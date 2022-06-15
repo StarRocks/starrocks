@@ -116,7 +116,7 @@ public:
     // so in order to avoid running out of disk capacity, we currently use the actual
     // disk available capacity and total capacity to do the calculation.
     // So that the capacity StarRocks actually used may exceeds the user specified capacity.
-    bool reach_capacity_limit(int64_t incoming_data_size);
+    bool capacity_limit_reached(int64_t incoming_data_size);
 
     Status update_capacity();
 

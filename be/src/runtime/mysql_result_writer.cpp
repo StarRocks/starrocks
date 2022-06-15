@@ -23,6 +23,7 @@
 
 #include <column/column_helper.h>
 
+#include "column/chunk.h"
 #include "column/const_column.h"
 #include "exprs/expr.h"
 #include "gen_cpp/InternalService_types.h"

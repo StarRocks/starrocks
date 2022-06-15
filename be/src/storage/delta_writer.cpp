@@ -2,6 +2,7 @@
 
 #include "storage/delta_writer.h"
 
+#include "common/tracer.h"
 #include "runtime/current_thread.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
@@ -9,7 +10,9 @@
 #include "storage/rowset/rowset_factory.h"
 #include "storage/schema.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
+#include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 
 namespace starrocks::vectorized {
@@ -248,6 +251,10 @@ Status DeltaWriter::close() {
 }
 
 Status DeltaWriter::_flush_memtable_async() {
+    // _mem_table is nullptr means write() has not been called
+    if (_mem_table == nullptr) {
+        return Status::OK();
+    }
     RETURN_IF_ERROR(_mem_table->finalize());
     return _flush_token->submit(std::move(_mem_table));
 }
@@ -263,6 +270,8 @@ void DeltaWriter::_reset_mem_table() {
 }
 
 Status DeltaWriter::commit() {
+    auto scoped =
+            trace::Scope(Tracer::Instance().start_trace_txn_tablet("delta_writer_commit", _opt.txn_id, _opt.tablet_id));
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     auto state = _get_state();
     switch (state) {

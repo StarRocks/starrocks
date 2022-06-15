@@ -4,16 +4,6 @@
 
 #include <memory>
 
-#include "column/array_column.h"
-#include "column/binary_column.h"
-#include "column/chunk.h"
-#include "column/column_helper.h"
-#include "column/const_column.h"
-#include "column/decimalv3_column.h"
-#include "column/field.h"
-#include "column/nullable_column.h"
-#include "column/object_column.h"
-#include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "storage/olap_type_infra.h"
 #include "storage/schema.h"
@@ -25,11 +15,6 @@ class TabletColumn;
 class TabletSchema;
 
 namespace vectorized {
-
-class Chunk;
-class Field;
-class Column;
-class Schema;
 
 class ChunkHelper {
 public:

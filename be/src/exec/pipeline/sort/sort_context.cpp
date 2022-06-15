@@ -13,6 +13,11 @@ using vectorized::Columns;
 using vectorized::SortedRun;
 using vectorized::SortedRuns;
 
+void SortContext::close(RuntimeState* state) {
+    _chunks_sorter_partions.clear();
+    _merged_runs.clear();
+}
+
 StatusOr<ChunkPtr> SortContext::pull_chunk() {
     if (!_is_merge_finish) {
         _merge_inputs();

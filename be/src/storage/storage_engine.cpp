@@ -39,16 +39,19 @@
 #include "fs/fs_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
-#include "storage/async_delta_writer_executor.h"
 #include "storage/base_compaction.h"
+#include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset/unique_rowset_id_generator.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage/task/engine_task.h"
 #include "storage/update_manager.h"
+#include "util/bthreads/executor.h"
 #include "util/lru_cache.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
@@ -162,8 +165,16 @@ Status StorageEngine::_open() {
     // `load_data_dirs` depend on |_update_manager|.
     load_data_dirs(dirs);
 
-    _async_delta_writer_executor = std::make_unique<AsyncDeltaWriterExecutor>();
-    RETURN_IF_ERROR_WITH_WARN(_async_delta_writer_executor->init(), "init AsyncDeltaWriterExecutor failed");
+    std::unique_ptr<ThreadPool> thread_pool;
+    RETURN_IF_ERROR(ThreadPoolBuilder("delta_writer")
+                            .set_min_threads(config::number_tablet_writer_threads / 2)
+                            .set_max_threads(std::max<int>(1, config::number_tablet_writer_threads))
+                            .set_max_queue_size(40960 /*a random chosen number that should big enough*/)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
+                            .build(&thread_pool));
+
+    _async_delta_writer_executor =
+            std::make_unique<bthreads::ThreadPoolExecutor>(thread_pool.release(), kTakesOwnership);
 
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");

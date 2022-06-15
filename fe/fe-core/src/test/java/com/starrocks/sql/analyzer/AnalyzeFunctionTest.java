@@ -127,7 +127,7 @@ public class AnalyzeFunctionTest {
                 AST2SQL.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select timestampadd(day, 2, '2022-01-01')");
-        Assert.assertEquals("SELECT TIMESTAMPADD(DAY, 2, '2022-01-01 00:00:00')",
+        Assert.assertEquals("SELECT timestampadd(DAY, 2, '2022-01-01 00:00:00')",
                 AST2SQL.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select date_add('2022-01-01', 2)");
@@ -151,21 +151,21 @@ public class AnalyzeFunctionTest {
                 AST2SQL.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select timestampdiff(day, '2020-01-01', '2020-01-03')");
-        Assert.assertEquals("SELECT TIMESTAMPDIFF(DAY, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
+        Assert.assertEquals("SELECT timestampdiff(DAY, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
                 AST2SQL.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess(
                 "select timestampdiff(day, '2020-01-01 00:00:00', '2020-01-03 00:00:00')");
-        Assert.assertEquals("SELECT TIMESTAMPDIFF(DAY, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
+        Assert.assertEquals("SELECT timestampdiff(DAY, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
                 AST2SQL.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess("select timestampdiff(minute, '2020-01-01', '2020-01-03')");
-        Assert.assertEquals("SELECT TIMESTAMPDIFF(MINUTE, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
+        Assert.assertEquals("SELECT timestampdiff(MINUTE, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
                 AST2SQL.toString(queryStatement.getQueryRelation()));
 
         queryStatement = (QueryStatement) analyzeSuccess(
                 "select timestampdiff(minute, '2020-01-01 00:00:00', '2020-01-03 00:00:00')");
-        Assert.assertEquals("SELECT TIMESTAMPDIFF(MINUTE, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
+        Assert.assertEquals("SELECT timestampdiff(MINUTE, '2020-01-01 00:00:00', '2020-01-03 00:00:00')",
                 AST2SQL.toString(queryStatement.getQueryRelation()));
     }
 

@@ -23,6 +23,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType;
 
@@ -57,13 +58,20 @@ public class ScalarRangePredicateExtractor {
 
         Set<ScalarOperator> result = Sets.newLinkedHashSet();
         extractMap.keySet().stream().filter(k -> !onlyExtractColumnRef || k.isColumnRef())
-                // The decimal column is filtered out
-                // because the literal constants of the same Decimal may have different types,
-                // resulting in an error in the judgment of the equivalence of the constants
-                .filter(k -> !k.getType().isDecimalOfAnyVersion())
                 .map(extractMap::get)
                 .filter(d -> d.sourceCount > 1)
                 .map(ValueDescriptor::toScalarOperator).forEach(result::addAll);
+
+        List<ScalarOperator> decimalKeys =
+                extractMap.keySet().stream().filter(k -> !onlyExtractColumnRef || k.isColumnRef())
+                        .filter(k -> k.getType().isDecimalOfAnyVersion()).collect(Collectors.toList());
+        if (!decimalKeys.isEmpty()) {
+            for (ScalarOperator key : decimalKeys) {
+                ValueDescriptor vd = extractMap.get(key);
+                vd.toScalarOperator().forEach(s -> Preconditions.checkState(
+                        s.getChildren().stream().allMatch(c -> c.getType().matchesType(key.getType()))));
+            }
+        }
 
         ScalarOperator extractExpr = Utils.compoundAnd(Lists.newArrayList(result));
         if (extractExpr == null) {

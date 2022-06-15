@@ -70,6 +70,8 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.load.InsertOverwriteJob;
+import com.starrocks.load.InsertOverwriteJobManager;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.metric.MetricRepo;
@@ -766,8 +768,8 @@ public class StmtExecutor {
     private void handleAnalyzeStmt() throws Exception {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        Database db = MetaUtils.getStarRocks(context, analyzeStmt.getTableName());
-        Table table = MetaUtils.getStarRocksTable(context, analyzeStmt.getTableName());
+        Database db = MetaUtils.getDatabase(context, analyzeStmt.getTableName());
+        Table table = MetaUtils.getTable(context, analyzeStmt.getTableName());
 
         AnalyzeJob job = new AnalyzeJob();
         job.setDbId(db.getId());
@@ -1031,6 +1033,26 @@ public class StmtExecutor {
                 || statement instanceof CreateAnalyzeJobStmt;
     }
 
+    public void handleInsertOverwrite(InsertStmt insertStmt) {
+        Database database = MetaUtils.getDatabase(context, insertStmt.getTableName());
+        Table table = insertStmt.getTargetTable();
+        if (!(table instanceof OlapTable)) {
+            LOG.warn("insert overwrite table:{} type:{} is not supported", table.getName(), table.getClass());
+            throw new RuntimeException("not supported table type for insert overwrite");
+        }
+        OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
+                insertStmt, database.getId(), olapTable.getId());
+        insertStmt.setOverwriteJobId(insertOverwriteJob.getJobId());
+        try {
+            InsertOverwriteJobManager manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager();
+            manager.executeJob(context, this, insertOverwriteJob);
+        } catch (Exception e) {
+            LOG.warn("execute insert overwrite job:{} failed", insertOverwriteJob.getJobId(), e);
+            throw new RuntimeException("insert overwrite failed", e);
+        }
+    }
+
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
         if (stmt.isExplain()) {
             handleExplainStmt(execPlan.getExplainString(stmt.getExplainLevel()));
@@ -1054,9 +1076,15 @@ public class StmtExecutor {
             return;
         }
 
+        if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite()
+                && !((InsertStmt) parsedStmt).hasOverwriteJob()) {
+            handleInsertOverwrite((InsertStmt) parsedStmt);
+            return;
+        }
+
         MetaUtils.normalizationTableName(context, stmt.getTableName());
-        Database database = MetaUtils.getStarRocks(context, stmt.getTableName());
-        Table targetTable = MetaUtils.getStarRocksTable(context, stmt.getTableName());
+        Database database = MetaUtils.getDatabase(context, stmt.getTableName());
+        Table targetTable = MetaUtils.getTable(context, stmt.getTableName());
 
         String label = DebugUtil.printId(context.getExecutionId());
         if (stmt instanceof InsertStmt) {
@@ -1107,7 +1135,6 @@ public class StmtExecutor {
                 txnState.addTableIndexes((OlapTable) targetTable);
             }
         }
-
         // Every time set no send flag and clean all data in buffer
         if (context.getMysqlChannel() != null) {
             context.getMysqlChannel().reset();

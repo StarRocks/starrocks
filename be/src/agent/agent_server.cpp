@@ -21,6 +21,8 @@
 
 #include "agent/agent_server.h"
 
+#include <thrift/protocol/TDebugProtocol.h>
+
 #include <filesystem>
 #include <string>
 
@@ -28,6 +30,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
 #include "util/phmap/phmap.h"
 

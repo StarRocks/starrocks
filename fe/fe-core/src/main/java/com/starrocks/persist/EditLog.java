@@ -455,6 +455,11 @@ public class EditLog {
                     }
                     break;
                 }
+                case OperationType.OP_UPDATE_FRONTEND: {
+                    Frontend fe = (Frontend) journal.getData();
+                    globalStateMgr.replayUpdateFrontend(fe);
+                    break;
+                }
                 case OperationType.OP_CREATE_USER: {
                     PrivInfo privInfo = (PrivInfo) journal.getData();
                     globalStateMgr.getAuth().replayCreateUser(privInfo);
@@ -874,6 +879,16 @@ public class EditLog {
                     globalStateMgr.getAuth().replayRevokeImpersonate(info);
                     break;
                 }
+                case OperationType.OP_CREATE_INSERT_OVERWRITE: {
+                    CreateInsertOverwriteJobLog jobInfo = (CreateInsertOverwriteJobLog) journal.getData();
+                    globalStateMgr.getInsertOverwriteJobManager().replayCreateInsertOverwrite(jobInfo);
+                    break;
+                }
+                case OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE: {
+                    InsertOverwriteStateChangeInfo stateChangeInfo = (InsertOverwriteStateChangeInfo) journal.getData();
+                    globalStateMgr.getInsertOverwriteJobManager().replayInsertOverwriteStateChange(stateChangeInfo);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1128,6 +1143,10 @@ public class EditLog {
 
     public void logRemoveFrontend(Frontend fe) {
         logEdit(OperationType.OP_REMOVE_FRONTEND, fe);
+    }
+
+    public void logUpdateFrontend(Frontend fe) {
+        logEdit(OperationType.OP_UPDATE_FRONTEND, fe);
     }
 
     public void logFinishDelete(DeleteInfo info) {
@@ -1490,5 +1509,13 @@ public class EditLog {
 
     public void logDropCatalog(DropCatalogLog log) {
         logEdit(OperationType.OP_DROP_CATALOG, log);
+    }
+
+    public void logCreateInsertOverwrite(CreateInsertOverwriteJobLog info) {
+        logEdit(OperationType.OP_CREATE_INSERT_OVERWRITE, info);
+    }
+
+    public void logInsertOverwriteStateChange(InsertOverwriteStateChangeInfo info) {
+        logEdit(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, info);
     }
 }

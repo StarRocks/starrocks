@@ -7,6 +7,7 @@
 #include "column/object_column.h"
 #include "exprs/vectorized/unary_function.h"
 #include "types/hll.h"
+#include "udf/udf.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks::vectorized {

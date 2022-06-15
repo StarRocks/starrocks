@@ -191,14 +191,24 @@ class EncodeRollupAggregateTableFunction
         List<Object> keys = new ArrayList();
         Object[] values = new Object[valueColumnIndexMap.length];
 
+        int parentRollupKeysSize = parentRollupKeyValuePair._1.size() - 1;
+
         // deal bucket_id column
         keys.add(parentRollupKeyValuePair._1().get(0));
         for (int i = 0; i < keyColumnIndexMap.length; i++) {
-            keys.add(parentRollupKeyValuePair._1().get(keyColumnIndexMap[i] + 1));
+            if (keyColumnIndexMap[i] < parentRollupKeysSize) {
+                keys.add(parentRollupKeyValuePair._1().get(keyColumnIndexMap[i] + 1));
+            } else {
+                keys.add(parentRollupKeyValuePair._2()[keyColumnIndexMap[i] - parentRollupKeysSize]);
+            }
         }
 
         for (int i = 0; i < valueColumnIndexMap.length; i++) {
-            values[i] = parentRollupKeyValuePair._2()[valueColumnIndexMap[i]];
+            if (valueColumnIndexMap[i] < parentRollupKeysSize) {
+                values[i] = parentRollupKeyValuePair._1().get(valueColumnIndexMap[i] + 1);
+            } else {
+                values[i] = parentRollupKeyValuePair._2()[valueColumnIndexMap[i] - parentRollupKeysSize];
+            }
         }
         return new Tuple2<>(keys, values);
     }

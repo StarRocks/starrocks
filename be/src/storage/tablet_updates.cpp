@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "common/status.h"
+#include "common/tracer.h"
 #include "gen_cpp/MasterService_types.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/stl_util.h"
@@ -39,6 +40,7 @@
 #include "util/defer_op.h"
 #include "util/pretty_printer.h"
 #include "util/scoped_cleanup.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -475,6 +477,9 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
 }
 
 Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetSharedPtr& rowset) {
+    auto span = Tracer::Instance().start_trace_txn_tablet("rowset_commit", rowset->txn_id(), _tablet.tablet_id());
+    span->SetAttribute("version", version);
+    auto scoped = trace::Scope(span);
     EditVersionMetaPB edit;
     auto edit_version_pb = edit.mutable_version();
     edit_version_pb->set_major(version);
@@ -504,9 +509,11 @@ Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetShare
     edit.set_rowsetid_add(rowsetid_add);
     // TODO: is rollback modification of rowset meta required if commit failed?
     rowset->make_commit(version, rowsetid);
+    span->AddEvent("save_meta_begin");
     auto st = TabletMetaManager::rowset_commit(
             _tablet.data_dir(), _tablet.tablet_id(), _next_log_id, &edit, rowset->rowset_meta()->get_meta_pb(),
             RowsetMetaManager::get_rowset_meta_key(_tablet.tablet_uid(), rowset->rowset_id()));
+    span->AddEvent("save_meta_end");
     if (!st.ok()) {
         LOG(WARNING) << "rowset commit failed: " << st << " " << _debug_string(false, false);
         return st;
@@ -699,6 +706,9 @@ void TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_versi
 }
 
 void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
+    auto span = Tracer::Instance().start_trace_tablet("apply_rowset_commit", _tablet.tablet_id());
+    auto scoped = trace::Scope(span);
+
     // NOTE: after commit, apply must success or fatal crash
     int64_t t_start = MonotonicMillis();
     auto tablet_id = _tablet.tablet_id();
@@ -708,6 +718,9 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             << " rowset:" << rowset_id;
     RowsetSharedPtr rowset = _get_rowset(rowset_id);
     auto manager = StorageEngine::instance()->update_manager();
+
+    span->SetAttribute("txn_id", rowset->txn_id());
+    span->SetAttribute("version", version.major());
 
     // 1. load upserts/deletes in rowset
     auto state_entry = manager->update_state_cache().get_or_create(
@@ -754,6 +767,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         return;
     }
 
+    span->AddEvent("reslove_conflict");
     int64_t t_load = MonotonicMillis();
     EditVersion latest_applied_version;
     get_latest_applied_version(&latest_applied_version);
@@ -768,6 +782,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     }
     int64_t t_apply = MonotonicMillis();
 
+    span->AddEvent("update_index");
     // 3. generate delvec
     // add initial empty delvec for new segments
     PrimaryIndex::DeletesMap new_deletes;
@@ -798,6 +813,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             return;
         }
     }
+    span->AddEvent("commit_index");
     st = index.commit(&index_meta);
     if (!st.ok()) {
         std::string msg = Substitute("primary index commit failed: $0", st.to_string());
@@ -812,6 +828,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     manager->update_state_cache().remove(state_entry);
     int64_t t_index = MonotonicMillis();
 
+    span->AddEvent("gen_delvec");
     size_t ndelvec = new_deletes.size();
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs(ndelvec);
     size_t idx = 0;
@@ -1085,6 +1102,8 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
 
 Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo, const RowsetSharedPtr& rowset,
                                          EditVersion* commit_version) {
+    auto span = Tracer::Instance().start_trace_tablet("commit_compaction", _tablet.tablet_id());
+    auto scoped_span = trace::Scope(span);
     _compaction_state = std::make_unique<vectorized::CompactionState>();
     const auto status = _compaction_state->load(rowset.get());
     if (!status.ok()) {
@@ -1185,10 +1204,12 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     VLOG(1) << "update compaction commit " << _debug_string(false, true);
     _check_for_apply();
     *commit_version = edit_version_info_ptr->version;
+    span->SetAttribute("version", commit_version->to_string());
     return Status::OK();
 }
 
 void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info) {
+    auto scoped_span = trace::Scope(Tracer::Instance().start_trace_tablet("apply_compaction", _tablet.tablet_id()));
     // NOTE: after commit, apply must success or fatal crash
     auto info = version_info.compaction.get();
     CHECK(info != nullptr) << "compaction info empty";

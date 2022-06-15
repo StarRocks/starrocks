@@ -87,6 +87,18 @@ fi
 
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 
+# check java version and choose correct JAVA_OPTS
+JAVA_VERSION=$(jdk_version)
+final_java_opt=$JAVA_OPTS
+if [[ "$JAVA_VERSION" -gt 8 ]]; then
+    if [ -z "$JAVA_OPTS_FOR_JDK_9" ]; then
+        echo "JAVA_OPTS_FOR_JDK_9 is not set in be.conf" >> $LOG_DIR/be.out
+        exit -1
+    fi
+    final_java_opt=$JAVA_OPTS_FOR_JDK_9
+fi
+export LIBHDFS_OPTS=$final_java_opt
+
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
 export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH

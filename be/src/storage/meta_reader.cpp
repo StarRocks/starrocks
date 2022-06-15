@@ -4,6 +4,9 @@
 
 #include <vector>
 
+#include "column/array_column.h"
+#include "column/chunk.h"
+#include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "common/status.h"
 #include "runtime/global_dict/config.h"

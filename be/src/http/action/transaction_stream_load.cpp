@@ -422,7 +422,7 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
         }
         bb->pos = remove_bytes;
         bb->flip();
-        auto st = ctx->body_sink->append(bb);
+        auto st = ctx->body_sink->append(std::move(bb));
         if (!st.ok()) {
             LOG(WARNING) << "append body content failed. errmsg=" << st.get_error_msg() << ctx->brief();
             ctx->status = st;

@@ -77,6 +77,8 @@ public:
 
     void remove_tablets_channel(int64_t index_id);
 
+    MemTracker* mem_tracker() { return _mem_tracker.get(); }
+
 private:
     friend class RefCountedThreadSafe<LoadChannel>;
     ~LoadChannel() = default;

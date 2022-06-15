@@ -39,6 +39,7 @@ import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowUserStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.ShowBackendsStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -48,10 +49,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.StarOSAgent;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.UserException;
@@ -59,12 +62,16 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.internal.expectations.transformation.ExpectationsTransformer;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Ignore;
@@ -77,6 +84,9 @@ import java.net.URL;
 import java.util.List;
 
 public class ShowExecutorTest {
+
+    private static final Logger LOG = LogManager.getLogger(ShowExecutorTest.class);
+
     private ConnectContext ctx;
     private GlobalStateMgr globalStateMgr;
 
@@ -484,7 +494,8 @@ public class ShowExecutorTest {
 
     @Test(expected = AnalysisException.class)
     public void testShowCreateTableEmptyDb() throws AnalysisException, DdlException {
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("testCluster:emptyDb", "testTable"));
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("testCluster:emptyDb", "testTable"),
+                ShowCreateTableStmt.CreateTableType.TABLE);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
@@ -493,7 +504,8 @@ public class ShowExecutorTest {
 
     @Test(expected = AnalysisException.class)
     public void testShowCreateTableEmptyTbl() throws AnalysisException, DdlException {
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("testCluster:testDb", "emptyTable"));
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("testCluster:testDb", "emptyTable"),
+                ShowCreateTableStmt.CreateTableType.TABLE);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
@@ -566,6 +578,67 @@ public class ShowExecutorTest {
         expectedEx.expect(AnalysisException.class);
         expectedEx.expectMessage("Unknown table 'testCluster:testDb.emptyTable'");
         executor.execute();
+    }
+
+    @Test
+    public void testShowBackends() throws AnalysisException, DdlException {
+        SystemInfoService clusterInfo = AccessTestUtil.fetchSystemInfoService();
+        StarOSAgent starosAgent = new StarOSAgent();
+
+        // mock backends
+        Backend backend = new Backend();
+        new Expectations(clusterInfo) {
+            {
+                clusterInfo.getBackend(1L);
+                minTimes = 0;
+                result = backend;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            SystemInfoService getCurrentSystemInfo() {
+                return clusterInfo;
+            }
+
+            @Mock
+            StarOSAgent getStarOSAgent() {
+                return starosAgent;
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            List<Long> getBackendIds(boolean needAlive) {
+                List<Long> backends = Lists.newArrayList();
+                backends.add(1L);
+                return backends;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            long getWorkerIdByBackendId(long BackendId) {
+                return 5;
+            }
+        };
+
+        Config.integrate_starmgr = true;
+        ShowBackendsStmt stmt = new ShowBackendsStmt();
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+
+        Assert.assertEquals(26, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
+        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(24).getName());
+        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(25).getName());
+
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("1", resultSet.getString(0));
+        Assert.assertEquals("0", resultSet.getString(24));
+        Assert.assertEquals("5", resultSet.getString(25));
+
+        Config.integrate_starmgr = false;
     }
 
     @Test

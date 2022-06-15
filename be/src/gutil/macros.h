@@ -99,6 +99,13 @@ struct CompileAssert {};
     TypeName(const TypeName&) = delete;    \
     void operator=(const TypeName&) = delete
 
+#undef DISALLOW_COPY_AND_MOVE
+#define DISALLOW_COPY_AND_MOVE(TypeName)      \
+    TypeName(const TypeName&) = delete;       \
+    void operator=(const TypeName&) = delete; \
+    TypeName(TypeName&&) = delete;            \
+    void operator=(TypeName&&) = delete
+
 // A macro to disallow all the implicit constructors, namely the
 // default constructor, copy constructor and operator= functions.
 //

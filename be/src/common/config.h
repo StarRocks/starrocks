@@ -479,7 +479,7 @@ CONF_mBool(sync_tablet_meta, "false");
 CONF_mInt32(thrift_rpc_timeout_ms, "5000");
 
 // txn commit rpc timeout
-CONF_mInt32(txn_commit_rpc_timeout_ms, "10000");
+CONF_mInt32(txn_commit_rpc_timeout_ms, "20000");
 
 // If set to true, metric calculator will run
 CONF_Bool(enable_metric_calculator, "true");
@@ -587,8 +587,8 @@ CONF_Int32(late_materialization_ratio, "10");
 // `1000` will enable late materialization always select metric type.
 CONF_Int32(metric_late_materialization_ratio, "1000");
 
-// Max batched bytes for each transmit request.
-CONF_Int64(max_transmit_batched_bytes, "65536");
+// Max batched bytes for each transmit request. (256KB)
+CONF_Int64(max_transmit_batched_bytes, "262144");
 
 CONF_Int16(bitmap_max_filter_items, "30");
 
@@ -698,6 +698,9 @@ CONF_String(object_storage_endpoint, "");
 // Tencent cos needs to add region information
 CONF_String(object_storage_region, "");
 CONF_Int64(object_storage_max_connection, "102400");
+// Acccess object storage using https.
+// this options is applicable only if `object_storage_endpoint` is not specified.
+CONF_Bool(object_storage_endpoint_use_https, "false");
 
 CONF_Bool(enable_orc_late_materialization, "true");
 // orc reader, if RowGroup/Stripe/File size is less than this value, read all data.

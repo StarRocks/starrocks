@@ -26,6 +26,10 @@
 #include <map>
 #include <sstream>
 
+#include "cctz/time_zone.h"
+#include "column/column.h"
+#include "column/column_viewer.h"
+#include "column/const_column.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/es/es_query_builder.h"
@@ -40,6 +44,7 @@
 #include "runtime/string_value.h"
 #include "service/backend_options.h"
 #include "util/runtime_profile.h"
+#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -56,6 +61,35 @@ using namespace std;
 template <typename T, typename... Ts>
 static constexpr bool is_type_in() {
     return (std::is_same_v<T, Ts> || ...);
+}
+
+VExtLiteral::VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column) {
+    DCHECK(!column->empty());
+    // We need to convert the predicate column into the corresponding string.
+    // Some types require special handling, because the default behavior of Datum may not match the behavior of ES.
+    if (type == TYPE_DATE) {
+        vectorized::ColumnViewer<TYPE_DATE> viewer(column);
+        DCHECK(!viewer.is_null(0));
+        _value = viewer.value(0).to_string();
+    } else if (type == TYPE_DATETIME) {
+        vectorized::ColumnViewer<TYPE_DATETIME> viewer(column);
+        DCHECK(!viewer.is_null(0));
+        vectorized::TimestampValue datetime_value = viewer.value(0);
+        // convert convert default timezone to UTC;
+        cctz::time_zone defaut_timezone;
+        TimezoneUtils::find_cctz_time_zone(TimezoneUtils::default_time_zone, defaut_timezone);
+        int64_t offsets = TimezoneUtils::to_utc_offset(defaut_timezone);
+        _value = std::to_string((datetime_value.to_unix_second() - offsets) * 1000);
+    } else if (type == TYPE_BOOLEAN) {
+        vectorized::ColumnViewer<TYPE_BOOLEAN> viewer(column);
+        if (viewer.value(0)) {
+            _value = "true";
+        } else {
+            _value = "false";
+        }
+    } else {
+        _value = _value_to_string(column);
+    }
 }
 
 std::string VExtLiteral::_value_to_string(ColumnPtr& column) {

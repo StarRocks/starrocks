@@ -343,7 +343,7 @@ public:
 
     virtual void reset_column() { _delete_state = DEL_NOT_SATISFIED; }
 
-    virtual bool reach_capacity_limit(std::string* msg = nullptr) const = 0;
+    virtual bool capacity_limit_reached(std::string* msg = nullptr) const = 0;
 
     virtual Status accept(ColumnVisitor* visitor) const = 0;
 

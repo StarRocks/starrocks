@@ -53,6 +53,16 @@ public class CTASAnalyzer {
         // For replication_num, we select the maximum value of all tables replication_num
         int defaultReplicationNum = 1;
 
+        for (Table table : tableRefToTable.values()) {
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                Short replicationNum = olapTable.getDefaultReplicationNum();
+                if (replicationNum > defaultReplicationNum) {
+                    defaultReplicationNum = replicationNum;
+                }
+            }
+        }
+
         List<Field> allFields = queryStatement.getQueryRelation().getRelationFields().getAllFields();
         List<String> finalColumnNames = Lists.newArrayList();
 
@@ -124,7 +134,7 @@ public class CTASAnalyzer {
             createTableStmt.setDistributionDesc(distributionDesc);
         }
 
-        CreateTableAnalyzer.transformCreateTableStmt(createTableStmt, session);
+        Analyzer.analyze(createTableStmt, session);
 
         InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
         insertStmt.setQueryStatement(queryStatement);

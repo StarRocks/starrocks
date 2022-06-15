@@ -29,8 +29,8 @@ public class UpdateAnalyzer {
     public static void analyze(UpdateStmt updateStmt, ConnectContext session) {
         TableName tableName = updateStmt.getTableName();
         MetaUtils.normalizationTableName(session, tableName);
-        MetaUtils.getStarRocks(session, tableName);
-        Table table = MetaUtils.getStarRocksTable(session, tableName);
+        MetaUtils.getDatabase(session, tableName);
+        Table table = MetaUtils.getTable(session, tableName);
 
         if (table instanceof MaterializedView) {
             throw new SemanticException(

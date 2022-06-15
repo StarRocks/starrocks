@@ -2,6 +2,7 @@
 
 #include "exec/vectorized/csv_scanner.h"
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "fs/fs.h"

@@ -2,6 +2,8 @@
 
 #include "rowset_writer_adapter.h"
 
+#include "column/chunk.h"
+#include "column/schema.h"
 #include "storage/chunk_helper.h"
 #include "storage/convert_helper.h"
 #include "storage/rowset/rowset_factory.h"

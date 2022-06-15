@@ -29,8 +29,8 @@ public class DeleteAnalyzer {
     public static void analyze(DeleteStmt deleteStatement, ConnectContext session) {
         TableName tableName = deleteStatement.getTableName();
         MetaUtils.normalizationTableName(session, tableName);
-        MetaUtils.getStarRocks(session, tableName);
-        Table table = MetaUtils.getStarRocksTable(session, tableName);
+        MetaUtils.getDatabase(session, tableName);
+        Table table = MetaUtils.getTable(session, tableName);
 
         if (table instanceof MaterializedView) {
             throw new SemanticException(

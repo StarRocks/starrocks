@@ -25,6 +25,7 @@
 #include "storage/column_block.h"
 #include "storage/range.h"
 #include "storage/types.h"
+#include "util/mem_util.hpp"
 
 namespace starrocks {
 
