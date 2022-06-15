@@ -115,6 +115,7 @@ import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -1197,6 +1198,26 @@ public class StmtExecutor {
                             + coord.getTrackingUrl());
                     return;
                 }
+            }
+
+            // To fix https://github.com/StarRocks/starrocks/issues/6461.
+            if (loadedRows == 0 && filteredRows == 0 && stmt instanceof DeleteStmt) {
+                if (targetTable instanceof ExternalOlapTable) {
+                    ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                            externalTable.getSourceTableDbId(), transactionId,
+                            externalTable.getSourceTableHost(),
+                            externalTable.getSourceTablePort(),
+                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+                } else {
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
+                            database.getId(),
+                            transactionId,
+                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG
+                    );
+                }
+                context.getState().setOk();
+                return;
             }
 
             if (targetTable instanceof ExternalOlapTable) {
