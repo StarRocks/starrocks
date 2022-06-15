@@ -42,7 +42,7 @@ MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const s
           _sink(sink),
           _aggregator(nullptr),
           _mem_tracker(mem_tracker) {
-    _vectorized_schema = std::move(ChunkHelper::convert_schema_to_format_v2(*tablet_schema));
+    _vectorized_schema = std::move(ChunkHelper::convert_schema(*tablet_schema));
     if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         // load slots have __op field, so add to _vectorized_schema
         auto op_column = std::make_shared<starrocks::vectorized::Field>((ColumnId)-1, LOAD_OP_COLUMN,

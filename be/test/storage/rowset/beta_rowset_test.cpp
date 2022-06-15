@@ -217,7 +217,7 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
         std::unique_ptr<RowsetWriter> rowset_writer;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
+        auto schema = vectorized::ChunkHelper::convert_schema(tablet_schema);
 
         {
             auto chunk = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);
@@ -320,7 +320,7 @@ TEST_F(BetaRowsetTest, VerticalWriteTest) {
     {
         // k1 k2
         std::vector<uint32_t> column_indexes{0, 1};
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, column_indexes);
+        auto schema = vectorized::ChunkHelper::convert_schema(tablet_schema, column_indexes);
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -337,7 +337,7 @@ TEST_F(BetaRowsetTest, VerticalWriteTest) {
     {
         // v1
         std::vector<uint32_t> column_indexes{2};
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, column_indexes);
+        auto schema = vectorized::ChunkHelper::convert_schema(tablet_schema, column_indexes);
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -361,7 +361,7 @@ TEST_F(BetaRowsetTest, VerticalWriteTest) {
     rs_opts.sorted = true;
     rs_opts.version = 0;
     rs_opts.stats = &_stats;
-    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
+    auto schema = vectorized::ChunkHelper::convert_schema(tablet_schema);
     auto res = rowset->new_iterator(schema, rs_opts);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
 

@@ -113,7 +113,7 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+        auto schema = vectorized::ChunkHelper::convert_schema(_tablet->tablet_schema());
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (size_t i = 0; i < keys.size(); i++) {
@@ -211,7 +211,7 @@ static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
 }
 
 static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
-    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -258,7 +258,7 @@ TEST_F(RowsetMergerTest, horizontal_merge) {
     int64_t version = num_segment * 2 + 1;
     EXPECT_EQ(pks.size(), read_tablet(_tablet, version));
     TestRowsetWriter writer;
-    Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
     ASSERT_TRUE(vectorized::compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
     ASSERT_EQ(pks.size(), writer.all_pks->size());
@@ -307,7 +307,7 @@ TEST_F(RowsetMergerTest, vertical_merge) {
     int64_t version = num_segment * 2 + 1;
     EXPECT_EQ(pks.size(), read_tablet(_tablet, version));
     TestRowsetWriter writer;
-    Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
     writer.non_key_columns.emplace_back(std::move(vectorized::Int16Column::create_mutable()));
     writer.non_key_columns.emplace_back(std::move(vectorized::Int32Column::create_mutable()));
@@ -370,7 +370,7 @@ TEST_F(RowsetMergerTest, horizontal_merge_seq) {
     int64_t version = num_segment * 2 + 1;
     EXPECT_EQ(pks.size(), read_tablet(_tablet, version));
     TestRowsetWriter writer;
-    Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
     ASSERT_TRUE(vectorized::compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
     ASSERT_EQ(pks.size(), writer.all_pks->size());
@@ -418,7 +418,7 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
     int64_t version = num_segment * 2 + 1;
     EXPECT_EQ(pks.size(), read_tablet(_tablet, version));
     TestRowsetWriter writer;
-    Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
     writer.non_key_columns.emplace_back(std::move(vectorized::Int16Column::create_mutable()));
     writer.non_key_columns.emplace_back(std::move(vectorized::Int32Column::create_mutable()));

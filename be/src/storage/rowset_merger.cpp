@@ -406,7 +406,7 @@ private:
         // merge key columns
         auto mask_buffer = std::make_unique<RowSourceMaskBuffer>(tablet.tablet_id(), tablet.data_dir()->path());
         {
-            Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[0]);
+            Schema schema = ChunkHelper::convert_schema(tablet.tablet_schema(), column_groups[0]);
             RETURN_IF_ERROR(_do_merge_horizontally(tablet, version, schema, rowsets, writer, cfg, total_input_size,
                                                    total_rows, total_chunk, stats, mask_buffer.get()));
         }
@@ -422,7 +422,7 @@ private:
             vector<vectorized::ChunkIteratorPtr> iterators;
             iterators.reserve(rowsets.size());
             OlapReaderStatistics non_key_stats;
-            Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[i]);
+            Schema schema = ChunkHelper::convert_schema(tablet.tablet_schema(), column_groups[i]);
             for (const auto& rowset : rowsets) {
                 _entries.emplace_back(new MergeEntry<T>());
                 MergeEntry<T>& entry = *_entries.back();
@@ -509,7 +509,7 @@ private:
 
 Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<RowsetSharedPtr>& rowsets,
                                 RowsetWriter* writer, const MergeConfig& cfg) {
-    Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(tablet.tablet_schema());
     std::unique_ptr<RowsetMerger> merger;
     auto key_type = PrimaryKeyEncoder::encoded_primary_key_type(schema);
     switch (key_type) {

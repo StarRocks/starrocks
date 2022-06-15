@@ -22,6 +22,8 @@ public:
 
     static vectorized::Schema convert_schema(const starrocks::TabletSchema& schema);
 
+    static vectorized::Schema convert_schema(const starrocks::TabletSchema& schema, const std::vector<ColumnId>& cids);
+
     // Convert starrocks::TabletColumn to vectorized::Field. This function will generate format
     // V2 type: DATE_V2, TIMESTAMP, DECIMAL_V2
     static vectorized::Field convert_field_to_format_v2(ColumnId id, const TabletColumn& c);

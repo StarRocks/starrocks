@@ -247,6 +247,12 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
     } else {
         _schema = std::make_shared<const TabletSchema>(tablet_meta_pb.schema());
     }
+    DCHECK(_schema != nullptr);
+    // if tablet contain format v1 columns, remind user to do the schema change
+    if (_schema->contains_format_v1_column()) {
+        LOG(WARNING) << "tablet " << tablet_id()
+                     << " contain format v1 column, please upgrade the table to v2 through schema change!";
+    }
 
     // init _rs_metas
     for (auto& it : tablet_meta_pb.rs_metas()) {

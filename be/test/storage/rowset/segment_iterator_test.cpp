@@ -89,7 +89,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
         // col0
         std::vector<uint32_t> column_indexes = {0};
         ASSERT_OK(writer.init(column_indexes, true));
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, column_indexes);
+        auto schema = vectorized::ChunkHelper::convert_schema(tablet_schema, column_indexes);
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -105,7 +105,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
         // col1
         std::vector<uint32_t> column_indexes{1};
         ASSERT_OK(writer.init(column_indexes, false));
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, column_indexes);
+        auto schema = vectorized::ChunkHelper::convert_schema(tablet_schema, column_indexes);
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -127,7 +127,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     seg_options.fs = _fs;
     seg_options.stats = &stats;
 
-    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
+    auto schema = vectorized::ChunkHelper::convert_schema(tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
 
     vectorized::Schema vec_schema;
@@ -210,7 +210,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
         // col0
         std::vector<uint32_t> column_indexes = {0};
         ASSERT_OK(writer.init(column_indexes, true));
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, column_indexes);
+        auto schema = vectorized::ChunkHelper::convert_schema(tablet_schema, column_indexes);
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -226,7 +226,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
         // col1
         std::vector<uint32_t> column_indexes{1};
         ASSERT_OK(writer.init(column_indexes, false));
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, column_indexes);
+        auto schema = vectorized::ChunkHelper::convert_schema(tablet_schema, column_indexes);
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
@@ -248,7 +248,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     seg_options.fs = _fs;
     seg_options.stats = &stats;
 
-    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
+    auto schema = vectorized::ChunkHelper::convert_schema(tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
 
     ColumnIterator* scalar_iter = nullptr;

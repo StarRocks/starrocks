@@ -313,8 +313,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                 }
                 ColumnPtr& base_col = base_chunk->get_column_by_index(ref_column);
                 ColumnPtr& new_col = new_chunk->get_column_by_index(i);
-                Field ref_field = ChunkHelper::convert_field_to_format_v2(
-                        ref_column, base_tablet_meta->tablet_schema().column(ref_column));
+                Field ref_field =
+                        ChunkHelper::convert_field(ref_column, base_tablet_meta->tablet_schema().column(ref_column));
                 Status st = converter->convert_materialized(base_col, new_col, ref_field.type().get());
                 if (!st.ok()) {
                     return false;
@@ -367,10 +367,9 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                     return false;
                 }
 
-                Field ref_field = ChunkHelper::convert_field_to_format_v2(
-                        ref_column, base_tablet_meta->tablet_schema().column(ref_column));
-                Field new_field =
-                        ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
+                Field ref_field =
+                        ChunkHelper::convert_field(ref_column, base_tablet_meta->tablet_schema().column(ref_column));
+                Field new_field = ChunkHelper::convert_field(i, new_tablet_meta->tablet_schema().column(i));
 
                 Status st = converter->convert_column(ref_field.type().get(), *base_col, new_field.type().get(),
                                                       new_col.get(), mem_pool);
@@ -417,8 +416,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                 dst_datum.set_null();
                 COLUMN_APPEND_DATUM();
             } else {
-                Field new_field =
-                        ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
+                Field new_field = ChunkHelper::convert_field(i, new_tablet_meta->tablet_schema().column(i));
                 const FieldType field_type = new_field.type()->type();
                 std::string tmp = _schema_mapping[i].default_value->to_string();
                 if (field_type == OLAP_FIELD_TYPE_HLL || field_type == OLAP_FIELD_TYPE_OBJECT ||
@@ -612,7 +610,7 @@ ChunkSorter::ChunkSorter(ChunkAllocator* chunk_allocator)
 ChunkSorter::~ChunkSorter() = default;
 
 bool ChunkSorter::sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet) {
-    Schema new_schema = ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema());
+    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
     if (_swap_chunk == nullptr || _max_allocated_rows < chunk->num_rows()) {
         Status st = ChunkAllocator::allocate(_swap_chunk, chunk->num_rows(), new_schema);
         if (_swap_chunk == nullptr || !st.ok()) {
@@ -705,7 +703,7 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
 
     _make_heap(chunk_arr);
     size_t nread = 0;
-    Schema new_schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    Schema new_schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ChunkPtr tmp_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
     if (_tablet->keys_type() == KeysType::AGG_KEYS) {
         _aggregator = std::make_unique<ChunkAggregator>(&new_schema, config::vector_chunk_size, 0);
@@ -813,10 +811,10 @@ Status LinkedSchemaChange::processV2(TabletReader* reader, RowsetWriter* new_row
 
 bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                                    TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
-    Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
 
-    Schema new_schema = ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema());
+    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
@@ -887,10 +885,10 @@ bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowse
 Status SchemaChangeDirectly::processV2(TabletReader* reader, RowsetWriter* new_rowset_writer,
                                        TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
                                        RowsetSharedPtr rowset) {
-    Schema base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
-            base_tablet->tablet_schema(), *_chunk_changer->get_mutable_selected_column_indexs()));
+    Schema base_schema = std::move(ChunkHelper::convert_schema(base_tablet->tablet_schema(),
+                                                               *_chunk_changer->get_mutable_selected_column_indexs()));
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
-    Schema new_schema = std::move(ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema()));
+    Schema new_schema = std::move(ChunkHelper::convert_schema(new_tablet->tablet_schema()));
     auto char_field_indexes = std::move(ChunkHelper::get_char_field_indexes(new_schema));
 
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
@@ -978,8 +976,8 @@ bool SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_ro
         }
     }
     std::vector<ChunkPtr> chunk_arr;
-    Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
-    Schema new_schema = ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
 
     ChunkSorter chunk_sorter(_chunk_allocator);
     std::unique_ptr<MemPool> mem_pool(new MemPool());
@@ -1077,9 +1075,9 @@ Status SchemaChangeWithSorting::processV2(TabletReader* reader, RowsetWriter* ne
                                           TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
                                           RowsetSharedPtr rowset) {
     MemTableRowsetWriterSink mem_table_sink(new_rowset_writer);
-    Schema base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
-            base_tablet->tablet_schema(), *_chunk_changer->get_mutable_selected_column_indexs()));
-    Schema new_schema = std::move(ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema()));
+    Schema base_schema = std::move(ChunkHelper::convert_schema(base_tablet->tablet_schema(),
+                                                               *_chunk_changer->get_mutable_selected_column_indexs()));
+    Schema new_schema = std::move(ChunkHelper::convert_schema(new_tablet->tablet_schema()));
     auto char_field_indexes = std::move(ChunkHelper::get_char_field_indexes(new_schema));
 
     // memtable max buffer size set default 80% of memory limit so that it will do _merge() if reach limit
@@ -1347,10 +1345,10 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
 
         Schema base_schema;
         if (config::enable_schema_change_v2) {
-            base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
+            base_schema = std::move(ChunkHelper::convert_schema(
                     base_tablet->tablet_schema(), *sc_params.chunk_changer->get_mutable_selected_column_indexs()));
         } else {
-            base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema()));
+            base_schema = std::move(ChunkHelper::convert_schema(base_tablet->tablet_schema()));
         }
 
         for (auto& version : versions_to_be_changed) {

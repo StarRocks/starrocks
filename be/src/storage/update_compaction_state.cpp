@@ -48,7 +48,7 @@ Status CompactionState::_do_load(Rowset* rowset) {
         pk_columns.push_back(static_cast<uint32_t>(i));
     }
 
-    vectorized::Schema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
+    vectorized::Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
 
     std::unique_ptr<vectorized::Column> pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {

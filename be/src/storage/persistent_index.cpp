@@ -1259,7 +1259,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    auto pkey_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, pk_columns);
+    auto pkey_schema = vectorized::ChunkHelper::convert_schema(tablet_schema, pk_columns);
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
     if (fix_size == 0) {
         LOG(WARNING) << "Build persistent index failed because get key cloumn size failed";

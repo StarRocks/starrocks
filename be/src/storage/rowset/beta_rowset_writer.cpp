@@ -425,7 +425,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     MonotonicStopWatch timer;
     timer.start();
 
-    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema);
+    auto schema = vectorized::ChunkHelper::convert_schema(*_context.tablet_schema);
 
     std::vector<vectorized::ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(_num_segment);
