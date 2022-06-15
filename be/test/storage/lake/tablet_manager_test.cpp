@@ -27,7 +27,7 @@ public:
 
     StatusOr<std::string> get_group(int64_t tablet_id) override { return _local_dir; };
 
-    Status list_group(std::vector<std::string>* groups) override {
+    Status list_group(std::set<std::string>* groups) override {
         return Status::NotSupported("LocalGroupAssigner::list_group");
     };
 
