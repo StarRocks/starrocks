@@ -53,12 +53,18 @@ public class OperationType {
     public static final short OP_BATCH_MODIFY_PARTITION = 211;
 
     // 20~29 120~129 220~229 ...
+    @Deprecated
     public static final short OP_START_ROLLUP = 20;
+    @Deprecated
     public static final short OP_FINISH_ROLLUP = 21;
+    @Deprecated
     public static final short OP_CANCEL_ROLLUP = 23;
     public static final short OP_DROP_ROLLUP = 24;
+    @Deprecated
     public static final short OP_START_SCHEMA_CHANGE = 25;
+    @Deprecated
     public static final short OP_FINISH_SCHEMA_CHANGE = 26;
+    @Deprecated
     public static final short OP_CANCEL_SCHEMA_CHANGE = 27;
     public static final short OP_CLEAR_ROLLUP_INFO = 28;
     public static final short OP_FINISH_CONSISTENCY_CHECK = 29;
@@ -140,7 +146,9 @@ public class OperationType {
     //real time load 100 -108
     public static final short OP_UPSERT_TRANSACTION_STATE = 100;
     public static final short OP_DELETE_TRANSACTION_STATE = 101;
+    @Deprecated
     public static final short OP_FINISHING_ROLLUP = 102;
+    @Deprecated
     public static final short OP_FINISHING_SCHEMA_CHANGE = 103;
     public static final short OP_SAVE_TRANSACTION_ID = 104;
 
@@ -227,6 +235,9 @@ public class OperationType {
     public static final short OP_DROP_TASK_RUNS = 10083;
 
     public static final short OP_CREATE_MATERIALIZED_VIEW = 10094;
+    public static final short OP_CREATE_INSERT_OVERWRITE = 10095;
+    public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10096;
+
     // manage system node info 10100 ~ 10120
     public static final short OP_UPDATE_FRONTEND = 10101;
 }

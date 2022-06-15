@@ -136,8 +136,9 @@ public class ExpressionTest extends PlanTestBase {
     public void testExpression6() throws Exception {
         String sql = "select cast(v1 as decimal64(7,2)) + cast(v2 as decimal64(9,3)) from t0";
         String planFragment = getFragmentPlan(sql);
+        System.out.println("planFragment = " + planFragment);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL64(7,2)) AS DECIMAL64(18,2)) + CAST(CAST(2: v2 AS DECIMAL64(9,3)) AS DECIMAL64(18,3))\n"));
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL64(7,2)) AS DECIMAL64(10,2)) + CAST(CAST(2: v2 AS DECIMAL64(9,3)) AS DECIMAL64(10,3))\n"));
     }
 
     @Test
@@ -971,7 +972,7 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select id_decimal + 1, id_decimal + 2 from test_all_type";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "common expressions:\n" +
-                "  |  <slot 13> : CAST(10: id_decimal AS DECIMAL64(18,2))");
+                "  |  <slot 13> : CAST(10: id_decimal AS DECIMAL64(12,2))");
 
         sql = "select concat(cast(t1c as varchar(10)), 'a'), concat(cast(t1c as varchar(10)), 'b') from test_all_type";
         plan = getFragmentPlan(sql);
@@ -1014,6 +1015,17 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select days_sub('2010-11-30 23:59:59', 0)";
         String plan =  getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("<slot 2> : '2010-11-30 23:59:59'"));
+    }
+
+    @Test
+    public void testMultiStarItem() throws Exception {
+        String sql = "select *,v1,* from t0";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3 | 1: v1 | 1: v1 | 2: v2 | 3: v3"));
+
+        sql = "select *,* from t0";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3 | 1: v1 | 2: v2 | 3: v3"));
     }
 
 }

@@ -317,6 +317,19 @@ public enum PrimitiveType {
         }
     }
 
+    public static PrimitiveType getDecimalPrimitiveType(int precision) {
+        PrimitiveType type = INVALID_TYPE;
+        if (precision > 0 && precision <= getMaxPrecisionOfDecimal(DECIMAL32)) {
+            return DECIMAL32;
+        } else if (precision <= getMaxPrecisionOfDecimal(DECIMAL64)) {
+            return DECIMAL64;
+        } else if (precision <= getMaxPrecisionOfDecimal(DECIMAL128)) {
+            return DECIMAL128;
+        }
+        Preconditions.checkState(type.isDecimalOfAnyVersion());
+        return type;
+    }
+
     public void setTimeType() {
         isTimeType = true;
     }

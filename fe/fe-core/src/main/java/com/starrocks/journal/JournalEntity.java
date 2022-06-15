@@ -63,6 +63,7 @@ import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ClusterInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
+import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropCatalogLog;
@@ -74,6 +75,7 @@ import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.HbPackage;
 import com.starrocks.persist.ImpersonatePrivInfo;
+import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
@@ -235,14 +237,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_START_ROLLUP:
-            case OperationType.OP_FINISHING_ROLLUP:
-            case OperationType.OP_FINISHING_SCHEMA_CHANGE:
-            case OperationType.OP_FINISH_ROLLUP:
-            case OperationType.OP_CANCEL_ROLLUP:
-            case OperationType.OP_START_SCHEMA_CHANGE:
-            case OperationType.OP_FINISH_SCHEMA_CHANGE:
-            case OperationType.OP_CANCEL_SCHEMA_CHANGE:
             case OperationType.OP_START_DECOMMISSION_BACKEND:
             case OperationType.OP_FINISH_DECOMMISSION_BACKEND: {
                 data = AlterJob.read(in);
@@ -635,6 +629,16 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DROP_CATALOG: {
                 data = DropCatalogLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CREATE_INSERT_OVERWRITE: {
+                data = CreateInsertOverwriteJobLog.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE: {
+                data = InsertOverwriteStateChangeInfo.read(in);
                 isRead = true;
                 break;
             }

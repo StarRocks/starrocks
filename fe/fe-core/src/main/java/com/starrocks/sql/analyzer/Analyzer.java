@@ -12,6 +12,7 @@ import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -22,6 +23,7 @@ import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
@@ -47,6 +49,12 @@ public class Analyzer {
         public void analyze(StatementBase statement, ConnectContext session) {
             statement.setClusterName(session.getClusterName());
             visit(statement, session);
+        }
+
+        @Override
+        public Void visitCreateTableStatement(CreateTableStmt statement, ConnectContext context) {
+            CreateTableAnalyzer.analyze(statement, context);
+            return null;
         }
 
         @Override
@@ -111,9 +119,8 @@ public class Analyzer {
             CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
             QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
             Analyzer.analyze(queryStatement, context);
-            String sqlText = "CREATE TABLE " +
-                    createTableAsSelectStmt.getCreateTableStmt().getDbTbl().toSql() + " AS " +
-                    ViewDefBuilder.build(queryStatement);
+            OriginStatement origStmt = statement.getOrigStmt();
+            String sqlText = origStmt.originStmt.substring(statement.getSqlBeginIndex());
             statement.setSqlText(sqlText);
             TaskAnalyzer.analyzeSubmitTaskStmt(statement, context);
             return null;

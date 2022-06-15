@@ -47,7 +47,7 @@ public class CreateTableWithPartitionTest {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p20140101 VALUES LESS THEN ('2014-01-01')"));
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p20140102 VALUES LESS THEN ('2014-01-02')"));
@@ -76,7 +76,7 @@ public class CreateTableWithPartitionTest {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         Assert.assertTrue(
                 partitionDesc.toSql().contains("PARTITION p20140101 VALUES [('0000-01-01'), ('2014-01-01'))"));
@@ -105,7 +105,7 @@ public class CreateTableWithPartitionTest {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         Assert.assertTrue(
                 partitionDesc.toSql().contains("PARTITION p20140101 VALUES [('2014-01-01'), ('2014-01-02'))"));
@@ -115,6 +115,39 @@ public class CreateTableWithPartitionTest {
                 partitionDesc.toSql().contains("PARTITION p20140103 VALUES [('2014-01-03'), ('2014-01-04'))"));
         Assert.assertFalse(
                 partitionDesc.toSql().contains("PARTITION p20140104 VALUES [('2014-01-04'), ('2014-01-05'))"));
+
+    }
+
+    @Test
+    public void testCreateTableBatchPartitionWithDynamicPrefix() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createTableSql = "CREATE TABLE testCreateTableBatchPartitionDay (\n" +
+                "    k1 DATE,\n" +
+                "    k2 INT,\n" +
+                "    k3 SMALLINT,\n" +
+                "    v1 VARCHAR(2048),\n" +
+                "    v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1, k2, k3)\n" +
+                "PARTITION BY RANGE (k1) (\n" +
+                "    START (\"2014-01-01\") END (\"2014-01-04\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"dynamic_partition.prefix\" = \"p_\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
+        Assert.assertTrue(
+                partitionDesc.toSql().contains("PARTITION p_20140101 VALUES [('2014-01-01'), ('2014-01-02'))"));
+        Assert.assertTrue(
+                partitionDesc.toSql().contains("PARTITION p_20140102 VALUES [('2014-01-02'), ('2014-01-03'))"));
+        Assert.assertTrue(
+                partitionDesc.toSql().contains("PARTITION p_20140103 VALUES [('2014-01-03'), ('2014-01-04'))"));
+        Assert.assertFalse(
+                partitionDesc.toSql().contains("PARTITION p_20140104 VALUES [('2014-01-04'), ('2014-01-05'))"));
 
     }
 
@@ -137,7 +170,7 @@ public class CreateTableWithPartitionTest {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         Assert.assertTrue(
                 partitionDesc.toSql().contains("PARTITION p20140101 VALUES [('2014-01-01'), ('2014-01-06'))"));
@@ -169,7 +202,7 @@ public class CreateTableWithPartitionTest {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2020_13 VALUES [('2020-03-25'), ('2020-03-30'))"));
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2020_14 VALUES [('2020-03-30'), ('2020-04-06'))"));
@@ -196,7 +229,7 @@ public class CreateTableWithPartitionTest {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2020_52 VALUES [('2020-12-25'), ('2020-12-28'))"));
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2020_53 VALUES [('2020-12-28'), ('2021-01-04'))"));
@@ -224,7 +257,7 @@ public class CreateTableWithPartitionTest {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p202001 VALUES [('2020-01-01'), ('2020-02-01'))"));
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p202002 VALUES [('2020-02-01'), ('2020-03-01'))"));
@@ -253,7 +286,7 @@ public class CreateTableWithPartitionTest {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p202012 VALUES [('2020-12-04'), ('2021-01-01'))"));
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01'))"));
@@ -282,7 +315,7 @@ public class CreateTableWithPartitionTest {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01'))"));
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01'))"));
@@ -308,7 +341,7 @@ public class CreateTableWithPartitionTest {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p1 VALUES [('1'), ('2'))"));
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2 VALUES [('2'), ('3'))"));
@@ -338,7 +371,7 @@ public class CreateTableWithPartitionTest {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p1 VALUES [('1'), ('2'))"));
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2 VALUES [('2'), ('3'))"));
@@ -365,7 +398,7 @@ public class CreateTableWithPartitionTest {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
     }
 
@@ -387,7 +420,7 @@ public class CreateTableWithPartitionTest {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
     }
 
     @Test(expected = AnalysisException.class)
@@ -410,7 +443,7 @@ public class CreateTableWithPartitionTest {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
     }
 
     @Test
@@ -436,7 +469,7 @@ public class CreateTableWithPartitionTest {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2013 VALUES [('2013-01-01'), ('2014-01-01'))"));
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2014 VALUES [('2014-01-01'), ('2015-01-01'))"));
@@ -473,7 +506,7 @@ public class CreateTableWithPartitionTest {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         Assert.assertTrue(partitionDesc.toSql()
                 .contains("PARTITION p20140101 VALUES [('2014-01-01 00:00:00'), ('2014-01-02 00:00:00'))"));
@@ -507,7 +540,7 @@ public class CreateTableWithPartitionTest {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p20140101 VALUES [('20140101'), ('20140102'))"));
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p20140102 VALUES [('20140102'), ('20140103'))"));
@@ -538,7 +571,7 @@ public class CreateTableWithPartitionTest {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
     }
 
     @Test(expected = AnalysisException.class)
@@ -563,7 +596,7 @@ public class CreateTableWithPartitionTest {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
     }
 
     @Test(expected = AnalysisException.class)
@@ -587,7 +620,7 @@ public class CreateTableWithPartitionTest {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
     }
 
     @Test(expected = AnalysisException.class)
@@ -612,7 +645,7 @@ public class CreateTableWithPartitionTest {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
     }
 
     @Test(expected = AnalysisException.class)
@@ -636,7 +669,7 @@ public class CreateTableWithPartitionTest {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p1 VALUES [('1'), ('2'))"));
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2 VALUES [('2'), ('3'))"));

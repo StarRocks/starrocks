@@ -4,7 +4,10 @@ package com.starrocks.catalog;
 
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import mockit.Expectations;
+import com.starrocks.common.jmockit.Deencapsulation;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -89,12 +92,16 @@ public class StarOSAgentTest {
     }
 
     @Test
-    public void testAddWorker() throws Exception {
+    public void testAddAndRemoveWorker() throws Exception {
          new Expectations() {
              {
                  client.addWorker(1, "127.0.0.1:8090");
                  minTimes = 0;
                  result = 10;
+
+                 client.removeWorker(1, 10);
+                 minTimes = 0;
+                 result = null;
              }
          };
 
@@ -102,8 +109,10 @@ public class StarOSAgentTest {
         starosAgent.setServiceId(1);
         starosAgent.addWorker(5, workerHost);
         Assert.assertEquals(10, starosAgent.getWorkerId(workerHost));
-    }
 
+        starosAgent.removeWorker(workerHost);
+        Assert.assertEquals(-1, starosAgent.getWorkerIdByBackendId(5));
+    }
 
     @Test
     public void testAddWorkerException() throws Exception  {
@@ -125,5 +134,38 @@ public class StarOSAgentTest {
         starosAgent.addWorker(5, workerHost);
         Assert.assertEquals(6, starosAgent.getWorkerId(workerHost));
         Assert.assertEquals(6, starosAgent.getWorkerIdByBackendId(5));
+    }
+
+    @Test
+    public void testRemoveWorkerException() throws Exception {
+        new Expectations() {
+            {
+                client.getWorkerInfo(1, "127.0.0.1:8090").getWorkerId();
+                minTimes = 0;
+                result = new StarClientException(StarClientException.ExceptionCode.GRPC,
+                        "network error");
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", 1L);
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to get worker id from starMgr.",
+                () -> starosAgent.removeWorker("127.0.0.1:8090"));
+
+        new Expectations() {
+            {
+                client.getWorkerInfo(1, "127.0.0.1:8090").getWorkerId();
+                minTimes = 0;
+                result = 10;
+
+                client.removeWorker(1, 10);
+                minTimes = 0;
+                result = new StarClientException(StarClientException.ExceptionCode.GRPC,
+                        "network error");
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to remove worker.",
+                () -> starosAgent.removeWorker("127.0.0.1:8090"));
     }
 }

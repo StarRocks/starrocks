@@ -279,8 +279,8 @@ public:
         return ss.str();
     }
 
-    bool reach_capacity_limit(std::string* msg = nullptr) const override {
-        return _data_column->reach_capacity_limit(msg) || _null_column->reach_capacity_limit(msg);
+    bool capacity_limit_reached(std::string* msg = nullptr) const override {
+        return _data_column->capacity_limit_reached(msg) || _null_column->capacity_limit_reached(msg);
     }
 
     void check_or_die() const override;

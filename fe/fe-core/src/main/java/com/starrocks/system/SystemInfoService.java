@@ -41,6 +41,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
@@ -311,6 +312,16 @@ public class SystemInfoService {
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(droppedBackend.getOwnerClusterName());
         if (null != cluster) {
+            // remove worker
+            if (Config.integrate_starmgr) {
+                long starletPort = droppedBackend.getStarletPort();
+                if (starletPort == 0) {
+                    throw new DdlException("starletPort has not been updated by heartbeat from this backend");
+                }
+                String workerAddr = droppedBackend.getHost() + ":" + starletPort;
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
+            }
+
             cluster.removeBackend(droppedBackend.getId());
         } else {
             LOG.error("Cluster " + droppedBackend.getOwnerClusterName() + " no exist.");

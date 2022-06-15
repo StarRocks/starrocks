@@ -128,7 +128,6 @@ import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
@@ -818,10 +817,10 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
 
-        if (engineName.equals("olap")) {
+        if (engineName.equalsIgnoreCase("olap")) {
             createOlapTable(db, stmt);
             return;
-        } else if (engineName.equals("mysql")) {
+        } else if (engineName.equalsIgnoreCase("mysql")) {
             createMysqlTable(db, stmt);
             return;
         } else if (engineName.equalsIgnoreCase("elasticsearch") || engineName.equalsIgnoreCase("es")) {
@@ -862,12 +861,11 @@ public class LocalMetastore implements ConnectorMetadata {
             } finally {
                 db.readUnlock();
             }
-            StatementBase statementBase =
-                    SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(createTableStmt.get(0),
+                    ConnectContext.get().getSessionVariable().getSqlMode()).get(0);
+            com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ConnectContext.get());
             if (statementBase instanceof CreateTableStmt) {
-                CreateTableStmt parsedCreateTableStmt =
-                        (CreateTableStmt) SqlParserUtils
-                                .parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+                CreateTableStmt parsedCreateTableStmt = (CreateTableStmt) statementBase;
                 parsedCreateTableStmt.setTableName(stmt.getTableName());
                 if (stmt.isSetIfNotExists()) {
                     parsedCreateTableStmt.setIfNotExists();
@@ -878,7 +876,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         } catch (UserException e) {
             throw new DdlException("Failed to execute CREATE TABLE LIKE " + stmt.getExistedTableName() + ". Reason: " +
-                    e.getMessage());
+                    e.getMessage(), e);
         }
     }
 
@@ -1230,9 +1228,14 @@ public class LocalMetastore implements ConnectorMetadata {
                 olapTable.addPartition(partition);
             }
 
-            ((RangePartitionInfo) partitionInfo).unprotectHandleNewSinglePartitionDesc(partition.getId(),
-                    info.isTempPartition(), info.getRange(), info.getDataProperty(), info.getReplicationNum(),
-                    info.isInMemory());
+            if (partitionInfo.getType() == PartitionType.RANGE) {
+                ((RangePartitionInfo) partitionInfo).unprotectHandleNewSinglePartitionDesc(partition.getId(),
+                        info.isTempPartition(), info.getRange(), info.getDataProperty(), info.getReplicationNum(),
+                        info.isInMemory());
+            } else {
+                partitionInfo.addPartition(
+                        partition.getId(), info.getDataProperty(), info.getReplicationNum(), info.isInMemory());
+            }
 
             if (!isCheckpointThread()) {
                 // add to inverted index
@@ -4288,5 +4291,84 @@ public class LocalMetastore implements ConnectorMetadata {
         stateMgr.getRollupHandler().unprotectedGetAlterJobs().clear();
         stateMgr.getSchemaChangeHandler().unprotectedGetAlterJobs().clear();
         System.gc();
+    }
+
+    @VisibleForTesting
+    public OlapTable getCopiedTable(Database db, OlapTable olapTable, List<Long> sourcePartitionIds,
+                                    Map<Long, String> origPartitions) {
+        OlapTable copiedTbl;
+        db.readLock();
+        try {
+            if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+                throw new RuntimeException("Table' state is not NORMAL: " + olapTable.getState()
+                        + ", tableId:" + olapTable.getId() + ", tabletName:" + olapTable.getName());
+            }
+            for (Long id : sourcePartitionIds) {
+                origPartitions.put(id, olapTable.getPartition(id).getName());
+            }
+            copiedTbl = olapTable.selectiveCopy(origPartitions.values(), true, MaterializedIndex.IndexExtState.VISIBLE);
+        } finally {
+            db.readUnlock();
+        }
+        return copiedTbl;
+    }
+
+    @VisibleForTesting
+    public List<Partition> getNewPartitionsFromPartitions(Database db, OlapTable olapTable, List<Long> sourcePartitionIds,
+                                                          Map<Long, String> origPartitions, OlapTable copiedTbl,
+                                                          String namePostfix, Set<Long> tabletIdSet, List<Long> tmpPartitionIds)
+            throws DdlException {
+        List<Partition> newPartitions = Lists.newArrayListWithCapacity(sourcePartitionIds.size());
+        for (int i = 0; i < sourcePartitionIds.size(); ++i) {
+            long newPartitionId = tmpPartitionIds.get(i);
+            long sourcePartitionId = sourcePartitionIds.get(i);
+            String newPartitionName = origPartitions.get(sourcePartitionId) + namePostfix;
+            if (olapTable.checkPartitionNameExist(newPartitionName, true)) {
+                // to prevent creating the same partitions when failover
+                // this will happen when OverwriteJob crashed after created temp partitions,
+                // but before changing to PREPARED state
+                LOG.warn("partition:{} already exists in table:{}", newPartitionName, olapTable.getName());
+                continue;
+            }
+            PartitionInfo partitionInfo = copiedTbl.getPartitionInfo();
+            partitionInfo.setTabletType(newPartitionId, partitionInfo.getTabletType(sourcePartitionId));
+            partitionInfo.setIsInMemory(newPartitionId, partitionInfo.getIsInMemory(sourcePartitionId));
+            partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(sourcePartitionId));
+            partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(sourcePartitionId));
+
+            Partition newPartition =
+                    createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
+            newPartitions.add(newPartition);
+        }
+        return newPartitions;
+    }
+
+    // create new partitions from source partitions.
+    // new partitions have the same indexes as source partitions.
+    public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
+                                                              String namePostfix, List<Long> sourcePartitionIds,
+                                                              List<Long> tmpPartitionIds) {
+        Preconditions.checkState(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        Map<Long, String> origPartitions = Maps.newHashMap();
+        OlapTable copiedTbl = getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions);
+
+        // 2. use the copied table to create partitions
+        List<Partition> newPartitions = null;
+        // tabletIdSet to save all newly created tablet ids.
+        Set<Long> tabletIdSet = Sets.newHashSet();
+        try {
+            newPartitions = getNewPartitionsFromPartitions(db, olapTable, sourcePartitionIds, origPartitions,
+                    copiedTbl, namePostfix, tabletIdSet, tmpPartitionIds);
+            buildPartitions(db, copiedTbl, newPartitions);
+        } catch (Exception e) {
+            // create partition failed, remove all newly created tablets
+            for (Long tabletId : tabletIdSet) {
+                GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+            }
+            LOG.warn("create partitions from partitions failed.", e);
+            throw new RuntimeException("create partitions failed", e);
+        }
+        return newPartitions;
     }
 }

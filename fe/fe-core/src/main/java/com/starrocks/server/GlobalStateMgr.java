@@ -166,6 +166,7 @@ import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
+import com.starrocks.load.InsertOverwriteJobManager;
 import com.starrocks.load.Load;
 import com.starrocks.load.loadv2.LoadEtlChecker;
 import com.starrocks.load.loadv2.LoadJobScheduler;
@@ -401,8 +402,8 @@ public class GlobalStateMgr {
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
     private ConnectorMgr connectorMgr;
-
     private TaskManager taskManager;
+    private InsertOverwriteJobManager insertOverwriteJobManager;
 
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
@@ -561,6 +562,7 @@ public class GlobalStateMgr {
         this.connectorMgr = new ConnectorMgr(metadataMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
+        this.insertOverwriteJobManager = new InsertOverwriteJobManager();
     }
 
     public static void destroyCheckpoint() {
@@ -721,6 +723,10 @@ public class GlobalStateMgr {
 
     public TaskManager getTaskManager() {
         return taskManager;
+    }
+
+    public InsertOverwriteJobManager getInsertOverwriteJobManager() {
+        return insertOverwriteJobManager;
     }
 
     // Use tryLock to avoid potential dead lock
@@ -925,6 +931,7 @@ public class GlobalStateMgr {
             startMasterOnlyDaemonThreads();
             // start other daemon threads that should running on all FE
             startNonMasterDaemonThreads();
+            insertOverwriteJobManager.cancelRunningJobs();
 
             MetricRepo.init();
 
@@ -1121,6 +1128,7 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = catalogMgr.loadCatalogs(dis, checksum);
             remoteChecksum = dis.readLong();
+            checksum = loadInsertOverwriteJobs(dis, checksum);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1287,6 +1295,20 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long loadInsertOverwriteJobs(DataInputStream dis, long checksum) throws IOException {
+        try {
+            this.insertOverwriteJobManager = InsertOverwriteJobManager.read(dis);
+        } catch (EOFException e) {
+            LOG.warn("no InsertOverwriteJobManager to replay.", e);
+        }
+        return checksum;
+    }
+
+    public long saveInsertOverwriteJobs(DataOutputStream dos, long checksum) throws IOException {
+        getInsertOverwriteJobManager().write(dos);
+        return checksum;
+    }
+
     public long loadResources(DataInputStream in, long checksum) throws IOException {
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_87) {
             resourceMgr = ResourceMgr.read(in);
@@ -1354,6 +1376,7 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = catalogMgr.saveCatalogs(dos, checksum);
             dos.writeLong(checksum);
+            checksum = saveInsertOverwriteJobs(dos, checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -1393,43 +1416,20 @@ public class GlobalStateMgr {
     }
 
     public long saveAlterJob(DataOutputStream dos, long checksum, JobType type) throws IOException {
-        Map<Long, AlterJob> alterJobs = null;
-        ConcurrentLinkedQueue<AlterJob> finishedOrCancelledAlterJobs = null;
         Map<Long, AlterJobV2> alterJobsV2 = Maps.newHashMap();
         if (type == JobType.ROLLUP) {
-            alterJobs = this.getRollupHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getRollupHandler().unprotectedGetFinishedOrCancelledAlterJobs();
             alterJobsV2 = this.getRollupHandler().getAlterJobsV2();
         } else if (type == JobType.SCHEMA_CHANGE) {
-            alterJobs = this.getSchemaChangeHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getSchemaChangeHandler().unprotectedGetFinishedOrCancelledAlterJobs();
             alterJobsV2 = this.getSchemaChangeHandler().getAlterJobsV2();
-        } else if (type == JobType.DECOMMISSION_BACKEND) {
-            alterJobs = this.getClusterHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getClusterHandler().unprotectedGetFinishedOrCancelledAlterJobs();
         }
 
-        // alter jobs
-        int size = alterJobs.size();
+        // alter jobs just for compatibility
+        int size = 0;
         checksum ^= size;
         dos.writeInt(size);
-        for (Entry<Long, AlterJob> entry : alterJobs.entrySet()) {
-            long tableId = entry.getKey();
-            checksum ^= tableId;
-            dos.writeLong(tableId);
-            entry.getValue().write(dos);
-        }
-
-        // finished or cancelled jobs
-        size = finishedOrCancelledAlterJobs.size();
+        // finished or cancelled jobs just for compatibility
         checksum ^= size;
         dos.writeInt(size);
-        for (AlterJob alterJob : finishedOrCancelledAlterJobs) {
-            long tableId = alterJob.getTableId();
-            checksum ^= tableId;
-            dos.writeLong(tableId);
-            alterJob.write(dos);
-        }
 
         // alter job v2
         size = alterJobsV2.size();
@@ -2960,6 +2960,12 @@ public class GlobalStateMgr {
 
         LOG.info("finished dumpping image to {}", dumpFilePath);
         return dumpFilePath;
+    }
+
+    public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
+                                                              String namePostfix, List<Long> sourcePartitionIds,
+                                                              List<Long> tmpPartitionIds) {
+        return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds, tmpPartitionIds);
     }
 
     public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {

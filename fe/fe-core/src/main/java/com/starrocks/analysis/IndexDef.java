@@ -25,7 +25,6 @@ import com.google.common.base.Strings;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
@@ -52,21 +51,21 @@ public class IndexDef {
         }
     }
 
-    public void analyze() throws AnalysisException {
+    public void analyze() {
         if (indexType == IndexDef.IndexType.BITMAP) {
             if (columns == null || columns.size() != 1) {
-                throw new AnalysisException("bitmap index can only apply to a single column.");
+                throw new SemanticException("bitmap index can only apply to a single column.");
             }
             if (Strings.isNullOrEmpty(indexName)) {
-                throw new AnalysisException("index name cannot be blank.");
+                throw new SemanticException("index name cannot be blank.");
             }
             if (indexName.length() > 64) {
-                throw new AnalysisException("index name too long, the index name length at most is 64.");
+                throw new SemanticException("index name too long, the index name length at most is 64.");
             }
             TreeSet<String> distinct = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
             distinct.addAll(columns);
             if (columns.size() != distinct.size()) {
-                throw new AnalysisException("columns of index has duplicated.");
+                throw new SemanticException("columns of index has duplicated.");
             }
         }
     }
@@ -124,21 +123,21 @@ public class IndexDef {
 
     // new planner framework use SemanticException instead of AnalysisException, this code will remove in future
     @Deprecated
-    public void checkColumn(Column column, KeysType keysType) throws AnalysisException {
+    public void checkColumn(Column column, KeysType keysType) {
         if (indexType == IndexType.BITMAP) {
             String indexColName = column.getName();
             PrimitiveType colType = column.getPrimitiveType();
             if (!(colType.isDateType() ||
                     colType.isFixedPointType() || colType.isStringType() || colType == PrimitiveType.BOOLEAN)) {
-                throw new AnalysisException(colType + " is not supported in bitmap index. "
+                throw new SemanticException(colType + " is not supported in bitmap index. "
                         + "invalid column: " + indexColName);
             } else if ((keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) && !column.isKey()) {
-                throw new AnalysisException(
+                throw new SemanticException(
                         "BITMAP index only used in columns of DUP_KEYS/PRIMARY_KEYS table or key columns of"
                                 + " UNIQUE_KEYS/AGG_KEYS table. invalid column: " + indexColName);
             }
         } else {
-            throw new AnalysisException("Unsupported index type: " + indexType);
+            throw new SemanticException("Unsupported index type: " + indexType);
         }
     }
 

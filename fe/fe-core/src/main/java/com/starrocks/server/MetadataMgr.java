@@ -2,6 +2,7 @@
 
 package com.starrocks.server;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
@@ -61,8 +62,8 @@ public class MetadataMgr {
     }
 
     // get metadata by catalog name
-
-    private Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
+    @VisibleForTesting
+    public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return Optional.of(localMetastore);
         } else {

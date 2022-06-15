@@ -25,6 +25,7 @@
 #include <mutex>
 #include <set>
 
+#include "bthread/mutex.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -34,6 +35,7 @@
 #include "runtime/local_pass_through_buffer.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
+#include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
 
 namespace google {
@@ -95,49 +97,29 @@ public:
 
 private:
     friend class DataStreamRecvr;
+    static const uint32_t BUCKET_NUM = 127;
 
     // protects all fields below
-    std::mutex _lock;
+    typedef bthread::Mutex Mutex;
+    Mutex _lock[BUCKET_NUM];
 
     // map from hash value of fragment instance id/node id pair to stream receivers;
     // Ownership of the stream revcr is shared between this instance and the caller of
     // create_recvr().
-    // we don't want to create a map<pair<TUniqueId, PlanNodeId>, DataStreamRecvr*>,
-    // because that requires a bunch of copying of ids for lookup
-    typedef std::unordered_multimap<uint32_t, std::shared_ptr<DataStreamRecvr> > StreamMap;
-    StreamMap _receiver_map;
-
-    // less-than ordering for pair<TUniqueId, PlanNodeId>
-    struct ComparisonOp {
-        bool operator()(const std::pair<starrocks::TUniqueId, PlanNodeId>& a,
-                        const std::pair<starrocks::TUniqueId, PlanNodeId>& b) const {
-            if (a.first.hi < b.first.hi) {
-                return true;
-            } else if (a.first.hi > b.first.hi) {
-                return false;
-            } else if (a.first.lo < b.first.lo) {
-                return true;
-            } else if (a.first.lo > b.first.lo) {
-                return false;
-            }
-            return a.second < b.second;
-        }
-    };
-
-    // ordered set of registered streams' fragment instance id/node id
-    typedef std::set<std::pair<TUniqueId, PlanNodeId>, ComparisonOp> FragmentStreamSet;
-    FragmentStreamSet _fragment_stream_set;
+    typedef phmap::flat_hash_map<PlanNodeId, std::shared_ptr<DataStreamRecvr>> RecvrMap;
+    typedef phmap::flat_hash_map<TUniqueId, std::shared_ptr<RecvrMap>> StreamMap;
+    StreamMap _receiver_map[BUCKET_NUM];
+    std::atomic<uint32_t> _fragment_count{0};
+    std::atomic<uint32_t> _receiver_count{0};
 
     // Return the receiver for given fragment_instance_id/node_id,
-    // or NULL if not found. If 'acquire_lock' is false, assumes _lock is already being
-    // held and won't try to acquire it.
-    std::shared_ptr<DataStreamRecvr> find_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id,
-                                                bool acquire_lock = true);
+    // or NULL if not found.
+    std::shared_ptr<DataStreamRecvr> find_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
 
     // Remove receiver block for fragment_instance_id/node_id from the map.
     Status deregister_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
 
-    inline uint32_t get_hash_value(const TUniqueId& fragment_instance_id, PlanNodeId node_id);
+    inline uint32_t get_bucket(const TUniqueId& fragment_instance_id);
 
     PassThroughChunkBufferManager _pass_through_chunk_buffer_manager;
 };

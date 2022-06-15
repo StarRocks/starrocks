@@ -126,6 +126,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         // it will follow this configuration to set day of week
         int dayOfWeek = 1;
         int dayOfMonth = 1;
+        String partitionPrefix = DEFAULT_PREFIX;
         if (properties != null) {
             if (properties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
                 String dayOfWeekStr = properties.get(DynamicPartitionProperty.START_DAY_OF_WEEK);
@@ -145,6 +146,14 @@ public class MultiRangePartitionDesc extends PartitionDesc {
                 }
                 dayOfMonth = Integer.parseInt(dayOfMonthStr);
             }
+            if (properties.containsKey(DynamicPartitionProperty.PREFIX)) {
+                partitionPrefix = properties.get(DynamicPartitionProperty.PREFIX);
+                try {
+                    DynamicPartitionUtil.checkPrefix(partitionPrefix);
+                } catch (DdlException e) {
+                    throw new AnalysisException(e.getMessage());
+                }
+            }
         }
         WeekFields weekFields = WeekFields.of(DayOfWeek.of(dayOfWeek), 1);
         while (beginTime.isBefore(endTime)) {
@@ -152,25 +161,25 @@ public class MultiRangePartitionDesc extends PartitionDesc {
 
             switch (timeUnitType) {
                 case DAY:
-                    partitionName = DEFAULT_PREFIX + beginTime.format(DateUtils.DATEKEY_FORMATTER);
+                    partitionName = partitionPrefix + beginTime.format(DateUtils.DATEKEY_FORMATTER);
                     beginTime = beginTime.plusDays(timeInterval);
                     break;
                 case WEEK:
                     LocalDate localDate = LocalDate.of(beginTime.getYear(), beginTime.getMonthValue(),
                             beginTime.getDayOfMonth());
                     int weekOfYear = localDate.get(weekFields.weekOfYear());
-                    partitionName = String.format("%s%s_%02d", DEFAULT_PREFIX,
+                    partitionName = String.format("%s%s_%02d", partitionPrefix,
                             beginTime.format(DateUtils.YEAR_FORMATTER), weekOfYear);
                     beginTime = beginTime.with(ChronoField.DAY_OF_WEEK, dayOfMonth);
                     beginTime = beginTime.plusWeeks(timeInterval);
                     break;
                 case MONTH:
-                    partitionName = DEFAULT_PREFIX + beginTime.format(DateUtils.MONTH_FORMATTER);
+                    partitionName = partitionPrefix + beginTime.format(DateUtils.MONTH_FORMATTER);
                     beginTime = beginTime.withDayOfMonth(dayOfMonth);
                     beginTime = beginTime.plusMonths(timeInterval);
                     break;
                 case YEAR:
-                    partitionName = DEFAULT_PREFIX + beginTime.format(DateUtils.YEAR_FORMATTER);
+                    partitionName = partitionPrefix + beginTime.format(DateUtils.YEAR_FORMATTER);
                     beginTime = beginTime.withDayOfYear(1);
                     beginTime = beginTime.plusYears(timeInterval);
                     break;

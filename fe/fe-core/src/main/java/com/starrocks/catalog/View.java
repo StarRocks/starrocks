@@ -142,10 +142,6 @@ public class View extends Table {
         }
     }
 
-    public QueryStmt getQueryStmtWithParse() throws StarRocksPlannerException {
-        return null;
-    }
-
     public QueryStatement getQueryStatement() throws StarRocksPlannerException {
         if (queryStmt != null) {
             return queryStmt;

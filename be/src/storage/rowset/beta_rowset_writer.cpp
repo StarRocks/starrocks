@@ -29,6 +29,7 @@
 #include "column/chunk.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "common/tracer.h"
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
 #include "segment_options.h"
@@ -419,6 +420,8 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         return Status::OK();
     }
 
+    auto span = Tracer::Instance().start_trace_txn_tablet("final_merge", _context.txn_id, _context.tablet_id);
+    auto scoped = trace::Scope(span);
     MonotonicStopWatch timer;
     timer.start();
 
@@ -523,6 +526,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
               << " bytes=" << PrettyPrinter::print(stats.bytes_read, TUnit::UNIT) << ") output(rows=" << total_rows
               << " chunk=" << total_chunk << " bytes=" << PrettyPrinter::print(total_data_size(), TUnit::UNIT)
               << ") duration: " << timer.elapsed_time() / 1000000 << "ms";
+    span->SetAttribute("output_bytes", total_data_size());
 
     for (const auto& tmp_segment_file : _tmp_segment_files) {
         auto st = _fs->delete_file(tmp_segment_file);

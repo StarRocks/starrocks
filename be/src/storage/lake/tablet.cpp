@@ -22,7 +22,7 @@ StatusOr<TabletMetadataPtr> Tablet::get_metadata(int64_t version) {
     return _mgr->get_tablet_metadata(_group, _id, version);
 }
 
-StatusOr<MetadataIterator> Tablet::list_metadata() {
+StatusOr<TabletMetadataIter> Tablet::list_metadata() {
     return _mgr->list_tablet_metadata(_group, _id);
 }
 

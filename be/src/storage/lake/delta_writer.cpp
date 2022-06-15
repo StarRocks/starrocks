@@ -63,7 +63,7 @@ public:
 
     [[nodiscard]] Status open();
 
-    [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
+    [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
     [[nodiscard]] Status finish();
 
@@ -77,10 +77,12 @@ public:
 
     [[nodiscard]] MemTracker* mem_tracker() { return _mem_tracker; }
 
+    [[nodiscard]] Status flush();
+
+    [[nodiscard]] Status flush_async();
+
 private:
     void reset_memtable();
-    Status flush_memtable();
-    Status flush_memtable_async();
 
     const int64_t _tablet_id;
     const int64_t _txn_id;
@@ -96,17 +98,21 @@ private:
 };
 
 inline void DeltaWriterImpl::reset_memtable() {
-    _mem_table =
-            std::make_unique<MemTable>(_tablet_id, _tablet_schema.get(), _slots, _mem_table_sink.get(), _mem_tracker);
+    _mem_table.reset(new MemTable(_tablet_id, _tablet_schema.get(), _slots, _mem_table_sink.get(), _mem_tracker));
 }
 
-inline Status DeltaWriterImpl::flush_memtable_async() {
-    RETURN_IF_ERROR(_mem_table->finalize());
-    return _flush_token->submit(std::move(_mem_table));
+inline Status DeltaWriterImpl::flush_async() {
+    Status st;
+    if (_mem_table != nullptr) {
+        RETURN_IF_ERROR(_mem_table->finalize());
+        st = _flush_token->submit(std::move(_mem_table));
+        _mem_table.reset(nullptr);
+    }
+    return st;
 }
 
-inline Status DeltaWriterImpl::flush_memtable() {
-    RETURN_IF_ERROR(flush_memtable_async());
+inline Status DeltaWriterImpl::flush() {
+    RETURN_IF_ERROR(flush_async());
     return _flush_token->wait();
 }
 
@@ -117,30 +123,31 @@ Status DeltaWriterImpl::open() {
     ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_tablet_id));
     ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
     ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer());
+    RETURN_IF_ERROR(_tablet_writer->open());
     _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());
     _flush_token = ExecEnv::GetInstance()->storage_engine()->memtable_flush_executor()->create_flush_token();
+    if (_flush_token == nullptr) {
+        return Status::InternalError("fail to create flush token");
+    }
     return Status::OK();
 }
 
-Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
+Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
     if (_mem_table == nullptr) {
         reset_memtable();
     }
     Status st;
-    bool full = _mem_table->insert(chunk, indexes, from, size);
+    bool full = _mem_table->insert(chunk, indexes, 0, indexes_size);
     if (_mem_tracker->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to memory limit exceeded";
-        st = flush_memtable();
-        _mem_table = nullptr;
+        st = flush();
     } else if (_mem_tracker->parent() && _mem_tracker->parent()->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to parent memory limit exceeded";
-        st = flush_memtable();
-        _mem_table = nullptr;
+        st = flush();
     } else if (full) {
-        st = flush_memtable_async();
-        _mem_table = nullptr;
+        st = flush_async();
     }
     return st;
 }
@@ -152,7 +159,7 @@ Status DeltaWriterImpl::finish() {
     auto is_seg_file = [](const std::string& name) -> bool { return HasSuffixString(name, ".dat"); };
     auto is_del_file = [](const std::string& name) -> bool { return HasSuffixString(name, ".del"); };
 
-    RETURN_IF_ERROR(_flush_token->wait());
+    RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(_tablet_writer->finish());
     ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_tablet_id));
     auto txn_log = std::make_shared<TxnLog>();
@@ -178,7 +185,9 @@ Status DeltaWriterImpl::finish() {
 void DeltaWriterImpl::close() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
-    (void)_flush_token->wait();
+    if (_flush_token != nullptr) {
+        (void)_flush_token->wait();
+    }
 
     // Destruct variables manually for counting memory usage into |_mem_tracker|
     if (_tablet_writer != nullptr) {
@@ -201,8 +210,8 @@ Status DeltaWriter::open() {
     return _impl->open();
 }
 
-Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
-    return _impl->write(chunk, indexes, from, size);
+Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size) {
+    return _impl->write(chunk, indexes, indexes_size);
 }
 
 Status DeltaWriter::finish() {
@@ -227,6 +236,14 @@ int64_t DeltaWriter::txn_id() const {
 
 MemTracker* DeltaWriter::mem_tracker() {
     return _impl->mem_tracker();
+}
+
+Status DeltaWriter::flush() {
+    return _impl->flush();
+}
+
+Status DeltaWriter::flush_async() {
+    return _impl->flush_async();
 }
 
 std::unique_ptr<DeltaWriter> DeltaWriter::create(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
