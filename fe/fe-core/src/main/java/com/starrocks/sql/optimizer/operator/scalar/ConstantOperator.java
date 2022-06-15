@@ -286,7 +286,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         ConstantOperator that = (ConstantOperator) obj;
         return isNull == that.isNull &&
                 Objects.equals(value, that.value) &&
-                Objects.equals(type.getPrimitiveType(), that.type.getPrimitiveType());
+                type.matchesType(that.getType());
     }
 
     @Override
