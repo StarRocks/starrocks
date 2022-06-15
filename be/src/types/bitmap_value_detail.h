@@ -24,6 +24,8 @@
 // Note: Why does this file exist rather than in bitmap_value.cpp? Because we have some unittest for
 // the detail class such as Roaring64Map.
 // So other files should not include this file except bitmap_value.cpp.
+#include <cstdint>
+#include <optional>
 namespace starrocks {
 
 // serialized bitmap := TypeCode(1), Payload
@@ -183,7 +185,7 @@ public:
                 return uniteBytes(roaring_iter->first, roaring_iter->second.maximum());
             }
         }
-        return {};
+        return std::nullopt;
     }
 
     /**
@@ -196,7 +198,7 @@ public:
                 return uniteBytes(roaring.first, roaring.second.minimum());
             }
         }
-        return {};
+        return std::nullopt;
     }
 
     /**
