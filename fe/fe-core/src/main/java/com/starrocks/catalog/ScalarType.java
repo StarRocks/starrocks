@@ -822,4 +822,14 @@ public class ScalarType extends Type implements Cloneable {
     public ScalarType clone() {
         return (ScalarType) super.clone();
     }
+
+    @Override
+    public String canonicalName() {
+        if (isDecimalOfAnyVersion()) {
+            Preconditions.checkArgument(!isWildcardDecimal());
+            return String.format("DECIMAL(%d,%d)", precision, scale);
+        } else {
+            return toString();
+        }
+    }
 }
