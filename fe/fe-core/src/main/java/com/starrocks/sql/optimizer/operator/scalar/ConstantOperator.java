@@ -272,7 +272,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
     @Override
     public int hashCode() {
-        return Objects.hash(value, type, isNull);
+        return Objects.hash(value, type.getPrimitiveType(), isNull);
     }
 
     @Override
@@ -286,7 +286,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         ConstantOperator that = (ConstantOperator) obj;
         return isNull == that.isNull &&
                 Objects.equals(value, that.value) &&
-                Objects.equals(type, that.type);
+                Objects.equals(type.getPrimitiveType(), that.type.getPrimitiveType());
     }
 
     @Override
