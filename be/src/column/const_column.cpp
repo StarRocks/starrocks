@@ -35,7 +35,7 @@ void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index,
     append(src, index, size);
 }
 
-void ConstColumn::update_default(const Filter& filter) {
+void ConstColumn::fill_default(const Filter& filter) {
     CHECK(false) << "ConstColumn does not support update";
 }
 

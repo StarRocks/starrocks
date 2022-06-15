@@ -116,7 +116,7 @@ public:
 
     void append_default(size_t count) override { _size += count; }
 
-    void update_default(const Filter& filter) override;
+    void fill_default(const Filter& filter) override;
 
     Status update_rows(const Column& src, const uint32_t* indexes) override;
 

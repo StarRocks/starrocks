@@ -182,7 +182,7 @@ public:
         _slices_cache = false;
     }
 
-    void update_default(const Filter& filter) override;
+    void fill_default(const Filter& filter) override;
 
     Status update_rows(const Column& src, const uint32_t* indexes) override;
 

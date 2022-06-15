@@ -129,7 +129,7 @@ void ObjectColumn<T>::append_default(size_t count) {
 }
 
 template <typename T>
-void ObjectColumn<T>::update_default(const Filter& filter) {
+void ObjectColumn<T>::fill_default(const Filter& filter) {
     for (size_t i = 0; i < filter.size(); i++) {
         if (filter[i] == 1) {
             _pool[i] = {};

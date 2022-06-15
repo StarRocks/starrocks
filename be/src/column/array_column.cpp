@@ -130,7 +130,7 @@ void ArrayColumn::append_default(size_t count) {
     _offsets->append_value_multiple_times(&offset, count);
 }
 
-void ArrayColumn::update_default(const Filter& filter) {
+void ArrayColumn::fill_default(const Filter& filter) {
     std::vector<uint32_t> indexes;
     for (size_t i = 0; i < filter.size(); i++) {
         if (filter[i] == 1 && get_element_size(i) > 0) {

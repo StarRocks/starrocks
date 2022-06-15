@@ -210,7 +210,7 @@ void BinaryColumnBase<T>::_build_slices() const {
 }
 
 template <typename T>
-void BinaryColumnBase<T>::update_default(const Filter& filter) {
+void BinaryColumnBase<T>::fill_default(const Filter& filter) {
     std::vector<uint32_t> indexes;
     for (size_t i = 0; i < filter.size(); i++) {
         Slice slice = get_slice(i);

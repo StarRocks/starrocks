@@ -51,7 +51,7 @@ void FixedLengthColumnBase<T>::append_value_multiple_times(const Column& src, ui
 }
 
 template <typename T>
-void FixedLengthColumnBase<T>::update_default(const Filter& filter) {
+void FixedLengthColumnBase<T>::fill_default(const Filter& filter) {
     T val = DefaultValueGenerator<T>::next_value();
     for (size_t i = 0; i < filter.size(); i++) {
         if (filter[i] == 1) {
