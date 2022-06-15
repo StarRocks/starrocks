@@ -143,7 +143,7 @@ public class AnalyzeStmtAnalyzer {
             return null;
         }
 
-        void analyzeAnalyzeTypeDesc(ConnectContext session, AnalyzeStmt statement, AnalyzeTypeDesc analyzeTypeDesc) {
+        private void analyzeAnalyzeTypeDesc(ConnectContext session, AnalyzeStmt statement, AnalyzeTypeDesc analyzeTypeDesc) {
             if (analyzeTypeDesc instanceof AnalyzeHistogramDesc) {
                 List<String> columns = statement.getColumnNames();
                 OlapTable analyzeTable = (OlapTable) MetaUtils.getStarRocksTable(session, statement.getTableName());
