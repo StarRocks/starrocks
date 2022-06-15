@@ -745,7 +745,7 @@ CONF_String(jaeger_endpoint, "");
 // Although the probability is very small, but it is possible. Please make sure you can accept it before
 // enable this feature.
 // default: false
-CONF_Bool(enable_hash_key, "false");
+CONF_Bool(enable_mapping_pk_into_hash, "false");
 
 #ifdef USE_STAROS
 CONF_String(starmgr_addr, "");

@@ -1236,7 +1236,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     // In this case, we don't have all rowset data in persistent index files, so we also need to rebuild it
     // Third is we find PersistentIndexMetaPB and it's version is equal to latest applied version. In this case,
     // we can load from index file directly
-    // The last is we change `config::enable_hash_key` before be restarted, it will change the key value of the
+    // The last is we change `config::enable_mapping_pk_into_hash` before be restarted, it will change the key value of the
     // same record, so we need to rebuild the PersistentIndex
     const TabletSchema& tablet_schema = tablet->tablet_schema();
     vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
@@ -1251,8 +1251,9 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         // all applied rowsets has save in existing persistent index meta
         // so we can load persistent index according to PersistentIndexMetaPB
         EditVersion version = index_meta.version();
-        bool enable_hash_key = index_meta.enable_hash_key();
-        if (version == lastest_applied_version && enable_hash_key == PrimaryKeyEncoder::enable_hash_key(pkey_schema)) {
+        bool enable_mapping_pk_into_hash = index_meta.enable_mapping_pk_into_hash();
+        if (version == lastest_applied_version &&
+            enable_mapping_pk_into_hash == PrimaryKeyEncoder::enable_mapping_pk_into_hash(pkey_schema)) {
             status = load(index_meta);
             LOG(INFO) << "load persistent index tablet:" << tablet->tablet_id() << " version:" << version.to_string()
                       << " size: " << _size << " l0_size: " << (_l0 ? _l0->size() : 0)
@@ -1290,7 +1291,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     //   2. delete WALs because maybe PersistentIndexMetaPB has expired wals
     //   3. reset SnapshotMeta
     //   4. write all data into new tmp _l0 index file (tmp file will be delete in _build_commit())
-    index_meta.set_enable_hash_key(PrimaryKeyEncoder::enable_hash_key(pkey_schema));
+    index_meta.set_enable_mapping_pk_into_hash(PrimaryKeyEncoder::enable_mapping_pk_into_hash(pkey_schema));
     index_meta.set_key_size(_key_size);
     lastest_applied_version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();

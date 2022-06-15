@@ -159,7 +159,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
 }
 
 TEST(PrimaryKeyEncoderTest, testEnableHashKey) {
-    config::enable_hash_key = true;
+    config::enable_mapping_pk_into_hash = true;
     auto sc = create_key_schema(
             {OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_SMALLINT, OLAP_FIELD_TYPE_BOOL});
     unique_ptr<vectorized::Column> dest;
@@ -190,7 +190,7 @@ TEST(PrimaryKeyEncoderTest, testEnableHashKey) {
     }
     PrimaryKeyEncoder::encode_selective(*sc, *pchunk, indexes.data(), n, dest.get());
 
-    config::enable_hash_key = false;
+    config::enable_mapping_pk_into_hash = false;
     unique_ptr<vectorized::Column> bdest;
     PrimaryKeyEncoder::create_column(*sc, &bdest);
     ASSERT_TRUE(bdest->is_binary());

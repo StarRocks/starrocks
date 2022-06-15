@@ -259,8 +259,8 @@ bool PrimaryKeyEncoder::is_supported(const vectorized::Schema& schema) {
 
 // We don't check whether the schema supports encoding or not.
 // It is caller's duty to ensure that the schema supports encoding
-bool PrimaryKeyEncoder::enable_hash_key(const vectorized::Schema& schema) {
-    if (!config::enable_hash_key) {
+bool PrimaryKeyEncoder::enable_mapping_pk_into_hash(const vectorized::Schema& schema) {
+    if (!config::enable_mapping_pk_into_hash) {
         return false;
     }
     size_t ret = 0;
@@ -279,7 +279,7 @@ FieldType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::Schema& 
     if (!is_supported(schema)) {
         return OLAP_FIELD_TYPE_NONE;
     }
-    if (enable_hash_key(schema)) {
+    if (enable_mapping_pk_into_hash(schema)) {
         return OLAP_FIELD_TYPE_LARGEINT;
     }
     if (schema.num_key_fields() == 1) {
@@ -289,8 +289,8 @@ FieldType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::Schema& 
 }
 
 size_t PrimaryKeyEncoder::get_encoded_fixed_size(const vectorized::Schema& schema) {
-    // if `enable_hash_key()` is true, we will use a hash value(int128) to replace the encoded key
-    if (enable_hash_key(schema)) {
+    // if `enable_mapping_pk_into_hash()` is true, we will use a hash value(int128) to replace the encoded key
+    if (enable_mapping_pk_into_hash(schema)) {
         return 16;
     }
     size_t ret = 0;
@@ -310,7 +310,7 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
     if (!is_supported(schema)) {
         return Status::NotSupported("type not supported for primary key encoding");
     }
-    if (enable_hash_key(schema)) {
+    if (enable_mapping_pk_into_hash(schema)) {
         *pcolumn = vectorized::Int128Column::create_mutable();
         return Status::OK();
     }
@@ -434,7 +434,7 @@ void PrimaryKeyEncoder::encode(const vectorized::Schema& schema, const vectorize
     if (schema.num_key_fields() == 1) {
         // simple encoding, src & dest should have same type
         auto& src = chunk.get_column_by_index(0);
-        if (!enable_hash_key(schema)) {
+        if (!enable_mapping_pk_into_hash(schema)) {
             dest->append(*src, offset, len);
         } else {
             DCHECK(src->is_binary()) << "src column should be binary";
@@ -453,7 +453,7 @@ void PrimaryKeyEncoder::encode(const vectorized::Schema& schema, const vectorize
         vector<EncodeOp> ops;
         vector<const void*> datas;
         prepare_ops_datas(schema, chunk, &ops, &datas);
-        if (enable_hash_key(schema)) {
+        if (enable_mapping_pk_into_hash(schema)) {
             DCHECK(dest->is_numeric()) << "dest column should be int128";
             vectorized::Int128Column& idest = down_cast<vectorized::Int128Column&>(*dest);
             idest.reserve(len);
@@ -487,7 +487,7 @@ void PrimaryKeyEncoder::encode_selective(const vectorized::Schema& schema, const
     if (schema.num_key_fields() == 1) {
         // simple encoding, src & dest should have same type
         auto& src = chunk.get_column_by_index(0);
-        if (!enable_hash_key(schema)) {
+        if (!enable_mapping_pk_into_hash(schema)) {
             dest->append_selective(*src, indexes, 0, len);
         } else {
             DCHECK(src->is_binary()) << "src column should be binary";
@@ -506,7 +506,7 @@ void PrimaryKeyEncoder::encode_selective(const vectorized::Schema& schema, const
         vector<EncodeOp> ops;
         vector<const void*> datas;
         prepare_ops_datas(schema, chunk, &ops, &datas);
-        if (enable_hash_key(schema)) {
+        if (enable_mapping_pk_into_hash(schema)) {
             DCHECK(dest->is_numeric()) << "dest column should be int128";
             vectorized::Int128Column& idest = down_cast<vectorized::Int128Column&>(*dest);
             idest.reserve(len);
@@ -539,7 +539,7 @@ void PrimaryKeyEncoder::encode_selective(const vectorized::Schema& schema, const
 
 bool PrimaryKeyEncoder::encode_exceed_limit(const vectorized::Schema& schema, const vectorized::Chunk& chunk,
                                             size_t offset, size_t len, const size_t limit_size) {
-    if (enable_hash_key(schema)) {
+    if (enable_mapping_pk_into_hash(schema)) {
         return false;
     }
     int ncol = schema.num_key_fields();
@@ -592,7 +592,7 @@ bool PrimaryKeyEncoder::encode_exceed_limit(const vectorized::Schema& schema, co
 
 Status PrimaryKeyEncoder::decode(const vectorized::Schema& schema, const vectorized::Column& keys, size_t offset,
                                  size_t len, vectorized::Chunk* dest) {
-    if (enable_hash_key(schema)) {
+    if (enable_mapping_pk_into_hash(schema)) {
         LOG(WARNING) << "decode is not support when enable hash key";
         return Status::InternalError("decode is not support");
     }

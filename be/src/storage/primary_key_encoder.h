@@ -27,7 +27,7 @@ public:
 
     static bool is_supported(const vectorized::Schema& schema);
 
-    static bool enable_hash_key(const vectorized::Schema& schema);
+    static bool enable_mapping_pk_into_hash(const vectorized::Schema& schema);
 
     // Return |OLAP_FIELD_TYPE_NONE| if no primary key contained in |schema|.
     static FieldType encoded_primary_key_type(const vectorized::Schema& schema);

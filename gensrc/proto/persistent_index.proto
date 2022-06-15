@@ -42,7 +42,7 @@ message PersistentIndexMetaPB {
     EditVersionPB version = 1;
     uint64 key_size = 2;
     uint64 size = 3;
-    bool enable_hash_key = 4;
+    bool enable_mapping_pk_into_hash = 4;
     MutableIndexMetaPB l0_meta = 5;
     // l1's meta stored in l1 file
     // only store a version to get file name
