@@ -1,4 +1,4 @@
-# BITMAP_MAX
+# bitmap_max
 
 ## 功能
 
@@ -7,7 +7,7 @@
 ## 语法
 
 ```Plain Text
-BITMAP_MAX(bitmap)
+bitmap_max(bitmap)
 ```
 
 ## 参数说明
