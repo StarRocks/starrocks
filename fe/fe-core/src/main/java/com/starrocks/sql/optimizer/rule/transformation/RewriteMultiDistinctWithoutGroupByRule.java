@@ -12,15 +12,13 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -144,15 +142,15 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
                     OptExpression.create(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null), left, right);
             allCteConsumes.offerFirst(join);
         }
-        Operator.Builder builder = OperatorBuilderFactory.build(allCteConsumes.get(0).getOp());
-        Operator newOperator = builder.withOperator(allCteConsumes.get(0).getOp()).
-                setProjection(new Projection(columnRefMap)).build();
+        // Add project node
+        LogicalProjectOperator.Builder builder = new LogicalProjectOperator.Builder();
+        builder.setColumnRefMap(columnRefMap);
 
         context.getCteContext().addForceCTE(cteId);
 
         LogicalCTEAnchorOperator cteAnchor = new LogicalCTEAnchorOperator(cteId);
         return Lists.newArrayList(OptExpression.create(cteAnchor, cteProduce,
-                OptExpression.create(newOperator, allCteConsumes.get(0).getInputs())));
+                OptExpression.create(builder.build(), allCteConsumes.get(0))));
     }
 
     private LinkedList<OptExpression> buildDistinctAggCTEConsume(LogicalAggregationOperator aggregate,
