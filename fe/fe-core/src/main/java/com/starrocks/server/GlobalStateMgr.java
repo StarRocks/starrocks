@@ -182,8 +182,6 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
-import com.starrocks.persist.DatabaseInfo;
-import com.starrocks.persist.DropLinkDbAndUpdateDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
@@ -248,7 +246,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -1759,10 +1756,6 @@ public class GlobalStateMgr {
         localMetastore.dropDb(stmt);
     }
 
-    public void replayDropLinkDb(DropLinkDbAndUpdateDbInfo info) {
-        localMetastore.replayDropLinkDb(info);
-    }
-
     public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {
         localMetastore.replayDropDb(dbName, isForceDrop);
     }
@@ -2907,10 +2900,6 @@ public class GlobalStateMgr {
 
     public void initDefaultCluster() {
         localMetastore.initDefaultCluster();
-    }
-
-    public void replayUpdateDb(DatabaseInfo info) {
-        localMetastore.replayUpdateDb(info);
     }
 
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
