@@ -12,10 +12,10 @@
   + [表创建](/quick_start/Create_table.md)
   + [数据导入和查询](/quick_start/Import_and_query.md)
 + 表设计
-  + [理解StarRocks表设计](/table_design/StarRocks_table_design.md)
+  + [理解 StarRocks 表设计](/table_design/StarRocks_table_design.md)
   + [数据模型介绍](/table_design/Data_model.md)
   + [数据分布](/table_design/Data_distribution.md)
-  + [排序键和shortkey index](/table_design/Sort_key.md)
+  + [排序键和前缀索引](/table_design/Sort_key.md)
 + 数据导入
   + [导入总览](/loading/Loading_intro.md)
   + [Stream Load](/loading/StreamLoad.md)
@@ -34,7 +34,7 @@
   + [Spark Connector](/unloading/Spark_connector.md)
   + [Flink Connector](/unloading/Flink_connector.md)
 + 使用StarRocks
-  + [CBO优化器](/using_starrocks/Cost_based_optimizer.md)
+  + [CBO 优化器](/using_starrocks/Cost_based_optimizer.md)
   + [物化视图](/using_starrocks/Materialized_view.md)
   + [外部表](/using_starrocks/External_table.md)
   + [Colocate Join](/using_starrocks/Colocate_join.md)
@@ -42,8 +42,8 @@
   + [数组](/using_starrocks/Array.md)
   + [窗口函数](/using_starrocks/Window_function.md)
   + [JAVA UDF](/using_starrocks/JAVA_UDF.md)
-  + [Bitmap索引](/table_design/Bitmap_index.md)
-  + [Bloomfilter索引](/table_design/Bloomfilter_index.md)
+  + [Bitmap 索引](/table_design/Bitmap_index.md)
+  + [Bloomfilter 索引](/table_design/Bloomfilter_index.md)
   + [基于 Bitmap 实现精确去重](/using_starrocks/Using_bitmap.md)
   + [基于 HyperLogLog 实现近似去重](/using_starrocks/Using_HLL.md)
   + [时区](/using_starrocks/timezone.md)
@@ -445,21 +445,21 @@
   + [部署运维](/faq/Deploy_faq.md)
   + 数据迁移
     + 导入
-      + [导入通用FAQ](/faq/loading/Loading_faq.md)
+      + [导入通用 FAQ](/faq/loading/Loading_faq.md)
       + [Stream Load](/faq/loading/Stream_load_faq.md)
       + [Routine Load](/faq/loading/Routine_load_faq.md)
       + [Broker Load](/faq/loading/Broker_load_faq.md)
       + [Insert Into](/faq/loading/Insert_into_faq.md)
       + [Flink connector](/faq/loading/Flink_connector_faq.md)
       + [DataX](/faq/loading/DataX_faq.md)
-      + [CloudCanal数据导入](/faq/loading/CloudCanal_load_faq.md)
+      + [CloudCanal 数据导入](/faq/loading/CloudCanal_load_faq.md)
     + [导出](/faq/Exporting_faq.md)
   + [SQL FAQ](/faq/Sql_faq.md)
   + [视频资源](/faq/Video.md)
   + [其他](/faq/Others.md)
 + 性能测试
-  + [SSB性能测试](/benchmarking/SSB_Benchmarking.md)
-  + [TPC-H基准测试](/benchmarking/TPC-H_Benchmark.md)
+  + [SSB 性能测试](/benchmarking/SSB_Benchmarking.md)
+  + [TPC-H 基准测试](/benchmarking/TPC-H_Benchmark.md)
 + Release Notes
   + [v2.2](/release_notes/release-2.2.md)
   + [v2.1](/release_notes/release-2.1.md)
