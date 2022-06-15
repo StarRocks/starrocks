@@ -29,7 +29,7 @@
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
-#include "runtime/global_dicts.h"
+#include "runtime/global_dict/types.h"
 
 namespace starrocks {
 

@@ -1291,13 +1291,9 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
-            boolean notNeedLocalShuffle = aggregationNode.isNeedsFinalize() &&
-                    hasNoExchangeNodes(inputFragment.getPlanRoot());
-            boolean pipelineDopEnabled = ConnectContext.get() != null &&
-                    ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
-                    inputFragment.getPlanRoot().canUsePipeLine();
-            if (pipelineDopEnabled && notNeedLocalShuffle) {
-                inputFragment.setNeedsLocalShuffle(false);
+            // One phase aggregation prefer the inter-instance parallel to avoid local shuffle
+            if (node.isOnePhaseAgg()) {
+                inputFragment.preferInstanceParallel();
             }
 
             inputFragment.setPlanRoot(aggregationNode);
@@ -1560,9 +1556,7 @@ public class PlanFragmentBuilder {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
-            fragment.setPipelineDop(fragment.getParallelExecNum());
-            fragment.setParallelExecNum(1);
-            fragment.setDopEstimated();
+            fragment.preferPipelineParallel();
         }
 
         /**
@@ -1575,9 +1569,7 @@ public class PlanFragmentBuilder {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
-            fragment.setPipelineDop(fragment.getParallelExecNum());
-            fragment.setParallelExecNum(1);
-            fragment.setDopEstimated();
+            fragment.preferPipelineParallel();
         }
 
         /**
@@ -1590,8 +1582,7 @@ public class PlanFragmentBuilder {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
-            // To prevent ancestor nodes from adjusting parallelExecNum and pipelineDop.
-            fragment.setDopEstimated();
+            fragment.preferInstanceParallel();
         }
 
         // when enable_pipeline_engine=true and enable_global_runtime_filter=false, global runtime filter

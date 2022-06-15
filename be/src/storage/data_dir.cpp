@@ -32,6 +32,7 @@
 #include <sstream>
 #include <utility>
 
+#include "common/config.h"
 #include "common/version.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -43,7 +44,9 @@
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage/txn_manager.h"
 #include "storage/utils.h" // for check_dir_existed
 #include "util/defer_op.h"
 #include "util/errno.h"
@@ -518,7 +521,7 @@ Status DataDir::update_capacity() {
     return Status::OK();
 }
 
-bool DataDir::reach_capacity_limit(int64_t incoming_data_size) {
+bool DataDir::capacity_limit_reached(int64_t incoming_data_size) {
     double used_pct = (_disk_capacity_bytes - _available_bytes + incoming_data_size) / (double)_disk_capacity_bytes;
     int64_t left_bytes = _disk_capacity_bytes - _available_bytes - incoming_data_size;
 

@@ -25,6 +25,7 @@
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_reader.h"
 #include "storage/union_iterator.h"
@@ -1667,7 +1668,7 @@ void TabletUpdatesTest::snapshot_prepare(const TabletSharedPtr& tablet, const st
     std::shared_lock rdlock(tablet->get_header_lock());
     for (int64_t v : delta_versions) {
         auto rowset = tablet->get_inc_rowset_by_version(Version{v, v});
-        if (rowset == nullptr && tablet->max_continuous_version_from_beginning().second >= v) {
+        if (rowset == nullptr && tablet->max_continuous_version() >= v) {
             LOG(WARNING) << "version " << v << " has been merged";
             ASSERT_TRUE(false);
         } else if (rowset == nullptr) {

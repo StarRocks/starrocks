@@ -4,6 +4,7 @@ package com.starrocks.external;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
@@ -109,6 +110,64 @@ public class HiveMetaStoreTableUtils {
         return allHiveColumns;
     }
 
+    public static List<FieldSchema> getAllColumns(Table table) {
+        List<FieldSchema> allColumns = table.getSd().getCols();
+        List<FieldSchema> partHiveColumns = table.getPartitionKeys();
+        allColumns.addAll(partHiveColumns);
+        return allColumns;
+    }
+
+    public static boolean validateColumnType(String hiveType, Type type) {
+        if (hiveType == null) {
+            return false;
+        }
+
+        // for type with length, like char(10), we only check the type and ignore the length
+        String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
+        PrimitiveType primitiveType = type.getPrimitiveType();
+        switch (typeUpperCase) {
+            case "TINYINT":
+                return primitiveType == PrimitiveType.TINYINT;
+            case "SMALLINT":
+                return primitiveType == PrimitiveType.SMALLINT;
+            case "INT":
+            case "INTEGER":
+                return primitiveType == PrimitiveType.INT;
+            case "BIGINT":
+                return primitiveType == PrimitiveType.BIGINT;
+            case "FLOAT":
+                return primitiveType == PrimitiveType.FLOAT;
+            case "DOUBLE":
+            case "DOUBLE PRECISION":
+                return primitiveType == PrimitiveType.DOUBLE;
+            case "DECIMAL":
+            case "NUMERIC":
+                return primitiveType == PrimitiveType.DECIMALV2 || primitiveType == PrimitiveType.DECIMAL32 ||
+                        primitiveType == PrimitiveType.DECIMAL64 || primitiveType == PrimitiveType.DECIMAL128;
+            case "TIMESTAMP":
+                return primitiveType == PrimitiveType.DATETIME;
+            case "DATE":
+                return primitiveType == PrimitiveType.DATE;
+            case "STRING":
+            case "VARCHAR":
+            case "BINARY":
+                return primitiveType == PrimitiveType.VARCHAR;
+            case "CHAR":
+                return primitiveType == PrimitiveType.CHAR ||
+                        primitiveType == PrimitiveType.VARCHAR;
+            case "BOOLEAN":
+                return primitiveType == PrimitiveType.BOOLEAN;
+            case "ARRAY":
+                if (!type.isArrayType()) {
+                    return false;
+                }
+                return validateColumnType(hiveType.substring(hiveType.indexOf('<') + 1, hiveType.length() - 1),
+                        ((ArrayType) type).getItemType());
+            default:
+                return false;
+        }
+    }
+
     public static Type convertColumnType(String hiveType) throws DdlException {
         String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
         PrimitiveType primitiveType;
@@ -179,10 +238,9 @@ public class HiveMetaStoreTableUtils {
             throw new DdlException("Hive view table is not supported.");
         }
 
-        Map<String, FieldSchema> allHiveColumns = getAllHiveColumns(hiveTable);
+        List<FieldSchema> allHiveColumns = getAllColumns(hiveTable);
         List<Column> fullSchema = Lists.newArrayList();
-        for (Map.Entry<String, FieldSchema> entry : allHiveColumns.entrySet()) {
-            FieldSchema fieldSchema = entry.getValue();
+        for (FieldSchema fieldSchema : allHiveColumns) {
             Type srType = convertColumnType(fieldSchema.getType());
             Column column = new Column(fieldSchema.getName(), srType, true);
             fullSchema.add(column);

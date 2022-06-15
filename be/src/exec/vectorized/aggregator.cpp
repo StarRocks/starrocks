@@ -4,6 +4,7 @@
 
 #include <algorithm>
 
+#include "column/chunk.h"
 #include "common/status.h"
 #include "exprs/anyval_util.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -274,6 +275,10 @@ void Aggregator::close(RuntimeState* state) {
     }
 
     _is_closed = true;
+    // Clear the buffer
+    while (!_buffer.empty()) {
+        _buffer.pop();
+    }
 
     auto agg_close = [this, state]() {
         // _mem_pool is nullptr means prepare phase failed

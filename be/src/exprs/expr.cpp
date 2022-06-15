@@ -343,8 +343,10 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     }
     if (*expr == nullptr) {
-        LOG(WARNING) << "Vectorized engine node type return nullptr: " + std::to_string(texpr_node.node_type);
-        return Status::InternalError("Vectorized engine does not support the operator");
+        std::string err_msg =
+                fmt::format("Vectorized engine does not support the operator, node_type: {}", texpr_node.node_type);
+        LOG(WARNING) << err_msg;
+        return Status::InternalError(err_msg);
     }
 
     return Status::OK();
@@ -448,7 +450,9 @@ Status Expr::open(RuntimeState* state, ExprContext* context, FunctionContext::Fu
 
 void Expr::close(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
     for (auto ctx : ctxs) {
-        ctx->close(state);
+        if (ctx != nullptr) {
+            ctx->close(state);
+        }
     }
 }
 
@@ -479,6 +483,7 @@ Status Expr::clone_if_not_exists(const std::vector<ExprContext*>& ctxs, RuntimeS
         }
         return Status::OK();
     }
+
     new_ctxs->resize(ctxs.size());
     for (int i = 0; i < ctxs.size(); ++i) {
         RETURN_IF_ERROR(ctxs[i]->clone(state, &(*new_ctxs)[i]));

@@ -2,9 +2,11 @@
 
 #include "storage/lake/tablet.h"
 
+#include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
+#include "storage/tablet_schema_map.h"
 
 namespace starrocks::lake {
 
@@ -20,7 +22,7 @@ StatusOr<TabletMetadataPtr> Tablet::get_metadata(int64_t version) {
     return _mgr->get_tablet_metadata(_group, _id, version);
 }
 
-StatusOr<MetadataIterator> Tablet::list_metadata() {
+StatusOr<TabletMetadataIter> Tablet::list_metadata() {
     return _mgr->list_tablet_metadata(_group, _id);
 }
 
@@ -48,6 +50,16 @@ StatusOr<TxnLogPtr> Tablet::get_txn_log(int64_t txn_id) {
 
 Status Tablet::delete_txn_log(int64_t txn_id) {
     return _mgr->delete_txn_log(_group, _id, txn_id);
+}
+
+StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer() {
+    // TODO: check tablet type
+    return std::make_unique<GeneralTabletWriter>(*this);
+}
+
+StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
+    ASSIGN_OR_RETURN(auto metadata, get_metadata(1));
+    return GlobalTabletSchemaMap::Instance()->emplace(metadata->schema()).first;
 }
 
 } // namespace starrocks::lake

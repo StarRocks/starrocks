@@ -7,7 +7,8 @@
 #include "column/column.h"
 #include "column/datum.h"
 #include "common/object_pool.h"
-#include "util/bitmap_value.h"
+#include "types/bitmap_value.h"
+#include "types/hll.h"
 
 namespace starrocks::vectorized {
 
@@ -196,7 +197,7 @@ public:
         return ss.str();
     }
 
-    bool reach_capacity_limit(std::string* msg = nullptr) const override {
+    bool capacity_limit_reached(std::string* msg = nullptr) const override {
         if (_pool.size() > Column::MAX_CAPACITY_LIMIT) {
             if (msg != nullptr) {
                 msg->append("row count of object column exceed the limit: " +

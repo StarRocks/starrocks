@@ -7,6 +7,7 @@
 #include "exprs/expr.h"
 #include "exprs/vectorized/column_ref.h"
 #include "glog/logging.h"
+#include "gutil/casts.h"
 
 namespace starrocks::vectorized {
 // DictMappingExpr.

@@ -79,6 +79,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+@Deprecated
 public class RollupJob extends AlterJob {
     private static final Logger LOG = LogManager.getLogger(RollupJob.class);
 

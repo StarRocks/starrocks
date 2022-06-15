@@ -21,24 +21,34 @@
 
 #include "storage/tablet_meta_manager.h"
 
+#include "common/compiler_util.h"
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <rapidjson/writer.h>
+DIAGNOSTIC_POP
+
+#include <json2pb/json_to_pb.h>
+#include <json2pb/pb_to_json.h>
+#include <rocksdb/write_batch.h>
+
 #include <boost/algorithm/string/trim.hpp>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #include "common/logging.h"
+#include "common/tracer.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/substitute.h"
-#include "json2pb/json_to_pb.h"
-#include "json2pb/pb_to_json.h"
-#include "rocksdb/write_batch.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
 #include "storage/olap_define.h"
 #include "storage/rocksdb_status_adapter.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
+#include "util/coding.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
 #include "util/url_coding.h"
@@ -798,6 +808,9 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
                                               const EditVersion& version,
                                               vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
                                               const PersistentIndexMetaPB& index_meta, bool enable_persistent_index) {
+    auto span = Tracer::Instance().start_trace_tablet("apply_save_meta", tablet_id);
+    span->SetAttribute("version", version.to_string());
+    auto scoped_span = trace::Scope(span);
     WriteBatch batch;
     auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
     string logkey = encode_meta_log_key(tablet_id, logid);
@@ -815,16 +828,21 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
     }
     TabletSegmentId tsid;
     tsid.tablet_id = tablet_id;
+    span->AddEvent("delvec_start");
+    int64_t total_bytes = 0;
     for (auto& rssid_delvec : delvecs) {
         tsid.segment_id = rssid_delvec.first;
         auto dv_key = encode_del_vector_key(tsid.tablet_id, tsid.segment_id, version.major());
         auto dv_value = rssid_delvec.second->save();
+        total_bytes += dv_value.size();
         st = batch.Put(handle, dv_key, dv_value);
         if (!st.ok()) {
             LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
             return to_status(st);
         }
     }
+    span->SetAttribute("delvec_bytes", total_bytes);
+    span->AddEvent("delvec_end");
 
     if (enable_persistent_index) {
         auto meta_key = encode_persistent_index_key(tsid.tablet_id);

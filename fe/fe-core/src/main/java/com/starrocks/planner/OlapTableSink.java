@@ -27,10 +27,12 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -267,6 +269,10 @@ public class OlapTableSink extends DataSink {
                         }
                     }
                 }
+                if (rangePartitionInfo instanceof ExpressionRangePartitionInfo) {
+                    ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo)rangePartitionInfo;
+                    partitionParam.setPartition_exprs(Expr.treesToThrift(exprPartitionInfo.getPartitionExprs()));
+                }
                 break;
             }
             case UNPARTITIONED: {
@@ -274,7 +280,14 @@ public class OlapTableSink extends DataSink {
                 Preconditions.checkArgument(table.getPartitions().size() == 1,
                         "Number of table partitions is not 1 for unpartitioned table, partitionNum="
                                 + table.getPartitions().size());
-                Partition partition = table.getPartitions().iterator().next();
+                Partition partition = null;
+                if (partitionIds != null) {
+                    Preconditions.checkState(partitionIds.size() == 1,
+                            "invalid partitionIds size:{}", partitionIds.size());
+                    partition = table.getPartition(partitionIds.get(0));
+                } else {
+                    partition = table.getPartitions().iterator().next();
+                }
 
                 TOlapTablePartition tPartition = new TOlapTablePartition();
                 tPartition.setId(partition.getId());

@@ -24,7 +24,11 @@
 #include <ostream>
 
 #include "gutil/strings/substitute.h"
+#include "runtime/datetime_value.h"
+#include "runtime/decimal_value.h"
 #include "runtime/primitive_type.h"
+#include "runtime/string_value.h"
+#include "storage/array_type_info.h"
 #include "storage/types.h"
 
 namespace starrocks {
@@ -259,8 +263,7 @@ TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
     bool is_array = false;
     if (ftype == OLAP_FIELD_TYPE_ARRAY) {
         is_array = true;
-        ArrayTypeInfo* array_type_info = down_cast<ArrayTypeInfo*>(type_info);
-        type_info = array_type_info->item_type_info().get();
+        type_info = get_item_type_info(type_info).get();
         ftype = type_info->type();
     }
 
@@ -278,6 +281,61 @@ TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
         return arr;
     }
     return ret;
+}
+
+/// Returns the size of a slot for this type.
+int TypeDescriptor::get_slot_size() const {
+    switch (type) {
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
+    case TYPE_HLL:
+    case TYPE_OBJECT:
+    case TYPE_PERCENTILE:
+    case TYPE_JSON:
+        return sizeof(StringValue);
+
+    case TYPE_NULL:
+    case TYPE_BOOLEAN:
+    case TYPE_TINYINT:
+        return 1;
+
+    case TYPE_SMALLINT:
+        return 2;
+
+    case TYPE_INT:
+    case TYPE_FLOAT:
+    case TYPE_DECIMAL32:
+        return 4;
+
+    case TYPE_BIGINT:
+    case TYPE_DOUBLE:
+    case TYPE_TIME:
+    case TYPE_DECIMAL64:
+        return 8;
+
+    case TYPE_DATE:
+    case TYPE_DATETIME:
+        // This is the size of the slot, the actual size of the data is 12.
+        return sizeof(DateTimeValue);
+
+    case TYPE_DECIMAL:
+        return sizeof(DecimalValue);
+
+    case TYPE_LARGEINT:
+    case TYPE_DECIMALV2:
+    case TYPE_DECIMAL128:
+        return 16;
+    case TYPE_ARRAY:
+        return sizeof(void*); // sizeof(Collection*)
+    case INVALID_TYPE:
+    case TYPE_BINARY:
+    case TYPE_STRUCT:
+    case TYPE_MAP:
+        DCHECK(false);
+        break;
+    }
+    // For llvm complain
+    return -1;
 }
 
 } // namespace starrocks

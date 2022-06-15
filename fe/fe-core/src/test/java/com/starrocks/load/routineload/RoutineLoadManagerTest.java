@@ -838,6 +838,9 @@ public class RoutineLoadManagerTest {
         loadManager.replayChangeRoutineLoadJob(new RoutineLoadOperation(goodJob.getId(), RoutineLoadJob.JobState.CANCELLED));
         Assert.assertEquals(2, idToRoutineLoadJob.size());
 
+        // 3. make sure it can not be clean
+        idToRoutineLoadJob.get(goodJob.getId()).endTimestamp = System.currentTimeMillis() + 100000L;
+
         // 5. save image
         File tempFile = File.createTempFile("RoutineLoadManagerTest", ".image");
         System.err.println("write image " + tempFile.getAbsolutePath());
@@ -845,9 +848,6 @@ public class RoutineLoadManagerTest {
         long checksum = 0;
         long saveChecksum = loadManager.saveRoutineLoadJobs(dos, checksum);
         dos.close();
-
-        // make sure it can not be clean
-        idToRoutineLoadJob.get(goodJob.getId()).endTimestamp = System.currentTimeMillis() + 100000L;
 
         // 6. clean expire
         loadManager.cleanOldRoutineLoadJobs();

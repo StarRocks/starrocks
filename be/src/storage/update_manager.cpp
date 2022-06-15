@@ -4,6 +4,7 @@
 
 #include <limits>
 #include <memory>
+#include <numeric>
 
 #include "gutil/endian.h"
 #include "storage/chunk_helper.h"

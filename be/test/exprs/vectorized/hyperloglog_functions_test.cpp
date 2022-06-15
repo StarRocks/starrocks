@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "exprs/vectorized/mock_vectorized_expr.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 namespace vectorized {

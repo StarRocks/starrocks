@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/fixed_length_column.h"

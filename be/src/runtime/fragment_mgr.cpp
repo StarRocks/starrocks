@@ -43,6 +43,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/plan_fragment_executor.h"
+#include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
 #include "service/backend_options.h"
 #include "util/debug_util.h"

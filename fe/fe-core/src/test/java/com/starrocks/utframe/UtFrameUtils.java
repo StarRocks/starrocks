@@ -34,6 +34,7 @@ import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.AnalysisException;
@@ -50,6 +51,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -129,7 +131,7 @@ public class UtFrameUtils {
         ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setQualifiedUser(Auth.ROOT_USER);
-        ctx.setCatalog(GlobalStateMgr.getCurrentState());
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setThreadLocalInfo();
         ctx.setDumpInfo(new MockDumpInfo());
         return ctx;
@@ -488,10 +490,15 @@ public class UtFrameUtils {
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
                                                                        QueryDumpInfo replayDumpInfo) throws Exception {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
+        Map<String, Database> dbs = null;
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
                     connectContext.getSessionVariable().getSqlMode()).get(0);
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
+
+            dbs = AnalyzerUtils.collectAllDatabase(connectContext, statementBase);
+            lock(dbs);
+
             if (statementBase instanceof QueryStatement) {
                 return getQueryExecPlan((QueryStatement) statementBase, connectContext);
             } else if (statementBase instanceof InsertStmt) {
@@ -501,6 +508,7 @@ public class UtFrameUtils {
                 return null;
             }
         } finally {
+            unLock(dbs);
             tearMockEnv();
         }
     }
@@ -527,5 +535,25 @@ public class UtFrameUtils {
 
     public static String getPlanThriftString(ConnectContext ctx, String queryStr) throws Exception {
         return UtFrameUtils.getThriftString(UtFrameUtils.getPlanAndFragment(ctx, queryStr).second.getFragments());
+    }
+
+    // Lock all database before analyze
+    private static void lock(Map<String, Database> dbs) {
+        if (dbs == null) {
+            return;
+        }
+        for (Database db : dbs.values()) {
+            db.readLock();
+        }
+    }
+
+    // unLock all database after analyze
+    private static void unLock(Map<String, Database> dbs) {
+        if (dbs == null) {
+            return;
+        }
+        for (Database db : dbs.values()) {
+            db.readUnlock();
+        }
     }
 }

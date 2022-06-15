@@ -53,7 +53,7 @@ void PipelineDriverPoller::run_internal() {
         while (driver_it != local_blocked_drivers.end()) {
             auto* driver = *driver_it;
 
-            if (driver->query_ctx()->is_expired()) {
+            if (driver->query_ctx()->is_query_expired()) {
                 // there are not any drivers belonging to a query context can make progress for an expiration period
                 // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
                 // this situation, query is failed finally, so drivers are marked PENDING_FINISH/FINISH.
@@ -63,7 +63,7 @@ void PipelineDriverPoller::run_internal() {
                 LOG(WARNING) << "[Driver] Timeout, query_id=" << print_id(driver->query_ctx()->query_id())
                              << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());
                 driver->fragment_ctx()->cancel(Status::TimedOut(fmt::format(
-                        "Query exceeded time limit of {} seconds", driver->query_ctx()->get_expire_seconds())));
+                        "Query exceeded time limit of {} seconds", driver->query_ctx()->get_query_expire_seconds())));
                 driver->cancel_operators(driver->fragment_ctx()->runtime_state());
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
@@ -137,10 +137,10 @@ void PipelineDriverPoller::run_internal() {
 }
 
 void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
-    std::unique_lock<std::mutex> lock(this->_mutex);
-    this->_blocked_drivers.push_back(driver);
+    std::unique_lock<std::mutex> lock(_mutex);
+    _blocked_drivers.push_back(driver);
     driver->_pending_timer_sw->reset();
-    this->_cond.notify_one();
+    _cond.notify_one();
 }
 
 void PipelineDriverPoller::remove_blocked_driver(DriverList& local_blocked_drivers, DriverList::iterator& driver_it) {

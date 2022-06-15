@@ -7,8 +7,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.DdlException;
+import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.external.hive.HivePartitionKey;
+import com.starrocks.external.hive.HiveTableName;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.logging.log4j.LogManager;
@@ -71,8 +73,15 @@ public class MetastoreEventFactory implements EventFactory {
         // Therefore, it's necessary to filter the events pulled this time from the hms instance,
         // and the events of the tables that don't register in the fe MetastoreEventsProcessor need to be filtered out.
         for (NotificationEvent event : events) {
-            HiveTable table = GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
-                    .getHiveTable(resourceName, event.getDbName(), event.getTableName());
+            HiveTable table;
+            if (HiveMetaStoreTableUtils.isInternalCatalog(resourceName)) {
+                table = GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
+                        .getHiveTable(resourceName, event.getDbName(), event.getTableName());
+            } else {
+                table = (HiveTable) metaCache.getTableFromCache(
+                        HiveTableName.of(event.getDbName(), event.getTableName()));
+            }
+
             if (table == null) {
                 continue;
             }
@@ -114,7 +123,18 @@ public class MetastoreEventFactory implements EventFactory {
                     } else {
                         batchEvents.put(hivePartitionKey, metastoreTableEvent);
                     }
+                    if (batchEvent instanceof AlterTableEvent && ((AlterTableEvent) batchEvent).isSchemaChange()) {
+                        return Lists.newArrayList(batchEvents.values());
+                    }
                     break;
+                case DROP_TABLE:
+                    String dbName = event.getDbName();
+                    String tblName = event.getTblName();
+                    batchEvents = batchEvents.entrySet().stream()
+                            .filter(entry -> !entry.getKey().approximateMatchTable(dbName, tblName))
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                    batchEvents.put(hivePartitionKey, metastoreTableEvent);
+                    return Lists.newArrayList(batchEvents.values());
                 default:
                     LOG.warn("Failed to create batch event on {}", event);
             }

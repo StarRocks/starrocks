@@ -70,7 +70,7 @@ public class DynamicPartitionUtil {
         }
     }
 
-    private static void checkPrefix(String prefix) throws DdlException {
+    public static void checkPrefix(String prefix) throws DdlException {
         try {
             FeNameFormat.checkPartitionName(prefix);
         } catch (AnalysisException e) {

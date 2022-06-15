@@ -3,6 +3,7 @@ package com.starrocks.analysis;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.catalog.WorkGroupClassifier;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -20,6 +21,8 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import static com.starrocks.common.ErrorCode.ERROR_NO_WG_ERROR;
 
 public class WorkGroupStmtTest {
     private static final Pattern idPattern = Pattern.compile("\\bid=(\\b\\d+\\b)");
@@ -101,7 +104,7 @@ public class WorkGroupStmtTest {
             ");";
     private String createRg5Sql = "create resource group rg5\n" +
             "to\n" +
-            "     (`database`='db1')\n" +
+            "     (`db`='db1')\n" +
             "with (\n" +
             "    'cpu_core_limit' = '25',\n" +
             "    'mem_limit' = '80%',\n" +
@@ -157,6 +160,11 @@ public class WorkGroupStmtTest {
         Assert.assertTrue(rows.isEmpty());
     }
 
+    private void assertWorkGroupNotExist(String wg) {
+        Assert.assertThrows(ERROR_NO_WG_ERROR.formatErrorMsg(wg), AnalysisException.class,
+                () -> starRocksAssert.executeWorkGroupShowSql("show resource group " + wg));
+    }
+
     @Test
     public void testCreateResourceGroup() throws Exception {
         createResourceGroups();
@@ -173,7 +181,7 @@ public class WorkGroupStmtTest {
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=2.409375, query_type in (INSERT, SELECT), source_ip=192.168.6.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))\n" +
                 "rg4|25|80.0%|1024|1024|1024|10|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
-                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, database='default_cluster:db1')";
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='default_cluster:db1')";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }
@@ -182,14 +190,12 @@ public class WorkGroupStmtTest {
     public void testCreateDuplicateResourceGroup() throws Exception {
         starRocksAssert.executeWorkGroupDdlSql(createRg1Sql);
         starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP rg1");
-        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
-        String actual = rowsToString(rows);
-        Assert.assertTrue(actual.isEmpty());
+        assertWorkGroupNotExist("rg1");
 
         starRocksAssert.executeWorkGroupDdlSql(createRg1IfNotExistsSql);
-        rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
+        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
         Assert.assertEquals(rows.size(), 1);
-        actual = rowsToString(rows);
+        String actual = rowsToString(rows);
         Assert.assertTrue(actual.contains("rg1_if_not_exists"));
 
         starRocksAssert.executeWorkGroupDdlSql(createRg1OrReplaceSql);
@@ -205,9 +211,7 @@ public class WorkGroupStmtTest {
         Assert.assertTrue(actual.contains("rg1_or_replace"));
 
         starRocksAssert.executeWorkGroupDdlSql("DROP resource group rg1");
-        rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
-        actual = rowsToString(rows);
-        Assert.assertTrue(actual.isEmpty());
+        assertWorkGroupNotExist("rg1");
 
         starRocksAssert.executeWorkGroupDdlSql(createRg1OrReplaceSql);
         rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
@@ -224,7 +228,6 @@ public class WorkGroupStmtTest {
 
         starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP rg1");
     }
-
     @Test
     public void testCreateDuplicateResourceGroupFail() throws Exception {
         starRocksAssert.executeWorkGroupDdlSql(createRg1Sql);
@@ -351,6 +354,18 @@ public class WorkGroupStmtTest {
     }
 
     @Test
+    public void testShowUnknownOrNotExistWorkGroup() throws Exception {
+        starRocksAssert.executeWorkGroupDdlSql(createRg1Sql);
+
+        starRocksAssert.executeWorkGroupDdlSql("ALTER RESOURCE GROUP rg1 DROP ALL;");
+        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
+        Assert.assertTrue(rows.isEmpty());
+
+        starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP rg1");
+        assertWorkGroupNotExist("rg1");
+    }
+
+    @Test
     public void testChooseResourceGroup() throws Exception {
         createResourceGroups();
         String qualifiedUser = "default_cluster:rg1_user1";
@@ -418,7 +433,7 @@ public class WorkGroupStmtTest {
                 starRocksAssert.getCtx(), false);
         String result = rowsToString(rows);
         String expect = "" +
-                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, database='default_cluster:db1')\n" +
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='default_cluster:db1')\n" +
                 "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.409375, user=rg1_user1, role=rg1_role1, query_type in (INSERT, SELECT), source_ip=192.168.2.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))";
         Assert.assertEquals(result, expect);
@@ -473,7 +488,7 @@ public class WorkGroupStmtTest {
                 "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=2.409375, query_type in (INSERT, SELECT), source_ip=192.168.6.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))\n" +
                 "rg4|13|41.0%|1024|1024|1024|23|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
-                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, database='default_cluster:db1')";
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='default_cluster:db1')";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }

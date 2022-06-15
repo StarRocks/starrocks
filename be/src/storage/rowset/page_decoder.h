@@ -23,10 +23,10 @@
 
 #include "common/status.h" // for Status
 #include "gen_cpp/segment.pb.h"
-#include "runtime/timestamp_value.h"
 #include "storage/column_block.h" // for ColumnBlockView
 #include "storage/range.h"
 #include "storage/rowset/page_pointer.h"
+#include "types/timestamp_value.h"
 
 namespace starrocks::vectorized {
 class Column;

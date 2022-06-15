@@ -2,6 +2,7 @@
 
 #include "column/nullable_column.h"
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include "column/binary_column.h"

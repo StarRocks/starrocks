@@ -80,6 +80,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+@Deprecated
 public class SchemaChangeJob extends AlterJob {
     private static final Logger LOG = LogManager.getLogger(SchemaChangeJob.class);
 
@@ -218,46 +219,6 @@ public class SchemaChangeJob extends AlterJob {
 
     public synchronized int getFinishedReplicaNumByIndexId(long indexId) {
         return this.indexIdToFinishedReplicaNum.count(indexId);
-    }
-
-    public void deleteAllTableHistorySchema() {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            LOG.warn("db[{}] does not exist", dbId);
-            return;
-        }
-
-        db.readLock();
-        try {
-            OlapTable olapTable = (OlapTable) db.getTable(tableId);
-            if (olapTable == null) {
-                LOG.warn("table[{}] does not exist in db[{}]", tableId, dbId);
-                return;
-            }
-            // drop all replicas with old schemaHash
-            for (Partition partition : olapTable.getPartitions()) {
-                long partitionId = partition.getId();
-                for (Long indexId : this.changedIndexIdToSchema.keySet()) {
-                    MaterializedIndex materializedIndex = partition.getIndex(indexId);
-                    if (materializedIndex == null) {
-                        LOG.warn("index[{}] does not exist in partition[{}-{}-{}]",
-                                indexId, dbId, tableId, partitionId);
-                        continue;
-                    }
-
-                    // delete schema hash
-                    // the real drop task is handled by report process
-                    // we call 'deleteNewSchemaHash' but we delete old one actually.
-                    // cause schema hash is switched when job is finished.
-                    GlobalStateMgr.getCurrentInvertedIndex().deleteNewSchemaHash(partitionId, indexId);
-                    LOG.info("delete old schema. db[{}], table[{}], partition[{}], index[{}]",
-                            dbId, tableId, partitionId, indexId);
-                }
-            } // end for partitions
-        } finally {
-            db.readUnlock();
-        }
-        return;
     }
 
     @Override
@@ -530,8 +491,6 @@ public class SchemaChangeJob extends AlterJob {
                         } // end for replicas
                     } // end for tablets
 
-                    // delete schema hash in inverted index
-                    GlobalStateMgr.getCurrentInvertedIndex().deleteNewSchemaHash(partitionId, indexId);
                     Preconditions.checkArgument(index.getState() == IndexState.SCHEMA_CHANGE);
                     index.setState(IndexState.NORMAL);
                 } // end for indices
@@ -830,9 +789,6 @@ public class SchemaChangeJob extends AlterJob {
                                         tabletId);
                             } // end for replicas
                         } // end for tablets
-
-                        // update schema hash
-                        GlobalStateMgr.getCurrentInvertedIndex().updateToNewSchemaHash(partitionId, indexId);
                         materializedIndex.setState(IndexState.NORMAL);
                     } // end for indices
                     partition.setState(PartitionState.NORMAL);
@@ -935,9 +891,6 @@ public class SchemaChangeJob extends AlterJob {
                         }
                     }
                     index.setState(IndexState.SCHEMA_CHANGE);
-
-                    GlobalStateMgr.getCurrentInvertedIndex().setNewSchemaHash(partition.getId(), entry.getKey(),
-                            entry.getValue());
                 }
 
                 partition.setState(PartitionState.SCHEMA_CHANGE);
@@ -968,12 +921,7 @@ public class SchemaChangeJob extends AlterJob {
                             replica.setState(ReplicaState.NORMAL);
                         }
                     }
-
                     index.setState(IndexState.NORMAL);
-
-                    // update to new schema hash in inverted index
-                    GlobalStateMgr.getCurrentInvertedIndex().updateToNewSchemaHash(partitionId, index.getId());
-                    GlobalStateMgr.getCurrentInvertedIndex().deleteNewSchemaHash(partitionId, index.getId());
                 }
                 partition.setState(PartitionState.NORMAL);
 
@@ -1076,9 +1024,6 @@ public class SchemaChangeJob extends AlterJob {
 
                     Preconditions.checkState(index.getState() == IndexState.SCHEMA_CHANGE, index.getState());
                     index.setState(IndexState.NORMAL);
-
-                    // delete new schema hash in invered index
-                    GlobalStateMgr.getCurrentInvertedIndex().deleteNewSchemaHash(partitionId, indexId);
                 } // end for indices
 
                 Preconditions.checkState(partition.getState() == PartitionState.SCHEMA_CHANGE,

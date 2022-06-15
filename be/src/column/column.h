@@ -10,6 +10,7 @@
 #include "column/column_visitor.h"
 #include "column/column_visitor_mutable.h"
 #include "column/vectorized_fwd.h"
+#include "common/statusor.h"
 #include "gutil/casts.h"
 #include "storage/delete_condition.h" // for DelCondSatisfied
 
@@ -342,7 +343,7 @@ public:
 
     virtual void reset_column() { _delete_state = DEL_NOT_SATISFIED; }
 
-    virtual bool reach_capacity_limit(std::string* msg = nullptr) const = 0;
+    virtual bool capacity_limit_reached(std::string* msg = nullptr) const = 0;
 
     virtual Status accept(ColumnVisitor* visitor) const = 0;
 
