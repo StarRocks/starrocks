@@ -129,6 +129,16 @@ void ObjectColumn<T>::append_default(size_t count) {
 }
 
 template <typename T>
+void ObjectColumn<T>::fill_default(const Filter& filter) {
+    for (size_t i = 0; i < filter.size(); i++) {
+        if (filter[i] == 1) {
+            _pool[i] = {};
+        }
+    }
+    _cache_ok = false;
+}
+
+template <typename T>
 Status ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
     size_t replace_num = src.size();

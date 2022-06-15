@@ -16,6 +16,8 @@ namespace starrocks::vectorized {
 // @param permutation input and output permutation
 // @param tie input and output tie
 // @param range sort range, {0, 0} means not build tie but sort data
+Status sort_and_tie_column(const bool cancel, ColumnPtr& column, const bool is_asc_order, const bool is_null_first,
+                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie);
 Status sort_and_tie_column(const bool cancel, const ColumnPtr& column, const bool is_asc_order,
                            const bool is_null_first, SmallPermutation& permutation, Tie& tie, std::pair<int, int> range,
                            const bool build_tie);
