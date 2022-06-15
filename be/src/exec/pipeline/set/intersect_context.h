@@ -31,7 +31,7 @@ public:
     IntersectContext(const int dst_tuple_id, const size_t intersect_times)
             : _dst_tuple_id(dst_tuple_id), _intersect_times(intersect_times) {}
 
-    bool is_ht_empty() const { return _hash_set->empty(); }
+    bool is_ht_empty() const { return _hash_set == nullptr || _hash_set->empty(); }
 
     void finish_build_ht() {
         _next_processed_iter = _hash_set->begin();
@@ -44,7 +44,7 @@ public:
         return _finished_dependency_index.load(std::memory_order_acquire) == dependency_index;
     }
 
-    bool is_output_finished() const { return _next_processed_iter == _hash_set->end(); }
+    bool is_output_finished() const { return _hash_set == nullptr || _next_processed_iter == _hash_set->end(); }
 
     // Called in the preparation phase of IntersectBuildSinkOperator.
     Status prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs);
