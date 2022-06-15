@@ -148,7 +148,7 @@ public class DescribeStmt extends ShowStmt {
                                     String extraStr = StringUtils.join(extras, ",");
                                     List<String> row = Arrays.asList(
                                             column.getDisplayName(),
-                                            column.getType().toString(),
+                                            column.getType().canonicalName(),
                                             column.isAllowNull() ? "Yes" : "No",
                                             ((Boolean) column.isKey()).toString(),
                                             defaultStr,
@@ -221,7 +221,7 @@ public class DescribeStmt extends ShowStmt {
                             List<String> row = Arrays.asList("",
                                     "",
                                     column.getDisplayName(),
-                                    column.getType().toString(),
+                                    column.getType().canonicalName(),
                                     column.isAllowNull() ? "Yes" : "No",
                                     ((Boolean) column.isKey()).toString(),
                                     defaultStr,

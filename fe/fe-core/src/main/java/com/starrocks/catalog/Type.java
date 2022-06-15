@@ -1491,4 +1491,7 @@ public abstract class Type implements Cloneable {
         throw new AnalysisException("Cannot get innermost type of '" + type + "'");
     }
 
+    public String canonicalName() {
+        return toString();
+    }
 }
