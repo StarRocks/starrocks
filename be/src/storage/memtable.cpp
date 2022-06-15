@@ -45,7 +45,7 @@ void MemTable::_init_aggregator_if_needed() {
     }
 }
 
-MemTable::MemTable(int64_t tablet_id, Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
+MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
                    MemTableSink* sink, MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
           _vectorized_schema(schema),
@@ -60,7 +60,7 @@ MemTable::MemTable(int64_t tablet_id, Schema* schema, const std::vector<SlotDesc
     _init_aggregator_if_needed();
 }
 
-MemTable::MemTable(int64_t tablet_id, Schema* schema, MemTableSink* sink, int64_t max_buffer_size,
+MemTable::MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, int64_t max_buffer_size,
                    MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
           _vectorized_schema(schema),

@@ -21,10 +21,10 @@ class MemTableSink;
 
 class MemTable {
 public:
-    MemTable(int64_t tablet_id, Schema* schema, const std::vector<SlotDescriptor*>* slot_descs, MemTableSink* sink,
+    MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs, MemTableSink* sink,
              MemTracker* mem_tracker);
 
-    MemTable(int64_t tablet_id, Schema* schema, MemTableSink* sink, int64_t max_buffer_size, MemTracker* mem_tracker);
+    MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, int64_t max_buffer_size, MemTracker* mem_tracker);
 
     ~MemTable();
 
