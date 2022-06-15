@@ -467,5 +467,16 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         System.out.println("plan = " + plan);
         Assert.assertTrue(plan.contains("round[(cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(18,0))); args: DECIMAL128; result: DECIMAL128(38,0); args nullable: true; result nullable: true]"));
     }
+
+    @Test
+    public void testDecimalLiteral() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "select key0 from decimal_table where key0 * 1e309 > 8e38;";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        System.out.println("plan = " + plan);
+    }
+
 }
 
