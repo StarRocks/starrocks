@@ -57,14 +57,14 @@ public class StatisticAutoCollector extends MasterDaemon {
 
         updateHealthy();
 
-        List<TableCollectJob> allJobs;
+        List<BaseCollectJob> allJobs;
         if (Config.enable_collect_full_statistics) {
             allJobs = generateFullAnalyzeJobs();
         } else {
             allJobs = generateAllJobs();
         }
 
-        for (TableCollectJob tcj : allJobs) {
+        for (BaseCollectJob tcj : allJobs) {
             statisticExecutor.collectStatistics(tcj);
         }
 
@@ -98,7 +98,7 @@ public class StatisticAutoCollector extends MasterDaemon {
                 }
             }
 
-            /**
+            /*
              * health = totalLoadRows / totalRowCount.
              * The ratio of the number of modified lines to the total number of lines.
              * Because we cannot obtain complete table-level information, we use the row count of
@@ -120,8 +120,8 @@ public class StatisticAutoCollector extends MasterDaemon {
         }
     }
 
-    private List<TableCollectJob> generateFullAnalyzeJobs() {
-        Map<Long, TableCollectJob> allTableJobMap = Maps.newHashMap();
+    private List<BaseCollectJob> generateFullAnalyzeJobs() {
+        List<BaseCollectJob> collectJobs = new ArrayList<>();
 
         // all database
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
@@ -143,19 +143,19 @@ public class StatisticAutoCollector extends MasterDaemon {
                             AnalyzeType.FULL, ScheduleType.SCHEDULE, Maps.newHashMap(),
                             ScheduleStatus.PENDING, LocalDateTime.MIN);
                 }
-                createTableJobs(allTableJobMap, analyzeJob, db, table);
-            }
-        }
 
-        List<TableCollectJob> tableCollectJobs = new ArrayList<>(allTableJobMap.values());
-        for (TableCollectJob tableCollectJob : tableCollectJobs) {
-            if (tableCollectJob.getAnalyzeJob().getType().equals(AnalyzeType.FULL)) {
-                AnalyzeMeta analyzeMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeMetaMap()
-                        .get(tableCollectJob.getAnalyzeJob().getTableId());
+                if (!Table.TableType.OLAP.equals(table.getType())) {
+                    continue;
+                }
 
-                List<Partition> partitions = Lists.newArrayList(((OlapTable) tableCollectJob.getTable()).getPartitions());
+                List<String> columns = table.getFullSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
+                        .collect(Collectors.toList());
+
+                AnalyzeMeta analyzeMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeMetaMap().get(table.getId());
+                List<Partition> partitions = Lists.newArrayList(((OlapTable) table).getPartitions());
+                List<Long> partitionIdList = new ArrayList<>();
                 if (analyzeMeta == null) {
-                    partitions.stream().map(Partition::getId).forEach(tableCollectJob::addPartitionId);
+                    partitions.stream().map(Partition::getId).forEach(partitionIdList::add);
                 } else {
                     if (analyzeMeta.getHealthy() > Config.auto_collect_statistic_ratio) {
                         continue;
@@ -165,20 +165,20 @@ public class StatisticAutoCollector extends MasterDaemon {
                         LocalDateTime updateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
 
                         if (statsLastUpdateTime.isBefore(updateTime)) {
-                            tableCollectJob.addPartitionId(partition.getId());
+                            partitionIdList.add(partition.getId());
                         }
                     }
+                }
+                if (!partitionIdList.isEmpty()) {
+                    collectJobs.add(new FullStatisticsCollectJob(analyzeJob, db, (OlapTable) table, partitionIdList, columns));
                 }
             }
         }
 
-        tableCollectJobs.removeIf(tJob -> tJob.getAnalyzeJob().getType().equals(AnalyzeType.FULL)
-                && tJob.getPartitionIdList().isEmpty());
-
-        return tableCollectJobs;
+        return collectJobs;
     }
 
-    private List<TableCollectJob> generateAllJobs() {
+    private List<BaseCollectJob> generateAllJobs() {
         List<AnalyzeJob> allAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList();
         // The jobs need to be sorted in order of execution to avoid duplicate collections
         allAnalyzeJobs.sort(Comparator.comparing(AnalyzeJob::getId));
@@ -230,8 +230,8 @@ public class StatisticAutoCollector extends MasterDaemon {
                     continue;
                 }
 
-                createTableJobs(allTableJobMap, analyzeJob, db, db.getTable(analyzeJob.getTableId()),
-                        analyzeJob.getColumns());
+                OlapTable olapTable = (OlapTable) db.getTable(analyzeJob.getTableId());
+                createTableJobs(allTableJobMap, analyzeJob, db, olapTable, analyzeJob.getColumns());
             }
         }
 
@@ -246,11 +246,11 @@ public class StatisticAutoCollector extends MasterDaemon {
 
         List<String> columns = table.getFullSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                 .collect(Collectors.toList());
-        createTableJobs(tableJobs, job, db, table, columns);
+        createTableJobs(tableJobs, job, db, (OlapTable) table, columns);
     }
 
     private void createTableJobs(Map<Long, TableCollectJob> tableJobs, AnalyzeJob job,
-                                 Database db, Table table, List<String> columns) {
+                                 Database db, OlapTable table, List<String> columns) {
         // check table has updated
         LocalDateTime updateTime = StatisticUtils.getTableLastUpdateTime(table);
 

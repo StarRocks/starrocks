@@ -1,48 +1,67 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.statistic;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Table;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.cluster.ClusterNamespace;
+import org.apache.velocity.VelocityContext;
 
-import java.util.ArrayList;
+import java.io.StringWriter;
 import java.util.List;
 
-public class TableCollectJob {
-    private final AnalyzeJob analyzeJob;
-    private final Database db;
-    private final Table table;
-    private final List<String> columns;
-    private final List<Long> partitionIdList;
+public class TableCollectJob extends BaseCollectJob {
+    private static final String INSERT_SELECT_FULL_TEMPLATE =
+            "SELECT $tableId, '$columnName', $dbId, '$tableName', '$dbName', COUNT(1), "
+                    + "$dataSize, $countDistinctFunction, $countNullFunction, $maxFunction, $minFunction, NOW() "
+                    + "FROM $tableName";
 
-    public TableCollectJob(AnalyzeJob analyzeJob, Database db, Table table, List<String> columns) {
-        this.analyzeJob = analyzeJob;
-        this.db = db;
-        this.table = table;
-        this.columns = columns;
-        this.partitionIdList =  new ArrayList<>();
+    public TableCollectJob(AnalyzeJob analyzeJob, Database db, OlapTable table, List<String> columns) {
+        super(analyzeJob, db, table, columns);
     }
 
-    public AnalyzeJob getAnalyzeJob() {
-        return analyzeJob;
+    @Override
+    void collect() throws Exception {
+        for (String column : analyzeJob.getColumns()) {
+            String sql = buildFullInsertSQL(db, table, Lists.newArrayList(column));
+            collectStatisticSync(sql);
+        }
     }
 
-    public Database getDb() {
-        return db;
-    }
+    private String buildFullInsertSQL(Database database, OlapTable table, List<String> columnNames) {
+        StringBuilder builder = new StringBuilder(INSERT_STATISTIC_TEMPLATE).append(" ");
 
-    public Table getTable() {
-        return table;
-    }
+        for (String name : columnNames) {
+            VelocityContext context = new VelocityContext();
+            Column column = table.getColumn(name);
 
-    public List<String> getColumns() {
-        return columns;
-    }
+            context.put("dbId", database.getId());
+            context.put("tableId", table.getId());
+            context.put("columnName", name);
+            context.put("dbName", db.getFullName());
+            context.put("tableName", ClusterNamespace.getNameFromFullName(db.getFullName()) + "." + table.getName());
+            context.put("dataSize", getDataSize(column, false));
 
-    public List<Long> getPartitionIdList() {
-        return partitionIdList;
-    }
+            if (!column.getType().canStatistic()) {
+                context.put("countDistinctFunction", "0");
+                context.put("countNullFunction", "0");
+                context.put("maxFunction", "''");
+                context.put("minFunction", "''");
+            } else {
+                context.put("countDistinctFunction", "approx_count_distinct(`" + name + "`)");
+                context.put("countNullFunction", "COUNT(1) - COUNT(`" + name + "`)");
+                context.put("maxFunction", "IFNULL(MAX(`" + name + "`), '')");
+                context.put("minFunction", "IFNULL(MIN(`" + name + "`), '')");
+            }
 
-    public void addPartitionId(Long partitionId) {
-        partitionIdList.add(partitionId);
+            StringWriter sw = new StringWriter();
+            DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", INSERT_SELECT_FULL_TEMPLATE);
+
+            builder.append(sw);
+            builder.append(" UNION ALL ");
+        }
+
+        return builder.substring(0, builder.length() - "UNION ALL ".length());
     }
 }

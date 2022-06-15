@@ -46,6 +46,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         ScalarType dbNameType = ScalarType.createVarcharType(65530);
         ScalarType maxType = ScalarType.createVarcharType(65530);
         ScalarType minType = ScalarType.createVarcharType(65530);
+        ScalarType histogramType = ScalarType.createVarcharType(65530);
 
         // varchar type column need call setAssignedStrLenInColDefinition here,
         // otherwise it will be set length to 1 at analyze
@@ -55,6 +56,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         dbNameType.setAssignedStrLenInColDefinition();
         maxType.setAssignedStrLenInColDefinition();
         minType.setAssignedStrLenInColDefinition();
+        histogramType.setAssignedStrLenInColDefinition();
 
         COLUMNS = ImmutableList.of(
                 new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
@@ -85,11 +87,20 @@ public class StatisticsMetaManager extends MasterDaemon {
                 new ColumnDef("min", new TypeDef(minType)),
                 new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
         );
+
+        HISTOGRAM_STATISTICS_COLUMNS = ImmutableList.of(
+                new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                new ColumnDef("column_name", new TypeDef(columnNameType)),
+                new ColumnDef("table_name", new TypeDef(tableNameType)),
+                new ColumnDef("histogram", new TypeDef(histogramType))
+        );
     }
 
     private static final List<ColumnDef> COLUMNS;
 
     private static final List<ColumnDef> FULL_STATISTICS_COLUMNS;
+
+    private static final List<ColumnDef> HISTOGRAM_STATISTICS_COLUMNS;
 
     // If all replicas are lost more than 3 times in a row, rebuild the statistics table
     private int lossTableCount = 0;
@@ -169,6 +180,10 @@ public class StatisticsMetaManager extends MasterDaemon {
             "table_id", "partition_id", "column_name"
     );
 
+    private static final List<String> histogramKeyColumns = ImmutableList.of(
+            "table_id", "column_name"
+    );
+
     private boolean createTable() {
         LOG.info("create statistics table start");
         TableName tableName = new TableName(Constants.StatisticsDBName,
@@ -216,6 +231,40 @@ public class StatisticsMetaManager extends MasterDaemon {
                 new KeysDesc(KeysType.PRIMARY_KEYS, fullStatisticsKeyColumns),
                 null,
                 new HashDistributionDesc(10, fullStatisticsKeyColumns),
+                properties,
+                null,
+                "");
+        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(),
+                StatisticUtils.buildConnectContext());
+        try {
+            stmt.analyze(analyzer);
+        } catch (UserException e) {
+            LOG.warn("Failed to create table when analyze " + e.getMessage());
+            return false;
+        }
+        try {
+            GlobalStateMgr.getCurrentState().createTable(stmt);
+        } catch (DdlException e) {
+            LOG.warn("Failed to create table" + e.getMessage());
+            return false;
+        }
+        LOG.info("create statistics table done");
+        return checkFullStatisticsTableExist();
+    }
+
+    private boolean createHistogramStatisticsTable() {
+        LOG.info("create statistics table v2 start");
+        TableName tableName = new TableName(Constants.StatisticsDBName,
+                Constants.HistogramStatisticsTableName);
+        Map<String, String> properties = Maps.newHashMap();
+        int defaultReplicationNum = Math.min(3,
+                GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
+        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+        CreateTableStmt stmt = new CreateTableStmt(false, false,
+                tableName, HISTOGRAM_STATISTICS_COLUMNS, "olap",
+                new KeysDesc(KeysType.PRIMARY_KEYS, histogramKeyColumns),
+                null,
+                new HashDistributionDesc(10, histogramKeyColumns),
                 properties,
                 null,
                 "");
@@ -314,6 +363,13 @@ public class StatisticsMetaManager extends MasterDaemon {
                 }
                 trySleep(10000);
             }
+        }
+
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(Constants.StatisticsDBName);
+        Preconditions.checkState(db != null);
+        if (db.getTable(Constants.HistogramStatisticsTableName) == null) {
+            createHistogramStatisticsTable();
         }
     }
 }

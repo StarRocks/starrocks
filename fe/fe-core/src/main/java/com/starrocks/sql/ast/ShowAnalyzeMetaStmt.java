@@ -17,7 +17,8 @@ import com.starrocks.statistic.AnalyzeMeta;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-public class ShowAnalyzeMetaStmt extends ShowStmt {
+public class
+ShowAnalyzeMetaStmt extends ShowStmt {
 
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
