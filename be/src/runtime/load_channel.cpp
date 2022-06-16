@@ -24,6 +24,7 @@
 #include <memory>
 
 #include "common/closure_guard.h"
+#include "runtime/lake_tablets_channel.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/local_tablets_channel.h"
 #include "runtime/mem_tracker.h"
@@ -45,13 +46,15 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
 
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
     int64_t index_id = request.index_id();
+    bool is_lake_tablet = request.has_is_lake_tablet() && request.is_lake_tablet();
 
     Status st;
     {
         std::lock_guard<std::mutex> l(_lock);
         if (_tablets_channels.find(index_id) == _tablets_channels.end()) {
             TabletsChannelKey key(request.id(), index_id);
-            scoped_refptr<TabletsChannel> channel(new LocalTabletsChannel(this, key, _mem_tracker.get()));
+            auto channel = is_lake_tablet ? new_lake_tablets_channel(this, key, _mem_tracker.get())
+                                          : new_local_tablets_channel(this, key, _mem_tracker.get());
             if (st = channel->open(request); st.ok()) {
                 _tablets_channels.insert({index_id, std::move(channel)});
             }
