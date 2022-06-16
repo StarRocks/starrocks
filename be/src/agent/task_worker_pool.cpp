@@ -356,7 +356,6 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
         TStatus task_status;
 
         auto tablet_type = create_tablet_req.tablet_type;
-        std::vector<TTabletInfo> finish_tablet_infos;
         Status create_status;
         if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
             create_status = worker_pool_this->_env->lake_tablet_manager()->create_tablet(create_tablet_req);
