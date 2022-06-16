@@ -16,7 +16,7 @@ namespace pipeline {
 class ScanOperator : public SourceOperator {
 public:
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
-                 int max_scan_concurrency, std::atomic<int>& num_committed_scan_tasks);
+                 std::atomic<int>& num_committed_scan_tasks);
 
     ~ScanOperator() override;
 
@@ -61,6 +61,11 @@ public:
         return res;
     }
 
+    virtual size_t max_scan_concurrency() const {
+        // It takes effect, only when it is positive.
+        return 0;
+    }
+
 private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
@@ -96,7 +101,6 @@ protected:
 
     bool _is_finished = false;
 
-    const int _max_scan_concurrency;
     // Shared by all the ScanOperators created by the same ScanOperatorFactory.
     std::atomic<int>& _num_committed_scan_tasks;
 
@@ -141,7 +145,6 @@ public:
 protected:
     ScanNode* const _scan_node;
 
-    const int _max_scan_concurrency;
     std::atomic<int> _num_committed_scan_tasks{0};
 };
 
