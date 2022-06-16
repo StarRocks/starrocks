@@ -21,11 +21,11 @@
 
 #include "agent/task_worker_pool.h"
 
+#include <atomic>
 #include <boost/lexical_cast.hpp>
 #include <chrono>
 #include <condition_variable>
 #include <ctime>
-#include <mutex>
 #include <sstream>
 #include <string>
 
@@ -44,7 +44,6 @@
 #include "storage/olap_common.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
-#include "storage/tablet.h"
 #include "storage/task/engine_alter_tablet_task.h"
 #include "storage/task/engine_batch_load_task.h"
 #include "storage/task/engine_checksum_task.h"
@@ -62,10 +61,12 @@ const uint32_t TASK_FINISH_MAX_RETRY = 3;
 const uint32_t ALTER_FINISH_TASK_MAX_RETRY = 10;
 const size_t PUBLISH_VERSION_BATCH_SIZE = 10;
 
-std::atomic_ulong TaskWorkerPool::_s_report_version(time(nullptr) * 10000);
+std::atomic<int64_t> TaskWorkerPool::_s_report_version(time(nullptr) * 10000);
 std::mutex TaskWorkerPool::_s_task_signatures_locks[TTaskType::type::NUM_TASK_TYPE];
 std::set<int64_t> TaskWorkerPool::_s_task_signatures[TTaskType::type::NUM_TASK_TYPE];
 FrontendServiceClientCache TaskWorkerPool::_master_service_client_cache;
+
+using std::swap;
 
 TaskWorkerPool::TaskWorkerPool(const TaskWorkerType task_worker_type, ExecEnv* env, const TMasterInfo& master_info,
                                int worker_count)
@@ -333,11 +334,10 @@ uint32_t TaskWorkerPool::_get_next_task_index(int32_t thread_count, std::deque<T
 }
 
 void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     while (true) {
         TAgentTaskRequest agent_task_req;
-        TCreateTabletReq create_tablet_req;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
@@ -346,12 +346,10 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
             if (worker_pool_this->_stopped) {
                 break;
             }
-
-            agent_task_req = worker_pool_this->_tasks.front();
-            create_tablet_req = agent_task_req.create_tablet_req;
+            swap(agent_task_req, worker_pool_this->_tasks.front());
             worker_pool_this->_tasks.pop_front();
         }
-
+        const auto& create_tablet_req = agent_task_req.create_tablet_req;
         TFinishTaskRequest finish_task_request;
         TStatusCode::type status_code = TStatusCode::OK;
         std::vector<std::string> error_msgs;
@@ -361,11 +359,7 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
         std::vector<TTabletInfo> finish_tablet_infos;
         Status create_status;
         if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-#ifndef USE_STAROS
-            create_status = Status::NotSupported("create lake tablet");
-#else
             create_status = worker_pool_this->_env->lake_tablet_manager()->create_tablet(create_tablet_req);
-#endif
         } else {
             create_status = worker_pool_this->_env->storage_engine()->create_tablet(create_tablet_req);
         }
@@ -373,29 +367,26 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
             LOG(WARNING) << "create table failed. status: " << create_status.to_string()
                          << ", signature: " << agent_task_req.signature;
             status_code = TStatusCode::RUNTIME_ERROR;
-        } else {
-            if (create_tablet_req.tablet_type != TTabletType::TABLET_TYPE_LAKE) {
-                ++_s_report_version;
-                // get path hash of the created tablet
-                auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
-                DCHECK(tablet != nullptr);
-                TTabletInfo tablet_info;
-                tablet_info.tablet_id = tablet->tablet_id();
-                tablet_info.schema_hash = tablet->schema_hash();
-                tablet_info.version = create_tablet_req.version;
-                tablet_info.row_count = 0;
-                tablet_info.data_size = 0;
-                tablet_info.__set_path_hash(tablet->data_dir()->path_hash());
-                finish_tablet_infos.push_back(tablet_info);
-                finish_task_request.__set_finish_tablet_infos(finish_tablet_infos);
-            }
+        } else if (create_tablet_req.tablet_type != TTabletType::TABLET_TYPE_LAKE) {
+            _s_report_version.fetch_add(1, std::memory_order_relaxed);
+            // get path hash of the created tablet
+            auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
+            DCHECK(tablet != nullptr);
+            TTabletInfo& tablet_info = finish_task_request.finish_tablet_infos.emplace_back();
+            finish_task_request.__isset.finish_tablet_infos = true;
+            tablet_info.tablet_id = tablet->tablet_id();
+            tablet_info.schema_hash = tablet->schema_hash();
+            tablet_info.version = create_tablet_req.version;
+            tablet_info.row_count = 0;
+            tablet_info.data_size = 0;
+            tablet_info.__set_path_hash(tablet->data_dir()->path_hash());
         }
 
         task_status.__set_status_code(status_code);
         task_status.__set_error_msgs(error_msgs);
 
         finish_task_request.__set_backend(BackendOptions::get_localBackend());
-        finish_task_request.__set_report_version(_s_report_version);
+        finish_task_request.__set_report_version(_s_report_version.load(std::memory_order_relaxed));
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);
         finish_task_request.__set_task_status(task_status);
@@ -407,11 +398,10 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
 }
 
 void* TaskWorkerPool::_drop_tablet_worker_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     while (true) {
         TAgentTaskRequest agent_task_req;
-        TDropTabletReq drop_tablet_req;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
@@ -420,11 +410,10 @@ void* TaskWorkerPool::_drop_tablet_worker_thread_callback(void* arg_this) {
             if (worker_pool_this->_stopped) {
                 break;
             }
-
-            agent_task_req = worker_pool_this->_tasks.front();
-            drop_tablet_req = agent_task_req.drop_tablet_req;
+            swap(agent_task_req, worker_pool_this->_tasks.front());
             worker_pool_this->_tasks.pop_front();
         }
+        const TDropTabletReq& drop_tablet_req = agent_task_req.drop_tablet_req;
 
         bool force_drop = drop_tablet_req.__isset.force && drop_tablet_req.force;
         TStatusCode::type status_code = TStatusCode::OK;
@@ -461,7 +450,7 @@ void* TaskWorkerPool::_drop_tablet_worker_thread_callback(void* arg_this) {
 }
 
 void* TaskWorkerPool::_alter_tablet_worker_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     while (true) {
         TAgentTaskRequest agent_task_req;
@@ -473,8 +462,7 @@ void* TaskWorkerPool::_alter_tablet_worker_thread_callback(void* arg_this) {
             if (worker_pool_this->_stopped) {
                 break;
             }
-
-            agent_task_req = worker_pool_this->_tasks.front();
+            swap(agent_task_req, worker_pool_this->_tasks.front());
             worker_pool_this->_tasks.pop_front();
         }
         int64_t signatrue = agent_task_req.signature;
@@ -546,32 +534,31 @@ void TaskWorkerPool::_alter_tablet(TaskWorkerPool* worker_pool_this, const TAgen
     }
 
     if (status == STARROCKS_SUCCESS) {
-        ++_s_report_version;
+        _s_report_version.fetch_add(1, std::memory_order_relaxed);
         LOG(INFO) << process_name << " finished. signature: " << signature;
     }
 
     // Return result to fe
     finish_task_request->__set_backend(BackendOptions::get_localBackend());
-    finish_task_request->__set_report_version(_s_report_version);
+    finish_task_request->__set_report_version(_s_report_version.load(std::memory_order_relaxed));
     finish_task_request->__set_task_type(task_type);
     finish_task_request->__set_signature(signature);
 
     std::vector<TTabletInfo> finish_tablet_infos;
     if (status == STARROCKS_SUCCESS) {
-        TTabletInfo tablet_info;
+        TTabletInfo& tablet_info = finish_tablet_infos.emplace_back();
         status = _get_tablet_info(new_tablet_id, new_schema_hash, signature, &tablet_info);
 
         if (status != STARROCKS_SUCCESS) {
             LOG(WARNING) << process_name << " success, but get new tablet info failed."
                          << "tablet_id: " << new_tablet_id << ", schema_hash: " << new_schema_hash
                          << ", signature: " << signature;
-        } else {
-            finish_tablet_infos.push_back(tablet_info);
         }
     }
 
     if (status == STARROCKS_SUCCESS) {
-        finish_task_request->__set_finish_tablet_infos(finish_tablet_infos);
+        swap(finish_tablet_infos, finish_task_request->finish_tablet_infos);
+        finish_task_request->__isset.finish_tablet_infos = true;
         LOG(INFO) << process_name << " success. signature: " << signature;
         error_msgs.push_back(process_name + " success");
         task_status.__set_status_code(TStatusCode::OK);
@@ -594,7 +581,7 @@ void TaskWorkerPool::_alter_tablet(TaskWorkerPool* worker_pool_this, const TAgen
 void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
     static uint32_t s_worker_count = 0;
 
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     TPriority::type priority = TPriority::NORMAL;
 
@@ -699,7 +686,7 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
             VLOG(3) << "push ok. signature: " << agent_task_req.signature << ", push_type: " << push_req.push_type;
             error_msgs.emplace_back("push success");
 
-            ++_s_report_version;
+            _s_report_version.fetch_add(1, std::memory_order_relaxed);
 
             task_status.__set_status_code(TStatusCode::OK);
             finish_task_request.__set_finish_tablet_infos(tablet_infos);
@@ -715,7 +702,7 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
         }
         task_status.__set_error_msgs(error_msgs);
         finish_task_request.__set_task_status(task_status);
-        finish_task_request.__set_report_version(_s_report_version);
+        finish_task_request.__set_report_version(_s_report_version.load(std::memory_order_relaxed));
 
         worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req.task_type, agent_task_req.signature);
@@ -725,7 +712,7 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
 }
 
 void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     std::unique_ptr<ThreadPool> threadpool;
     auto st =
@@ -780,7 +767,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         StarRocksMetrics::instance()->publish_task_request_total.increment(1);
         auto& finish_task = finish_task_requests.emplace_back();
         finish_task.__set_backend(BackendOptions::get_localBackend());
-        finish_task.__set_report_version(_s_report_version);
+        finish_task.__set_report_version(_s_report_version.load(std::memory_order_relaxed));
         int64_t start_ts = MonotonicMillis();
         run_publish_version_task(*threadpool, publish_version_task, finish_task, affected_dirs);
         batch_publish_latency += MonotonicMillis() - start_ts;
@@ -810,10 +797,9 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
 }
 
 void* TaskWorkerPool::_clear_transaction_task_worker_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
     while (true) {
         TAgentTaskRequest agent_task_req;
-        TClearTransactionTaskRequest clear_transaction_task_req;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
@@ -822,11 +808,10 @@ void* TaskWorkerPool::_clear_transaction_task_worker_thread_callback(void* arg_t
             if (worker_pool_this->_stopped) {
                 break;
             }
-
-            agent_task_req = worker_pool_this->_tasks.front();
-            clear_transaction_task_req = agent_task_req.clear_transaction_task_req;
+            swap(agent_task_req, worker_pool_this->_tasks.front());
             worker_pool_this->_tasks.pop_front();
         }
+        const TClearTransactionTaskRequest& clear_transaction_task_req = agent_task_req.clear_transaction_task_req;
         LOG(INFO) << "get clear transaction task task, signature:" << agent_task_req.signature
                   << ", txn_id: " << clear_transaction_task_req.transaction_id
                   << ", partition id size: " << clear_transaction_task_req.partition_id.size();
@@ -869,10 +854,9 @@ void* TaskWorkerPool::_clear_transaction_task_worker_thread_callback(void* arg_t
 }
 
 void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
     while (true) {
         TAgentTaskRequest agent_task_req;
-        TUpdateTabletMetaInfoReq update_tablet_meta_req;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
@@ -881,11 +865,11 @@ void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this)
             if (worker_pool_this->_stopped) {
                 break;
             }
-
-            agent_task_req = worker_pool_this->_tasks.front();
-            update_tablet_meta_req = agent_task_req.update_tablet_meta_info_req;
+            swap(agent_task_req, worker_pool_this->_tasks.front());
             worker_pool_this->_tasks.pop_front();
         }
+        const TUpdateTabletMetaInfoReq& update_tablet_meta_req = agent_task_req.update_tablet_meta_info_req;
+
         LOG(INFO) << "get update tablet meta task, signature:" << agent_task_req.signature;
 
         TStatusCode::type status_code = TStatusCode::OK;
@@ -946,13 +930,11 @@ void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this)
 }
 
 void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     while (true) {
         AgentStatus status = STARROCKS_SUCCESS;
         TAgentTaskRequest agent_task_req;
-        TCloneReq clone_req;
-
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
@@ -961,12 +943,10 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
             if (worker_pool_this->_stopped) {
                 break;
             }
-
-            agent_task_req = worker_pool_this->_tasks.front();
-            clone_req = agent_task_req.clone_req;
+            swap(agent_task_req, worker_pool_this->_tasks.front());
             worker_pool_this->_tasks.pop_front();
         }
-
+        const TCloneReq& clone_req = agent_task_req.clone_req;
         StarRocksMetrics::instance()->clone_requests_total.increment(1);
         LOG(INFO) << "get clone task. signature:" << agent_task_req.signature;
 
@@ -1044,11 +1024,10 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
 }
 
 void* TaskWorkerPool::_storage_medium_migrate_worker_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     while (true) {
         TAgentTaskRequest agent_task_req;
-        TStorageMediumMigrateReq storage_medium_migrate_req;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
@@ -1057,12 +1036,10 @@ void* TaskWorkerPool::_storage_medium_migrate_worker_thread_callback(void* arg_t
             if (worker_pool_this->_stopped) {
                 break;
             }
-
-            agent_task_req = worker_pool_this->_tasks.front();
-            storage_medium_migrate_req = agent_task_req.storage_medium_migrate_req;
+            swap(agent_task_req, worker_pool_this->_tasks.front());
             worker_pool_this->_tasks.pop_front();
         }
-
+        const TStorageMediumMigrateReq& storage_medium_migrate_req = agent_task_req.storage_medium_migrate_req;
         TStatusCode::type status_code = TStatusCode::OK;
         std::vector<std::string> error_msgs;
         TStatus task_status;
@@ -1143,11 +1120,10 @@ void* TaskWorkerPool::_storage_medium_migrate_worker_thread_callback(void* arg_t
 }
 
 void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     while (true) {
         TAgentTaskRequest agent_task_req;
-        TCheckConsistencyReq check_consistency_req;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
@@ -1156,12 +1132,10 @@ void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) 
             if (worker_pool_this->_stopped) {
                 break;
             }
-
-            agent_task_req = worker_pool_this->_tasks.front();
-            check_consistency_req = agent_task_req.check_consistency_req;
+            swap(agent_task_req, worker_pool_this->_tasks.front());
             worker_pool_this->_tasks.pop_front();
         }
-
+        const TCheckConsistencyReq& check_consistency_req = agent_task_req.check_consistency_req;
         TStatusCode::type status_code = TStatusCode::OK;
         std::vector<std::string> error_msgs;
         TStatus task_status;
@@ -1204,7 +1178,7 @@ void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) 
 }
 
 void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     TReportRequest request;
 
@@ -1243,7 +1217,7 @@ void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
 }
 
 void* TaskWorkerPool::_report_disk_state_worker_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     TReportRequest request;
 
@@ -1299,7 +1273,7 @@ void* TaskWorkerPool::_report_disk_state_worker_thread_callback(void* arg_this) 
 }
 
 void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     TReportRequest request;
     request.__isset.tablets = true;
@@ -1315,7 +1289,7 @@ void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
         }
         request.tablets.clear();
 
-        request.__set_report_version(_s_report_version);
+        request.__set_report_version(_s_report_version.load(std::memory_order_relaxed));
         Status st_report = StorageEngine::instance()->tablet_manager()->report_all_tablets_info(&request.tablets);
         if (!st_report.ok()) {
             LOG(WARNING) << "Fail to report all tablets info, err=" << st_report.to_string();
@@ -1347,7 +1321,7 @@ void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
 }
 
 void* TaskWorkerPool::_report_workgroup_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     TReportRequest request;
     AgentStatus status = STARROCKS_SUCCESS;
@@ -1362,7 +1336,7 @@ void* TaskWorkerPool::_report_workgroup_thread_callback(void* arg_this) {
         }
 
         StarRocksMetrics::instance()->report_workgroup_requests_total.increment(1);
-        request.__set_report_version(_s_report_version);
+        request.__set_report_version(_s_report_version.load(std::memory_order_relaxed));
         auto workgroups = workgroup::WorkGroupManager::instance()->list_workgroups();
         request.__set_active_workgroups(std::move(workgroups));
         request.__set_backend(BackendOptions::get_localBackend());
@@ -1384,11 +1358,10 @@ void* TaskWorkerPool::_report_workgroup_thread_callback(void* arg_this) {
 }
 
 void* TaskWorkerPool::_upload_worker_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     while (true) {
         TAgentTaskRequest agent_task_req;
-        TUploadReq upload_request;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
@@ -1397,11 +1370,10 @@ void* TaskWorkerPool::_upload_worker_thread_callback(void* arg_this) {
             if (worker_pool_this->_stopped) {
                 break;
             }
-
-            agent_task_req = worker_pool_this->_tasks.front();
-            upload_request = agent_task_req.upload_req;
+            swap(agent_task_req, worker_pool_this->_tasks.front());
             worker_pool_this->_tasks.pop_front();
         }
+        const TUploadReq& upload_request = agent_task_req.upload_req;
 
         LOG(INFO) << "Got upload task signature=" << agent_task_req.signature << " job id=" << upload_request.job_id;
 
@@ -1438,11 +1410,10 @@ void* TaskWorkerPool::_upload_worker_thread_callback(void* arg_this) {
 }
 
 void* TaskWorkerPool::_download_worker_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     while (true) {
         TAgentTaskRequest agent_task_req;
-        TDownloadReq download_request;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
@@ -1451,11 +1422,10 @@ void* TaskWorkerPool::_download_worker_thread_callback(void* arg_this) {
             if (worker_pool_this->_stopped) {
                 break;
             }
-
-            agent_task_req = worker_pool_this->_tasks.front();
-            download_request = agent_task_req.download_req;
+            swap(agent_task_req, worker_pool_this->_tasks.front());
             worker_pool_this->_tasks.pop_front();
         }
+        const TDownloadReq& download_request = agent_task_req.download_req;
         LOG(INFO) << "Got download task signature=" << agent_task_req.signature
                   << " job id=" << download_request.job_id;
 
@@ -1494,11 +1464,10 @@ void* TaskWorkerPool::_download_worker_thread_callback(void* arg_this) {
 }
 
 void* TaskWorkerPool::_make_snapshot_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     while (true) {
         TAgentTaskRequest agent_task_req;
-        TSnapshotRequest snapshot_request;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
@@ -1507,11 +1476,10 @@ void* TaskWorkerPool::_make_snapshot_thread_callback(void* arg_this) {
             if (worker_pool_this->_stopped) {
                 break;
             }
-
-            agent_task_req = worker_pool_this->_tasks.front();
-            snapshot_request = agent_task_req.snapshot_req;
+            swap(agent_task_req, worker_pool_this->_tasks.front());
             worker_pool_this->_tasks.pop_front();
         }
+        const TSnapshotRequest& snapshot_request = agent_task_req.snapshot_req;
         LOG(INFO) << "Got snapshot task signature=" << agent_task_req.signature;
 
         TStatusCode::type status_code = TStatusCode::OK;
@@ -1567,11 +1535,10 @@ void* TaskWorkerPool::_make_snapshot_thread_callback(void* arg_this) {
 }
 
 void* TaskWorkerPool::_release_snapshot_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     while (true) {
         TAgentTaskRequest agent_task_req;
-        TReleaseSnapshotRequest release_snapshot_request;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
@@ -1580,18 +1547,17 @@ void* TaskWorkerPool::_release_snapshot_thread_callback(void* arg_this) {
             if (worker_pool_this->_stopped) {
                 break;
             }
-
-            agent_task_req = worker_pool_this->_tasks.front();
-            release_snapshot_request = agent_task_req.release_snapshot_req;
+            swap(agent_task_req, worker_pool_this->_tasks.front());
             worker_pool_this->_tasks.pop_front();
         }
+        const TReleaseSnapshotRequest& release_snapshot_request = agent_task_req.release_snapshot_req;
         LOG(INFO) << "Got release snapshot task signature=" << agent_task_req.signature;
 
         TStatusCode::type status_code = TStatusCode::OK;
         std::vector<std::string> error_msgs;
         TStatus task_status;
 
-        std::string& snapshot_path = release_snapshot_request.snapshot_path;
+        const std::string& snapshot_path = release_snapshot_request.snapshot_path;
         Status release_snapshot_status = SnapshotManager::instance()->release_snapshot(snapshot_path);
         if (!release_snapshot_status.ok()) {
             status_code = TStatusCode::RUNTIME_ERROR;
@@ -1633,11 +1599,10 @@ AgentStatus TaskWorkerPool::_get_tablet_info(const TTabletId tablet_id, const TS
 }
 
 void* TaskWorkerPool::_move_dir_thread_callback(void* arg_this) {
-    TaskWorkerPool* worker_pool_this = (TaskWorkerPool*)arg_this;
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
 
     while (true) {
         TAgentTaskRequest agent_task_req;
-        TMoveDirReq move_dir_req;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
@@ -1646,11 +1611,10 @@ void* TaskWorkerPool::_move_dir_thread_callback(void* arg_this) {
             if (worker_pool_this->_stopped) {
                 break;
             }
-
-            agent_task_req = worker_pool_this->_tasks.front();
-            move_dir_req = agent_task_req.move_dir_req;
+            swap(agent_task_req, worker_pool_this->_tasks.front());
             worker_pool_this->_tasks.pop_front();
         }
+        const TMoveDirReq& move_dir_req = agent_task_req.move_dir_req;
         LOG(INFO) << "Got move dir task signature=" << agent_task_req.signature << " job id=" << move_dir_req.job_id;
 
         TStatusCode::type status_code = TStatusCode::OK;
