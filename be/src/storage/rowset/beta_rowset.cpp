@@ -317,6 +317,42 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
     return Status::OK();
 }
 
+StatusOr<int64_t> BetaRowset::estimate_compaction_segment_iterator_num() {
+    if (num_segments() == 0) {
+        return 0;
+    }
+
+    int64_t segment_num = 0;
+    acquire();
+    DeferOp defer([this]() { release(); });
+    RETURN_IF_ERROR(load());
+    for (auto& seg_ptr : segments()) {
+        if (seg_ptr->num_rows() == 0) {
+            continue;
+        }
+        // When creating segment iterators for compaction, we don't provide rowid_range_option and predicates_for_zone_map,
+        // So here we don't need to consider the following two situation:
+        //
+        //    if (options.rowid_range_option != nullptr && !options.rowid_range_option->match_segment(seg_ptr.get())) {
+        //       continue;
+        //    }
+        //    auto res = seg_ptr->new_iterator(segment_schema, seg_options);
+        //    if (res.status().is_end_of_file()) {
+        //     continue;
+        //    }
+
+        segment_num++;
+    }
+
+    if (segment_num == 0) {
+        return 0;
+    } else if (rowset_meta()->is_segments_overlapping()) {
+        return segment_num;
+    } else {
+        return 1;
+    }
+}
+
 StatusOr<std::vector<vectorized::ChunkIteratorPtr>> BetaRowset::get_segment_iterators2(const vectorized::Schema& schema,
                                                                                        KVStore* meta, int64_t version,
                                                                                        OlapReaderStatistics* stats) {
