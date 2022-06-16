@@ -203,6 +203,7 @@ public:
      */
     template <typename Type>
     static inline typename Type::Ptr as_column(ColumnPtr value) {
+        down_cast<Type>(value.get());
         return std::static_pointer_cast<Type>(value);
     }
 
@@ -273,7 +274,9 @@ public:
 
     using ColumnsConstIterator = Columns::const_iterator;
     static bool is_all_const(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
+
     static size_t compute_bytes_size(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
+
     template <typename T>
     static size_t filter_range(const Column::Filter& filter, T* data, size_t from, size_t to) {
         auto start_offset = from;
