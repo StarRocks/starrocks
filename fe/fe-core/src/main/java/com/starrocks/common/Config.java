@@ -1322,6 +1322,18 @@ public class Config extends ConfigBase {
     public static boolean enable_statistic_collect = true;
 
     /**
+     * default bucket size of histogram statistics
+     */
+    @ConfField(mutable = true)
+    public static long histogram_buckets_size = 256;
+
+    /**
+     * default most common value size of histogram statistics
+     */
+    @ConfField(mutable = true)
+    public static long histogram_topn_size = 256;
+
+    /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
      * This may reduce network transmission in following case:
      * 1. N hosts with N Backends and N Frontends deployed.

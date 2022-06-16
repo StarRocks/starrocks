@@ -61,6 +61,8 @@ statement
     | analyzeStatement                                                                      #analyze
     | createAnalyzeStatement                                                                #createAnalyze
     | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
+    | analyzeHistogramStatement                                                             #analyzeHistogram
+    | dropAnalyzeHistogramStatement                                                         #dropHistogram
     | showAnalyzeStatement                                                                  #showAnalyze
 
     // Work Group Statement
@@ -332,6 +334,15 @@ deleteStatement
 
 analyzeStatement
     : ANALYZE FULL? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    ;
+
+analyzeHistogramStatement
+    : ANALYZE TABLE qualifiedName UPDATE HISTOGRAM ON identifier (',' identifier)*
+        (WITH bucket=INTEGER_VALUE BUCKETS)? properties?
+    ;
+
+dropAnalyzeHistogramStatement
+    : ANALYZE TABLE qualifiedName DROP HISTOGRAM ON identifier (',' identifier)*
     ;
 
 createAnalyzeStatement
@@ -943,7 +954,7 @@ nonReserved
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FILE | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
     | GLOBAL | GRANTS
-    | HASH | HELP | HLL_UNION | HOUR
+    | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR
     | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
     | MANUAL | MATERIALIZED | MAX | MIN | MINUTE | MODIFY | MONTH | MERGE

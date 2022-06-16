@@ -126,6 +126,8 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AnalyzeBasicDesc;
+import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CTERelation;
@@ -904,7 +906,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        return new AnalyzeStmt(tableName, columnNames, properties, context.FULL() == null);
+        return new AnalyzeStmt(tableName, columnNames, properties, context.FULL() == null, new AnalyzeBasicDesc());
     }
 
     @Override
@@ -944,6 +946,36 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowAnalyzeStatement(StarRocksParser.ShowAnalyzeStatementContext context) {
         return new ShowAnalyzeStmt();
+    }
+
+    @Override
+    public ParseNode visitAnalyzeHistogramStatement(StarRocksParser.AnalyzeHistogramStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName tableName = qualifiedNameToTableName(qualifiedName);
+
+        List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
+        List<String> columnNames = null;
+        if (columns != null) {
+            columnNames = columns.stream().map(Identifier::getValue).collect(toList());
+        }
+
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        long bucket;
+        if (context.bucket != null) {
+            bucket = Long.parseLong(context.bucket.getText());
+        } else {
+            bucket = Config.histogram_buckets_size;
+        }
+        long mcv = Config.histogram_topn_size;
+
+        return new AnalyzeStmt(tableName, columnNames, properties, true, new AnalyzeHistogramDesc(bucket, mcv));
     }
 
     // ------------------------------------------- Work Group Statement -------------------------------------------------
