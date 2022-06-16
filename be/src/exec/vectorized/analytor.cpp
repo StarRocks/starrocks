@@ -478,25 +478,6 @@ int64_t Analytor::get_total_position(int64_t local_position) {
     return _removed_from_buffer_rows + local_position;
 }
 
-void Analytor::find_partition_end() {
-    // current partition data don't consume finished
-    if (_current_row_position < _partition_end) {
-        _found_partition_end = _partition_end;
-        return;
-    }
-
-    if (_partition_columns.empty() || _input_rows == 0) {
-        _found_partition_end = _input_rows;
-        return;
-    }
-
-    int64_t start = _found_partition_end;
-    _found_partition_end = static_cast<int64_t>(_partition_columns[0]->size());
-    for (auto& column : _partition_columns) {
-        _found_partition_end = _find_first_not_equal(column.get(), _partition_end, start, _found_partition_end);
-    }
-}
-
 bool Analytor::find_and_check_partition_end() {
     // current partition data don't consume finished
     if (_current_row_position < _partition_end) {

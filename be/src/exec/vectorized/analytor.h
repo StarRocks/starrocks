@@ -110,7 +110,6 @@ public:
 
     bool is_new_partition();
     int64_t get_total_position(int64_t local_position);
-    void find_partition_end();
     bool find_and_check_partition_end();
     void find_peer_group_end();
     bool find_and_check_peer_group_end(bool found_partition_end = false);

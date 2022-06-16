@@ -287,11 +287,11 @@ Status AnalyticNode::_get_next_for_rows_between_unbounded_preceding_and_current_
 }
 
 Status AnalyticNode::_try_fetch_next_partition_data(RuntimeState* state) {
-    _analytor->find_partition_end();
+    _analytor->find_and_check_partition_end();
     while (!_analytor->is_partition_boundary_reached()) {
         RETURN_IF_ERROR(state->check_mem_limit("analytic node fetch next partition data"));
         RETURN_IF_ERROR(_fetch_next_chunk(state));
-        _analytor->find_partition_end();
+        _analytor->find_and_check_partition_end();
     }
     return Status::OK();
 }
