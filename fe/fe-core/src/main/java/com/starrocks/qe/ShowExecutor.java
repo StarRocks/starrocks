@@ -712,7 +712,7 @@ public class ShowExecutor {
                             continue;
                         }
                         final String columnName = col.getName();
-                        final String columnType = col.getType().toString().toLowerCase();
+                        final String columnType = col.getType().canonicalName().toLowerCase();
                         final String isAllowNull = col.isAllowNull() ? "YES" : "NO";
                         final String isKey = col.isKey() ? "YES" : "NO";
                         final String defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
