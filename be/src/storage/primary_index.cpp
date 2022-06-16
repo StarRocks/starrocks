@@ -923,7 +923,8 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     // load persistent index if enable persistent index meta
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
 
-    if (tablet->get_enable_persistent_index() && fix_size <= 64) {
+    // persistent_index does't support variable length columns(varchar/char) as key column for now
+    if (tablet->get_enable_persistent_index() && (fix_size <= 64 && fix_size > 0)) {
         // TODO
         // PersistentIndex and tablet data are currently stored in the same directory
         // We may need to support the separation of PersistentIndex and Tablet data
