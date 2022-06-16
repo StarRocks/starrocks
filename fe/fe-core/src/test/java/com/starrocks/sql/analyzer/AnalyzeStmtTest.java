@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -54,5 +55,13 @@ public class AnalyzeStmtTest {
         Assert.assertFalse(analyzeStmt.isSample());
         Assert.assertEquals(1, analyzeStmt.getProperties().size());
         Assert.assertEquals("30", analyzeStmt.getProperties().getOrDefault("expire_sec", "2"));
+    }
+
+    @Test
+    public void testHistogram() {
+        String sql = "analyze table t0 update histogram on v1,v2 with 256 buckets";
+        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertTrue(analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc);
+        Assert.assertEquals(((AnalyzeHistogramDesc) (analyzeStmt.getAnalyzeTypeDesc())).getBuckets(), 256);
     }
 }

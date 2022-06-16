@@ -12,7 +12,9 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.AnalyzeTypeDesc;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.common.MetaUtils;
@@ -78,6 +80,8 @@ public class AnalyzeStmtAnalyzer {
                     throw new SemanticException("Property '%s' value must be numeric", key);
                 }
             }
+
+            analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
             return null;
         }
 
@@ -137,6 +141,23 @@ public class AnalyzeStmtAnalyzer {
                 }
             }
             return null;
+        }
+
+        private void analyzeAnalyzeTypeDesc(ConnectContext session, AnalyzeStmt statement, AnalyzeTypeDesc analyzeTypeDesc) {
+            if (analyzeTypeDesc instanceof AnalyzeHistogramDesc) {
+                List<String> columns = statement.getColumnNames();
+                OlapTable analyzeTable = (OlapTable) MetaUtils.getStarRocksTable(session, statement.getTableName());
+
+                for (String columnName : columns) {
+                    Column column = analyzeTable.getColumn(columnName);
+                    if (column.getType().isComplexType()
+                            || column.getType().isJsonType()
+                            || column.getType().isOnlyMetricType()) {
+                        throw new SemanticException("Can't create histogram statistics on column type is %s",
+                                column.getType().toSql());
+                    }
+                }
+            }
         }
     }
 }
