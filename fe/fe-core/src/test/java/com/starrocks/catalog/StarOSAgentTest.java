@@ -2,6 +2,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Maps;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.proto.StatusCode;
@@ -13,6 +14,8 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.Map;
 
 public class StarOSAgentTest {
     private StarOSAgent starosAgent;
@@ -93,7 +96,7 @@ public class StarOSAgentTest {
     }
 
     @Test
-    public void testAddAndRemoveWorker() throws Exception {
+    public void testAddAndDropWorker() throws Exception {
          new Expectations() {
              {
                  client.addWorker(1, "127.0.0.1:8090");
@@ -111,7 +114,7 @@ public class StarOSAgentTest {
         starosAgent.addWorker(5, workerHost);
         Assert.assertEquals(10, starosAgent.getWorkerId(workerHost));
 
-        starosAgent.removeWorker(workerHost);
+        starosAgent.dropWorker(workerHost);
         Assert.assertEquals(-1, starosAgent.getWorkerIdByBackendId(5));
     }
 
@@ -138,7 +141,7 @@ public class StarOSAgentTest {
     }
 
     @Test
-    public void testRemoveWorkerException() throws Exception {
+    public void testDropWorkerException() throws Exception {
         new Expectations() {
             {
                 client.getWorkerInfo(1, "127.0.0.1:8090").getWorkerId();
@@ -151,7 +154,7 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "serviceId", 1L);
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Failed to get worker id from starMgr.",
-                () -> starosAgent.removeWorker("127.0.0.1:8090"));
+                () -> starosAgent.dropWorker("127.0.0.1:8090"));
 
         new Expectations() {
             {
@@ -166,7 +169,19 @@ public class StarOSAgentTest {
             }
         };
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Failed to remove worker.",
-                () -> starosAgent.removeWorker("127.0.0.1:8090"));
+                "Failed to drop worker.",
+                () -> starosAgent.dropWorker("127.0.0.1:8090"));
+    }
+
+    @Test
+    public void testRemoveWorker() {
+        String workerHost = "127.0.0.1:8090";
+        Map<String, Long> mockWorkerToId = Maps.newHashMap();
+        mockWorkerToId.put(workerHost, 5L);
+        Deencapsulation.setField(starosAgent, "workerToId", mockWorkerToId);
+        Assert.assertEquals(5L, starosAgent.getWorkerId(workerHost));
+
+        starosAgent.removeWorker(workerHost);
+        ExceptionChecker.expectThrows(NullPointerException.class, () -> starosAgent.getWorkerId(workerHost));
     }
 }

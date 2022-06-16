@@ -1054,12 +1054,13 @@ public class GlobalStateMgr {
             // not set canRead here, leave canRead as what is was.
             // if meta out of date, canRead will be set to false in replayer thread.
             metaReplayState.setTransferToUnknown();
-            // get serviceId from starMgr
-            if (Config.integrate_starmgr) {
-                int clusterId = getCurrentState().getClusterId();
-                getStarOSAgent().getServiceId(Integer.toString(clusterId));
-            }
             return;
+        }
+
+        // get serviceId from starMgr
+        if (Config.integrate_starmgr) {
+            int clusterId = getCurrentState().getClusterId();
+            getStarOSAgent().getServiceId(Integer.toString(clusterId));
         }
 
         // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER

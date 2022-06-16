@@ -319,7 +319,7 @@ public class SystemInfoService {
                     throw new DdlException("starletPort has not been updated by heartbeat from this backend");
                 }
                 String workerAddr = droppedBackend.getHost() + ":" + starletPort;
-                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
+                GlobalStateMgr.getCurrentState().getStarOSAgent().dropWorker(workerAddr);
             }
 
             cluster.removeBackend(droppedBackend.getId());
@@ -827,6 +827,16 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(backend.getOwnerClusterName());
         if (null != cluster) {
             cluster.removeBackend(backend.getId());
+            // clear map in starosAgent
+            // remove worker
+            if (Config.integrate_starmgr) {
+                long starletPort = backend.getStarletPort();
+                if (starletPort == 0) {
+                    return;
+                }
+                String workerAddr = backend.getHost() + ":" + starletPort;
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
+            }
         } else {
             LOG.error("Cluster " + backend.getOwnerClusterName() + " no exist.");
         }

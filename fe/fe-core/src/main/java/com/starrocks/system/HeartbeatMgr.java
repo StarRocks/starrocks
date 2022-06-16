@@ -185,7 +185,7 @@ public class HeartbeatMgr extends MasterDaemon {
                                     .abortTxnWhenCoordinateBeDown(be.getHost(), 100);
                         }
                     } else {
-                        if (Config.integrate_starmgr) {
+                        if (Config.integrate_starmgr && !isReplay) {
                             // addWorker
                             int starletPort = be.getStarletPort();
                             if (starletPort != 0) {

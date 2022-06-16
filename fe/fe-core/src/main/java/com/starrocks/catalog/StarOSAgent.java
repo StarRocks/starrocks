@@ -150,7 +150,7 @@ public class StarOSAgent {
         LOG.info("add worker {} success, backendId is {}", workerId, backendId);
     }
 
-    public void removeWorker(String workerIpPort) throws DdlException {
+    public void dropWorker(String workerIpPort) throws DdlException {
         long workerId = -1;
         if (workerToId.containsKey(workerIpPort)) {
             workerId = workerToId.get(workerIpPort);
@@ -178,13 +178,19 @@ public class StarOSAgent {
             // but it is right, so only need to throw exception
             // if code is not StatusCode.NOT_EXIST
             if (e.getCode() != StatusCode.NOT_EXIST) {
-                throw new DdlException("Failed to remove worker. error: " + e.getMessage());
+                throw new DdlException("Failed to drop worker. error: " + e.getMessage());
             }
         }
 
         workerToBackend.remove(workerId);
         workerToId.remove(workerIpPort);
-        LOG.info("remove worker {} success from StarMgr", workerIpPort);
+        LOG.info("drop worker {} success from StarMgr", workerIpPort);
+    }
+
+    public void removeWorker(String workerIpPort) {
+        long workerId = workerToId.get(workerIpPort);
+        workerToBackend.remove(workerId);
+        workerToId.remove(workerIpPort);
     }
 
     public long getWorkerIdByBackendId(long backendId) {
