@@ -99,7 +99,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
                 info.add(Integer.toString(fe.getRpcPort()));
             }
 
-            info.add(catalog.getFeType().name());
+            info.add(globalStateMgr.getFeType().name());
             info.add(String.valueOf(fe.getHost().equals(masterIp)));
 
             info.add(Integer.toString(globalStateMgr.getClusterId()));
