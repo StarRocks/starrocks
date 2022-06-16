@@ -58,19 +58,21 @@ EMPTY_HLL(): This generates empty HLL column and is used to fill in default valu
 
     create table test_uv(
     dt date,
+    id int
     uv_set hll hll_union)
     distributed by hash(id) buckets 32;
 
-    insert into test_uv select dt, set1 from test;
+    insert into test_uv select dt, id, set1 from test;
 
     c. Create another table to calculate uv. Insert data and generate hll column by testing other columns through hll_hash
 
     create table test_uv(
     dt date,
+    id int,
     id_set hll hll_union)
     distributed by hash(id) buckets 32;
 
-    insert into test_uv select dt, hll_hash(id) from test;
+    insert into test_uv select dt, id, hll_hash(id) from test;
     ```
 
 4. Query. HLL column does not support direct query into its original values. It can be queried by matching functions.
