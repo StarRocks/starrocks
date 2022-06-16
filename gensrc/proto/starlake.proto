@@ -5,7 +5,10 @@ syntax="proto2";
 package starrocks.lake;
 option java_package = "com.starrocks.lake.proto";
 
+import "status.proto";
 import "tablet_schema.proto";
+
+option cc_generic_services = true;
 
 message RowsetMetadataPB {
     optional uint32 id = 1;
@@ -57,4 +60,30 @@ message TxnLogPB {
     optional OpSchemaChange op_schema_change = 5;
 }
 
+message PublishVersionRequest {
+    repeated int64 tablet_ids = 1;
+    repeated int64 txn_ids = 2;
+    optional int64 base_version = 3;
+    optional int64 publish_version = 4;
+}
+
+message PublishVersionResponse {
+    optional StatusPB status = 1;
+    repeated int64 failed_tablets = 2;
+}
+
+message AbortTxnRequest {
+    repeated int64 tablet_ids = 1;
+    repeated int64 txn_ids = 2;    
+}
+
+message AbortTxnResponse {
+    optional StatusPB status = 1;
+    repeated int64 failed_tablets = 2;
+}
+
+service LakeService {
+    rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
+    rpc abort_txn(AbortTxnRequest) returns (AbortTxnResponse);
+}
 
