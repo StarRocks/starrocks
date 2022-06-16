@@ -566,6 +566,25 @@ under the License.
             <artifactId>starclient</artifactId>
             <version>0.1.1</version>
         </dependency>
+
+        <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-api -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-api</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-sdk -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-exporter-jaeger -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-jaeger</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -717,7 +736,8 @@ under the License.
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
                     <argLine>
-                        -javaagent:${settings.localRepository}/org/jmockit/jmockit/1.48/jmockit-1.48.jar -Xmx2048m -Duser.timezone=Asia/Shanghai @{jacocoArgLine}
+                        -javaagent:${settings.localRepository}/org/jmockit/jmockit/1.48/jmockit-1.48.jar -Xmx2048m
+                        -Duser.timezone=Asia/Shanghai @{jacocoArgLine}
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>
