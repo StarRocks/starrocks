@@ -104,6 +104,7 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
         _chunk = ChunkHelper::new_chunk(_vectorized_schema, 0);
     }
 
+    size_t cur_row_count = _chunk->num_rows();
     if (_slot_descs != nullptr) {
         // For schema change, FE will construct a shadow column.
         // The shadow column is not exist in _vectorized_schema
@@ -124,7 +125,7 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
 
     if (chunk.has_rows()) {
         _chunk_memory_usage += chunk.memory_usage() * size / chunk.num_rows();
-        _chunk_bytes_usage += chunk.bytes_usage() * size / chunk.num_rows();
+        _chunk_bytes_usage += _chunk->bytes_usage(cur_row_count, size);
     }
 
     // if memtable is full, push it to the flush executor,
