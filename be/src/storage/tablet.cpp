@@ -348,13 +348,13 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     // rowset is already set version here, memory is changed, if save failed it maybe a fatal error
     rowset->make_visible({version, version});
     auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
-    Status st = RowsetMetaManager::save(data_dir()->get_meta(), tablet_uid(), rowset_meta_pb);
+    auto st = RowsetMetaManager::save(data_dir()->get_meta(), tablet_uid(), rowset_meta_pb);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to save committed rowset. "
                      << "tablet_id: " << tablet_id() << ", txn_id: " << rowset->txn_id()
                      << ", rowset_id: " << rowset->rowset_id();
-        return Status::InternalError(fmt::format("Fail to save committed rowset. tablet_id: {}, txn_id: {}",
-                                                 tablet_id(), rowset->txn_id()));
+        return Status::InternalError(
+                fmt::format("Fail to save committed rowset. tablet_id: {}, txn_id: {}", tablet_id(), rowset->txn_id()));
     }
 
     RETURN_IF_ERROR(_contains_version(rowset->version()));
@@ -370,7 +370,7 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     }
 
     // warm-up this rowset
-    auto st = rowset->load();
+    st = rowset->load();
     // ignore this error, only log load failure
     LOG_IF(WARNING, !st.ok()) << "ignore load rowset error tablet:" << tablet_id() << " rowset:" << rowset->rowset_id()
                               << " " << st;
