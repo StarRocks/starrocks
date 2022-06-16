@@ -126,7 +126,6 @@ import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
-import com.starrocks.cluster.BaseParam;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -2665,10 +2664,6 @@ public class GlobalStateMgr {
         throw new DdlException("not implmented");
     }
 
-    public void replayRenameColumn(TableInfo tableInfo) throws DdlException {
-        throw new DdlException("not implmented");
-    }
-
     public void modifyTableDynamicPartition(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         localMetastore.modifyTableDynamicPartition(db, table, properties);
@@ -2792,20 +2787,8 @@ public class GlobalStateMgr {
         this.isDefaultClusterCreated = isDefaultClusterCreated;
     }
 
-    public void changeCluster(ConnectContext ctx, String clusterName) throws DdlException {
-        localMetastore.changeCluster(ctx, clusterName);
-    }
-
     public Cluster getCluster(String clusterName) {
         return localMetastore.getCluster(clusterName);
-    }
-
-    public List<String> getClusterNames() {
-        return localMetastore.getClusterNames();
-    }
-
-    public Set<BaseParam> getMigrations() {
-        return localMetastore.getMigrations();
     }
 
     public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {

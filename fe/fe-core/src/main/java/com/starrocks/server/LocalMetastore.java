@@ -111,7 +111,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
-import com.starrocks.cluster.BaseParam;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -3523,39 +3522,8 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    /**
-     * @param ctx
-     * @param clusterName
-     * @throws DdlException
-     */
-    public void changeCluster(ConnectContext ctx, String clusterName) throws DdlException {
-        if (!stateMgr.getAuth().checkCanEnterCluster(ConnectContext.get(), clusterName)) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_AUTHORITY,
-                    ConnectContext.get().getQualifiedUser(), "enter");
-        }
-
-        if (!nameToCluster.containsKey(clusterName)) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_EXISTS, clusterName);
-        }
-
-        ctx.setCluster(clusterName);
-    }
-
     public Cluster getCluster(String clusterName) {
         return nameToCluster.get(clusterName);
-    }
-
-    public List<String> getClusterNames() {
-        return new ArrayList<String>(nameToCluster.keySet());
-    }
-
-    /**
-     * get migrate progress , when finish migration, next clonecheck will reset dbState
-     *
-     * @return
-     */
-    public Set<BaseParam> getMigrations() {
-        return Sets.newHashSet();
     }
 
     public long loadCluster(DataInputStream dis, long checksum) throws IOException {
