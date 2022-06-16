@@ -21,9 +21,21 @@ public class Constants {
     public static final int CrossJoinCostPenalty = 100000000;
     public static final int BroadcastJoinMemExceedPenalty = 1000;
 
+    // Sample ratio in total rows
+    public static final String PRO_SAMPLE_RATIO = "sample_ratio";
+
+    //Statistics collection threshold
+    public static final String PRO_AUTO_COLLECT_STATISTICS_RATIO = "auto_collect_statistics_ratio";
+
+    public static final String PRO_BUCKET_NUM = "bucket_num";
+
+    public static final String PROP_UPDATE_INTERVAL_SEC_KEY = "update_interval_sec";
+    public static final String PROP_SAMPLE_COLLECT_ROWS_KEY = "sample_collect_rows";
+
     public enum AnalyzeType {
         SAMPLE,
-        FULL
+        FULL,
+        HISTOGRAM
     }
 
     public enum ScheduleType {

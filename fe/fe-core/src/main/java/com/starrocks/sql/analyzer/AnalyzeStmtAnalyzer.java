@@ -2,7 +2,8 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.google.common.collect.Maps;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
@@ -11,6 +12,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
@@ -18,7 +20,7 @@ import com.starrocks.sql.ast.AnalyzeTypeDesc;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.Constants;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -31,6 +33,16 @@ public class AnalyzeStmtAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
         new AnalyzeStatementAnalyzerVisitor().analyze(statement, session);
     }
+
+    private static final List<String> VALID_PROPERTIES = Lists.newArrayList(
+            Constants.PRO_SAMPLE_RATIO,
+            Constants.PRO_AUTO_COLLECT_STATISTICS_RATIO,
+            Constants.PROP_UPDATE_INTERVAL_SEC_KEY,
+            Constants.PROP_SAMPLE_COLLECT_ROWS_KEY);
+
+    public static final List<String> NUMBER_PROP_KEY_LIST = ImmutableList.<String>builder()
+            .add(Constants.PROP_UPDATE_INTERVAL_SEC_KEY)
+            .add(Constants.PROP_SAMPLE_COLLECT_ROWS_KEY).build();
 
     static class AnalyzeStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         public void analyze(StatementBase statement, ConnectContext session) {
@@ -68,19 +80,7 @@ public class AnalyzeStmtAnalyzer {
                 }
             }
 
-            Map<String, String> properties = statement.getProperties();
-
-            if (null == properties) {
-                statement.setProperties(Maps.newHashMap());
-                return null;
-            }
-
-            for (String key : AnalyzeJob.NUMBER_PROP_KEY_LIST) {
-                if (properties.containsKey(key) && !StringUtils.isNumeric(properties.get(key))) {
-                    throw new SemanticException("Property '%s' value must be numeric", key);
-                }
-            }
-
+            analyzeProperties(statement.getProperties());
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
             return null;
         }
@@ -127,23 +127,25 @@ public class AnalyzeStmtAnalyzer {
                     statement.setTableId(table.getId());
                 }
             }
+            analyzeProperties(statement.getProperties());
+            return null;
+        }
 
-            Map<String, String> properties = statement.getProperties();
-
-            if (null == properties) {
-                statement.setProperties(Maps.newHashMap());
-                return null;
+        private void analyzeProperties(Map<String, String> properties) {
+            for (String property : properties.keySet()) {
+                if (!VALID_PROPERTIES.contains(property)) {
+                    throw new SemanticException("Property '%s' is not valid", property);
+                }
             }
 
-            for (String key : AnalyzeJob.NUMBER_PROP_KEY_LIST) {
+            for (String key : NUMBER_PROP_KEY_LIST) {
                 if (properties.containsKey(key) && !StringUtils.isNumeric(properties.get(key))) {
                     throw new SemanticException("Property '%s' value must be numeric", key);
                 }
             }
-            return null;
         }
 
-        void analyzeAnalyzeTypeDesc(ConnectContext session, AnalyzeStmt statement, AnalyzeTypeDesc analyzeTypeDesc) {
+        private void analyzeAnalyzeTypeDesc(ConnectContext session, AnalyzeStmt statement, AnalyzeTypeDesc analyzeTypeDesc) {
             if (analyzeTypeDesc instanceof AnalyzeHistogramDesc) {
                 List<String> columns = statement.getColumnNames();
                 OlapTable analyzeTable = (OlapTable) MetaUtils.getTable(session, statement.getTableName());
@@ -156,6 +158,14 @@ public class AnalyzeStmtAnalyzer {
                         throw new SemanticException("Can't create histogram statistics on column type is %s",
                                 column.getType().toSql());
                     }
+                }
+
+                Map<String, String> properties = statement.getProperties();
+                statement.getProperties().put(Constants.PRO_BUCKET_NUM,
+                        String.valueOf(((AnalyzeHistogramDesc) analyzeTypeDesc).getBuckets()));
+
+                if (properties.get(Constants.PRO_SAMPLE_RATIO) == null) {
+                    properties.put(Constants.PRO_SAMPLE_RATIO, String.valueOf(Config.histogram_sample_ratio));
                 }
             }
         }

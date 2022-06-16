@@ -8,6 +8,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -35,7 +37,9 @@ public class AnalyzeManager implements Writable {
 
     private final Map<Long, AnalyzeStatus> analyzeStatusMap;
 
-    private final Map<Long, AnalyzeMeta> analyzeMetaMap;
+    private final Map<Long, BasicStatsMeta> basicStatsMetaMap;
+
+    private final Map<Pair<Long, String>, HistogramStatsMeta> histogramStatsMetaMap;
 
     private static final ExecutorService executor =
             ThreadPoolManager.newDaemonFixedThreadPool(1, 16, "analyze-replay-pool", true);
@@ -43,7 +47,8 @@ public class AnalyzeManager implements Writable {
     public AnalyzeManager() {
         analyzeJobMap = Maps.newConcurrentMap();
         analyzeStatusMap = Maps.newConcurrentMap();
-        analyzeMetaMap = Maps.newConcurrentMap();
+        basicStatsMetaMap = Maps.newConcurrentMap();
+        histogramStatsMetaMap = Maps.newConcurrentMap();
     }
 
     public void addAnalyzeJob(AnalyzeJob job) {
@@ -128,8 +133,10 @@ public class AnalyzeManager implements Writable {
     }
 
     public void addAnalyzeStatus(AnalyzeStatus status) {
-        analyzeStatusMap.put(status.getId(), status);
-        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeStatus(status);
+        if (Config.enable_collect_full_statistics) {
+            analyzeStatusMap.put(status.getId(), status);
+            GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeStatus(status);
+        }
     }
 
     public void replayAddAnalyzeStatus(AnalyzeStatus status) {
@@ -143,17 +150,34 @@ public class AnalyzeManager implements Writable {
         return analyzeStatusMap;
     }
 
-    public void addAnalyzeMeta(AnalyzeMeta analyzeMeta) {
-        analyzeMetaMap.put(analyzeMeta.getTableId(), analyzeMeta);
-        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeMeta(analyzeMeta);
+    public void addBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
+        if (Config.enable_collect_full_statistics) {
+            basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
+            GlobalStateMgr.getCurrentState().getEditLog().logAddBasicStatsMeta(basicStatsMeta);
+        }
     }
 
-    public void replayAddAnalyzeMeta(AnalyzeMeta analyzeMeta) {
-        analyzeMetaMap.put(analyzeMeta.getTableId(), analyzeMeta);
+    public void replayAddBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
+        basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
     }
 
-    public Map<Long, AnalyzeMeta> getAnalyzeMetaMap() {
-        return analyzeMetaMap;
+    public Map<Long, BasicStatsMeta> getBasicStatsMetaMap() {
+        return basicStatsMetaMap;
+    }
+
+    public void addHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
+        histogramStatsMetaMap.put(
+                new Pair<>(histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn()), histogramStatsMeta);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddHistogramMeta(histogramStatsMeta);
+    }
+
+    public void replayAddHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
+        histogramStatsMetaMap.put(
+                new Pair<>(histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn()), histogramStatsMeta);
+    }
+
+    public Map<Pair<Long, String>, HistogramStatsMeta> getHistogramStatsMetaMap() {
+        return histogramStatsMetaMap;
     }
 
     public void readFields(DataInputStream dis) throws IOException {
@@ -161,21 +185,29 @@ public class AnalyzeManager implements Writable {
         String s = Text.readString(dis);
         SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
 
-        if (null != data && null != data.jobs) {
-            for (AnalyzeJob job : data.jobs) {
-                replayAddAnalyzeJob(job);
+        if (null != data) {
+            if (null != data.jobs) {
+                for (AnalyzeJob job : data.jobs) {
+                    replayAddAnalyzeJob(job);
+                }
             }
-        }
 
-        if (null != data && null != data.status) {
-            for (AnalyzeStatus status : data.status) {
-                replayAddAnalyzeStatus(status);
+            if (null != data.status) {
+                for (AnalyzeStatus status : data.status) {
+                    replayAddAnalyzeStatus(status);
+                }
             }
-        }
 
-        if (null != data && null != data.meta) {
-            for (AnalyzeMeta meta : data.meta) {
-                replayAddAnalyzeMeta(meta);
+            if (null != data.basicStatsMeta) {
+                for (BasicStatsMeta meta : data.basicStatsMeta) {
+                    replayAddBasicStatsMeta(meta);
+                }
+            }
+
+            if (null != data.histogramStatsMeta) {
+                for (HistogramStatsMeta meta : data.histogramStatsMeta) {
+                    replayAddHistogramStatsMeta(meta);
+                }
             }
         }
     }
@@ -186,7 +218,8 @@ public class AnalyzeManager implements Writable {
         SerializeData data = new SerializeData();
         data.jobs = getAllAnalyzeJobList();
         data.status = new ArrayList<>(getAnalyzeStatusMap().values());
-        data.meta = new ArrayList<>(getAnalyzeMetaMap().values());
+        data.basicStatsMeta = new ArrayList<>(getBasicStatsMetaMap().values());
+        data.histogramStatsMeta = new ArrayList<>(getHistogramStatsMetaMap().values());
 
         String s = GsonUtils.GSON.toJson(data);
         Text.writeString(out, s);
@@ -214,8 +247,11 @@ public class AnalyzeManager implements Writable {
         @SerializedName("analyzeStatus")
         public List<AnalyzeStatus> status;
 
-        @SerializedName("analyzeMeta")
-        public List<AnalyzeMeta> meta;
+        @SerializedName("basicStatsMeta")
+        public List<BasicStatsMeta> basicStatsMeta;
+
+        @SerializedName("histogramStatsMeta")
+        public List<HistogramStatsMeta> histogramStatsMeta;
     }
 
     // This task is used to expire cached statistics

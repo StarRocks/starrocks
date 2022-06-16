@@ -166,9 +166,10 @@ import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
-import com.starrocks.sql.ast.ShowAnalyzeMetaStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
+import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
@@ -356,7 +357,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (defaultDescContext != null) {
                 if (defaultDescContext.string() != null) {
                     String value = ((StringLiteral) visit(defaultDescContext.string())).getStringValue();
-                    defaultValueDef =  new ColumnDef.DefaultValueDef(true, new StringLiteral(value));
+                    defaultValueDef = new ColumnDef.DefaultValueDef(true, new StringLiteral(value));
                 } else if (defaultDescContext.NULL() != null) {
                     defaultValueDef = ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
                 } else if (defaultDescContext.CURRENT_TIMESTAMP() != null) {
@@ -603,16 +604,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         CreateTableAsSelectStmt createTableAsSelectStmt =
                 (CreateTableAsSelectStmt) visit(context.createTableAsSelectStatement());
-
+        int startIndex = context.createTableAsSelectStatement().start.getStartIndex();
         if (qualifiedName == null) {
             return new SubmitTaskStmt(null, null,
-                    properties, createTableAsSelectStmt);
+                    properties, startIndex, createTableAsSelectStmt);
         } else if (qualifiedName.getParts().size() == 1) {
             return new SubmitTaskStmt(null, qualifiedName.getParts().get(0),
-                    properties, createTableAsSelectStmt);
+                    properties, startIndex, createTableAsSelectStmt);
         } else if (qualifiedName.getParts().size() == 2) {
             return new SubmitTaskStmt(SystemInfoService.DEFAULT_CLUSTER + ":" + qualifiedName.getParts().get(0),
-                    qualifiedName.getParts().get(1), properties, createTableAsSelectStmt);
+                    qualifiedName.getParts().get(1), properties, startIndex, createTableAsSelectStmt);
         } else {
             throw new ParsingException("error task name ");
         }
@@ -985,13 +986,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowAnalyzeStatement(StarRocksParser.ShowAnalyzeStatementContext context) {
         if (context.STATUS() != null) {
             return new ShowAnalyzeStatusStmt();
-        } else if (context.META() != null) {
-            return new ShowAnalyzeMetaStmt();
         } else if (context.JOB() != null) {
             return new ShowAnalyzeJobStmt();
         } else {
             return new ShowAnalyzeJobStmt();
         }
+    }
+
+    @Override
+    public ParseNode visitShowStatsMetaStatement(StarRocksParser.ShowStatsMetaStatementContext context) {
+        return new ShowBasicStatsMetaStmt();
+    }
+
+    @Override
+    public ParseNode visitShowHistogramMetaStatement(StarRocksParser.ShowHistogramMetaStatementContext context) {
+        return new ShowHistogramStatsMetaStmt();
     }
 
     @Override
@@ -1019,9 +1028,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             bucket = Config.histogram_buckets_size;
         }
-        long mcv = Config.histogram_topn_size;
 
-        return new AnalyzeStmt(tableName, columnNames, properties, true, new AnalyzeHistogramDesc(bucket, mcv));
+        return new AnalyzeStmt(tableName, columnNames, properties, true, new AnalyzeHistogramDesc(bucket));
     }
 
     // ------------------------------------------- Work Group Statement -------------------------------------------------

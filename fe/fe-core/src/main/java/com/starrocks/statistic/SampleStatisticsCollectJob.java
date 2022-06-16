@@ -39,7 +39,8 @@ public class SampleStatisticsCollectJob extends BaseCollectJob {
         super(analyzeJob, db, table, columns);
     }
 
-    void collect() throws Exception {
+    @Override
+    public void collect() throws Exception {
         for (String columnName : analyzeJob.getColumns()) {
             String sql = buildSampleInsertSQL(db.getId(), table.getId(), Lists.newArrayList(columnName),
                     analyzeJob.getSampleCollectRows());

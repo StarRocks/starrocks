@@ -111,7 +111,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
-import com.starrocks.cluster.BaseParam;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -139,7 +138,6 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropInfo;
-import com.starrocks.persist.DropLinkDbAndUpdateDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyPartitionInfo;
@@ -290,9 +288,6 @@ public class LocalMetastore implements ConnectorMetadata {
             newChecksum ^= db.getId();
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
-            if (db.getDbState() == Database.DbState.LINK) {
-                fullNameToDb.put(db.getAttachDb(), db);
-            }
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
         }
         LOG.info("finished replay databases from image");
@@ -414,38 +409,6 @@ public class LocalMetastore implements ConnectorMetadata {
                                         " please use \"DROP database FORCE\".");
                     }
                 }
-                if (db.getDbState() == Database.DbState.LINK && dbName.equals(db.getAttachDb())) {
-                    // We try to drop a hard link.
-                    final DropLinkDbAndUpdateDbInfo info = new DropLinkDbAndUpdateDbInfo();
-                    fullNameToDb.remove(db.getAttachDb());
-                    db.setDbState(Database.DbState.NORMAL);
-                    info.setUpdateDbState(Database.DbState.NORMAL);
-                    final Cluster cluster = nameToCluster
-                            .get(ClusterNamespace.getClusterNameFromFullName(db.getAttachDb()));
-                    final BaseParam param = new BaseParam();
-                    param.addStringParam(db.getAttachDb());
-                    param.addLongParam(db.getId());
-                    cluster.removeLinkDb(param);
-                    info.setDropDbCluster(cluster.getName());
-                    info.setDropDbId(db.getId());
-                    info.setDropDbName(db.getAttachDb());
-                    editLog.logDropLinkDb(info);
-                    return;
-                }
-
-                if (db.getDbState() == Database.DbState.LINK && dbName.equals(db.getFullName())) {
-                    // We try to drop a db which other dbs attach to it,
-                    // which is not allowed.
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_DB_STATE_LINK_OR_MIGRATE,
-                            ClusterNamespace.getNameFromFullName(dbName));
-                    return;
-                }
-
-                if (dbName.equals(db.getAttachDb()) && db.getDbState() == Database.DbState.MOVE) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_DB_STATE_LINK_OR_MIGRATE,
-                            ClusterNamespace.getNameFromFullName(dbName));
-                    return;
-                }
 
                 // save table names for recycling
                 Set<String> tableNames = db.getTableNamesWithLock();
@@ -518,22 +481,6 @@ public class LocalMetastore implements ConnectorMetadata {
         LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), db.getFullName(),
                 table.getId());
         return batchTaskMap;
-    }
-
-    public void replayDropLinkDb(DropLinkDbAndUpdateDbInfo info) {
-        tryLock(true);
-        try {
-            final Database db = this.fullNameToDb.remove(info.getDropDbName());
-            db.setDbState(info.getUpdateDbState());
-            final Cluster cluster = nameToCluster
-                    .get(info.getDropDbCluster());
-            final BaseParam param = new BaseParam();
-            param.addStringParam(db.getAttachDb());
-            param.addLongParam(db.getId());
-            cluster.removeLinkDb(param);
-        } finally {
-            unlock();
-        }
     }
 
     public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {
@@ -721,9 +668,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, fullDbName);
             }
 
-            if (db.getDbState() == Database.DbState.LINK || db.getDbState() == Database.DbState.MOVE) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_RENAME_DB_ERR, fullDbName);
-            }
             // check if name is already used
             if (fullNameToDb.get(newFullDbName) != null) {
                 throw new DdlException("Database name[" + newFullDbName + "] is already used");
@@ -3578,97 +3522,8 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    /**
-     * @param ctx
-     * @param clusterName
-     * @throws DdlException
-     */
-    public void changeCluster(ConnectContext ctx, String clusterName) throws DdlException {
-        if (!stateMgr.getAuth().checkCanEnterCluster(ConnectContext.get(), clusterName)) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_AUTHORITY,
-                    ConnectContext.get().getQualifiedUser(), "enter");
-        }
-
-        if (!nameToCluster.containsKey(clusterName)) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_EXISTS, clusterName);
-        }
-
-        ctx.setCluster(clusterName);
-    }
-
     public Cluster getCluster(String clusterName) {
         return nameToCluster.get(clusterName);
-    }
-
-    public List<String> getClusterNames() {
-        return new ArrayList<String>(nameToCluster.keySet());
-    }
-
-    /**
-     * get migrate progress , when finish migration, next clonecheck will reset dbState
-     *
-     * @return
-     */
-    public Set<BaseParam> getMigrations() {
-        final Set<BaseParam> infos = Sets.newHashSet();
-        for (Database db : fullNameToDb.values()) {
-            db.readLock();
-            try {
-                if (db.getDbState() == Database.DbState.MOVE) {
-                    int tabletTotal = 0;
-                    int tabletQuorum = 0;
-                    final Set<Long> beIds = Sets.newHashSet(stateMgr.getClusterInfo()
-                            .getClusterBackendIds(db.getClusterName()));
-                    final Set<String> tableNames = db.getTableNamesWithLock();
-                    for (String tableName : tableNames) {
-
-                        Table table = db.getTable(tableName);
-                        if (table == null || table.getType() != Table.TableType.OLAP) {
-                            continue;
-                        }
-
-                        OlapTable olapTable = (OlapTable) table;
-                        for (Partition partition : olapTable.getPartitions()) {
-                            final short replicationNum = olapTable.getPartitionInfo()
-                                    .getReplicationNum(partition.getId());
-                            for (MaterializedIndex materializedIndex : partition
-                                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                                if (materializedIndex.getState() != MaterializedIndex.IndexState.NORMAL) {
-                                    continue;
-                                }
-                                for (Tablet tablet : materializedIndex.getTablets()) {
-                                    int replicaNum = 0;
-                                    int quorum = replicationNum / 2 + 1;
-                                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                                        if (replica.getState() != Replica.ReplicaState.CLONE
-                                                && beIds.contains(replica.getBackendId())) {
-                                            replicaNum++;
-                                        }
-                                    }
-                                    if (replicaNum > quorum) {
-                                        replicaNum = quorum;
-                                    }
-
-                                    tabletQuorum = tabletQuorum + replicaNum;
-                                    tabletTotal = tabletTotal + quorum;
-                                }
-                            }
-                        }
-                    }
-                    final BaseParam info = new BaseParam();
-                    info.addStringParam(db.getClusterName());
-                    info.addStringParam(db.getAttachDb());
-                    info.addStringParam(db.getFullName());
-                    final float percentage = tabletTotal > 0 ? (float) tabletQuorum / (float) tabletTotal : 0f;
-                    info.addFloatParam(percentage);
-                    infos.add(info);
-                }
-            } finally {
-                db.readUnlock();
-            }
-        }
-
-        return infos;
     }
 
     public long loadCluster(DataInputStream dis, long checksum) throws IOException {
@@ -3752,12 +3607,6 @@ public class LocalMetastore implements ConnectorMetadata {
         // mark isDefaultClusterCreated as true
         stateMgr.setIsDefaultClusterCreated(true);
         editLog.logCreateCluster(cluster);
-    }
-
-    public void replayUpdateDb(DatabaseInfo info) {
-        final Database db = fullNameToDb.get(info.getDbName());
-        db.setClusterName(info.getClusterName());
-        db.setDbState(info.getDbState());
     }
 
     public long saveCluster(DataOutputStream dos, long checksum) throws IOException {

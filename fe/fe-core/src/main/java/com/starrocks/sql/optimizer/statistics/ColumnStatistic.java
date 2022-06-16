@@ -195,4 +195,15 @@ public class ColumnStatistic {
             return new ColumnStatistic(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, type);
         }
     }
+
+    // TODO: Only definitions have been added for now, for the subsequent use of histograms to calculate statistics
+    private Histogram histogram;
+
+    public Histogram getHistogram() {
+        return histogram;
+    }
+
+    public void setHistogram(Histogram histogram) {
+        this.histogram = histogram;
+    }
 }

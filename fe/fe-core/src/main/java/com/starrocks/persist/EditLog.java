@@ -39,7 +39,6 @@ import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
-import com.starrocks.cluster.BaseParam;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -73,8 +72,9 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.AnalyzeJob;
-import com.starrocks.statistic.AnalyzeMeta;
 import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
@@ -555,24 +555,6 @@ public class EditLog {
                     globalStateMgr.replayCreateCluster(value);
                     break;
                 }
-                case OperationType.OP_DROP_CLUSTER:
-                case OperationType.OP_EXPAND_CLUSTER: {
-                    break;
-                }
-                // for compatibility
-                case OperationType.OP_LINK_CLUSTER:
-                case OperationType.OP_MIGRATE_CLUSTER:
-                    break;
-                case OperationType.OP_UPDATE_DB: {
-                    final DatabaseInfo param = (DatabaseInfo) journal.getData();
-                    globalStateMgr.replayUpdateDb(param);
-                    break;
-                }
-                case OperationType.OP_DROP_LINKDB: {
-                    final DropLinkDbAndUpdateDbInfo param = (DropLinkDbAndUpdateDbInfo) journal.getData();
-                    globalStateMgr.replayDropLinkDb(param);
-                    break;
-                }
                 case OperationType.OP_ADD_BROKER: {
                     final BrokerMgr.ModifyBrokerInfo param = (BrokerMgr.ModifyBrokerInfo) journal.getData();
                     globalStateMgr.getBrokerMgr().replayAddBrokers(param.brokerName, param.brokerAddresses);
@@ -859,9 +841,14 @@ public class EditLog {
                     globalStateMgr.getAnalyzeManager().replayAddAnalyzeStatus(analyzeStatus);
                     break;
                 }
-                case OperationType.OP_ADD_ANALYZE_META: {
-                    AnalyzeMeta analyzeMeta = (AnalyzeMeta) journal.getData();
-                    globalStateMgr.getAnalyzeManager().replayAddAnalyzeMeta(analyzeMeta);
+                case OperationType.OP_ADD_BASIC_STATS_META: {
+                    BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeManager().replayAddBasicStatsMeta(basicStatsMeta);
+                    break;
+                }
+                case OperationType.OP_ADD_HISTOGRAM_STATS_META: {
+                    HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeManager().replayAddHistogramStatsMeta(histogramStatsMeta);
                     break;
                 }
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
@@ -1049,10 +1036,6 @@ public class EditLog {
         logEdit(OperationType.OP_UPDATE_TASK_RUN, statusChange);
     }
 
-    public void logDropTaskRuns(List<String> queryIdList) {
-        logEdit(OperationType.OP_DROP_TASK_RUNS, new DropTaskRunsLog(queryIdList));
-    }
-
     public void logAddPartition(PartitionPersistInfo info) {
         logEdit(OperationType.OP_ADD_PARTITION, info);
     }
@@ -1093,10 +1076,6 @@ public class EditLog {
         logEdit(OperationType.OP_RECOVER_TABLE, info);
     }
 
-    public void logStartRollup(RollupJob rollupJob) {
-        logEdit(OperationType.OP_START_ROLLUP, rollupJob);
-    }
-
     public void logFinishingRollup(RollupJob rollupJob) {
         logEdit(OperationType.OP_FINISHING_ROLLUP, rollupJob);
     }
@@ -1115,10 +1094,6 @@ public class EditLog {
 
     public void logBatchDropRollup(BatchDropInfo batchDropInfo) {
         logEdit(OperationType.OP_BATCH_DROP_ROLLUP, batchDropInfo);
-    }
-
-    public void logStartSchemaChange(SchemaChangeJob schemaChangeJob) {
-        logEdit(OperationType.OP_START_SCHEMA_CHANGE, schemaChangeJob);
     }
 
     public void logFinishingSchemaChange(SchemaChangeJob schemaChangeJob) {
@@ -1161,10 +1136,6 @@ public class EditLog {
         logEdit(OperationType.OP_UPDATE_FRONTEND, fe);
     }
 
-    public void logFinishDelete(DeleteInfo info) {
-        logEdit(OperationType.OP_FINISH_DELETE, info);
-    }
-
     public void logFinishMultiDelete(MultiDeleteInfo info) {
         logEdit(OperationType.OP_FINISH_MULTI_DELETE, info);
     }
@@ -1187,10 +1158,6 @@ public class EditLog {
 
     public void logMasterInfo(MasterInfo info) {
         logEdit(OperationType.OP_MASTER_INFO_CHANGE, info);
-    }
-
-    public void logMetaVersion(int version) {
-        logEdit(OperationType.OP_META_VERSION, new Text(Integer.toString(version)));
     }
 
     public void logMetaVersion(MetaVersion metaVersion) {
@@ -1237,20 +1204,12 @@ public class EditLog {
         logEdit(OperationType.OP_DROP_ROLE, info);
     }
 
-    public void logStartDecommissionBackend(DecommissionBackendJob job) {
-        logEdit(OperationType.OP_START_DECOMMISSION_BACKEND, job);
-    }
-
     public void logFinishDecommissionBackend(DecommissionBackendJob job) {
         logEdit(OperationType.OP_FINISH_DECOMMISSION_BACKEND, job);
     }
 
     public void logDatabaseRename(DatabaseInfo databaseInfo) {
         logEdit(OperationType.OP_RENAME_DB, databaseInfo);
-    }
-
-    public void logUpdateDatabase(DatabaseInfo databaseInfo) {
-        logEdit(OperationType.OP_UPDATE_DB, databaseInfo);
     }
 
     public void logTableRename(TableInfo tableInfo) {
@@ -1275,26 +1234,6 @@ public class EditLog {
 
     public void logCreateCluster(Cluster cluster) {
         logEdit(OperationType.OP_CREATE_CLUSTER, cluster);
-    }
-
-    public void logDropCluster(ClusterInfo info) {
-        logEdit(OperationType.OP_DROP_CLUSTER, info);
-    }
-
-    public void logExpandCluster(ClusterInfo ci) {
-        logEdit(OperationType.OP_EXPAND_CLUSTER, ci);
-    }
-
-    public void logLinkCluster(BaseParam param) {
-        logEdit(OperationType.OP_LINK_CLUSTER, param);
-    }
-
-    public void logMigrateCluster(BaseParam param) {
-        logEdit(OperationType.OP_MIGRATE_CLUSTER, param);
-    }
-
-    public void logDropLinkDb(DropLinkDbAndUpdateDbInfo info) {
-        logEdit(OperationType.OP_DROP_LINKDB, info);
     }
 
     public void logAddBroker(BrokerMgr.ModifyBrokerInfo info) {
@@ -1515,8 +1454,12 @@ public class EditLog {
         logEdit(OperationType.OP_ADD_ANALYZE_STATUS, status);
     }
 
-    public void logAddAnalyzeMeta(AnalyzeMeta meta) {
-        logEdit(OperationType.OP_ADD_ANALYZE_META, meta);
+    public void logAddBasicStatsMeta(BasicStatsMeta meta) {
+        logEdit(OperationType.OP_ADD_BASIC_STATS_META, meta);
+    }
+
+    public void logAddHistogramMeta(HistogramStatsMeta meta) {
+        logEdit(OperationType.OP_ADD_HISTOGRAM_STATS_META, meta);
     }
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {

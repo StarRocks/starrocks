@@ -22,7 +22,7 @@ public class TableCollectJob extends BaseCollectJob {
     }
 
     @Override
-    void collect() throws Exception {
+    public void collect() throws Exception {
         for (String column : analyzeJob.getColumns()) {
             String sql = buildFullInsertSQL(db, table, Lists.newArrayList(column));
             collectStatisticSync(sql);

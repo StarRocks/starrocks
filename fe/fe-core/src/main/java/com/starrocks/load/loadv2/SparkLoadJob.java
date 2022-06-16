@@ -74,7 +74,7 @@ import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
-import com.starrocks.statistic.AnalyzeMeta;
+import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -729,10 +729,10 @@ public class SparkLoadJob extends BulkLoadJob {
             if (kv.getValue().containsKey(TableMetricsEntity.TABLE_LOAD_ROWS)) {
                 entity.counterSparkLoadRowsTotal.increase(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_ROWS));
 
-                AnalyzeMeta analyzeMeta =
-                        GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeMetaMap().get(kv.getKey());
-                if (analyzeMeta != null) {
-                    analyzeMeta.increase(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_ROWS));
+                BasicStatsMeta basicStatsMeta =
+                        GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(kv.getKey());
+                if (basicStatsMeta != null) {
+                    basicStatsMeta.increase(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_ROWS));
                 }
             }
             if (kv.getValue().containsKey(TableMetricsEntity.TABLE_LOAD_FINISHED)) {

@@ -36,6 +36,23 @@ public class FieldReference extends Expr {
     }
 
     @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        FieldReference that = (FieldReference) o;
+        return fieldIndex == that.fieldIndex && Objects.equals(tblName, that.tblName);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), fieldIndex, tblName);
+    }
+
+    @Override
     public Expr clone() {
         return new FieldReference(fieldIndex, tblName);
     }
@@ -53,25 +70,5 @@ public class FieldReference extends Expr {
     @Override
     protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
         throw new StarRocksPlannerException("FieldReference not implement toThrift", ErrorType.INTERNAL_ERROR);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-        FieldReference that = (FieldReference) o;
-        return fieldIndex == that.fieldIndex && Objects.equals(tblName, that.tblName);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), fieldIndex, tblName);
     }
 }

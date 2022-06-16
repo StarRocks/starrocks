@@ -31,7 +31,6 @@ public:
                                    int64_t frame_end) const override {
         const HyperLogLogColumn* column = down_cast<const HyperLogLogColumn*>(columns[0]);
         for (size_t i = frame_start; i < frame_end; ++i) {
-            this->data(state)
             this->data(state).merge(*(column->get_object(i)));
         }
     }

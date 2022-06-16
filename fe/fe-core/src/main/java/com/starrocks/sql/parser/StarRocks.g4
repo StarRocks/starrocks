@@ -69,6 +69,8 @@ statement
     | analyzeHistogramStatement                                                             #analyzeHistogram
     | dropAnalyzeHistogramStatement                                                         #dropHistogram
     | showAnalyzeStatement                                                                  #showAnalyze
+    | showStatsMetaStatement                                                                #showStatsMeta
+    | showHistogramMetaStatement                                                            #showHistogramMeta
 
     // Work Group Statement
     | createWorkGroupStatement                                                              #createWorkGroup
@@ -375,7 +377,15 @@ dropAnalyzeJobStatement
     ;
 
 showAnalyzeStatement
-    : SHOW ANALYZE (JOB | STATUS | META)?
+    : SHOW ANALYZE (JOB | STATUS)?
+    ;
+
+showStatsMetaStatement
+    : SHOW STATS META
+    ;
+
+showHistogramMetaStatement
+    : SHOW HISTOGRAM META
     ;
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
@@ -980,7 +990,7 @@ nonReserved
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
     | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE | STRING
-    | SUBMIT | SYNC
+    | STATS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER

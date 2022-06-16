@@ -98,7 +98,7 @@ public class AnalyzeDecimalV3Test {
         List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
         Assert.assertTrue(items.size() == 2 && items.get(1) != null);
         Type type = items.get(1).getType();
-        Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2));
+        Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2));
     }
 
     @Test
@@ -218,13 +218,13 @@ public class AnalyzeDecimalV3Test {
         Type[] expectArgTypes = Arrays.asList(
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 4),
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 10),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 30)
+                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 18)
         ).toArray(new Type[0]);
 
         Type[] expectReturnTypes = Arrays.asList(
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 4),
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 10),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 30)
+                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 18)
         ).toArray(new Type[0]);
         Assert.assertTrue(items.size() == 9);
         Assert.assertTrue(expectArgTypes.length == 3);

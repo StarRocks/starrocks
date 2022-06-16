@@ -12,10 +12,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
-import com.starrocks.sql.ast.ShowAnalyzeMetaStmt;
+import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.statistic.AnalyzeJob;
-import com.starrocks.statistic.AnalyzeMeta;
+import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.Constants;
 import com.starrocks.statistic.FullStatisticsCollectJob;
@@ -100,13 +100,13 @@ public class AnalyzeStmtTest {
                 ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
 
         sql = "show analyze meta";
-        ShowAnalyzeMetaStmt showAnalyzeMetaStmt = (ShowAnalyzeMetaStmt) analyzeSuccess(sql);
+        ShowBasicStatsMetaStmt showAnalyzeMetaStmt = (ShowBasicStatsMetaStmt) analyzeSuccess(sql);
 
-        AnalyzeMeta analyzeMeta = new AnalyzeMeta(10002, 10004, Constants.AnalyzeType.FULL,
-                LocalDateTime.of(2020, 1, 1, 1, 1));
-        analyzeMeta.setHealthy(0.5);
+        BasicStatsMeta basicStatsMeta = new BasicStatsMeta(10002, 10004, Constants.AnalyzeType.FULL,
+                LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
+        basicStatsMeta.setHealthy(0.5);
         Assert.assertEquals("[test, t0, FULL, 2020-01-01 01:01:00, 50%]",
-                ShowAnalyzeMetaStmt.showAnalyzeMeta(analyzeMeta).toString());
+                ShowBasicStatsMetaStmt.showBasicStatsMeta(basicStatsMeta).toString());
     }
 
     @Test

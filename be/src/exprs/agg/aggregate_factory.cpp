@@ -848,6 +848,20 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_aggregate_mapping<TYPE_CHAR, TYPE_VARCHAR>("group_concat");
     add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARCHAR>("group_concat");
 
+    add_aggregate_mapping<TYPE_BOOLEAN, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_TINYINT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_SMALLINT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_INT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_LARGEINT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_FLOAT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_DOUBLE, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_DATE, TYPE_BIGINT>("histogram");
+    add_aggregate_mapping<TYPE_DATETIME, TYPE_BIGINT>("histogram");
+    add_aggregate_mapping<TYPE_DECIMAL32, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_DECIMAL64, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_DECIMAL128, TYPE_VARCHAR>("histogram");
+
     ADD_ALL_TYPE("first_value");
     ADD_ALL_TYPE("last_value");
     ADD_ALL_TYPE("lead");
@@ -933,8 +947,6 @@ AggregateFuncResolver::AggregateFuncResolver() {
     // And the 1st type is BigInt, 2nd is datetime, 3rd is mode(default 0).
     add_array_mapping<TYPE_DATETIME, TYPE_INT>("window_funnel");
     add_array_mapping<TYPE_DATE, TYPE_INT>("window_funnel");
-
-    add_aggregate_mapping<TYPE_BIGINT, TYPE_VARCHAR>("histogram");
 }
 
 #undef ADD_ALL_TYPE

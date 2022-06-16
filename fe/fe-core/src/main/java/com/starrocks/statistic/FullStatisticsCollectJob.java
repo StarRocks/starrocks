@@ -31,7 +31,8 @@ public class FullStatisticsCollectJob extends BaseCollectJob {
         return partitionIdList;
     }
 
-    void collect() throws Exception {
+    @Override
+    public void collect() throws Exception {
         for (Long partitionId : partitionIdList) {
             Partition partition = table.getPartition(partitionId);
             for (String columnName : columns) {
@@ -59,7 +60,7 @@ public class FullStatisticsCollectJob extends BaseCollectJob {
             context.put("dataSize", getDataSize(column, false));
 
             if (!column.getType().canStatistic()) {
-                context.put("countDistinctFunction", "0");
+                context.put("countDistinctFunction", "hll_empty()");
                 context.put("countNullFunction", "0");
                 context.put("maxFunction", "''");
                 context.put("minFunction", "''");

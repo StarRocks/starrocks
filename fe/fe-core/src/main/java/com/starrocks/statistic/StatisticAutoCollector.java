@@ -84,8 +84,8 @@ public class StatisticAutoCollector extends MasterDaemon {
     }
 
     private void updateHealthy() {
-        Map<Long, AnalyzeMeta> analyzeMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeMetaMap();
-        for (Map.Entry<Long, AnalyzeMeta> meta : analyzeMeta.entrySet()) {
+        Map<Long, BasicStatsMeta> analyzeMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap();
+        for (Map.Entry<Long, BasicStatsMeta> meta : analyzeMeta.entrySet()) {
             Database database = GlobalStateMgr.getCurrentState().getDb(meta.getValue().getDbId());
             OlapTable table = (OlapTable) database.getTable(meta.getValue().getTableId());
 
@@ -116,7 +116,7 @@ public class StatisticAutoCollector extends MasterDaemon {
             }
 
             meta.getValue().setHealthy(healthy);
-            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeMeta(meta.getValue());
+            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(meta.getValue());
         }
     }
 
@@ -134,7 +134,7 @@ public class StatisticAutoCollector extends MasterDaemon {
             for (Table table : db.getTables()) {
                 AnalyzeJob analyzeJob;
                 if (((OlapTable) table).getPartitions().stream().anyMatch(
-                        p -> p.getDataSize() > Config.max_full_statistics_collect_data_size)) {
+                        p -> p.getDataSize() > Config.statistics_max_full_collect_data_size)) {
                     analyzeJob = new AnalyzeJob(dbId, table.getId(), Lists.newArrayList(),
                             AnalyzeType.SAMPLE, ScheduleType.SCHEDULE, Maps.newHashMap(),
                             ScheduleStatus.PENDING, LocalDateTime.MIN);
@@ -151,16 +151,16 @@ public class StatisticAutoCollector extends MasterDaemon {
                 List<String> columns = table.getFullSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                         .collect(Collectors.toList());
 
-                AnalyzeMeta analyzeMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeMetaMap().get(table.getId());
+                BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
                 List<Partition> partitions = Lists.newArrayList(((OlapTable) table).getPartitions());
                 List<Long> partitionIdList = new ArrayList<>();
-                if (analyzeMeta == null) {
+                if (basicStatsMeta == null) {
                     partitions.stream().map(Partition::getId).forEach(partitionIdList::add);
                 } else {
-                    if (analyzeMeta.getHealthy() > Config.auto_collect_statistic_ratio) {
+                    if (basicStatsMeta.getHealthy() > Config.statistics_auto_collect_ratio) {
                         continue;
                     }
-                    LocalDateTime statsLastUpdateTime = analyzeMeta.getUpdateTime();
+                    LocalDateTime statsLastUpdateTime = basicStatsMeta.getUpdateTime();
                     for (Partition partition : partitions) {
                         LocalDateTime updateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
 

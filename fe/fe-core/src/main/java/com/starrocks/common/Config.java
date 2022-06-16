@@ -1288,13 +1288,13 @@ public class Config extends ConfigBase {
      * Statistics collection threshold
      */
     @ConfField(mutable = true)
-    public static double auto_collect_statistic_ratio = 0.8;
+    public static double statistics_auto_collect_ratio = 0.8;
 
     /**
      * Full statistics collection max data size
      */
     @ConfField(mutable = true)
-    public static long max_full_statistics_collect_data_size = 100L * 1024 * 1024 * 1024; // 100G
+    public static long statistics_max_full_collect_data_size = 100L * 1024 * 1024 * 1024; // 100G
 
     /**
      * default bucket size of histogram statistics
@@ -1303,10 +1303,10 @@ public class Config extends ConfigBase {
     public static long histogram_buckets_size = 256;
 
     /**
-     * default most common value size of histogram statistics
+     * default sample ratio of histogram statistics
      */
     @ConfField(mutable = true)
-    public static long histogram_topn_size = 256;
+    public static double histogram_sample_ratio = 0.1;
 
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.

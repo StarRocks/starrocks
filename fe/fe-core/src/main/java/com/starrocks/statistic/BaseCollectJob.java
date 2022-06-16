@@ -1,10 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.statistic;
 
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
@@ -15,10 +17,11 @@ import org.apache.velocity.app.VelocityEngine;
 
 import java.io.StringWriter;
 import java.util.List;
+import java.util.Set;
 
 import static com.starrocks.sql.parser.SqlParser.parseFirstStatement;
 
-public class BaseCollectJob {
+public abstract class BaseCollectJob {
     protected final AnalyzeJob analyzeJob;
     protected final Database db;
     protected final OlapTable table;
@@ -44,6 +47,7 @@ public class BaseCollectJob {
 
     protected static final String INSERT_STATISTIC_TEMPLATE = "INSERT INTO " + Constants.StatisticsTableName;
 
+    public abstract void collect() throws Exception;
 
     public AnalyzeJob getAnalyzeJob() {
         return analyzeJob;
@@ -67,9 +71,6 @@ public class BaseCollectJob {
             throw new DdlException(context.getState().getErrorMessage());
         }
     }
-    void collect() throws Exception {
-
-    }
 
     protected String getDataSize(Column column, boolean isSample) {
         if (column.getPrimitiveType().isCharFamily() || column.getPrimitiveType().isJsonType()) {
@@ -91,5 +92,37 @@ public class BaseCollectJob {
         StringWriter sw = new StringWriter();
         DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);
         return sw.toString();
+    }
+
+    protected String getSampleTableHint(OlapTable table, long rows) {
+        Set<String> randomTablets = Sets.newHashSet();
+        rows = Math.max(rows, 1);
+
+        // calculate the number of tablets by each partition
+        // simpleTabletNums = simpleRows / partitionNums / (actualPartitionRows / actualTabletNums)
+        long avgRowsPerPartition = rows / Math.max(table.getPartitions().size(), 1);
+
+        for (Partition p : table.getPartitions()) {
+            List<Long> ids = p.getBaseIndex().getTabletIdsInOrder();
+
+            if (ids.isEmpty()) {
+                continue;
+            }
+
+            if (p.getBaseIndex().getRowCount() < (avgRowsPerPartition / 2)) {
+                continue;
+            }
+
+            long avgRowsPerTablet = Math.max(p.getBaseIndex().getRowCount() / ids.size(), 1);
+            long tabletCounts = Math.max(avgRowsPerPartition / avgRowsPerTablet, 1);
+            tabletCounts = Math.min(tabletCounts, ids.size());
+
+            for (int i = 0; i < tabletCounts; i++) {
+                randomTablets.add(String.valueOf(ids.get(i)));
+            }
+        }
+
+        // all hit, direct full
+        return " Tablet(" + String.join(", ", randomTablets) + ")";
     }
 }

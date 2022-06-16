@@ -46,6 +46,11 @@ public class CachedStatisticStorage implements StatisticStorage {
 
     private final StatisticExecutor statisticExecutor = new StatisticExecutor();
 
+
+    class HistogramObj {
+        Map<String, String[][]> buckets;
+    }
+
     private final AsyncCacheLoader<CacheKey, Optional<ColumnStatistic>> loader =
             new AsyncCacheLoader<CacheKey, Optional<ColumnStatistic>>() {
                 @Override
@@ -130,6 +135,10 @@ public class CachedStatisticStorage implements StatisticStorage {
 
     private List<TStatisticData> queryStatisticsData(long tableId, String column) throws Exception {
         return queryStatisticsData(tableId, ImmutableList.of(column));
+    }
+
+    public List<TStatisticData> queryHistogramStatistics(long tableId, String column) throws Exception {
+        return statisticExecutor.queryHistogram(tableId, ImmutableList.of(column));
     }
 
     private List<TStatisticData> queryStatisticsData(long tableId, List<String> columns) throws Exception {

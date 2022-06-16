@@ -32,7 +32,6 @@ import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DmlStmt;
-import com.starrocks.analysis.EnterStmt;
 import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InsertStmt;
@@ -108,8 +107,8 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeJob;
-import com.starrocks.statistic.AnalyzeMeta;
 import com.starrocks.statistic.BaseCollectJob;
+import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.Constants;
 import com.starrocks.statistic.FullStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
@@ -123,6 +122,7 @@ import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -423,8 +423,6 @@ public class StmtExecutor {
                 }
             } else if (parsedStmt instanceof SetStmt) {
                 handleSetStmt();
-            } else if (parsedStmt instanceof EnterStmt) {
-                handleEnterStmt();
             } else if (parsedStmt instanceof UseStmt) {
                 handleUseStmt();
             } else if (parsedStmt instanceof CreateTableAsSelectStmt) {
@@ -788,8 +786,8 @@ public class StmtExecutor {
 
         BaseCollectJob collectJob;
         if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
-            collectJob = new HistogramStatisticsCollectJob(analyzeJob, db, table, analyzeStmt.getColumnNames(),
-                    ((AnalyzeHistogramDesc) analyzeStmt.getAnalyzeTypeDesc()).getBuckets());
+            analyzeJob.setType(Constants.AnalyzeType.HISTOGRAM);
+            collectJob = new HistogramStatisticsCollectJob(analyzeJob, db, table, analyzeStmt.getColumnNames());
         } else {
             if (Constants.AnalyzeType.FULL == analyzeJob.getType()) {
                 if (Config.enable_collect_full_statistics) {
@@ -968,19 +966,6 @@ public class StmtExecutor {
             LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
             context.getState().setError("Unexpected exception: " + e.getMessage());
         }
-    }
-
-    // process enter cluster
-    private void handleEnterStmt() {
-        final EnterStmt enterStmt = (EnterStmt) parsedStmt;
-        try {
-            context.getGlobalStateMgr().changeCluster(context, enterStmt.getClusterName());
-            context.setDatabase("");
-        } catch (DdlException e) {
-            context.getState().setError(e.getMessage());
-            return;
-        }
-        context.getState().setOk();
     }
 
     private void handleExportStmt(UUID queryId) throws Exception {
@@ -1215,6 +1200,26 @@ public class StmtExecutor {
                 }
             }
 
+            // To fix https://github.com/StarRocks/starrocks/issues/6461.
+            if (loadedRows == 0 && filteredRows == 0 && stmt instanceof DeleteStmt) {
+                if (targetTable instanceof ExternalOlapTable) {
+                    ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                            externalTable.getSourceTableDbId(), transactionId,
+                            externalTable.getSourceTableHost(),
+                            externalTable.getSourceTablePort(),
+                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+                } else {
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
+                            database.getId(),
+                            transactionId,
+                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG
+                    );
+                }
+                context.getState().setOk();
+                return;
+            }
+
             if (targetTable instanceof ExternalOlapTable) {
                 ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
                 if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitRemoteTransaction(
@@ -1242,10 +1247,10 @@ public class StmtExecutor {
                         entity.counterInsertLoadRowsTotal.increase(loadedRows);
                         entity.counterInsertLoadBytesTotal
                                 .increase(Long.valueOf(coord.getLoadCounters().get(LoadJob.LOADED_BYTES)));
-                        AnalyzeMeta analyzeMeta =
-                                GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeMetaMap().get(targetTable.getId());
-                        if (analyzeMeta != null) {
-                            analyzeMeta.increase(loadedRows);
+                        BasicStatsMeta basicStatsMeta =
+                                GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(targetTable.getId());
+                        if (basicStatsMeta != null) {
+                            basicStatsMeta.increase(loadedRows);
                         }
                     }
                 } else {

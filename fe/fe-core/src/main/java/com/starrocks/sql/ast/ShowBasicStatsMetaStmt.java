@@ -12,13 +12,12 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.statistic.AnalyzeMeta;
+import com.starrocks.statistic.BasicStatsMeta;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-public class
-ShowAnalyzeMetaStmt extends ShowStmt {
+public class ShowBasicStatsMetaStmt extends ShowStmt {
 
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -26,13 +25,14 @@ ShowAnalyzeMetaStmt extends ShowStmt {
                     .addColumn(new Column("Table", ScalarType.createVarchar(60)))
                     .addColumn(new Column("Type", ScalarType.createVarchar(20)))
                     .addColumn(new Column("UpdateTime", ScalarType.createVarchar(60)))
+                    .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
                     .addColumn(new Column("Healthy", ScalarType.createVarchar(5)))
                     .build();
 
-    public static List<String> showAnalyzeMeta(AnalyzeMeta analyzeMeta) throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "", "", "", "");
-        long dbId = analyzeMeta.getDbId();
-        long tableId = analyzeMeta.getTableId();
+    public static List<String> showBasicStatsMeta(BasicStatsMeta basicStatsMeta) throws MetaNotFoundException {
+        List<String> row = Lists.newArrayList("", "", "", "", "", "");
+        long dbId = basicStatsMeta.getDbId();
+        long tableId = basicStatsMeta.getTableId();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
@@ -44,9 +44,10 @@ ShowAnalyzeMetaStmt extends ShowStmt {
             throw new MetaNotFoundException("No found table: " + tableId);
         }
         row.set(1, table.getName());
-        row.set(2, analyzeMeta.getType().name());
-        row.set(3, analyzeMeta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-        row.set(4, (int) (analyzeMeta.getHealthy() * 100) + "%");
+        row.set(2, basicStatsMeta.getType().name());
+        row.set(3, basicStatsMeta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        row.set(4, basicStatsMeta.getProperties() == null ? "{}" : basicStatsMeta.getProperties().toString());
+        row.set(5, (int) (basicStatsMeta.getHealthy() * 100) + "%");
 
         return row;
     }

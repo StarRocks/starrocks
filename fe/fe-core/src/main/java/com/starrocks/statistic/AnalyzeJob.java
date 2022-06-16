@@ -2,7 +2,6 @@
 
 package com.starrocks.statistic;
 
-import com.google.common.collect.ImmutableList;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
@@ -20,12 +19,6 @@ import java.util.List;
 import java.util.Map;
 
 public class AnalyzeJob implements Writable {
-    public static final String PROP_UPDATE_INTERVAL_SEC_KEY = "update_interval_sec";
-    public static final String PROP_SAMPLE_COLLECT_ROWS_KEY = "sample_collect_rows";
-
-    public static final List<String> NUMBER_PROP_KEY_LIST = ImmutableList.<String>builder()
-            .add(PROP_UPDATE_INTERVAL_SEC_KEY)
-            .add(PROP_SAMPLE_COLLECT_ROWS_KEY).build();
 
     public static final long DEFAULT_ALL_ID = -1;
 
@@ -130,13 +123,13 @@ public class AnalyzeJob implements Writable {
     }
 
     public long getUpdateIntervalSec() {
-        return Long.parseLong(properties
-                .getOrDefault(PROP_UPDATE_INTERVAL_SEC_KEY, String.valueOf(Config.statistic_update_interval_sec)));
+        return Long.parseLong(properties.getOrDefault(Constants.PROP_UPDATE_INTERVAL_SEC_KEY,
+                String.valueOf(Config.statistic_update_interval_sec)));
     }
 
     public long getSampleCollectRows() {
-        return Long.parseLong(properties
-                .getOrDefault(PROP_SAMPLE_COLLECT_ROWS_KEY, String.valueOf(Config.statistic_sample_collect_rows)));
+        return Long.parseLong(properties.getOrDefault(Constants.PROP_SAMPLE_COLLECT_ROWS_KEY,
+                String.valueOf(Config.statistic_sample_collect_rows)));
     }
 
     public ScheduleType getScheduleType() {

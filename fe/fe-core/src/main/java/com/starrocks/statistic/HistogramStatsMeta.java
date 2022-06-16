@@ -11,14 +11,17 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
-import java.util.concurrent.atomic.LongAdder;
+import java.util.Map;
 
-public class AnalyzeMeta implements Writable {
+public class HistogramStatsMeta implements Writable {
     @SerializedName("dbId")
     private long dbId;
 
     @SerializedName("tableId")
     private long tableId;
+
+    @SerializedName("column")
+    private String column;
 
     @SerializedName("type")
     private Constants.AnalyzeType type;
@@ -26,40 +29,31 @@ public class AnalyzeMeta implements Writable {
     @SerializedName("updateTime")
     private LocalDateTime updateTime;
 
-    @SerializedName("healthy")
-    private double healthy;
+    @SerializedName("properties")
+    private Map<String, String> properties;
 
-    @SerializedName("updateRows")
-    private long updateRows;
-
-    private LongAdder updateCounter;
-
-    public AnalyzeMeta(long dbId, long tableId,
-                       Constants.AnalyzeType type,
-                       LocalDateTime updateTime) {
+    public HistogramStatsMeta(long dbId, long tableId, String column,
+                              Constants.AnalyzeType type,
+                              LocalDateTime updateTime,
+                              Map<String, String> properties) {
         this.dbId = dbId;
         this.tableId = tableId;
+        this.column = column;
         this.type = type;
         this.updateTime = updateTime;
-        this.healthy = 1;
-        this.updateRows = 0;
-        this.updateCounter = new LongAdder();
+        this.properties = properties;
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
-        updateRows = updateCounter.longValue();
-
         String s = GsonUtils.GSON.toJson(this);
         Text.writeString(out, s);
     }
 
-    public static AnalyzeMeta read(DataInput in) throws IOException {
+    public static HistogramStatsMeta read(DataInput in) throws IOException {
         String s = Text.readString(in);
-        AnalyzeMeta analyzeMeta = GsonUtils.GSON.fromJson(s, AnalyzeMeta.class);
-        analyzeMeta.updateCounter = new LongAdder();
-        analyzeMeta.updateCounter.add(analyzeMeta.updateRows);
-        return analyzeMeta;
+        HistogramStatsMeta histogramStatsMeta = GsonUtils.GSON.fromJson(s, HistogramStatsMeta.class);
+        return histogramStatsMeta;
     }
 
     public long getDbId() {
@@ -70,6 +64,10 @@ public class AnalyzeMeta implements Writable {
         return tableId;
     }
 
+    public String getColumn() {
+        return column;
+    }
+
     public Constants.AnalyzeType getType() {
         return type;
     }
@@ -78,19 +76,7 @@ public class AnalyzeMeta implements Writable {
         return updateTime;
     }
 
-    public double getHealthy() {
-        return healthy;
-    }
-
-    public void setHealthy(double healthy) {
-        this.healthy = healthy;
-    }
-
-    public long getUpdateRows() {
-        return updateRows;
-    }
-
-    public void increase(Long delta) {
-        updateCounter.add(delta);
+    public Map<String, String> getProperties() {
+        return properties;
     }
 }

@@ -848,7 +848,43 @@ public class FunctionSet {
         }
 
         addBuiltin(AggregateFunction.createBuiltin("histogram",
-                Lists.newArrayList(Type.BIGINT, Type.BIGINT, Type.BIGINT), Type.VARCHAR, Type.VARCHAR,
+                Lists.newArrayList(Type.BOOLEAN, Type.BIGINT, Type.BIGINT, Type.BIGINT), Type.VARCHAR, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("histogram",
+                Lists.newArrayList(Type.TINYINT, Type.BIGINT, Type.BIGINT, Type.BIGINT), Type.VARCHAR, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("histogram",
+                Lists.newArrayList(Type.SMALLINT, Type.BIGINT, Type.BIGINT, Type.BIGINT), Type.VARCHAR, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("histogram",
+                Lists.newArrayList(Type.INT, Type.BIGINT, Type.BIGINT, Type.BIGINT), Type.VARCHAR, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("histogram",
+                Lists.newArrayList(Type.BIGINT, Type.BIGINT, Type.BIGINT, Type.BIGINT), Type.VARCHAR, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("histogram",
+                Lists.newArrayList(Type.LARGEINT, Type.BIGINT, Type.BIGINT, Type.BIGINT), Type.VARCHAR, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("histogram",
+                Lists.newArrayList(Type.FLOAT, Type.BIGINT, Type.BIGINT, Type.BIGINT), Type.VARCHAR, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("histogram",
+                Lists.newArrayList(Type.DOUBLE, Type.BIGINT, Type.BIGINT, Type.BIGINT), Type.VARCHAR, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("histogram",
+                Lists.newArrayList(Type.DATE, Type.BIGINT, Type.BIGINT, Type.BIGINT), Type.VARCHAR, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("histogram",
+                Lists.newArrayList(Type.DATETIME, Type.BIGINT, Type.BIGINT, Type.BIGINT), Type.VARCHAR, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("histogram",
+                Lists.newArrayList(Type.DECIMAL32, Type.BIGINT, Type.BIGINT, Type.BIGINT), Type.VARCHAR, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("histogram",
+                Lists.newArrayList(Type.DECIMAL64, Type.BIGINT, Type.BIGINT, Type.BIGINT), Type.VARCHAR, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin("histogram",
+                Lists.newArrayList(Type.DECIMAL128, Type.BIGINT, Type.BIGINT, Type.BIGINT), Type.VARCHAR, Type.VARCHAR,
                 false, false, false));
     }
 

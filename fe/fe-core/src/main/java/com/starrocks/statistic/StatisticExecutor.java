@@ -67,7 +67,7 @@ public class StatisticExecutor {
     public List<TStatisticData> queryStatisticSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
         String sql;
         if (Config.enable_collect_full_statistics) {
-            AnalyzeMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeMetaMap().get(tableId);
+            BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
             if (meta != null && meta.getType().equals(Constants.AnalyzeType.FULL)) {
                 sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNames);
             } else {
@@ -251,8 +251,21 @@ public class StatisticExecutor {
         analyzeStatus.setEndTime(LocalDateTime.now());
 
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeMeta(
-                new AnalyzeMeta(db.getId(), table.getId(), analyzeJob.getType(), analyzeStatus.getEndTime()));
+        if (analyzeJob.getType().equals(Constants.AnalyzeType.HISTOGRAM)) {
+            for (String columnName : analyzeJob.getColumns()) {
+                GlobalStateMgr.getCurrentAnalyzeMgr().addHistogramStatsMeta(
+                        new HistogramStatsMeta(db.getId(), table.getId(), columnName,
+                                analyzeJob.getType(),
+                                analyzeStatus.getEndTime(),
+                                analyzeJob.getProperties()));
+            }
+        } else {
+            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(
+                    new BasicStatsMeta(db.getId(), table.getId(),
+                            analyzeJob.getType(),
+                            analyzeStatus.getEndTime(),
+                            analyzeJob.getProperties()));
+        }
     }
 
     public void expireStatisticSync(List<String> tableIds) {

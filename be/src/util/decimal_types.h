@@ -93,8 +93,18 @@ inline constexpr T get_scale_factor(int n) {
 }
 
 template <typename T>
+inline constexpr T get_max_decimal(int predision) {
+    return get_scale_factor<T>(predision) - 1;
+}
+
+template <typename T>
+inline constexpr T get_min_decimal(int predision) {
+    return -get_max_decimal<T>(predision);
+}
+
+template <typename T>
 inline constexpr T get_max_decimal() {
-    return get_scale_factor<T>(decimal_precision_limit<T>) - 1;
+    return get_max_decimal<T>(decimal_precision_limit<T>);
 }
 
 template <typename T>

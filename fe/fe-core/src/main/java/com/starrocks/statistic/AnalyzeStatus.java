@@ -45,7 +45,6 @@ public class AnalyzeStatus implements Writable {
     @SerializedName("endTime")
     private LocalDateTime endTime;
 
-
     @SerializedName("reason")
     private String reason;
 

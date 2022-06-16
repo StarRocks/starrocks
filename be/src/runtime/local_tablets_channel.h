@@ -183,4 +183,9 @@ private:
     std::unique_ptr<MemPool> _mem_pool;
 };
 
+inline scoped_refptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
+                                                               MemTracker* mem_tracker) {
+    return scoped_refptr<TabletsChannel>(new LocalTabletsChannel(load_channel, key, mem_tracker));
+}
+
 } // namespace starrocks

@@ -140,6 +140,7 @@ void NodeChannel::open() {
     request.set_index_id(_index_id);
     request.set_txn_id(_parent->_txn_id);
     request.set_allocated_schema(_parent->_schema->to_protobuf());
+    request.set_is_lake_tablet(_parent->_is_lake_table);
     for (auto& tablet : _all_tablets) {
         auto ptablet = request.add_tablets();
         ptablet->set_partition_id(tablet.partition_id);
@@ -564,6 +565,7 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     _num_repicas = table_sink.num_replicas;
     _need_gen_rollup = table_sink.need_gen_rollup;
     _tuple_desc_id = table_sink.tuple_id;
+    _is_lake_table = table_sink.is_lake_table;
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema));
     _vectorized_partition = _pool->add(new vectorized::OlapTablePartitionParam(_schema, table_sink.partition));
@@ -990,7 +992,6 @@ void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, con
     if (state->has_reached_max_error_msg_num()) {
         return;
     }
-    std::stringstream ss;
     auto decimal_str = DecimalV3Cast::to_string<CppType>(decimal, desc->type().precision, desc->type().scale);
     std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
                                                 desc->col_name(), desc->type().debug_string());
@@ -1011,8 +1012,8 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, vectorized::Column* c
     auto* data = &data_column->get_data().front();
 
     int precision = desc->type().precision;
-    const auto max_decimal = get_scale_factor<CppType>(precision);
-    const auto min_decimal = -max_decimal;
+    const auto max_decimal = get_max_decimal<CppType>(precision);
+    const auto min_decimal = get_min_decimal<CppType>(precision);
 
     for (auto i = 0; i < num_rows; ++i) {
         if ((*validate_selection)[i] == VALID_SEL_OK) {
