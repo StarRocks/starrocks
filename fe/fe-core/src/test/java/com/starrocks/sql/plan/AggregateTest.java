@@ -1322,4 +1322,15 @@ public class AggregateTest extends PlanTestBase {
                 "  6:EXCHANGE");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
+
+    @Test
+    public void testAvgCountDistinctWithMultiColumns() {
+        String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal,s_nationkey) from supplier;";
+        try {
+            getFragmentPlan(sql);
+        } catch (Throwable e) {
+            Assert.assertEquals("The query contains multi count distinct or sum distinct, each can't have multi columns.",
+                    e.getMessage());
+        }
+    }
 }
