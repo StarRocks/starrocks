@@ -35,6 +35,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
@@ -199,7 +200,7 @@ public class BDBJEJournal implements Journal {
     }
 
     @Override
-    public JournalCursor read(long fromKey, long toKey) {
+    public JournalCursor read(long fromKey, long toKey) throws JournalException {
         return BDBJournalCursor.getJournalCursor(bdbEnvironment, fromKey, toKey);
     }
 

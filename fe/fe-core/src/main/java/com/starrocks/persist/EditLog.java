@@ -50,6 +50,7 @@ import com.starrocks.ha.MasterInfo;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalFactory;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
@@ -106,7 +107,7 @@ public class EditLog {
         return journal.getMaxJournalId();
     }
 
-    public JournalCursor read(long fromId, long toId) {
+    public JournalCursor read(long fromId, long toId) throws JournalException {
         return journal.read(fromId, toId);
     }
 

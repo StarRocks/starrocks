@@ -21,7 +21,7 @@ package com.starrocks.journal;
 public interface JournalCursor {
 
     // Return the next journal. return null when there is no more journals
-    public JournalEntity next();
+    public JournalEntity next() throws InterruptedException, JournalException;
 
     public void close();
 

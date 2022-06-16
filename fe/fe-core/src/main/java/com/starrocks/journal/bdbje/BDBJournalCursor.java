@@ -23,19 +23,25 @@ package com.starrocks.journal.bdbje;
 
 import com.sleepycat.bind.tuple.TupleBinding;
 import com.sleepycat.je.DatabaseEntry;
+import com.sleepycat.je.DatabaseException;
 import com.sleepycat.je.LockMode;
 import com.sleepycat.je.OperationStatus;
+import com.sleepycat.je.rep.InsufficientLogException;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
+import java.io.IOException;
 import java.util.List;
 
 public class BDBJournalCursor implements JournalCursor {
     private static final Logger LOG = LogManager.getLogger(JournalCursor.class);
+    static final int RETRY_TIME = 3;
+    static final long SLEEP_INTERVAL_SEC = 5;
 
     private long toKey;
     private long currentKey;
@@ -43,29 +49,24 @@ public class BDBJournalCursor implements JournalCursor {
     private List<Long> dbNames;
     private CloseSafeDatabase database;
     private int nextDbPositionIndex;
-    private final int maxTryTime = 3;
 
-    public static BDBJournalCursor getJournalCursor(BDBEnvironment env, long fromKey, long toKey) {
+    public static BDBJournalCursor getJournalCursor(BDBEnvironment env, long fromKey, long toKey) throws
+            JournalException {
         if (toKey < fromKey || fromKey < 0) {
-            LOG.error("Invalid key range!");
-            return null;
+            throw new JournalException(String.format("Invalid key range! fromKey %s toKey %s", fromKey, toKey));
         }
-        BDBJournalCursor cursor = null;
-        try {
-            cursor = new BDBJournalCursor(env, fromKey, toKey);
-        } catch (Exception e) {
-            LOG.error("new BDBJournalCursor error.", e);
-        }
-        return cursor;
+        return new BDBJournalCursor(env, fromKey, toKey);
     }
 
-    private BDBJournalCursor(BDBEnvironment env, long fromKey, long toKey) throws Exception {
+    protected BDBJournalCursor(BDBEnvironment env, long fromKey, long toKey) throws JournalException {
         this.environment = env;
         this.toKey = toKey;
         this.currentKey = fromKey;
         this.dbNames = env.getDatabaseNames();
         if (dbNames == null) {
-            throw new NullPointerException("dbNames is null.");
+            // TODO we should raise JournalException in getDatabaseNames()
+            //   now we haven swallowed the details
+            throw new JournalException("failed to get db names!");
         }
         this.nextDbPositionIndex = 0;
 
@@ -79,54 +80,109 @@ public class BDBJournalCursor implements JournalCursor {
                 break;
             }
         }
+        nextDbPositionIndex -= 1;
 
         if (dbName == null) {
-            LOG.error("Can not find the key:{}, fail to get journal cursor. will exit.", fromKey);
-            System.exit(-1);
+            throw new JournalException(String.format("Can not find the key:%d, fail to get journal cursor!", fromKey));
         }
-        this.database = env.openDatabase(dbName);
+    }
+
+    private boolean shouldOpenDatabase() {
+        // the very first time
+        if (database == null) {
+            return true;
+        }
+        // if current db does not contain any more data, then we go to search the next db
+        return nextDbPositionIndex < dbNames.size() && currentKey == dbNames.get(nextDbPositionIndex);
+    }
+
+    protected void openDatabaseIfNecessary() throws InterruptedException, JournalException {
+        if (!shouldOpenDatabase()) {
+            return;
+        }
+
+        String dbName = Long.toString(dbNames.get(nextDbPositionIndex));
+        JournalException exception = null;
+        for (int i = 0; i != RETRY_TIME; ++ i) {
+            try {
+                if (i != 0) {
+                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+                }
+
+                database = environment.openDatabase(dbName);
+                nextDbPositionIndex++;
+                return;
+            } catch (InsufficientLogException insufficientLogEx) {
+                String errMsg = String.format("catch insufficient log exception while open db %s!", dbName);
+                LOG.error(errMsg);
+                // for InsufficientLogException we should refresh the log and
+                // then exit the process because we may have read dirty data.
+                environment.refreshLog(insufficientLogEx);
+                exception = new JournalException(errMsg);
+                exception.initCause(insufficientLogEx);
+                throw exception;
+            } catch (DatabaseException e) {
+                String errMsg = String.format("failed to open %s for %s times!", dbName, i + 1);
+                LOG.warn(errMsg);
+                exception = new JournalException(errMsg);
+                exception.initCause(e);
+            }
+        }
+
+        // failed after retry
+        throw exception;
+    }
+
+    protected JournalEntity serializedData(DatabaseEntry data) throws JournalException {
+        DataInputStream in = new DataInputStream(new ByteArrayInputStream(data.getData()));
+        JournalEntity ret = new JournalEntity();
+        try {
+            ret.readFields(in);
+        } catch (IOException e) {
+            // bad data, will not retry
+            String errMsg = String.format("fail to read journal entity key=%s, data=%s",
+                    currentKey, data);
+            LOG.error(errMsg, e);
+            JournalException exception = new JournalException(errMsg);
+            exception.initCause(e);
+            throw exception;
+        }
+        return ret;
     }
 
     @Override
-    public JournalEntity next() {
-        JournalEntity ret = null;
+    public JournalEntity next() throws InterruptedException, JournalException {
+        // EOF
         if (currentKey > toKey) {
-            return ret;
+            return null;
         }
+
+        // if current db does not contain any more data, then we go to search the next db
+        openDatabaseIfNecessary();
+
+        // make the key
         Long key = currentKey;
         DatabaseEntry theKey = new DatabaseEntry();
         TupleBinding<Long> myBinding = TupleBinding.getPrimitiveBinding(Long.class);
         myBinding.objectToEntry(key, theKey);
 
         DatabaseEntry theData = new DatabaseEntry();
-        // if current db does not contain any more data, then we go to search the next db
-        try {
-            int tryTimes = 0;
-            while (true) {
-                // null means perform the operation without transaction protection.
-                // READ_COMMITTED guarantees no dirty read.
+        JournalException exception = null;
+        for (int i = 0; i != RETRY_TIME; i++) {
+            // 1. sleep after retry
+            if (i != 0) {
+                Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+            }
+
+            // 2. read from bdb & error handling
+            try {
                 OperationStatus operationStatus = database.get(null, theKey, theData, LockMode.READ_COMMITTED);
+
                 if (operationStatus == OperationStatus.SUCCESS) {
-                    // Recreate the data String.
-                    byte[] retData = theData.getData();
-                    DataInputStream in = new DataInputStream(new ByteArrayInputStream(retData));
-                    ret = new JournalEntity();
-                    try {
-                        ret.readFields(in);
-                    } catch (Exception e) {
-                        LOG.error("fail to read journal entity key={}, will exit", currentKey, e);
-                        System.exit(-1);
-                    }
+                    // 3. serialized
+                    JournalEntity entity = serializedData(theData);
                     currentKey++;
-                    return ret;
-                } else if (nextDbPositionIndex < dbNames.size() && currentKey == dbNames.get(nextDbPositionIndex)) {
-                    database = environment.openDatabase(dbNames.get(nextDbPositionIndex).toString());
-                    nextDbPositionIndex++;
-                    tryTimes = 0;
-                } else if (tryTimes < maxTryTime) {
-                    tryTimes++;
-                    LOG.warn("fail to get journal {}, will try again. status: {}", currentKey, operationStatus);
-                    Thread.sleep(3000);
+                    return entity;
                 } else if (operationStatus == OperationStatus.NOTFOUND) {
                     // In the case:
                     // On non-master FE, the replayer will first get the max journal id,
@@ -137,21 +193,29 @@ public class BDBJournalCursor implements JournalCursor {
                     // is hanging and waiting to be aborted after timeout). and after this log abort,
                     // we will get NOTFOUND.
                     // So we simply throw a exception and let the replayer get the max id again.
-                    throw new Exception(
-                            "Failed to find key " + currentKey + " in database " + database.getDb().getDatabaseName());
+                    LOG.warn("canot find journal {} in db {}, maybe because master switched, will try again.",
+                            key, database);
+                    return null;
                 } else {
-                    LOG.error("fail to get journal {}, status: {}, will exit", currentKey, operationStatus);
-                    System.exit(-1);
+                    String errMsg = String.format("failed to read after retried %d times! key = %d, db = %s, status = %s",
+                            i + 1, key, database, operationStatus);
+                    LOG.warn(errMsg);
+                    exception = new JournalException(errMsg);
                 }
+            } catch (DatabaseException e) {
+                String errMsg = String.format("failed to read after retried %d times! key = %d, db = %s",
+                        i + 1, key, database);
+                LOG.error(errMsg, e);
+                exception = new JournalException(errMsg);
+                exception.initCause(e);
             }
-        } catch (Exception e) {
-            LOG.warn("Catch an exception when get next JournalEntity. key:{}", currentKey, e);
-            return null;
-        }
+        } // for i in retry
+
+        // failed after retry
+        throw exception;
     }
 
     @Override
     public void close() {
-
     }
 }

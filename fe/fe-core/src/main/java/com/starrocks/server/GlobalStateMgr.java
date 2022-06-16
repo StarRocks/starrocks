@@ -160,6 +160,7 @@ import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.MasterInfo;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalException;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
@@ -1664,19 +1665,32 @@ public class GlobalStateMgr {
         }
 
         LOG.info("replayed journal id is {}, replay to journal id is {}", replayedJournalId, newToJournalId);
-        JournalCursor cursor = editLog.read(replayedJournalId.get() + 1, newToJournalId);
-        if (cursor == null) {
-            LOG.warn("failed to get cursor from {} to {}", replayedJournalId.get() + 1, newToJournalId);
+        JournalCursor cursor = null;
+        try {
+            cursor = editLog.read(replayedJournalId.get() + 1, newToJournalId);
+        } catch (JournalException e) {
+            LOG.warn("failed to get cursor from {} to {}", replayedJournalId.get() + 1, newToJournalId, e);
             return false;
         }
 
         long startTime = System.currentTimeMillis();
         boolean hasLog = false;
         while (true) {
-            JournalEntity entity = cursor.next();
+            JournalEntity entity = null;
+            try {
+                entity = cursor.next();
+            } catch (InterruptedException | JournalException e) {
+                LOG.warn("got interrupted exception or journal exception, will quit, ", e);
+                // TODO exit gracefully
+                Util.stdoutWithTime(e.getMessage());
+                System.exit(-1);
+            }
+
+            // EOF
             if (entity == null) {
                 break;
             }
+
             hasLog = true;
             EditLog.loadJournal(this, entity);
             replayedJournalId.incrementAndGet();

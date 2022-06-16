@@ -9,6 +9,7 @@ import com.starrocks.ha.HAProtocol;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalException;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.net.InetSocketAddress;
@@ -52,7 +53,7 @@ public class MockJournal implements Journal {
     }
 
     @Override
-    public JournalCursor read(long fromKey, long toKey) {
+    public JournalCursor read(long fromKey, long toKey) throws JournalException {
         if (toKey < fromKey || fromKey < 0) {
             return null;
         }
