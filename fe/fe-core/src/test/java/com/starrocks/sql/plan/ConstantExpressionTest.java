@@ -17,7 +17,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.amazonaws.services.dynamodbv2.xspec.S;
 import com.starrocks.sql.parser.ParsingException;
 import org.junit.Assert;
 import org.junit.Test;
