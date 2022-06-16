@@ -186,13 +186,13 @@ public class Config extends ConfigBase {
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
 
     /**
-     *  for task set expire time
+     * for task set expire time
      */
     @ConfField(mutable = true)
     public static int task_ttl_second = 3 * 24 * 3600;         // 3 day
 
     /**
-     *  for task run set expire time
+     * for task run set expire time
      */
     @ConfField(mutable = true)
     public static int task_runs_ttl_second = 3 * 24 * 3600;     // 3 day
@@ -1485,7 +1485,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = false;
-  
+
     @ConfField
     public static boolean enable_dict_optimize_routine_load = false;
 
@@ -1520,9 +1520,15 @@ public class Config extends ConfigBase {
     public static int quorom_publish_wait_time_ms = 5000;
 
     /**
-     * Fqdn function switch, 
+     * Fqdn function switch,
      * this switch will be deleted after release the fqdn func
      */
     @ConfField(mutable = true)
     public static boolean enable_fqdn_func = false;
+
+    /**
+     * jaeger tracing endpoint, empty thing disables tracing
+     */
+    @ConfField
+    public static String jaeger_grpc_endpoint = "";
 }
