@@ -353,8 +353,6 @@ public class LocalMetastore implements ConnectorMetadata {
     public void unprotectCreateDb(Database db) {
         idToDb.put(db.getId(), db);
         fullNameToDb.put(db.getFullName(), db);
-        final Cluster cluster = nameToCluster.get(db.getClusterName());
-        cluster.addDb(db.getFullName(), db.getId());
         stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
     }
 
@@ -422,8 +420,6 @@ public class LocalMetastore implements ConnectorMetadata {
             // 3. remove db from globalStateMgr
             idToDb.remove(db.getId());
             fullNameToDb.remove(db.getFullName());
-            final Cluster cluster = nameToCluster.get(db.getClusterName());
-            cluster.removeDb(dbName, db.getId());
             DropDbInfo info = new DropDbInfo(dbName, stmt.isForceDrop());
             editLog.logDropDb(info);
 
@@ -498,8 +494,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
             fullNameToDb.remove(dbName);
             idToDb.remove(db.getId());
-            final Cluster cluster = nameToCluster.get(db.getClusterName());
-            cluster.removeDb(dbName, db.getId());
 
             LOG.info("finish replay drop db, name: {}, id: {}", dbName, db.getId());
         } finally {
@@ -528,8 +522,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
             fullNameToDb.put(db.getFullName(), db);
             idToDb.put(db.getId(), db);
-            final Cluster cluster = nameToCluster.get(db.getClusterName());
-            cluster.addDb(db.getFullName(), db.getId());
 
             // log
             RecoverInfo recoverInfo = new RecoverInfo(db.getId(), -1L, -1L);
@@ -669,8 +661,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("Database name[" + newFullDbName + "] is already used");
             }
 
-            cluster.removeDb(db.getFullName(), db.getId());
-            cluster.addDb(newFullDbName, db.getId());
             // 1. rename db
             db.setNameWithLock(newFullDbName);
 
@@ -692,10 +682,7 @@ public class LocalMetastore implements ConnectorMetadata {
         tryLock(true);
         try {
             Database db = fullNameToDb.get(dbName);
-            Cluster cluster = nameToCluster.get(db.getClusterName());
-            cluster.removeDb(db.getFullName(), db.getId());
             db.setName(newDbName);
-            cluster.addDb(newDbName, db.getId());
             fullNameToDb.remove(dbName);
             fullNameToDb.put(newDbName, db);
 
@@ -3591,7 +3578,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 Preconditions.checkState(db.getId() < NEXT_ID_INIT_VALUE, errMsg);
                 idToDb.put(db.getId(), db);
                 fullNameToDb.put(db.getFullName(), db);
-                cluster.addDb(dbName, db.getId());
                 idToCluster.put(cluster.getId(), cluster);
                 nameToCluster.put(cluster.getName(), cluster);
             }
@@ -3629,7 +3615,6 @@ public class LocalMetastore implements ConnectorMetadata {
         unprotectCreateCluster(cluster);
         for (Database db : idToDb.values()) {
             db.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
-            cluster.addDb(db.getFullName(), db.getId());
         }
 
         // no matter default_cluster is created or not,
