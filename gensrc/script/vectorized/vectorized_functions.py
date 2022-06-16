@@ -492,11 +492,11 @@ vectorized_functions = [
 
     # json string function
     [110000, "get_json_int", "INT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_int",
-     "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close", False],
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110001, "get_json_double", "DOUBLE", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_double",
-     "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close", False],
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110002, "get_json_string", "VARCHAR", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_string",
-     "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close", False],
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
 
     # json type function
     [110003, "parse_json", "JSON", ["VARCHAR"], "JsonFunctions::parse_json", False],
