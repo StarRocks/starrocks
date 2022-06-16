@@ -74,7 +74,7 @@ public class CloseSafeDatabase {
     @Override
     public String toString() {
         return "CloseSafeDatabase{" +
-                "db=" + getDb().getDatabaseName() +
+                "db=" + this.getDatabaseName() +
                 '}';
     }
 }
