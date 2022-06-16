@@ -358,12 +358,6 @@ public class LocalMetastore implements ConnectorMetadata {
         stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
     }
 
-    // for test
-    public void addCluster(Cluster cluster) {
-        nameToCluster.put(cluster.getName(), cluster);
-        idToCluster.put(cluster.getId(), cluster);
-    }
-
     public ConcurrentHashMap<Long, Database> getIdToDb() {
         return idToDb;
     }
@@ -2712,14 +2706,6 @@ public class LocalMetastore implements ConnectorMetadata {
         } else {
             throw new DdlException("Database " + dbName + " doesn't exist");
         }
-    }
-
-    public List<String> getClusterDbNames(String clusterName) throws AnalysisException {
-        final Cluster cluster = nameToCluster.get(clusterName);
-        if (cluster == null) {
-            throw new AnalysisException("No cluster selected");
-        }
-        return Lists.newArrayList(cluster.getDbNames());
     }
 
     @Override
