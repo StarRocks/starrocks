@@ -1007,10 +1007,10 @@ TEST_F(TimeFunctionsTest, from_days) {
         columns.emplace_back(tc);
         ColumnPtr result = TimeFunctions::from_days(ctx, columns);
         ASSERT_TRUE(result->is_nullable());
-
-        NullableColumn::Ptr nullable_col = ColumnHelper::as_column<NullableColumn>(result);
-        ASSERT_EQ(1, nullable_col->size());
-        ASSERT_TRUE(nullable_col->is_null(0));
+        auto col = ColumnHelper::as_column<NullableColumn>(result);
+        ASSERT_EQ(1,col->size());
+        ASSERT_FALSE(col->is_null(0));
+        ASSERT_EQ(col->get(0).get_date().to_string(), "0000-00-00");
     }
     // from_days(negative) return "0000-00-00"
     {
@@ -1024,11 +1024,11 @@ TEST_F(TimeFunctionsTest, from_days) {
         ColumnPtr result = TimeFunctions::from_days(ctx, columns);
         ASSERT_TRUE(result->is_nullable());
 
-        NullableColumn::Ptr nullable_column = ColumnHelper::as_column<NullableColumn>(result);
-        std::string zero_day("0000-00-00");
-        ASSERT_EQ(3, nullable_column->size());
+        auto col = ColumnHelper::as_column<NullableColumn>(result);
+        ASSERT_EQ(3, col->size());
         for (auto i = 0; i < 3; ++i) {
-            ASSERT_EQ(nullable_column->get(i).get_date().to_string(), zero_day);
+            ASSERT_FALSE(col->is_null(i));
+            ASSERT_EQ(col->get(i).get_date().to_string(), "0000-00-00");
         }
     }
 }
