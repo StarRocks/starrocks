@@ -690,12 +690,6 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
         return Status::InternalError("Invalid serialized tablet meta");
     }
 
-    for (const auto& rs : tablet_meta->all_rs_metas()) {
-        LOG_IF(FATAL, rs->rowset_type() != BETA_ROWSET)
-                << "Unsupported rowset type " << rs->rowset_type() << " tablet_id=" << tablet_meta->tablet_id()
-                << " tablet_uid=" << rs->tablet_uid() << " schema_hash=" << tablet_meta->schema_hash()
-                << " rowset_id=" << rs->rowset_id();
-    }
     if (tablet_meta->tablet_id() != tablet_id) {
         LOG(WARNING) << "Mismatched tablet_id. expect=" << tablet_id << " real=" << tablet_meta->tablet_id();
         return Status::InternalError("mismatched tablet_id");
@@ -1115,7 +1109,6 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
             context.tablet_id = tablet->tablet_id();
             context.partition_id = tablet->partition_id();
             context.tablet_schema_hash = tablet->schema_hash();
-            context.rowset_type = RowsetTypePB::BETA_ROWSET;
             context.rowset_path_prefix = tablet->schema_hash_path();
             context.tablet_schema = &tablet->tablet_schema();
             context.rowset_state = VISIBLE;
@@ -1209,7 +1202,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
     }
     // We generate a new tablet_uid for this new tablet.
     return TabletMeta::create(_mem_tracker, normal_request, TabletUid::gen_uid(), shard_id, next_unique_id,
-                              col_idx_to_unique_id, RowsetTypePB::BETA_ROWSET, tablet_meta);
+                              col_idx_to_unique_id, tablet_meta);
 }
 
 Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, TabletDropFlag flag) {

@@ -251,10 +251,6 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
         int64_t total_num_rows = 0;
         int64_t total_mem_footprint = 0;
         for (auto& rowset : _input_rowsets) {
-            if (rowset->rowset_meta()->rowset_type() != BETA_ROWSET) {
-                continue;
-            }
-
             total_num_rows += rowset->num_rows();
             auto* beta_rowset = down_cast<BetaRowset*>(rowset.get());
             for (auto& segment : beta_rowset->segments()) {

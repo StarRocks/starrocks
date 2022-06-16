@@ -192,14 +192,6 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
 
     std::unordered_map<Version, RowsetMetaPB*, HashOfVersion> rs_version_map;
     for (const auto& visible_rowset : cloned_tablet_meta_pb.rs_metas()) {
-        if (visible_rowset.rowset_type() == ALPHA_ROWSET) {
-            LOG(WARNING) << "must change V1 format to V2 format. "
-                         << "tablet_id: " << visible_rowset.tablet_id()
-                         << ", tablet_uid: " << visible_rowset.tablet_uid()
-                         << ", schema_hash: " << visible_rowset.tablet_schema_hash()
-                         << ", rowset_id:" << visible_rowset.rowset_id();
-            return Status::RuntimeError("unknown rowset type");
-        }
         RowsetMetaPB* rowset_meta = new_tablet_meta_pb.add_rs_metas();
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
         RETURN_IF_ERROR(_rename_rowset_id(visible_rowset, clone_dir, tablet_schema, rowset_id, rowset_meta));
@@ -210,13 +202,6 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     }
 
     for (const auto& inc_rowset : cloned_tablet_meta_pb.inc_rs_metas()) {
-        if (inc_rowset.rowset_type() == ALPHA_ROWSET) {
-            LOG(WARNING) << "must change V1 format to V2 format. "
-                         << "tablet_id: " << inc_rowset.tablet_id() << ", tablet_uid: " << inc_rowset.tablet_uid()
-                         << ", schema_hash: " << inc_rowset.tablet_schema_hash()
-                         << ", rowset_id:" << inc_rowset.rowset_id();
-            return Status::RuntimeError("unknown rowset type");
-        }
         Version rowset_version = {inc_rowset.start_version(), inc_rowset.end_version()};
         auto exist_rs = rs_version_map.find(rowset_version);
         if (exist_rs != rs_version_map.end()) {
@@ -254,7 +239,6 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
     context.tablet_id = org_rowset_meta->tablet_id();
     context.partition_id = org_rowset_meta->partition_id();
     context.tablet_schema_hash = org_rowset_meta->tablet_schema_hash();
-    context.rowset_type = org_rowset_meta->rowset_type();
     context.rowset_path_prefix = new_path;
     context.tablet_schema = &tablet_schema;
     context.rowset_state = org_rowset_meta->rowset_state();
