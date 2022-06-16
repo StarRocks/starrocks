@@ -41,7 +41,7 @@ public class SparkLoadAppHandle implements Writable {
     // 5min
     private static final long SUBMIT_APP_TIMEOUT_MS = 300 * 1000;
 
-    private Process process;
+    private transient Process process;
 
     @SerializedName("appId")
     private String appId;
@@ -60,7 +60,7 @@ public class SparkLoadAppHandle implements Writable {
     @SerializedName("logPath")
     private String logPath;
 
-    private List<Listener> listeners;
+    private transient List<Listener> listeners;
 
     public interface Listener {
         void stateChanged(SparkLoadAppHandle handle);
