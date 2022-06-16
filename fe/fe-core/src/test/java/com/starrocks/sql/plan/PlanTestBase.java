@@ -200,6 +200,25 @@ public class PlanTestBase {
                 "\"colocate_with\" = \"colocate_group_2\"" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `test_all_number_type` (\n" +
+                "  `k_str` varchar(20) NULL COMMENT \"\",\n" +
+                "  `c_ti` tinyint(4) NULL COMMENT \"\",\n" +
+                "  `c_si` smallint(6) NULL COMMENT \"\",\n" +
+                "  `c_i` int(11) NULL COMMENT \"\",\n" +
+                "  `c_bi` bigint(20) NULL COMMENT \"\",\n" +
+                "  `c_li` largeint NULL COMMENT \"\",\n" +
+                "  `c_f` float NULL COMMENT \"\",\n" +
+                "  `c_d` double NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k_str`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k_str`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
         starRocksAssert.withTable("CREATE TABLE `test_all_type` (\n" +
                 "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
                 "  `t1b` smallint(6) NULL COMMENT \"\",\n" +

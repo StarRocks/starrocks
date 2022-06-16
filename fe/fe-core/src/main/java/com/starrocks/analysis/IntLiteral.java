@@ -48,6 +48,7 @@ public class IntLiteral extends LiteralExpr {
     public static final long INT_MIN = Integer.MIN_VALUE; // -2^31 ~ 2^31 - 1
     public static final long INT_MAX = Integer.MAX_VALUE;
     public static final long BIG_INT_MIN = Long.MIN_VALUE; // -2^63 ~ 2^63 - 1
+    public static final long BIG_INT_MAX = Long.MAX_VALUE;
     private long value;
 
     /**

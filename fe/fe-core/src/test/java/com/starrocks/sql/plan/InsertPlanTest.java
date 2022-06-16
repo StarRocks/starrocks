@@ -8,6 +8,7 @@ import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -680,5 +681,67 @@ public class InsertPlanTest extends PlanTestBase {
         }
         InsertPlanner.enableSingleReplicationShuffle = false;
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testInsertOverflowWithFloatLiteral() throws Exception {
+        // Tinyint.
+        Assert.assertThrows("Number out of range", SemanticException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_ti) values('a', 3e39)"));
+        Assert.assertThrows("Number out of range", SemanticException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_ti) values('a', -3e39)"));
+
+        // Smallint.
+        Assert.assertThrows("Number out of range", SemanticException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_si) values('a', 3e39)"));
+        Assert.assertThrows("Number out of range", SemanticException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_si) values('a', -3e39)"));
+
+        // Int.
+        Assert.assertThrows("Number out of range", SemanticException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_i) values('a', 3e39)"));
+        Assert.assertThrows("Number out of range", SemanticException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_i) values('a', -3e39)"));
+
+        // Bigint.
+        Assert.assertThrows("Number out of range", SemanticException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_bi) values('a', 3e39)"));
+        Assert.assertThrows("Number out of range", SemanticException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_bi) values('a', -3e39)"));
+
+        // Largeint.
+        Assert.assertThrows("Number out of range", SemanticException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_li) values('a', 3e39)"));
+        Assert.assertThrows("Number out of range", SemanticException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_li) values('a', -3e39)"));
+
+        // Float.
+        Assert.assertThrows("Number out of range", SemanticException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_f) values('a', 3e39)"));
+        Assert.assertThrows("Number out of range", SemanticException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_f) values('a', -3e39)"));
+        Assert.assertThrows("Number out of range", SemanticException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_f) values('a', '3e39')"));
+        Assert.assertThrows("Number out of range", SemanticException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_f) values('a', '-3e39')"));
+
+        // Double.
+        Assert.assertThrows("Number out of range", ParsingException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_d) values('a', 3e310)"));
+        Assert.assertThrows("Number out of range", ParsingException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_d) values('a', -3e310)"));
+        Assert.assertThrows("Number out of range", SemanticException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_d) values('a', '3e310')"));
+        Assert.assertThrows("Number out of range", SemanticException.class,
+                () -> getInsertExecPlan("insert into test_all_number_type(k_str, c_d) values('a', '-3e310')"));
+
+        String plan = getInsertExecPlan("insert into test_all_number_type(k_str, c_d) values('a', 3e39)");
+        assertContains(plan, "3.0E39");
+        plan = getInsertExecPlan("insert into test_all_number_type(k_str, c_d) values('a', -3e39)");
+        assertContains(plan, "-3.0E39");
+
+        // Double to string.
+        plan = getInsertExecPlan("insert into test_all_number_type(k_str, c_d) values(-3e39, -3e39)");
+        assertContains(plan, "'-3000000000000000000000000000000000000000' | -3.0E39");
     }
 }

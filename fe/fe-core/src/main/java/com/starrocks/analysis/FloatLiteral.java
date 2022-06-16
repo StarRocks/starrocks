@@ -32,6 +32,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
@@ -42,7 +43,7 @@ public class FloatLiteral extends LiteralExpr {
     }
 
     public FloatLiteral(Double value) throws AnalysisException {
-        checkValue(value);
+        validateDouble(value);
         init(value);
     }
 
@@ -50,9 +51,12 @@ public class FloatLiteral extends LiteralExpr {
      * C'tor forcing type, e.g., due to implicit cast
      */
     public FloatLiteral(Double value, Type type) throws AnalysisException {
+        validateDouble(value);
+        if (type.isFloatType()) {
+            validateDoubleCastToFloat(value, type);
+        }
         this.value = value;
         this.type = type;
-        checkValue(value);
         analysisDone();
     }
 
@@ -60,7 +64,7 @@ public class FloatLiteral extends LiteralExpr {
         Double floatValue = null;
         try {
             floatValue = new Double(value);
-            checkValue(floatValue);
+            validateDouble(floatValue, value);
         } catch (NumberFormatException e) {
             throw new AnalysisException("Invalid floating-point literal: " + value, e);
         }
@@ -113,12 +117,6 @@ public class FloatLiteral extends LiteralExpr {
         }
     }
 
-    private void checkValue(Double value) throws AnalysisException {
-        if (value.isInfinite()||value.isNaN()) {
-            throw new AnalysisException("Invalid literal:" + value);
-        }
-    }
-
     @Override
     public boolean isMinValue() {
         return false;
@@ -167,13 +165,18 @@ public class FloatLiteral extends LiteralExpr {
         return value;
     }
 
+    public BigInteger getBigIntegerValue() {
+        return BigDecimal.valueOf(value).toBigInteger();
+    }
+
     @Override
     public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
-        if (!(targetType.isFloatingPointType() || targetType.isDecimalOfAnyVersion())) {
-            return super.uncheckedCastTo(targetType);
-        }
         if (targetType.isFloatingPointType()) {
             if (!type.equals(targetType)) {
+                if (type.isDoubleType() && targetType.isFloatType()) {
+                    validateDoubleCastToFloat(value, targetType);
+                }
+
                 FloatLiteral floatLiteral = new FloatLiteral(this);
                 floatLiteral.setType(targetType);
                 return floatLiteral;
@@ -183,8 +186,15 @@ public class FloatLiteral extends LiteralExpr {
             DecimalLiteral decimalLiteral = new DecimalLiteral(new BigDecimal(Double.toString(value)));
             decimalLiteral.type = targetType;
             return decimalLiteral;
+        } else if (targetType.isIntegerType()) {
+            validateDoubleCastToBigint(value, targetType);
+            return new IntLiteral(getLongValue(), targetType);
+        } else if (targetType.isLargeint()) {
+            validateDoubleCastToLargint(value, targetType);
+            return super.uncheckedCastTo(targetType);
         }
-        return this;
+
+        return super.uncheckedCastTo(targetType);
     }
 
     @Override
@@ -213,6 +223,40 @@ public class FloatLiteral extends LiteralExpr {
     @Override
     public int hashCode() {
         return 31 * super.hashCode() + Double.hashCode(value);
+    }
+
+    private void validateDoubleCastToFloat(double value, Type targetType) throws AnalysisException {
+        float fvalue = (float)value;
+        if (!Float.isFinite(fvalue)) {
+            throw new AnalysisException("Number out of range[" + value + "]. type: " + targetType);
+        }
+    }
+
+    private void validateDoubleCastToBigint(double value, Type targetType) throws AnalysisException {
+        if (Double.compare(value, IntLiteral.BIG_INT_MIN) < 0 ||
+                Double.compare(value, IntLiteral.BIG_INT_MAX) > 0) {
+            throw new AnalysisException("Number out of range[" + value + "]. type: " + targetType);
+        }
+    }
+
+    private void validateDoubleCastToLargint(double value, Type targetType) throws AnalysisException {
+        BigInteger bigValue = getBigIntegerValue();
+        if (bigValue.compareTo(LargeIntLiteral.LARGE_INT_MIN) < 0 ||
+                bigValue.compareTo(LargeIntLiteral.LARGE_INT_MAX) > 0) {
+            throw new AnalysisException("Number out of range[" + value + "]. type: " + targetType);
+        }
+    }
+
+    private void validateDouble(double value) throws AnalysisException {
+        if (!Double.isFinite(value)) {
+            throw new AnalysisException("Number out of range[" + value + "].");
+        }
+    }
+
+    private void validateDouble(double value, String strValue) throws AnalysisException {
+        if (!Double.isFinite(value)) {
+            throw new AnalysisException("Number out of range[" + strValue + "].");
+        }
     }
 }
 
