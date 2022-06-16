@@ -223,62 +223,62 @@ TEST_F(LakeTabletManagerTest, list_txn_log) {
 }
 
 TEST_F(LakeTabletManagerTest, put_get_tabletmetadata_witch_cache_evict) {
-    starrocks::lake::TabletMetadata metadata;
-    metadata.set_id(23456);
-    metadata.set_version(2);
-    auto rowset_meta_pb = metadata.add_rowsets();
-    rowset_meta_pb->set_id(2);
-    rowset_meta_pb->set_overlapped(false);
-    rowset_meta_pb->set_data_size(1024);
-    rowset_meta_pb->set_num_rows(5);
+    int64_t tablet_id = 23456;
+    std::vector<lake::TabletMetadataPtr> vec;
 
-    auto group = tablet_group("shard1", 12345);
+    auto group = tablet_group("shard1", tablet_id);
 
     // we set meta cache capacity to 16K, and each meta here cost 232 bytes,putting 64 tablet meta will fill up the cache space.
     for (int i = 0; i < 64; ++i) {
-        metadata.set_version(2 + i);
+        auto metadata = std::make_shared<lake::TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(2 + i);
+        auto rowset_meta_pb = metadata->add_rowsets();
+        rowset_meta_pb->set_id(2);
+        rowset_meta_pb->set_overlapped(false);
+        rowset_meta_pb->set_data_size(1024);
+        rowset_meta_pb->set_num_rows(5);
         EXPECT_OK(_tabletManager->put_tablet_metadata(group, metadata));
+        vec.emplace_back(metadata);
     }
 
     // get version 4 from cache
     {
-        metadata.set_version(4);
-        auto res = _tabletManager->get_tablet_metadata(group, metadata.id(), metadata.version());
+        auto res = _tabletManager->get_tablet_metadata(group, tablet_id, 4);
         EXPECT_TRUE(res.ok());
-        EXPECT_EQ(res.value()->id(), 23456);
+        EXPECT_EQ(res.value()->id(), tablet_id);
         EXPECT_EQ(res.value()->version(), 4);
     }
 
     // put another 32 tablet meta to trigger cache eviction.
     for (int i = 0; i < 32; ++i) {
-        metadata.set_version(66 + i);
+        auto metadata = std::make_shared<lake::TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(66 + i);
+        auto rowset_meta_pb = metadata->add_rowsets();
+        rowset_meta_pb->set_id(2);
+        rowset_meta_pb->set_overlapped(false);
+        rowset_meta_pb->set_data_size(1024);
+        rowset_meta_pb->set_num_rows(5);
         EXPECT_OK(_tabletManager->put_tablet_metadata(group, metadata));
     }
 
     // test eviction result;
     {
-        // version 4  evicted
-        metadata.set_version(4);
-        auto res = _tabletManager->get_tablet_metadata(group, metadata.id(), metadata.version());
+        // version 4 expect not evicted
+        auto res = _tabletManager->get_tablet_metadata(group, tablet_id, 4);
         EXPECT_TRUE(res.ok());
-        EXPECT_EQ(res.value()->id(), 23456);
+        EXPECT_EQ(res.value()->id(), tablet_id);
         EXPECT_EQ(res.value()->version(), 4);
+        EXPECT_EQ(res.value().get(), vec[2].get());
     }
     {
         // version 6 expect evicted
-        metadata.set_version(6);
-        auto res = _tabletManager->get_tablet_metadata(group, metadata.id(), metadata.version());
+        auto res = _tabletManager->get_tablet_metadata(group, tablet_id, 6);
         EXPECT_TRUE(res.ok());
-        EXPECT_EQ(res.value()->id(), 23456);
+        EXPECT_EQ(res.value()->id(), tablet_id);
         EXPECT_EQ(res.value()->version(), 6);
-    }
-    {
-        // version 6 in cache
-        metadata.set_version(66);
-        auto res = _tabletManager->get_tablet_metadata(group, metadata.id(), metadata.version());
-        EXPECT_TRUE(res.ok());
-        EXPECT_EQ(res.value()->id(), 23456);
-        EXPECT_EQ(res.value()->version(), 66);
+        EXPECT_NE(res.value().get(), vec[4].get());
     }
 }
 
