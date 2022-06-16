@@ -172,9 +172,13 @@ public class AggregateTest extends PlanTestBase {
     public void testGroupBy2() throws Exception {
         String queryStr = "select avg(v2) from t0 group by v2";
 
+        int originInstanceNum = connectContext.getSessionVariable().getParallelExecInstanceNum();
+        int originPipelineDop = connectContext.getSessionVariable().getPipelineDop();
         try {
+            int cpuCores = 8;
+            int expectedTotalDop = cpuCores / 2;
             {
-                BackendCoreStat.setDefaultCoresOfBe(8);
+                BackendCoreStat.setDefaultCoresOfBe(cpuCores);
                 Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, queryStr);
                 String explainString = plan.second.getExplainString(TExplainLevel.NORMAL);
                 Assert.assertTrue(explainString.contains("  2:Project\n"
@@ -196,14 +200,16 @@ public class AggregateTest extends PlanTestBase {
                         + "  |  group by: 2: v2\n"
                         + "  |  \n"
                         + "  0:OlapScanNode"));
-                Assert.assertEquals(4, aggPlan.getParallelExecNum());
+                Assert.assertEquals(expectedTotalDop, aggPlan.getParallelExecNum());
                 Assert.assertEquals(1, aggPlan.getPipelineDop());
             }
 
             // Manually set dop
             {
-                int pipelineDop = 2;
+                final int pipelineDop = 2;
+                final int instanceNum = 2;
                 connectContext.getSessionVariable().setPipelineDop(pipelineDop);
+                connectContext.getSessionVariable().setParallelExecInstanceNum(instanceNum);
                 Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, queryStr);
                 String explainString = plan.second.getExplainString(TExplainLevel.NORMAL);
                 Assert.assertTrue(explainString.contains("  2:Project\n"
@@ -216,11 +222,12 @@ public class AggregateTest extends PlanTestBase {
                         + "  0:OlapScanNode"));
 
                 PlanFragment aggPlan = plan.second.getFragments().get(0);
-                Assert.assertEquals(4, aggPlan.getParallelExecNum());
+                Assert.assertEquals(instanceNum, aggPlan.getParallelExecNum());
                 Assert.assertEquals(pipelineDop, aggPlan.getPipelineDop());
             }
         } finally {
-            connectContext.getSessionVariable().setPipelineDop(0);
+            connectContext.getSessionVariable().setPipelineDop(originPipelineDop);
+            connectContext.getSessionVariable().setPipelineDop(originInstanceNum);
             BackendCoreStat.setDefaultCoresOfBe(1);
         }
     }
