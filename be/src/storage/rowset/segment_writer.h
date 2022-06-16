@@ -22,7 +22,7 @@
 #pragma once
 
 #include <cstdint>
-#include <memory> // unique_ptr
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -73,7 +73,7 @@ struct SegmentWriterOptions {
 //      for (column_group : column_groups) {
 //          writer.init(column_group, has_key);
 //          writer.append_chunk(chunk1);
-//          writer.append_chunk(chunk1);
+//          writer.append_chunk(chunk2);
 //          ...
 //          writer.finalize_columns(index_size);
 //      }

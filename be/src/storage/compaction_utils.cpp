@@ -50,7 +50,7 @@ Status CompactionUtils::construct_output_rowset_writer(Tablet* tablet, uint32_t 
     context.tablet_schema_hash = tablet->schema_hash();
     context.rowset_type = BETA_ROWSET;
     context.rowset_path_prefix = tablet->schema_hash_path();
-    context.tablet_schema = &(tablet->tablet_schema());
+    context.tablet_schema = &tablet->tablet_schema();
     context.rowset_state = VISIBLE;
     context.version = version;
     context.segments_overlap = NONOVERLAPPING;
@@ -68,11 +68,11 @@ Status CompactionUtils::construct_output_rowset_writer(Tablet* tablet, uint32_t 
 }
 
 uint32_t CompactionUtils::get_segment_max_rows(int64_t max_segment_file_size, int64_t input_row_num,
-                                               int64_t input_size) {
-    // The range of config::max_segments_file_size is between [1, INT64_MAX]
-    // If the configuration is set wrong, the config::max_segments_file_size will be a negtive value.
+                                               int64_t input_rowsets_size) {
+    // The range of config::max_segment_file_size is between [1, INT64_MAX]
+    // If the configuration is wrong, the config::max_segment_file_size will be a negtive value.
     // Using division instead multiplication can avoid the overflow
-    int64_t max_segment_rows = max_segment_file_size / (input_size / (input_row_num + 1) + 1);
+    int64_t max_segment_rows = max_segment_file_size / (input_rowsets_size / (input_row_num + 1) + 1);
     if (max_segment_rows > INT32_MAX || max_segment_rows <= 0) {
         max_segment_rows = INT32_MAX;
     }

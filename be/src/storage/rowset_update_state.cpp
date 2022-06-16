@@ -121,11 +121,9 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     for (const auto& one_delete : _deletes) {
         _memory_usage += one_delete != nullptr ? one_delete->memory_usage() : 0;
     }
-    const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
-    if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0) {
+    if (!rowset->rowset_meta()->get_meta_pb().has_txn_meta() || rowset->num_segments() == 0) {
         return Status::OK();
     }
-
     return _prepare_partial_update_states(tablet, rowset);
 }
 

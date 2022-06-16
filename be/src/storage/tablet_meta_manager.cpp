@@ -386,8 +386,8 @@ Status TabletMetaManager::save(DataDir* store, const TabletMetaSharedPtr& tablet
     TabletMetaPB tablet_meta_pb;
     tablet_meta->to_meta_pb(&tablet_meta_pb);
     if (tablet_meta_pb.schema().keys_type() == KeysType::PRIMARY_KEYS) {
-        LOG(WARNING) << "does support save TabletMetaSharedPtr for PRIMARY_KEYS";
-        return Status::NotSupported("does support save TabletMetaSharedPtr for PRIMARY_KEYS");
+        LOG(WARNING) << "do not support save TabletMetaSharedPtr for PRIMARY_KEYS";
+        return Status::NotSupported("do not support save TabletMetaSharedPtr for PRIMARY_KEYS");
     }
     return save(store, tablet_meta_pb);
 }
