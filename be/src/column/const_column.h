@@ -5,6 +5,7 @@
 #include "column/column.h"
 #include "column/datum.h"
 #include "common/logging.h"
+#include "common/status.h"
 
 namespace starrocks::vectorized {
 
