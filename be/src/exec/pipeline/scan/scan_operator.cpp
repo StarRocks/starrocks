@@ -91,7 +91,7 @@ bool ScanOperator::has_output() const {
     }
 
     for (const auto& chunk_source : _chunk_sources) {
-        if (chunk_source != nullptr && chunk_source->has_output()) {
+        if (chunk_source != nullptr && (chunk_source->has_output() || chunk_source->has_shared_output())) {
             return true;
         }
     }

@@ -6,6 +6,7 @@
 
 #include "exec/olap_common.h"
 #include "exec/olap_utils.h"
+#include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/chunk_source.h"
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exec/workgroup/work_group_fwd.h"
@@ -16,6 +17,7 @@
 #include "storage/conjunctive_predicates.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
+#include "util/json.h"
 
 namespace starrocks {
 
@@ -32,8 +34,8 @@ class OlapScanContext;
 
 class OlapChunkSource final : public ChunkSource {
 public:
-    OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, vectorized::OlapScanNode* scan_node,
-                    OlapScanContext* scan_ctx);
+    OlapChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                    vectorized::OlapScanNode* scan_node, OlapScanContext* scan_ctx);
 
     ~OlapChunkSource() override;
 
@@ -44,6 +46,8 @@ public:
     bool has_next_chunk() const override;
 
     bool has_output() const override;
+
+    bool has_shared_output() const override;
 
     virtual size_t get_buffer_size() const override;
 
@@ -89,7 +93,7 @@ private:
     TInternalScanRange* _scan_range;
 
     Status _status = Status::OK();
-    UnboundedBlockingQueue<vectorized::ChunkPtr> _chunk_buffer;
+    BalancedChunkBuffer& _chunk_buffer;
     vectorized::ConjunctivePredicates _not_push_down_predicates;
     std::vector<uint8_t> _selection;
 

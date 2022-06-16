@@ -45,15 +45,16 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
 void ConnectorScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
-    auto* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
-    return std::make_shared<ConnectorChunkSource>(_chunk_source_profiles[chunk_source_index].get(), std::move(morsel),
-                                                  this, scan_node);
+    vectorized::ConnectorScanNode* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
+    return std::make_shared<ConnectorChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
+                                                  std::move(morsel), this, scan_node);
 }
 
 // ==================== ConnectorChunkSource ====================
-ConnectorChunkSource::ConnectorChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
+ConnectorChunkSource::ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile,
+                                           MorselPtr&& morsel, ScanOperator* op,
                                            vectorized::ConnectorScanNode* scan_node)
-        : ChunkSource(runtime_profile, std::move(morsel)),
+        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel)),
           _scan_node(scan_node),
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),

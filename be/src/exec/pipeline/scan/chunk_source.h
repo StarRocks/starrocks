@@ -18,8 +18,8 @@ namespace pipeline {
 
 class ChunkSource {
 public:
-    ChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel)
-            : _runtime_profile(runtime_profile), _morsel(std::move(morsel)){};
+    ChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel)
+            : _scan_operator_seq(scan_operator_id), _runtime_profile(runtime_profile), _morsel(std::move(morsel)) {}
 
     virtual ~ChunkSource() = default;
 
@@ -33,6 +33,8 @@ public:
 
     // Whether cache is empty or not
     virtual bool has_output() const = 0;
+
+    virtual bool has_shared_output() const { return false; }
 
     virtual size_t get_buffer_size() const = 0;
 
@@ -59,6 +61,7 @@ public:
     }
 
 protected:
+    const int32_t _scan_operator_seq;
     RuntimeProfile* _runtime_profile;
     // The morsel will own by pipeline driver
     MorselPtr _morsel;

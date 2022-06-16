@@ -40,8 +40,8 @@ private:
 
 class ConnectorChunkSource final : public ChunkSource {
 public:
-    ConnectorChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
-                         vectorized::ConnectorScanNode* scan_node);
+    ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                         ScanOperator* op, vectorized::ConnectorScanNode* scan_node);
 
     ~ConnectorChunkSource() override;
 

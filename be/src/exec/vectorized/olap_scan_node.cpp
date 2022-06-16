@@ -751,7 +751,7 @@ void OlapScanNode::_close_pending_scanners() {
 }
 
 pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
-    auto scan_ctx = std::make_shared<pipeline::OlapScanContext>(this);
+    auto scan_ctx = std::make_shared<pipeline::OlapScanContext>(this, context->degree_of_parallelism());
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
 
     // scan_prepare_op.
