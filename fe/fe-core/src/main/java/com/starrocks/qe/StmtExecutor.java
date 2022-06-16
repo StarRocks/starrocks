@@ -382,6 +382,8 @@ public class StmtExecutor {
                         //reset query id for each retry
                         if (i > 0) {
                             uuid = UUID.randomUUID();
+                            LOG.info("transfer QueryId: {} to {}", DebugUtil.printId(context.getQueryId()),
+                                    DebugUtil.printId(uuid));
                             context.setExecutionId(
                                     new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
                         }
@@ -568,7 +570,8 @@ public class StmtExecutor {
         profile.computeTimeInChildProfile();
         long profileEndTime = System.currentTimeMillis();
         profile.getChildMap().get("Summary")
-                .addInfoString(ProfileManager.PROFILE_TIME, DebugUtil.getPrettyStringMs(profileEndTime - profileBeginTime));
+                .addInfoString(ProfileManager.PROFILE_TIME,
+                        DebugUtil.getPrettyStringMs(profileEndTime - profileBeginTime));
         StringBuilder builder = new StringBuilder();
         profile.prettyPrint(builder, "");
         String profileContent = ProfileManager.getInstance().pushProfile(profile);
