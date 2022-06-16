@@ -1293,7 +1293,7 @@ public class PlanFragmentBuilder {
 
             // One phase aggregation prefer the inter-instance parallel to avoid local shuffle
             if (node.isOnePhaseAgg()) {
-                inputFragment.preferInstanceParallel();
+                estimateDopOfOnePhaseAgg(inputFragment);
             }
 
             inputFragment.setPlanRoot(aggregationNode);
@@ -1579,6 +1579,13 @@ public class PlanFragmentBuilder {
          * @param fragment The fragment which needs to estimate DOP.
          */
         private void estimateDopOfColocateAndLocalBucketJoinInPipeline(PlanFragment fragment) {
+            if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
+                return;
+            }
+            fragment.preferInstanceParallel();
+        }
+
+        private void estimateDopOfOnePhaseAgg(PlanFragment fragment) {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
