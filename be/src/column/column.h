@@ -323,9 +323,6 @@ public:
     virtual Status accept_mutable(ColumnVisitorMutable* visitor) = 0;
 
 protected:
-    static StatusOr<ColumnPtr> downgrade_helper_func(ColumnPtr* col);
-    static StatusOr<ColumnPtr> upgrade_helper_func(ColumnPtr* col);
-
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };
 
