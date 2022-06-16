@@ -12,7 +12,6 @@ DIAGNOSTIC_POP
 
 #include <chrono>
 #include <cstdint>
-#include <shared_mutex>
 #include <unordered_map>
 #include <vector>
 
