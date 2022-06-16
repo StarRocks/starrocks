@@ -6,7 +6,8 @@
 
 namespace starrocks::pipeline {
 
-BalancedChunkBuffer::BalancedChunkBuffer(int output_runs) : _output_runs(output_runs) {
+BalancedChunkBuffer::BalancedChunkBuffer(BalanceStrategy strategy, int output_runs)
+        : _output_runs(output_runs), _strategy(strategy) {
     DCHECK_GT(output_runs, 0);
     for (int i = 0; i < output_runs; i++) {
         _sub_buffers.emplace_back(std::make_unique<QueueT>());
@@ -44,7 +45,7 @@ bool BalancedChunkBuffer::try_get(int buffer_index, vectorized::ChunkPtr* output
     return _get_sub_buffer(buffer_index)->try_get(output_chunk);
 }
 
-bool BalancedChunkBuffer::put(vectorized::ChunkPtr chunk) {
+bool BalancedChunkBuffer::put(int buffer_index, vectorized::ChunkPtr chunk) {
     int target_index = _output_index.fetch_add(1);
     target_index %= _output_runs;
     return _get_sub_buffer(target_index)->put(chunk);

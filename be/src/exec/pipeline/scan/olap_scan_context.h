@@ -24,8 +24,10 @@ using namespace vectorized;
 
 class OlapScanContext final : public ContextWithDependency {
 public:
-    explicit OlapScanContext(vectorized::OlapScanNode* scan_node, int32_t dop)
-            : _scan_node(scan_node), _chunk_buffer(dop), _scan_dop(dop) {}
+    explicit OlapScanContext(vectorized::OlapScanNode* scan_node, int32_t dop, bool shared_scan)
+            : _scan_node(scan_node),
+              _chunk_buffer(shared_scan ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect, dop),
+              _scan_dop(dop) {}
 
     Status prepare(RuntimeState* state);
     void close(RuntimeState* state) override;

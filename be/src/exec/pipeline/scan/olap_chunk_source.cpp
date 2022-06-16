@@ -329,13 +329,13 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, Run
             // end of file is normal case, need process chunk
             if (_status.is_end_of_file()) {
                 _update_avg_row_bytes(chunk.get(), i, batch_size);
-                _chunk_buffer.put(std::move(chunk));
+                _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
             }
             break;
         }
 
         _update_avg_row_bytes(chunk.get(), i, batch_size);
-        _chunk_buffer.put(std::move(chunk));
+        _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
     }
 
     return _status;
@@ -362,14 +362,14 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
                 if (_status.is_end_of_file()) {
                     ++(*num_read_chunks);
                     _update_avg_row_bytes(chunk.get(), i, batch_size);
-                    _chunk_buffer.put(std::move(chunk));
+                    _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
                 }
                 break;
             }
 
             ++(*num_read_chunks);
             _update_avg_row_bytes(chunk.get(), i, batch_size);
-            _chunk_buffer.put(std::move(chunk));
+            _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
         }
 
         if (time_spent >= YIELD_MAX_TIME_SPENT) {
