@@ -229,12 +229,13 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
         _load_channel->remove_tablets_channel(_index_id);
 
         // persist txn.
-        auto tablet_ids = request.tablet_ids();
-        std::vector<TabletSharedPtr> tablets(tablet_ids.size());
+        const auto& tablet_ids = request.tablet_ids();
+        std::vector<TabletSharedPtr> tablets;
+        tablets.reserve(tablet_ids.size());
         for (const auto tablet_id : tablet_ids) {
             TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
             if (tablet != nullptr) {
-                tablets.push_back(tablet);
+                tablets.emplace_back(std::move(tablet));
             }
         }
         auto st = StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
