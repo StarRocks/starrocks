@@ -266,7 +266,7 @@ public class SystemInfoServiceTest {
         new Expectations(starosAgent) {
             {
                 try {
-                    starosAgent.dropWorker("192.168.0.1:1235");
+                    starosAgent.removeWorker("192.168.0.1:1235");
                     minTimes = 0;
                     result = null;
                 } catch (DdlException e) {

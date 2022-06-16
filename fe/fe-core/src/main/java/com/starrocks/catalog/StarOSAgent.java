@@ -112,7 +112,6 @@ public class StarOSAgent {
         LOG.info("get serviceId {} from starMgr", serviceId);
     }
 
-    // for ut only
     public long getWorkerId(String workerIpPort) {
         return workerToId.get(workerIpPort);
     }
@@ -150,7 +149,7 @@ public class StarOSAgent {
         LOG.info("add worker {} success, backendId is {}", workerId, backendId);
     }
 
-    public void dropWorker(String workerIpPort) throws DdlException {
+    public void removeWorker(String workerIpPort) throws DdlException {
         long workerId = -1;
         if (workerToId.containsKey(workerIpPort)) {
             workerId = workerToId.get(workerIpPort);
@@ -182,13 +181,11 @@ public class StarOSAgent {
             }
         }
 
-        workerToBackend.remove(workerId);
-        workerToId.remove(workerIpPort);
+        removeWorkerfromMap(workerId, workerIpPort);
         LOG.info("drop worker {} success from StarMgr", workerIpPort);
     }
 
-    public void removeWorker(String workerIpPort) {
-        long workerId = workerToId.get(workerIpPort);
+    public void removeWorkerfromMap(long workerId, String workerIpPort) {
         workerToBackend.remove(workerId);
         workerToId.remove(workerIpPort);
     }

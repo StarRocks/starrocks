@@ -96,7 +96,7 @@ public class StarOSAgentTest {
     }
 
     @Test
-    public void testAddAndDropWorker() throws Exception {
+    public void testAddAndRemoveWorker() throws Exception {
          new Expectations() {
              {
                  client.addWorker(1, "127.0.0.1:8090");
@@ -114,7 +114,7 @@ public class StarOSAgentTest {
         starosAgent.addWorker(5, workerHost);
         Assert.assertEquals(10, starosAgent.getWorkerId(workerHost));
 
-        starosAgent.dropWorker(workerHost);
+        starosAgent.removeWorker(workerHost);
         Assert.assertEquals(-1, starosAgent.getWorkerIdByBackendId(5));
     }
 
@@ -141,7 +141,7 @@ public class StarOSAgentTest {
     }
 
     @Test
-    public void testDropWorkerException() throws Exception {
+    public void testRemoveWorkerException() throws Exception {
         new Expectations() {
             {
                 client.getWorkerInfo(1, "127.0.0.1:8090").getWorkerId();
@@ -154,7 +154,7 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "serviceId", 1L);
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Failed to get worker id from starMgr.",
-                () -> starosAgent.dropWorker("127.0.0.1:8090"));
+                () -> starosAgent.removeWorker("127.0.0.1:8090"));
 
         new Expectations() {
             {
@@ -170,7 +170,7 @@ public class StarOSAgentTest {
         };
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Failed to drop worker.",
-                () -> starosAgent.dropWorker("127.0.0.1:8090"));
+                () -> starosAgent.removeWorker("127.0.0.1:8090"));
     }
 
     @Test
@@ -181,7 +181,7 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "workerToId", mockWorkerToId);
         Assert.assertEquals(5L, starosAgent.getWorkerId(workerHost));
 
-        starosAgent.removeWorker(workerHost);
+        starosAgent.removeWorkerfromMap(5L, workerHost);
         ExceptionChecker.expectThrows(NullPointerException.class, () -> starosAgent.getWorkerId(workerHost));
     }
 }
