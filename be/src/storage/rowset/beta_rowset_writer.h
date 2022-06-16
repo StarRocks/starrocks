@@ -27,6 +27,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "runtime/global_dict/types.h"
+#include "storage/compaction_utils.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/segment_writer.h"
 
@@ -89,6 +90,8 @@ protected:
     vectorized::DictColumnsValidMap _global_dict_columns_valid_info;
 };
 
+class VerticalBetaRowsetWriter;
+
 // Chunk contains all schema columns data.
 class HorizontalBetaRowsetWriter final : public BetaRowsetWriter {
 public:
@@ -121,6 +124,7 @@ private:
     std::string _dump_mixed_segment_delfile_not_supported();
 
     std::unique_ptr<SegmentWriter> _segment_writer;
+    std::unique_ptr<VerticalBetaRowsetWriter> _vertical_beta_rowset_writer;
 };
 
 // Chunk contains partial columns data corresponding to column_indexes.
