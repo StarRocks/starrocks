@@ -69,6 +69,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -765,6 +766,24 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn begin request: {}", request);
 
         TLoadTxnBeginResult result = new TLoadTxnBeginResult();
+        // if current node is follower, forward it to leader
+        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+            TNetworkAddress addr = masterImpl.masterAddr();
+            try {
+                LOG.info("loadTxnBegin as follower, forward it to master. master: {}", addr.toString());
+                result = FrontendServiceProxy.call(addr,
+                        Config.thrift_rpc_timeout_ms,
+                        Config.thrift_rpc_retry_times,
+                        client -> client.loadTxnBegin(request));
+            } catch (Exception e) {
+                LOG.warn("loadTxnBegin forward to master failed", e);
+                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+                status.setError_msgs(Lists.newArrayList("forward request to fe master failed"));
+                result.setStatus(status);
+            }
+            return result;
+        }
+
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
         try {
@@ -833,6 +852,24 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn commit request: {}", request);
 
         TLoadTxnCommitResult result = new TLoadTxnCommitResult();
+        // if current node is follower, forward it to leader
+        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+            TNetworkAddress addr = masterImpl.masterAddr();
+            try {
+                LOG.info("loadTxnCommit as follower, forward it to master. master: {}", addr.toString());
+                result = FrontendServiceProxy.call(addr,
+                        Config.thrift_rpc_timeout_ms,
+                        Config.thrift_rpc_retry_times,
+                        client -> client.loadTxnCommit(request));
+            } catch (Exception e) {
+                LOG.warn("loadTxnCommit forward to master failed", e);
+                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+                status.setError_msgs(Lists.newArrayList("forward request to fe master failed"));
+                result.setStatus(status);
+            }
+            return result;
+        }
+
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
         try {
@@ -935,6 +972,24 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn rollback request: {}", request);
 
         TLoadTxnRollbackResult result = new TLoadTxnRollbackResult();
+        // if current node is follower, forward it to leader
+        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+            TNetworkAddress addr = masterImpl.masterAddr();
+            try {
+                LOG.info("loadTxnRollback as follower, forward it to master. master: {}", addr.toString());
+                result = FrontendServiceProxy.call(addr,
+                        Config.thrift_rpc_timeout_ms,
+                        Config.thrift_rpc_retry_times,
+                        client -> client.loadTxnRollback(request));
+            } catch (Exception e) {
+                LOG.warn("loadTxnRollback forward to master failed", e);
+                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+                status.setError_msgs(Lists.newArrayList("forward request to fe master failed"));
+                result.setStatus(status);
+            }
+            return result;
+        }
+
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
         try {
