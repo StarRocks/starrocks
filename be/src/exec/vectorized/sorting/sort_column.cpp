@@ -355,7 +355,7 @@ Status sort_and_tie_column(const bool cancel, const ColumnPtr& column, const boo
 
 Status sort_and_tie_column(const bool cancel, ColumnPtr& column, const bool is_asc_order, const bool is_null_first,
                            SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
-    if (column->is_nullable()) {
+    if (column->is_nullable() && !column->is_constant()) {
         ColumnHelper::as_column<NullableColumn>(column)->fill_null_with_default();
     }
     ColumnSorter column_sorter(cancel, is_asc_order, is_null_first, permutation, tie, range, build_tie);
@@ -425,7 +425,7 @@ Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<
     DCHECK_GT(permutation.size(), 0);
 
     for (auto& col : columns) {
-        if (col->is_nullable()) {
+        if (col->is_nullable() && !col->is_constant()) {
             ColumnHelper::as_column<NullableColumn>(col)->fill_null_with_default();
         }
     }
