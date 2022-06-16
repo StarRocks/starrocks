@@ -377,7 +377,7 @@ const constexpr uint32_t CACHE_JULIAN_DAYS = 200 * 366;
 extern JulianToDateEntry g_julian_to_date_cache[];
 
 inline void date::to_date(JulianDate julian, int* year, int* month, int* day) {
-    if (julian == ZERO_EPOCH_JULIAN) {
+    if (UNLIKELY(julian == ZERO_EPOCH_JULIAN)) {
         *year = 0;
         *month = 0;
         *day = 0;
