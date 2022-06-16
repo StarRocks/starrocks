@@ -243,7 +243,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
         _rowset_stats.emplace(rsid, std::move(stats));
     }
     l2.unlock(); // _rowsets_lock
-    _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets);
+    _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
     VLOG(1) << "load tablet " << _debug_string(false, true);
     _try_commit_pendings_unlocked();
     _check_for_apply();
@@ -935,7 +935,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     } else {
         manager->index_cache().release(index_entry);
     }
-    _update_total_stats(version_info.rowsets);
+    _update_total_stats(version_info.rowsets, nullptr, nullptr);
     int64_t t_write = MonotonicMillis();
 
     size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
@@ -1335,7 +1335,9 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
             DCHECK_LE(iter->second->num_dels, iter->second->num_rows);
         }
     }
-    _update_total_stats(version_info.rowsets);
+    size_t row_before = 0;
+    size_t row_after = 0;
+    _update_total_stats(version_info.rowsets, &row_before, &row_after);
     int64_t t_write = MonotonicMillis();
     size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
     LOG(INFO) << "apply_compaction_commit finish tablet:" << tablet_id
@@ -1345,6 +1347,12 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
               << " #delvec:" << delvecs.size() << " duration:" << t_write - t_start << "ms"
               << Substitute("($0/$1/$2)", t_load - t_start, t_index_delvec - t_load, t_write - t_index_delvec);
     VLOG(1) << "update compaction apply " << _debug_string(true, true);
+    if (row_before != row_after) {
+        string msg = Substitute("actual row size changed after compaction $0 -> $1 $2", row_before, row_after,
+                                debug_string());
+        LOG(ERROR) << msg;
+        _set_error(msg);
+    }
 }
 
 void TabletUpdates::to_updates_pb(TabletUpdatesPB* updates_pb) const {
@@ -2627,21 +2635,26 @@ Status TabletUpdates::clear_meta() {
     return Status::OK();
 }
 
-void TabletUpdates::_update_total_stats(const std::vector<uint32_t>& rowsets) {
+void TabletUpdates::_update_total_stats(const std::vector<uint32_t>& rowsets, size_t* row_count_before,
+                                        size_t* row_count_after) {
+    std::lock_guard l(_rowset_stats_lock);
+    if (row_count_before != nullptr) {
+        *row_count_before = _cur_total_rows - _cur_total_dels;
+    }
     size_t nrow = 0;
     size_t ndel = 0;
-    {
-        std::lock_guard l(_rowset_stats_lock);
-        for (auto rid : rowsets) {
-            auto itr = _rowset_stats.find(rid);
-            if (itr != _rowset_stats.end()) {
-                nrow += itr->second->num_rows;
-                ndel += itr->second->num_dels;
-            }
+    for (auto rid : rowsets) {
+        auto itr = _rowset_stats.find(rid);
+        if (itr != _rowset_stats.end()) {
+            nrow += itr->second->num_rows;
+            ndel += itr->second->num_dels;
         }
     }
     _cur_total_rows = nrow;
     _cur_total_dels = ndel;
+    if (row_count_after != nullptr) {
+        *row_count_after = _cur_total_rows - _cur_total_dels;
+    }
 }
 
 Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool with_default,

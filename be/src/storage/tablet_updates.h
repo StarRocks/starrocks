@@ -318,7 +318,7 @@ private:
 
     void _clear_rowset_del_vec_cache(const Rowset& rowset);
 
-    void _update_total_stats(const std::vector<uint32_t>& rowsets);
+    void _update_total_stats(const std::vector<uint32_t>& rowsets, size_t* row_count_before, size_t* row_count_after);
 
     Status _convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet,
                                      const std::vector<vectorized::ChunkIteratorPtr>& seg_iterators,
