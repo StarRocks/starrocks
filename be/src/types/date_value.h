@@ -69,6 +69,8 @@ public:
 
     bool is_valid() const;
 
+    // date_valid function needs this method, for DateValue '0000-00-00', is_valid_non_strict returns true but
+    // is_valid returns false.
     bool is_valid_non_strict() const;
 
     std::string month_name() const;

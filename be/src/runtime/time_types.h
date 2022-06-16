@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <string>
 
+#include "common/compiler_util.h"
+
 #pragma once
 
 namespace starrocks {
