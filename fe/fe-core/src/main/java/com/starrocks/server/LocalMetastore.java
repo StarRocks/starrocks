@@ -821,7 +821,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         if (stmt.isOlapOrLakeEngine()) {
-            createOlapTable(db, stmt);
+            createOlapOrLakeTable(db, stmt);
             return;
         } else if (engineName.equalsIgnoreCase("mysql")) {
             createMysqlTable(db, stmt);
@@ -1685,8 +1685,11 @@ public class LocalMetastore implements ConnectorMetadata {
         this.colocateTableIndex = colocateTableIndex;
     }
 
-    // Create olap table and related base index synchronously.
-    private void createOlapTable(Database db, CreateTableStmt stmt) throws DdlException {
+    // Create olap|lake table and related base index synchronously.
+    // Currently, there are two differences between lake table and olap table
+    // 1. Lake table needs to get storage group from StarMgr.
+    // 2. Tablet is different.
+    private void createOlapOrLakeTable(Database db, CreateTableStmt stmt) throws DdlException {
         String tableName = stmt.getTableName();
         LOG.debug("begin create olap table: {}", tableName);
 
