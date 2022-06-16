@@ -237,6 +237,11 @@ public class RollupJobV2Test {
             }
         }
 
+        // add this call to avoid the follow error:
+        //  Missing 1 invocation to:
+        //  com.starrocks.server.GlobalStateMgr#getCurrentSystemInfo()
+        FakeGlobalStateMgr.getCurrentSystemInfo();
+
         materializedViewHandler.runAfterCatalogReady();
         Assert.assertEquals(JobState.FINISHED, rollupJob.getJobState());
     }
