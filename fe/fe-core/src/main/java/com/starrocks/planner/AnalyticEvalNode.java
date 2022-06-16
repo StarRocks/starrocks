@@ -31,6 +31,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TAnalyticNode;
@@ -296,6 +297,36 @@ public class AnalyticEvalNode extends PlanNode {
 
     public void setSubstitutedPartitionExprs(List<Expr> substitutedPartitionExprs) {
         this.substitutedPartitionExprs = substitutedPartitionExprs;
+    }
+
+    @Override
+    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
+        if (!canPushDownRuntimeFilter()) {
+            return false;
+        }
+
+        if (probeExpr.isBoundByTupleIds(getTupleIds())) {
+            if (probeExpr instanceof SlotRef) {
+                for (Expr pExpr : partitionExprs) {
+                    // push down only when both of them are slot ref and slot id match.
+                    if ((pExpr instanceof SlotRef) &&
+                            (((SlotRef) pExpr).getSlotId().asInt() == ((SlotRef) probeExpr).getSlotId().asInt())) {
+                        if (children.get(0).pushDownRuntimeFilters(description, pExpr)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            if (description.canProbeUse(this)) {
+                // can not push down to children.
+                // use runtime filter at this level.
+                description.addProbeExpr(id.asInt(), probeExpr);
+                probeRuntimeFilters.add(description);
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
