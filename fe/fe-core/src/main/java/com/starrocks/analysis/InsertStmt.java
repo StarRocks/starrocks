@@ -136,6 +136,11 @@ public class InsertStmt extends DmlStmt {
      */
     private boolean isTransactionBegin = false;
 
+    // The default value of this variable is false, which means that the insert operation created by the user
+    // it is not allowed to write data to the materialized view.
+    // If this is set to true it means a system refresh operation, which is allowed to write to materialized view.
+    private boolean isSystem = false;
+
     public InsertStmt(InsertTarget target, String label, List<String> cols, InsertSource source, List<String> hints) {
         this.tblName = target.getTblName();
         this.targetPartitionNames = target.getPartitionNames();
@@ -297,6 +302,14 @@ public class InsertStmt extends DmlStmt {
 
     public boolean isTransactionBegin() {
         return isTransactionBegin;
+    }
+
+    public boolean isSystem() {
+        return isSystem;
+    }
+
+    public void setSystem(boolean system) {
+        isSystem = system;
     }
 
     @Override

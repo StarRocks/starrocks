@@ -10,6 +10,7 @@ import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -39,13 +40,21 @@ public class InsertAnalyzer {
         Database database = MetaUtils.getDatabase(session, insertStmt.getTableName());
         Table table = MetaUtils.getTable(session, insertStmt.getTableName());
 
+        if (table instanceof MaterializedView && !insertStmt.isSystem()) {
+            throw new SemanticException(
+                    "The data of '%s' cannot be inserted because '%s' is a materialized view," +
+                            "and the data of materialized view must be consistent with the base table.",
+                    insertStmt.getTableName().getTbl(), insertStmt.getTableName().getTbl());
+        }
+
         if (insertStmt.isOverwrite()) {
             if (!(table instanceof OlapTable)) {
                 throw unsupportedException("Only support insert overwrite olap table");
             }
             if (((OlapTable) table).getState() != NORMAL) {
-                String msg = String.format("table state is %s, please wait to insert overwrite util table state is normal",
-                        ((OlapTable) table).getState());
+                String msg =
+                        String.format("table state is %s, please wait to insert overwrite util table state is normal",
+                                ((OlapTable) table).getState());
                 throw unsupportedException(msg);
             }
         } else if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
