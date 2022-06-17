@@ -38,6 +38,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 
@@ -109,7 +110,7 @@ public class TabletsProcDir implements ProcDirInterface {
                     tabletInfo.add(-1); // lst failed version
                     tabletInfo.add(0); // lst failed version hash
                     tabletInfo.add(-1); // lst failed time
-                    tabletInfo.add(lakeTablet.getDataSize(true));
+                    tabletInfo.add(new ByteSizeValue(lakeTablet.getDataSize(true)));
                     tabletInfo.add(lakeTablet.getRowCount(0L));
                     tabletInfo.add(FeConstants.null_string); // state
                     tabletInfo.add(-1); // lst consistency check time
@@ -178,7 +179,7 @@ public class TabletsProcDir implements ProcDirInterface {
                             tabletInfo.add(replica.getLastFailedVersion());
                             tabletInfo.add(0);
                             tabletInfo.add(TimeUtils.longToTimeString(replica.getLastFailedTimestamp()));
-                            tabletInfo.add(replica.getDataSize());
+                            tabletInfo.add(new ByteSizeValue(replica.getDataSize()));
                             tabletInfo.add(replica.getRowCount());
                             tabletInfo.add(replica.getState());
 
