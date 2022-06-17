@@ -140,6 +140,7 @@ void NodeChannel::open() {
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(_index_id);
     request.set_txn_id(_parent->_txn_id);
+    request.set_txn_trace_parent(_parent->_txn_trace_parent);
     request.set_allocated_schema(_parent->_schema->to_protobuf());
     request.set_is_lake_tablet(_parent->_is_lake_table);
     for (auto& tablet : _all_tablets) {
@@ -564,6 +565,8 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     _load_id.set_hi(table_sink.load_id.hi);
     _load_id.set_lo(table_sink.load_id.lo);
     _txn_id = table_sink.txn_id;
+    _txn_trace_parent = table_sink.txn_trace_parent;
+    _span = Tracer::Instance().start_trace_or_add_span("olap_table_sink", _txn_trace_parent);
     _num_repicas = table_sink.num_replicas;
     _need_gen_rollup = table_sink.need_gen_rollup;
     _tuple_desc_id = table_sink.tuple_id;
@@ -585,6 +588,7 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
 }
 
 Status OlapTableSink::prepare(RuntimeState* state) {
+    _span->AddEvent("prepare");
     RETURN_IF_ERROR(DataSink::prepare(state));
 
     _sender_id = state->per_fragment_instance_idx();
@@ -693,6 +697,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
 }
 
 Status OlapTableSink::open(RuntimeState* state) {
+    auto open_span = Tracer::Instance().add_span("open", _span);
     SCOPED_TIMER(_profile->total_time_counter());
     SCOPED_TIMER(_open_timer);
     // Prepare the exprs to run.
@@ -873,6 +878,10 @@ Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel
 }
 
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
+    DeferOp end_span([&] { _span->End(); });
+    _span->AddEvent("close");
+    _span->SetAttribute("input_rows", _number_input_rows);
+    _span->SetAttribute("output_rows", _number_output_rows);
     Status status = close_status;
     if (status.ok()) {
         // only if status is ok can we call this _profile->total_time_counter().

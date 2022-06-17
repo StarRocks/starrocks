@@ -241,6 +241,7 @@ struct TPublishVersionRequest {
     // strict mode means BE will check tablet missing version
     3: optional bool strict_mode = false // Deprecated
     4: optional i64 commit_timestamp
+    5: optional string txn_trace_parent
 }
 
 struct TClearAlterTaskRequest {
