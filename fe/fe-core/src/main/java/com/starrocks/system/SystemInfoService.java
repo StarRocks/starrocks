@@ -804,6 +804,12 @@ public class SystemInfoService {
             if (null != cluster) {
                 // replay log
                 cluster.addBackend(newBackend.getId());
+                // get serviceId from starMgr
+                if (Config.integrate_starmgr) {
+                    int clusterId = GlobalStateMgr.getCurrentState().getClusterId();
+                    GlobalStateMgr.getCurrentState().getStarOSAgent().getServiceId(Integer.toString(clusterId));
+                }
+
             } else {
                 // This happens in loading image when fe is restarted, because loadCluster is after loadBackend,
                 // cluster is not created. Be in cluster will be updated in loadCluster.

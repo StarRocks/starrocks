@@ -963,6 +963,15 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startMasterOnlyDaemonThreads() {
+        if (Config.integrate_starmgr) {
+            // start starMgr background threads
+            getStarMgr().start();
+            // register service to starMgr
+            int clusterId = getCurrentState().getClusterId();
+            getStarOSAgent().registerAndBootstrapService(Integer.toString(clusterId));
+
+        }
+
         // start checkpoint thread
         checkpointer = new Checkpoint(editLog);
         checkpointer.setMetaContext(metaContext);
@@ -1016,15 +1025,6 @@ public class GlobalStateMgr {
         statisticsMetaManager.start();
         statisticAutoCollector.start();
         taskManager.start();
-
-        if (Config.integrate_starmgr) {
-            // register service to starMgr
-            int clusterId = getCurrentState().getClusterId();
-            getStarOSAgent().registerAndBootstrapService(Integer.toString(clusterId));
-
-            // start starMgr background threads
-            getStarMgr().start();
-        }
     }
 
     // start threads that should running on all FE
@@ -1055,12 +1055,6 @@ public class GlobalStateMgr {
             // if meta out of date, canRead will be set to false in replayer thread.
             metaReplayState.setTransferToUnknown();
             return;
-        }
-
-        // get serviceId from starMgr
-        if (Config.integrate_starmgr) {
-            int clusterId = getCurrentState().getClusterId();
-            getStarOSAgent().getServiceId(Integer.toString(clusterId));
         }
 
         // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER
