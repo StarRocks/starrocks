@@ -1487,6 +1487,7 @@ StatusOr<ChunkPtr> OrcChunkReader::get_active_chunk(ChunkPtr* chunk) {
 void OrcChunkReader::lazy_filter_on_cvb(Filter* filter) {
     size_t true_size = SIMD::count_nonzero(*filter);
     if (filter->size() != true_size) {
+        std::cout<< "XXXXXXXXXXX: " << true_size << "       " << __LINE__ <<std::endl;
         _batch->filterOnFields(filter->data(), filter->size(), true_size, _lazy_load_ctx->lazy_load_orc_positions,
                                true);
     }
