@@ -2310,7 +2310,7 @@ public class Coordinator {
                     if (isEnablePipelineEngine) {
                         params.setIs_pipeline(true);
                         params.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
-                        params.setEnable_shared_scan(fragment.isEnableSharedScan());
+                        params.setEnable_shared_scan(sessionVariable.isEnableSharedScan() && fragment.isEnableSharedScan());
 
                         params.setPipeline_dop(fragment.getPipelineDop());
 
