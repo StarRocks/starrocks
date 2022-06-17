@@ -188,6 +188,14 @@ protected:
     void TearDown() override {
         _tablets_channel.reset();
         _load_channel.reset();
+        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(10086));
+        tablet.delete_txn_log(kTxnId);
+        ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10087));
+        tablet.delete_txn_log(kTxnId);
+        ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10088));
+        tablet.delete_txn_log(kTxnId);
+        ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10089));
+        tablet.delete_txn_log(kTxnId);
         (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_group_assigner(_backup_group_assigner);
         (void)fs::remove_all(kTestGroupPath);
     }
