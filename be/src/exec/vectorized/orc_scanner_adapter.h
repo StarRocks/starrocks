@@ -94,6 +94,18 @@ public:
     void report_error_message(const std::string& error_msg);
     int get_column_id_by_name(const std::string& name) const;
 
+<<<<<<< HEAD:be/src/exec/vectorized/orc_scanner_adapter.h
+=======
+    void set_lazy_load_context(LazyLoadContext* ctx) { _lazy_load_ctx = ctx; }
+    bool has_lazy_load_context() { return _lazy_load_ctx != nullptr; }
+    StatusOr<ChunkPtr> get_chunk(ChunkPtr* chunk);
+    StatusOr<ChunkPtr> get_active_chunk(ChunkPtr* chunk);
+    void lazy_read_next(size_t numValues);
+    void lazy_seek_to(uint64_t rowInStripe);
+    void lazy_filter_on_cvb(Filter* filter);
+    StatusOr<ChunkPtr> get_lazy_chunk(ChunkPtr* chunk);
+
+>>>>>>> 8738ccc8e ([BugFix]Fix wrong column order (#7413)):be/src/formats/orc/orc_chunk_reader.h
 private:
     bool _ok_to_add_conjunct(const Expr* conjunct);
     void _add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder);

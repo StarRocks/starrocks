@@ -395,6 +395,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     if (_should_skip_file) {
         return Status::EndOfFile("");
     }
+<<<<<<< HEAD
     {
         SCOPED_RAW_TIMER(&_stats.column_read_ns);
         RETURN_IF_ERROR(_orc_adapter->read_next());
@@ -429,6 +430,88 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         ExecNode::eval_conjuncts(it.second, ck.get());
         if (ck->num_rows() == 0) {
             return Status::OK();
+=======
+
+    ChunkPtr& ck = *chunk;
+    // this infinite for loop is for retry.
+    for (;;) {
+        orc::RowReader::ReadPosition position;
+        size_t read_num_values = 0;
+        bool has_used_dict_filter = false;
+        {
+            SCOPED_RAW_TIMER(&_stats.column_read_ns);
+            RETURN_IF_ERROR(_orc_reader->read_next(&position));
+            // read num values is how many rows actually read before doing dict filtering.
+            read_num_values = position.num_values;
+            RETURN_IF_ERROR(_orc_reader->apply_dict_filter_eval_cache(_orc_row_reader_filter->_dict_filter_eval_cache,
+                                                                      &_dict_filter));
+            if (_orc_reader->get_cvb_size() != read_num_values) {
+                has_used_dict_filter = true;
+            }
+        }
+
+        size_t chunk_size = 0;
+        if (_orc_reader->get_cvb_size() != 0) {
+            {
+                StatusOr<ChunkPtr> ret;
+                SCOPED_RAW_TIMER(&_stats.column_convert_ns);
+                if (!_orc_reader->has_lazy_load_context()) {
+                    ret = _orc_reader->get_chunk(chunk);
+                } else {
+                    ret = _orc_reader->get_active_chunk(chunk);
+                }
+                RETURN_IF_ERROR(ret);
+            }
+
+            // important to add columns before evaluation
+            // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
+            _scanner_ctx.update_not_existed_columns_to_chunk(chunk, ck->num_rows());
+            _scanner_ctx.update_partition_column_to_chunk(chunk, ck->num_rows());
+            chunk_size = ck->num_rows();
+            // do stats before we filter rows which does not match.
+            _stats.raw_rows_read += chunk_size;
+            _chunk_filter.assign(chunk_size, 1);
+            {
+                SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
+                for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
+                    // do evaluation.
+                    if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
+                        continue;
+                    }
+                    ASSIGN_OR_RETURN(chunk_size,
+                                     ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &_chunk_filter));
+                    if (chunk_size == 0) {
+                        break;
+                    }
+                }
+            }
+            if (chunk_size != 0 && chunk_size != ck->num_rows()) {
+                ck->filter(_chunk_filter);
+            }
+        }
+
+        if (!_orc_reader->has_lazy_load_context()) {
+            return Status::OK();
+        }
+
+        // if has lazy load fields, skip it if chunk_size == 0
+        if (chunk_size == 0) {
+            continue;
+        }
+        {
+            SCOPED_RAW_TIMER(&_stats.column_read_ns);
+            _orc_reader->lazy_seek_to(position.row_in_stripe);
+            _orc_reader->lazy_read_next(read_num_values);
+        }
+        {
+            SCOPED_RAW_TIMER(&_stats.column_convert_ns);
+            if (has_used_dict_filter) {
+                _orc_reader->lazy_filter_on_cvb(&_dict_filter);
+            }
+            _orc_reader->lazy_filter_on_cvb(&_chunk_filter);
+            StatusOr<ChunkPtr> ret = _orc_reader->get_lazy_chunk(chunk);
+            RETURN_IF_ERROR(ret);
+>>>>>>> 8738ccc8e ([BugFix]Fix wrong column order (#7413))
         }
     }
     return Status::OK();
