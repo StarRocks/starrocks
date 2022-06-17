@@ -23,6 +23,7 @@
 
 #include "common/closure_guard.h"
 #include "common/config.h"
+#include "common/tracer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
 #include "gutil/strings/substitute.h"
@@ -45,6 +46,10 @@ void BackendInternalServiceImpl<T>::tablet_writer_open(google::protobuf::RpcCont
                                                        google::protobuf::Closure* done) {
     VLOG_RPC << "tablet writer open, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
              << ", txn_id: " << request->txn_id();
+    // WARNING: this trace span may get lost in bthread env
+    auto span = Tracer::Instance().start_trace_txn("load_channel_open", request->txn_id());
+    span->SetAttribute("index_id", request->index_id());
+    auto scoped = trace::Scope(span);
     PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->open(static_cast<brpc::Controller*>(cntl_base),
                                                                      *request, response, done);
 }
@@ -76,6 +81,10 @@ void BackendInternalServiceImpl<T>::tablet_writer_cancel(google::protobuf::RpcCo
                                                          google::protobuf::Closure* done) {
     VLOG_RPC << "tablet writer cancel, id=" << print_id(request->id()) << ", index_id=" << request->index_id()
              << ", sender_id=" << request->sender_id();
+    // WARNING: this trace span may get lost in bthread env
+    auto span = Tracer::Instance().start_trace_txn("load_channel_cancel", request->txn_id());
+    span->SetAttribute("index_id", request->index_id());
+    auto scoped = trace::Scope(span);
     PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->cancel(static_cast<brpc::Controller*>(cntl_base),
                                                                        *request, response, done);
 }
