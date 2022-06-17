@@ -823,15 +823,14 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         // parse the define stmt to schema
         SqlParser parser = new SqlParser(new SqlScanner(new StringReader(origStmt.originStmt),
                 SqlModeHelper.MODE_DEFAULT));
-        CreateMaterializedViewStmt stmt = null;
+        CreateMaterializedViewStmt stmt;
         try {
             stmt = (CreateMaterializedViewStmt) SqlParserUtils.getStmt(parser, origStmt.idx);
             stmt.setIsReplay(true);
             Map<String, Expr> columnNameToDefineExpr = stmt.parseDefineExprWithoutAnalyze();
             setColumnsDefineExpr(columnNameToDefineExpr);
         } catch (Exception e) {
-            // Under normal circumstances, the stmt will not fail to analyze.
-            throw new IOException("error happens when parsing create materialized view stmt: " + stmt, e);
+            throw new IOException("error happens when parsing create materialized view stmt: " + origStmt.originStmt, e);
         }
 
     }
