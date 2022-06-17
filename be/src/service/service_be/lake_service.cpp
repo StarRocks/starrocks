@@ -4,9 +4,36 @@
 
 #include <brpc/controller.h>
 
+#include "common/status.h"
 #include "runtime/exec_env.h"
+#include "storage/lake/tablet.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_metadata.h"
+#include "storage/lake/txn_log.h"
 
 namespace starrocks {
+
+Status apply_txn_log(const lake::TxnLog& log, lake::TabletMetadata* metadata) {
+    // apply txn log
+    if (log.has_op_write()) {
+        if (log.op_write().has_rowset() && log.op_write().rowset().segments_size() > 0) {
+            auto rowset = metadata->add_rowsets();
+            rowset->CopyFrom(log.op_write().rowset());
+            rowset->set_id(metadata->next_rowset_id());
+            metadata->set_next_rowset_id(metadata->next_rowset_id() + std::max<int>(1, rowset->segments_size()));
+        }
+    }
+
+    if (log.has_op_compaction()) {
+        return Status::NotSupported("does not support apply compaction log yet");
+    }
+
+    if (log.has_op_schema_change()) {
+        return Status::NotSupported("does not support apply schema change log yet");
+    }
+
+    return Status::OK();
+}
 
 void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
                                       const ::starrocks::lake::PublishVersionRequest* request,
@@ -14,8 +41,82 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                       ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     (void)controller;
-    (void)request;
-    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+    if (!request->has_version()) {
+        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
+        response->mutable_status()->add_error_msgs("missing version");
+        return;
+    }
+    if (request->txn_ids_size() == 0) {
+        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
+        response->mutable_status()->add_error_msgs("missing txn_ids");
+        return;
+    }
+    if (request->tablet_ids_size() == 0) {
+        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
+        response->mutable_status()->add_error_msgs("missing tablet_ids");
+        return;
+    }
+    int64_t base_version = request->version() - request->txn_ids_size();
+    if (base_version < 1) {
+        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
+        response->mutable_status()->add_error_msgs("invalid version");
+        return;
+    }
+    // Will not update status code since here, only failed_tablets will be updated.
+    response->mutable_status()->set_status_code(TStatusCode::OK);
+
+    // TODO move the execution to TaskWorkerPool
+    for (const auto& tablet_id : request->tablet_ids()) {
+        auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
+        if (!tablet.ok()) {
+            LOG(WARNING) << "Fail to get tablet " << tablet_id << ": " << tablet.status();
+            response->add_failed_tablets(tablet_id);
+            continue;
+        }
+        auto base_metadata = tablet->get_metadata(base_version);
+        if (base_metadata.status().is_not_found() && tablet->get_metadata(request->version()).ok()) {
+            // the current tablet has been successfully published before, skip to the next tablet
+            continue;
+        } else if (!base_metadata.ok()) {
+            LOG(WARNING) << "Fail to get " << tablet->metadata_path(base_version) << ": " << base_metadata.status();
+            response->add_failed_tablets(tablet_id);
+            continue;
+        }
+
+        // make a copy of metadata
+        auto new_metadata = std::make_shared<lake::TabletMetadata>(**base_metadata);
+        new_metadata->set_version(request->version());
+
+        bool save_meta = false;
+        for (auto txn_id : request->txn_ids()) {
+            auto txnlog = tablet->get_txn_log(txn_id);
+            if (txnlog.status().is_not_found() && tablet->get_metadata(request->version()).ok()) {
+                // the current tablet has been successfully published before, skip to the next tablet
+                break;
+            } else if (!txnlog.ok()) {
+                LOG(WARNING) << "Fail to get " << tablet->txn_log_path(txn_id) << ": " << txnlog.status();
+                response->add_failed_tablets(tablet_id);
+                break;
+            }
+            // else
+            auto st = apply_txn_log(**txnlog, new_metadata.get());
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to apply " << tablet->txn_log_path(txn_id) << ": " << st;
+                response->add_failed_tablets(tablet_id);
+                break;
+            }
+            // TODO: batch deletion
+            (void)tablet->delete_txn_log(txn_id);
+            save_meta = true;
+        }
+        if (!save_meta) {
+            continue;
+        }
+        if (auto st = tablet->put_metadata(new_metadata); !st.ok()) {
+            LOG(WARNING) << "Fail to put " << tablet->metadata_path(request->version()) << ": " << st;
+            response->add_failed_tablets(tablet_id);
+        }
+    }
 }
 
 void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
@@ -23,8 +124,22 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
                                 ::starrocks::lake::AbortTxnResponse* response, ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     (void)controller;
-    (void)request;
-    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+
+    // TODO: move the execution to TaskWorkerPool
+    // This rpc never fail.
+    response->mutable_status()->set_status_code(TStatusCode::OK);
+    for (const auto& tablet_id : request->tablet_ids()) {
+        auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
+        if (!tablet.ok()) {
+            LOG(WARNING) << tablet.status();
+            continue;
+        }
+        // TODO: batch deletion
+        for (const auto& txn_id : request->txn_ids()) {
+            auto st = tablet->delete_txn_log(txn_id);
+            LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_log_path(txn_id) << ": " << st;
+        }
+    }
 }
 
 } // namespace starrocks

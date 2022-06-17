@@ -66,6 +66,10 @@ public:
 
     StatusOr<std::shared_ptr<const TabletSchema>> get_schema();
 
+    std::string metadata_path(int64_t version) const;
+
+    std::string txn_log_path(int64_t txn_id) const;
+
 private:
     TabletManager* _mgr;
     std::string _group;
