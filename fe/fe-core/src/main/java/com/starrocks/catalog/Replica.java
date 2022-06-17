@@ -103,16 +103,16 @@ public class Replica implements Writable {
     private boolean setBadForce = false;
 
     /*
-     * If set to true, with means this replica need to be repaired. explicitly.
+     * If set to true, which means that this replica needs to be repaired explicitly.
      * This can happen when this replica is created by a balance clone task, and
-     * when task finished, the version of this replica is behind the partition's visible version.
-     * So this replica need a further repair.
+     * when task is finished, the version of this replica is behind the partition's visible version.
+     * So this replica needs a further repair.
      * If we do not do this, this replica will be treated as version stale, and will be removed,
      * so that the balance task is failed, which is unexpected.
      *
-     * furtherRepairSetTime set alone with needFurtherRepair.
+     * furtherRepairSetTime is set along with needFurtherRepair.
      * This is an insurance, in case that further repair task always fail. If 20 min passed
-     * since we set needFurtherRepair to true, the 'needFurtherRepair' will be set to false.
+     * since we set needFurtherRepair to true, `needFurtherRepair` will be set to false.
      */
     private boolean needFurtherRepair = false;
     private long furtherRepairSetTime = -1;

@@ -499,15 +499,21 @@ public class LocalTablet extends Tablet {
             return Pair.create(TabletStatus.VERSION_INCOMPLETE, TabletSchedCtx.Priority.HIGH);
         } else if (aliveAndVersionComplete < replicationNum) {
             return Pair.create(TabletStatus.VERSION_INCOMPLETE, TabletSchedCtx.Priority.NORMAL);
-        } else if (aliveAndVersionComplete > replicationNum) {
-            if (needFurtherRepairReplica != null) {
-                return Pair.create(TabletStatus.NEED_FURTHER_REPAIR, TabletSchedCtx.Priority.HIGH);
-            }
+        }
+
+        // 3. there is a replica definitely need version repair,
+        // see `Replica.needFurtherRepair` for more details
+        if (needFurtherRepairReplica != null) {
+            return Pair.create(TabletStatus.NEED_FURTHER_REPAIR, TabletSchedCtx.Priority.HIGH);
+        }
+
+        // 4. redundant replica exist, we need to delete it asap to spare some disk space
+        if (aliveAndVersionComplete > replicationNum || replicas.size() > replicationNum) {
             // we set REDUNDANT as VERY_HIGH, because delete redundant replicas can free the space quickly.
             return Pair.create(TabletStatus.REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH);
         }
 
-        // 3. replica is under relocating
+        // 5. replica is under relocating
         if (stable < replicationNum) {
             List<Long> replicaBeIds = replicas.stream()
                     .map(Replica::getBackendId).collect(Collectors.toList());
@@ -524,22 +530,18 @@ public class LocalTablet extends Tablet {
             if (stable < (replicationNum / 2) + 1) {
                 return Pair.create(TabletStatus.REPLICA_RELOCATING, TabletSchedCtx.Priority.NORMAL);
             } else {
-                return Pair.create(TabletStatus.REPLICA_RELOCATING, Priority.LOW);
+                return Pair.create(TabletStatus.REPLICA_RELOCATING, Priority.LOW); // priority too low?
             }
         }
 
-        // 4. healthy replicas in cluster are not enough
+        // 6. healthy replicas in cluster are not enough
+        // (deprecated, e.g. the value of `availableInCluster` is always equal to `stable`,
+        // currently we only use a single cluster in StarRocks)
         if (availableInCluster < replicationNum) {
             return Pair.create(TabletStatus.REPLICA_MISSING_IN_CLUSTER, TabletSchedCtx.Priority.LOW);
-        } else if (replicas.size() > replicationNum) {
-            if (needFurtherRepairReplica != null) {
-                return Pair.create(TabletStatus.NEED_FURTHER_REPAIR, TabletSchedCtx.Priority.HIGH);
-            }
-            // we set REDUNDANT as VERY_HIGH, because delete redundant replicas can free the space quickly.
-            return Pair.create(TabletStatus.REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH);
         }
 
-        // 5. healthy
+        // 7. healthy
         return Pair.create(TabletStatus.HEALTHY, TabletSchedCtx.Priority.NORMAL);
     }
 
