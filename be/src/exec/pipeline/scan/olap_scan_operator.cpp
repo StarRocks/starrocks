@@ -76,6 +76,8 @@ bool OlapScanOperator::is_finished() const {
 Status OlapScanOperator::do_prepare(RuntimeState*) {
     auto* max_scan_concurrency_counter = ADD_COUNTER(_unique_metrics, "DefaultMaxScanConcurrency", TUnit::UNIT);
     COUNTER_SET(max_scan_concurrency_counter, static_cast<int64_t>(_default_max_scan_concurrency));
+    bool shared_scan = _ctx->is_shared_scan();
+    _unique_metrics->add_info_string("SharedScan", shared_scan ? "True" : "False");
 
     return Status::OK();
 }
