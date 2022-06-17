@@ -512,7 +512,6 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                 ck->filter(_chunk_filter);
             }
         }
-        ck->set_num_rows(chunk_size);
 
         if (!_orc_reader->has_lazy_load_context()) {
             return Status::OK();
