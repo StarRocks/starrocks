@@ -105,16 +105,20 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 response->add_failed_tablets(tablet_id);
                 break;
             }
-            // TODO: batch deletion
-            (void)tablet->delete_txn_log(txn_id);
             save_meta = true;
         }
         if (!save_meta) {
             continue;
         }
-        if (auto st = tablet->put_metadata(new_metadata); !st.ok()) {
+        auto st = tablet->put_metadata(new_metadata);
+        if (!st.ok()) {
             LOG(WARNING) << "Fail to put " << tablet->metadata_path(request->version()) << ": " << st;
             response->add_failed_tablets(tablet_id);
+        } else {
+            for (auto txn_id : request->txn_ids()) {
+                st = tablet->delete_txn_log(txn_id);
+                LOG(WARNING) << "Fail to delete " << tablet->txn_log_path(txn_id) << ": " << st;
+            }
         }
     }
 }
