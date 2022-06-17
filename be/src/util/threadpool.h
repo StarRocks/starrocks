@@ -158,7 +158,7 @@ private:
 class ThreadPool {
 public:
     enum Priority {
-        LOW_PRIORITY,
+        LOW_PRIORITY = 0,
         HIGH_PRIORITY,
         NUM_PRIORITY,
     };
