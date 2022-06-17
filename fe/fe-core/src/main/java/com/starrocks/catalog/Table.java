@@ -341,6 +341,9 @@ public class Table extends MetaObject implements Writable {
         if (this instanceof View) {
             return "VIEW";
         }
+        if (this instanceof MaterializedView) {
+            return "MATERIALIZED VIEW";
+        }
         return "BASE TABLE";
     }
 

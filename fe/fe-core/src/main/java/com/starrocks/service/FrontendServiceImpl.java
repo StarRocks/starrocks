@@ -362,6 +362,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 status.setDatabase_name(dbName);
                 status.setText(mvTable.getViewDefineSql());
                 status.setRows(String.valueOf(mvTable.getRowCount()));
+                status.setType(mvTable.getMysqlType());
+                status.setComment(mvTable.getComment());
                 tablesResult.add(status);
                 if (limit > 0 && tablesResult.size() >= limit) {
                     return;
@@ -412,6 +414,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                     .replaceAll("[ ]+", " "));
                         }
                         status.setRows(String.valueOf(mvIdx.getRowCount()));
+                        // for materialized view used old logic
+                        status.setType("");
+                        status.setComment("");
                         tablesResult.add(status);
                         if (limit > 0 && tablesResult.size() >= limit) {
                             return;
