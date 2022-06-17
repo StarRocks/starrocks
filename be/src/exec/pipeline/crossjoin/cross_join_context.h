@@ -18,10 +18,7 @@ public:
 
     void close(RuntimeState* state) override { _build_chunks.clear(); }
 
-    bool is_build_chunk_empty() const {
-        return std::all_of(_build_chunks.begin(), _build_chunks.end(),
-                           [](const vectorized::ChunkPtr& chunk) { return chunk == nullptr || chunk->is_empty(); });
-    }
+    bool is_build_chunk_empty() const { return _is_build_chunk_empty; }
 
     int32_t num_build_chunks() const { return _num_right_sinkers; }
 
@@ -31,7 +28,20 @@ public:
         _build_chunks[sinker_id] = build_chunk;
     }
 
+<<<<<<< HEAD
     void finish_one_right_sinker() { _num_finished_right_sinkers.fetch_add(1, std::memory_order_release); }
+=======
+    Status finish_one_right_sinker(RuntimeState* state) {
+        if (_num_right_sinkers - 1 == _num_finished_right_sinkers.fetch_add(1)) {
+            RETURN_IF_ERROR(_init_runtime_filter(state));
+            _is_build_chunk_empty = std::all_of(
+                    _build_chunks.begin(), _build_chunks.end(),
+                    [](const vectorized::ChunkPtr& chunk) { return chunk == nullptr || chunk->is_empty(); });
+            _all_right_finished.store(true, std::memory_order_release);
+        }
+        return Status::OK();
+    }
+>>>>>>> 24c6e5883 ([Bugfix] Avoid using released resources for ContextWithDependency after closing (backport #7363))
 
     bool is_right_finished() const {
         return _num_finished_right_sinkers.load(std::memory_order_acquire) == _num_right_sinkers;
@@ -47,6 +57,20 @@ private:
 
     // _build_chunks[i] contains all the rows from i-th CrossJoinRightSinkOperator.
     std::vector<vectorized::ChunkPtr> _build_chunks;
+<<<<<<< HEAD
+=======
+
+    bool _is_build_chunk_empty = false;
+    // finished flags
+    std::atomic_bool _all_right_finished = false;
+
+    // conjuncts in cross join, used for generate runtime_filter
+    std::vector<ExprContext*> _conjuncts_ctx;
+
+    RuntimeFilterHub* _rf_hub;
+
+    std::vector<vectorized::RuntimeFilterBuildDescriptor*> _rf_descs;
+>>>>>>> 24c6e5883 ([Bugfix] Avoid using released resources for ContextWithDependency after closing (backport #7363))
 };
 
 } // namespace starrocks::pipeline
