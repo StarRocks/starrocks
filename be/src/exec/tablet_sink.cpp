@@ -99,6 +99,7 @@ Status NodeChannel::init(RuntimeState* state) {
     // Initialize _cur_request
     _cur_request.set_allocated_id(&_parent->_load_id);
     _cur_request.set_index_id(_index_id);
+    _cur_request.set_txn_id(_parent->_txn_id);
     _cur_request.set_sender_id(_parent->_sender_id);
     _cur_request.set_eos(false);
 
@@ -140,6 +141,7 @@ void NodeChannel::open() {
     request.set_index_id(_index_id);
     request.set_txn_id(_parent->_txn_id);
     request.set_allocated_schema(_parent->_schema->to_protobuf());
+    request.set_is_lake_tablet(_parent->_is_lake_table);
     for (auto& tablet : _all_tablets) {
         auto ptablet = request.add_tablets();
         ptablet->set_partition_id(tablet.partition_id);
@@ -483,6 +485,7 @@ void NodeChannel::cancel(const Status& err_st) {
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(_index_id);
     request.set_sender_id(_parent->_sender_id);
+    request.set_txn_id(_parent->_txn_id);
 
     auto closure = new RefCountClosure<PTabletWriterCancelResult>();
 
@@ -564,6 +567,7 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     _num_repicas = table_sink.num_replicas;
     _need_gen_rollup = table_sink.need_gen_rollup;
     _tuple_desc_id = table_sink.tuple_id;
+    _is_lake_table = table_sink.is_lake_table;
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema));
     _vectorized_partition = _pool->add(new vectorized::OlapTablePartitionParam(_schema, table_sink.partition));

@@ -2,21 +2,29 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
+import com.staros.proto.ReplicaInfo;
+import com.staros.proto.ReplicaRole;
 import com.staros.proto.ServiceInfo;
+import com.staros.proto.ShardInfo;
 import com.staros.proto.WorkerInfo;
+import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.UserException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 /**
  * StarOSAgent is responsible for
@@ -30,6 +38,7 @@ public class StarOSAgent {
     private long serviceId;
     private Map<String, Long> workerToId;
     private Map<Long, Long> workerToBackend;
+    private ReentrantReadWriteLock rwLock;
 
     public StarOSAgent() {
         serviceId = -1;
@@ -46,6 +55,7 @@ public class StarOSAgent {
 
         workerToId = Maps.newHashMap();
         workerToBackend = Maps.newHashMap();
+        rwLock = new ReentrantReadWriteLock();
     }
 
     // for ut only
@@ -56,18 +66,6 @@ public class StarOSAgent {
     // for ut only
     public void setServiceId(long id) {
         this.serviceId = id;
-    }
-
-    public List<Long> createShards(int numShards) {
-        return Lists.newArrayList();
-    }
-
-    public long getPrimaryBackendIdByShard(long shardId) {
-        return 0;
-    }
-
-    public Set<Long> getBackendIdsByShard(long shardId) {
-        return Sets.newHashSet();
     }
 
     public void registerAndBootstrapService(String serviceName) {
@@ -109,6 +107,11 @@ public class StarOSAgent {
             System.exit(-1);
         }
         LOG.info("get serviceId {} from starMgr", serviceId);
+    }
+
+    public String getServiceStorageUri() {
+        // TODO: get from StarMgr
+        return String.format("s3://bucket/%d/", serviceId);
     }
 
     // for ut only
@@ -195,5 +198,66 @@ public class StarOSAgent {
             }
         }
         return workerId;
+    }
+
+    public List<Long> createShards(int numShards, Map<String, String> properties) throws DdlException {
+        List<ShardInfo> shardInfos = null;
+        try {
+            // TODO: support properties
+            shardInfos = client.createShard(serviceId, numShards);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to create shards. error: " + e.getMessage());
+        }
+
+        Preconditions.checkState(shardInfos.size() == numShards);
+        return shardInfos.stream().map(ShardInfo::getShardId).collect(Collectors.toList());
+    }
+
+    private List<ReplicaInfo> getShardReplicas(long shardId) throws UserException {
+        try {
+            List<ShardInfo> shardInfos = client.getShardInfo(serviceId, Lists.newArrayList(shardId));
+            Preconditions.checkState(shardInfos.size() == 1);
+            return shardInfos.get(0).getReplicaInfoList();
+        } catch (StarClientException e) {
+            throw new UserException("Failed to get shard info. error: " + e.getMessage());
+        }
+    }
+
+    public long getPrimaryBackendIdByShard(long shardId) throws UserException {
+        List<ReplicaInfo> replicas = getShardReplicas(shardId);
+
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            for (ReplicaInfo replicaInfo : replicas) {
+                if (replicaInfo.getReplicaRole() == ReplicaRole.PRIMARY) {
+                    WorkerInfo workerInfo = replicaInfo.getWorkerInfo();
+                    long workerId = workerInfo.getWorkerId();
+                    if (!workerToBackend.containsKey(workerId)) {
+                        throw new UserException("Failed to get backend by worker. worker id: " + workerId);
+                    }
+
+                    return workerToBackend.get(workerId);
+                }
+            }
+        }
+        throw new UserException("Failed to get primary backend. shard id: " + shardId);
+    }
+
+    public Set<Long> getBackendIdsByShard(long shardId) throws UserException {
+        List<ReplicaInfo> replicas = getShardReplicas(shardId);
+
+        Set<Long> backendIds = Sets.newHashSet();
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            for (ReplicaInfo replicaInfo : replicas) {
+                // TODO: check worker state
+                WorkerInfo workerInfo = replicaInfo.getWorkerInfo();
+                long workerId = workerInfo.getWorkerId();
+                if (!workerToBackend.containsKey(workerId)) {
+                    throw new UserException("Failed to get backend by worker. worker id: " + workerId);
+                }
+
+                backendIds.add(workerToBackend.get(workerId));
+            }
+        }
+        return backendIds;
     }
 }

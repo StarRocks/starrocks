@@ -30,5 +30,4 @@ public class Constants {
         // only use for ScheduleType.ONCE
         FINISH,
     }
-
 }
