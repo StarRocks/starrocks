@@ -11,9 +11,14 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 public class AggregateTest extends PlanTestBase {
+    @Rule
+    public ExpectedException expectedException = ExpectedException.none();
+
     @Test
     public void testHaving() throws Exception {
         String sql = "select v2 from t0 group by v2 having v2 > 0";
@@ -1326,5 +1331,13 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  6:EXCHANGE");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testAvgCountDistinctWithMultiColumns() throws Exception {
+        expectedException.expect(StarRocksPlannerException.class);
+        expectedException.expectMessage("The query contains multi count distinct or sum distinct, each can't have multi columns");
+        String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal,s_nationkey) from supplier;";
+        getFragmentPlan(sql);
     }
 }
