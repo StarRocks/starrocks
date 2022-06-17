@@ -466,6 +466,9 @@ public class Auth implements Writable {
      * This method will check the given privilege levels
      */
     public boolean checkHasPriv(ConnectContext ctx, PrivPredicate priv, PrivLevel... levels) {
+        if (!Config.enable_auth_check) {
+            return true;
+        }
         // currentUser referred to the account that determines user's access privileges.
         return checkHasPrivInternal(ctx.getCurrentUserIdentity(), priv, levels);
     }
