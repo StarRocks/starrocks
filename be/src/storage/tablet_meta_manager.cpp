@@ -810,7 +810,6 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
                                               const PersistentIndexMetaPB& index_meta, bool enable_persistent_index) {
     auto span = Tracer::Instance().start_trace_tablet("apply_save_meta", tablet_id);
     span->SetAttribute("version", version.to_string());
-    auto scoped_span = trace::Scope(span);
     WriteBatch batch;
     auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
     string logkey = encode_meta_log_key(tablet_id, logid);
