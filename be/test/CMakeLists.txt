@@ -265,6 +265,7 @@ set(EXEC_FILES
         ./util/parse_util_test.cpp
         ./util/path_trie_test.cpp
         ./util/path_util_test.cpp
+        ./util/priority_queue_test.cpp
         ./util/radix_sort_test.cpp
         ./util/rle_encoding_test.cpp
         ./util/scoped_cleanup_test.cpp
