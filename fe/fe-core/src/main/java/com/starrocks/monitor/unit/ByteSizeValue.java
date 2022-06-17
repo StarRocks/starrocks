@@ -19,9 +19,6 @@ package com.starrocks.monitor.unit;
 
 import com.starrocks.monitor.utils.Strings;
 
-import java.util.Locale;
-import java.util.Objects;
-
 public class ByteSizeValue implements Comparable<ByteSizeValue> {
 
     private final long size;
@@ -110,121 +107,6 @@ public class ByteSizeValue implements Comparable<ByteSizeValue> {
             suffix = "KB";
         }
         return Strings.format1Decimals(value, suffix);
-    }
-
-    public static ByteSizeValue parseBytesSizeValue(String sValue, String settingName) throws Exception {
-        return parseBytesSizeValue(sValue, null, settingName);
-    }
-
-    public static ByteSizeValue parseBytesSizeValue(String sValue, ByteSizeValue defaultValue, String settingName)
-            throws Exception {
-        settingName = Objects.requireNonNull(settingName);
-        if (sValue == null) {
-            return defaultValue;
-        }
-        long bytes;
-        try {
-            String lowerSValue = sValue.toLowerCase(Locale.ROOT).trim();
-            if (lowerSValue.endsWith("k")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0,
-                        lowerSValue.length() - 1)) * ByteSizeUnit.C1);
-            } else if (lowerSValue.endsWith("kb")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0,
-                        lowerSValue.length() - 2)) * ByteSizeUnit.C1);
-            } else if (lowerSValue.endsWith("m")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0,
-                        lowerSValue.length() - 1)) * ByteSizeUnit.C2);
-            } else if (lowerSValue.endsWith("mb")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0,
-                        lowerSValue.length() - 2)) * ByteSizeUnit.C2);
-            } else if (lowerSValue.endsWith("g")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0,
-                        lowerSValue.length() - 1)) * ByteSizeUnit.C3);
-            } else if (lowerSValue.endsWith("gb")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0,
-                        lowerSValue.length() - 2)) * ByteSizeUnit.C3);
-            } else if (lowerSValue.endsWith("t")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0,
-                        lowerSValue.length() - 1)) * ByteSizeUnit.C4);
-            } else if (lowerSValue.endsWith("tb")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0,
-                        lowerSValue.length() - 2)) * ByteSizeUnit.C4);
-            } else if (lowerSValue.endsWith("p")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0,
-                        lowerSValue.length() - 1)) * ByteSizeUnit.C5);
-            } else if (lowerSValue.endsWith("pb")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0,
-                        lowerSValue.length() - 2)) * ByteSizeUnit.C5);
-            } else if (lowerSValue.endsWith("b")) {
-                bytes = Long.parseLong(lowerSValue.substring(0, lowerSValue.length() - 1).trim());
-            } else if (lowerSValue.equals("-1")) {
-                // Allow this special value to be unit-less:
-                bytes = -1;
-            } else if (lowerSValue.equals("0")) {
-                // Allow this special value to be unit-less:
-                bytes = 0;
-            } else {
-                // Missing units:
-                throw new NumberFormatException("failed to parse string");
-            }
-        } catch (NumberFormatException e) {
-            throw new NumberFormatException("failed to parse string");
-        }
-        return new ByteSizeValue(bytes, ByteSizeUnit.BYTES);
-    }
-
-    public static long simpleParseBytesSizeValue(String sValue, String settingName) throws Exception {
-        long bytes;
-        try {
-            String lowerSValue = sValue.toLowerCase(Locale.ROOT).trim();
-            if (lowerSValue.endsWith("k")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0, lowerSValue.length() - 1))
-                        * ByteSizeUnit.C1);
-            } else if (lowerSValue.endsWith("kb")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0, lowerSValue.length() - 2))
-                        * ByteSizeUnit.C1);
-            } else if (lowerSValue.endsWith("m")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0, lowerSValue.length() - 1))
-                        * ByteSizeUnit.C2);
-            } else if (lowerSValue.endsWith("mb")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0, lowerSValue.length() - 2))
-                        * ByteSizeUnit.C2);
-            } else if (lowerSValue.endsWith("g")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0, lowerSValue.length() - 1))
-                        * ByteSizeUnit.C3);
-            } else if (lowerSValue.endsWith("gb")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0, lowerSValue.length() - 2))
-                        * ByteSizeUnit.C3);
-            } else if (lowerSValue.endsWith("t")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0, lowerSValue.length() - 1))
-                        * ByteSizeUnit.C4);
-            } else if (lowerSValue.endsWith("tb")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0, lowerSValue.length() - 2))
-                        * ByteSizeUnit.C4);
-            } else if (lowerSValue.endsWith("p")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0, lowerSValue.length() - 1))
-                        * ByteSizeUnit.C5);
-            } else if (lowerSValue.endsWith("pb")) {
-                bytes = (long) (Double.parseDouble(lowerSValue.substring(0, lowerSValue.length() - 2))
-                        * ByteSizeUnit.C5);
-            } else if (lowerSValue.endsWith("b")) {
-                bytes = Long.parseLong(lowerSValue.substring(0, lowerSValue.length() - 1).trim());
-            } else if (lowerSValue.equals("-1")) {
-                // Allow this special value to be unit-less:
-                bytes = -1;
-            } else if (lowerSValue.equals("0")) {
-                // Allow this special value to be unit-less:
-                bytes = 0;
-            } else {
-                // Missing units:
-                throw new Exception("failed to parse setting [{}] with value"
-                        + " as a size in bytes: unit is missing or unrecognized");
-
-            }
-        } catch (NumberFormatException e) {
-            throw new Exception("failed to parse");
-        }
-        return bytes;
     }
 
     @Override

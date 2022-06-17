@@ -61,7 +61,8 @@ public class CreateTableAnalyzer {
         HIVE,
         ICEBERG,
         HUDI,
-        JDBC
+        JDBC,
+        STARROCKS
     }
 
     public enum CharsetType {
@@ -73,12 +74,16 @@ public class CreateTableAnalyzer {
         if (Strings.isNullOrEmpty(engineName)) {
             return DEFAULT_ENGINE_NAME;
         }
+
+        if (engineName.equalsIgnoreCase(CreateTableStmt.LAKE_ENGINE_NAME) && !Config.use_staros) {
+            throw new SemanticException("Engine %s needs 'use_staros = true' config in fe.conf", engineName);
+        }
+
         try {
             return EngineType.valueOf(engineName.toUpperCase()).name();
         } catch (IllegalArgumentException e) {
             throw new SemanticException("Unknown engine name: %s", engineName);
         }
-
     }
 
     private static String analyzeCharsetName(String charsetName) {
@@ -116,8 +121,8 @@ public class CreateTableAnalyzer {
         List<ColumnDef> columnDefs = statement.getColumnDefs();
         PartitionDesc partitionDesc = statement.getPartitionDesc();
         // analyze key desc
-        if (engineName.equals(DEFAULT_ENGINE_NAME)) {
-            // olap table
+        if (statement.isOlapOrLakeEngine()) {
+            // olap table or lake table
             if (keysDesc == null) {
                 List<String> keysColumnNames = Lists.newArrayList();
                 int keyLength = 0;
@@ -203,14 +208,13 @@ public class CreateTableAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_MUST_HAVE_COLUMNS);
         }
 
-        int rowLengthBytes = 0;
         boolean hasHll = false;
         boolean hasBitmap = false;
         boolean hasJson = false;
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
             try {
-                columnDef.analyze(engineName.equals(DEFAULT_ENGINE_NAME));
+                columnDef.analyze(statement.isOlapOrLakeEngine());
             } catch (AnalysisException e) {
                 logger.error("Column definition analyze failed.", e);
                 throw new SemanticException(e.getMessage());
@@ -231,13 +235,6 @@ public class CreateTableAnalyzer {
             if (!columnSet.add(columnDef.getName())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
             }
-
-            rowLengthBytes += columnDef.getType().getStorageLayoutBytes();
-        }
-
-        if (rowLengthBytes > Config.max_layout_length_per_row && engineName.equals(DEFAULT_ENGINE_NAME)) {
-            throw new SemanticException("The size of a row (%d) exceed the maximal row size: %d", rowLengthBytes,
-                    Config.max_layout_length_per_row);
         }
 
         if (hasHll && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
@@ -249,7 +246,7 @@ public class CreateTableAnalyzer {
         }
 
         DistributionDesc distributionDesc = statement.getDistributionDesc();
-        if (engineName.equals(DEFAULT_ENGINE_NAME)) {
+        if (statement.isOlapOrLakeEngine()) {
             // analyze partition
             Map<String, String> properties = statement.getProperties();
             if (partitionDesc != null) {
@@ -312,7 +309,7 @@ public class CreateTableAnalyzer {
 
             for (IndexDef indexDef : indexDefs) {
                 indexDef.analyze();
-                if (!engineName.equals(DEFAULT_ENGINE_NAME)) {
+                if (!statement.isOlapOrLakeEngine()) {
                     throw new SemanticException("index only support in olap engine at current version.");
                 }
                 for (String indexColName : indexDef.getColumns()) {

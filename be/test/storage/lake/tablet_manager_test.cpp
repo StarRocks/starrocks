@@ -27,7 +27,7 @@ public:
 
     StatusOr<std::string> get_group(int64_t tablet_id) override { return _local_dir; };
 
-    Status list_group(std::vector<std::string>* groups) override {
+    Status list_group(std::set<std::string>* groups) override {
         return Status::NotSupported("LocalGroupAssigner::list_group");
     };
 
@@ -45,7 +45,7 @@ public:
         _test_dir = paths[0].path + "/lake";
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_test_dir));
         _group_assigner = new LocalGroupAssigner(_test_dir);
-        _tabletManager = new starrocks::lake::TabletManager(_group_assigner, 1024);
+        _tabletManager = new starrocks::lake::TabletManager(_group_assigner, 16384);
     }
     std::string tablet_group(std::string_view prefix, int64_t tablet_id) {
         ASSIGN_OR_ABORT(auto group_path, _group_assigner->get_group(tablet_id));
@@ -60,8 +60,9 @@ public:
         (void)FileSystem::Default()->delete_dir_recursive(_test_dir);
     }
 
-private:
     starrocks::lake::TabletManager* _tabletManager;
+
+private:
     std::string _test_dir;
     LocalGroupAssigner* _group_assigner;
 };
@@ -220,4 +221,65 @@ TEST_F(LakeTabletManagerTest, list_txn_log) {
     iter = std::find(txnlogs.begin(), txnlogs.end(), "txn_0000000000003039_0000000000000003");
     EXPECT_TRUE(iter != txnlogs.end());
 }
+
+TEST_F(LakeTabletManagerTest, put_get_tabletmetadata_witch_cache_evict) {
+    int64_t tablet_id = 23456;
+    std::vector<lake::TabletMetadataPtr> vec;
+
+    auto group = tablet_group("shard1", tablet_id);
+
+    // we set meta cache capacity to 16K, and each meta here cost 232 bytes,putting 64 tablet meta will fill up the cache space.
+    for (int i = 0; i < 64; ++i) {
+        auto metadata = std::make_shared<lake::TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(2 + i);
+        auto rowset_meta_pb = metadata->add_rowsets();
+        rowset_meta_pb->set_id(2);
+        rowset_meta_pb->set_overlapped(false);
+        rowset_meta_pb->set_data_size(1024);
+        rowset_meta_pb->set_num_rows(5);
+        EXPECT_OK(_tabletManager->put_tablet_metadata(group, metadata));
+        vec.emplace_back(metadata);
+    }
+
+    // get version 4 from cache
+    {
+        auto res = _tabletManager->get_tablet_metadata(group, tablet_id, 4);
+        EXPECT_TRUE(res.ok());
+        EXPECT_EQ(res.value()->id(), tablet_id);
+        EXPECT_EQ(res.value()->version(), 4);
+    }
+
+    // put another 32 tablet meta to trigger cache eviction.
+    for (int i = 0; i < 32; ++i) {
+        auto metadata = std::make_shared<lake::TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(66 + i);
+        auto rowset_meta_pb = metadata->add_rowsets();
+        rowset_meta_pb->set_id(2);
+        rowset_meta_pb->set_overlapped(false);
+        rowset_meta_pb->set_data_size(1024);
+        rowset_meta_pb->set_num_rows(5);
+        EXPECT_OK(_tabletManager->put_tablet_metadata(group, metadata));
+    }
+
+    // test eviction result;
+    {
+        // version 4 expect not evicted
+        auto res = _tabletManager->get_tablet_metadata(group, tablet_id, 4);
+        EXPECT_TRUE(res.ok());
+        EXPECT_EQ(res.value()->id(), tablet_id);
+        EXPECT_EQ(res.value()->version(), 4);
+        EXPECT_EQ(res.value().get(), vec[2].get());
+    }
+    {
+        // version 6 expect evicted
+        auto res = _tabletManager->get_tablet_metadata(group, tablet_id, 6);
+        EXPECT_TRUE(res.ok());
+        EXPECT_EQ(res.value()->id(), tablet_id);
+        EXPECT_EQ(res.value()->version(), 6);
+        EXPECT_NE(res.value().get(), vec[4].get());
+    }
+}
+
 } // namespace starrocks

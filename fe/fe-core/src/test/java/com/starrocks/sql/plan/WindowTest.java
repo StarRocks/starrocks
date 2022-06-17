@@ -356,4 +356,54 @@ public class WindowTest extends PlanTestBase {
         }
         FeConstants.runningUnitTest = false;
     }
+
+    @Test
+    public void testRuntimeFilterPushWithoutPartition() throws Exception {
+        String sql = "select * from " +
+                "(select v1, sum(v2) over (order by v2 desc) as sum1 from t0) a," +
+                "(select v1 from t0 where v1 = 1) b " +
+                "where a.v1 = b.v1";
+
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "3:ANALYTIC\n" +
+                "  |  functions: [, sum[([2: v2, BIGINT, true]); args: BIGINT; result: BIGINT; args nullable: true; result nullable: true], ]\n" +
+                "  |  order by: [2: v2, BIGINT, true] DESC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  cardinality: 1\n" +
+                "  |  probe runtime filters:\n" +
+                "  |  - filter_id = 0, probe_expr = (1: v1)");
+    }
+
+    @Test
+    public void testRuntimeFilterPushWithRightPartition() throws Exception {
+        String sql = "select * from " +
+                "(select v1, sum(v2) over (partition by v1 order by v2 desc) as sum1 from t0) a," +
+                "(select v1 from t0 where v1 = 1) b " +
+                "where a.v1 = b.v1";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:SORT\n" +
+                "  |  order by: [1, BIGINT, true] ASC, [2, BIGINT, true] DESC\n" +
+                "  |  offset: 0\n" +
+                "  |  cardinality: 1\n" +
+                "  |  probe runtime filters:\n" +
+                "  |  - filter_id = 0, probe_expr = (1: v1)");
+    }
+
+    @Test
+    public void testRuntimeFilterPushWithOtherPartition() throws Exception {
+        String sql = "select * from " +
+                "(select v1, v3, sum(v2) over (partition by v3 order by v2 desc) as sum1 from t0) a," +
+                "(select v1 from t0 where v1 = 1) b " +
+                "where a.v1 = b.v1";
+
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "3:ANALYTIC\n" +
+                "  |  functions: [, sum[([2: v2, BIGINT, true]); args: BIGINT; result: BIGINT; args nullable: true; result nullable: true], ]\n" +
+                "  |  partition by: [3: v3, BIGINT, true]\n" +
+                "  |  order by: [2: v2, BIGINT, true] DESC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  cardinality: 1\n" +
+                "  |  probe runtime filters:\n" +
+                "  |  - filter_id = 0, probe_expr = (1: v1)");
+    }
 }

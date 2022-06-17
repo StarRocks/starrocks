@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <string>
 
+#include "common/compiler_util.h"
+
 #pragma once
 
 namespace starrocks {
@@ -131,6 +133,8 @@ public:
 public:
     // from_date(1970, 1, 1)
     static constexpr JulianDate UNIX_EPOCH_JULIAN = 2440588;
+    // from_date(0000, 0, 0)
+    static constexpr JulianDate ZERO_EPOCH_JULIAN = 1721028;
     // from_date(0000, 1, 1)
     static constexpr JulianDate BC_EPOCH_JULIAN = 1721060;
     // from_date(0001, 1, 1)
@@ -375,6 +379,13 @@ const constexpr uint32_t CACHE_JULIAN_DAYS = 200 * 366;
 extern JulianToDateEntry g_julian_to_date_cache[];
 
 inline void date::to_date(JulianDate julian, int* year, int* month, int* day) {
+    if (UNLIKELY(julian == ZERO_EPOCH_JULIAN)) {
+        *year = 0;
+        *month = 0;
+        *day = 0;
+        return;
+    }
+
     int quad;
     int extra;
     int y;
