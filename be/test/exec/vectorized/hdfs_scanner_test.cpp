@@ -309,6 +309,7 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
         auto chunk = vectorized::ChunkHelper::new_chunk(*tuple_desc, 0);               \
         uint64_t records = 0;                                                          \
         for (;;) {                                                                     \
+            chunk->reset();                                                            \
             status = scanner->get_next(_runtime_state, &chunk);                        \
             if (status.is_end_of_file()) {                                             \
                 break;                                                                 \

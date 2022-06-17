@@ -1432,10 +1432,17 @@ ChunkPtr OrcScannerAdapter::_create_chunk(const std::vector<SlotDescriptor*>& sr
     return chunk;
 }
 
+<<<<<<< HEAD:be/src/exec/vectorized/orc_scanner_adapter.cpp
 ChunkPtr OrcScannerAdapter::_cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& src_slot_descriptors,
                                         const std::vector<int>* indices) {
     ChunkPtr cast_chunk = std::make_shared<Chunk>();
     ChunkPtr& src = (*chunk);
+=======
+ChunkPtr OrcChunkReader::_cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& src_slot_descriptors,
+                                     const std::vector<int>* indices) {
+    ChunkPtr& src = (*chunk);
+    size_t chunk_size = src->num_rows();
+>>>>>>> 8738ccc8e ([BugFix]Fix wrong column order (#7413)):be/src/formats/orc/orc_chunk_reader.cpp
     int column_size = src_slot_descriptors.size();
     for (int column_pos = 0; column_pos < column_size; ++column_pos) {
         auto slot = src_slot_descriptors[column_pos];
@@ -1447,10 +1454,15 @@ ChunkPtr OrcScannerAdapter::_cast_chunk(ChunkPtr* chunk, const std::vector<SlotD
             src_index = (*indices)[src_index];
         }
         ColumnPtr col = _cast_exprs[src_index]->evaluate(nullptr, src.get());
+<<<<<<< HEAD:be/src/exec/vectorized/orc_scanner_adapter.cpp
         col = ColumnHelper::unfold_const_column(slot->type(), src->num_rows(), col);
         cast_chunk->append_column(std::move(col), slot->id());
+=======
+        col = ColumnHelper::unfold_const_column(slot->type(), chunk_size, col);
+        DCHECK_LE(col->size(), chunk_size);
+>>>>>>> 8738ccc8e ([BugFix]Fix wrong column order (#7413)):be/src/formats/orc/orc_chunk_reader.cpp
     }
-    return cast_chunk;
+    return src;
 }
 
 ChunkPtr OrcScannerAdapter::create_chunk() {
@@ -1464,6 +1476,7 @@ ChunkPtr OrcScannerAdapter::cast_chunk(ChunkPtr* chunk) {
     return _cast_chunk(chunk, _src_slot_descriptors, nullptr);
 }
 
+<<<<<<< HEAD:be/src/exec/vectorized/orc_scanner_adapter.cpp
 StatusOr<ChunkPtr> OrcScannerAdapter::get_chunk() {
     ChunkPtr ptr = create_chunk();
     RETURN_IF_ERROR(fill_chunk(&ptr));
@@ -1475,6 +1488,17 @@ StatusOr<ChunkPtr> OrcScannerAdapter::get_active_chunk() {
     ChunkPtr ptr = _create_chunk(_lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices);
     RETURN_IF_ERROR(_fill_chunk(&ptr, _lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices));
     ChunkPtr ret = _cast_chunk(&ptr, _lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices);
+=======
+StatusOr<ChunkPtr> OrcChunkReader::get_chunk(ChunkPtr* chunk) {
+    RETURN_IF_ERROR(fill_chunk(chunk));
+    ChunkPtr ret = cast_chunk(chunk);
+    return ret;
+}
+
+StatusOr<ChunkPtr> OrcChunkReader::get_active_chunk(ChunkPtr* chunk) {
+    RETURN_IF_ERROR(_fill_chunk(chunk, _lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices));
+    ChunkPtr ret = _cast_chunk(chunk, _lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices);
+>>>>>>> 8738ccc8e ([BugFix]Fix wrong column order (#7413)):be/src/formats/orc/orc_chunk_reader.cpp
     return ret;
 }
 
@@ -1486,10 +1510,16 @@ void OrcScannerAdapter::lazy_filter_on_cvb(Filter* filter) {
     }
 }
 
+<<<<<<< HEAD:be/src/exec/vectorized/orc_scanner_adapter.cpp
 StatusOr<ChunkPtr> OrcScannerAdapter::get_lazy_chunk() {
     ChunkPtr ptr = _create_chunk(_lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
     RETURN_IF_ERROR(_fill_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices));
     ChunkPtr ret = _cast_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
+=======
+StatusOr<ChunkPtr> OrcChunkReader::get_lazy_chunk(ChunkPtr* chunk) {
+    RETURN_IF_ERROR(_fill_chunk(chunk, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices));
+    ChunkPtr ret = _cast_chunk(chunk, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
+>>>>>>> 8738ccc8e ([BugFix]Fix wrong column order (#7413)):be/src/formats/orc/orc_chunk_reader.cpp
     return ret;
 }
 

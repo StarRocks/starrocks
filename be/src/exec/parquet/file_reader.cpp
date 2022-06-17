@@ -470,9 +470,14 @@ Status FileReader::_get_next_internal(vectorized::ChunkPtr* chunk) {
         Status status = _row_group_readers[_cur_row_group_idx]->get_next(chunk, &row_count);
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
+<<<<<<< HEAD:be/src/exec/parquet/file_reader.cpp
                 _append_not_exist_column_to_chunk(chunk, row_count);
                 _append_partition_column_to_chunk(chunk, row_count);
 
+=======
+                _scanner_ctx->update_not_existed_columns_to_chunk(chunk, row_count);
+                _scanner_ctx->update_partition_column_to_chunk(chunk, row_count);
+>>>>>>> 8738ccc8e ([BugFix]Fix wrong column order (#7413)):be/src/formats/parquet/file_reader.cpp
                 _scan_row_count += (*chunk)->num_rows();
             }
             if (status.is_end_of_file()) {
@@ -490,10 +495,15 @@ Status FileReader::_get_next_internal(vectorized::ChunkPtr* chunk) {
 Status FileReader::_exec_only_partition_scan(vectorized::ChunkPtr* chunk) {
     if (_scan_row_count < _total_row_count) {
         size_t read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
+<<<<<<< HEAD:be/src/exec/parquet/file_reader.cpp
 
         _append_not_exist_column_to_chunk(chunk, read_size);
         _append_partition_column_to_chunk(chunk, read_size);
 
+=======
+        _scanner_ctx->update_not_existed_columns_to_chunk(chunk, read_size);
+        _scanner_ctx->update_partition_column_to_chunk(chunk, read_size);
+>>>>>>> 8738ccc8e ([BugFix]Fix wrong column order (#7413)):be/src/formats/parquet/file_reader.cpp
         _scan_row_count += read_size;
         return Status::OK();
     }
