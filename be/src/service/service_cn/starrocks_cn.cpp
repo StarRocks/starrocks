@@ -10,13 +10,20 @@
 #include "compute_service.h"
 #include "exec/pipeline/query_context.h"
 #include "http_service.h"
-#include "internal_service.h"
 #include "runtime/exec_env.h"
-#include "service/brpc_service.h"
+#include "service/brpc.h"
 #include "service/service.h"
+#include "service/service_cn/internal_service.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
 #include "util/thrift_server.h"
+
+namespace brpc {
+
+DECLARE_uint64(max_body_size);
+DECLARE_int64(socket_max_unwritten_bytes);
+
+} // namespace brpc
 
 void start_cn() {
     using starrocks::Status;
@@ -34,11 +41,18 @@ void start_cn() {
     }
 
     // 2. Start brpc service.
-    std::unique_ptr<starrocks::BRpcService> brpc_service = std::make_unique<starrocks::BRpcService>(exec_env);
-    status = brpc_service->start(starrocks::config::brpc_port,
-                                 new starrocks::ComputeNodeInternalServiceImpl<starrocks::PInternalService>(exec_env),
-                                 new starrocks::ComputeNodeInternalServiceImpl<doris::PBackendService>(exec_env));
-    if (!status.ok()) {
+    brpc::FLAGS_max_body_size = starrocks::config::brpc_max_body_size;
+    brpc::FLAGS_socket_max_unwritten_bytes = starrocks::config::brpc_socket_max_unwritten_bytes;
+    brpc::Server brpc_server;
+
+    starrocks::ComputeNodeInternalServiceImpl<starrocks::PInternalService> compute_service(exec_env);
+    brpc_server.AddService(&compute_service, brpc::SERVER_DOESNT_OWN_SERVICE);
+
+    brpc::ServerOptions options;
+    if (starrocks::config::brpc_num_threads != -1) {
+        options.num_threads = starrocks::config::brpc_num_threads;
+    }
+    if (brpc_server.Start(starrocks::config::brpc_port, &options) != 0) {
         LOG(ERROR) << "BRPC service did not start correctly, exiting";
         starrocks::shutdown_logging();
         exit(1);
@@ -60,8 +74,9 @@ void start_cn() {
     }
 
     http_service.reset();
-    brpc_service->join();
-    brpc_service.reset();
+
+    brpc_server.Stop(0);
+    brpc_server.Join();
 
     cn_server->stop();
     cn_server->join();
