@@ -1173,8 +1173,7 @@ public class StmtExecutor {
                 }
             }
 
-            // To fix https://github.com/StarRocks/starrocks/issues/6461.
-            if (loadedRows == 0 && filteredRows == 0 && stmt instanceof DeleteStmt) {
+            if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt)) {
                 if (targetTable instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
