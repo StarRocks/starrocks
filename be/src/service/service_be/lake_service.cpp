@@ -87,7 +87,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         auto new_metadata = std::make_shared<lake::TabletMetadata>(**base_metadata);
         new_metadata->set_version(request->version());
 
-        bool save_meta = false;
+        bool succeeded = false;
         for (auto txn_id : request->txn_ids()) {
             auto txnlog = tablet->get_txn_log(txn_id);
             if (txnlog.status().is_not_found() && tablet->get_metadata(request->version()).ok()) {
@@ -105,9 +105,9 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 response->add_failed_tablets(tablet_id);
                 break;
             }
-            save_meta = true;
+            succeeded = true;
         }
-        if (!save_meta) {
+        if (!succeeded) {
             continue;
         }
         auto st = tablet->put_metadata(new_metadata);
@@ -117,7 +117,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         } else {
             for (auto txn_id : request->txn_ids()) {
                 st = tablet->delete_txn_log(txn_id);
-                LOG(WARNING) << "Fail to delete " << tablet->txn_log_path(txn_id) << ": " << st;
+                LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_log_path(txn_id) << ": " << st;
             }
         }
     }
