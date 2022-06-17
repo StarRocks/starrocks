@@ -173,10 +173,10 @@ public:
     //       require an explicit "abort" notification to exit from the run loop.
     void shutdown();
 
-    // Submits a Runnable class with LOW_PRIORITY.
+    // Submits a Runnable class.
     Status submit(std::shared_ptr<Runnable> r, Priority pri = LOW_PRIORITY);
 
-    // Submits a function bound using std::bind(&FuncName, args...) with LOW_PRIORITY.
+    // Submits a function bound using std::bind(&FuncName, args...).
     Status submit_func(std::function<void()> f, Priority pri = LOW_PRIORITY);
 
     // Waits until all the tasks are completed.
