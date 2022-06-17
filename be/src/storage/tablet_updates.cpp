@@ -454,6 +454,8 @@ Status TabletUpdates::_get_apply_version_and_rowsets(int64_t* version, std::vect
 }
 
 Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rowset) {
+    auto span = Tracer::Instance().start_trace("rowset_commit");
+    auto scope_span = trace::Scope(span);
     if (_error) {
         return Status::InternalError(Substitute("rowset_commit failed, tablet updates is in error state: tablet:$0 $1",
                                                 _tablet.tablet_id(), _error_msg));
@@ -519,6 +521,13 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
 }
 
 Status TabletUpdates::_rowset_commit_unlocked(int64_t version, const RowsetSharedPtr& rowset) {
+<<<<<<< HEAD
+=======
+    auto span =
+            Tracer::Instance().start_trace_txn_tablet("rowset_commit_unlocked", rowset->txn_id(), _tablet.tablet_id());
+    span->SetAttribute("version", version);
+    auto scoped = trace::Scope(span);
+>>>>>>> d2a883052 ([Enhancement] Remove txn lock and add tracing for run_publish_version_task (#7187))
     EditVersionMetaPB edit;
     auto edit_version_pb = edit.mutable_version();
     edit_version_pb->set_major(version);

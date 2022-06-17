@@ -99,6 +99,7 @@ Status NodeChannel::init(RuntimeState* state) {
     // Initialize _cur_request
     _cur_request.set_allocated_id(&_parent->_load_id);
     _cur_request.set_index_id(_index_id);
+    _cur_request.set_txn_id(_parent->_txn_id);
     _cur_request.set_sender_id(_parent->_sender_id);
     _cur_request.set_eos(false);
 
@@ -559,6 +560,7 @@ void NodeChannel::cancel(const Status& err_st) {
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(_index_id);
     request.set_sender_id(_parent->_sender_id);
+    request.set_txn_id(_parent->_txn_id);
 
     auto closure = new RefCountClosure<PTabletWriterCancelResult>();
 

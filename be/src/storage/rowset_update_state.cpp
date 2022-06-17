@@ -48,6 +48,11 @@ Status RowsetUpdateState::load(Tablet* tablet, Rowset* rowset) {
 }
 
 Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
+<<<<<<< HEAD
+=======
+    auto span = Tracer::Instance().start_trace_txn_tablet("rowset_update_state_load", rowset->txn_id(),
+                                                          tablet->tablet_id());
+>>>>>>> d2a883052 ([Enhancement] Remove txn lock and add tracing for run_publish_version_task (#7187))
     _tablet_id = tablet->tablet_id();
     auto& schema = rowset->schema();
     vector<uint32_t> pk_columns;

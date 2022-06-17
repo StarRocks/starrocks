@@ -122,7 +122,7 @@ public:
 
     RowsetSharedPtr rowset_with_max_version() const;
 
-    Status add_inc_rowset(const RowsetSharedPtr& rowset);
+    Status add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version);
     void delete_expired_inc_rowsets();
 
     /// Delete stale rowset by timing. This delete policy uses now() munis

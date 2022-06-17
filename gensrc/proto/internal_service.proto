@@ -181,6 +181,7 @@ message PTabletWriterAddChunkRequest {
     // only valid when eos is true
     // valid partition ids that would write in this writer
     repeated int64 partition_ids = 8;
+    optional int64 txn_id = 9;
 };
 
 message PTabletWriterAddBatchResult {
@@ -195,6 +196,7 @@ message PTabletWriterCancelRequest {
     required PUniqueId id = 1;
     required int64 index_id = 2;
     required int32 sender_id = 3;
+    optional int64 txn_id = 4;
 };
 
 message PTabletWriterCancelResult {

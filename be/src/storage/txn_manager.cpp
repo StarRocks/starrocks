@@ -107,6 +107,7 @@ TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, int32
     _txn_map_locks = std::unique_ptr<std::shared_mutex[]>(new std::shared_mutex[_txn_map_shard_size]);
     _txn_tablet_maps = std::unique_ptr<txn_tablet_map_t[]>(new txn_tablet_map_t[_txn_map_shard_size]);
     _txn_partition_maps = std::unique_ptr<txn_partition_map_t[]>(new txn_partition_map_t[_txn_map_shard_size]);
+<<<<<<< HEAD
     _txn_mutex = std::unique_ptr<std::mutex[]>(new std::mutex[_txn_shard_size]);
     // we will get "store_num = 0" if it acts as cn, just ignore flush pool
     if (store_num > 0) {
@@ -117,6 +118,8 @@ TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, int32
                           .build(&_flush_thread_pool);
         CHECK(st.ok());
     }
+=======
+>>>>>>> d2a883052 ([Enhancement] Remove txn lock and add tracing for run_publish_version_task (#7187))
 }
 
 Status TxnManager::prepare_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
@@ -207,7 +210,6 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
         return Status::InternalError(msg);
     }
 
-    std::lock_guard txn_lock(_get_txn_lock(transaction_id));
     {
         // get tx
         std::shared_lock rdlock(_get_txn_map_lock(transaction_id));
@@ -282,6 +284,7 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
 
 Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                                int64_t version, const RowsetSharedPtr& rowset) {
+<<<<<<< HEAD
     {
         std::lock_guard txn_lock(_get_txn_lock(transaction_id));
         if (tablet->updates() != nullptr) {
@@ -313,6 +316,22 @@ Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr&
                              << ", res=" << st;
                 return st;
             }
+=======
+    if (tablet->updates() != nullptr) {
+        StarRocksMetrics::instance()->update_rowset_commit_request_total.increment(1);
+        auto st = tablet->rowset_commit(version, rowset);
+        if (!st.ok()) {
+            StarRocksMetrics::instance()->update_rowset_commit_request_failed.increment(1);
+            return st;
+        }
+    } else {
+        auto st = tablet->add_inc_rowset(rowset, version);
+        if (!st.ok() && !st.is_already_exist()) {
+            // TODO: rollback saved rowset if error?
+            LOG(WARNING) << "fail to add visible rowset to tablet. rowset_id=" << rowset->rowset_id()
+                         << ", tablet_id=" << tablet->tablet_id() << ", txn_id=" << transaction_id << ", res=" << st;
+            return st;
+>>>>>>> d2a883052 ([Enhancement] Remove txn lock and add tracing for run_publish_version_task (#7187))
         }
     }
     std::unique_lock wrlock(_get_txn_map_lock(transaction_id));

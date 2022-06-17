@@ -805,8 +805,14 @@ Status TabletMetaManager::rowset_iterate(DataDir* store, TTabletId tablet_id, co
 Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid,
                                               const EditVersion& version,
                                               vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
+<<<<<<< HEAD
                                               const PersistentIndexMetaPB& index_meta, bool enable_persistent_index,
                                               const RowsetMetaPB* rowset_meta) {
+=======
+                                              const PersistentIndexMetaPB& index_meta, bool enable_persistent_index) {
+    auto span = Tracer::Instance().start_trace_tablet("apply_save_meta", tablet_id);
+    span->SetAttribute("version", version.to_string());
+>>>>>>> d2a883052 ([Enhancement] Remove txn lock and add tracing for run_publish_version_task (#7187))
     WriteBatch batch;
     auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
     string logkey = encode_meta_log_key(tablet_id, logid);
