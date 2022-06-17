@@ -26,6 +26,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -105,7 +106,9 @@ public class MysqlProto {
             return false;
         }
         context.setAuthDataSalt(randomString);
-        context.setCurrentUserIdentity(currentUserIdentity.get(0));
+        if (Config.enable_auth_check) {
+            context.setCurrentUserIdentity(currentUserIdentity.get(0));
+        }
         context.setQualifiedUser(qualifiedUser);
         return true;
     }
