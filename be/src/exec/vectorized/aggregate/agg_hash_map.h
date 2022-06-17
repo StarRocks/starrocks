@@ -206,7 +206,8 @@ struct AggHashMapWithOneNullableNumberKey {
             for (size_t i = 0; i < chunk_size; i++) {
                 (*agg_states)[i] = null_key_data;
             }
-        } else if (key_columns[0]->is_nullable()) {
+        } else {
+            DCHECK(key_columns[0]->is_nullable());
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
             auto* data_column = down_cast<ColumnType*>(nullable_column->data_column().get());
 
