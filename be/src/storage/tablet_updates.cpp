@@ -256,6 +256,10 @@ size_t TabletUpdates::data_size() const {
     int64_t total_size = 0;
     {
         std::lock_guard rl(_lock);
+        if (_edit_version_infos.empty()) {
+            LOG(WARNING) << "tablet deleted when call data_size() tablet:" << _tablet.tablet_id();
+            return 0;
+        }
         std::lock_guard lg(_rowset_stats_lock);
         auto& last = _edit_version_infos.back();
         for (uint32_t rowsetid : last->rowsets) {
@@ -279,6 +283,10 @@ size_t TabletUpdates::num_rows() const {
     int64_t total_row = 0;
     {
         std::lock_guard rl(_lock);
+        if (_edit_version_infos.empty()) {
+            LOG(WARNING) << "tablet delete when call num_rows tablet:" << _tablet.tablet_id();
+            return 0;
+        }
         std::lock_guard lg(_rowset_stats_lock);
         auto& last = _edit_version_infos.back();
         for (uint32_t rowsetid : last->rowsets) {
@@ -394,6 +402,11 @@ void TabletUpdates::_redo_edit_version_log(const EditVersionMetaPB& edit_version
 Status TabletUpdates::_get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
                                                      std::vector<uint32_t>* rowset_ids) {
     std::lock_guard rl(_lock);
+    if (_edit_version_infos.empty()) {
+        string msg = Substitute("tablet deleted when _get_apply_version_and_rowsets tablet:$0", _tablet.tablet_id());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
     EditVersionInfo* edit_version_info = nullptr;
     edit_version_info = _edit_version_infos[_apply_version_idx].get();
     rowsets->reserve(edit_version_info->rowsets.size());
@@ -422,6 +435,11 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
     Status st;
     {
         std::lock_guard wl(_lock);
+        if (_edit_version_infos.empty()) {
+            string msg = Substitute("tablet deleted when rowset_commit tablet:$0", _tablet.tablet_id());
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
         if (version <= _edit_version_infos.back()->version.major()) {
             LOG(WARNING) << "ignored already committed version " << version << " of tablet " << _tablet.tablet_id()
                          << " txn_id: " << rowset->txn_id();
@@ -645,6 +663,10 @@ void TabletUpdates::do_apply() {
         const EditVersionInfo* version_info_apply = nullptr;
         {
             std::lock_guard rl(_lock);
+            if (_edit_version_infos.empty()) {
+                LOG(WARNING) << "tablet deleted when doing apply tablet:" << _tablet.tablet_id();
+                break;
+            }
             if (_apply_version_idx + 1 >= _edit_version_infos.size()) {
                 if (first) {
                     LOG(WARNING) << "illegal state: do_apply should not be called when there is "
@@ -693,9 +715,15 @@ void TabletUpdates::_stop_and_wait_apply_done() {
     }
 }
 
-void TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_version) {
+Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_version) {
     std::lock_guard l(_lock);
+    if (_edit_version_infos.empty()) {
+        string msg = Substitute("tablet deleted when get_latest_applied_version tablet:$0", _tablet.tablet_id());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
     *latest_applied_version = _edit_version_infos[_apply_version_idx]->version;
+    return Status::OK();
 }
 
 void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
@@ -756,8 +784,10 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
 
     int64_t t_load = MonotonicMillis();
     EditVersion latest_applied_version;
-    get_latest_applied_version(&latest_applied_version);
-    st = state.apply(&_tablet, rowset.get(), rowset_id, latest_applied_version, index);
+    st = get_latest_applied_version(&latest_applied_version);
+    if (st.ok()) {
+        st = state.apply(&_tablet, rowset.get(), rowset_id, latest_applied_version, index);
+    }
     if (!st.ok()) {
         manager->update_state_cache().remove(state_entry);
         std::string msg = Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
@@ -896,6 +926,10 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
 
     {
         std::lock_guard wl(_lock);
+        if (_edit_version_infos.empty()) {
+            LOG(WARNING) << "tablet deleted when apply rowset commmit tablet:" << tablet_id;
+            return;
+        }
         // 4. write meta
         st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version, new_del_vecs,
                                                     index_meta, _tablet.get_enable_persistent_index());
@@ -962,6 +996,11 @@ RowsetSharedPtr TabletUpdates::_get_rowset(uint32_t rowset_id) {
 
 Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t timeout_ms) {
     std::unique_lock<std::mutex> ul(_lock);
+    if (_edit_version_infos.empty()) {
+        string msg = Substitute("tablet deleted when _wait_for_version tablet:$0", _tablet.tablet_id());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
     if (!(_edit_version_infos[_apply_version_idx]->version < version)) {
         return Status::OK();
     }
@@ -998,17 +1037,6 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
         }
     }
     return Status::OK();
-}
-
-StatusOr<std::unique_ptr<CompactionInfo>> TabletUpdates::_get_compaction() {
-    std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
-    std::lock_guard rl(_lock);
-    // 1. start compaction at current apply version
-    info->start_version = _edit_version_infos[_apply_version_idx]->version;
-    // 2. TODO: select compaction input rowsets
-    // currently just select all rowset for demo purpose
-    info->inputs = _edit_version_infos[_apply_version_idx]->rowsets;
-    return info;
 }
 
 Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, bool wait_apply) {
@@ -1095,6 +1123,11 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
         return status;
     }
     std::lock_guard wl(_lock);
+    if (_edit_version_infos.empty()) {
+        string msg = Substitute("tablet deleted when commit_compaction tablet:$0", _tablet.tablet_id());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
     EditVersionMetaPB edit;
     auto lastv = _edit_version_infos.back().get();
     auto edit_version_pb = edit.mutable_version();
@@ -1276,6 +1309,10 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
 
     {
         std::lock_guard wl(_lock);
+        if (_edit_version_infos.empty()) {
+            LOG(WARNING) << "tablet deleted when apply compaction tablet:" << tablet_id;
+            return;
+        }
         // 3. write meta
         st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version_info.version,
                                                     delvecs, index_meta, _tablet.get_enable_persistent_index());
@@ -1364,6 +1401,10 @@ void TabletUpdates::_erase_expired_versions(int64_t expire_time,
                                             std::vector<std::unique_ptr<EditVersionInfo>>* expire_list) {
     DCHECK(expire_list->empty());
     std::lock_guard l(_lock);
+    if (_edit_version_infos.empty()) {
+        LOG(WARNING) << "tablet deleted when erase_expired_versions tablet:" << _tablet.tablet_id();
+        return;
+    }
     for (int i = 0; i < _apply_version_idx; i++) {
         if (_edit_version_infos[i]->creation_time <= expire_time) {
             expire_list->emplace_back(std::move(_edit_version_infos[i]));
@@ -1485,6 +1526,9 @@ int64_t TabletUpdates::get_compaction_score() {
     vector<uint32_t> rowsets;
     {
         std::lock_guard rl(_lock);
+        if (_edit_version_infos.empty()) {
+            return -1;
+        }
         if (_apply_version_idx + 2 < _edit_version_infos.size() || _pending_commits.size() >= 2) {
             // has too many pending tasks, skip compaction
             return -1;
@@ -1560,6 +1604,11 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     vector<uint32_t> rowsets;
     {
         std::lock_guard rl(_lock);
+        if (_edit_version_infos.empty()) {
+            string msg = Substitute("tablet deleted when compaction tablet:$0", _tablet.tablet_id());
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
         // 1. start compaction at current apply version
         info->start_version = _edit_version_infos[_apply_version_idx]->version;
         rowsets = _edit_version_infos[_apply_version_idx]->rowsets;
@@ -1657,6 +1706,9 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
     std::vector<uint32_t> rowset_ids;
     {
         std::lock_guard l1(_lock);
+        if (_edit_version_infos.empty()) {
+            return;
+        }
         std::lock_guard l2(_rowsets_lock);
         last_version = _edit_version_infos.back()->version;
         rowset_ids = _edit_version_infos.back()->rowsets;
@@ -1749,15 +1801,19 @@ size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset) {
 }
 
 void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
-    int64_t version;
+    int64_t version = 0;
     bool has_pending = false;
     vector<uint32_t> rowsets;
     {
         std::lock_guard rl(_lock);
-        auto& last = _edit_version_infos.back();
-        version = last->version.major();
-        rowsets = last->rowsets;
-        has_pending = _pending_commits.size() > 0;
+        if (_edit_version_infos.empty()) {
+            LOG(WARNING) << "tablet delete when get_tablet_info_extra tablet:" << _tablet.tablet_id();
+        } else {
+            auto& last = _edit_version_infos.back();
+            version = last->version.major();
+            rowsets = last->rowsets;
+            has_pending = _pending_commits.size() > 0;
+        }
     }
     string err_rowsets;
     int64_t total_row = 0;
@@ -1805,6 +1861,11 @@ std::string TabletUpdates::_debug_string(bool lock, bool abbr) const {
     string pending_info;
     if (lock) _lock.lock();
     num_version = _edit_version_infos.size();
+    // num_version can be 0, if clear_meta is called after deleting this Tablet
+    if (num_version == 0) {
+        if (lock) _lock.unlock();
+        return Substitute("tablet:$0 <deleted>");
+    }
     apply_idx = _apply_version_idx;
     first_version = _edit_version_infos[0]->version;
     apply_version = _edit_version_infos[_apply_version_idx]->version;
@@ -1831,6 +1892,11 @@ std::string TabletUpdates::_debug_version_info(bool lock) const {
     size_t npending = 0;
     if (lock) _lock.lock();
     num_version = _edit_version_infos.size();
+    // num_version can be 0, if clear_meta is called after deleting this Tablet
+    if (num_version == 0) {
+        if (lock) _lock.unlock();
+        return Substitute("tablet:$0 <deleted>");
+    }
     apply_idx = _apply_version_idx;
     first_version = _edit_version_infos[0]->version;
     apply_version = _edit_version_infos[_apply_version_idx]->version;
@@ -1902,6 +1968,10 @@ RowsetSharedPtr TabletUpdates::get_delta_rowset(int64_t version) const {
         return nullptr;
     }
     std::lock_guard lg(_lock);
+    if (_edit_version_infos.empty()) {
+        LOG(WARNING) << "tablet deleted when get_delta_rowset tablet:" << _tablet.tablet_id();
+        return nullptr;
+    }
     if (version < _edit_version_infos[0]->version.major() || _edit_version_infos.back()->version.major() < version) {
         return nullptr;
     }
@@ -1935,6 +2005,11 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
     // TODO(cbl): optimize: following code lock _lock twice, should make it just lock once
     RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 60000));
     std::lock_guard rl(_lock);
+    if (_edit_version_infos.empty()) {
+        string msg = Substitute("tablet deleted when get_applied_rowsets tablet:$0", _tablet.tablet_id());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
     for (ssize_t i = _apply_version_idx; i >= 0; i--) {
         const auto& edit_version_info = _edit_version_infos[i];
         if (edit_version_info->version.major() == version) {
@@ -2488,6 +2563,11 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         _tablet.tablet_meta()->to_meta_pb(&new_tablet_meta_pb);
 
         std::unique_lock l1(_lock);
+        if (_edit_version_infos.empty()) {
+            string msg = Substitute("tablet deleted when load_snapshot tablet:$0", _tablet.tablet_id());
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
         std::unique_lock l2(_rowsets_lock);
         std::unique_lock l3(_rowset_stats_lock);
 
@@ -2604,6 +2684,7 @@ Status TabletUpdates::clear_meta() {
     std::lock_guard l1(_lock);
     std::lock_guard l2(_rowsets_lock);
     std::lock_guard l3(_rowset_stats_lock);
+    // TODO: tablet is already marked to be deleted, so maybe don't need to clear unused rowsets here
     _remove_unused_rowsets();
     if (_unused_rowsets.get_size() != 0) {
         return Status::InternalError("some unused rowset cannot be removed");
@@ -2631,6 +2712,7 @@ Status TabletUpdates::clear_meta() {
     StorageEngine::instance()->update_manager()->index_cache().remove_by_key(_tablet.tablet_id());
     STLClearObject(&_rowsets);
     STLClearObject(&_rowset_stats);
+    // If this get cleared, every other thread that uses variable should recheck it's valid state after acquiring _lock
     STLClearObject(&_edit_version_infos);
     return Status::OK();
 }
@@ -2736,6 +2818,11 @@ Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, const std::v
     {
         // get next_rowset_id and read_version to identify conflict
         std::lock_guard wl(_lock);
+        if (_edit_version_infos.empty()) {
+            string msg = Substitute("tablet deleted when prepare_partial_update_states tablet:$0", _tablet.tablet_id());
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
         *next_rowset_id = _next_rowset_id;
         *read_version = _edit_version_infos[_apply_version_idx]->version;
     }
@@ -2801,6 +2888,12 @@ Status TabletUpdates::get_rowsets_for_incremental_snapshot(const std::vector<int
     vector<uint32_t> rowsetids;
     {
         std::lock_guard lg(_lock);
+        if (_edit_version_infos.empty()) {
+            string msg = Substitute("tablet deleted when get_rowsets_for_incremental_snapshot tablet:$0",
+                                    _tablet.tablet_id());
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
         int64_t vmax = _edit_version_infos.back()->version.major();
         for (size_t i = 0; i + 1 < missing_version_ranges.size(); i += 2) {
             for (size_t v = missing_version_ranges[i]; v <= missing_version_ranges[i + 1]; v++) {
