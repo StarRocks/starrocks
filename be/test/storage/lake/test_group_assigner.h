@@ -1,7 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#include <set>
 #include <string>
-#include <vector>
 
 #include "storage/lake/group_assigner.h"
 
@@ -15,8 +15,8 @@ public:
 
     StatusOr<std::string> get_group(int64_t tablet_id) override { return _path; }
 
-    Status list_group(std::vector<std::string>* groups) override {
-        groups->emplace_back(_path);
+    Status list_group(std::set<std::string>* groups) override {
+        groups->emplace(_path);
         return Status::OK();
     }
 

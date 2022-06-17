@@ -141,7 +141,7 @@ TEST_F(DeltaWriterTest, test_open) {
         class MockGroupAssigner : public GroupAssigner {
         public:
             StatusOr<std::string> get_group(int64_t) override { return Status::InternalError("injected error"); }
-            Status list_group(std::vector<std::string>*) override { return Status::InternalError("injected error"); }
+            Status list_group(std::set<std::string>*) override { return Status::InternalError("injected error"); }
         };
         MockGroupAssigner mock;
         auto old = _tablet_manager->TEST_set_group_assigner(&mock);
