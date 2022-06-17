@@ -155,5 +155,16 @@ public class RestrictOpMaterializedViewTest {
         }
     }
 
+    @Test
+    public void testAlterTable() {
+        String sql1 = "alter table db1.mv1 rename mv2;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            assertTrue(e.getMessage().contains("is a materialized view,you can use 'ALTER MATERIALIZED VIEW' to alter it."));
+        }
+    }
+
 }
 

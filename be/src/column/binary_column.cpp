@@ -11,7 +11,6 @@
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
-#include "util/coding.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
 #include "util/raw_container.h"

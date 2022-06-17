@@ -37,10 +37,7 @@ public:
 
     void close(RuntimeState* state) override;
 
-    bool is_build_chunk_empty() const {
-        return std::all_of(_build_chunks.begin(), _build_chunks.end(),
-                           [](const vectorized::ChunkPtr& chunk) { return chunk == nullptr || chunk->is_empty(); });
-    }
+    bool is_build_chunk_empty() const { return _is_build_chunk_empty; }
 
     int32_t num_build_chunks() const { return _num_right_sinkers; }
 
@@ -53,6 +50,9 @@ public:
     Status finish_one_right_sinker(RuntimeState* state) {
         if (_num_right_sinkers - 1 == _num_finished_right_sinkers.fetch_add(1)) {
             RETURN_IF_ERROR(_init_runtime_filter(state));
+            _is_build_chunk_empty = std::all_of(
+                    _build_chunks.begin(), _build_chunks.end(),
+                    [](const vectorized::ChunkPtr& chunk) { return chunk == nullptr || chunk->is_empty(); });
             _all_right_finished.store(true, std::memory_order_release);
         }
         return Status::OK();
@@ -75,6 +75,7 @@ private:
     // _build_chunks[i] contains all the rows from i-th CrossJoinRightSinkOperator.
     std::vector<vectorized::ChunkPtr> _build_chunks;
 
+    bool _is_build_chunk_empty = false;
     // finished flags
     std::atomic_bool _all_right_finished = false;
 
