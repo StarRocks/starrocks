@@ -26,7 +26,7 @@ public class InsertOverwriteJob {
     @SerializedName(value = "targetTableId")
     private long targetTableId;
 
-    private InsertStmt insertStmt;
+    private transient InsertStmt insertStmt;
 
     public InsertOverwriteJob(long jobId, InsertStmt insertStmt, long targetDbId, long targetTableId) {
         this.jobId = jobId;
