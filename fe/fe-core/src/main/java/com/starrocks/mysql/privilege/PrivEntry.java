@@ -43,12 +43,12 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable {
     protected static final String ANY_USER = "%";
 
     // host is not case sensitive
-    protected PatternMatcher hostPattern;
+    protected transient PatternMatcher hostPattern;
     @SerializedName("origHost")
     protected String origHost;
     protected boolean isAnyHost = false;
     // user name is case sensitive
-    protected PatternMatcher userPattern;
+    protected transient PatternMatcher userPattern;
     @SerializedName("origUser")
     protected String origUser;
     protected boolean isAnyUser = false;
@@ -66,7 +66,7 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable {
     // see PrivEntry.read() for more details.
     protected boolean isClassNameWrote = false;
 
-    private UserIdentity userIdentity;
+    private transient UserIdentity userIdentity;
 
     protected PrivEntry() {}
 

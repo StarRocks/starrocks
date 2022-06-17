@@ -41,13 +41,13 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
     @SerializedName(value = "tableToOverwriteJobs")
     private Map<Long, List<Long>> tableToOverwriteJobs;
 
-    private ExecutorService cancelJobExecutorService;
+    private transient ExecutorService cancelJobExecutorService;
 
     // store the jobs which are still running after FE restart
     // it is used when replay, so no need to add concurrent control for it
-    private List<InsertOverwriteJob> runningJobs;
+    private transient List<InsertOverwriteJob> runningJobs;
 
-    private ReentrantReadWriteLock lock;
+    private transient ReentrantReadWriteLock lock;
 
     public InsertOverwriteJobManager() {
         this.overwriteJobMap = Maps.newHashMap();
