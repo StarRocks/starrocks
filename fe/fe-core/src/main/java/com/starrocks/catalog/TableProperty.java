@@ -99,6 +99,9 @@ public class TableProperty implements Writable {
             case OperationType.OP_MODIFY_IN_MEMORY:
                 buildInMemory();
                 break;
+            case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
+                buildEnablePersistentIndex();
+                break;
             default:
                 break;
         }
