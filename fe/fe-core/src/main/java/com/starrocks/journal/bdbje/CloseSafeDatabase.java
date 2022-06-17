@@ -70,4 +70,11 @@ public class CloseSafeDatabase {
             return "";
         }
     }
+
+    @Override
+    public String toString() {
+        return "CloseSafeDatabase{" +
+                "db=" + this.getDatabaseName() +
+                '}';
+    }
 }

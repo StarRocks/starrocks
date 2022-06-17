@@ -30,6 +30,7 @@ import com.sleepycat.je.Durability.ReplicaAckPolicy;
 import com.sleepycat.je.Durability.SyncPolicy;
 import com.sleepycat.je.EnvironmentConfig;
 import com.sleepycat.je.EnvironmentFailureException;
+import com.sleepycat.je.TransactionConfig;
 import com.sleepycat.je.rep.InsufficientLogException;
 import com.sleepycat.je.rep.NetworkRestore;
 import com.sleepycat.je.rep.NetworkRestoreConfig;
@@ -76,6 +77,7 @@ public class BDBEnvironment {
     private EnvironmentConfig environmentConfig;
     private ReplicationConfig replicationConfig;
     private DatabaseConfig dbConfig;
+    private TransactionConfig txnConfig;
     private CloseSafeDatabase epochDB = null;  // used for fencing
     private ReplicationGroupAdmin replicationGroupAdmin = null;
     // NOTE: never call System.exit() in lock, because shutdown hook will call BDBEnvironment.close() function which needs lock too.
@@ -170,6 +172,15 @@ public class BDBEnvironment {
         } else {
             dbConfig.setAllowCreate(false);
             dbConfig.setReadOnly(true);
+        }
+
+        // set transaction config
+        txnConfig = new TransactionConfig();
+        if (isElectable) {
+            txnConfig.setDurability(new Durability(
+                    getSyncPolicy(Config.master_sync_policy),
+                    getSyncPolicy(Config.replica_sync_policy),
+                    getAckPolicy(Config.replica_ack_policy)));
         }
 
         // open environment and epochDB
@@ -494,4 +505,10 @@ public class BDBEnvironment {
         return Durability.ReplicaAckPolicy.SIMPLE_MAJORITY;
     }
 
+    /**
+     * package private, used within com.starrocks.journal.bdbje
+     */
+    TransactionConfig getTxnConfig() {
+        return txnConfig;
+    }
 }
