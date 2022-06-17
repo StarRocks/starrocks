@@ -81,12 +81,12 @@ public class PrivilegeCheckerTest {
         TablePattern db1TablePattern = new TablePattern("db1", "*");
         db1TablePattern.analyze("default_cluster");
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ALTER_PRIV), true);
-        String sql = "alter table db1.table1 rename table2";
+        String sql = "alter table db1.tbl1 rename table2";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ALTER_PRIV), true);
-        sql = "alter table db1.table1 rename table2";
+        sql = "alter table db1.tbl1 rename table2";
         StatementBase statementBase2 = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx()));
