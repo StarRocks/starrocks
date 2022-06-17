@@ -152,7 +152,7 @@ public:
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta);
 
-    void get_latest_applied_version(EditVersion* latest_applied_version);
+    Status get_latest_applied_version(EditVersion* latest_applied_version);
 
     // Clear both in-memory cached and permanently stored meta data:
     //  - primary index
@@ -287,8 +287,6 @@ private:
     std::set<uint32_t> _active_rowsets();
 
     void _stop_and_wait_apply_done();
-
-    StatusOr<std::unique_ptr<CompactionInfo>> _get_compaction();
 
     Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo, bool wait_apply);
 
