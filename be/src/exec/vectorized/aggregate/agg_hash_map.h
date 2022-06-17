@@ -312,6 +312,7 @@ struct AggHashMapWithOneNullableNumberKey {
 
 template <typename HashMap>
 struct AggHashMapWithOneStringKey {
+    using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using ResultVector = typename std::vector<Slice>;
     HashMap hash_map;
@@ -400,6 +401,7 @@ struct AggHashMapWithOneStringKey {
 
 template <typename HashMap>
 struct AggHashMapWithOneNullableStringKey {
+    using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using ResultVector = typename std::vector<Slice>;
     HashMap hash_map;
@@ -527,6 +529,7 @@ struct AggHashMapWithOneNullableStringKey {
 
 template <typename HashMap>
 struct AggHashMapWithSerializedKey {
+    using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using ResultVector = typename std::vector<Slice>;
     HashMap hash_map;
@@ -643,6 +646,7 @@ struct AggHashMapWithSerializedKey {
 
 template <typename HashMap>
 struct AggHashMapWithSerializedKeyFixedSize {
+    using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using FixedSizeSliceKey = typename HashMap::key_type;
     using ResultVector = typename std::vector<FixedSizeSliceKey>;
