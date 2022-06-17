@@ -64,7 +64,7 @@ message PublishVersionRequest {
     repeated int64 tablet_ids = 1;
     repeated int64 txn_ids = 2;
     // The version to be published. base version would be version - txn_ids_size()
-    optional int64 version = 4;
+    optional int64 version = 3;
 }
 
 message PublishVersionResponse {
