@@ -843,6 +843,8 @@ public class SystemInfoService {
                 String workerAddr = backend.getHost() + ":" + starletPort;
                 long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerId(workerAddr);
                 GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerfromMap(workerId, workerAddr);
+                // for debug
+                LOG.info("remove worker {} from map succ.", workerAddr);
             }
         } else {
             LOG.error("Cluster " + backend.getOwnerClusterName() + " no exist.");

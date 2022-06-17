@@ -965,8 +965,10 @@ public class GlobalStateMgr {
     private void startMasterOnlyDaemonThreads() {
         if (Config.integrate_starmgr) {
             // start starMgr background threads
+            LOG.info("start starMgr backgroud threads");
             getStarMgr().start();
             // register service to starMgr
+            LOG.info("register service to starMgr");
             int clusterId = getCurrentState().getClusterId();
             getStarOSAgent().registerAndBootstrapService(Integer.toString(clusterId));
 
