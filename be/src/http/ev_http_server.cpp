@@ -113,6 +113,8 @@ Status EvHttpServer::start() {
                 LOG(WARNING) << "Couldn't create an evhttp.";
                 return;
             }
+            _https.push_back(http);
+
             auto res = evhttp_accept_socket(http, _server_fd);
             if (res < 0) {
                 LOG(WARNING) << "evhttp accept socket failed"
