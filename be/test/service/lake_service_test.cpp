@@ -23,8 +23,6 @@ public:
         CHECK(!groups.empty());
         _group = *groups.begin();
         _tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
-
-        create_tablet();
     }
 
     void create_tablet() {
@@ -64,6 +62,13 @@ public:
         ASSERT_TRUE(tablet_mgr != nullptr);
         ASSERT_OK(tablet_mgr->put_tablet_metadata(_group, metadata));
     }
+
+    void SetUp() override {
+        _tablet_mgr->drop_tablet(_tablet_id);
+        create_tablet();
+    }
+
+    void TearDown() override { _tablet_mgr->drop_tablet(_tablet_id); }
 
 protected:
     LakeServiceImpl _lake_service;
