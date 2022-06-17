@@ -415,7 +415,15 @@ public class Auth implements Writable {
      * This method will check the given privilege levels
      */
     public boolean checkHasPriv(ConnectContext ctx, PrivPredicate priv, PrivLevel... levels) {
+<<<<<<< HEAD
         return checkHasPrivInternal(ctx.getRemoteIP(), ctx.getQualifiedUser(), priv, levels);
+=======
+        if (!Config.enable_auth_check) {
+            return true;
+        }
+        // currentUser referred to the account that determines user's access privileges.
+        return checkHasPrivInternal(ctx.getCurrentUserIdentity(), priv, levels);
+>>>>>>> c25cf9714 ([BugFix] allow skip authorization and reset root password (#7361))
     }
 
     private boolean checkHasPrivInternal(String host, String user, PrivPredicate priv, PrivLevel... levels) {
