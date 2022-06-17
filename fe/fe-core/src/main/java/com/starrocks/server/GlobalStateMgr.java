@@ -126,7 +126,6 @@ import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
-import com.starrocks.cluster.BaseParam;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -182,8 +181,6 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
-import com.starrocks.persist.DatabaseInfo;
-import com.starrocks.persist.DropLinkDbAndUpdateDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
@@ -248,7 +245,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -1746,21 +1742,12 @@ public class GlobalStateMgr {
         localMetastore.unprotectCreateDb(db);
     }
 
-    // for test
-    public void addCluster(Cluster cluster) {
-        localMetastore.addCluster(cluster);
-    }
-
     public void replayCreateDb(Database db) {
         localMetastore.replayCreateDb(db);
     }
 
     public void dropDb(DropDbStmt stmt) throws DdlException {
         localMetastore.dropDb(stmt);
-    }
-
-    public void replayDropLinkDb(DropLinkDbAndUpdateDbInfo info) {
-        localMetastore.replayDropLinkDb(info);
     }
 
     public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {
@@ -2323,10 +2310,6 @@ public class GlobalStateMgr {
         return localMetastore.listDbNames();
     }
 
-    public List<String> getClusterDbNames(String clusterName) throws AnalysisException {
-        return localMetastore.getClusterDbNames(clusterName);
-    }
-
     public List<Long> getDbIds() {
         return localMetastore.getDbIds();
     }
@@ -2672,10 +2655,6 @@ public class GlobalStateMgr {
         throw new DdlException("not implmented");
     }
 
-    public void replayRenameColumn(TableInfo tableInfo) throws DdlException {
-        throw new DdlException("not implmented");
-    }
-
     public void modifyTableDynamicPartition(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         localMetastore.modifyTableDynamicPartition(db, table, properties);
@@ -2799,20 +2778,8 @@ public class GlobalStateMgr {
         this.isDefaultClusterCreated = isDefaultClusterCreated;
     }
 
-    public void changeCluster(ConnectContext ctx, String clusterName) throws DdlException {
-        localMetastore.changeCluster(ctx, clusterName);
-    }
-
     public Cluster getCluster(String clusterName) {
         return localMetastore.getCluster(clusterName);
-    }
-
-    public List<String> getClusterNames() {
-        return localMetastore.getClusterNames();
-    }
-
-    public Set<BaseParam> getMigrations() {
-        return localMetastore.getMigrations();
     }
 
     public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {
@@ -2907,10 +2874,6 @@ public class GlobalStateMgr {
 
     public void initDefaultCluster() {
         localMetastore.initDefaultCluster();
-    }
-
-    public void replayUpdateDb(DatabaseInfo info) {
-        localMetastore.replayUpdateDb(info);
     }
 
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {

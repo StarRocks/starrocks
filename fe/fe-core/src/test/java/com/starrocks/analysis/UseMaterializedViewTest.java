@@ -94,37 +94,6 @@ public class UseMaterializedViewTest {
         }
     }
 
-    @Test
-    public void testInsert() {
-        String sql = "insert into mv1 values(date('2020-04-21'),1)";
-        try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        } catch (Exception e) {
-            assertEquals(e.getMessage(),"data cannot be inserted into table with empty partition.Use `SHOW PARTITIONS FROM mv1` to see the currently partitions of this table. ");
-        }
-
-    }
-
-    @Test
-    public void testUpdate() {
-        String sql = "update mv1 set k2 = 2";
-        try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        } catch (Exception e) {
-            assertEquals(e.getMessage(),"only support updating primary key table");
-        }
-    }
-
-    @Test
-    public void testDelete() {
-        String sql = "delete from mv1 where k2 = 2";
-        try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
-        }
-    }
-
 
 
 }

@@ -98,13 +98,6 @@ public class Database extends MetaObject implements Writable {
 
     private long lastSlowLockLogTime = 0;
 
-    public enum DbState {
-        NORMAL, LINK, MOVE
-    }
-
-    private String attachDbName;
-    private DbState dbState;
-
     public Database() {
         this(0, null);
     }
@@ -120,8 +113,6 @@ public class Database extends MetaObject implements Writable {
         this.nameToTable = new ConcurrentHashMap<>();
         this.dataQuotaBytes = FeConstants.default_db_data_quota_bytes;
         this.replicaQuotaSize = FeConstants.default_db_replica_quota_size;
-        this.dbState = DbState.NORMAL;
-        this.attachDbName = "";
         this.clusterName = "";
     }
 
@@ -447,28 +438,6 @@ public class Database extends MetaObject implements Writable {
         return idToTable.get(tableId);
     }
 
-    public int getMaxReplicationNum() {
-        int ret = 0;
-        readLock();
-        try {
-            for (Table table : idToTable.values()) {
-                if (table.getType() != TableType.OLAP) {
-                    continue;
-                }
-                OlapTable olapTable = (OlapTable) table;
-                for (Partition partition : olapTable.getAllPartitions()) {
-                    short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
-                    if (ret < replicationNum) {
-                        ret = replicationNum;
-                    }
-                }
-            }
-        } finally {
-            readUnlock();
-        }
-        return ret;
-    }
-
     public static Database read(DataInput in) throws IOException {
         Database db = new Database();
         db.readFields(in);
@@ -504,8 +473,10 @@ public class Database extends MetaObject implements Writable {
 
         out.writeLong(dataQuotaBytes);
         Text.writeString(out, clusterName);
-        Text.writeString(out, dbState.name());
-        Text.writeString(out, attachDbName);
+        // compatible for dbState
+        Text.writeString(out, "NORMAL");
+        // NOTE: compatible attachDbName
+        Text.writeString(out, "");
 
         // write functions
         out.writeInt(name2Function.size());
@@ -543,8 +514,10 @@ public class Database extends MetaObject implements Writable {
             clusterName = SystemInfoService.DEFAULT_CLUSTER;
         } else {
             clusterName = Text.readString(in);
-            dbState = DbState.valueOf(Text.readString(in));
-            attachDbName = Text.readString(in);
+            // Compatible for dbState
+            Text.readString(in);
+            // Compatible for attachDbName
+            Text.readString(in);
         }
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_47) {
@@ -603,25 +576,6 @@ public class Database extends MetaObject implements Writable {
 
     public void setClusterName(String clusterName) {
         this.clusterName = clusterName;
-    }
-
-    public DbState getDbState() {
-        return dbState;
-    }
-
-    public void setDbState(DbState dbState) {
-        if (dbState == null) {
-            return;
-        }
-        this.dbState = dbState;
-    }
-
-    public void setAttachDb(String name) {
-        this.attachDbName = name;
-    }
-
-    public String getAttachDb() {
-        return this.attachDbName;
     }
 
     public void setName(String name) {

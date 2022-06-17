@@ -125,4 +125,23 @@ public class TypeTest {
         Assert.assertEquals(0, type.getMysqlResultSetFieldDecimals());
         Assert.assertEquals(33, type.getMysqlResultSetFieldCharsetIndex());
     }
+
+    @Test
+    public void testCanonicalName() {
+        Object[][] testCases = new Object[][]{
+                {ScalarType.createDecimalV3NarrowestType(9, 2), "DECIMAL(9,2)"},
+                {ScalarType.createDecimalV3NarrowestType(18, 4), "DECIMAL(18,4)"},
+                {ScalarType.createDecimalV3NarrowestType(38, 6), "DECIMAL(38,6)"},
+                {ScalarType.createVarchar(16), "VARCHAR(16)"},
+                {ScalarType.createCharType(16), "CHAR(16)"},
+                {ScalarType.createType(PrimitiveType.INT), "INT"},
+                {ScalarType.createType(PrimitiveType.FLOAT), "FLOAT"},
+        };
+
+        for (Object[] tc : testCases) {
+            ScalarType type = (ScalarType) tc[0];
+            String name = (String) tc[1];
+            Assert.assertEquals(name, type.canonicalName());
+        }
+    }
 }

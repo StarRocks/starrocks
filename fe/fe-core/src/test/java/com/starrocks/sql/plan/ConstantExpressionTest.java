@@ -17,6 +17,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.sql.parser.ParsingException;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -283,6 +284,12 @@ public class ConstantExpressionTest extends PlanTestBase {
                         "  |  <slot 20> : 'REPEATABLE-READ'\n" +
                         "  |  <slot 21> : 28800"
         ));
+    }
+
+    @Test(expected = ParsingException.class)
+    public void testDoubleLiteral() throws Exception {
+        String sql = "select 1e309";
+        getFragmentPlan(sql);
     }
 
     @Test

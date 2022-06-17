@@ -134,6 +134,8 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AnalyzeBasicDesc;
+import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CTERelation;
@@ -599,16 +601,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         CreateTableAsSelectStmt createTableAsSelectStmt =
                 (CreateTableAsSelectStmt) visit(context.createTableAsSelectStatement());
-
+        int startIndex = context.createTableAsSelectStatement().start.getStartIndex();
         if (qualifiedName == null) {
             return new SubmitTaskStmt(null, null,
-                    properties, createTableAsSelectStmt);
+                    properties, startIndex, createTableAsSelectStmt);
         } else if (qualifiedName.getParts().size() == 1) {
             return new SubmitTaskStmt(null, qualifiedName.getParts().get(0),
-                    properties, createTableAsSelectStmt);
+                    properties, startIndex, createTableAsSelectStmt);
         } else if (qualifiedName.getParts().size() == 2) {
             return new SubmitTaskStmt(SystemInfoService.DEFAULT_CLUSTER + ":" + qualifiedName.getParts().get(0),
-                    qualifiedName.getParts().get(1), properties, createTableAsSelectStmt);
+                    qualifiedName.getParts().get(1), properties, startIndex, createTableAsSelectStmt);
         } else {
             throw new ParsingException("error task name ");
         }
@@ -947,7 +949,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        return new AnalyzeStmt(tableName, columnNames, properties, context.FULL() == null);
+        return new AnalyzeStmt(tableName, columnNames, properties, context.FULL() == null, new AnalyzeBasicDesc());
     }
 
     @Override
@@ -987,6 +989,36 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowAnalyzeStatement(StarRocksParser.ShowAnalyzeStatementContext context) {
         return new ShowAnalyzeStmt();
+    }
+
+    @Override
+    public ParseNode visitAnalyzeHistogramStatement(StarRocksParser.AnalyzeHistogramStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName tableName = qualifiedNameToTableName(qualifiedName);
+
+        List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
+        List<String> columnNames = null;
+        if (columns != null) {
+            columnNames = columns.stream().map(Identifier::getValue).collect(toList());
+        }
+
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        long bucket;
+        if (context.bucket != null) {
+            bucket = Long.parseLong(context.bucket.getText());
+        } else {
+            bucket = Config.histogram_buckets_size;
+        }
+        long mcv = Config.histogram_topn_size;
+
+        return new AnalyzeStmt(tableName, columnNames, properties, true, new AnalyzeHistogramDesc(bucket, mcv));
     }
 
     // ------------------------------------------- Work Group Statement -------------------------------------------------
@@ -2178,14 +2210,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDoubleValue(StarRocksParser.DoubleValueContext context) {
         try {
-            BigDecimal decimal = new BigDecimal(context.getText());
-            int precision = DecimalLiteral.getRealPrecision(decimal);
-            int scale = DecimalLiteral.getRealScale(decimal);
-            int integerPartWidth = precision - scale;
-            if (integerPartWidth > 38) {
+            if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_DOUBLE_LITERAL)) {
                 return new FloatLiteral(context.getText());
+            } else {
+                BigDecimal decimal = new BigDecimal(context.getText());
+                int precision = DecimalLiteral.getRealPrecision(decimal);
+                int scale = DecimalLiteral.getRealScale(decimal);
+                int integerPartWidth = precision - scale;
+                if (integerPartWidth > 38) {
+                    return new FloatLiteral(context.getText());
+                }
+                return new DecimalLiteral(decimal);
             }
-            return new DecimalLiteral(decimal);
+
         } catch (AnalysisException | NumberFormatException e) {
             throw new ParsingException(e.getMessage());
         }
@@ -2194,7 +2231,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDecimalValue(StarRocksParser.DecimalValueContext context) {
         try {
-            return new DecimalLiteral(context.getText());
+            if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_DOUBLE_LITERAL)) {
+                return new FloatLiteral(context.getText());
+            } else {
+                return new DecimalLiteral(context.getText());
+            }
         } catch (AnalysisException e) {
             throw new ParsingException(e.getMessage());
         }

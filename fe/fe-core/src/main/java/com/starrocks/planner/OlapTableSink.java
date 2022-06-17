@@ -106,6 +106,7 @@ public class OlapTableSink extends DataSink {
         tSink.setTxn_id(txnId);
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
+        tSink.setIs_lake_table(dstTable.isLakeTable());
         tDataSink = new TDataSink(TDataSinkType.DATA_SPLIT_SINK);
         tDataSink.setType(TDataSinkType.OLAP_TABLE_SINK);
         tDataSink.setOlap_table_sink(tSink);

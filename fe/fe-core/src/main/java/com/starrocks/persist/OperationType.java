@@ -118,14 +118,6 @@ public class OperationType {
     public static final short OP_GLOBAL_VARIABLE = 73;
 
     public static final short OP_CREATE_CLUSTER = 74;
-    public static final short OP_DROP_CLUSTER = 75;
-    public static final short OP_EXPAND_CLUSTER = 76;
-    public static final short OP_MIGRATE_CLUSTER = 77;
-    public static final short OP_LINK_CLUSTER = 78;
-    public static final short OP_ENTER_CLUSTER = 79;
-    public static final short OP_SHOW_CLUSTERS = 80;
-    public static final short OP_UPDATE_DB = 82;
-    public static final short OP_DROP_LINKDB = 83;
     public static final short OP_GLOBAL_VARIABLE_V2 = 84;
 
     public static final short OP_ADD_BROKER = 85;

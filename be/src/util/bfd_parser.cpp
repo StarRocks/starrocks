@@ -102,7 +102,9 @@ BfdParser* BfdParser::create() {
     }
 
     char prog_name[1024];
-    fscanf(file, "%s ", prog_name);
+    if (fscanf(file, "%s ", prog_name) != 1) {
+        strcpy(prog_name, "read cmdline failed");
+    }
     fclose(file);
     std::unique_ptr<BfdParser> parser(new BfdParser(prog_name));
     if (parser->parse()) {

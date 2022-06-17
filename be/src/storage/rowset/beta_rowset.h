@@ -63,6 +63,9 @@ public:
     Status get_segment_iterators(const vectorized::Schema& schema, const vectorized::RowsetReadOptions& options,
                                  std::vector<vectorized::ChunkIteratorPtr>* seg_iterators) override;
 
+    // estimate the number of compaction segment iterator
+    StatusOr<int64_t> estimate_compaction_segment_iterator_num() override;
+
     // only used for updatable tablets' rowset
     // simply get iterators to iterate all rows without complex options like predicates
     // |schema| read schema
