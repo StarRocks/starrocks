@@ -28,6 +28,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.OriginStatement;
@@ -55,6 +56,20 @@ public class MaterializedIndexMetaTest {
     public void tearDown() {
         File file = new File(fileName);
         file.delete();
+    }
+
+    @Test
+    public void testSetDefineExprCaseInsensitive() {
+        List<Column> schema = Lists.newArrayList();
+        Column column = new Column("UPPER", Type.ARRAY_VARCHAR);
+        schema.add(column);
+        MaterializedIndexMeta meta = new MaterializedIndexMeta(0, schema, 0, 0,
+                (short) 0, TStorageType.COLUMN, KeysType.DUP_KEYS, null);
+
+        Map<String, Expr> columnNameToDefineExpr = Maps.newHashMap();
+        columnNameToDefineExpr.put("upper", new StringLiteral());
+        meta.setColumnsDefineExpr(columnNameToDefineExpr);
+        Assert.assertNotNull(column.getDefineExpr());
     }
 
     @Test
