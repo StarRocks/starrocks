@@ -70,7 +70,7 @@ public:
 
     void close(RuntimeState* state) override;
 
-    std::unique_ptr<MemPool>& mem_pool() { return _mem_pool; };
+    const MemPool* mem_pool() const { return _mem_pool.get(); }
     bool is_none_group_by_exprs() { return _group_by_expr_ctxs.empty(); }
     const std::vector<ExprContext*>& conjunct_ctxs() { return _conjunct_ctxs; }
     const std::vector<ExprContext*>& group_by_expr_ctxs() { return _group_by_expr_ctxs; }
