@@ -149,22 +149,12 @@ public class MasterImpl {
     }
 
     public TMasterResult finishTask(TFinishTaskRequest request) {
-        // if current node is follower, forward it to leader
+        // if current node is not master, reject the request
         TMasterResult result = new TMasterResult();
         if (!GlobalStateMgr.getCurrentState().isMaster()) {
-            TNetworkAddress addr = masterAddr();
-            try {
-                LOG.info("finishTask as follower, forward it to master. master: {}", addr.toString());
-                result = FrontendServiceProxy.call(addr,
-                        Config.thrift_rpc_timeout_ms,
-                        Config.thrift_rpc_retry_times,
-                        client -> client.finishTask(request));
-            } catch (Exception e) {
-                LOG.warn("finishTask forward to master failed", e);
-                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-                status.setError_msgs(Lists.newArrayList("forward request to fe master failed"));
-                result.setStatus(status);
-            }
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+            result.setStatus(status);
             return result;
         }
         TStatus tStatus = new TStatus(TStatusCode.OK);
@@ -932,19 +922,9 @@ public class MasterImpl {
         // if current node is follower, forward it to leader
         TMasterResult result = new TMasterResult();
         if (!GlobalStateMgr.getCurrentState().isMaster()) {
-            TNetworkAddress addr = masterAddr();
-            try {
-                LOG.info("report as follower, forward it to master. master: {}", addr.toString());
-                result = FrontendServiceProxy.call(addr,
-                        Config.thrift_rpc_timeout_ms,
-                        Config.thrift_rpc_retry_times,
-                        client -> client.report(request));
-            } catch (Exception e) {
-                LOG.warn("report forward to master failed", e);
-                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-                status.setError_msgs(Lists.newArrayList("forward request to fe master failed"));
-                result.setStatus(status);
-            }
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+            result.setStatus(status);
             return result;
         }
         return reportHandler.handleReport(request);
