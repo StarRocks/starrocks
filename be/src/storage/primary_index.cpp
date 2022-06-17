@@ -1039,11 +1039,21 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     return Status::OK();
 }
 
-Status PrimaryIndex::_build_persistent_values(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
-                                              uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* values) {
+Status PrimaryIndex::_build_persistent_values(uint32_t rssid, uint32_t rowid_start, uint32_t idx_begin,
+                                              uint32_t idx_end, std::vector<uint64_t>* values) {
     uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
     for (uint32_t i = idx_begin; i < idx_end; i++) {
         values->emplace_back(base + i);
+    }
+    return Status::OK();
+}
+
+Status PrimaryIndex::_build_persistent_values(uint32_t rssid, const vector<uint32_t>& rowids, uint32_t idx_begin,
+                                              uint32_t idx_end, std::vector<uint64_t>* values) {
+    DCHECK(idx_end <= rowids.size());
+    uint64_t base = ((uint64_t)rssid) << 32;
+    for (uint32_t i = idx_begin; i < idx_end; i++) {
+        values->emplace_back(base + rowids[i]);
     }
     return Status::OK();
 }
@@ -1052,7 +1062,7 @@ Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<
                                                    const vectorized::Column& pks) {
     std::vector<uint64_t> values;
     values.reserve(pks.size());
-    _build_persistent_values(rssid, rowids[0], pks, 0, pks.size(), &values);
+    _build_persistent_values(rssid, rowids, 0, pks.size(), &values);
     RETURN_IF_ERROR(_persistent_index->insert(pks.size(), pks.continuous_data(), values.data(), true));
     return Status::OK();
 }
@@ -1062,7 +1072,7 @@ void PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_
     std::vector<uint64_t> values;
     values.reserve(pks.size());
     std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
-    _build_persistent_values(rssid, rowid_start, pks, 0, pks.size(), &values);
+    _build_persistent_values(rssid, rowid_start, 0, pks.size(), &values);
     _persistent_index->upsert(pks.size(), pks.continuous_data(), values.data(), old_values.data());
     for (uint32_t i = 0; i < old_values.size(); ++i) {
         uint64_t old = old_values[i];
@@ -1100,7 +1110,7 @@ void PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_star
                                              const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes) {
     std::vector<uint64_t> values;
     values.reserve(pks.size());
-    _build_persistent_values(rssid, rowid_start, pks, 0, pks.size(), &values);
+    _build_persistent_values(rssid, rowid_start, 0, pks.size(), &values);
     Status st = _persistent_index->try_replace(pks.size(), pks.continuous_data(), values.data(), src_rssid, deletes);
     if (!st.ok()) {
         LOG(WARNING) << "try replace persistent index failed";
