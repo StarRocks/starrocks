@@ -213,7 +213,20 @@ void HdfsScannerContext::set_columns_from_file(const std::unordered_set<std::str
     }
 }
 
-void HdfsScannerContext::append_not_exised_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
+void HdfsScannerContext::update_not_existed_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
+    if (not_existed_slots.size() == 0) return;
+
+    ChunkPtr& ck = (*chunk);
+    ck->set_num_rows(row_count);
+    for (auto* slot_desc : not_existed_slots) {
+        auto col = ck->get_column_by_slot_id(slot_desc->id());
+        if (row_count > 0) {
+            col->append_default(row_count);
+        }
+    }
+}
+
+void HdfsScannerContext::append_not_existed_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
     if (not_existed_slots.size() == 0) return;
 
     ChunkPtr& ck = (*chunk);
@@ -232,7 +245,7 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
 
     // build chunk for evaluation.
     ChunkPtr chunk = std::make_shared<Chunk>();
-    append_not_exised_columns_to_chunk(&chunk, 1);
+    append_not_existed_columns_to_chunk(&chunk, 1);
     // do evaluation.
     {
         SCOPED_RAW_TIMER(&stats->expr_filter_ns);
@@ -241,7 +254,7 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
     return !(chunk->has_rows());
 }
 
-void HdfsScannerContext::append_partition_column_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
+void HdfsScannerContext::update_partition_column_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
     if (partition_columns.size() == 0) return;
 
     ChunkPtr& ck = (*chunk);
@@ -262,7 +275,7 @@ void HdfsScannerContext::append_partition_column_to_chunk(vectorized::ChunkPtr* 
             }
             chunk_part_column->assign(row_count, 0);
         }
-        ck->append_column(std::move(chunk_part_column), slot_desc->id());
+        ck->update_column(std::move(chunk_part_column), slot_desc->id());
     }
 }
 
