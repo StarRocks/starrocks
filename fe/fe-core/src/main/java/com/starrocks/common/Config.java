@@ -1513,7 +1513,30 @@ public class Config extends ConfigBase {
     public static int quorom_publish_wait_time_ms = 5000;
 
     /**
-     * Fqdn function switch,
+     * FE journal queue size
+     * Write log will fail if queue is full
+     **/
+    @ConfField(mutable = true)
+    public static int metadata_journal_queue_size = 1000;
+
+    /**
+     * The maxium size(key+value) of journal entity to write as a batch
+     * Increase this configuration if journal queue is always full
+     * TODO: set default value
+     **/
+    @ConfField(mutable = true)
+    public static int metadata_journal_max_batch_size_mb = 10;
+
+    /**
+     * The maxium number of journal entity to write as a batch
+     * Increase this configuration if journal queue is always full
+     * TODO: set default value
+     **/
+    @ConfField(mutable = true)
+    public static int metadata_journal_max_batch_cnt = 100;
+
+    /**
+     * Fqdn function switch, 
      * this switch will be deleted after release the fqdn func
      */
     @ConfField(mutable = true)

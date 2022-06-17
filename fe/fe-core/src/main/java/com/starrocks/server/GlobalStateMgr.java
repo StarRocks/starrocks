@@ -159,6 +159,7 @@ import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.MasterInfo;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
@@ -292,6 +293,7 @@ public class GlobalStateMgr {
 
     private MasterDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
     private MasterDaemon txnTimeoutChecker; // To abort timeout txns
+    private JournalWriter journalWriter; // master only: write journal log
     private Daemon replayer;
     private Daemon timePrinter;
     private Daemon listener;
@@ -815,6 +817,8 @@ public class GlobalStateMgr {
         this.globalTransactionMgr.setEditLog(editLog);
         this.idGenerator.setEditLog(editLog);
         this.localMetastore.setEditLog(editLog);
+        // init journal writer
+        journalWriter = new JournalWriter(this.editLog.getJournal(), this.editLog.getJournalQueue());
 
         // 4. create load and export job label cleaner thread
         createLabelCleaner();
@@ -885,7 +889,8 @@ public class GlobalStateMgr {
 
         nodeMgr.checkCurrentNodeExist();
 
-        editLog.rollEditLog();
+        journalWriter.init(editLog.getMaxJournalId());
+        journalWriter.startDaemon();
 
         // Set the feType to MASTER before writing edit log, because the feType must be Master when writing edit log.
         // It will be set to the old type if any error happens in the following procedure
