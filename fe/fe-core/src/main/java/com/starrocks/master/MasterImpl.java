@@ -919,7 +919,7 @@ public class MasterImpl {
     }
 
     public TMasterResult report(TReportRequest request) throws TException {
-        // if current node is follower, forward it to leader
+        // if current node is not master, reject the request
         TMasterResult result = new TMasterResult();
         if (!GlobalStateMgr.getCurrentState().isMaster()) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);

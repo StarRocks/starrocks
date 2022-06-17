@@ -765,7 +765,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn begin request: {}", request);
 
         TLoadTxnBeginResult result = new TLoadTxnBeginResult();
-        // if current node is follower, forward it to leader
+        // if current node is not master, reject the request
         if (!GlobalStateMgr.getCurrentState().isMaster()) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList("current fe is not master"));
@@ -841,7 +841,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn commit request: {}", request);
 
         TLoadTxnCommitResult result = new TLoadTxnCommitResult();
-        // if current node is follower, forward it to leader
+        // if current node is not master, reject the request
         if (!GlobalStateMgr.getCurrentState().isMaster()) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList("current fe is not master"));
@@ -951,7 +951,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn rollback request: {}", request);
 
         TLoadTxnRollbackResult result = new TLoadTxnRollbackResult();
-        // if current node is follower, forward it to leader
+        // if current node is not master, reject the request
         if (!GlobalStateMgr.getCurrentState().isMaster()) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList("current fe is not master"));
