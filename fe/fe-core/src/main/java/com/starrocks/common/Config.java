@@ -829,13 +829,6 @@ public class Config extends ConfigBase {
     public static int max_allowed_in_element_num_of_delete = 10000;
 
     /**
-     * only limit for Row-based storage.
-     * set to Integer.MAX_VALUE, cause starrocks is already Column-based storage
-     */
-    @ConfField(mutable = true)
-    public static int max_layout_length_per_row = Integer.MAX_VALUE;
-
-    /**
      * The multi cluster feature will be deprecated in version 0.12
      * set this config to true will disable all operations related to cluster feature, include:
      * create/drop cluster

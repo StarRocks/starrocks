@@ -208,7 +208,6 @@ public class CreateTableAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_MUST_HAVE_COLUMNS);
         }
 
-        int rowLengthBytes = 0;
         boolean hasHll = false;
         boolean hasBitmap = false;
         boolean hasJson = false;
@@ -236,13 +235,6 @@ public class CreateTableAnalyzer {
             if (!columnSet.add(columnDef.getName())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
             }
-
-            rowLengthBytes += columnDef.getType().getStorageLayoutBytes();
-        }
-
-        if (rowLengthBytes > Config.max_layout_length_per_row && statement.isOlapOrLakeEngine()) {
-            throw new SemanticException("The size of a row (%d) exceed the maximal row size: %d", rowLengthBytes,
-                    Config.max_layout_length_per_row);
         }
 
         if (hasHll && keysDesc.getKeysType() != KeysType.AGG_KEYS) {

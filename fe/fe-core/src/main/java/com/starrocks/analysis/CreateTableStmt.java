@@ -417,7 +417,6 @@ public class CreateTableStmt extends DdlStmt {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLE_MUST_HAVE_COLUMNS);
         }
 
-        int rowLengthBytes = 0;
         boolean hasHll = false;
         boolean hasBitmap = false;
         boolean hasJson = false;
@@ -440,13 +439,6 @@ public class CreateTableStmt extends DdlStmt {
             if (!columnSet.add(columnDef.getName())) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
             }
-
-            rowLengthBytes += columnDef.getType().getStorageLayoutBytes();
-        }
-
-        if (rowLengthBytes > Config.max_layout_length_per_row && isOlapOrLakeEngine()) {
-            throw new AnalysisException("The size of a row (" + rowLengthBytes + ") exceed the maximal row size: "
-                    + Config.max_layout_length_per_row);
         }
 
         if (hasHll && keysDesc.getKeysType() != KeysType.AGG_KEYS) {

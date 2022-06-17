@@ -1364,10 +1364,6 @@ public abstract class Type implements Cloneable {
         }
     }
 
-    public int getStorageLayoutBytes() {
-        return 0;
-    }
-
     public int getIndexSize() {
         if (this.getPrimitiveType() == PrimitiveType.CHAR) {
             return ((ScalarType) this).getLength();
