@@ -20,33 +20,33 @@ public class AnalyzeDropTest {
 
     @Test
     public void testDropTable() {
-        analyzeSuccess("drop table if exists test1 force");
-        analyzeSuccess("drop table if exists test1");
-        analyzeSuccess("drop table test1 force");
-        analyzeSuccess("drop table db1.test1");
-        analyzeFail("drop table exists test1");
-        DropTableStmt stmt = (DropTableStmt) analyzeSuccess("drop table if exists db1.test1 force");
-        Assert.assertEquals("default_cluster:db1", stmt.getDbName());
-        Assert.assertEquals("test1", stmt.getTableName());
+        analyzeSuccess("drop table if exists table_to_drop force");
+        analyzeSuccess("drop table if exists table_to_drop");
+        analyzeSuccess("drop table table_to_drop force");
+        analyzeSuccess("drop table test.table_to_drop");
+        analyzeFail("drop table exists table_to_drop");
+        DropTableStmt stmt = (DropTableStmt) analyzeSuccess("drop table if exists test.table_to_drop force");
+        Assert.assertEquals("default_cluster:test", stmt.getDbName());
+        Assert.assertEquals("table_to_drop", stmt.getTableName());
         Assert.assertTrue(stmt.isSetIfExists());
         Assert.assertTrue(stmt.isForceDrop());
-        stmt = (DropTableStmt) analyzeSuccess("drop table test2");
+        stmt = (DropTableStmt) analyzeSuccess("drop table t0");
         Assert.assertEquals("default_cluster:test", stmt.getDbName());
-        Assert.assertEquals("test2", stmt.getTableName());
+        Assert.assertEquals("t0", stmt.getTableName());
         Assert.assertFalse(stmt.isSetIfExists());
         Assert.assertFalse(stmt.isForceDrop());
     }
 
     @Test
     public void testDropView() {
-        analyzeSuccess("drop view if exists view");
-        analyzeSuccess("drop view test1");
-        analyzeSuccess("drop view db1.test1");
-        analyzeFail("drop view test1 force");
-        analyzeFail("drop view exists test1");
-        DropTableStmt stmt = (DropTableStmt) analyzeSuccess("drop view if exists db1.test1");
-        Assert.assertEquals("default_cluster:db1", stmt.getDbName());
-        Assert.assertEquals("test1", stmt.getTableName());
+        analyzeSuccess("drop view if exists view_to_drop");
+        analyzeSuccess("drop view view_to_drop");
+        analyzeSuccess("drop view test.view_to_drop");
+        analyzeFail("drop view view_to_drop force");
+        analyzeFail("drop view exists view_to_drop");
+        DropTableStmt stmt = (DropTableStmt) analyzeSuccess("drop view if exists test.view_to_drop");
+        Assert.assertEquals("default_cluster:test", stmt.getDbName());
+        Assert.assertEquals("view_to_drop", stmt.getTableName());
         Assert.assertTrue(stmt.isView());
         Assert.assertTrue(stmt.isSetIfExists());
         Assert.assertFalse(stmt.isForceDrop());

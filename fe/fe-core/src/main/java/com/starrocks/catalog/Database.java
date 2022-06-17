@@ -27,7 +27,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
@@ -38,8 +41,13 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.CreateTableInfo;
+import com.starrocks.persist.DropInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTask;
+import com.starrocks.task.AgentTaskExecutor;
+import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -48,6 +56,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -338,6 +347,96 @@ public class Database extends MetaObject implements Writable {
             nameToTable.put(table.getName(), table);
         }
         return result;
+    }
+
+    public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
+        Table table;
+        HashMap<Long, AgentBatchTask> batchTaskMap;
+        writeLock();
+        try {
+            table = getTable(tableName);
+            // double check because the table may be dropped
+            if (table == null) {
+                if (isSetIfExists) {
+                    LOG.info("drop table[{}] which does not exist", tableName);
+                    return;
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+                }
+            }
+            if (!isForce) {
+                if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .existCommittedTxns(id, table.getId(), null)) {
+                    throw new DdlException(
+                            "There are still some transactions in the COMMITTED state waiting to be completed. " +
+                                    "The table [" + table.getName() +
+                                    "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
+                                    " please use \"DROP table FORCE\".");
+                }
+            }
+            batchTaskMap = unprotectDropTable(table.getId(), isForce, false);
+            DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
+            GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info);
+        } finally {
+            writeUnlock();
+        }
+        sendDropTabletTasks(batchTaskMap);
+        LOG.info("finished dropping table: {}, type:{} from db: {}, is force: {}",
+                table.getName(), table.getType(), fullQualifiedName, isForce);
+    }
+
+    public HashMap<Long, AgentBatchTask> unprotectDropTable(long tableId, boolean isForceDrop,
+                                                            boolean isReplay) {
+        HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
+        Table table = getTable(tableId);
+        // delete from db meta
+        if (table == null) {
+            return batchTaskMap;
+        }
+
+        table.onDrop();
+
+        dropTable(table.getName());
+        if (!isForceDrop) {
+            Table oldTable = GlobalStateMgr.getCurrentState().getRecycleBin().recycleTable(id, table);
+            if (oldTable != null && oldTable.getType() == Table.TableType.OLAP) {
+                batchTaskMap = GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) oldTable, false);
+            }
+        } else {
+            if (table.getType() == Table.TableType.OLAP) {
+                batchTaskMap = GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) table, isReplay);
+            }
+        }
+
+        LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), getFullName(),
+                table.getId());
+        return batchTaskMap;
+    }
+
+    public void sendDropTabletTasks(HashMap<Long, AgentBatchTask> batchTaskMap) {
+        int numDropTaskPerBe = Config.max_agent_tasks_send_per_be;
+        for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
+            AgentBatchTask originTasks = entry.getValue();
+            if (originTasks.getTaskNum() > numDropTaskPerBe) {
+                AgentBatchTask partTask = new AgentBatchTask();
+                List<AgentTask> allTasks = originTasks.getAllTasks();
+                int curTask = 1;
+                for (AgentTask task : allTasks) {
+                    partTask.addTask(task);
+                    if (curTask++ > numDropTaskPerBe) {
+                        AgentTaskExecutor.submit(partTask);
+                        curTask = 1;
+                        partTask = new AgentBatchTask();
+                        ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
+                    }
+                }
+                if (partTask.getAllTasks().size() > 0) {
+                    AgentTaskExecutor.submit(partTask);
+                }
+            } else {
+                AgentTaskExecutor.submit(originTasks);
+            }
+        }
     }
 
     public void dropTableWithLock(String tableName) {

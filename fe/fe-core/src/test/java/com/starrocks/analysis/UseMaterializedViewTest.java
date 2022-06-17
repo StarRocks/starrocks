@@ -3,10 +3,13 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -74,6 +77,14 @@ public class UseMaterializedViewTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\"\n" +
                         ") " +
+                        "as select tbl1.k1 ss, k2 from tbl1;")
+                .withNewMaterializedView("create materialized view mv_to_drop " +
+                        "partition by ss " +
+                        "distributed by hash(k2) " +
+                        "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ") " +
                         "as select tbl1.k1 ss, k2 from tbl1;");
     }
 
@@ -94,7 +105,22 @@ public class UseMaterializedViewTest {
         }
     }
 
-
-
+    @Test
+    public void testDropMaterializedView() {
+        String sql = "drop materialized view mv_to_drop";
+        try {
+            Database database = starRocksAssert.getCtx().getGlobalStateMgr().getDb("default_cluster:test");
+            Assert.assertTrue(database != null);
+            Table table = database.getTable("mv_to_drop");
+            Assert.assertTrue(table != null);
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
+            stmtExecutor.execute();
+            table = database.getTable("mv_to_drop");
+            Assert.assertTrue(table == null);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+    }
 }
 

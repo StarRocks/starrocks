@@ -138,7 +138,6 @@ import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropDbInfo;
-import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyPartitionInfo;
@@ -432,7 +431,7 @@ public class LocalMetastore implements ConnectorMetadata {
     public HashMap<Long, AgentBatchTask> unprotectDropDb(Database db, boolean isForeDrop, boolean isReplay) {
         HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
         for (Table table : db.getTables()) {
-            HashMap<Long, AgentBatchTask> dropTasks = unprotectDropTable(db, table.getId(), isForeDrop, isReplay);
+            HashMap<Long, AgentBatchTask> dropTasks = db.unprotectDropTable(table.getId(), isForeDrop, isReplay);
             if (!isReplay) {
                 for (Long backendId : dropTasks.keySet()) {
                     AgentBatchTask batchTask = batchTaskMap.get(backendId);
@@ -447,33 +446,7 @@ public class LocalMetastore implements ConnectorMetadata {
         return batchTaskMap;
     }
 
-    public HashMap<Long, AgentBatchTask> unprotectDropTable(Database db, long tableId, boolean isForceDrop,
-                                                            boolean isReplay) {
-        HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
-        Table table = db.getTable(tableId);
-        // delete from db meta
-        if (table == null) {
-            return batchTaskMap;
-        }
 
-        table.onDrop();
-
-        db.dropTable(table.getName());
-        if (!isForceDrop) {
-            Table oldTable = recycleBin.recycleTable(db.getId(), table);
-            if (oldTable != null && oldTable.getType() == Table.TableType.OLAP) {
-                batchTaskMap = stateMgr.onEraseOlapTable((OlapTable) oldTable, false);
-            }
-        } else {
-            if (table.getType() == Table.TableType.OLAP) {
-                batchTaskMap = stateMgr.onEraseOlapTable((OlapTable) table, isReplay);
-            }
-        }
-
-        LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), db.getFullName(),
-                table.getId());
-        return batchTaskMap;
-    }
 
     public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {
         tryLock(true);
@@ -2406,50 +2379,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-
-        Table table;
-        HashMap<Long, AgentBatchTask> batchTaskMap;
-        db.writeLock();
-        try {
-            table = db.getTable(tableName);
-            if (table == null) {
-                if (stmt.isSetIfExists()) {
-                    LOG.info("drop table[{}] which does not exist", tableName);
-                    return;
-                } else {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
-                }
-            }
-
-            // Check if a view
-            if (stmt.isView()) {
-                if (!(table instanceof View)) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_OBJECT, dbName, tableName, "VIEW");
-                }
-            } else {
-                if (table instanceof View) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_OBJECT, dbName, tableName, "TABLE");
-                }
-            }
-
-            if (!stmt.isForceDrop()) {
-                if (stateMgr.getGlobalTransactionMgr()
-                        .existCommittedTxns(db.getId(), table.getId(), null)) {
-                    throw new DdlException(
-                            "There are still some transactions in the COMMITTED state waiting to be completed. " +
-                                    "The table [" + tableName +
-                                    "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
-                                    " please use \"DROP table FORCE\".");
-                }
-            }
-            batchTaskMap = unprotectDropTable(db, table.getId(), stmt.isForceDrop(), false);
-            DropInfo info = new DropInfo(db.getId(), table.getId(), -1L, stmt.isForceDrop());
-            editLog.logDropTable(info);
-        } finally {
-            db.writeUnlock();
-        }
-        sendDropTabletTasks(batchTaskMap);
-        LOG.info("finished dropping table: {} from db: {}, is force: {}", tableName, dbName, stmt.isForceDrop());
+        db.dropTable(tableName, stmt.isSetIfExists(), stmt.isForceDrop());
     }
 
     public void sendDropTabletTasks(HashMap<Long, AgentBatchTask> batchTaskMap) {
@@ -2481,7 +2411,7 @@ public class LocalMetastore implements ConnectorMetadata {
     public void replayDropTable(Database db, long tableId, boolean isForceDrop) {
         db.writeLock();
         try {
-            unprotectDropTable(db, tableId, isForceDrop, true);
+            db.unprotectDropTable(tableId, isForceDrop, true);
         } finally {
             db.writeUnlock();
         }
@@ -2984,7 +2914,25 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
-        stateMgr.getAlterInstance().processDropMaterializedView(stmt);
+        if (stmt.getDbTblName() != null) {
+            stateMgr.getAlterInstance().processDropMaterializedView(stmt);
+        }
+        Database db = getDb(stmt.getDbName());
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, stmt.getDbName());
+        }
+        Table table;
+        db.readLock();
+        try {
+            table = db.getTable(stmt.getMvName());
+        } finally {
+            db.readUnlock();
+        }
+        if (table != null && table instanceof MaterializedView) {
+            db.dropTable(table.getName(), stmt.isSetIfExists(), true);
+        } else {
+            stateMgr.getAlterInstance().processDropMaterializedView(stmt);
+        }
     }
 
     /*
