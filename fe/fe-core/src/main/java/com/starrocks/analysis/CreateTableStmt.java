@@ -63,7 +63,7 @@ import static com.starrocks.catalog.AggregateType.HLL_UNION;
 public class CreateTableStmt extends DdlStmt {
 
     private static final String DEFAULT_ENGINE_NAME = "olap";
-    private static final String LAKE_ENGINE_NAME = "starrocks";
+    public static final String LAKE_ENGINE_NAME = "starrocks";
     private static final String DEFAULT_CHARSET_NAME = "utf8";
 
     private boolean ifNotExists;
