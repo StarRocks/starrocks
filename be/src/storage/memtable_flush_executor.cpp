@@ -33,7 +33,7 @@ public:
     MemtableFlushTask(FlushToken* flush_token, std::unique_ptr<vectorized::MemTable> memtable)
             : _flush_token(flush_token), _memtable(std::move(memtable)) {}
 
-    ~MemtableFlushTask() = default;
+    ~MemtableFlushTask() override = default;
 
     void run() override {
         SCOPED_THREAD_LOCAL_MEM_SETTER(_memtable->mem_tracker(), false);
