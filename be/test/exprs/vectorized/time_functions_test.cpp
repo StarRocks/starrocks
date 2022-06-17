@@ -1005,10 +1005,29 @@ TEST_F(TimeFunctionsTest, from_days) {
         columns.emplace_back(tc);
         ColumnPtr result = TimeFunctions::from_days(ctx, columns);
         ASSERT_TRUE(result->is_nullable());
+        auto col = ColumnHelper::as_column<NullableColumn>(result);
+        ASSERT_EQ(1,col->size());
+        ASSERT_FALSE(col->is_null(0));
+        ASSERT_EQ(col->get(0).get_date().to_string(), "0000-00-00");
+    }
+    // from_days(negative) return "0000-00-00"
+    {
+        auto tc = Int32Column::create();
+        tc->append(-1);
+        tc->append(-2);
+        tc->append(-2147483648);
+        Columns columns;
+        columns.push_back(tc);
 
-        NullableColumn::Ptr nullable_col = ColumnHelper::as_column<NullableColumn>(result);
-        ASSERT_EQ(1, nullable_col->size());
-        ASSERT_TRUE(nullable_col->is_null(0));
+        ColumnPtr result = TimeFunctions::from_days(ctx, columns);
+        ASSERT_TRUE(result->is_nullable());
+
+        auto col = ColumnHelper::as_column<NullableColumn>(result);
+        ASSERT_EQ(3, col->size());
+        for (auto i = 0; i < 3; ++i) {
+            ASSERT_FALSE(col->is_null(i));
+            ASSERT_EQ(col->get(i).get_date().to_string(), "0000-00-00");
+        }
     }
 }
 
