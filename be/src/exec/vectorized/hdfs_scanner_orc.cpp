@@ -478,17 +478,18 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                 StatusOr<ChunkPtr> ret;
                 SCOPED_RAW_TIMER(&_stats.column_convert_ns);
                 if (!_orc_reader->has_lazy_load_context()) {
-                    ret = _orc_reader->get_chunk(chunk);
+                    ret = _orc_reader->get_chunk();
                 } else {
-                    ret = _orc_reader->get_active_chunk(chunk);
+                    ret = _orc_reader->get_active_chunk();
                 }
                 RETURN_IF_ERROR(ret);
+                *chunk = std::move(ret.value());
             }
 
             // important to add columns before evaluation
             // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
-            _scanner_ctx.update_not_existed_columns_to_chunk(chunk, ck->num_rows());
-            _scanner_ctx.update_partition_column_to_chunk(chunk, ck->num_rows());
+            _scanner_ctx.append_not_exised_columns_to_chunk(chunk, ck->num_rows());
+            _scanner_ctx.append_partition_column_to_chunk(chunk, ck->num_rows());
             chunk_size = ck->num_rows();
             // do stats before we filter rows which does not match.
             _stats.raw_rows_read += chunk_size;
@@ -511,6 +512,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                 ck->filter(_chunk_filter);
             }
         }
+        ck->set_num_rows(chunk_size);
 
         if (!_orc_reader->has_lazy_load_context()) {
             return Status::OK();
@@ -531,8 +533,10 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                 _orc_reader->lazy_filter_on_cvb(&_dict_filter);
             }
             _orc_reader->lazy_filter_on_cvb(&_chunk_filter);
-            StatusOr<ChunkPtr> ret = _orc_reader->get_lazy_chunk(chunk);
+            StatusOr<ChunkPtr> ret = _orc_reader->get_lazy_chunk();
             RETURN_IF_ERROR(ret);
+            Chunk& ret_ck = *(ret.value());
+            ck->merge(std::move(ret_ck));
         }
         return Status::OK();
     }
