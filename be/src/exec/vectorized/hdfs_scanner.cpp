@@ -217,7 +217,6 @@ void HdfsScannerContext::update_not_existed_columns_to_chunk(vectorized::ChunkPt
     if (not_existed_slots.size() == 0) return;
 
     ChunkPtr& ck = (*chunk);
-    ck->set_num_rows(row_count);
     for (auto* slot_desc : not_existed_slots) {
         auto col = ck->get_column_by_slot_id(slot_desc->id());
         if (row_count > 0) {
@@ -259,8 +258,6 @@ void HdfsScannerContext::update_partition_column_to_chunk(vectorized::ChunkPtr* 
     if (partition_columns.size() == 0) return;
 
     ChunkPtr& ck = (*chunk);
-    ck->set_num_rows(row_count);
-
     for (size_t i = 0; i < partition_columns.size(); i++) {
         SlotDescriptor* slot_desc = partition_columns[i].slot_desc;
         DCHECK(partition_values[i]->is_constant());
