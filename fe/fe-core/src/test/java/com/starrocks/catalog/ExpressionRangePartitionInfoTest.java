@@ -8,24 +8,17 @@ import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionKeyDesc.PartitionRangeType;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.SingleRangePartitionDesc;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.IdGenerator;
-import com.starrocks.common.jmockit.Deencapsulation;
-import mockit.Expectations;
-import mockit.Injectable;
-import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
-import java.util.LinkedList;
+import java.util.Arrays;
 import java.util.List;
 
 public class ExpressionRangePartitionInfoTest {
@@ -43,13 +36,9 @@ public class ExpressionRangePartitionInfoTest {
     public void setUp() {
         partitionExprs = Lists.newArrayList();
         singleRangePartitionDescs = Lists.newArrayList();
-
         tableName = new TableName("default_cluster:test", "tbl1");
         k2 = new Column("k2", new ScalarType(PrimitiveType.DATETIME), true, null, "", "");
-        SlotDescriptor slotDescriptor2 = new SlotDescriptor(null, null);
-        slotDescriptor2.setColumn(k2);
         SlotRef slotRef2 = new SlotRef(tableName, "k2");
-        slotRef2.setDesc(slotDescriptor2);
         List<Expr> fnChildren = Lists.newArrayList();
         fnChildren.add(new StringLiteral("month"));
         fnChildren.add(slotRef2);
@@ -61,12 +50,10 @@ public class ExpressionRangePartitionInfoTest {
     @Test
     public void testInitUseSlotRef() {
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.DATETIME), true, null, "", "");
-        SlotDescriptor slotDescriptor = new SlotDescriptor(null, null);
-        slotDescriptor.setColumn(k1);
         SlotRef slotRef = new SlotRef(tableName, "k1");
-        slotRef.setDesc(slotDescriptor);
         partitionExprs.add(slotRef);
-        ExpressionRangePartitionInfo expressionRangePartitionInfo = new ExpressionRangePartitionInfo(partitionExprs);
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = new ExpressionRangePartitionInfo(partitionExprs,
+                Arrays.asList(k1));
         List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns();
         Assert.assertEquals(partitionColumns.size(), 1);
         Assert.assertEquals(partitionColumns.get(0), k1);
@@ -75,7 +62,8 @@ public class ExpressionRangePartitionInfoTest {
     @Test
     public void testInitUseFunction() {
         partitionExprs.add(functionCallExpr);
-        ExpressionRangePartitionInfo expressionRangePartitionInfo = new ExpressionRangePartitionInfo(partitionExprs);
+        ExpressionRangePartitionInfo expressionRangePartitionInfo =
+                new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k2));
         List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns();
         Assert.assertEquals(partitionColumns.size(), 1);
         Assert.assertEquals(partitionColumns.get(0), k2);
@@ -84,27 +72,15 @@ public class ExpressionRangePartitionInfoTest {
     @Test
     public void testInitHybrid() {
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.DATETIME), true, null, "", "");
-        SlotDescriptor slotDescriptor = new SlotDescriptor(null, null);
-        slotDescriptor.setColumn(k1);
         SlotRef slotRef = new SlotRef(tableName, "k1");
-        slotRef.setDesc(slotDescriptor);
         partitionExprs.add(slotRef);
         partitionExprs.add(functionCallExpr);
-        ExpressionRangePartitionInfo expressionRangePartitionInfo = new ExpressionRangePartitionInfo(partitionExprs);
+        ExpressionRangePartitionInfo expressionRangePartitionInfo =
+                new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2));
         List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns();
         Assert.assertEquals(partitionColumns.size(), 2);
         Assert.assertEquals(partitionColumns.get(0), k1);
         Assert.assertEquals(partitionColumns.get(1), k2);
-    }
-
-    @Test
-    public void testInitOtherExpr() {
-        partitionExprs.add(new StringLiteral("123"));
-        try {
-            new ExpressionRangePartitionInfo(partitionExprs);
-        } catch (Exception e) {
-            Assert.assertEquals(e.getMessage(), "Unsupported expression type:VARCHAR");
-        }
     }
 
     // cover RangePartitionInfo test cases
@@ -113,17 +89,14 @@ public class ExpressionRangePartitionInfoTest {
     public void testTinyInt() throws DdlException, AnalysisException {
 
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.TINYINT), true, null, "", "");
-        SlotDescriptor slotDescriptor = new SlotDescriptor(null, null);
-        slotDescriptor.setColumn(k1);
         SlotRef slotRef = new SlotRef(tableName, "k1");
-        slotRef.setDesc(slotDescriptor);
         partitionExprs.add(slotRef);
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1",
                 new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-128"))),
                 null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs);
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1));
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(1, null);
             partitionInfo.handleNewSinglePartitionDesc(singleRangePartitionDesc, 20000L, false);
@@ -133,17 +106,14 @@ public class ExpressionRangePartitionInfoTest {
     @Test(expected = DdlException.class)
     public void testSmallInt() throws DdlException, AnalysisException {
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.SMALLINT), true, null, "", "");
-        SlotDescriptor slotDescriptor = new SlotDescriptor(null, null);
-        slotDescriptor.setColumn(k1);
         SlotRef slotRef = new SlotRef(tableName, "k1");
-        slotRef.setDesc(slotDescriptor);
         partitionExprs.add(slotRef);
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1",
                 new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-32768"))),
                 null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs);
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1));
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(1, null);
             partitionInfo.handleNewSinglePartitionDesc(singleRangePartitionDesc, 20000L, false);
@@ -153,17 +123,14 @@ public class ExpressionRangePartitionInfoTest {
     @Test(expected = DdlException.class)
     public void testInt() throws DdlException, AnalysisException {
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.INT), true, null, "", "");
-        SlotDescriptor slotDescriptor = new SlotDescriptor(null, null);
-        slotDescriptor.setColumn(k1);
         SlotRef slotRef = new SlotRef(tableName, "k1");
-        slotRef.setDesc(slotDescriptor);
         partitionExprs.add(slotRef);
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1",
                 new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-2147483648"))),
                 null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs);
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1));
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(1, null);
             partitionInfo.handleNewSinglePartitionDesc(singleRangePartitionDesc, 20000L, false);
@@ -173,10 +140,7 @@ public class ExpressionRangePartitionInfoTest {
     @Test(expected = DdlException.class)
     public void testBigInt() throws DdlException, AnalysisException {
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.BIGINT), true, null, "", "");
-        SlotDescriptor slotDescriptor = new SlotDescriptor(null, null);
-        slotDescriptor.setColumn(k1);
         SlotRef slotRef = new SlotRef(tableName, "k1");
-        slotRef.setDesc(slotDescriptor);
         partitionExprs.add(slotRef);
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", new PartitionKeyDesc(Lists
@@ -188,7 +152,7 @@ public class ExpressionRangePartitionInfoTest {
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p4", new PartitionKeyDesc(Lists
                 .newArrayList(new PartitionValue("9223372036854775806"))), null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs);
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1));
         ;
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
@@ -200,10 +164,7 @@ public class ExpressionRangePartitionInfoTest {
     @Test
     public void testBigIntNormal() throws DdlException, AnalysisException {
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.BIGINT), true, null, "", "");
-        SlotDescriptor slotDescriptor = new SlotDescriptor(null, null);
-        slotDescriptor.setColumn(k1);
         SlotRef slotRef = new SlotRef(tableName, "k1");
-        slotRef.setDesc(slotDescriptor);
         partitionExprs.add(slotRef);
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", new PartitionKeyDesc(Lists
@@ -215,7 +176,7 @@ public class ExpressionRangePartitionInfoTest {
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p4", new PartitionKeyDesc(Lists
                 .newArrayList(new PartitionValue("9223372036854775806"))), null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs);
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1));
         ;
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
@@ -237,16 +198,10 @@ public class ExpressionRangePartitionInfoTest {
         //add columns
         int columns = 2;
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.INT), true, null, "", "");
-        SlotDescriptor slotDescriptor1 = new SlotDescriptor(null, null);
-        slotDescriptor1.setColumn(k1);
         SlotRef slotRef1 = new SlotRef(tableName, "k1");
-        slotRef1.setDesc(slotDescriptor1);
         partitionExprs.add(slotRef1);
         Column k2 = new Column("k2", new ScalarType(PrimitiveType.BIGINT), true, null, "", "");
-        SlotDescriptor slotDescriptor2 = new SlotDescriptor(null, null);
-        slotDescriptor2.setColumn(k2);
         SlotRef slotRef2 = new SlotRef(tableName, "k2");
-        slotRef2.setDesc(slotDescriptor2);
         partitionExprs.add(slotRef2);
 
         //add RangePartitionDescs
@@ -268,8 +223,7 @@ public class ExpressionRangePartitionInfoTest {
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p3", p3, null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p4", p4, null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs);
-        ;
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2));
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
@@ -289,22 +243,13 @@ public class ExpressionRangePartitionInfoTest {
     public void testFixedRange1() throws DdlException, AnalysisException {
         //add columns
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.DATE), true, null, "", "");
-        SlotDescriptor slotDescriptor1 = new SlotDescriptor(null, null);
-        slotDescriptor1.setColumn(k1);
         SlotRef slotRef1 = new SlotRef(tableName, "k1");
-        slotRef1.setDesc(slotDescriptor1);
         partitionExprs.add(slotRef1);
         Column k2 = new Column("k2", new ScalarType(PrimitiveType.INT), true, null, "", "");
-        SlotDescriptor slotDescriptor2 = new SlotDescriptor(null, null);
-        slotDescriptor2.setColumn(k2);
         SlotRef slotRef2 = new SlotRef(tableName, "k2");
-        slotRef2.setDesc(slotDescriptor2);
         partitionExprs.add(slotRef2);
         Column k3 = new Column("k3", new ScalarType(PrimitiveType.INT), true, null, "", "");
-        SlotDescriptor slotDescriptor3 = new SlotDescriptor(null, null);
-        slotDescriptor3.setColumn(k3);
         SlotRef slotRef3 = new SlotRef(tableName, "k3");
-        slotRef3.setDesc(slotDescriptor3);
         partitionExprs.add(slotRef3);
 
         //add RangePartitionDescs
@@ -321,7 +266,7 @@ public class ExpressionRangePartitionInfoTest {
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p2", p2, null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p3", p3, null));
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs);
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2, k3));
         ;
         PartitionRangeType partitionType = PartitionRangeType.INVALID;
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
@@ -346,16 +291,10 @@ public class ExpressionRangePartitionInfoTest {
         //add columns
         int columns = 2;
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.INT), true, null, "", "");
-        SlotDescriptor slotDescriptor1 = new SlotDescriptor(null, null);
-        slotDescriptor1.setColumn(k1);
         SlotRef slotRef1 = new SlotRef(tableName, "k1");
-        slotRef1.setDesc(slotDescriptor1);
         partitionExprs.add(slotRef1);
         Column k2 = new Column("k2", new ScalarType(PrimitiveType.BIGINT), true, null, "", "");
-        SlotDescriptor slotDescriptor2 = new SlotDescriptor(null, null);
-        slotDescriptor2.setColumn(k2);
         SlotRef slotRef2 = new SlotRef(tableName, "k2");
-        slotRef2.setDesc(slotDescriptor2);
         partitionExprs.add(slotRef2);
 
         //add RangePartitionDescs
@@ -364,7 +303,7 @@ public class ExpressionRangePartitionInfoTest {
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs);
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2));
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
@@ -383,16 +322,10 @@ public class ExpressionRangePartitionInfoTest {
         //add columns
         int columns = 2;
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.INT), true, null, "", "");
-        SlotDescriptor slotDescriptor1 = new SlotDescriptor(null, null);
-        slotDescriptor1.setColumn(k1);
         SlotRef slotRef1 = new SlotRef(tableName, "k1");
-        slotRef1.setDesc(slotDescriptor1);
         partitionExprs.add(slotRef1);
         Column k2 = new Column("k2", new ScalarType(PrimitiveType.BIGINT), true, null, "", "");
-        SlotDescriptor slotDescriptor2 = new SlotDescriptor(null, null);
-        slotDescriptor2.setColumn(k2);
         SlotRef slotRef2 = new SlotRef(tableName, "k2");
-        slotRef2.setDesc(slotDescriptor2);
         partitionExprs.add(slotRef2);
 
         //add RangePartitionDescs
@@ -402,7 +335,7 @@ public class ExpressionRangePartitionInfoTest {
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs);
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs,Arrays.asList(k1,k2));
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
@@ -420,16 +353,10 @@ public class ExpressionRangePartitionInfoTest {
         //add columns
         int columns = 2;
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.INT), true, null, "", "");
-        SlotDescriptor slotDescriptor1 = new SlotDescriptor(null, null);
-        slotDescriptor1.setColumn(k1);
         SlotRef slotRef1 = new SlotRef(tableName, "k1");
-        slotRef1.setDesc(slotDescriptor1);
         partitionExprs.add(slotRef1);
         Column k2 = new Column("k2", new ScalarType(PrimitiveType.BIGINT), true, null, "", "");
-        SlotDescriptor slotDescriptor2 = new SlotDescriptor(null, null);
-        slotDescriptor2.setColumn(k2);
         SlotRef slotRef2 = new SlotRef(tableName, "k2");
-        slotRef2.setDesc(slotDescriptor2);
         partitionExprs.add(slotRef2);
 
         //add RangePartitionDescs
@@ -439,7 +366,7 @@ public class ExpressionRangePartitionInfoTest {
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs);
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs,Arrays.asList(k1,k2));
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
@@ -458,16 +385,10 @@ public class ExpressionRangePartitionInfoTest {
         //add columns
         int columns = 2;
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.INT), true, null, "", "");
-        SlotDescriptor slotDescriptor1 = new SlotDescriptor(null, null);
-        slotDescriptor1.setColumn(k1);
         SlotRef slotRef1 = new SlotRef(tableName, "k1");
-        slotRef1.setDesc(slotDescriptor1);
         partitionExprs.add(slotRef1);
         Column k2 = new Column("k2", new ScalarType(PrimitiveType.BIGINT), true, null, "", "");
-        SlotDescriptor slotDescriptor2 = new SlotDescriptor(null, null);
-        slotDescriptor2.setColumn(k2);
         SlotRef slotRef2 = new SlotRef(tableName, "k2");
-        slotRef2.setDesc(slotDescriptor2);
         partitionExprs.add(slotRef2);
 
         //add RangePartitionDescs
@@ -477,7 +398,7 @@ public class ExpressionRangePartitionInfoTest {
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs);
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs,Arrays.asList(k1,k2));
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);

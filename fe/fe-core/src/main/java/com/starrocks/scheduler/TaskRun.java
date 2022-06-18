@@ -1,10 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.scheduler;
 
-
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
@@ -87,16 +88,23 @@ public class TaskRun {
         newCtx.setCurrentUserIdentity(ctx.getCurrentUserIdentity());
         newCtx.getState().reset();
         newCtx.setQueryId(UUID.fromString(status.getQueryId()));
+        Map<String, String> taskRunContextProperties = Maps.newHashMap();
         SessionVariable sessionVariable = (SessionVariable) ctx.getSessionVariable().clone();
         if (properties != null) {
             for (String key : properties.keySet()) {
-                VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(properties.get(key))),
-                        true);
+                try {
+                    VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(properties.get(key))),
+                            true);
+                } catch (DdlException e) {
+                    // not session variable
+                    taskRunContextProperties.put(key, properties.get(key));
+                }
             }
         }
         newCtx.setSessionVariable(sessionVariable);
         taskRunContext.setCtx(newCtx);
         taskRunContext.setRemoteIp(ctx.getMysqlChannel().getRemoteHostPortString());
+        taskRunContext.setProperties(taskRunContextProperties);
         processor.processTaskRun(taskRunContext);
         QueryState queryState = newCtx.getState();
         if (newCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {

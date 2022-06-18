@@ -153,6 +153,12 @@ import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.MvTaskRunProcessor;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.TaskRunBuilder;
+import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -2242,7 +2248,6 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
             } // end for partitions
-            // todo add async task after task framework is completed
         }
     }
 
@@ -2807,7 +2812,9 @@ public class LocalMetastore implements ConnectorMetadata {
         PartitionInfo partitionInfo;
         if (partitionDesc != null) {
             Map<String, Long> partitionNameToId = Maps.newHashMap();
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+            partitionInfo = partitionDesc.toPartitionInfo(
+                    Arrays.asList(stmt.getBasePartitionColumn()),
+                    partitionNameToId, false);
         } else {
             partitionInfo = new SinglePartitionInfo();
         }
@@ -2909,7 +2916,29 @@ public class LocalMetastore implements ConnectorMetadata {
         LOG.info("Successfully create materialized view[{};{}]", mvName, mvId);
 
         // NOTE: The materialized view  has been added to the database, and the following procedure cannot throw exception.
-        // todo add async task after task framework is completed
+        if (createMvSuccess) {
+            if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC) {
+                // create task
+                Task task = new Task();
+                long taskId = GlobalStateMgr.getCurrentState().getNextId();
+                task.setId(taskId);
+                task.setName("mv-" + materializedView.getId());
+                task.setCreateTime(System.currentTimeMillis());
+                task.setDbName(getDb(materializedView.getDbId()).getFullName());
+                Map<String, String> taskProperties = Maps.newHashMap();
+                taskProperties.put("mvId", String.valueOf(materializedView.getId()));
+                task.setProperties(taskProperties);
+                task.setDefinition(materializedView.getViewDefineSql());
+                task.setExpireTime(0L);
+                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+                taskManager.createTask(task, true);
+                // run task
+                TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+                taskRun.setProcessor(new MvTaskRunProcessor());
+                TaskRunManager taskRunManager = taskManager.getTaskRunManager();
+                taskRunManager.submitTaskRun(taskRun);
+            }
+        }
     }
 
     @Override

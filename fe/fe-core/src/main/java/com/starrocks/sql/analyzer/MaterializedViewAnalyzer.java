@@ -34,6 +34,7 @@ import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -108,6 +109,8 @@ public class MaterializedViewAnalyzer {
                 checkPartitionExpParams(statement);
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, tableNameTableMap);
+                // analyze expression
+                analyzeExp(statement, context);
             }
             // check and analyze distribution
             checkDistribution(statement);
@@ -256,9 +259,10 @@ public class MaterializedViewAnalyzer {
                             "only supports single column");
                 }
                 boolean isInPartitionColumns = false;
-                for (Column partitionColumn : partitionColumns) {
-                    if (partitionColumn.getName().equals(slotRef.getColumnName())) {
+                for (Column basePartitionColumn : partitionColumns) {
+                    if (basePartitionColumn.getName().equals(slotRef.getColumnName())) {
                         isInPartitionColumns = true;
+                        statement.setBasePartitionColumn(basePartitionColumn);
                         break;
                     }
                 }
@@ -269,6 +273,25 @@ public class MaterializedViewAnalyzer {
             } else {
                 throw new SemanticException("Materialized view related base table partition type:" +
                         partitionInfo.getType().name() + "not supports");
+            }
+        }
+
+        private void analyzeExp(CreateMaterializedViewStatement statement,
+                                ConnectContext context) {
+            ExpressionPartitionDesc partitionExpDesc = statement.getPartitionExpDesc();
+            Map<String, TableRelation> tableRelations =
+                    AnalyzerUtils.collectAllTableRelation(statement.getQueryStatement());
+            List<Field> fields = Lists.newArrayList();
+            for (TableRelation value : tableRelations.values()) {
+                fields.addAll(value.getRelationFields().getAllFields());
+            }
+            Scope scope = new Scope(RelationId.anonymous(), new RelationFields(fields));
+            if (partitionExpDesc.isFunction()) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpDesc.getExpr();
+                if (functionCallExpr.getFn() == null) {
+                    ExpressionAnalyzer.analyzeExpression(partitionExpDesc.getExpr(), new AnalyzeState(),
+                            scope, context);
+                }
             }
         }
 
