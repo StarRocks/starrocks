@@ -2830,6 +2830,9 @@ public class LocalMetastore implements ConnectorMetadata {
         } else if (refreshSchemeDesc.getType() == RefreshType.SYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             mvRefreshScheme.setType(MaterializedView.RefreshType.SYNC);
+        } else {
+            mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+            mvRefreshScheme.setType(MaterializedView.RefreshType.MANUAL);
         }
         // create mv
         long mvId = GlobalStateMgr.getCurrentState().getNextId();

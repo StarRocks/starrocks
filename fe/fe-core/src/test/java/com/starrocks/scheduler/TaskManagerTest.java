@@ -143,7 +143,7 @@ public class TaskManagerTest {
         taskProperties.put("mvId",String.valueOf(materializedView.getId()));
         task.setProperties(taskProperties);
         task.setDefinition(materializedView.getViewDefineSql());
-        task.setExpireTime(0l);
+        task.setExpireTime(0L);
 
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         taskManager.createTask(task, true);

@@ -2,7 +2,9 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropPartitionClause;
@@ -50,8 +52,6 @@ import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.spark_project.guava.collect.Maps;
-import org.spark_project.guava.collect.Sets;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -213,7 +213,6 @@ public class MvTaskRunProcessor implements TaskRunProcessor {
                         partitionKeyDesc, partitionProperties, distributionDesc);
             }
         }
-        // todo basePartitionVisionMap size is incorrect
         Set<Long> deletedPartitionIds = basePartitionVisionMap.keySet().stream()
                 .filter(partitionId -> newBaseTableVisibleVersionMap.get(partitionId) == null)
                 .collect(Collectors.toSet());
@@ -274,6 +273,7 @@ public class MvTaskRunProcessor implements TaskRunProcessor {
         insertSqlBuilder.append(context.getDefinition());
         String insertSql = insertSqlBuilder.toString();
         InsertStmt insertStmt = ((InsertStmt) SqlParser.parse(insertSql, ctx.getSessionVariable().getSqlMode()).get(0));
+        insertStmt.setSystem(true);
         insertStmt.setOrigStmt(new OriginStatement(insertSql, 0));
         StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
         ctx.setExecutor(executor);
@@ -328,6 +328,7 @@ public class MvTaskRunProcessor implements TaskRunProcessor {
             InsertStmt insertStmt = ((InsertStmt) SqlParser.parse(insertIntoSql,
                     ctx.getSessionVariable().getSqlMode()).get(0));
             insertStmt.setOrigStmt(new OriginStatement(insertIntoSql, 0));
+            insertStmt.setSystem(true);
             StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
             ctx.setExecutor(executor);
             ctx.setThreadLocalInfo();
