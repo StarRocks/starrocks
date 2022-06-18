@@ -2811,10 +2811,9 @@ public class LocalMetastore implements ConnectorMetadata {
         PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
         PartitionInfo partitionInfo;
         if (partitionDesc != null) {
-            Map<String, Long> partitionNameToId = Maps.newHashMap();
             partitionInfo = partitionDesc.toPartitionInfo(
                     Arrays.asList(stmt.getBasePartitionColumn()),
-                    partitionNameToId, false);
+                    Maps.newHashMap(), false);
         } else {
             partitionInfo = new SinglePartitionInfo();
         }
