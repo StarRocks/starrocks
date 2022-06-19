@@ -4,19 +4,30 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.SingleRangePartitionDesc;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.FastByteArrayOutputStream;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -25,22 +36,13 @@ import org.junit.Test;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 
 public class MaterializedViewTest {
 
     private static List<Column> columns;
-
-    @Mocked
-    private GlobalStateMgr globalStateMgr;
-
-    @Mocked
-    private Database database;
-
-    private OlapTable olapTable1;
-    private OlapTable olapTable2;
-    private OlapTable olapTable3;
 
     @Before
     public void setUp() {
@@ -51,7 +53,7 @@ public class MaterializedViewTest {
     }
 
     @Test
-    public void testInit() {
+    public void testInit(@Mocked GlobalStateMgr globalStateMgr) {
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
@@ -218,7 +220,8 @@ public class MaterializedViewTest {
     }
 
     @Test
-    public void testSinglePartitionSerialization() throws Exception {
+    public void testSinglePartitionSerialization(@Mocked GlobalStateMgr globalStateMgr,
+                                                 @Mocked Database database) throws Exception {
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
@@ -228,13 +231,13 @@ public class MaterializedViewTest {
                 result = database;
 
                 database.getTable(10L);
-                result = olapTable1;
+                result = null;
 
                 database.getTable(20L);
-                result = olapTable2;
+                result = null;
 
                 database.getTable(30L);
-                result = olapTable3;
+                result = null;
             }
         };
         PartitionInfo partitionInfo = new SinglePartitionInfo();
@@ -278,24 +281,29 @@ public class MaterializedViewTest {
         Assert.assertEquals(1, ((HashDistributionInfo) distributionInfo).getDistributionColumns().size());
     }
 
-    public RangePartitionInfo generateRangePartitionInfo() throws DdlException, AnalysisException {
+    public RangePartitionInfo generateRangePartitionInfo(Database database, OlapTable baseTable)
+            throws DdlException, AnalysisException, NotImplementedException {
         //add columns
-        List<Column> partitionColumns = Lists.newArrayList();
+        List<Column> partitionColumns = baseTable.getPartitionInfo().getPartitionColumns();
         List<SingleRangePartitionDesc> singleRangePartitionDescs = Lists.newArrayList();
-        int columns = 2;
-        Column k1 = new Column("k1", new ScalarType(PrimitiveType.INT), true, null, "", "");
-        Column k2 = new Column("k2", new ScalarType(PrimitiveType.BIGINT), true, null, "", "");
-        partitionColumns.add(k1);
-        partitionColumns.add(k2);
+        int columns = partitionColumns.size();
 
         //add RangePartitionDescs
         PartitionKeyDesc p1 = new PartitionKeyDesc(
-                Lists.newArrayList(new PartitionValue("20180101"), new PartitionValue("10")),
-                Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")));
+                Lists.newArrayList(new PartitionValue("20180101")),
+                Lists.newArrayList(new PartitionValue("20190101")));
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
-        RangePartitionInfo partitionInfo = new RangePartitionInfo(partitionColumns);
+        List<Expr> exprs = Lists.newArrayList();
+        TableName tableName = new TableName(database.getFullName(), baseTable.getName());
+        SlotRef slotRef1 = new SlotRef(tableName, "k1");
+        StringLiteral quarterStringLiteral = new StringLiteral("quarter");
+        FunctionCallExpr quarterFunctionCallExpr =
+                new FunctionCallExpr("date_trunc", Arrays.asList(quarterStringLiteral, slotRef1));
+        exprs.add(quarterFunctionCallExpr);
+
+        RangePartitionInfo partitionInfo = new ExpressionRangePartitionInfo(exprs,partitionColumns);
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
@@ -312,36 +320,41 @@ public class MaterializedViewTest {
 
     @Test
     public void testRangePartitionSerialization() throws Exception {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
+        FeConstants.runningUnitTest = true;
+        Config.enable_experimental_mv = true;
+        UtFrameUtils.createMinStarRocksCluster();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.tbl1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        OlapTable baseTable = ((OlapTable) testDb.getTable("tbl1"));
 
-                globalStateMgr.getDb(100);
-                result = database;
-
-                database.getTable(10L);
-                result = olapTable1;
-
-                database.getTable(20L);
-                result = olapTable2;
-
-                database.getTable(30L);
-                result = olapTable3;
-            }
-        };
-        RangePartitionInfo partitionInfo = generateRangePartitionInfo();
+        RangePartitionInfo partitionInfo = generateRangePartitionInfo(testDb, baseTable);
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
         HashDistributionInfo hashDistributionInfo = new HashDistributionInfo(10, Lists.newArrayList(columns.get(0)));
-        MaterializedView mv = new MaterializedView(1000, 100, "mv_name", columns, KeysType.AGG_KEYS,
+        MaterializedView mv = new MaterializedView(1000, testDb.getId(), "mv_name", columns, KeysType.AGG_KEYS,
                 partitionInfo, hashDistributionInfo, refreshScheme);
         mv.setBaseIndexId(1);
         mv.setIndexMeta(1L, "mv_name", columns, 0,
                 111, (short) 2, TStorageType.COLUMN, KeysType.AGG_KEYS, null);
-        MaterializedIndex index = new MaterializedIndex(3, IndexState.NORMAL);
+        MaterializedIndex index = new MaterializedIndex(3, MaterializedIndex.IndexState.NORMAL);
         Partition partition = new Partition(2, "mv_name", index, hashDistributionInfo);
         mv.addPartition(partition);
-        mv.setBaseTableIds(Sets.newHashSet(10L, 20L, 30L));
+        mv.setBaseTableIds(Sets.newHashSet(baseTable.getId()));
+        mv.setViewDefineSql("select * from test.tbl1");
 
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
         DataOutputStream out = new DataOutputStream(byteArrayOutputStream);

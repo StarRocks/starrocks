@@ -308,6 +308,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         if (partitionExpr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
             if (functionCallExpr.getFn() == null) {
+                // set fn into functionCallExpr, because FunctionCallExpr serialized use sql
                 ExpressionAnalyzer.analyzeExpression(functionCallExpr, new AnalyzeState(),
                         scope, connectContext);
             }
