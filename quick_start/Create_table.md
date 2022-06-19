@@ -93,7 +93,7 @@ StarRocks 表中支持多种字段类型，除 demo 中已经列举的字段类�
 
 `PARTITION` 关键字用于给表 [创建分区](/sql-reference/sql-statements/data-definition/CREATE%20TABLE.md#Syntax)，当前 demo 中使用 `make_time` 进行范围分区，从 11 日到 15 日每天创建一个分区。StarRocks 支持动态生成分区，`PROPERTIES` 中的 `dynamic_partition` 开头的相关属性配置都是为表设置动态分区。详见 [动态分区管理](/table_design/Data_distribution.md#动态分区管理)。
 
-`DISTRIBUTED` 关键字用于给表 [创建分桶](/sql-reference/sql-statements/data-definition/CREATE%20TABLE.md#Syntax)，当前 demo 中使用 `make_time, mache_verson` 两个字段通过 Hash 算法创建 32 个桶。
+`DISTRIBUTED` 关键字用于给表 [创建分桶](/sql-reference/sql-statements/data-definition/CREATE%20TABLE.md#distribution_desc)，以上示例中使用 `recruit_date` 以及 `region_num` 两个字段通过 Hash 算法创建 8 个桶。
 
 创建表时合理的分区和分桶设计可以优化表的查询性能，分区分桶列如何选择详见 [数据分布章节](/table_design/Data_distribution.md)。
 
