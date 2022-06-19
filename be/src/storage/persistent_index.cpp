@@ -663,7 +663,7 @@ public:
     }
 
     // return the dump file size if dump _map into a new file
-    // If _map is empty, _map.dump_bound() will  set empty hash set serialize_size larger 
+    // If _map is empty, _map.dump_bound() will  set empty hash set serialize_size larger
     // than sizeof(uint64_t) in order to improve count distinct streaming aggregate performance.
     // Howevevr, the real snapshot file will only wite a size_(type is size_t) into file. So we
     // will use `sizeof(size_t)` as return value.
