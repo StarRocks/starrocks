@@ -167,7 +167,7 @@ public class Analyzer {
             new QueryAnalyzer(session).analyze(stmt);
 
             QueryRelation queryRelation = stmt.getQueryRelation();
-            long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
+            long selectLimit = session.getSessionVariable().getSqlSelectLimit();
             if (!queryRelation.hasLimit() && selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
                 queryRelation.setLimit(new LimitElement(selectLimit));
             }
