@@ -106,6 +106,7 @@ public class OlapTableSink extends DataSink {
         tSink.setTxn_id(txnId);
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
+        tSink.setIs_lake_table(dstTable.isLakeTable());
         tDataSink = new TDataSink(TDataSinkType.DATA_SPLIT_SINK);
         tDataSink.setType(TDataSinkType.OLAP_TABLE_SINK);
         tDataSink.setOlap_table_sink(tSink);
@@ -280,7 +281,14 @@ public class OlapTableSink extends DataSink {
                 Preconditions.checkArgument(table.getPartitions().size() == 1,
                         "Number of table partitions is not 1 for unpartitioned table, partitionNum="
                                 + table.getPartitions().size());
-                Partition partition = table.getPartitions().iterator().next();
+                Partition partition = null;
+                if (partitionIds != null) {
+                    Preconditions.checkState(partitionIds.size() == 1,
+                            "invalid partitionIds size:{}", partitionIds.size());
+                    partition = table.getPartition(partitionIds.get(0));
+                } else {
+                    partition = table.getPartitions().iterator().next();
+                }
 
                 TOlapTablePartition tPartition = new TOlapTablePartition();
                 tPartition.setId(partition.getId());

@@ -29,10 +29,12 @@ class ExceptContext final : public ContextWithDependency {
 public:
     explicit ExceptContext(const int dst_tuple_id) : _dst_tuple_id(dst_tuple_id) {}
 
-    bool is_ht_empty() const { return _hash_set->empty(); }
+    bool is_ht_empty() const { return _is_hash_set_empty; }
 
     void finish_build_ht() {
+        _is_hash_set_empty = _hash_set->empty();
         _next_processed_iter = _hash_set->begin();
+        _hash_set_end_iter = _hash_set->end();
         _finished_dependency_index.fetch_add(1, std::memory_order_release);
     }
 
@@ -42,7 +44,7 @@ public:
         return _finished_dependency_index.load(std::memory_order_acquire) == dependency_index;
     }
 
-    bool is_output_finished() const { return _next_processed_iter == _hash_set->end(); }
+    bool is_output_finished() const { return _next_processed_iter == _hash_set_end_iter; }
 
     // Called in the preparation phase of ExceptBuildSinkOperator.
     Status prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs);
@@ -77,6 +79,8 @@ private:
     // Used for traversal on the hash set to get the undeleted keys to dest chunk.
     // Init when the hash set is finished building in finish_build_ht().
     vectorized::ExceptHashSerializeSet::Iterator _next_processed_iter;
+    vectorized::ExceptHashSerializeSet::Iterator _hash_set_end_iter;
+    bool _is_hash_set_empty = false;
 
     // The BUILD, PROBES, and OUTPUT operators execute sequentially.
     // BUILD -> 1-th PROBE -> 2-th PROBE -> ... -> n-th PROBE -> OUTPUT.

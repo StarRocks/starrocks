@@ -39,6 +39,7 @@ import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -1025,6 +1026,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         Table table = db.getTable(tblName);
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
+        }
+
+        if (table instanceof MaterializedView) {
+            throw new AnalysisException(String.format(
+                    "The data of '%s' cannot be inserted because '%s' is a materialized view," +
+                            "and the data of materialized view must be consistent with the base table.",
+                    tblName, tblName));
         }
 
         if (table.getType() != Table.TableType.OLAP) {

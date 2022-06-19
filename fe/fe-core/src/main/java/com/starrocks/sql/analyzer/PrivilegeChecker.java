@@ -31,9 +31,11 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
+import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -65,9 +67,9 @@ public class PrivilegeChecker {
     }
 
     public static boolean checkDbPriv(ConnectContext context,
-                                       String catalogName,
-                                       String dbName,
-                                       PrivPredicate predicate) {
+                                      String catalogName,
+                                      String dbName,
+                                      PrivPredicate predicate) {
         return !CatalogMgr.isInternalCatalog(catalogName) ||
                 GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(context, dbName, predicate);
     }
@@ -343,6 +345,36 @@ public class PrivilegeChecker {
                         ConnectContext.get().getQualifiedUser(),
                         ConnectContext.get().getRemoteIP(),
                         statement.getTable());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
+            TableName tableName = statement.getTableName();
+            if (!checkTblPriv(session, tableName, PrivPredicate.SELECT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
+                        session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
+            }
+
+            if (!checkTblPriv(session, tableName, PrivPredicate.LOAD)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
+                        session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
+            TableName tableName = statement.getTableName();
+            if (!checkTblPriv(session, tableName, PrivPredicate.SELECT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
+                        session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
+            }
+
+            if (!checkTblPriv(session, tableName, PrivPredicate.LOAD)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
+                        session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
             }
             return null;
         }

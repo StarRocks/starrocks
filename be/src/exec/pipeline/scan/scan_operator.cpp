@@ -17,11 +17,10 @@ namespace starrocks::pipeline {
 // ========== ScanOperator ==========
 
 ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
-                           int max_scan_concurrency, std::atomic<int>& num_committed_scan_tasks)
+                           std::atomic<int>& num_committed_scan_tasks)
         : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence),
           _scan_node(scan_node),
           _chunk_source_profiles(MAX_IO_TASKS_PER_OP),
-          _max_scan_concurrency(max_scan_concurrency),
           _num_committed_scan_tasks(num_committed_scan_tasks),
           _is_io_task_running(MAX_IO_TASKS_PER_OP),
           _chunk_sources(MAX_IO_TASKS_PER_OP) {
@@ -48,8 +47,6 @@ Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
-    auto* max_scan_concurrency_counter = ADD_COUNTER(_unique_metrics, "MaxScanConcurrency", TUnit::UNIT);
-    COUNTER_SET(max_scan_concurrency_counter, static_cast<int64_t>(_max_scan_concurrency));
 
     if (_workgroup == nullptr) {
         DCHECK(_io_threads != nullptr);
@@ -190,19 +187,17 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
         return Status::OK();
     }
 
-    // Firstly, find the picked-up morsel, whose can commit an io task.
     for (int i = 0; i < MAX_IO_TASKS_PER_OP; ++i) {
-        if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
-            RETURN_IF_ERROR(_trigger_next_scan(state, i));
+        if (_is_io_task_running[i]) {
+            continue;
         }
-    }
 
-    // Secondly, find the unused position of _chunk_sources to pick up a new morsel.
-    if (!_morsel_queue->empty()) {
-        for (int i = 0; i < MAX_IO_TASKS_PER_OP; ++i) {
-            if (_chunk_sources[i] == nullptr || (!_is_io_task_running[i] && !_chunk_sources[i]->has_output())) {
-                RETURN_IF_ERROR(_pickup_morsel(state, i));
-            }
+        if (_chunk_sources[i] == nullptr) {
+            RETURN_IF_ERROR(_pickup_morsel(state, i));
+        } else if (_chunk_sources[i]->has_next_chunk()) {
+            RETURN_IF_ERROR(_trigger_next_scan(state, i));
+        } else if (!_chunk_sources[i]->has_output()) {
+            RETURN_IF_ERROR(_pickup_morsel(state, i));
         }
     }
 
@@ -351,16 +346,15 @@ bool ScanOperator::_try_to_increase_committed_scan_tasks() {
 }
 
 bool ScanOperator::_exceed_max_scan_concurrency(int num_committed_scan_tasks) const {
-    // _max_scan_concurrency takes effect, only when it is positive.
-    return _max_scan_concurrency > 0 && num_committed_scan_tasks >= _max_scan_concurrency;
+    size_t max = max_scan_concurrency();
+    // max_scan_concurrency takes effect, only when it is positive.
+    return max > 0 && num_committed_scan_tasks >= max;
 }
 
 // ========== ScanOperatorFactory ==========
 
 ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
-        : SourceOperatorFactory(id, scan_node->name(), scan_node->id()),
-          _scan_node(scan_node),
-          _max_scan_concurrency(scan_node->max_scan_concurrency()) {}
+        : SourceOperatorFactory(id, scan_node->name(), scan_node->id()), _scan_node(scan_node) {}
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));

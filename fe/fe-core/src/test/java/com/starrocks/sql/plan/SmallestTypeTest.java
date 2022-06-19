@@ -65,7 +65,7 @@ public class SmallestTypeTest extends PlanTestBase {
         sql = "select id_decimal + 1 from test_all_type";
         planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 11> : CAST(10: id_decimal AS DECIMAL64(18,2)) + 1\n" +
+                "  |  <slot 11> : CAST(10: id_decimal AS DECIMAL64(12,2)) + 1\n" +
                 "  |  "));
     }
 

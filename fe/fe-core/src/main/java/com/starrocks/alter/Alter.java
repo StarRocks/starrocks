@@ -122,6 +122,10 @@ public class Alter {
                 throw new DdlException(
                         "Do not support create materialized view on primary key table[" + tableName + "]");
             }
+            if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager().hasRunningOverwriteJob(olapTable.getId())) {
+                throw new DdlException("Table[" + olapTable.getName() + "] is doing insert overwrite job, " +
+                        "please start to create materialized view after insert overwrite");
+            }
             olapTable.checkStableAndNormal(db.getClusterName());
 
             ((MaterializedViewHandler) materializedViewHandler).processCreateMaterializedView(stmt, db,

@@ -44,7 +44,6 @@
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
 #include "service/backend_options.h"
-#include "service/brpc_service.h"
 #include "service/service.h"
 #include "service/staros_worker.h"
 #include "storage/options.h"

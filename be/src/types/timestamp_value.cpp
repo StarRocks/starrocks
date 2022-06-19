@@ -883,6 +883,10 @@ bool TimestampValue::is_valid() const {
     return (_timestamp >= timestamp::MIN_TIMESTAMP) & (_timestamp <= timestamp::MAX_TIMESTAMP);
 }
 
+bool TimestampValue::is_valid_non_strict() const {
+    return is_valid();
+}
+
 std::string TimestampValue::to_string() const {
     return timestamp::to_string(_timestamp);
 }

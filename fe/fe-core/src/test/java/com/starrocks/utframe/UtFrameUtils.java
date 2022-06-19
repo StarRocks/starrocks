@@ -94,6 +94,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -101,6 +102,7 @@ import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
 
 public class UtFrameUtils {
     private final static AtomicInteger INDEX = new AtomicInteger(0);
+    private final static AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
 
     public static final String createStatisticsTableStmt = "CREATE TABLE `table_statistic_v1` (\n" +
             "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
@@ -225,7 +227,11 @@ public class UtFrameUtils {
         frontend.start(startBDB, new String[0]);
     }
 
-    public static void createMinStarRocksCluster(boolean startBDB) {
+    public synchronized static void createMinStarRocksCluster(boolean startBDB) {
+        // to avoid call createMinStarRocksCluster multiple times
+        if (CREATED_MIN_CLUSTER.get()) {
+            return;
+        }
         try {
             ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
@@ -239,6 +245,7 @@ public class UtFrameUtils {
                     retry++ < 600) {
                 Thread.sleep(100);
             }
+            CREATED_MIN_CLUSTER.set(true);
         } catch (Exception e) {
             e.printStackTrace();
         }

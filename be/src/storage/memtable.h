@@ -56,7 +56,6 @@ private:
     void _sort_column_inc();
     void _append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final);
 
-    bool _is_aggregate_needed();
     void _init_aggregator_if_needed();
     void _aggregate(bool is_final);
 
@@ -70,6 +69,7 @@ private:
     std::vector<uint32_t> _selective_values;
 
     int64_t _tablet_id;
+
     const Schema* _vectorized_schema;
     // the slot in _slot_descs are in order of tablet's schema
     const std::vector<SlotDescriptor*>* _slot_descs;

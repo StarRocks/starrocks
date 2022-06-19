@@ -80,6 +80,8 @@ public:
 
     void append_default(size_t count) override;
 
+    void fill_default(const Filter& filter) override;
+
     Status update_rows(const Column& src, const uint32_t* indexes) override;
 
     void remove_first_n_values(size_t count) override {}
@@ -118,6 +120,8 @@ public:
     std::string get_name() const override { return "array"; }
 
     Datum get(size_t idx) const override;
+
+    size_t get_element_size(size_t idx) const;
 
     bool set_null(size_t idx) override;
 

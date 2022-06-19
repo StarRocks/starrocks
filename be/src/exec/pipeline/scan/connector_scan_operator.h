@@ -27,7 +27,7 @@ public:
 class ConnectorScanOperator final : public ScanOperator {
 public:
     ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
-                          int max_scan_concurrency, std::atomic<int>& num_committed_scan_tasks);
+                          std::atomic<int>& num_committed_scan_tasks);
 
     ~ConnectorScanOperator() override = default;
 

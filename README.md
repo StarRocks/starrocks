@@ -1,7 +1,7 @@
 
  <p align="center">
  <a href="https://www.starrocks.com/en-US/index">
-    <img  height="200" src="https://github.com/kateshaowanjou/starrocks/blob/main/logo%2Bslogan.png">
+    <img  width="526" src="https://github.com/kateshaowanjou/starrocks/blob/main/logo%2Bslogan.png">
    </a>
 </p>
 <p align="center">
@@ -58,7 +58,7 @@ It delivers query speeds 5 to 10 times faster than other popular solutions. Star
 ## Architecture Overview
 
  <p align="center">
-    <img height="400"  src="https://github.com/kateshaowanjou/starrocks/blob/main/Arch.png">
+    <img width="526"  src="https://github.com/kateshaowanjou/starrocks/blob/main/Arch.png">
    </a>
 </p>
 

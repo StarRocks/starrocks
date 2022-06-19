@@ -11,9 +11,14 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 public class AggregateTest extends PlanTestBase {
+    @Rule
+    public ExpectedException expectedException = ExpectedException.none();
+
     @Test
     public void testHaving() throws Exception {
         String sql = "select v2 from t0 group by v2 having v2 > 0";
@@ -172,32 +177,62 @@ public class AggregateTest extends PlanTestBase {
     public void testGroupBy2() throws Exception {
         String queryStr = "select avg(v2) from t0 group by v2";
 
+        int originInstanceNum = connectContext.getSessionVariable().getParallelExecInstanceNum();
+        int originPipelineDop = connectContext.getSessionVariable().getPipelineDop();
         try {
-            BackendCoreStat.setDefaultCoresOfBe(8);
-            Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, queryStr);
-            String explainString = plan.second.getExplainString(TExplainLevel.NORMAL);
-            Assert.assertTrue(explainString.contains("  2:Project\n"
-                    + "  |  <slot 4> : 4: avg\n"
-                    + "  |  \n"
-                    + "  1:AGGREGATE (update finalize)\n"
-                    + "  |  output: avg(2: v2)\n"
-                    + "  |  group by: 2: v2\n"
-                    + "  |  \n"
-                    + "  0:OlapScanNode"));
+            int cpuCores = 8;
+            int expectedTotalDop = cpuCores / 2;
+            {
+                BackendCoreStat.setDefaultCoresOfBe(cpuCores);
+                Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, queryStr);
+                String explainString = plan.second.getExplainString(TExplainLevel.NORMAL);
+                Assert.assertTrue(explainString.contains("  2:Project\n"
+                        + "  |  <slot 4> : 4: avg\n"
+                        + "  |  \n"
+                        + "  1:AGGREGATE (update finalize)\n"
+                        + "  |  output: avg(2: v2)\n"
+                        + "  |  group by: 2: v2\n"
+                        + "  |  \n"
+                        + "  0:OlapScanNode"));
 
-            PlanFragment aggPlan = plan.second.getFragments().get(0);
-            String aggPlanStr = aggPlan.getExplainString(TExplainLevel.NORMAL);
-            Assert.assertTrue(aggPlanStr, aggPlanStr.contains("  2:Project\n"
-                    + "  |  <slot 4> : 4: avg\n"
-                    + "  |  \n"
-                    + "  1:AGGREGATE (update finalize)\n"
-                    + "  |  output: avg(2: v2)\n"
-                    + "  |  group by: 2: v2\n"
-                    + "  |  \n"
-                    + "  0:OlapScanNode"));
-            Assert.assertEquals(4, aggPlan.getParallelExecNum());
-            Assert.assertEquals(1, aggPlan.getPipelineDop());
+                PlanFragment aggPlan = plan.second.getFragments().get(0);
+                String aggPlanStr = aggPlan.getExplainString(TExplainLevel.NORMAL);
+                Assert.assertTrue(aggPlanStr, aggPlanStr.contains("  2:Project\n"
+                        + "  |  <slot 4> : 4: avg\n"
+                        + "  |  \n"
+                        + "  1:AGGREGATE (update finalize)\n"
+                        + "  |  output: avg(2: v2)\n"
+                        + "  |  group by: 2: v2\n"
+                        + "  |  \n"
+                        + "  0:OlapScanNode"));
+                Assert.assertEquals(expectedTotalDop, aggPlan.getParallelExecNum());
+                Assert.assertEquals(1, aggPlan.getPipelineDop());
+            }
+
+            // Manually set dop
+            {
+                final int pipelineDop = 2;
+                final int instanceNum = 2;
+                connectContext.getSessionVariable().setPipelineDop(pipelineDop);
+                connectContext.getSessionVariable().setParallelExecInstanceNum(instanceNum);
+                Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, queryStr);
+                String explainString = plan.second.getExplainString(TExplainLevel.NORMAL);
+                Assert.assertTrue(explainString.contains("  2:Project\n"
+                        + "  |  <slot 4> : 4: avg\n"
+                        + "  |  \n"
+                        + "  1:AGGREGATE (update finalize)\n"
+                        + "  |  output: avg(2: v2)\n"
+                        + "  |  group by: 2: v2\n"
+                        + "  |  \n"
+                        + "  0:OlapScanNode"));
+
+                PlanFragment aggPlan = plan.second.getFragments().get(0);
+                Assert.assertEquals(instanceNum, aggPlan.getParallelExecNum());
+                Assert.assertEquals(pipelineDop, aggPlan.getPipelineDop());
+            }
         } finally {
+            connectContext.getSessionVariable().setPipelineDop(originPipelineDop);
+            connectContext.getSessionVariable().setPipelineDop(originInstanceNum);
             BackendCoreStat.setDefaultCoresOfBe(1);
         }
     }
@@ -760,24 +795,28 @@ public class AggregateTest extends PlanTestBase {
 
     @Test
     public void testWindowFunnel() throws Exception {
-       FeConstants.runningUnitTest = true;
-       String sql = "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 0, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
-       String plan = getFragmentPlan(sql);
-       assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 0, 18: expr)");
+        FeConstants.runningUnitTest = true;
+        String sql =
+                "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 0, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 0, 18: expr)");
 
-       sql = "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 1, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
-       plan = getFragmentPlan(sql);
-       assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 1, 18: expr)");
+        sql =
+                "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 1, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 1, 18: expr)");
 
-       sql = "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 2, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
-       plan = getFragmentPlan(sql);
-       assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 2, 18: expr)");
+        sql =
+                "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 2, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 2, 18: expr)");
 
-       sql = "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 3, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
-       plan = getFragmentPlan(sql);
-       assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 3, 18: expr)");
+        sql =
+                "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 3, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 3, 18: expr)");
 
-       FeConstants.runningUnitTest = false;
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
@@ -1321,5 +1360,13 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  6:EXCHANGE");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testAvgCountDistinctWithMultiColumns() throws Exception {
+        expectedException.expect(StarRocksPlannerException.class);
+        expectedException.expectMessage("The query contains multi count distinct or sum distinct, each can't have multi columns");
+        String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal,s_nationkey) from supplier;";
+        getFragmentPlan(sql);
     }
 }

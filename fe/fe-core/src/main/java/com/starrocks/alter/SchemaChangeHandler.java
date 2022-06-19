@@ -815,21 +815,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 modIndexSchema.add(newColumn);
             }
         }
-
-        checkRowLength(modIndexSchema);
-    }
-
-    // row length can not large than limit
-    private void checkRowLength(List<Column> modIndexSchema) throws DdlException {
-        int rowLengthBytes = 0;
-        for (Column column : modIndexSchema) {
-            rowLengthBytes += column.getType().getStorageLayoutBytes();
-        }
-
-        if (rowLengthBytes > Config.max_layout_length_per_row) {
-            throw new DdlException("The size of a row (" + rowLengthBytes + ") exceed the maximal row size: "
-                    + Config.max_layout_length_per_row);
-        }
     }
 
     private void checkIndexExists(OlapTable olapTable, String targetIndexName) throws DdlException {
@@ -1518,6 +1503,11 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
 
+            if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager().hasRunningOverwriteJob(olapTable.getId())) {
+                // because insert overwrite will create tmp partitions
+                throw new DdlException("Table[" + olapTable.getName() + "] is doing insert overwrite job, " +
+                        "please start schema change after insert overwrite");
+            }
             // the following operations can not be done when there are temp partitions exist.
             if (olapTable.existTempPartitions()) {
                 throw new DdlException("Can not alter table when there are temp partitions in table");

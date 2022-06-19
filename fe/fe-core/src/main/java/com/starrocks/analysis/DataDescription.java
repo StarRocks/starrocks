@@ -31,6 +31,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -39,6 +41,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -595,7 +598,18 @@ public class DataDescription {
 
     public void analyze(String fullDbName) throws AnalysisException {
         checkLoadPriv(fullDbName);
+        analyzeTable(fullDbName);
         analyzeWithoutCheckPriv();
+    }
+
+    public void analyzeTable(String fullDbName) throws AnalysisException {
+        Table table = MetaUtils.getTable(ConnectContext.get(), new TableName(fullDbName, tableName));
+        if (table instanceof MaterializedView) {
+            throw new AnalysisException(String.format(
+                    "The data of '%s' cannot be inserted because '%s' is a materialized view," +
+                            "and the data of materialized view must be consistent with the base table.",
+                    tableName, tableName));
+        }
     }
 
     public void analyzeWithoutCheckPriv() throws AnalysisException {
