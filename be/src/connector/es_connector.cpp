@@ -164,10 +164,6 @@ static std::string get_host_port(const std::vector<TNetworkAddress>& es_hosts) {
 
 Status ESDataSource::_create_scanner() {
     // create scanner.
-    std::vector<ExprContext*> scanner_expr_ctxs;
-    auto status = Expr::clone_if_not_exists(_conjunct_ctxs, _runtime_state, &scanner_expr_ctxs);
-    RETURN_IF_ERROR(status);
-
     const TEsScanRange& es_scan_range = _scan_range;
     _properties[ESScanReader::KEY_INDEX] = es_scan_range.index;
     if (es_scan_range.__isset.type) {
