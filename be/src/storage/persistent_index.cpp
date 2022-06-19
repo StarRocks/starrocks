@@ -1402,13 +1402,13 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         // be maybe crash after create index file during last commit
         // so we delete expired index file first to make sure no garbage left
         FileSystem::Default()->delete_file(file_name);
-        size_t snapshot_size = _dump_bound();
         phmap::BinaryOutputArchive ar_out(file_name.data());
         if (!_dump(ar_out)) {
             std::string err_msg = strings::Substitute("faile to dump snapshot to file $0", file_name);
             LOG(WARNING) << err_msg;
             return Status::InternalError(err_msg);
         }
+        size_t snapshot_size = _fs->get_file_size(file_name).value();
         // update PersistentIndexMetaPB
         index_meta->set_size(_size);
         _version.to_pb(index_meta->mutable_version());
