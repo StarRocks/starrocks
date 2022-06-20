@@ -67,9 +67,31 @@ echo "run docker for script"
 
 cmd="cd /root/starrocks;
 export FE_UT_PARALLEL=16;
-timeout 3600 sh run-fe-ut.sh --run"
+timeout 3600 sh run-fe-ut.sh --run com.starrocks.utframe.Demo"
 
+#docker exec --privileged $container_name /bin/bash -c "$cmd"
 
+echo "script run over-----"
+
+if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
+    cd $ROOT/resource/starrocks/fe/fe-core/target
+    jacoco_result="jacoco_${GITHUB_PR_NUMBER}.exec"
+    mv jacoco.exec $jacoco_result || true
+
+    java -jar $ROOT/../jacococli.jar report ./$jacoco_result --classfiles ./classes/ --html ./result --sourcefiles $ROOT/resource/starrocks/fe/fe-core/src/main/java/ --encoding utf-8 --name fe-coverage
+
+    cd $ROOT/../cover-checker
+    time_count=0
+    pull_status=1
+    while (( $pull_status != 0 ));do
+        if (( $time_count == 3 ));then
+            exit 1
+        fi
+        timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar --cover $ROOT/resource/starrocks/fe/fe-core/target/result/ --github-token 66e4c48809eb7e058eb73668b8c816867e6d7cbe  --repo StarRocks/starrocks --threshold 80 --github-url api.github.com  --pr ${GITHUB_PR_NUMBER} -type jacoco
+        pull_status=$?
+        time_count=`expr $time_count + 1`
+    done
+fi
 
 export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-11.0.14.1.1-1.el7_9.x86_64
 export PATH=$JAVA_HOME/bin:$PATH
