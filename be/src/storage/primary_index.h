@@ -121,6 +121,7 @@ private:
     std::mutex _lock;
     std::atomic<bool> _loaded{false};
     Status _status;
+    int64_t _table_id = 0;
     int64_t _tablet_id = 0;
     vectorized::Schema _pk_schema;
     FieldType _enc_pk_type = OLAP_FIELD_TYPE_UNKNOWN;
