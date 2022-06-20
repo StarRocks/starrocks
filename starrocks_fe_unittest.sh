@@ -96,7 +96,7 @@ fi
 export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-11.0.14.1.1-1.el7_9.x86_64
 export PATH=$JAVA_HOME/bin:$PATH
 
-cd $ROOT/resource/starrocks/fe
+cd $ROOT/starrocks/fe
 mvn clean -DskipTests verify sonar:sonar   -Dsonar.projectKey=StarRocks-${GITHUB_PR_NUMBER}   -Dsonar.host.url=http://39.101.206.100:9000   -Dsonar.login=5da9593bf8f8af7060968672bc2451700139349f
 rm -rf fe-core/target/generated-sources/
 
