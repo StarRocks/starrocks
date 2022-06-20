@@ -293,6 +293,7 @@ public class GlobalStateMgr {
 
     private MasterDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
     private MasterDaemon txnTimeoutChecker; // To abort timeout txns
+    private MasterDaemon taskCleaner; // To clean expire Task/TaskRun
     private Daemon replayer;
     private Daemon timePrinter;
     private Daemon listener;
@@ -854,6 +855,9 @@ public class GlobalStateMgr {
 
         // 6. start state listener thread
         createStateListener();
+
+        // 7. start task cleaner thread
+        createTaskCleaner();
         listener.start();
     }
 
@@ -1025,7 +1029,7 @@ public class GlobalStateMgr {
         statisticsMetaManager.start();
         statisticAutoCollector.start();
         taskManager.start();
-
+        taskCleaner.start();
         // register service to starMgr
         if (Config.integrate_staros) {
             int clusterId = getCurrentState().getClusterId();
@@ -1482,6 +1486,15 @@ public class GlobalStateMgr {
             @Override
             protected void runAfterCatalogReady() {
                 clearExpiredJobs();
+            }
+        };
+    }
+
+    public void createTaskCleaner() {
+        taskCleaner = new MasterDaemon("TaskCleaner", Config.task_check_interval_second * 1000L) {
+            @Override
+            protected void runAfterCatalogReady() {
+                doTaskBackgroundJob();
             }
         };
     }
@@ -3130,15 +3143,18 @@ public class GlobalStateMgr {
         } catch (Throwable t) {
             LOG.warn("routine load manager clean old routine load jobs failed", t);
         }
+    }
+
+    public void doTaskBackgroundJob() {
         try {
-            taskManager.removeOldTaskInfo();
+            taskManager.removeExpiredTasks();
         } catch (Throwable t) {
-            LOG.warn("task manager clean old task failed", t);
+            LOG.warn("task manager clean expire tasks failed", t);
         }
         try {
-            taskManager.removeOldTaskRunHistory();
+            taskManager.removeExpiredTaskRuns();
         } catch (Throwable t) {
-            LOG.warn("task manager clean old run history failed", t);
+            LOG.warn("task manager clean expire task runs history failed", t);
         }
     }
 }
