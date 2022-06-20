@@ -735,4 +735,7 @@ vectorized_functions = [
 
     [150270, 'array_cum_sum', 'ARRAY_BIGINT', ['ARRAY_BIGINT'], 'ArrayFunctions::array_cum_sum_bigint'],
     [150271, 'array_cum_sum', 'ARRAY_DOUBLE', ['ARRAY_DOUBLE'], 'ArrayFunctions::array_cum_sum_double'],
+
+    # reserve 150281
+    [150282, 'array_contains_all', 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'], 'ArrayFunctions::array_contains_all'],
 ]
