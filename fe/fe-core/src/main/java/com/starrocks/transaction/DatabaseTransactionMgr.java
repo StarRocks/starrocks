@@ -418,8 +418,12 @@ public class DatabaseTransactionMgr {
             tableListString.append(table.getName());
             committers.add(committer);
         }
+        int numPartitions = 0;
+        for (Map.Entry<Long, TableCommitInfo> entry : transactionState.getIdToTableCommitInfos().entrySet()) {
+            numPartitions += entry.getValue().getIdToPartitionCommitInfo().size();
+        }
         txnSpan.setAttribute("tables", tableListString.toString());
-        txnSpan.setAttribute("num_partition", transactionState.getIdToTableCommitInfos().size());
+        txnSpan.setAttribute("num_partition", numPartitions);
 
         // before state transform
         TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.COMMITTED);
