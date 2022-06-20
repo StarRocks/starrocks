@@ -50,12 +50,10 @@ bool BalancedChunkBuffer::empty(int buffer_index) const {
 }
 
 bool BalancedChunkBuffer::try_get(int buffer_index, vectorized::ChunkPtr* output_chunk) {
-    LOG(INFO) << "BalancedChunkBuffer get chunk " << buffer_index;
     return _get_sub_buffer(buffer_index)->try_get(output_chunk);
 }
 
 bool BalancedChunkBuffer::put(int buffer_index, vectorized::ChunkPtr chunk) {
-    LOG(INFO) << "BalancedChunkBuffer put chunk " << buffer_index;
     if (_strategy == BalanceStrategy::kDirect) {
         return _get_sub_buffer(buffer_index)->put(chunk);
     } else if (_strategy == BalanceStrategy::kRoundRobin) {
