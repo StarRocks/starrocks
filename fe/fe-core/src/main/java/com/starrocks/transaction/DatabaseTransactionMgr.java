@@ -36,9 +36,6 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.TabletInvertedIndex;
-import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
@@ -46,7 +43,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.LabelAlreadyUsedException;
-import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TraceManager;
@@ -59,7 +55,6 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
-import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -78,8 +73,6 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -142,6 +135,8 @@ public class DatabaseTransactionMgr {
     private long lastCommitTs = 0;
 
     private long commitTsInc = 0;
+
+    private TransactionCommitterFactory committerFactory = new TransactionCommitterFactory();
 
     protected void readLock() {
         this.transactionLock.readLock().lock();
@@ -368,24 +363,19 @@ public class DatabaseTransactionMgr {
             throw new MetaNotFoundException("could not find db [" + dbId + "]");
         }
 
-        TransactionState transactionState = null;
+        TransactionState transactionState;
         readLock();
         try {
             transactionState = unprotectedGetTransactionState(transactionId);
         } finally {
             readUnlock();
         }
-        if (transactionState == null
-                || transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
-            throw new TransactionCommitFailedException(
-                    transactionState == null ? "transaction not found" : transactionState.getReason());
+        if (transactionState == null) {
+            throw new TransactionCommitFailedException("transaction not found");
         }
-        Span txnSpan = transactionState.getTxnSpan();
-        txnSpan.setAttribute("db", db.getFullName());
-        StringBuilder tableListString = new StringBuilder();
-        int numPartition = 0;
-        txnSpan.addEvent("commit_start");
-
+        if (transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
+            throw new TransactionCommitFailedException(transactionState.getReason());
+        }
         if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
             LOG.debug("transaction is already visible: {}", transactionId);
             return;
@@ -394,7 +384,6 @@ public class DatabaseTransactionMgr {
             LOG.debug("transaction is already committed: {}", transactionId);
             return;
         }
-
         // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
         if (Config.empty_load_as_error && (tabletCommitInfos == null || tabletCommitInfos.isEmpty())) {
             throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
@@ -405,164 +394,44 @@ public class DatabaseTransactionMgr {
             transactionState.setTxnCommitAttachment(txnCommitAttachment);
         }
 
-        TabletInvertedIndex tabletInvertedIndex = globalStateMgr.getTabletInvertedIndex();
-        Map<Long, Set<Long>> tabletToBackends = new HashMap<>();
-        Map<Long, Set<Long>> tableToPartition = new HashMap<>();
-        Map<Long, Set<String>> tableToInvalidDictCacheColumns = new HashMap<>();
-        Map<Long, Set<String>> tableToValidDictCacheColumns = new HashMap<>();
+        Span txnSpan = transactionState.getTxnSpan();
+        txnSpan.setAttribute("db", db.getFullName());
+        StringBuilder tableListString = new StringBuilder();
+        int numPartition = 0;
+        txnSpan.addEvent("commit_start");
 
-        // 2. validate potential exists problem: db->table->partition
-        // guarantee exist exception during a transaction
-        // if index is dropped, it does not matter.
-        // if table or partition is dropped during load, just ignore that tablet,
-        // because we should allow dropping rollup or partition during load
-        List<Long> tabletIds = tabletCommitInfos.stream().map(
-                TabletCommitInfo::getTabletId).collect(Collectors.toList());
-        List<TabletMeta> tabletMetaList = tabletInvertedIndex.getTabletMetaList(tabletIds);
-        for (int i = 0; i < tabletMetaList.size(); i++) {
-            TabletMeta tabletMeta = tabletMetaList.get(i);
-            if (tabletMeta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
-                continue;
-            }
-            long tabletId = tabletIds.get(i);
-            long tableId = tabletMeta.getTableId();
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
-            if (tbl == null) {
+        List<TableCommitter> committers = Lists.newArrayList();
+        for (Long tableId : transactionState.getTableIdList()) {
+            Table table = db.getTable(tableId);
+            if (table == null) {
                 // this can happen when tableId == -1 (tablet being dropping)
                 // or table really not exist.
                 continue;
             }
-
-            if (tbl.getState() == OlapTable.OlapTableState.RESTORE) {
-                throw new LoadException("Table " + tbl.getName() + " is in restore process. "
-                        + "Can not load into it");
+            TableCommitter committer = committerFactory.create(this, table);
+            if (committer == null) {
+                throw new TransactionCommitFailedException(table.getName() + " does not support write");
             }
-
-            long partitionId = tabletMeta.getPartitionId();
-            if (tbl.getPartition(partitionId) == null) {
-                // this can happen when partitionId == -1 (tablet being dropping)
-                // or partition really not exist.
-                continue;
-            }
-
-            tableToPartition.computeIfAbsent(tableId, id -> new HashSet<>()).add(partitionId);
-            tabletToBackends.computeIfAbsent(tabletId, id -> new HashSet<>())
-                    .add(tabletCommitInfos.get(i).getBackendId());
-
-            // Invalid column set should union
-            tableToInvalidDictCacheColumns.computeIfAbsent(tableId, id -> new HashSet<>())
-                    .addAll(tabletCommitInfos.get(i).getInvalidDictCacheColumns());
-
-            // Valid column set should intersect and remove all invalid columns
-            // Only need to add valid column set once
-            Set<String> validColumns = tableToValidDictCacheColumns.computeIfAbsent(tableId, id -> new HashSet<>());
-            if (validColumns.isEmpty() &&
-                    !tabletCommitInfos.get(i).getValidDictCacheColumns().isEmpty()) {
-                validColumns.addAll(tabletCommitInfos.get(i).getValidDictCacheColumns());
-            }
-
-            if (i == tabletMetaList.size() - 1) {
-                validColumns.removeAll(tableToInvalidDictCacheColumns.get(tableId));
-            }
-        }
-
-        Set<Long> errorReplicaIds = Sets.newHashSet();
-        Set<Long> totalInvolvedBackends = Sets.newHashSet();
-        for (long tableId : tableToPartition.keySet()) {
-            OlapTable table = (OlapTable) db.getTable(tableId);
-            if (table == null) {
-                throw new MetaNotFoundException("Table does not exist: " + tableId);
-            }
-            if (tableListString.length() != 0) {
+            committer.preCommit(transactionState, tabletCommitInfos);
+            if (!committers.isEmpty()) {
                 tableListString.append(',');
             }
             tableListString.append(table.getName());
-            for (Partition partition : table.getAllPartitions()) {
-                if (!tableToPartition.get(tableId).contains(partition.getId())) {
-                    continue;
-                }
-                numPartition++;
-
-                boolean useStarOS = partition.isUseStarOS();
-
-                List<MaterializedIndex> allIndices = transactionState.getPartitionLoadedTblIndexes(tableId, partition);
-                int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partition.getId());
-                for (MaterializedIndex index : allIndices) {
-                    for (Tablet tablet : index.getTablets()) {
-                        long tabletId = tablet.getId();
-                        Set<Long> commitBackends = tabletToBackends.get(tabletId);
-
-                        if (useStarOS) {
-                            long backendId = ((LakeTablet) tablet).getPrimaryBackendId();
-                            totalInvolvedBackends.add(backendId);
-                            if (!commitBackends.contains(backendId)) {
-                                throw new TransactionCommitFailedException(
-                                        "Primary backend: " + backendId + " does not in commit backends: " +
-                                                Joiner.on(",").join(commitBackends));
-                            }
-                        } else {
-                            Set<Long> tabletBackends = tablet.getBackendIds();
-                            totalInvolvedBackends.addAll(tabletBackends);
-
-                            // save the error replica ids for current tablet
-                            // this param is used for log
-                            Set<Long> errorBackendIdsForTablet = Sets.newHashSet();
-                            int successReplicaNum = 0;
-                            for (long tabletBackend : tabletBackends) {
-                                Replica replica = tabletInvertedIndex.getReplica(tabletId, tabletBackend);
-                                if (replica == null) {
-                                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tabletBackend);
-                                    throw new TransactionCommitFailedException("Not found replicas of tablet. "
-                                            + "tablet_id: " + tabletId + ", backend_id: " + backend.getHost());
-                                }
-                                // if the tablet have no replica's to commit or the tablet is a rolling up tablet, the commit backends maybe null
-                                // if the commit backends is null, set all replicas as error replicas
-                                if (commitBackends != null && commitBackends.contains(tabletBackend)) {
-                                    // if the backend load success but the backend has some errors previously, then it is not a normal replica
-                                    // ignore it but not log it
-                                    // for example, a replica is in clone state
-                                    if (replica.getLastFailedVersion() < 0) {
-                                        ++successReplicaNum;
-                                    }
-                                } else {
-                                    errorBackendIdsForTablet.add(tabletBackend);
-                                    errorReplicaIds.add(replica.getId());
-                                    // not remove rollup task here, because the commit maybe failed
-                                    // remove rollup task when commit successfully
-                                }
-                            }
-
-                            if (successReplicaNum < quorumReplicaNum) {
-                                List<String> errorBackends = new ArrayList<String>();
-                                for (long backendId : errorBackendIdsForTablet) {
-                                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-                                    errorBackends.add(backend.getId() + ":" + backend.getHost());
-                                }
-
-                                LOG.warn("Fail to load files. tablet_id: {}, txn_id: {}, backends: {}",
-                                        tablet.getId(), transactionId,
-                                        Joiner.on(",").join(errorBackends));
-                                throw new TabletQuorumFailedException(tablet.getId(), transactionId, errorBackends);
-                            }
-                        }
-                    }
-                }
-            }
+            committers.add(committer);
         }
-
         txnSpan.setAttribute("tables", tableListString.toString());
         txnSpan.setAttribute("num_partition", numPartition);
+
         // before state transform
         TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.COMMITTED);
         // transaction state transform
         boolean txnOperated = false;
 
         Span unprotectedCommitSpan = TraceManager.startSpan("unprotectedCommitTransaction", txnSpan);
+
         writeLock();
         try {
-            unprotectedCommitTransaction(transactionState, errorReplicaIds, tableToPartition,
-                    tableToInvalidDictCacheColumns, tableToValidDictCacheColumns,
-                    totalInvolvedBackends, db);
+            unprotectedCommitTransaction(transactionState, committers);
             txnOperated = true;
         } finally {
             writeUnlock();
@@ -934,12 +803,7 @@ public class DatabaseTransactionMgr {
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
-    protected void unprotectedCommitTransaction(TransactionState transactionState, Set<Long> errorReplicaIds,
-                                                Map<Long, Set<Long>> tableToPartition,
-                                                Map<Long, Set<String>> tableToInvalidDictColumns,
-                                                Map<Long, Set<String>> tableToValidDictColumns,
-                                                Set<Long> totalInvolvedBackends,
-                                                Database db) {
+    protected void unprotectedCommitTransaction(TransactionState transactionState, List<TableCommitter> committers) {
         // transaction state is modified during check if the transaction could committed
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARE) {
             return;
@@ -959,37 +823,16 @@ public class DatabaseTransactionMgr {
         transactionState.setCommitTime(commitTs);
         // update transaction state version
         transactionState.setTransactionStatus(TransactionStatus.COMMITTED);
-        transactionState.setErrorReplicas(errorReplicaIds);
-        for (long tableId : tableToPartition.keySet()) {
-            TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
-            boolean isFirstPartition = true;
-            for (long partitionId : tableToPartition.get(tableId)) {
-                OlapTable table = (OlapTable) db.getTable(tableId);
-                Partition partition = table.getPartition(partitionId);
-                PartitionCommitInfo partitionCommitInfo;
-                if (isFirstPartition) {
-                    partitionCommitInfo = new PartitionCommitInfo(partitionId,
-                            partition.getNextVersion(),
-                            System.currentTimeMillis(),
-                            Lists.newArrayList(tableToInvalidDictColumns.get(tableId)),
-                            Lists.newArrayList(tableToValidDictColumns.get(tableId)));
-                } else {
-                    partitionCommitInfo = new PartitionCommitInfo(partitionId,
-                            partition.getNextVersion(),
-                            System.currentTimeMillis() /* use as partition visible time */);
-                }
-                tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
-                isFirstPartition = false;
-            }
-            transactionState.putIdToTableCommitInfo(tableId, tableCommitInfo);
+
+        for (TableCommitter committer : committers) {
+            committer.postCommit(transactionState);
         }
+
         // persist transactionState
         unprotectUpsertTransactionState(transactionState, false);
 
-        // add publish version tasks. set task to null as a placeholder.
-        // tasks will be created when publishing version.
-        for (long backendId : totalInvolvedBackends) {
-            transactionState.addPublishVersionTask(backendId, null);
+        for (TableCommitter committer : committers) {
+            committer.postEditLog(transactionState);
         }
     }
 
@@ -1575,4 +1418,7 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    GlobalStateMgr getGlobalStateMgr() {
+        return globalStateMgr;
+    }
 }
