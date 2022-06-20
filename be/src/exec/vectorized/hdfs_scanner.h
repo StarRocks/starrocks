@@ -252,6 +252,7 @@ protected:
     std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
     // predicate which havs min/max
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
+    std::unique_ptr<RandomAccessFile> _raw_file;
     std::unique_ptr<RandomAccessFile> _file;
 };
 

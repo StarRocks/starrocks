@@ -82,7 +82,6 @@ private:
     int _chunk_size;
 
     RandomAccessFile* _file;
-    RandomAccessFile* _file_with_stats;
     SharedBufferedInputStream* _sb_stream;
 
     // parquet file meta

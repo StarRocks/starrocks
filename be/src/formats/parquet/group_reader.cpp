@@ -16,43 +16,6 @@ namespace starrocks::parquet {
 constexpr static const PrimitiveType kDictCodePrimitiveType = TYPE_INT;
 constexpr static const FieldType kDictCodeFieldType = OLAP_FIELD_TYPE_INT;
 
-class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
-public:
-    explicit CountedSeekableInputStream(std::shared_ptr<io::SeekableInputStream> stream,
-                                        vectorized::HdfsScanStats* stats)
-            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(stream), _stats(stats) {}
-
-    ~CountedSeekableInputStream() override = default;
-
-    StatusOr<int64_t> read(void* data, int64_t size) override {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
-        ASSIGN_OR_RETURN(auto nread, _stream->read(data, size));
-        _stats->bytes_read += nread;
-        return nread;
-    }
-
-    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) override {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
-        ASSIGN_OR_RETURN(auto nread, _stream->read_at(offset, data, size));
-        _stats->bytes_read += nread;
-        return nread;
-    }
-
-    Status read_at_fully(int64_t offset, void* data, int64_t size) override {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
-        RETURN_IF_ERROR(_stream->read_at_fully(offset, data, size));
-        _stats->bytes_read += size;
-        return Status::OK();
-    }
-
-private:
-    std::shared_ptr<io::SeekableInputStream> _stream;
-    vectorized::HdfsScanStats* _stats;
-};
-
 GroupReader::GroupReader(int chunk_size, RandomAccessFile* file, FileMetaData* file_metadata, int row_group_number)
         : _chunk_size(chunk_size), _file(file), _file_metadata(file_metadata), _row_group_number(row_group_number) {
     _row_group_metadata =
@@ -122,18 +85,16 @@ void GroupReader::close() {
 }
 
 Status GroupReader::_init_column_readers() {
-    _file_with_stats = _obj_pool.add(new RandomAccessFile(
-            std::make_shared<CountedSeekableInputStream>(_file->stream(), _param.stats), _file->filename()));
-    _sb_stream = _obj_pool.add(new SharedBufferedInputStream(_file_with_stats));
+    _sb_stream = _obj_pool.add(new SharedBufferedInputStream(_file));
 
     ColumnReaderOptions& opts = _column_reader_opts;
     opts.timezone = _param.timezone;
     opts.chunk_size = _chunk_size;
     opts.stats = _param.stats;
     opts.sb_stream = _sb_stream;
-    opts.file = _file_with_stats;
+    opts.file = _file;
     opts.row_group_meta = _row_group_metadata.get();
-    opts.use_sb_stream = config::parquet_enable_coalesce_reads;
+    opts.use_sb_stream = config::parquet_coalesce_read_enable;
 
     if (opts.use_sb_stream) {
         RETURN_IF_ERROR(_set_io_ranges());

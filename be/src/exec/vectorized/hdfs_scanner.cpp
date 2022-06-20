@@ -7,6 +7,43 @@
 
 namespace starrocks::vectorized {
 
+class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
+public:
+    explicit CountedSeekableInputStream(std::shared_ptr<io::SeekableInputStream> stream,
+                                        vectorized::HdfsScanStats* stats)
+            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(stream), _stats(stats) {}
+
+    ~CountedSeekableInputStream() override = default;
+
+    StatusOr<int64_t> read(void* data, int64_t size) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        ASSIGN_OR_RETURN(auto nread, _stream->read(data, size));
+        _stats->bytes_read += nread;
+        return nread;
+    }
+
+    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        ASSIGN_OR_RETURN(auto nread, _stream->read_at(offset, data, size));
+        _stats->bytes_read += nread;
+        return nread;
+    }
+
+    Status read_at_fully(int64_t offset, void* data, int64_t size) override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        RETURN_IF_ERROR(_stream->read_at_fully(offset, data, size));
+        _stats->bytes_read += size;
+        return Status::OK();
+    }
+
+private:
+    std::shared_ptr<io::SeekableInputStream> _stream;
+    vectorized::HdfsScanStats* _stats;
+};
+
 Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     _runtime_state = runtime_state;
     _scanner_params = scanner_params;
@@ -110,7 +147,9 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
         return Status::OK();
     }
     CHECK(_file == nullptr) << "File has already been opened";
-    ASSIGN_OR_RETURN(_file, _scanner_params.fs->new_random_access_file(_scanner_params.path));
+    ASSIGN_OR_RETURN(_raw_file, _scanner_params.fs->new_random_access_file(_scanner_params.path));
+    _file = std::make_unique<RandomAccessFile>(
+            std::make_shared<CountedSeekableInputStream>(_raw_file->stream(), &_stats), _raw_file->filename());
     _build_scanner_context();
     auto status = do_open(runtime_state);
     if (status.ok()) {
@@ -136,6 +175,7 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     }
     do_close(runtime_state);
     _file.reset(nullptr);
+    _raw_file.reset(nullptr);
     _is_closed = true;
     if (_is_open && _scanner_params.open_limit != nullptr) {
         _scanner_params.open_limit->fetch_sub(1, std::memory_order_relaxed);
