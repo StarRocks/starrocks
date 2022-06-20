@@ -43,10 +43,10 @@ Status LakeServiceImpl::publish(lake::Tablet* tablet, const ::starrocks::lake::P
     if (!res.ok()) {
         // Check if the new version metadata exist.
         if (res.status().is_not_found() && tablet->get_metadata(new_version).ok()) {
-        // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ optimization, there is no need to invoke `get_metadata` in all
-        // circumstances, e.g, network and permission problems.
+            // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ optimization, there is no need to invoke `get_metadata` in all
+            // circumstances, e.g, network and permission problems.
             return Status::OK();
-        } 
+        }
         LOG(WARNING) << "Fail to get " << tablet->metadata_path(base_version) << ": " << res.status();
         return res.status();
     }
