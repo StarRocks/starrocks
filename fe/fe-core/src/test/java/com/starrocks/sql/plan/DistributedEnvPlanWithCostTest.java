@@ -80,21 +80,21 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     @Test
     public void testCountDistinctWithGroupHighCountHigh() throws Exception {
         String sql = "select count(distinct P_NAME) from part group by P_PARTKEY;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("1:AGGREGATE (update serialize)\n"
-                + "  |  group by: 1: P_PARTKEY, 2: P_NAME"));
-        Assert.assertTrue(planFragment.contains("  2:AGGREGATE (update finalize)\n"
-                + "  |  output: count(2: P_NAME)"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(2: P_NAME)\n" +
+                "  |  group by: 1: P_PARTKEY");
     }
 
     @Test
     public void testCountDistinctWithoutGroupBy() throws Exception {
         String sql = "SELECT COUNT (DISTINCT l_partkey) FROM lineitem";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("3:AGGREGATE (merge finalize)\n" +
-                "  |  output: multi_distinct_count(18: count"));
-        Assert.assertTrue(planFragment.contains("1:AGGREGATE (update serialize)\n" +
-                "  |  output: multi_distinct_count(2: L_PARTKEY)"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 2: L_PARTKEY");
+        assertContains(plan, "4:AGGREGATE (update serialize)\n" +
+                "  |  output: count(2: L_PARTKEY)\n" +
+                "  |  group by: ");
     }
 
     @Test
@@ -358,11 +358,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testDistinctGroupByAggWithDefaultStatistics() throws Exception {
         String sql = "SELECT C_NATION, COUNT(distinct LO_CUSTKEY) FROM lineorder_new_l GROUP BY C_NATION;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)\n" +
-                "  |  output: multi_distinct_count"));
-        Assert.assertTrue(plan.contains("1:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  output: multi_distinct_count"));
+                "  |  group by: 4: LO_CUSTKEY, 21: C_NATION");
+        assertContains(plan, "3:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 4: LO_CUSTKEY, 21: C_NATION");
     }
 
     @Test
