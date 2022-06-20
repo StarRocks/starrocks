@@ -34,12 +34,25 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
-    void set_workgroup(workgroup::WorkGroupPtr wg);
+
+    void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
 
     // interface for different scan node
     virtual Status do_prepare(RuntimeState* state) = 0;
     virtual void do_close(RuntimeState* state) = 0;
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
+
+    virtual int64_t get_last_scan_rows_num() {
+        int64_t scan_rows_num = _last_scan_rows_num;
+        _last_scan_rows_num = 0;
+        return scan_rows_num;
+    }
+
+    virtual int64_t get_last_scan_bytes() {
+        int64_t res = _last_scan_bytes;
+        _last_scan_bytes = 0;
+        return res;
+    }
 
 private:
     // This method is only invoked when current morsel is reached eof
@@ -88,6 +101,8 @@ private:
     std::weak_ptr<QueryContext> _query_ctx;
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
+    std::atomic_int64_t _last_scan_rows_num = 0;
+    std::atomic_int64_t _last_scan_bytes = 0;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {

@@ -164,17 +164,14 @@ Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
 }
 
 void OlapChunkSource::_decide_chunk_size() {
-    bool has_huge_length_type = std::any_of(_query_slots.begin(), _query_slots.end(),
-                                            [](auto& slot) { return slot->type().is_huge_type(); });
     if (_limit != -1 && _limit < _runtime_state->chunk_size()) {
         // Improve for select * from table limit x, x is small
         _params.chunk_size = _limit;
     } else {
         _params.chunk_size = _runtime_state->chunk_size();
     }
-    if (has_huge_length_type) {
-        _params.chunk_size = std::min(_params.chunk_size, CHUNK_SIZE_FOR_HUGE_TYPE);
-    }
+    // Use the default chunk size for IO, to avoid the memory allocation bottleneck
+    _params.chunk_size = std::min(_params.chunk_size, DEFAULT_CHUNK_SIZE);
 }
 
 Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
@@ -182,6 +179,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
                                             std::vector<uint32_t>& reader_columns) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     bool skip_aggregation = thrift_olap_scan_node.is_preaggregation;
+    _params.is_pipeline = true;
     _params.reader_type = READER_QUERY;
     _params.skip_aggregation = skip_aggregation;
     _params.profile = _runtime_profile;
@@ -469,6 +467,8 @@ void OlapChunkSource::close(RuntimeState* state) {
     _reader.reset();
     _predicate_free_pool.clear();
     _dict_optimize_parser.close(state);
+    _chunk_buffer.shutdown();
+    _chunk_buffer.clear();
 }
 
 void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {

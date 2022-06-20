@@ -21,6 +21,8 @@
 
 #include "storage/rowset/bloom_filter_index_reader.h"
 
+#include <bthread/sys_futex.h>
+
 #include <memory>
 
 #include "storage/rowset/bloom_filter.h"
@@ -28,15 +30,41 @@
 
 namespace starrocks {
 
-Status BloomFilterIndexReader::load(fs::BlockManager* block_mgr, const std::string& file_name,
-                                    const BloomFilterIndexPB* bloom_filter_index_meta, bool use_page_cache,
-                                    bool kept_in_memory) {
-    _typeinfo = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
-    _algorithm = bloom_filter_index_meta->algorithm();
-    _hash_strategy = bloom_filter_index_meta->hash_strategy();
-    const IndexedColumnMetaPB& bf_index_meta = bloom_filter_index_meta->bloom_filter();
+StatusOr<bool> BloomFilterIndexReader::load(fs::BlockManager* fs, const std::string& filename,
+                                            const BloomFilterIndexPB& meta, bool use_page_cache, bool kept_in_memory) {
+    while (true) {
+        auto curr_state = _state.load(std::memory_order_acquire);
+        if (curr_state == kLoaded) {
+            return false;
+        }
+        if (curr_state == kUnloaded && _state.compare_exchange_weak(curr_state, kLoading, std::memory_order_release)) {
+            auto st = do_load(fs, filename, meta, use_page_cache, kept_in_memory);
+            if (st.ok()) {
+                _state.store(kLoaded, std::memory_order_release);
+                int r = bthread::futex_wake_private(&_state, INT_MAX);
+                PLOG_IF(ERROR, r < 0) << " bthread::futex_wake_private";
+                return true;
+            } else {
+                _state.store(kUnloaded, std::memory_order_release);
+                int r = bthread::futex_wake_private(&_state, 1);
+                PLOG_IF(ERROR, r < 0) << " bthread::futex_wake_private";
+                return st;
+            }
+        }
+        if (curr_state == kLoading) {
+            int r = bthread::futex_wait_private(&_state, curr_state, nullptr);
+            PLOG_IF(ERROR, r != 0) << " bthread::futex_wait_private";
+        }
+    }
+}
 
-    _bloom_filter_reader = std::make_unique<IndexedColumnReader>(block_mgr, file_name, bf_index_meta);
+Status BloomFilterIndexReader::do_load(fs::BlockManager* fs, const std::string& filename,
+                                       const BloomFilterIndexPB& meta, bool use_page_cache, bool kept_in_memory) {
+    _typeinfo = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
+    _algorithm = meta.algorithm();
+    _hash_strategy = meta.hash_strategy();
+    const IndexedColumnMetaPB& bf_index_meta = meta.bloom_filter();
+    _bloom_filter_reader = std::make_unique<IndexedColumnReader>(fs, filename, bf_index_meta);
     RETURN_IF_ERROR(_bloom_filter_reader->load(use_page_cache, kept_in_memory));
     return Status::OK();
 }

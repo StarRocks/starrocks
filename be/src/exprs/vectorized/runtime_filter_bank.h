@@ -113,6 +113,7 @@ public:
     JoinRuntimeFilter::RunningContext* runtime_filter_ctx() { return &_runtime_filter_ctx; }
     bool is_local() const { return _is_local; }
     TPlanNodeId build_plan_node_id() const { return _build_plan_node_id; }
+    const std::vector<int32_t>* bucketseq_to_partition() { return &_bucketseq_to_partition; }
 
 private:
     friend class HashJoinNode;
@@ -128,6 +129,8 @@ private:
     RuntimeProfile::Counter* _latency_timer = nullptr;
     int64_t _open_timestamp = 0;
     int64_t _ready_timestamp = 0;
+    TRuntimeFilterBuildJoinMode::type _join_mode;
+    std::vector<int32_t> _bucketseq_to_partition;
 };
 
 // RuntimeFilterProbeCollector::do_evaluate function apply runtime bloom filter to Operators to filter chunk.
@@ -175,6 +178,8 @@ public:
     std::string debug_string() const;
     bool empty() const { return _descriptors.empty(); }
     void init_counter();
+    void set_plan_node_id(int id) { _plan_node_id = id; }
+    int plan_node_id() { return _plan_node_id; }
 
 private:
     void update_selectivity(vectorized::Chunk* chunk);
@@ -188,6 +193,7 @@ private:
     long _scan_wait_timeout_ms = 0L;
     RuntimeProfile* _runtime_profile = nullptr;
     RuntimeBloomFilterEvalContext _eval_context;
+    int _plan_node_id = -1;
 };
 
 } // namespace vectorized

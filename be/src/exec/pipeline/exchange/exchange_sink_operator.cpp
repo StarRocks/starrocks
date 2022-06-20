@@ -371,11 +371,11 @@ bool ExchangeSinkOperator::is_finished() const {
 }
 
 bool ExchangeSinkOperator::need_input() const {
-    return !is_finished() && !_buffer->is_full();
+    return !is_finished() && _buffer != nullptr && !_buffer->is_full();
 }
 
 bool ExchangeSinkOperator::pending_finish() const {
-    return !_buffer->is_finished();
+    return _buffer != nullptr && !_buffer->is_finished();
 }
 
 Status ExchangeSinkOperator::set_cancelled(RuntimeState* state) {
@@ -639,6 +639,7 @@ Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
 }
 
 void ExchangeSinkOperatorFactory::close(RuntimeState* state) {
+    _buffer.reset();
     Expr::close(_partition_expr_ctxs, state);
     OperatorFactory::close(state);
 }

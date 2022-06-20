@@ -137,6 +137,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.stream.Collectors;
 
 public class MasterImpl {
@@ -279,6 +280,13 @@ public class MasterImpl {
                 default:
                     break;
             }
+        } catch (RejectedExecutionException e) {
+            tStatus.setStatus_code(TStatusCode.TOO_MANY_TASKS);
+            String errMsg = "task queue full";
+            List<String> errorMsgs = new ArrayList<String>();
+            LOG.warn(errMsg, e);
+            errorMsgs.add(errMsg);
+            tStatus.setError_msgs(errorMsgs);
         } catch (Exception e) {
             tStatus.setStatus_code(TStatusCode.CANCELLED);
             String errMsg = "finish agent task error.";
@@ -913,15 +921,10 @@ public class MasterImpl {
 
     private void finishAlterTask(AgentTask task) {
         AlterReplicaTask alterTask = (AlterReplicaTask) task;
-        try {
-            if (alterTask.getJobType() == JobType.ROLLUP) {
-                Catalog.getCurrentCatalog().getRollupHandler().handleFinishAlterTask(alterTask);
-            } else if (alterTask.getJobType() == JobType.SCHEMA_CHANGE) {
-                Catalog.getCurrentCatalog().getSchemaChangeHandler().handleFinishAlterTask(alterTask);
-            }
-            alterTask.setFinished(true);
-        } catch (MetaNotFoundException e) {
-            LOG.warn("failed to handle finish alter task: {}, {}", task.getSignature(), e.getMessage());
+        if (alterTask.getJobType() == JobType.ROLLUP) {
+            Catalog.getCurrentCatalog().getRollupHandler().handleFinishAlterTask(alterTask);
+        } else if (alterTask.getJobType() == JobType.SCHEMA_CHANGE) {
+            Catalog.getCurrentCatalog().getSchemaChangeHandler().handleFinishAlterTask(alterTask);
         }
         AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER, task.getSignature());
     }
@@ -1280,7 +1283,7 @@ public class MasterImpl {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist or already deleted"));
             response.setStatus(status);
-            LOG.warn("commit remote txn failed, db: {} not exist, txn id: {}",
+            LOG.warn("commit remote txn failed, db: {} not exist, txn_id: {}",
                     request.getDb_id(), request.getTxn_id());
             return response;
         }
@@ -1303,7 +1306,7 @@ public class MasterImpl {
                 return response;
             }
         } catch (UserException e) {
-            LOG.warn("commit remote txn failed, txn id {}", request.getTxn_id(), e);
+            LOG.warn("commit remote txn failed, txn_id: {}", request.getTxn_id(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             response.setStatus(status);
@@ -1346,7 +1349,7 @@ public class MasterImpl {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist or already deleted"));
             response.setStatus(status);
-            LOG.warn("abort remote txn failed, db: {} not exist, txn id: {}",
+            LOG.warn("abort remote txn failed, db: {} not exist, txn_id: {}",
                     request.getDb_id(), request.getTxn_id());
             return response;
         }
@@ -1355,7 +1358,7 @@ public class MasterImpl {
             Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
                     request.getDb_id(), request.getTxn_id(), request.getError_msg());
         } catch (Exception e) {
-            LOG.warn("abort remote txn failed, txn id {}", request.getTxn_id(), e);
+            LOG.warn("abort remote txn failed, txn_id: {}", request.getTxn_id(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             response.setStatus(status);

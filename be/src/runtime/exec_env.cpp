@@ -217,7 +217,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     }
     _broker_mgr->init();
     _small_file_mgr->init();
-    _init_mem_tracker();
 
     RETURN_IF_ERROR(_load_channel_mgr->init(_load_mem_tracker));
     _heartbeat_flags = new HeartbeatFlags();
@@ -297,18 +296,11 @@ Status ExecEnv::init_mem_tracker() {
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
+    _init_storage_page_cache();
     return Status::OK();
 }
 
-Status ExecEnv::_init_mem_tracker() {
-    // Initialize global memory limit.
-    std::stringstream ss;
-
-    if (!BitUtil::IsPowerOf2(config::min_buffer_size)) {
-        ss << "--min_buffer_size must be a power-of-two: " << config::min_buffer_size;
-        return Status::InternalError(ss.str());
-    }
-
+Status ExecEnv::_init_storage_page_cache() {
     int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit);
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="

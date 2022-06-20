@@ -3,6 +3,7 @@
 #pragma once
 
 #include "column/column.h"
+#include "column/datum.h"
 #include "common/logging.h"
 
 namespace starrocks::vectorized {
@@ -213,7 +214,16 @@ public:
         return ss.str();
     }
 
-    bool reach_capacity_limit() const override { return _data->reach_capacity_limit(); }
+    bool reach_capacity_limit(std::string* msg = nullptr) const override {
+        RETURN_IF_UNLIKELY(_data->reach_capacity_limit(msg), true);
+        if (_size > Column::MAX_CAPACITY_LIMIT) {
+            if (msg != nullptr) {
+                msg->append("Row count of const column reach limit: " + std::to_string(Column::MAX_CAPACITY_LIMIT));
+            }
+            return true;
+        }
+        return false;
+    }
 
     void check_or_die() const override;
 

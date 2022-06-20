@@ -21,6 +21,8 @@
 
 #include "storage/rowset/zone_map_index.h"
 
+#include <bthread/sys_futex.h>
+
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/column_block.h"
@@ -189,9 +191,37 @@ Status ZoneMapIndexWriterImpl<type>::finish(fs::WritableBlock* wblock, ColumnInd
     return writer.finish(meta->mutable_page_zone_maps());
 }
 
-Status ZoneMapIndexReader::load(fs::BlockManager* block_mgr, const std::string& filename,
-                                const ZoneMapIndexPB* index_meta, bool use_page_cache, bool kept_in_memory) {
-    IndexedColumnReader reader(block_mgr, filename, index_meta->page_zone_maps());
+StatusOr<bool> ZoneMapIndexReader::load(fs::BlockManager* fs, const std::string& filename, const ZoneMapIndexPB& meta,
+                                        bool use_page_cache, bool kept_in_memory) {
+    while (true) {
+        auto curr_state = _state.load(std::memory_order_acquire);
+        if (curr_state == kLoaded) {
+            return false;
+        }
+        if (curr_state == kUnloaded && _state.compare_exchange_weak(curr_state, kLoading, std::memory_order_release)) {
+            auto st = do_load(fs, filename, meta, use_page_cache, kept_in_memory);
+            if (st.ok()) {
+                _state.store(kLoaded, std::memory_order_release);
+                int r = bthread::futex_wake_private(&_state, INT_MAX);
+                PLOG_IF(ERROR, r < 0) << " bthread::futex_wake_private";
+                return true;
+            } else {
+                _state.store(kUnloaded, std::memory_order_release);
+                int r = bthread::futex_wake_private(&_state, 1);
+                PLOG_IF(ERROR, r < 0) << " bthread::futex_wake_private";
+                return st;
+            }
+        }
+        if (curr_state == kLoading) {
+            int r = bthread::futex_wait_private(&_state, curr_state, nullptr);
+            PLOG_IF(ERROR, r != 0) << " bthread::futex_wait_private";
+        }
+    }
+}
+
+Status ZoneMapIndexReader::do_load(fs::BlockManager* fs, const std::string& filename, const ZoneMapIndexPB& meta,
+                                   bool use_page_cache, bool kept_in_memory) {
+    IndexedColumnReader reader(fs, filename, meta.page_zone_maps());
     RETURN_IF_ERROR(reader.load(use_page_cache, kept_in_memory));
     std::unique_ptr<IndexedColumnIterator> iter;
     RETURN_IF_ERROR(reader.new_iterator(&iter));
@@ -219,6 +249,15 @@ Status ZoneMapIndexReader::load(fs::BlockManager* block_mgr, const std::string& 
         pool.clear();
     }
     return Status::OK();
+}
+
+size_t ZoneMapIndexReader::mem_usage() const {
+    size_t size = sizeof(ZoneMapIndexReader);
+    size += _page_zone_maps.capacity() * sizeof(_page_zone_maps[0]);
+    for (const auto& zone_map : _page_zone_maps) {
+        size += zone_map.SpaceUsedLong();
+    }
+    return size;
 }
 
 } // namespace starrocks

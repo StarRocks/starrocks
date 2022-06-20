@@ -25,6 +25,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PKafkaLoadInfo;
@@ -159,6 +160,7 @@ public class KafkaUtil {
         }
 
         private PProxyResult sendProxyRequest(PProxyRequest request) throws UserException {
+            TNetworkAddress address = new TNetworkAddress();
             try {
                 List<Long> backendIds = Catalog.getCurrentSystemInfo().getBackendIds(true);
                 if (backendIds.isEmpty()) {
@@ -166,20 +168,22 @@ public class KafkaUtil {
                 }
                 Collections.shuffle(backendIds);
                 Backend be = Catalog.getCurrentSystemInfo().getBackend(backendIds.get(0));
-                TNetworkAddress address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
+                address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info
                 Future<PProxyResult> future = BackendServiceProxy.getInstance().getInfo(address, request);
-                PProxyResult result = future.get(5, TimeUnit.SECONDS);
+                PProxyResult result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
                 TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
                 if (code != TStatusCode.OK) {
-                    throw new UserException("failed to send proxy request: " + result.status.errorMsgs);
+                    LOG.warn("failed to send proxy request to " + address + " err " + result.status.errorMsgs);
+                    throw new UserException(
+                            "failed to send proxy request to " + address + " err " + result.status.errorMsgs);
                 } else {
                     return result;
                 }
             } catch (Exception e) {
-                LOG.warn("failed to send proxy request.", e);
-                throw new LoadException("Failed to send proxy request: " + e.getMessage());
+                LOG.warn("failed to send proxy request to " + address + " err " + e.getMessage());
+                throw new LoadException("failed to send proxy request to " + address + " err " + e.getMessage());
             }
         }
     }

@@ -449,7 +449,9 @@ Status Expr::open(RuntimeState* state, ExprContext* context, FunctionContext::Fu
 
 void Expr::close(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
     for (auto ctx : ctxs) {
-        ctx->close(state);
+        if (ctx != nullptr) {
+            ctx->close(state);
+        }
     }
 }
 
@@ -480,6 +482,7 @@ Status Expr::clone_if_not_exists(const std::vector<ExprContext*>& ctxs, RuntimeS
         }
         return Status::OK();
     }
+
     new_ctxs->resize(ctxs.size());
     for (int i = 0; i < ctxs.size(); ++i) {
         RETURN_IF_ERROR(ctxs[i]->clone(state, &(*new_ctxs)[i]));

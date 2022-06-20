@@ -36,7 +36,9 @@ Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, st
 
 MetaReader::MetaReader() : _is_init(false), _has_more(false) {}
 
-MetaReader::~MetaReader() {}
+MetaReader::~MetaReader() {
+    Rowset::release_readers(_rowsets);
+}
 
 Status MetaReader::init(const MetaReaderParams& read_params) {
     RETURN_IF_ERROR(_init_params(read_params));
@@ -125,21 +127,22 @@ Status MetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& v
         return Status::OK();
     }
 
-    std::vector<RowsetSharedPtr> rowsets;
     Status acquire_rowset_st;
     {
         std::shared_lock l(tablet->get_header_lock());
-        acquire_rowset_st = tablet->capture_consistent_rowsets(_version, &rowsets);
+        acquire_rowset_st = tablet->capture_consistent_rowsets(_version, &_rowsets);
     }
 
     if (!acquire_rowset_st.ok()) {
+        _rowsets.clear();
         std::stringstream ss;
         ss << "fail to init reader. tablet=" << tablet->full_name() << "res=" << acquire_rowset_st;
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str().c_str());
     }
+    Rowset::acquire_readers(_rowsets);
 
-    for (auto& rs : rowsets) {
+    for (auto& rs : _rowsets) {
         RETURN_IF_ERROR(rs->load());
         auto beta_rowset = down_cast<BetaRowset*>(rs.get());
         for (auto seg : beta_rowset->segments()) {

@@ -229,7 +229,7 @@ public:
     void release() {
         // if the refs by reader is 0 and the rowset is closed, should release the resouce
         uint64_t current_refs = --_refs_by_reader;
-        if (current_refs == 0 && _rowset_state_machine.rowset_state() == ROWSET_UNLOADING) {
+        if (current_refs == 0) {
             {
                 std::lock_guard<std::mutex> release_lock(_lock);
                 // rejudge _refs_by_reader because we do not add lock in create reader
@@ -245,6 +245,25 @@ public:
                         << ", tabletid:" << _rowset_meta->tablet_id();
             }
         }
+    }
+
+    static size_t get_segment_num(const std::vector<RowsetSharedPtr>& rowsets) {
+        size_t num_segments = 0;
+        std::for_each(rowsets.begin(), rowsets.end(),
+                      [&num_segments](const RowsetSharedPtr& rowset) { num_segments += rowset->num_segments(); });
+        return num_segments;
+    }
+
+    static void acquire_readers(const std::vector<RowsetSharedPtr>& rowsets) {
+        std::for_each(rowsets.begin(), rowsets.end(), [](const RowsetSharedPtr& rowset) { rowset->acquire(); });
+    }
+
+    static void release_readers(const std::vector<RowsetSharedPtr>& rowsets) {
+        std::for_each(rowsets.begin(), rowsets.end(), [](const RowsetSharedPtr& rowset) { rowset->release(); });
+    }
+
+    static void close_rowsets(const std::vector<RowsetSharedPtr>& rowsets) {
+        std::for_each(rowsets.begin(), rowsets.end(), [](const RowsetSharedPtr& rowset) { rowset->close(); });
     }
 
 protected:

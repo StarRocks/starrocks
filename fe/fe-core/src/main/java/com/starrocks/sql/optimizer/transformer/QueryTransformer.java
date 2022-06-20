@@ -9,11 +9,11 @@ import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
@@ -307,20 +307,15 @@ class QueryTransformer {
         // after: select sum(clone(a)) from xx group by rollup(a);
         if (groupingSetsList != null) {
             for (Expr groupBy : groupByExpressions) {
-                aggregates.forEach(f -> f.getParams().exprs()
-                        .replaceAll(root -> replaceExprBottomUp(root, groupBy, new CloneExpr(groupBy))));
                 aggregates.replaceAll(
                         root -> (FunctionCallExpr) replaceExprBottomUp(root, groupBy, new CloneExpr(groupBy)));
             }
         }
 
         ImmutableList.Builder<Expr> arguments = ImmutableList.builder();
-        aggregates.stream().map(FunctionCallExpr::getParams)
-                .filter(e -> !(e.isStar()))
-                .map(FunctionParams::exprs)
-                .flatMap(List::stream)
-                .filter(e -> !(e.isConstant()))
-                .forEach(arguments::add);
+        aggregates.stream().filter(f -> !f.getParams().isStar())
+                .map(TreeNode::getChildren).flatMap(List::stream)
+                .filter(e -> !(e.isConstant())).forEach(arguments::add);
 
         Iterable<Expr> inputs = Iterables.concat(groupByExpressions, arguments.build());
 

@@ -46,6 +46,20 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase("db1").useDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr);
+        starRocksAssert.withTable("CREATE TABLE `test_decimal_type6` (\n" +
+                "  `dec_1_2` decimal32(2, 1) NOT NULL COMMENT \"\",\n" +
+                "  `dec_18_0` decimal64(18, 0) NOT NULL COMMENT \"\",\n" +
+                "  `dec_18_18` decimal64(18, 18) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dec_1_2`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`dec_1_2`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"enable_persistent_index\" = \"false\"\n" +
+                ");");
     }
 
     @Test
@@ -266,14 +280,14 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimal32Stddev() throws Exception {
         String sql = "select stddev(col_decimal32p9s2) from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "stddev[(cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,9))); args: DECIMAL128; result: DECIMAL128(38,9)";
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,9))";
         Assert.assertTrue(plan.contains(snippet));
     }
     @Test
     public void testDecimal32Variance()throws Exception {
         String sql = "select variance(col_decimal32p9s2) from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "variance[(cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,9))); args: DECIMAL128; result: DECIMAL128(38,9)";
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,9))";
         Assert.assertTrue(plan.contains(snippet));
     }
 
@@ -390,6 +404,28 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         String snippet = "6 <-> 0 % cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2))";
         Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimalNullableProperties() throws Exception {
+        String sql;
+        String plan;
+        
+        // test decimal count(no-nullable decimal)
+        sql = "select count(`dec_18_0`) from `test_decimal_type6`;";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        System.out.println("plan = " + plan);
+        Assert.assertTrue(plan.contains("aggregate: count[([2: dec_18_0, DECIMAL64(18,0), false]); args: DECIMAL64; result: BIGINT; args nullable: false; result nullable: true]"));
+
+        // test decimal add return a nullable column
+        sql = "select count(`dec_18_0` + `dec_18_18`) from `test_decimal_type6`;";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("aggregate: count[([4: expr, DECIMAL64(18,18), true]); args: DECIMAL64; result: BIGINT; args nullable: true; result nullable: true]"));
+
+        // test decimal input function input no-nullable, output is nullable
+        sql = "select round(`dec_18_0`) from `test_decimal_type6`";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("  |  4 <-> round[(cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(18,0))); args: DECIMAL128; result: DECIMAL128(38,0); args nullable: true; result nullable: true]"));
     }
 }
 

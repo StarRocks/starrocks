@@ -67,8 +67,9 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, fs::Bl
                                                  const std::string& filename, uint32_t segment_id,
                                                  const TabletSchema* tablet_schema, size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer) {
-    auto segment = std::shared_ptr<Segment>(new Segment(private_type(0), blk_mgr, filename, segment_id, tablet_schema),
-                                            DeleterWithMemTracker<Segment>(mem_tracker));
+    auto segment = std::shared_ptr<Segment>(
+            new Segment(private_type(0), blk_mgr, filename, segment_id, tablet_schema, mem_tracker),
+            DeleterWithMemTracker<Segment>(mem_tracker));
     mem_tracker->consume(segment->mem_usage());
 
     RETURN_IF_ERROR(segment->_open(mem_tracker, footer_length_hint, partial_rowset_footer));
@@ -166,8 +167,12 @@ Status Segment::parse_segment_footer(fs::ReadableBlock* rblock, SegmentFooterPB*
 }
 
 Segment::Segment(const private_type&, fs::BlockManager* blk_mgr, std::string fname, uint32_t segment_id,
-                 const TabletSchema* tablet_schema)
-        : _block_mgr(blk_mgr), _fname(std::move(fname)), _tablet_schema(tablet_schema), _segment_id(segment_id) {}
+                 const TabletSchema* tablet_schema, MemTracker* mem_tracker)
+        : _block_mgr(blk_mgr),
+          _fname(std::move(fname)),
+          _tablet_schema(tablet_schema),
+          _segment_id(segment_id),
+          _mem_tracker(mem_tracker) {}
 
 Status Segment::_open(MemTracker* mem_tracker, size_t* footer_length_hint,
                       const FooterPointerPB* partial_rowset_footer) {
@@ -257,24 +262,20 @@ Status Segment::_load_index(MemTracker* mem_tracker) {
 
 Status Segment::_create_column_readers(MemTracker* mem_tracker, SegmentFooterPB* footer) {
     std::unordered_map<uint32_t, uint32_t> column_id_to_footer_ordinal;
-    for (uint32_t ordinal = 0; ordinal < footer->columns().size(); ++ordinal) {
+    for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
         const auto& column_pb = footer->columns(ordinal);
         column_id_to_footer_ordinal.emplace(column_pb.unique_id(), ordinal);
     }
 
     _column_readers.resize(_tablet_schema->columns().size());
-    for (uint32_t ordinal = 0; ordinal < _tablet_schema->num_columns(); ++ordinal) {
+    for (uint32_t ordinal = 0, sz = _tablet_schema->num_columns(); ordinal < sz; ++ordinal) {
         const auto& column = _tablet_schema->columns()[ordinal];
         auto iter = column_id_to_footer_ordinal.find(column.unique_id());
         if (iter == column_id_to_footer_ordinal.end()) {
             continue;
         }
 
-        ColumnReaderOptions opts;
-        opts.block_mgr = _block_mgr;
-        opts.storage_format_version = footer->version();
-        opts.kept_in_memory = _tablet_schema->is_in_memory();
-        auto res = ColumnReader::create(mem_tracker, opts, footer->mutable_columns(iter->second), _fname);
+        auto res = ColumnReader::create(footer->mutable_columns(iter->second), this);
         if (!res.ok()) {
             return res.status();
         }

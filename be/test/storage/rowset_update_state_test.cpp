@@ -26,6 +26,8 @@
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/chunk_iterator.h"
 #include "storage/vectorized/empty_iterator.h"
+#include "storage/vectorized/tablet_reader.h"
+#include "storage/vectorized/tablet_reader_params.h"
 #include "storage/vectorized/union_iterator.h"
 #include "testutil/assert.h"
 #include "util/file_utils.h"
@@ -156,24 +158,22 @@ protected:
     std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
 };
 
-static vectorized::ChunkIteratorPtr create_tablet_iterator(const TabletSharedPtr& tablet, int64_t version) {
-    static OlapReaderStatistics s_stats;
-    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
-    vectorized::RowsetReadOptions rs_opts;
-    rs_opts.is_primary_keys = true;
-    rs_opts.sorted = false;
-    rs_opts.version = version;
-    rs_opts.meta = tablet->data_dir()->get_meta();
-    rs_opts.stats = &s_stats;
-    auto seg_iters = tablet->capture_segment_iterators(Version(0, version), schema, rs_opts);
-    if (!seg_iters.ok()) {
-        LOG(ERROR) << "read tablet failed: " << seg_iters.status().to_string();
+static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,
+                                                           vectorized::Schema& schema) {
+    vectorized::TabletReaderParams params;
+    if (!reader.prepare().ok()) {
+        LOG(ERROR) << "reader prepare failed";
         return nullptr;
     }
-    if (seg_iters->empty()) {
+    std::vector<ChunkIteratorPtr> seg_iters;
+    if (!reader.get_segment_iterators(params, &seg_iters).ok()) {
+        LOG(ERROR) << "reader get segment iterators fail";
+        return nullptr;
+    }
+    if (seg_iters.empty()) {
         return vectorized::new_empty_iterator(schema, DEFAULT_CHUNK_SIZE);
     }
-    return vectorized::new_union_iterator(*seg_iters);
+    return vectorized::new_union_iterator(seg_iters);
 }
 
 static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
@@ -195,7 +195,9 @@ static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
 }
 
 static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
-    auto iter = create_tablet_iterator(tablet, version);
+    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::TabletReader reader(tablet, Version(0, version), schema);
+    auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
         return -1;
     }

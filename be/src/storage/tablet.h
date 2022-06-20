@@ -132,10 +132,6 @@ public:
 
     using IteratorList = std::vector<ChunkIteratorPtr>;
 
-    // Get the segment iterators for the specified version |spec_version|.
-    StatusOr<IteratorList> capture_segment_iterators(const Version& spec_version, const vectorized::Schema& schema,
-                                                     const vectorized::RowsetReadOptions& options) const;
-
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
     void add_delete_predicate(const DeletePredicatePB& delete_predicate, int64_t version);
     bool version_for_delete_predicate(const Version& version);
@@ -290,7 +286,7 @@ private:
     // inc_rowset_expired_sec conf. In addition, the deletion is triggered periodically,
     // So at a certain time point (such as just after a base compaction), some rowsets in
     // _inc_rs_version_map may do not exist in _rs_version_map.
-    std::unordered_map<Version, RowsetSharedPtr, HashOfVersion> _rs_version_map;
+    std::map<Version, RowsetSharedPtr> _rs_version_map;
     std::unordered_map<Version, RowsetSharedPtr, HashOfVersion> _inc_rs_version_map;
     // This variable _stale_rs_version_map is used to record these rowsets which are be compacted.
     // These _stale rowsets are been removed when rowsets' pathVersion is expired,

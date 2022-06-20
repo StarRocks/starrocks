@@ -2197,6 +2197,7 @@ public class PlanFragmentBuilder {
                             .collect(Collectors.toList()),
                     Arrays.stream(physicalTableFunction.getFnResultColumnRefSet().getColumnIds()).boxed()
                             .collect(Collectors.toList()));
+            tableFunctionNode.computeStatistics(optExpression.getStatistics());
             tableFunctionNode.setLimit(physicalTableFunction.getLimit());
             inputFragment.setPlanRoot(tableFunctionNode);
             return inputFragment;

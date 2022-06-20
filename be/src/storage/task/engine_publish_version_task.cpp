@@ -40,7 +40,7 @@ EnginePublishVersionTask::EnginePublishVersionTask(TTransactionId transaction_id
 Status EnginePublishVersionTask::finish() {
     VLOG(1) << "begin to publish version on tablet. "
             << "tablet_id=" << _tablet_info.tablet_id << ", schema_hash=" << _tablet_info.schema_hash
-            << ", version=" << _version << ", transaction_id=" << _transaction_id;
+            << ", version=" << _version << ", txn_id: " << _transaction_id;
 
     TabletSharedPtr tablet =
             StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_info.tablet_id, _tablet_info.tablet_uid);
@@ -63,7 +63,7 @@ Status EnginePublishVersionTask::finish() {
     }
     if (!st.ok()) {
         LOG(WARNING) << "Failed to publish version. rowset_id=" << _rowset->rowset_id()
-                     << ", tablet_id=" << _tablet_info.tablet_id << ", txn_id=" << _transaction_id;
+                     << ", tablet_id=" << _tablet_info.tablet_id << ", txn_id: " << _transaction_id;
         return st;
     }
 
@@ -72,13 +72,13 @@ Status EnginePublishVersionTask::finish() {
         auto st = tablet->add_inc_rowset(_rowset);
         if (!st.ok() && !st.is_already_exist()) {
             LOG(WARNING) << "fail to add visible rowset to tablet. rowset_id=" << _rowset->rowset_id()
-                         << ", tablet_id=" << _tablet_info.tablet_id << ", txn_id=" << _transaction_id
+                         << ", tablet_id=" << _tablet_info.tablet_id << ", txn_id: " << _transaction_id
                          << ", res=" << st;
             return st;
         }
     }
     VLOG(1) << "Publish version successfully on tablet. tablet=" << tablet->full_name()
-            << ", transaction_id=" << _transaction_id << ", version=" << _version << ", res=" << st.to_string();
+            << ", txn_id: " << _transaction_id << ", version=" << _version << ", res=" << st.to_string();
     return Status::OK();
 }
 

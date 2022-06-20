@@ -72,6 +72,11 @@ public class WorkGroupAnalyzer {
                     throw new SemanticException(
                             String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.QUERY_TYPE, inPred.toSql()));
                 }
+                for (String queryType : values) {
+                    if (!WorkGroupClassifier.SUPPORTED_QUERY_TYPES.contains(queryType.toUpperCase())) {
+                        throw new SemanticException(String.format("Unsupported query_type: '%s'", queryType));
+                    }
+                }
                 classifier.setQueryTypes(values.stream()
                         .map(String::toUpperCase).map(WorkGroupClassifier.QueryType::valueOf).collect(Collectors.toSet()));
             } else {
@@ -136,6 +141,8 @@ public class WorkGroupAnalyzer {
                 }
                 continue;
             }
+
+            throw new SemanticException("Unknown property: " + key);
         }
     }
 }

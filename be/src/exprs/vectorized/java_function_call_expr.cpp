@@ -103,8 +103,13 @@ ColumnPtr JavaFunctionCallExpr::evaluate(ExprContext* context, vectorized::Chunk
     for (int i = 0; i < _children.size(); ++i) {
         columns[i] = _children[i]->evaluate(context, ptr);
     }
-
-    return _call_helper->call(context->fn_context(_fn_context_index), columns, ptr != nullptr ? ptr->num_rows() : 1);
+    ColumnPtr res;
+    auto call_udf = [&]() {
+        res = _call_helper->call(context->fn_context(_fn_context_index), columns, ptr != nullptr ? ptr->num_rows() : 1);
+        return Status::OK();
+    };
+    call_function_in_pthread(_runtime_state, call_udf)->get_future().get();
+    return res;
 }
 
 JavaFunctionCallExpr::~JavaFunctionCallExpr() {

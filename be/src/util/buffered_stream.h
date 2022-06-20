@@ -15,6 +15,7 @@ class RandomAccessFile;
 class BufferedInputStream {
 public:
     BufferedInputStream(RandomAccessFile* file, uint64_t offset, uint64_t length);
+
     ~BufferedInputStream() = default;
 
     void seek_to(uint64_t offset) {
@@ -43,8 +44,9 @@ public:
 
     Status get_bytes(const uint8_t** buffer, size_t* nbytes, bool peek = false);
 
+    void reserve(size_t nbytes);
+
 private:
-    void _reserve(size_t nbytes);
     Status _read_data();
     size_t num_remaining() const { return _buf_written - _buf_position; }
     size_t left_capactiy() const { return _buf_capacity - _buf_written; }

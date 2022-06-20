@@ -15,8 +15,7 @@ QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
           _total_fragments(0),
           _num_fragments(0),
-          _num_active_fragments(0),
-          _deadline(0) {}
+          _num_active_fragments(0) {}
 
 QueryContext::~QueryContext() {
     // When destruct FragmentContextManager, we use query-level MemTracker. since when PipelineDriver executor
@@ -32,15 +31,12 @@ QueryContext::~QueryContext() {
     }
 
     // Accounting memory usage during QueryContext's destruction should not use query-level MemTracker, but its released
-    // in the mid of QueryContext destruction, so use its parent MemTracker.
-    if (_mem_tracker) {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker->parent());
-        if (_exec_env != nullptr) {
-            if (_is_runtime_filter_coordinator) {
-                _exec_env->runtime_filter_worker()->close_query(_query_id);
-            }
-            _exec_env->runtime_filter_cache()->remove(_query_id);
+    // in the mid of QueryContext destruction, so use process-level memory tracker
+    if (_exec_env != nullptr) {
+        if (_is_runtime_filter_coordinator) {
+            _exec_env->runtime_filter_worker()->close_query(_query_id);
         }
+        _exec_env->runtime_filter_cache()->remove(_query_id);
     }
 }
 
@@ -61,7 +57,7 @@ int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t 
     int64_t mem_limit = per_instance_mem_limit;
     // query's mem_limit = per-instance mem_limit * num_instances * pipeline_dop
     static constexpr int64_t MEM_LIMIT_MAX = std::numeric_limits<int64_t>::max();
-    if (MEM_LIMIT_MAX / total_fragments() / pipeline_dop < mem_limit) {
+    if (MEM_LIMIT_MAX / total_fragments() / pipeline_dop > mem_limit) {
         mem_limit *= total_fragments() * pipeline_dop;
     } else {
         mem_limit = MEM_LIMIT_MAX;
@@ -105,7 +101,7 @@ void QueryContextManager::_clean_slot_unlocked(size_t i) {
     auto& sc_map = _second_chance_maps[i];
     auto sc_it = sc_map.begin();
     while (sc_it != sc_map.end()) {
-        if (sc_it->second->has_no_active_instances() && sc_it->second->is_expired()) {
+        if (sc_it->second->has_no_active_instances() && sc_it->second->is_delivery_expired()) {
             sc_it = sc_map.erase(sc_it);
         } else {
             ++sc_it;
@@ -242,7 +238,7 @@ void QueryContextManager::remove(const TUniqueId& query_id) {
         // in the future, so extend the lifetime of query context and wait for some time till fragments on wire have
         // vanished
         auto ctx = std::move(it->second);
-        ctx->extend_lifetime();
+        ctx->extend_delivery_lifetime();
         context_map.erase(it);
         sc_map.emplace(query_id, std::move(ctx));
     }

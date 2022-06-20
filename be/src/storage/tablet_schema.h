@@ -139,6 +139,7 @@ public:
     static std::string get_string_by_aggregation_type(FieldAggregationMethod aggregation_type);
     static FieldType get_field_type_by_string(const std::string& str);
     static FieldAggregationMethod get_aggregation_type_by_string(const std::string& str);
+    size_t estimate_field_size(size_t variable_length) const;
     static uint32_t get_field_length_by_type(FieldType type, uint32_t string_length);
 
     std::string debug_string() const;
@@ -233,6 +234,7 @@ public:
     SchemaId id() const { return _id; }
     size_t row_size() const;
     size_t field_index(const std::string_view& field_name) const;
+    size_t estimate_row_size(size_t variable_len) const;
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
     size_t num_columns() const { return _cols.size(); }

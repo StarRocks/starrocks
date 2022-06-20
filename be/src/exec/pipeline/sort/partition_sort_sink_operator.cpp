@@ -29,6 +29,7 @@ Status PartitionSortSinkOperator::prepare(RuntimeState* state) {
 
 void PartitionSortSinkOperator::close(RuntimeState* state) {
     _sort_context->unref(state);
+    _chunks_sorter.reset();
     Operator::close(state);
 }
 

@@ -16,12 +16,9 @@ public:
     explicit CrossJoinContext(const int32_t num_right_sinkers)
             : _num_right_sinkers(num_right_sinkers), _build_chunks(num_right_sinkers) {}
 
-    void close(RuntimeState* state) override {}
+    void close(RuntimeState* state) override { _build_chunks.clear(); }
 
-    bool is_build_chunk_empty() const {
-        return std::all_of(_build_chunks.begin(), _build_chunks.end(),
-                           [](const vectorized::ChunkPtr& chunk) { return chunk == nullptr || chunk->is_empty(); });
-    }
+    bool is_build_chunk_empty() const { return _is_build_chunk_empty; }
 
     int32_t num_build_chunks() const { return _num_right_sinkers; }
 
@@ -31,11 +28,16 @@ public:
         _build_chunks[sinker_id] = build_chunk;
     }
 
-    void finish_one_right_sinker() { _num_finished_right_sinkers.fetch_add(1, std::memory_order_release); }
-
-    bool is_right_finished() const {
-        return _num_finished_right_sinkers.load(std::memory_order_acquire) == _num_right_sinkers;
+    void finish_one_right_sinker() {
+        if (_num_right_sinkers - 1 == _num_finished_right_sinkers.fetch_add(1)) {
+            _is_build_chunk_empty = std::all_of(
+                    _build_chunks.begin(), _build_chunks.end(),
+                    [](const vectorized::ChunkPtr& chunk) { return chunk == nullptr || chunk->is_empty(); });
+            _all_right_finished.store(true, std::memory_order_release);
+        }
     }
+
+    bool is_right_finished() const { return _all_right_finished.load(std::memory_order_acquire); }
 
 private:
     const int32_t _num_right_sinkers;
@@ -44,9 +46,12 @@ private:
     // _num_finished_right_sinkers is used to ensure CrossJoinLeftOperator can see all the parts
     // of _build_chunks, when it sees all the CrossJoinRightSinkOperators are finished.
     std::atomic<int32_t> _num_finished_right_sinkers = 0;
+    std::atomic_bool _all_right_finished = false;
 
     // _build_chunks[i] contains all the rows from i-th CrossJoinRightSinkOperator.
     std::vector<vectorized::ChunkPtr> _build_chunks;
+
+    bool _is_build_chunk_empty = false;
 };
 
 } // namespace starrocks::pipeline

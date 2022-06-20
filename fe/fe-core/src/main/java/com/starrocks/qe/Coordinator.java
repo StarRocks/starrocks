@@ -111,6 +111,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -213,6 +214,8 @@ public class Coordinator {
     private final Map<PlanFragmentId, Integer> fragmentIdToBucketNumMap = Maps.newHashMap();
     // fragment_id -> < be_id -> bucket_count >
     private final Map<PlanFragmentId, Map<Long, Integer>> fragmentIdToBackendIdBucketCountMap = Maps.newHashMap();
+
+    private final Map<PlanFragmentId, List<Integer>> fragmentIdToSeqToInstanceMap = Maps.newHashMap();
 
     // Used for new planner
     public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
@@ -466,6 +469,7 @@ public class Coordinator {
         for (TUniqueId instanceId : instanceIds) {
             profileDoneSignal.addMark(instanceId, -1L /* value is meaningless */);
         }
+        long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
         lock();
         try {
             // execute all instances from up to bottom
@@ -488,7 +492,7 @@ public class Coordinator {
                 List<List<FInstanceExecParam>> infightFInstanceExecParamList = new LinkedList<>();
 
                 // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
-                // shuffle partitions'ordinals in DataStreamSink. backendIds of Fragment instances that
+                // shuffle partitions' ordinals in DataStreamSink. backendIds of Fragment instances that
                 // contains shuffle join determine the ordinals of GRF components in the GRF. For a
                 // shuffle join, its shuffle partitions and corresponding one-map-one GRF components
                 // should have the same ordinals. so here assign monotonic unique backendIds to
@@ -564,8 +568,8 @@ public class Coordinator {
                         TStatusCode code;
                         String errMsg = null;
                         try {
-                            PExecPlanFragmentResult result = pair.second.get(queryOptions.query_timeout * 1000L,
-                                    TimeUnit.MILLISECONDS);
+                            PExecPlanFragmentResult result =
+                                    pair.second.get(queryDeliveryTimeoutMs, TimeUnit.MILLISECONDS);
                             code = TStatusCode.findByValue(result.status.statusCode);
                             if (result.status.errorMsgs != null && !result.status.errorMsgs.isEmpty()) {
                                 errMsg = result.status.errorMsgs.get(0);
@@ -1267,6 +1271,7 @@ public class Coordinator {
 
             if (hasColocate || hasBucketShuffle) {
                 computeColocatedJoinInstanceParam(fragment.getFragmentId(), parallelExecInstanceNum, params);
+                computeBucketSeq2InstanceOrdinal(params, fragmentIdToBucketNumMap.get(fragment.getFragmentId()));
             } else {
                 for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> tNetworkAddressMapEntry :
                         fragmentExecParamsMap.get(fragment.getFragmentId()).scanRangeAssignment.entrySet()) {
@@ -1332,6 +1337,24 @@ public class Coordinator {
                 params.instanceExecParams.add(instanceParam);
             }
         }
+    }
+
+    static final int BUCKET_ABSENT = 2147483647;
+    public void computeBucketSeq2InstanceOrdinal(FragmentExecParams params, int numBuckets) {
+        Integer[] bucketSeq2InstanceOrdinal = new Integer[numBuckets];
+        // some buckets are pruned, so set the corresponding instance ordinal to BUCKET_ABSENT to indicate
+        // absence of buckets.
+        for (int bucketSeq = 0; bucketSeq < numBuckets; ++bucketSeq) {
+            bucketSeq2InstanceOrdinal[bucketSeq] = BUCKET_ABSENT;
+        }
+        for (int i = 0; i < params.instanceExecParams.size(); ++i) {
+            FInstanceExecParam instance = params.instanceExecParams.get(i);
+            for (Integer bucketSeq : instance.bucketSeqSet) {
+                Preconditions.checkArgument(bucketSeq < numBuckets, "bucketSeq exceeds bucketNum in colocate Fragment");
+                bucketSeq2InstanceOrdinal[bucketSeq] = i;
+            }
+        }
+        fragmentIdToSeqToInstanceMap.put(params.fragment.getFragmentId(), Arrays.asList(bucketSeq2InstanceOrdinal));
     }
 
     private boolean isColocateFragment(PlanNode node) {
@@ -1569,13 +1592,12 @@ public class Coordinator {
     }
 
     public void updateFragmentExecStatus(TReportExecStatusParams params) {
-        if (params.backend_num >= backendExecStates.size()) {
-            LOG.warn("unknown backend number: {}, expected less than: {}",
-                    params.backend_num, backendExecStates.size());
+        BackendExecState execState = backendExecStates.get(params.backend_num);
+        if (execState == null) {
+            LOG.warn("unknown backend number: {}, valid backend numbers: {}", params.backend_num,
+                    backendExecStates.keySet());
             return;
         }
-
-        BackendExecState execState = backendExecStates.get(params.backend_num);
         lock();
         try {
             if (!execState.updateProfile(params)) {
@@ -1772,6 +1794,10 @@ public class Coordinator {
 
             for (int j = 0; !found && j < profile.getChildList().size(); j++) {
                 RuntimeProfile pipelineProfile = profile.getChildList().get(j).first;
+                if (pipelineProfile.getChildList().isEmpty()) {
+                    LOG.warn("pipeline's profile miss children, profileName={}", pipelineProfile.getName());
+                    continue;
+                }
                 RuntimeProfile operatorProfile = pipelineProfile.getChildList().get(0).first;
                 if (operatorProfile.getName().contains("RESULT_SINK")) {
                     long beTotalTime = pipelineProfile.getCounter("DriverTotalTime").getValue();
@@ -2052,6 +2078,7 @@ public class Coordinator {
         }
     }
 
+
     // execution parameters for a single fragment,
     // per-fragment can have multiple FInstanceExecParam,
     // used to assemble TPlanFragmentExecParas
@@ -2063,9 +2090,27 @@ public class Coordinator {
         public List<FInstanceExecParam> instanceExecParams = Lists.newArrayList();
         public FragmentScanRangeAssignment scanRangeAssignment = new FragmentScanRangeAssignment();
         TRuntimeFilterParams runtimeFilterParams = new TRuntimeFilterParams();
+        public boolean bucketSeqToInstanceForFilterIsSet = false;
 
         public FragmentExecParams(PlanFragment fragment) {
             this.fragment = fragment;
+        }
+
+        void setBucketSeqToInstanceForRuntimeFilters() {
+            if (bucketSeqToInstanceForFilterIsSet) {
+                return;
+            }
+            bucketSeqToInstanceForFilterIsSet = true;
+            List<Integer> seqToInstance = fragmentIdToSeqToInstanceMap.get(fragment.getFragmentId());
+            if (seqToInstance == null || seqToInstance.isEmpty()) {
+                return;
+            }
+            for (RuntimeFilterDescription rf : fragment.getBuildRuntimeFilters().values()) {
+                if (!rf.isColocateOrBucketShuffle()) {
+                    continue;
+                }
+                rf.setBucketSeqToInstance(seqToInstance);
+            }
         }
 
         List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
@@ -2085,7 +2130,7 @@ public class Coordinator {
                 workgroup = Catalog.getCurrentCatalog().getWorkGroupMgr().chooseWorkGroup(
                         ConnectContext.get(), WorkGroupClassifier.QueryType.SELECT);
             }
-
+            setBucketSeqToInstanceForRuntimeFilters();
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
             for (int i = 0; i < instanceExecParams.size(); ++i) {
                 final FInstanceExecParam instanceExecParam = instanceExecParams.get(i);

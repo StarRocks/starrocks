@@ -79,6 +79,7 @@ public:
 private:
     TabletSharedPtr _tablet;
     Version _version;
+    std::vector<RowsetSharedPtr> _rowsets;
 
     bool _is_init;
     bool _has_more;

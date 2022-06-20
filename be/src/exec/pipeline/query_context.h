@@ -40,18 +40,28 @@ public:
 
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
 
-    void set_expire_seconds(int expire_seconds) { _expire_seconds = seconds(expire_seconds); }
-    inline int get_expire_seconds() { return _expire_seconds.count(); }
+    void set_delivery_expire_seconds(int expire_seconds) { _delivery_expire_seconds = seconds(expire_seconds); }
+    void set_query_expire_seconds(int expire_seconds) { _query_expire_seconds = seconds(expire_seconds); }
+    inline int get_query_expire_seconds() const { return _query_expire_seconds.count(); }
     // now time point pass by deadline point.
-    bool is_expired() {
+    bool is_delivery_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-        return now > _deadline;
+        return now > _delivery_deadline;
+    }
+    bool is_query_expired() const {
+        auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+        return now > _query_deadline;
     }
 
     bool is_dead() { return _num_active_fragments == 0 && _num_fragments == _total_fragments; }
     // add expired seconds to deadline
-    void extend_lifetime() {
-        _deadline = duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _expire_seconds).count();
+    void extend_delivery_lifetime() {
+        _delivery_deadline =
+                duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _delivery_expire_seconds).count();
+    }
+    void extend_query_lifetime() {
+        _query_deadline =
+                duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _query_expire_seconds).count();
     }
     FragmentContextManager* fragment_mgr();
 
@@ -74,11 +84,17 @@ public:
     void init_mem_tracker(int64_t bytes_limit, MemTracker* parent);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
 
-    // Record the number of rows read from the data source for big query checking
+    // Some statistic about the query, including cpu, scan_rows, scan_bytes
+    void incr_cpu_cost(int64_t cost) { _cur_cpu_cost_ns += cost; }
+    int64_t cpu_cost() const { return _cur_cpu_cost_ns; }
+    int64_t mem_cost_bytes() const { return _mem_tracker->peak_consumption(); }
     void incr_cur_scan_rows_num(int64_t rows_num) { _cur_scan_rows_num += rows_num; }
     int64_t cur_scan_rows_num() const { return _cur_scan_rows_num; }
     void incr_cur_scan_bytes(int64_t scan_bytes) { _cur_scan_bytes += scan_bytes; }
     int64_t get_scan_bytes() const { return _cur_scan_bytes; }
+
+public:
+    static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
 private:
     ExecEnv* _exec_env = nullptr;
@@ -87,8 +103,10 @@ private:
     size_t _total_fragments;
     std::atomic<size_t> _num_fragments;
     std::atomic<size_t> _num_active_fragments;
-    int64_t _deadline;
-    seconds _expire_seconds;
+    int64_t _delivery_deadline = 0;
+    int64_t _query_deadline = 0;
+    seconds _delivery_expire_seconds = seconds(DEFAULT_EXPIRE_SECONDS);
+    seconds _query_expire_seconds = seconds(DEFAULT_EXPIRE_SECONDS);
     bool _is_runtime_filter_coordinator = false;
     std::once_flag _init_mem_tracker_once;
     std::shared_ptr<RuntimeProfile> _profile;
@@ -96,6 +114,7 @@ private:
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
 
+    std::atomic<int64_t> _cur_cpu_cost_ns = 0;
     std::atomic<int64_t> _cur_scan_rows_num = 0;
     std::atomic<int64_t> _cur_scan_bytes = 0;
 };

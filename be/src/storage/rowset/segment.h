@@ -85,7 +85,7 @@ public:
                                        const FooterPointerPB* partial_rowset_footer);
 
     Segment(const private_type&, fs::BlockManager* blk_mgr, std::string fname, uint32_t segment_id,
-            const TabletSchema* tablet_schema);
+            const TabletSchema* tablet_schema, MemTracker* mem_tracker);
 
     ~Segment() = default;
 
@@ -95,8 +95,6 @@ public:
                                             const vectorized::SegmentReadOptions& read_options);
 
     uint64_t id() const { return _segment_id; }
-
-    uint32_t num_rows() const { return _num_rows; }
 
     // TODO: remove this method, create `ColumnIterator` via `ColumnReader`.
     Status new_column_iterator(uint32_t cid, ColumnIterator** iter);
@@ -129,8 +127,6 @@ public:
         return _sk_index_decoder->num_items() - 1;
     }
 
-    const std::string& file_name() const { return _fname; }
-
     size_t num_columns() const { return _column_readers.size(); }
 
     const ColumnReader* column(size_t i) const { return _column_readers[i].get(); }
@@ -142,6 +138,16 @@ public:
         }
         return size;
     }
+
+    MemTracker* mem_tracker() const { return _mem_tracker; }
+
+    fs::BlockManager* block_manager() const { return _block_mgr; }
+
+    bool keep_in_memory() const { return _tablet_schema->is_in_memory(); }
+
+    const std::string& file_name() const { return _fname; }
+
+    uint32_t num_rows() const { return _num_rows; }
 
 private:
     Segment(const Segment&) = delete;
@@ -172,6 +178,7 @@ private:
     uint32_t _segment_id = 0;
     uint32_t _num_rows = 0;
     PagePointer _short_key_index_page;
+    MemTracker* _mem_tracker;
 
     // ColumnReader for each column in TabletSchema. If ColumnReader is nullptr,
     // This means that this segment has no data for that column, which may be added

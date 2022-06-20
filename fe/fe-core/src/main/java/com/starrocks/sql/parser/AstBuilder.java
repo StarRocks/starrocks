@@ -30,6 +30,7 @@ import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
@@ -152,8 +153,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowTables(StarRocksParser.ShowTablesContext context) {
         boolean isVerbose = context.FULL() != null;
         String database = null;
-        if (context.db != null) {
-            database = context.db.getText();
+        if (context.qualifiedName() != null) {
+            database = getQualifiedName(context.qualifiedName()).toString();
         }
 
         if (context.pattern != null) {
@@ -238,7 +239,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         return new InsertStmt(
                 new InsertTarget(targetTableName, partitionNames),
-                context.lable == null ? null : context.lable.getText(),
+                context.lable == null ? null : ((Identifier) visit(context.lable)).getValue(),
                 targetColumnNames,
                 queryStatement,
                 Lists.newArrayList());
@@ -1197,7 +1198,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new IsNullPredicate(params.get(0), false);
         }
 
-        FunctionCallExpr functionCallExpr = new FunctionCallExpr(getQualifiedName(context.qualifiedName()).toString(),
+        FunctionName fnName = FunctionName.createFnName(functionName);
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,
                 new FunctionParams(false, visit(context.expression(), Expr.class)));
 
         if (context.over() != null) {
@@ -1578,7 +1580,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             setType = SetType.SESSION;
         }
 
-        return new SysVariableDesc(context.identifier().getText(), setType);
+        return new SysVariableDesc(((Identifier) visit(context.identifier())).getValue(), setType);
     }
 
     @Override

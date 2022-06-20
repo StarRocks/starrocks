@@ -9,7 +9,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
 import java.util.ArrayList;
-import java.util.Objects;
 
 public class LogicalLimitOperator extends LogicalOperator {
     private final long offset;
@@ -60,22 +59,12 @@ public class LogicalLimitOperator extends LogicalOperator {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-        LogicalLimitOperator that = (LogicalLimitOperator) o;
-        return offset == that.offset;
+        return this == o;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), offset);
+        return System.identityHashCode(this);
     }
 
     public static class Builder

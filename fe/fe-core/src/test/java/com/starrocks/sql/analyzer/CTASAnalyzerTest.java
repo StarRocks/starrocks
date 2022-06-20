@@ -5,6 +5,7 @@ import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -20,6 +21,8 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.Map;
 
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
 
@@ -312,6 +315,9 @@ public class CTASAnalyzerTest {
 
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
         CreateTableAsSelectStmt createTableStmt2 = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql2, ctx);
+        String ctasSql3 = "CREATE TABLE json_kv as select * from test, lateral json_each(parse_json(c1));";
+        CreateTableAsSelectStmt createTableStmt3 =
+                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql3, ctx);
     }
 
     @Test
@@ -324,5 +330,28 @@ public class CTASAnalyzerTest {
                 = (HashDistributionDesc) createTableStmt.getCreateTableStmt().getDistributionDesc();
         Assert.assertEquals("vc1", hashDistributionDesc.getDistributionColumnNames().get(0));
     }
+    @Test
+    public void testCTASReplicaNum() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        Table table = ctx.getCatalog().getDb("default_cluster:ctas")
+                .getTable("duplicate_table_with_null");
+        OlapTable olapTable = (OlapTable) table;
+        olapTable.setReplicationNum((short) 3);
+        String sql = "CREATE TABLE test_replica as select * from duplicate_table_with_null";
+        CreateTableAsSelectStmt createTableStmt =
+                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
 
+        Map<String, String> properties = createTableStmt.getCreateTableStmt().getProperties();
+        Assert.assertTrue(properties.containsKey("replication_num"));
+        Assert.assertEquals(properties.get("replication_num"), "3");
+
+        String sql2 = "CREATE TABLE test_replica2 as select 1 as id";
+        CreateTableAsSelectStmt createTableStmt2 =
+                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql2, ctx);
+
+        Map<String, String> properties2 = createTableStmt2.getCreateTableStmt().getProperties();
+        Assert.assertTrue(properties2.containsKey("replication_num"));
+        Assert.assertEquals(properties2.get("replication_num"), "1");
+
+    }
 }

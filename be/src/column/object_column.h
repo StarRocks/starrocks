@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "column/column.h"
+#include "column/datum.h"
 #include "common/object_pool.h"
 #include "util/bitmap_value.h"
 
@@ -195,9 +196,15 @@ public:
         return ss.str();
     }
 
-    bool reach_capacity_limit() const override {
-        return _pool.size() >= Column::MAX_CAPACITY_LIMIT || _cache.size() >= Column::MAX_CAPACITY_LIMIT ||
-               _slices.size() >= Column::MAX_CAPACITY_LIMIT || _buffer.size() >= Column::MAX_CAPACITY_LIMIT;
+    bool reach_capacity_limit(std::string* msg = nullptr) const override {
+        if (_pool.size() > Column::MAX_CAPACITY_LIMIT) {
+            if (msg != nullptr) {
+                msg->append("row count of object column exceed the limit: " +
+                            std::to_string(Column::MAX_CAPACITY_LIMIT));
+            }
+            return true;
+        }
+        return false;
     }
 
 private:

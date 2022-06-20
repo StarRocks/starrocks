@@ -24,6 +24,7 @@ package com.starrocks.qe;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Reference;
 import com.starrocks.persist.EditLog;
@@ -78,7 +79,7 @@ public class SimpleSchedulerTest {
     // Comment out these code temporatily.
     // @Test
     public void testGetHostWithBackendId() {
-        FeConstants.heartbeat_interval_second = Integer.MAX_VALUE;
+        Config.heartbeat_timeout_second = Integer.MAX_VALUE;
         TNetworkAddress address;
         // three locations
         List<TScanRangeLocation> nullLocations = null;
@@ -141,7 +142,7 @@ public class SimpleSchedulerTest {
     // Comment out these code temporatily.
     // @Test
     public void testGetHostWithNoParams() {
-        FeConstants.heartbeat_interval_second = Integer.MAX_VALUE;
+        Config.heartbeat_timeout_second = Integer.MAX_VALUE;
         ImmutableMap<Long, Backend> nullBackends = null;
         ImmutableMap<Long, Backend> emptyBackends = ImmutableMap.of();
 
@@ -176,7 +177,7 @@ public class SimpleSchedulerTest {
     // Comment out these code temporatily.
     // @Test
     public void testBlackList() {
-        FeConstants.heartbeat_interval_second = Integer.MAX_VALUE;
+        Config.heartbeat_timeout_second = Integer.MAX_VALUE;
         TNetworkAddress address = null;
 
         Backend backendA = new Backend(0, "addressA", 0);

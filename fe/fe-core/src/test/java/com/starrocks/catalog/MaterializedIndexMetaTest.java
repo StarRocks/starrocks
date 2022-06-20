@@ -60,6 +60,20 @@ public class MaterializedIndexMetaTest {
     }
 
     @Test
+    public void testSetDefineExprCaseInsensitive() {
+        List<Column> schema = Lists.newArrayList();
+        Column column = new Column("UPPER", Type.ARRAY_VARCHAR);
+        schema.add(column);
+        MaterializedIndexMeta meta = new MaterializedIndexMeta(0, schema, 0, 0,
+                (short) 0, TStorageType.COLUMN, KeysType.DUP_KEYS, null);
+
+        Map<String, Expr> columnNameToDefineExpr = Maps.newHashMap();
+        columnNameToDefineExpr.put("upper", new StringLiteral());
+        meta.setColumnsDefineExpr(columnNameToDefineExpr);
+        Assert.assertNotNull(column.getDefineExpr());
+    }
+
+    @Test
     public void testSerializeMaterializedIndexMeta(@Mocked CreateMaterializedViewStmt stmt)
             throws IOException, AnalysisException {
         // 1. Write objects to file

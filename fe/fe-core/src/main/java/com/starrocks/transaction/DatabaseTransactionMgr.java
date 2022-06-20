@@ -297,7 +297,7 @@ public class DatabaseTransactionMgr {
             checkRunningTxnExceedLimit(sourceType);
 
             long tid = idGenerator.getNextTransactionId();
-            LOG.info("begin transaction: txn id {} with label {} from coordinator {}, listner id: {}",
+            LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
                     tid, label, coordinator, listenerId);
             TransactionState transactionState =
                     new TransactionState(dbId, tableIdList, tid, label, requestId, sourceType,
@@ -537,7 +537,7 @@ public class DatabaseTransactionMgr {
         }
 
         // before state transform
-        transactionState.beforeStateTransform(TransactionStatus.COMMITTED);
+        TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.COMMITTED);
         // transaction state transform
         boolean txnOperated = false;
         writeLock();
@@ -549,7 +549,7 @@ public class DatabaseTransactionMgr {
         } finally {
             writeUnlock();
             // after state transform
-            transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated);
+            transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
         }
 
         // 6. update nextVersion because of the failure of persistent transaction resulting in error version
@@ -572,7 +572,7 @@ public class DatabaseTransactionMgr {
             case VISIBLE:
                 break;
             default:
-                LOG.warn("transaction commit failed, db={}, txn={}", db.getFullName(), transactionId);
+                LOG.warn("transaction commit failed, db={}, txn_id: {}", db.getFullName(), transactionId);
                 throw new TransactionCommitFailedException("transaction commit failed");
         }
 
@@ -1051,14 +1051,14 @@ public class DatabaseTransactionMgr {
         }
 
         // before state transform
-        transactionState.beforeStateTransform(TransactionStatus.ABORTED);
+        TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.ABORTED);
         boolean txnOperated = false;
         writeLock();
         try {
             txnOperated = unprotectAbortTransaction(transactionId, reason);
         } finally {
             writeUnlock();
-            transactionState.afterStateTransform(TransactionStatus.ABORTED, txnOperated, reason);
+            transactionState.afterStateTransform(TransactionStatus.ABORTED, txnOperated, callback, reason);
         }
 
         // send clear txn task to BE to clear the transactions on BE.
@@ -1423,7 +1423,7 @@ public class DatabaseTransactionMgr {
                     continue;
                 }
                 if (entry.getKey() <= endTransactionId) {
-                    LOG.debug("find a running txn with txn_id={} on db: {}, less than watermark txn_id {}",
+                    LOG.debug("find a running txn with txn_id: {} on db: {}, less than watermark txn_id {}",
                             entry.getKey(), dbId, endTransactionId);
                     return false;
                 }

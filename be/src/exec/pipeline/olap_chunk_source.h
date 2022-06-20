@@ -52,7 +52,6 @@ public:
                                                            size_t* num_read_chunks, int worker_id,
                                                            workgroup::WorkGroupPtr running_wg) override;
 
-    // Return last bytes of Scan or Exchange Data, then reset it
     int64_t last_spent_cpu_time_ns() override;
 
 private:
@@ -120,11 +119,10 @@ private:
     int64_t _num_rows_read = 0;
     int64_t _raw_rows_read = 0;
     int64_t _compressed_bytes_read = 0;
+    int64_t _last_spent_cpu_time_ns = 0;
 
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
-
-    int64_t _last_spent_cpu_time_ns = 0;
 
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
     RuntimeProfile::Counter* _scan_timer = nullptr;

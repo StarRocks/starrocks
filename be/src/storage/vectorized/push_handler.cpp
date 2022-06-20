@@ -23,7 +23,7 @@ PushBrokerReader::~PushBrokerReader() {
     _scanner.reset();
 }
 
-Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TDescriptorTable& t_desc_tbl) {
+Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TPushReq& request) {
     // init runtime state, runtime profile, counter
     TUniqueId dummy_id;
     dummy_id.hi = 0;
@@ -36,13 +36,16 @@ Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TDescr
     fragment_params.protocol_version = InternalServiceVersion::V1;
     TQueryOptions query_options;
     TQueryGlobals query_globals;
+    if (request.__isset.timezone) {
+        query_globals.__set_time_zone(request.timezone);
+    }
     _runtime_state =
             std::make_unique<RuntimeState>(fragment_params.params.query_id, fragment_params.params.fragment_instance_id,
                                            query_options, query_globals, ExecEnv::GetInstance());
 
     DescriptorTbl* desc_tbl = nullptr;
     RETURN_IF_ERROR(
-            DescriptorTbl::create(_runtime_state->obj_pool(), t_desc_tbl, &desc_tbl, config::vector_chunk_size));
+            DescriptorTbl::create(_runtime_state->obj_pool(), request.desc_tbl, &desc_tbl, config::vector_chunk_size));
     _runtime_state->set_desc_tbl(desc_tbl);
 
     _runtime_profile = _runtime_state->runtime_profile();
@@ -250,7 +253,7 @@ void PushBrokerReader::print_profile() {
 Status PushHandler::process_streaming_ingestion(const TabletSharedPtr& tablet, const TPushReq& request,
                                                 PushType push_type, std::vector<TTabletInfo>* tablet_info_vec) {
     LOG(INFO) << "begin to realtime vectorized push. tablet=" << tablet->full_name()
-              << ", transaction_id=" << request.transaction_id;
+              << ", txn_id: " << request.transaction_id;
     DCHECK(request.__isset.use_vectorized && request.use_vectorized);
 
     _request = request;
@@ -264,7 +267,7 @@ Status PushHandler::process_streaming_ingestion(const TabletSharedPtr& tablet, c
         }
         LOG(INFO) << "process realtime vectorized push successfully. "
                   << "tablet=" << tablet->full_name() << ", partition_id=" << request.partition_id
-                  << ", transaction_id=" << request.transaction_id;
+                  << ", txn_id: " << request.transaction_id;
     }
 
     return st;
@@ -304,15 +307,14 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
         // tablet
         if (_request.is_schema_changing) {
             VLOG(3) << "push req specify schema changing is true. "
-                    << "tablet=" << tablet->full_name() << ", transaction_id=" << request.transaction_id;
+                    << "tablet=" << tablet->full_name() << ", txn_id: " << request.transaction_id;
             AlterTabletTaskSharedPtr alter_task = tablet->alter_task();
             if (alter_task != nullptr && alter_task->alter_state() != ALTER_FAILED) {
                 TTabletId related_tablet_id = alter_task->related_tablet_id();
                 TSchemaHash related_schema_hash = alter_task->related_schema_hash();
                 LOG(INFO) << "find schema_change status when realtime push. "
                           << "tablet=" << tablet->full_name() << ", related_tablet_id=" << related_tablet_id
-                          << ", related_schema_hash=" << related_schema_hash
-                          << ", transaction_id=" << request.transaction_id;
+                          << ", related_schema_hash=" << related_schema_hash << ", txn_id: " << request.transaction_id;
                 TabletSharedPtr related_tablet =
                         StorageEngine::instance()->tablet_manager()->get_tablet(related_tablet_id);
 
@@ -387,7 +389,7 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
     if (!st.ok()) {
         LOG(WARNING) << "fail to convert tmp file when realtime push. res=" << st.to_string()
                      << ", failed to process realtime push."
-                     << ", table=" << tablet->full_name() << ", transaction_id=" << request.transaction_id;
+                     << ", table=" << tablet->full_name() << ", txn_id: " << request.transaction_id;
         for (TabletVars& tablet_var : *tablet_vars) {
             if (tablet_var.tablet == nullptr) {
                 continue;
@@ -419,7 +421,7 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
                 false);
         if (!commit_status.ok() && !commit_status.is_already_exist()) {
             LOG(WARNING) << "fail to commit txn. res=" << commit_status << ", table=" << tablet->full_name()
-                         << ", transaction_id=" << request.transaction_id;
+                         << ", txn_id: " << request.transaction_id;
             st = Status::InternalError("Fail to commit txn");
         }
     }
@@ -474,7 +476,7 @@ Status PushHandler::_delete_convert(const TabletSharedPtr& cur_tablet, RowsetSha
         st = RowsetFactory::create_rowset_writer(context, &rowset_writer);
         if (!st.ok()) {
             LOG(WARNING) << "failed to init rowset writer, tablet=" << cur_tablet->full_name()
-                         << ", txn_id=" << _request.transaction_id << ", status:" << st.to_string();
+                         << ", txn_id: " << _request.transaction_id << ", status:" << st.to_string();
             break;
         }
 
@@ -528,7 +530,7 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
     st = RowsetFactory::create_rowset_writer(context, &rowset_writer);
     if (!st.ok()) {
         LOG(WARNING) << "failed to init rowset writer, tablet=" << cur_tablet->full_name()
-                     << ", txn_id=" << _request.transaction_id << ", res=" << st;
+                     << ", txn_id: " << _request.transaction_id << ", res=" << st;
         return Status::InternalError("Fail to init rowset writer");
     }
 
@@ -548,7 +550,7 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
 
         // 3. read data and write rowset
         // init Reader
-        st = reader->init(_request.broker_scan_range, _request.desc_tbl);
+        st = reader->init(_request.broker_scan_range, _request);
         if (!st.ok()) {
             LOG(WARNING) << "fail to init reader. res=" << st.to_string() << ", tablet=" << cur_tablet->full_name();
             return st;

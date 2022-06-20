@@ -366,6 +366,8 @@ struct Version {
     bool operator==(const Version& rhs) const { return first == rhs.first && second == rhs.second; }
 
     bool contains(const Version& other) const { return first <= other.first && second >= other.second; }
+
+    bool operator<(const Version& rhs) const { return second < rhs.second; }
 };
 
 typedef std::vector<Version> Versions;
