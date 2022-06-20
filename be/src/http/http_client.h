@@ -34,7 +34,6 @@ class HttpClient {
 public:
     HttpClient();
     ~HttpClient();
-
     // you can call this function to execute HTTP request with retry,
     // if callback return OK, this function will end and return OK.
     // This function will return FAIL if three are more than retry_times
