@@ -38,39 +38,6 @@ Parameters:
 * **database**: the name of the MySQL database
 * **table**: the name of the table in the MySQL database
 
-## HDFS external table
-
-To access HDFS data, you must create an external table in StarRocks and map it to the corresponding HDFS files.
-StarRocks cannot access HDFS files directly. You must access HDFS through a broker. When creating a table, you must specify information about the HDFS files as well as the broker. For details about broker, see [Broker Import](../loading/BrokerLoad.md).
-
-~~~sql
-CREATE EXTERNAL TABLE hdfs_external_table (
-    k1 DATE,
-    k2 INT,
-    k3 SMALLINT,
-    k4 VARCHAR(2048),
-    k5 DATETIME
-)
-ENGINE=broker
-PROPERTIES (
-    "broker_name" = "broker_name",
-    "path" = "hdfs://hdfs_host:hdfs_port/data1",
-    "column_separator" = "|",
-    "line_delimiter" = "\n"
-)
-BROKER PROPERTIES (
-    "username" = "hdfs_username",
-    "password" = "hdfs_password"
-)
-~~~
-
-Parameters:
-
-* **broker_name**: the broker name
-* **path**: the HDFS file path
-* **column_separator**: the column separator
-* **line_delimiter**: the row separator
-
 ## Elasticsearch external table
 
 StarRocks and Elasticsearch are two popular analytics systems. StarRocks is performant in large-scale distributed computing. Elasticsearch is ideal for full-text search. StarRocks combined with Elasticsearch can deliver a more complete OLAP solution.
