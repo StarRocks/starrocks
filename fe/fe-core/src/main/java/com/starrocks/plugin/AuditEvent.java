@@ -93,6 +93,8 @@ public class AuditEvent {
     public double planCpuCosts = 0.0;
     @AuditField(value = "PlanMemCost")
     public double planMemCosts = 0.0;
+    @AuditField(value = "IsMv")
+    public boolean isMv = false;
 
     public static class AuditEventBuilder {
 
@@ -215,6 +217,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setPlanMemCosts(double memCosts) {
             auditEvent.planMemCosts = memCosts;
+            return this;
+        }
+
+        public AuditEventBuilder setIsMv(boolean isMv) {
+            auditEvent.isMv = isMv;
             return this;
         }
 

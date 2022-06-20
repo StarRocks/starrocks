@@ -53,9 +53,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class MvTaskRunProcessor extends SqlTaskRunProcessor {
-
-    private static final Logger LOG = LogManager.getLogger(MvTaskRunProcessor.class);
+public class MvTaskRunProcessor extends BaseTaskRunProcessor {
 
     public static final String MV_ID = "mvId";
 
@@ -240,88 +238,6 @@ public class MvTaskRunProcessor extends SqlTaskRunProcessor {
         return refreshAllPartitions;
     }
 
-    private void refreshMv(TaskRunContext context, MaterializedView materializedView) {
-        ConnectContext ctx = context.getCtx();
-        StringBuilder insertSqlBuilder = new StringBuilder();
-        insertSqlBuilder.append("insert into ");
-        insertSqlBuilder.append(materializedView.getName() + " ");
-        insertSqlBuilder.append(context.getDefinition());
-        String insertSql = insertSqlBuilder.toString();
-        InsertStmt insertStmt = ((InsertStmt) SqlParser.parse(insertSql, ctx.getSessionVariable().getSqlMode()).get(0));
-        insertStmt.setSystem(true);
-        insertStmt.setOrigStmt(new OriginStatement(insertSql, 0));
-        StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
-        ctx.setExecutor(executor);
-        ctx.setThreadLocalInfo();
-        try {
-            executor.execute();
-        } catch (Exception e) {
-            throw new SemanticException("Refresh materialized view failed:" + insertSql, e);
-        } finally {
-            if (executor != null) {
-                auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
-            } else {
-                // executor can be null if we encounter analysis error.
-                auditAfterExec(context, null, null);
-            }
-        }
-    }
-
-    private void refreshMv(TaskRunContext context, MaterializedView materializedView, OlapTable olapTable,
-                           Set<Long> mvPartitionIds) {
-        Map<Long, Set<Long>> partitionIdRefMap = materializedView.getPartitionIdRefMap();
-        ConnectContext ctx = context.getCtx();
-        ctx.getAuditEventBuilder().reset();
-        ctx.getAuditEventBuilder()
-                .setTimestamp(System.currentTimeMillis())
-                .setClientIp(context.getRemoteIp())
-                .setUser(ctx.getQualifiedUser())
-                .setDb(ctx.getDatabase());
-        ctx.getPlannerProfile().reset();
-        for (Long mvPartitionId : mvPartitionIds) {
-            String definition = context.getDefinition();
-            Set<Long> basePartitionIds = partitionIdRefMap.get(mvPartitionId);
-            Set<String> tablePartitionNames = Sets.newHashSet();
-            for (Long basePartitionId : basePartitionIds) {
-                tablePartitionNames.add(olapTable.getPartition(basePartitionId).getName());
-            }
-            String mvPartitionName = materializedView.getPartition(mvPartitionId).getName();
-            QueryStatement queryStatement =
-                    (QueryStatement) SqlParser.parse(definition, ctx.getSessionVariable().getSqlMode()).get(0);
-            Map<String, TableRelation> tableRelations =
-                    AnalyzerUtils.collectAllTableRelation(queryStatement);
-            TableRelation tableRelation = tableRelations.get(olapTable.getName());
-            tableRelation.setPartitionNames(
-                    new PartitionNames(false, tablePartitionNames.stream().collect(Collectors.toList())));
-            // e.g. insert into mv partition(p1,p2) select * from table partition(p3)
-            StringBuilder insertSqlBuilder = new StringBuilder();
-            insertSqlBuilder.append("insert into ");
-            insertSqlBuilder.append(materializedView.getName());
-            insertSqlBuilder.append(" partition(" + mvPartitionName + ") ");
-            insertSqlBuilder.append(AST2SQL.toString(queryStatement));
-            String insertIntoSql = insertSqlBuilder.toString();
-            InsertStmt insertStmt = ((InsertStmt) SqlParser.parse(insertIntoSql,
-                    ctx.getSessionVariable().getSqlMode()).get(0));
-            insertStmt.setOrigStmt(new OriginStatement(insertIntoSql, 0));
-            insertStmt.setSystem(true);
-            StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
-            ctx.setExecutor(executor);
-            ctx.setThreadLocalInfo();
-            try {
-                executor.execute();
-            } catch (Exception e) {
-                throw new SemanticException("Refresh materialized view failed:" + insertIntoSql, e);
-            } finally {
-                if (executor != null) {
-                    auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
-                } else {
-                    // executor can be null if we encounter analysis error.
-                    auditAfterExec(context, null, null);
-                }
-            }
-        }
-    }
-
     private Map<String, String> getPartitionProperties(MaterializedView materializedView) {
         Map<String, String> partitionProperties = new HashMap<>(4);
         partitionProperties.put("replication_num",
@@ -398,6 +314,74 @@ public class MvTaskRunProcessor extends SqlTaskRunProcessor {
             partitionIdRefMap.get(basePartitionId).remove(mvPartitionId);
         }
         partitionIdRefMap.remove(mvPartitionId);
+    }
+
+    private void refreshMv(TaskRunContext context, MaterializedView materializedView) {
+        StringBuilder insertSqlBuilder = new StringBuilder();
+        insertSqlBuilder.append("insert into ");
+        insertSqlBuilder.append(materializedView.getName() + " ");
+        insertSqlBuilder.append(context.getDefinition());
+        String insertIntoSql = insertSqlBuilder.toString();
+        execInsertStmt(insertIntoSql, context);
+    }
+
+    private void refreshMv(TaskRunContext context, MaterializedView materializedView, OlapTable olapTable,
+                           Set<Long> mvPartitionIds) {
+        Map<Long, Set<Long>> partitionIdRefMap = materializedView.getPartitionIdRefMap();
+        ConnectContext ctx = context.getCtx();
+        ctx.getAuditEventBuilder().reset();
+        ctx.getAuditEventBuilder()
+                .setTimestamp(System.currentTimeMillis())
+                .setClientIp(context.getRemoteIp())
+                .setUser(ctx.getQualifiedUser())
+                .setDb(ctx.getDatabase());
+        ctx.getPlannerProfile().reset();
+        for (Long mvPartitionId : mvPartitionIds) {
+            String definition = context.getDefinition();
+            Set<Long> basePartitionIds = partitionIdRefMap.get(mvPartitionId);
+            Set<String> tablePartitionNames = Sets.newHashSet();
+            for (Long basePartitionId : basePartitionIds) {
+                tablePartitionNames.add(olapTable.getPartition(basePartitionId).getName());
+            }
+            String mvPartitionName = materializedView.getPartition(mvPartitionId).getName();
+            QueryStatement queryStatement =
+                    (QueryStatement) SqlParser.parse(definition, ctx.getSessionVariable().getSqlMode()).get(0);
+            Map<String, TableRelation> tableRelations =
+                    AnalyzerUtils.collectAllTableRelation(queryStatement);
+            TableRelation tableRelation = tableRelations.get(olapTable.getName());
+            tableRelation.setPartitionNames(
+                    new PartitionNames(false, tablePartitionNames.stream().collect(Collectors.toList())));
+            // e.g. insert into mv partition(p1,p2) select * from table partition(p3)
+            StringBuilder insertSqlBuilder = new StringBuilder();
+            insertSqlBuilder.append("insert into ");
+            insertSqlBuilder.append(materializedView.getName());
+            insertSqlBuilder.append(" partition(" + mvPartitionName + ") ");
+            insertSqlBuilder.append(AST2SQL.toString(queryStatement));
+            String insertIntoSql = insertSqlBuilder.toString();
+            execInsertStmt(insertIntoSql, context);
+        }
+    }
+
+    private void execInsertStmt(String insertSql, TaskRunContext context) {
+        ConnectContext ctx = context.getCtx();
+        InsertStmt insertStmt = ((InsertStmt) SqlParser.parse(insertSql, ctx.getSessionVariable().getSqlMode()).get(0));
+        insertStmt.setSystem(true);
+        insertStmt.setOrigStmt(new OriginStatement(insertSql, 0));
+        StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
+        ctx.setExecutor(executor);
+        ctx.setThreadLocalInfo();
+        try {
+            executor.execute();
+        } catch (Exception e) {
+            throw new SemanticException("Refresh materialized view failed:" + insertSql, e);
+        } finally {
+            if (executor != null) {
+                auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog(), true);
+            } else {
+                // executor can be null if we encounter analysis error.
+                auditAfterExec(context, null, null, true);
+            }
+        }
     }
 
 }
