@@ -137,10 +137,11 @@ TEST_F(JsonFunctionsTest, get_json_stringTest) {
 
     std::string values[] = {"{\"k1\":\"v1\", \"k2\":\"v2\"}", "{\"k1\":\"v1\", \"my.key\":[\"e1\", \"e2\", \"e3\"]}",
                             "{\"k1.key\":{\"k2\":[\"v1\", \"v2\"]}}",
-                            "[{\"k1\":\"v1\"}, {\"k2\":\"v2\"}, {\"k1\":\"v3\"}, {\"k1\":\"v4\"}]"};
+                            "[{\"k1\":\"v1\"}, {\"k2\":\"v2\"}, {\"k1\":\"v3\"}, {\"k1\":\"v4\"}]",
+                            "{\"key\":\"\"quoted_value\"\"}"};
 
     std::string strs[] = {"$.k1", "$.\"my.key\"[1]", "$.\"k1.key\".k2[0]", "$[*].k1"};
-    std::string length_strings[] = {"v1", "e2", "v1", "[\"v1\", \"v3\", \"v4\"]"};
+    std::string length_strings[] = {"v1", "e2", "v1", "[\"v1\", \"v3\", \"v4\"]", "\"quoted_value\""};
 
     for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
         strings->append(values[j]);

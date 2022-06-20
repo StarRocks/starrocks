@@ -338,12 +338,14 @@ ColumnPtr JsonFunctions::_unquote_string(FunctionContext* context, const Columns
             result.append_null();
         } else {
             auto str = viewer.value(row).to_string();
-            str.erase(str.begin(), std::find_if(str.begin(), str.end(), [](unsigned char ch) { return ch != '"'; }));
-
-            str.erase(std::find_if(str.rbegin(), str.rend(), [](unsigned char ch) { return ch != '"'; }).base(),
-                      str.end());
-
-            result.append(std::move(str));
+            if (str.length() <= 2) {
+                result.append(std::move(str));
+            }  else {
+                // Try to trim the first/last quote.
+                if (str[0] == '"') str = str.substr(1, str.size() - 1);
+                if (str[str.size() - 1] == '"') str = str.substr(0, str.size() - 1);
+                result.append(std::move(str));
+            }
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
