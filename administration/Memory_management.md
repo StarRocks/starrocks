@@ -31,7 +31,7 @@
 | compaction_max_memory_limit | -1 | Compaction 内存上限，取 mem_limit * compaction_max_memory_limit_percent / 100 和 compaction_max_memory_limit 中较小的那个值，-1 表示没有限制，当前不建议修改默认配置。Compaction 内存到达限制，会导致 Compaction 任务失败。|
 | compaction_max_memory_limit_percent | 100 | Compaction 内存上限，取 mem_limit * compaction_max_memory_limit_percent / 100 和 compaction_max_memory_limit 中较小的那个值，-1 表示没有限制，当前不建议修改默认配置。Compaction 内存到达限制，会导致 Compaction 任务失败。|
 | disable_storage_page_cache | true | 是否禁用 BE 存储层 page 缓存，和 storage_page_cache_limit 配合使用，在内存资源充足和有大数据量 Scan 的场景可以打开，能够加速查询性能。 |
-| storage_page_cache_limit | 0 | BE 存储层 page 缓存可以使用的内存上限。|
+| storage_page_cache_limit | 20G | BE 存储层 page 缓存可以使用的内存上限。|
 | chunk_reserved_bytes_limit | 2147483648 | 用于加速小块内存分配的 Cache，默认上限为 2G，在内存资源充足的情况下可以考虑打开。|
 | consistency_max_memory_limit_percent | 20 | 一致性校验任务使用的内存上限，取 mem_limit * consistency_max_memory_limit_percent / 100 和 consistency_max_memory_limit 中较小的那个值。内存使用超限，会导致任务失败。 |
 | consistency_max_memory_limit | 10G | 一致性校验任务使用的内存上限，取 mem_limit * consistency_max_memory_limit_percent / 100 和 consistency_max_memory_limit 中较小的那个值。内存使用超限，会导致任务失败。 |
