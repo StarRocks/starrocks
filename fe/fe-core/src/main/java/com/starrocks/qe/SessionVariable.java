@@ -392,7 +392,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int useNthExecPlan = 0;
 
     @VarAttr(name = CBO_CTE_REUSE)
-    private boolean cboCteReuse = false;
+    private boolean cboCteReuse = true;
 
     @VarAttr(name = CBO_CTE_REUSE_RATE, flag = VariableMgr.INVISIBLE)
     private double cboCTERuseRatio = 1.2;
