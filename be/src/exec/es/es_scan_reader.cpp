@@ -67,6 +67,10 @@ ESScanReader::ESScanReader(const std::string& target, const std::map<std::string
         _query = props.at(KEY_QUERY);
     }
 
+    if (props.find(KEY_ES_NET_SSL) != props.end()) {
+        std::istringstream(props.at(KEY_ES_NET_SSL)) >> std::boolalpha >> _ssl_enabled;
+    }
+
     std::string batch_size_str = props.at(KEY_BATCH_SIZE);
     _batch_size = atoi(batch_size_str.c_str());
     std::string filter_path = _doc_value_mode ? DOCVALUE_SCROLL_SEARCH_FILTER_PATH : SOURCE_SCROLL_SEARCH_FILTER_PATH;
@@ -106,6 +110,9 @@ Status ESScanReader::open() {
     }
     _network_client.set_basic_auth(_user_name, _passwd);
     _network_client.set_content_type("application/json");
+    if (_ssl_enabled) {
+        _network_client.trust_all_ssl();
+    }
     // phase open, we cached the first response for `get_next` phase
     Status status = _network_client.execute_post_request(_query, &_cached_response);
     VLOG(1) << "ES Query:" << _query;
@@ -137,6 +144,9 @@ Status ESScanReader::get_next(bool* scan_eos, std::unique_ptr<T>& scroll_parser)
         _network_client.set_basic_auth(_user_name, _passwd);
         _network_client.set_content_type("application/json");
         _network_client.set_timeout_ms(_http_timeout_ms);
+        if (_ssl_enabled) {
+            _network_client.trust_all_ssl();
+        }
         RETURN_IF_ERROR(_network_client.execute_post_request(
                 ESScrollQueryBuilder::build_next_scroll_body(_scroll_id, _scroll_keep_alive), &response));
         long status = _network_client.get_http_status();
@@ -193,6 +203,9 @@ Status ESScanReader::close() {
     _network_client.set_method(DELETE);
     _network_client.set_content_type("application/json");
     _network_client.set_timeout_ms(5 * 1000);
+    if (_ssl_enabled) {
+        _network_client.trust_all_ssl();
+    }
     std::string response;
     RETURN_IF_ERROR(_network_client.execute_delete_request(ESScrollQueryBuilder::build_clear_scroll_body(_scroll_id),
                                                            &response));

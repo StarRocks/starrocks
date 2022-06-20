@@ -360,6 +360,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setSchedule("MANUAL");
             info.setDatabase(task.getDbName());
             info.setDefinition(task.getDefinition());
+            info.setExpire_time(task.getExpireTime() / 1000);
             tasksResult.add(info);
         }
 
@@ -398,6 +399,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setDefinition(status.getDefinition());
             info.setError_code(status.getErrorCode());
             info.setError_message(status.getErrorMessage());
+            info.setExpire_time(status.getExpireTime() / 1000);
             tasksResult.add(info);
         }
         return result;
@@ -765,6 +767,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn begin request: {}", request);
 
         TLoadTxnBeginResult result = new TLoadTxnBeginResult();
+        // if current node is not master, reject the request
+        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+            result.setStatus(status);
+            return result;
+        }
+
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
         try {
@@ -833,6 +843,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn commit request: {}", request);
 
         TLoadTxnCommitResult result = new TLoadTxnCommitResult();
+        // if current node is not master, reject the request
+        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+            result.setStatus(status);
+            return result;
+        }
+
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
         try {
@@ -935,6 +953,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn rollback request: {}", request);
 
         TLoadTxnRollbackResult result = new TLoadTxnRollbackResult();
+        // if current node is not master, reject the request
+        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+            result.setStatus(status);
+            return result;
+        }
+
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
         try {

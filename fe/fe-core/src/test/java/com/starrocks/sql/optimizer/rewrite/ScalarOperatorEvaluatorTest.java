@@ -26,7 +26,7 @@ import static org.junit.Assert.assertTrue;
 public class ScalarOperatorEvaluatorTest {
     @Test
     public void evaluationNotConstant() {
-        CallOperator operator = new CallOperator(FunctionSet.IF_NULL, Type.INT,
+        CallOperator operator = new CallOperator(FunctionSet.IFNULL, Type.INT,
                 Lists.newArrayList(new ColumnRefOperator(1, Type.INT, "test", true), ConstantOperator.createInt(2)));
 
         ScalarOperator result = ScalarOperatorEvaluator.INSTANCE.evaluation(operator);

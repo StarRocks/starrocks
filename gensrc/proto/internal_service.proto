@@ -142,6 +142,7 @@ message PTabletWriterOpenRequest {
     optional int64 load_channel_timeout_s = 9;
     optional bool is_vectorized = 20; // Deprecate if we confirm all customer have upgrade to 2.1
     optional bool is_lake_tablet = 21;
+    optional string txn_trace_parent = 22;
 };
 
 message PTabletWriterOpenResult {
