@@ -231,6 +231,7 @@ public class TransactionState implements Writable {
     private long lastErrTimeMs = 0;
 
     private Span txnSpan = null;
+    private String traceParent = null;
 
     public TransactionState() {
         this.dbId = -1;
@@ -250,6 +251,7 @@ public class TransactionState implements Writable {
         this.hasSendTask = false;
         this.latch = new CountDownLatch(1);
         this.txnSpan = TraceManager.startSpan("txn");
+        this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
     }
 
     public TransactionState(long dbId, List<Long> tableIdList, long transactionId, String label, TUniqueId requestId,
@@ -277,6 +279,7 @@ public class TransactionState implements Writable {
         this.txnSpan = TraceManager.startSpan("txn");
         txnSpan.setAttribute("txn_id", transactionId);
         txnSpan.setAttribute("label", label);
+        this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
     }
 
     public void setErrorReplicas(Set<Long> newErrorReplicas) {
@@ -755,6 +758,7 @@ public class TransactionState implements Writable {
                     this.getDbId(),
                     commitTime,
                     partitionVersions,
+                    traceParent,
                     createTime);
             this.addPublishVersionTask(backendId, task);
             tasks.add(task);
@@ -764,5 +768,9 @@ public class TransactionState implements Writable {
 
     public Span getTxnSpan() {
         return txnSpan;
+    }
+
+    public String getTraceParent() {
+        return traceParent;
     }
 }

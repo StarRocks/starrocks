@@ -42,21 +42,24 @@ public class PublishVersionTask extends AgentTask {
     private List<TPartitionVersionInfo> partitionVersionInfos;
     private List<Long> errorTablets;
     private long commitTimestamp;
+    private String traceParent;
 
     public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,
-                              List<TPartitionVersionInfo> partitionVersionInfos, long createTime) {
+                              List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, long createTime) {
         super(null, backendId, TTaskType.PUBLISH_VERSION, dbId, -1L, -1L, -1L, -1L, transactionId, createTime);
         this.transactionId = transactionId;
         this.partitionVersionInfos = partitionVersionInfos;
         this.errorTablets = new ArrayList<Long>();
         this.isFinished = false;
         this.commitTimestamp = commitTimestamp;
+        this.traceParent = traceParent;
     }
 
     public TPublishVersionRequest toThrift() {
         TPublishVersionRequest publishVersionRequest = new TPublishVersionRequest(transactionId,
                 partitionVersionInfos);
         publishVersionRequest.setCommit_timestamp(commitTimestamp);
+        publishVersionRequest.setTxn_trace_parent(traceParent);
         return publishVersionRequest;
     }
 
