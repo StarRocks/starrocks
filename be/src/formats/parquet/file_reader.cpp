@@ -411,8 +411,8 @@ Status FileReader::get_next(vectorized::ChunkPtr* chunk) {
         Status status = _row_group_readers[_cur_row_group_idx]->get_next(chunk, &row_count);
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
-                _scanner_ctx->update_not_existed_columns_to_chunk(chunk, row_count);
-                _scanner_ctx->update_partition_column_to_chunk(chunk, row_count);
+                _scanner_ctx->update_not_existed_columns_of_chunk(chunk, row_count);
+                _scanner_ctx->update_partition_column_of_chunk(chunk, row_count);
                 _scan_row_count += (*chunk)->num_rows();
             }
             if (status.is_end_of_file()) {
