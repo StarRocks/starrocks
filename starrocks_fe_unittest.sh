@@ -17,8 +17,8 @@ echo "the env="$GITHUB_REF_NAME
 # chown -R jenkins:jenkins $ROOT/../
 
 #cd $ROOT/resource/starrocks/
-#cd $ROOT/starrocks/
-#rm -rf fe/fe-core/target
+cd $ROOT/starrocks/
+rm -rf fe/fe-core/target
 
 #git config  user.email "wanpengfei91@163.com"
 #git config  user.name "wanpengfei-git"
@@ -69,7 +69,7 @@ cmd="cd /root/starrocks;
 export FE_UT_PARALLEL=16;
 timeout 3600 sh run-fe-ut.sh --run com.starrocks.utframe.Demo"
 
-#docker exec --privileged $container_name /bin/bash -c "$cmd"
+docker exec --privileged $container_name /bin/bash -c "$cmd"
 
 echo "script run over-----"
 
