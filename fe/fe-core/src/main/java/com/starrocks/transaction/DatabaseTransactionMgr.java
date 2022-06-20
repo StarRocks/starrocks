@@ -397,7 +397,6 @@ public class DatabaseTransactionMgr {
         Span txnSpan = transactionState.getTxnSpan();
         txnSpan.setAttribute("db", db.getFullName());
         StringBuilder tableListString = new StringBuilder();
-        int numPartition = 0;
         txnSpan.addEvent("commit_start");
 
         List<TableCommitter> committers = Lists.newArrayList();
@@ -420,7 +419,7 @@ public class DatabaseTransactionMgr {
             committers.add(committer);
         }
         txnSpan.setAttribute("tables", tableListString.toString());
-        txnSpan.setAttribute("num_partition", numPartition);
+        txnSpan.setAttribute("num_partition", transactionState.getIdToTableCommitInfos().size());
 
         // before state transform
         TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.COMMITTED);
