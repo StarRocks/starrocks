@@ -381,6 +381,9 @@ public class DatabaseTransactionMgr {
                     transactionState == null ? "transaction not found" : transactionState.getReason());
         }
         Span txnSpan = transactionState.getTxnSpan();
+        txnSpan.setAttribute("db", db.getFullName());
+        StringBuilder tableListString = new StringBuilder();
+        int numPartition = 0;
         txnSpan.addEvent("commit_start");
 
         if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
@@ -442,33 +445,24 @@ public class DatabaseTransactionMgr {
                 continue;
             }
 
-            if (!tableToPartition.containsKey(tableId)) {
-                tableToPartition.put(tableId, new HashSet<>());
-            }
-            tableToPartition.get(tableId).add(partitionId);
-            if (!tabletToBackends.containsKey(tabletId)) {
-                tabletToBackends.put(tabletId, new HashSet<>());
-            }
-            tabletToBackends.get(tabletId).add(tabletCommitInfos.get(i).getBackendId());
+            tableToPartition.computeIfAbsent(tableId, id -> new HashSet<>()).add(partitionId);
+            tabletToBackends.computeIfAbsent(tabletId, id -> new HashSet<>())
+                    .add(tabletCommitInfos.get(i).getBackendId());
 
-            if (!tableToInvalidDictCacheColumns.containsKey(tableId)) {
-                tableToInvalidDictCacheColumns.put(tableId, new HashSet<>());
-            }
             // Invalid column set should union
-            tableToInvalidDictCacheColumns.get(tableId).addAll(tabletCommitInfos.get(i).getInvalidDictCacheColumns());
+            tableToInvalidDictCacheColumns.computeIfAbsent(tableId, id -> new HashSet<>())
+                    .addAll(tabletCommitInfos.get(i).getInvalidDictCacheColumns());
 
-            if (!tableToValidDictCacheColumns.containsKey(tableId)) {
-                tableToValidDictCacheColumns.put(tableId, new HashSet<>());
-            }
             // Valid column set should intersect and remove all invalid columns
             // Only need to add valid column set once
-            if (tableToValidDictCacheColumns.get(tableId).isEmpty() &&
+            Set<String> validColumns = tableToValidDictCacheColumns.computeIfAbsent(tableId, id -> new HashSet<>());
+            if (validColumns.isEmpty() &&
                     !tabletCommitInfos.get(i).getValidDictCacheColumns().isEmpty()) {
-                tableToValidDictCacheColumns.get(tableId).addAll(tabletCommitInfos.get(i).getValidDictCacheColumns());
+                validColumns.addAll(tabletCommitInfos.get(i).getValidDictCacheColumns());
             }
 
             if (i == tabletMetaList.size() - 1) {
-                tableToValidDictCacheColumns.get(tableId).removeAll(tableToInvalidDictCacheColumns.get(tableId));
+                validColumns.removeAll(tableToInvalidDictCacheColumns.get(tableId));
             }
         }
 
@@ -479,10 +473,15 @@ public class DatabaseTransactionMgr {
             if (table == null) {
                 throw new MetaNotFoundException("Table does not exist: " + tableId);
             }
+            if (tableListString.length() != 0) {
+                tableListString.append(',');
+            }
+            tableListString.append(table.getName());
             for (Partition partition : table.getAllPartitions()) {
                 if (!tableToPartition.get(tableId).contains(partition.getId())) {
                     continue;
                 }
+                numPartition++;
 
                 boolean useStarOS = partition.isUseStarOS();
 
@@ -551,6 +550,8 @@ public class DatabaseTransactionMgr {
             }
         }
 
+        txnSpan.setAttribute("tables", tableListString.toString());
+        txnSpan.setAttribute("num_partition", numPartition);
         // before state transform
         TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.COMMITTED);
         // transaction state transform

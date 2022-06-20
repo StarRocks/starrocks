@@ -2,7 +2,9 @@
 package com.starrocks.common;
 
 import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.internal.TemporaryBuffers;
 import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanContext;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.exporter.jaeger.JaegerGrpcSpanExporter;
@@ -48,5 +50,25 @@ public class TraceManager {
 
     public static Span startSpan(String name) {
         return getTracer().spanBuilder(name).startSpan();
+    }
+
+    public static String toTraceParent(SpanContext spanContext) {
+        if (!spanContext.isValid()) {
+            return null;
+        }
+        char[] chars = TemporaryBuffers.chars(55);
+        chars[0] = "00".charAt(0);
+        chars[1] = "00".charAt(1);
+        chars[2] = '-';
+        String traceId = spanContext.getTraceId();
+        traceId.getChars(0, traceId.length(), chars, 3);
+        chars[35] = '-';
+        String spanId = spanContext.getSpanId();
+        spanId.getChars(0, spanId.length(), chars, 36);
+        chars[52] = '-';
+        String traceFlagsHex = spanContext.getTraceFlags().asHex();
+        chars[53] = traceFlagsHex.charAt(0);
+        chars[54] = traceFlagsHex.charAt(1);
+        return new String(chars, 0, 55);
     }
 }
