@@ -412,7 +412,7 @@ public class DatabaseTransactionMgr {
                 throw new TransactionCommitFailedException(table.getName() + " does not support write");
             }
             committer.preCommit(transactionState, tabletCommitInfos);
-            if (!committers.isEmpty()) {
+            if (tableListString.length() != 0) {
                 tableListString.append(',');
             }
             tableListString.append(table.getName());
