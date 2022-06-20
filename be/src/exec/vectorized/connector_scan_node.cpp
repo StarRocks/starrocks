@@ -114,6 +114,7 @@ ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, c
         : ScanNode(pool, tnode, descs) {
     _name = "connector_scan";
     auto c = connector::ConnectorManager::default_instance()->get(tnode.connector_scan_node.connector_name);
+    _connector_type = c->connector_type();
     _data_source_provider = c->create_data_source_provider(this, tnode);
 }
 
@@ -185,7 +186,7 @@ Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
 }
 
 Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, const TScanRange& scan_range) {
-    connector::DataSourcePtr data_source = _data_source_provider->create_data_source(scan_range);
+    connector::DataSourcePtr data_source = _data_source_provider->create_data_source(scan_range, false);
     data_source->set_predicates(_conjunct_ctxs);
     data_source->set_runtime_filters(&_runtime_filter_collector);
     data_source->set_read_limit(_limit);

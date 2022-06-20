@@ -212,6 +212,7 @@ Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std
     if (scanner == nullptr) {
         return Status::InternalError("Failed to create scanner");
     }
+    DeferOp scanner_close([&scanner] { return scanner->close(); });
     RETURN_IF_ERROR(scanner->open());
 
     while (true) {

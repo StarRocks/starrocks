@@ -50,6 +50,11 @@ ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int3
                                                   this, scan_node);
 }
 
+connector::ConnectorType ConnectorScanOperator::connector_type() {
+    auto* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
+    return scan_node->connector_type();
+}
+
 // ==================== ConnectorChunkSource ====================
 ConnectorChunkSource::ConnectorChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
                                            vectorized::ConnectorScanNode* scan_node)
@@ -62,7 +67,7 @@ ConnectorChunkSource::ConnectorChunkSource(RuntimeProfile* runtime_profile, Mors
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
     ScanMorsel* scan_morsel = (ScanMorsel*)_morsel.get();
     const TScanRange* scan_range = scan_morsel->get_scan_range();
-    _data_source = scan_node->data_source_provider()->create_data_source(*scan_range);
+    _data_source = scan_node->data_source_provider()->create_data_source(*scan_range, true);
     _data_source->set_predicates(_conjunct_ctxs);
     _data_source->set_runtime_filters(_runtime_bloom_filters);
     _data_source->set_read_limit(_limit);

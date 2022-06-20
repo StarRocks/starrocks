@@ -22,6 +22,8 @@ public:
 
     DataSourceProviderPtr create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
+
+    ConnectorType connector_type() const override { return ConnectorType::ES; }
 };
 
 class ESDataSource;
@@ -32,7 +34,7 @@ public:
     ~ESDataSourceProvider() override = default;
     friend class ESDataSource;
     ESDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node);
-    DataSourcePtr create_data_source(const TScanRange& scan_range) override;
+    DataSourcePtr create_data_source(const TScanRange& scan_range, bool non_blocking_read) override;
 
 protected:
     vectorized::ConnectorScanNode* _scan_node;

@@ -21,13 +21,13 @@ namespace starrocks::vectorized {
 class CSVScanner final : public FileScanner {
 public:
     CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-               ScannerCounter* counter);
+               ScannerCounter* counter, bool non_blocking_read = false);
 
     Status open() override;
 
     StatusOr<ChunkPtr> get_next() override;
 
-    void close() override{};
+    void close() override;
 
 private:
     class ScannerCSVReader : public CSVReader {

@@ -15,8 +15,8 @@
 namespace starrocks::vectorized {
 
 ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-                               ScannerCounter* counter)
-        : FileScanner(state, profile, scan_range.params, counter),
+                               ScannerCounter* counter, bool non_blocking_read)
+        : FileScanner(state, profile, scan_range.params, counter, non_blocking_read),
           _scan_range(scan_range),
           _next_file(0),
           _curr_file_reader(nullptr),
@@ -28,9 +28,7 @@ ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, con
     _conv_ctx.state = state;
 }
 
-ParquetScanner::~ParquetScanner() {
-    close();
-}
+ParquetScanner::~ParquetScanner() = default;
 
 Status ParquetScanner::open() {
     RETURN_IF_ERROR(FileScanner::open());
@@ -365,6 +363,7 @@ Status ParquetScanner::open_next_reader() {
 }
 
 void ParquetScanner::close() {
+    FileScanner::close();
     _curr_file_reader.reset();
     _pool.clear();
 }

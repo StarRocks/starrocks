@@ -451,8 +451,17 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     case TPlanNodeType::SELECT_NODE:
         *node = pool->add(new SelectNode(pool, tnode, descs));
         return Status::OK();
-    case TPlanNodeType::FILE_SCAN_NODE:
-        *node = pool->add(new vectorized::FileScanNode(pool, tnode, descs));
+    case TPlanNodeType::FILE_SCAN_NODE: {
+        if (tnode.file_scan_node.__isset.enable_pipeline_load && tnode.file_scan_node.enable_pipeline_load) {
+            TPlanNode new_node = tnode;
+            TConnectorScanNode connector_scan_node;
+            connector_scan_node.connector_name = connector::Connector::FILE;
+            new_node.connector_scan_node = connector_scan_node;
+            *node = pool->add(new vectorized::ConnectorScanNode(pool, new_node, descs));
+        } else {
+            *node = pool->add(new vectorized::FileScanNode(pool, tnode, descs));
+        }
+    }
         return Status::OK();
     case TPlanNodeType::REPEAT_NODE:
         *node = pool->add(new vectorized::RepeatNode(pool, tnode, descs));

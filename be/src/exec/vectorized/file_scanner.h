@@ -16,6 +16,9 @@ namespace starrocks::vectorized {
 struct ScannerCounter {
     int64_t num_rows_filtered = 0;
     int64_t num_rows_unselected = 0;
+    int64_t filtered_rows_read = 0;
+    int64_t num_rows_read = 0;
+    int64_t num_bytes_read = 0;
 
     int64_t total_ns = 0;
     int64_t fill_ns = 0;
@@ -31,7 +34,7 @@ struct ScannerCounter {
 class FileScanner {
 public:
     FileScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRangeParams& params,
-                ScannerCounter* counter);
+                ScannerCounter* counter, bool non_blocking_read);
     virtual ~FileScanner();
 
     virtual Status init_expr_ctx();
@@ -40,7 +43,7 @@ public:
 
     virtual StatusOr<ChunkPtr> get_next() = 0;
 
-    virtual void close() = 0;
+    virtual void close();
 
     Status create_random_access_file(const TBrokerRangeDesc& range_desc, const TNetworkAddress& address,
                                      const TBrokerScanRangeParams& params, CompressionTypePB compression,
@@ -78,5 +81,7 @@ protected:
     // index: destination slot id
     // value: source slot desc
     std::vector<SlotDescriptor*> _dest_slot_desc_mappings;
+
+    bool _non_blocking_read;
 };
 } // namespace starrocks::vectorized

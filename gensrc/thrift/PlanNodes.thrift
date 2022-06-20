@@ -253,6 +253,7 @@ struct TFileScanNode {
     // Partition info used to process partition select in broker load
     2: optional list<Exprs.TExpr> partition_exprs
     3: optional list<Partitions.TRangePartition> partition_infos
+    4: optional bool enable_pipeline_load
 }
 
 struct TEsScanNode {

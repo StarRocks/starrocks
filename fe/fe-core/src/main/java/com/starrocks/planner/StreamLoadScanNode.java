@@ -41,6 +41,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.Config;
 import com.starrocks.load.Load;
 import com.starrocks.task.StreamLoadTask;
 import com.starrocks.thrift.TBrokerRangeDesc;
@@ -269,6 +270,7 @@ public class StreamLoadScanNode extends LoadScanNode {
     protected void toThrift(TPlanNode planNode) {
         planNode.setNode_type(TPlanNodeType.FILE_SCAN_NODE);
         TFileScanNode fileScanNode = new TFileScanNode(desc.getId().asInt());
+        fileScanNode.setEnable_pipeline_load(Config.enable_pipeline_load);
         planNode.setFile_scan_node(fileScanNode);
     }
 
@@ -290,5 +292,10 @@ public class StreamLoadScanNode extends LoadScanNode {
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         return "StreamLoadScanNode";
+    }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return Config.enable_pipeline_load;
     }
 }

@@ -238,7 +238,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                     size_t num_read_chunks = 0;
                     Status status = _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
                             _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
-                    if (!status.ok() && !status.is_end_of_file()) {
+                    if (!status.ok() && !status.is_end_of_file() && !status.is_time_out()) {
                         _set_scan_status(status);
                     }
                     // TODO (by laotan332): More detailed information is needed
@@ -269,7 +269,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
                     Status status =
                             _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);
-                    if (!status.ok() && !status.is_end_of_file()) {
+                    if (!status.ok() && !status.is_end_of_file() && !status.is_time_out()) {
                         _set_scan_status(status);
                     }
                     _last_growth_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
