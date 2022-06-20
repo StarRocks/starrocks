@@ -40,7 +40,7 @@ public class AlterMaterializedViewTest {
 
     @Test(expected = AnalysisException.class)
     public void testRenameSameName() throws Exception {
-        String alterMvSql = "alter materialized view mv1 rename MV1;";
+        String alterMvSql = "alter materialized view mv1 rename mv1;";
         UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
     }
 

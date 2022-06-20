@@ -256,12 +256,15 @@ public class Alter {
             asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
             asyncRefreshContext.setIntervalLiteral(asyncRefreshSchemeDesc.getIntervalLiteral());
         }
+        RefreshType oldRefreshType = refreshScheme.getType();
         final String refreshType = refreshSchemeDesc.getType().name();
         final RefreshType newRefreshType = RefreshType.valueOf(refreshType);
         refreshScheme.setType(newRefreshType);
 
         final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
         GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);
+        LOG.info("change materialized view refresh type [{}] to {}, id: {}", oldRefreshType.typeString,
+                newRefreshType.typeString, materializedView.getId());
     }
 
     private void processRenameMaterializedView(String oldMvName, String newMvName, Database db,
@@ -273,8 +276,9 @@ public class Alter {
         db.dropTable(oldMvName);
         db.createTable(materializedView);
         final RenameMaterializedViewLog renameMaterializedViewLog =
-                new RenameMaterializedViewLog(materializedView, oldMvName, newMvName);
+                new RenameMaterializedViewLog(materializedView.getId(), db.getId(), newMvName);
         GlobalStateMgr.getCurrentState().getEditLog().logMvRename(renameMaterializedViewLog);
+        LOG.info("rename materialized view[{}] to {}, id: {}", oldMvName, newMvName, materializedView.getId());
     }
 
     public void replayRenameMaterializedView(RenameMaterializedViewLog log) {
