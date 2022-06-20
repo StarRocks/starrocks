@@ -153,6 +153,7 @@ import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -2823,7 +2824,7 @@ public class LocalMetastore implements ConnectorMetadata {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
         } else if (refreshSchemeDesc.getType() == RefreshType.SYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
-            mvRefreshScheme.setType(MaterializedView.RefreshType.SYNC);
+            mvRefreshScheme.setType(RefreshType.SYNC);
         }
         // create mv
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
@@ -2933,6 +2934,12 @@ public class LocalMetastore implements ConnectorMetadata {
         } else {
             stateMgr.getAlterInstance().processDropMaterializedView(stmt);
         }
+        stateMgr.getAlterInstance().processDropMaterializedView(stmt);
+    }
+
+    @Override
+    public void alterMaterializedView(AlterMaterializedViewStatement stmt) throws DdlException, MetaNotFoundException {
+        stateMgr.getAlterInstance().processAlterMaterializedView(stmt);
     }
 
     /*

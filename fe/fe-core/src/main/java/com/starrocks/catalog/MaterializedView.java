@@ -8,6 +8,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.IntervalLiteral;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
@@ -16,6 +18,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -26,18 +29,21 @@ import java.util.Set;
 public class MaterializedView extends OlapTable implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(MaterializedView.class);
 
-    public enum RefreshType {
-        SYNC,
-        ASYNC
-    }
-
     public static class AsyncRefreshContext {
         // base table id -> (partitionid -> visible version)
         @SerializedName(value = "baseTableVisibleVersionMap")
         public Map<Long, Map<Long, Long>> baseTableVisibleVersionMap;
 
+        @SerializedName(value = "starTime")
+        private long startTime;
+
+        @SerializedName(value = "intervalLiteral")
+        private IntervalLiteral intervalLiteral;
+
         public AsyncRefreshContext() {
             this.baseTableVisibleVersionMap = Maps.newHashMap();
+            this.startTime = Utils.getLongFromDateTime(LocalDateTime.now());
+            this.intervalLiteral = null;
         }
 
         public AsyncRefreshContext(Map<Long, Map<Long, Long>> baseTableVisibleVersionMap) {
@@ -46,6 +52,22 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         Map<Long, Long> getPartitionVisibleVersionMapForTable(long tableId) {
             return baseTableVisibleVersionMap.get(tableId);
+        }
+
+        public long getStartTime() {
+            return startTime;
+        }
+
+        public void setStartTime(long startTime) {
+            this.startTime = startTime;
+        }
+
+        public IntervalLiteral getIntervalLiteral() {
+            return intervalLiteral;
+        }
+
+        public void setIntervalLiteral(IntervalLiteral intervalLiteral) {
+            this.intervalLiteral = intervalLiteral;
         }
     }
 
@@ -149,6 +171,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public void setViewDefineSql(String viewDefineSql) {
         this.viewDefineSql = viewDefineSql;
+    }
+
+    public MvRefreshScheme getRefreshScheme() {
+        return refreshScheme;
+    }
+
+    public void setRefreshScheme(MvRefreshScheme refreshScheme) {
+        this.refreshScheme = refreshScheme;
     }
 
     @Override

@@ -39,6 +39,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -189,6 +190,7 @@ public class StatementPlanner {
                 || statement instanceof AdminShowConfigStmt
                 || statement instanceof AdminShowReplicaDistributionStmt
                 || statement instanceof AdminShowReplicaStatusStmt
+                || statement instanceof AlterMaterializedViewStatement
                 || statement instanceof AlterViewStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof AnalyzeStmt

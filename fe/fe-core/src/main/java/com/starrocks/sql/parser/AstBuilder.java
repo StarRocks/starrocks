@@ -134,6 +134,7 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AnalyzeBasicDesc;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
@@ -699,6 +700,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
         TableName mvName = qualifiedNameToTableName(mvQualifiedName);
         return new DropMaterializedViewStmt(context.IF() != null, mvName);
+    }
+
+    @Override
+    public ParseNode visitAlterMaterializedViewStatement(
+            StarRocksParser.AlterMaterializedViewStatementContext context) {
+        QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
+        TableName mvName = qualifiedNameToTableName(mvQualifiedName);
+        String newMvName = null;
+        if (context.tableRenameClause() != null) {
+            newMvName = ((Identifier) visit(context.tableRenameClause().identifier())).getValue();
+        }
+        //process refresh
+        RefreshSchemeDesc refreshSchemeDesc = null;
+        if (context.refreshSchemeDesc() != null) {
+            refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
+        }
+        return new AlterMaterializedViewStatement(mvName, newMvName, refreshSchemeDesc);
     }
 
     // ------------------------------------------- Cluster Management Statement -----------------------------------------
@@ -2600,6 +2618,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         LocalDateTime startTime = LocalDateTime.now();
         IntervalLiteral intervalLiteral = null;
         if (context.ASYNC() != null) {
+            if (context.START() != null && context.interval() == null) {
+                throw new SemanticException("Please input interval clause");
+            }
             if (context.START() != null) {
                 StringLiteral stringLiteral = (StringLiteral) visit(context.string());
                 DateTimeFormatter dateTimeFormatter = null;
@@ -2617,10 +2638,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                                     stringLiteral.getStringValue() + " is incorrect");
                 }
             }
-            intervalLiteral = (IntervalLiteral) visit(context.interval());
-            if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
-                throw new IllegalArgumentException(
-                        "Refresh every " + intervalLiteral.getValue() + " must be IntLiteral");
+
+            if (context.interval() != null) {
+                intervalLiteral = (IntervalLiteral) visit(context.interval());
+                if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
+                    throw new IllegalArgumentException(
+                            "Refresh every " + intervalLiteral.getValue() + " must be IntLiteral");
+                }
             }
             return new AsyncRefreshSchemeDesc(startTime, intervalLiteral);
         } else if (context.SYNC() != null) {

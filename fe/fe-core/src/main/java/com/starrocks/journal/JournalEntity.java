@@ -59,6 +59,7 @@ import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDropInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
+import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
@@ -82,6 +83,7 @@ import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
+import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -258,6 +260,14 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME:
+                data = ChangeMaterializedViewRefreshSchemeLog.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_RENAME_MATERIALIZED_VIEW:
+                data = RenameMaterializedViewLog.read(in);
+                isRead = true;
+                break;
             case OperationType.OP_BACKUP_JOB: {
                 data = BackupJob.read(in);
                 isRead = true;
