@@ -119,6 +119,8 @@ explain costs select * from detailDemo;
 
 * 开启 Profile 上报。
 
+> 注意：通过此方式设置 Profile 上报仅在当前 session 生效。
+
 ```sql
 set is_report_success = true;
 ```
