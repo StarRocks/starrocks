@@ -26,6 +26,7 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TTableDescriptor;
@@ -288,7 +289,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         // set privilege
         connectContext.setQualifiedUser(Auth.ROOT_USER);
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
-        connectContext.setThreadLocalInfo();
         PartitionInfo partitionInfo = this.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             return;
@@ -296,23 +296,28 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
         // currently, mv only supports one expression
         Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
-        QueryStatement queryStatement = ((QueryStatement) SqlParser.parse(
-                this.viewDefineSql, connectContext.getSessionVariable().getSqlMode()).get(0));
-        Analyzer.analyze(queryStatement, connectContext);
-        Map<String, TableRelation> tableRelations = AnalyzerUtils.collectAllTableRelation(queryStatement);
-        List<Field> fields = Lists.newArrayList();
-        for (TableRelation value : tableRelations.values()) {
-            fields.addAll(value.getRelationFields().getAllFields());
-        }
-        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(fields));
-        if (partitionExpr instanceof FunctionCallExpr) {
-            FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-            if (functionCallExpr.getFn() == null) {
-                // set fn into functionCallExpr, because FunctionCallExpr serialized use sql
-                ExpressionAnalyzer.analyzeExpression(functionCallExpr, new AnalyzeState(),
-                        scope, connectContext);
+        try {
+            QueryStatement queryStatement = ((QueryStatement) SqlParser.parse(
+                    this.viewDefineSql, connectContext.getSessionVariable().getSqlMode()).get(0));
+            Analyzer.analyze(queryStatement, connectContext);
+            Map<String, TableRelation> tableRelations = AnalyzerUtils.collectAllTableRelation(queryStatement);
+            List<Field> fields = Lists.newArrayList();
+            for (TableRelation value : tableRelations.values()) {
+                fields.addAll(value.getRelationFields().getAllFields());
             }
+            Scope scope = new Scope(RelationId.anonymous(), new RelationFields(fields));
+            if (partitionExpr instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
+                if (functionCallExpr.getFn() == null) {
+                    // set fn into functionCallExpr, because FunctionCallExpr serialized use sql
+                    ExpressionAnalyzer.analyzeExpression(functionCallExpr, new AnalyzeState(),
+                            scope, connectContext);
+                }
+            }
+        } catch (ParsingException parsingException) {
+            LOG.warn("Parsing viewDefineSql:{} failed, exception:{}", this.viewDefineSql, parsingException.getMessage());
         }
+
     }
 
     @Override

@@ -351,7 +351,6 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testFullCreate() {
-
         new MockUp<StmtExecutor>() {
             @Mock
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {}

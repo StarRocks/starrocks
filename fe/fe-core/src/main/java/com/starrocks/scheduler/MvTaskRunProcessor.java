@@ -2,6 +2,8 @@
 
 package com.starrocks.scheduler;
 
+import com.clearspring.analytics.util.Lists;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
@@ -9,16 +11,13 @@ import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.PartitionValue;
-import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -28,33 +27,23 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.common.Config;
-import com.starrocks.sql.common.ExpressionPartitionUtil;
-import com.starrocks.metric.MetricRepo;
-import com.starrocks.metric.ResourceGroupMetricMgr;
-import com.starrocks.plugin.AuditEvent;
-import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
-import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
-import com.starrocks.sql.common.SqlDigestBuilder;
+import com.starrocks.sql.common.ExpressionPartitionUtil;
 import com.starrocks.sql.parser.SqlParser;
-import org.apache.commons.codec.binary.Hex;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -64,15 +53,17 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class MvTaskRunProcessor implements TaskRunProcessor {
+public class MvTaskRunProcessor extends SqlTaskRunProcessor {
 
     private static final Logger LOG = LogManager.getLogger(MvTaskRunProcessor.class);
+
+    public static final String MV_ID = "mvId";
 
     @Override
     public void processTaskRun(TaskRunContext context) throws Exception {
         Map<String, String> properties = context.getProperties();
         // NOTE: need set mvId in Task's properties when creating
-        long mvId = Long.parseLong(properties.get("mvId"));
+        long mvId = Long.parseLong(properties.get(MV_ID));
         // 0. prepare
         Database database = GlobalStateMgr.getCurrentState().getDb(context.ctx.getDatabase());
         MaterializedView materializedView = (MaterializedView) database.getTable(mvId);
@@ -107,6 +98,7 @@ public class MvTaskRunProcessor implements TaskRunProcessor {
         ExpressionRangePartitionInfo expressionRangePartitionInfo =
                 ((ExpressionRangePartitionInfo) partitionInfo);
         // currently, mv only supports one expression
+        Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
         Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
         Column partitionColumn = expressionRangePartitionInfo.getPartitionColumns().get(0);
         // 1. scan base table, get table id which used in partition
@@ -114,13 +106,11 @@ public class MvTaskRunProcessor implements TaskRunProcessor {
         OlapTable partitionTable = null;
         for (Long baseTableId : baseTableIds) {
             OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
-            SlotRef slotRef;
-            if (partitionExpr instanceof SlotRef) {
-                slotRef = ((SlotRef) partitionExpr);
-            } else {
-                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-                slotRef = getFirstSlotRefInFunction(functionCallExpr);
-            }
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            partitionExpr.collect(SlotRef.class, slotRefs);
+            // if partitionExpr is FunctionCallExpr, get first SlotRef
+            Preconditions.checkState(slotRefs.size() == 1);
+            SlotRef slotRef = slotRefs.get(0);
             if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(olapTable.getName())) {
                 partitionTable = olapTable;
             }
@@ -148,16 +138,6 @@ public class MvTaskRunProcessor implements TaskRunProcessor {
         } else {
             refreshMv(context, materializedView, partitionTable, needRefreshPartitionIds);
         }
-    }
-
-    public SlotRef getFirstSlotRefInFunction(FunctionCallExpr expr) {
-        ArrayList<Expr> children = expr.getChildren();
-        for (Expr child : children) {
-            if (child instanceof SlotRef) {
-                return (SlotRef) child;
-            }
-        }
-        throw new SemanticException("Create find SlotRef in FunctionCallExpr:" + expr.toSql());
     }
 
     private void processPartitionWithPartitionTable(Database database, MaterializedView materializedView,
@@ -204,13 +184,8 @@ public class MvTaskRunProcessor implements TaskRunProcessor {
                             expressionRangePartitionInfo.getIdToRange(false).values(),
                             basePartitionRange, basePartitionIndex);
             if (mvPartitionKeyRange != null) {
-                PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(
-                        Collections.singletonList(new PartitionValue(
-                                mvPartitionKeyRange.lowerEndpoint().getKeys().get(0).getStringValue())),
-                        Collections.singletonList(new PartitionValue(
-                                mvPartitionKeyRange.upperEndpoint().getKeys().get(0).getStringValue())));
                 addPartition(database, materializedView, basePartitionId,
-                        partitionKeyDesc, partitionProperties, distributionDesc);
+                        mvPartitionKeyRange, partitionProperties, distributionDesc);
             }
         }
         Set<Long> deletedPartitionIds = basePartitionVisionMap.keySet().stream()
@@ -371,10 +346,15 @@ public class MvTaskRunProcessor implements TaskRunProcessor {
     }
 
     private void addPartition(Database database, MaterializedView materializedView, long basePartitionId,
-                              PartitionKeyDesc partitionKeyDesc, Map<String, String> partitionProperties,
+                              Range<PartitionKey> partitionKeyRange, Map<String, String> partitionProperties,
                               DistributionDesc distributionDesc) {
-        // todo need to design partition name?
-        String partitionName = "mv_" + GlobalStateMgr.getCurrentState().getNextId();
+        String lowerBorder = partitionKeyRange.lowerEndpoint().getKeys().get(0).getStringValue();
+        String upperBorder = partitionKeyRange.upperEndpoint().getKeys().get(0).getStringValue();
+        PrimitiveType type = partitionKeyRange.lowerEndpoint().getKeys().get(0).getType().getPrimitiveType();
+        PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(
+                Collections.singletonList(new PartitionValue(lowerBorder)),
+                Collections.singletonList(new PartitionValue(upperBorder)));
+        String partitionName = "p" + ExpressionPartitionUtil.getFormattedPartitionName(lowerBorder, upperBorder, type);
         SingleRangePartitionDesc singleRangePartitionDesc =
                 new SingleRangePartitionDesc(false, partitionName, partitionKeyDesc, partitionProperties);
         try {
@@ -385,7 +365,7 @@ public class MvTaskRunProcessor implements TaskRunProcessor {
             addPartitionIdRef(materializedView.getPartitionIdRefMap(), basePartitionId,
                     materializedView.getPartition(partitionName).getId());
         } catch (Exception e) {
-            throw new SemanticException("Expression add partition failed: {}, db: {}, table: {}", e.getMessage(),
+            throw new SemanticException("Expression add partition failed: %s, db: %s, table: %s", e.getMessage(),
                     database.getFullName(), materializedView.getName());
         }
     }
@@ -420,81 +400,4 @@ public class MvTaskRunProcessor implements TaskRunProcessor {
         partitionIdRefMap.remove(mvPartitionId);
     }
 
-    private void auditAfterExec(TaskRunContext context, StatementBase parsedStmt, PQueryStatistics statistics) {
-        String origStmt = context.getDefinition();
-        ConnectContext ctx = context.getCtx();
-
-        // slow query
-        long endTime = System.currentTimeMillis();
-        long elapseMs = endTime - ctx.getStartTime();
-
-        ctx.getAuditEventBuilder().setEventType(AuditEvent.EventType.AFTER_QUERY)
-                .setState(ctx.getState().toString()).setErrorCode(ctx.getErrorCode()).setQueryTime(elapseMs)
-                .setScanBytes(statistics == null ? 0 : statistics.scanBytes)
-                .setScanRows(statistics == null ? 0 : statistics.scanRows)
-                .setCpuCostNs(statistics == null || statistics.cpuCostNs == null ? 0 : statistics.cpuCostNs)
-                .setMemCostBytes(statistics == null || statistics.memCostBytes == null ? 0 : statistics.memCostBytes)
-                .setReturnRows(ctx.getReturnRows())
-                .setStmtId(ctx.getStmtId())
-                .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString());
-
-        if (ctx.getState().isQuery()) {
-            MetricRepo.COUNTER_QUERY_ALL.increase(1L);
-            ResourceGroupMetricMgr.increaseQuery(ctx, 1L);
-            if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-                // err query
-                MetricRepo.COUNTER_QUERY_ERR.increase(1L);
-                ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
-            } else {
-                // ok query
-                MetricRepo.COUNTER_QUERY_SUCCESS.increase(1L);
-                MetricRepo.HISTO_QUERY_LATENCY.update(elapseMs);
-                if (elapseMs > Config.qe_slow_log_ms || ctx.getSessionVariable().isEnableSQLDigest()) {
-                    MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
-                    ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
-                }
-            }
-            ctx.getAuditEventBuilder().setIsQuery(true);
-        } else {
-            ctx.getAuditEventBuilder().setIsQuery(false);
-        }
-
-        ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
-
-        // We put origin query stmt at the end of audit log, for parsing the log more convenient.
-        if (!ctx.getState().isQuery() && (parsedStmt != null && parsedStmt.needAuditEncryption())) {
-            ctx.getAuditEventBuilder().setStmt(parsedStmt.toSql());
-        } else if (ctx.getState().isQuery() && containsComment(origStmt)) {
-            // avoid audit log can't replay
-            ctx.getAuditEventBuilder().setStmt(origStmt);
-        } else {
-            ctx.getAuditEventBuilder().setStmt(origStmt.replace("\n", " "));
-        }
-
-        GlobalStateMgr.getCurrentAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
-    }
-
-    public String computeStatementDigest(StatementBase queryStmt) {
-        if (queryStmt == null) {
-            return "";
-        }
-        String digest;
-        if (queryStmt instanceof QueryStmt) {
-            digest = ((QueryStmt) queryStmt).toDigest();
-        } else {
-            digest = SqlDigestBuilder.build(queryStmt);
-        }
-        try {
-            MessageDigest md = MessageDigest.getInstance("MD5");
-            md.reset();
-            md.update(digest.getBytes());
-            return Hex.encodeHexString(md.digest());
-        } catch (NoSuchAlgorithmException e) {
-            return "";
-        }
-    }
-
-    private boolean containsComment(String sql) {
-        return (sql.contains("--")) || sql.contains("#");
-    }
 }

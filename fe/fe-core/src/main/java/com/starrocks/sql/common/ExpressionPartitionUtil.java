@@ -141,7 +141,7 @@ public class ExpressionPartitionUtil {
         String fmtStr = ((StringLiteral) expr.getChild(0)).getValue();
         DateLiteral dateLiteral = (DateLiteral) border;
         // if dateLiteral is min value ,return it.
-        if(dateLiteral.isMinValue() && step <= 0) {
+        if (dateLiteral.isMinValue() && step <= 0) {
             return dateLiteral;
         }
         LocalDateTime localDateTime = dateLiteral.toLocalDateTime();
@@ -182,7 +182,7 @@ public class ExpressionPartitionUtil {
         LocalDateTime datetime = ScalarOperatorFunctions.dateTrunc(fmt, date).getDatetime();
         DateLiteral processedDateLiteral;
         try {
-            if(type == PrimitiveType.DATE) {
+            if (type == PrimitiveType.DATE) {
                 processedDateLiteral = new DateLiteral(datetime, Type.DATE);
             } else {
                 processedDateLiteral = new DateLiteral(datetime, Type.DATETIME);
@@ -191,5 +191,17 @@ public class ExpressionPartitionUtil {
         } catch (AnalysisException e) {
             throw new SemanticException("Convert to DateLiteral failed:" + e);
         }
+    }
+
+    public static String getFormattedPartitionName(String lowerBorder, String upperBorder, PrimitiveType type) {
+        if (type.isDateType()) {
+            lowerBorder = lowerBorder.replace("-", "")
+                    .replace(":", "")
+                    .replace(" ", "");
+            upperBorder = upperBorder.replace("-", "")
+                    .replace(":", "")
+                    .replace(" ", "");
+        }
+        return lowerBorder + "_" + upperBorder;
     }
 }

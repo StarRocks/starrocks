@@ -14,6 +14,11 @@ import java.util.Map;
 
 public class Task implements Writable {
 
+    public enum TaskSource {
+        CTAS,
+        MV
+    }
+
     @SerializedName("id")
     private long id;
 
@@ -34,6 +39,9 @@ public class Task implements Writable {
 
     @SerializedName("expireTime")
     private long expireTime = -1;
+
+    @SerializedName("source")
+    private TaskSource source;
 
     public long getId() {
         return id;
@@ -91,6 +99,14 @@ public class Task implements Writable {
         this.expireTime = expireTime;
     }
 
+    public TaskSource getSource() {
+        return source;
+    }
+
+    public void setSource(TaskSource source) {
+        this.source = source;
+    }
+
     public static Task read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, Task.class);
@@ -101,4 +117,5 @@ public class Task implements Writable {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
+
 }

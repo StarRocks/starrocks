@@ -16,7 +16,6 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.common.ExpressionPartitionUtil;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -249,6 +248,21 @@ public class ExpressionPartitionUtilTest {
                 ExpressionPartitionUtil.compareBorder(dateTimeBorder2, dateTimeBorder1), 1);
         Assert.assertEquals(
                 ExpressionPartitionUtil.compareBorder(dateTimeBorder1, dateTimeBorder1), 0);
+    }
+
+    @Test
+    public void testGetFormattedPartitionName(){
+        List<String> times = Arrays.asList(
+                "0000-01-01",
+                "0001-01-01",
+                "2020-04-21 20:43:00",
+                "2021-04-21 20:43:00",
+                "1",
+                "10"
+        );
+        Assert.assertEquals(ExpressionPartitionUtil.getFormattedPartitionName(times.get(0), times.get(1),PrimitiveType.DATE),"00000101_00010101");
+        Assert.assertEquals(ExpressionPartitionUtil.getFormattedPartitionName(times.get(2), times.get(3),PrimitiveType.DATETIME),"20200421204300_20210421204300");
+        Assert.assertEquals(ExpressionPartitionUtil.getFormattedPartitionName(times.get(4), times.get(5),PrimitiveType.INT),"1_10");
     }
 
 }

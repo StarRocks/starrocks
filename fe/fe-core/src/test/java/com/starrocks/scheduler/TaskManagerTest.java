@@ -133,25 +133,12 @@ public class TaskManagerTest {
 
         Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv1"));
-        Task task = new Task();
-        long taskId = GlobalStateMgr.getCurrentState().getNextId();
-        task.setId(taskId);
-        task.setName("mv-"+ materializedView.getId());
-        task.setCreateTime(System.currentTimeMillis());
-        task.setDbName(testDb.getFullName());
-        Map<String,String> taskProperties = Maps.newHashMap();
-        taskProperties.put("mvId",String.valueOf(materializedView.getId()));
-        task.setProperties(taskProperties);
-        task.setDefinition(materializedView.getViewDefineSql());
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         task.setExpireTime(0L);
 
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         taskManager.createTask(task, true);
-
-        TaskRunManager taskRunManager = taskManager.getTaskRunManager();
-        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
-        taskRun.setProcessor(new MvTaskRunProcessor());
-        taskRunManager.submitTaskRun(taskRun);
+        taskManager.executeTask(task.getName());
 
         ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
 

@@ -1,11 +1,15 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.scheduler;
 
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+
+import java.util.Map;
 
 // TaskBuilder is responsible for converting Stmt to Task Class
 // and also responsible for generating taskId and taskName
@@ -20,6 +24,7 @@ public class TaskBuilder {
             taskName = "ctas-" + DebugUtil.printId(context.getExecutionId());
         }
         task.setName(taskName);
+        task.setSource(Task.TaskSource.CTAS);
         task.setCreateTime(System.currentTimeMillis());
         task.setDbName(submitTaskStmt.getDbName());
         task.setDefinition(submitTaskStmt.getSqlText());
@@ -28,4 +33,19 @@ public class TaskBuilder {
         return task;
     }
 
+    public static Task buildMvTask(MaterializedView materializedView, String dbName) {
+        Task task = new Task();
+        long taskId = GlobalStateMgr.getCurrentState().getNextId();
+        task.setId(taskId);
+        task.setName("mv-" + materializedView.getId());
+        task.setSource(Task.TaskSource.MV);
+        task.setCreateTime(System.currentTimeMillis());
+        task.setDbName(dbName);
+        Map<String, String> taskProperties = Maps.newHashMap();
+        taskProperties.put(MvTaskRunProcessor.MV_ID, String.valueOf(materializedView.getId()));
+        task.setProperties(taskProperties);
+        task.setDefinition(materializedView.getViewDefineSql());
+        task.setExpireTime(System.currentTimeMillis() + Config.task_ttl_second * 1000L);
+        return task;
+    }
 }

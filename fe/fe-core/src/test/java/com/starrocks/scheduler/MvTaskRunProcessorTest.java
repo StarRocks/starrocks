@@ -80,21 +80,10 @@ public class MvTaskRunProcessorTest {
 
         Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv1"));
-        Task task = new Task();
-        long taskId = GlobalStateMgr.getCurrentState().getNextId();
-        task.setId(taskId);
-        task.setName("mv-"+ materializedView.getId());
-        task.setCreateTime(System.currentTimeMillis());
-        task.setDbName(testDb.getFullName());
-        Map<String,String> taskProperties = Maps.newHashMap();
-        taskProperties.put("mvId",String.valueOf(materializedView.getId()));
-        task.setProperties(taskProperties);
-        // sql need process
-        task.setDefinition(materializedView.getViewDefineSql());
-        task.setExpireTime(0l);
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        task.setExpireTime(0L);
 
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
-        taskRun.setProcessor(new MvTaskRunProcessor());
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         try {
             // first sync partition

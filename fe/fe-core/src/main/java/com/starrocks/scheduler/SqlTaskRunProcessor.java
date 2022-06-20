@@ -54,7 +54,7 @@ public class SqlTaskRunProcessor implements TaskRunProcessor {
         }
     }
 
-    private void auditAfterExec(TaskRunContext context, StatementBase parsedStmt, PQueryStatistics statistics) {
+    protected void auditAfterExec(TaskRunContext context, StatementBase parsedStmt, PQueryStatistics statistics) {
         String origStmt = context.getDefinition();
         ConnectContext ctx = context.getCtx();
 
