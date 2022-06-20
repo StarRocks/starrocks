@@ -398,7 +398,7 @@ public class DatabaseTransactionMgr {
         StringBuilder tableListString = new StringBuilder();
         txnSpan.addEvent("commit_start");
 
-        List<StateMachine> committers = Lists.newArrayList();
+        List<StateMachine> stateMachineList = Lists.newArrayList();
         for (Long tableId : transactionState.getTableIdList()) {
             Table table = db.getTable(tableId);
             if (table == null) {
@@ -415,7 +415,7 @@ public class DatabaseTransactionMgr {
                 tableListString.append(',');
             }
             tableListString.append(table.getName());
-            committers.add(stateMachine);
+            stateMachineList.add(stateMachine);
         }
         int numPartitions = 0;
         for (Map.Entry<Long, TableCommitInfo> entry : transactionState.getIdToTableCommitInfos().entrySet()) {
@@ -433,7 +433,7 @@ public class DatabaseTransactionMgr {
 
         writeLock();
         try {
-            unprotectedCommitTransaction(transactionState, committers);
+            unprotectedCommitTransaction(transactionState, stateMachineList);
             txnOperated = true;
         } finally {
             writeUnlock();
@@ -805,7 +805,7 @@ public class DatabaseTransactionMgr {
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
-    protected void unprotectedCommitTransaction(TransactionState transactionState, List<StateMachine> committers) {
+    protected void unprotectedCommitTransaction(TransactionState transactionState, List<StateMachine> stateMachineList) {
         // transaction state is modified during check if the transaction could committed
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARE) {
             return;
@@ -826,15 +826,15 @@ public class DatabaseTransactionMgr {
         // update transaction state version
         transactionState.setTransactionStatus(TransactionStatus.COMMITTED);
 
-        for (StateMachine committer : committers) {
-            committer.postCommit(transactionState);
+        for (StateMachine stateMachine : stateMachineList) {
+            stateMachine.postCommit(transactionState);
         }
 
         // persist transactionState
         unprotectUpsertTransactionState(transactionState, false);
 
-        for (StateMachine committer : committers) {
-            committer.postEditLog(transactionState);
+        for (StateMachine stateMachine : stateMachineList) {
+            stateMachine.postCommitEditLog(transactionState);
         }
     }
 

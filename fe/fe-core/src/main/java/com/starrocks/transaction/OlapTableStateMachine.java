@@ -189,7 +189,7 @@ public class OlapTableStateMachine extends StateMachine {
     }
 
     @Override
-    public void postEditLog(TransactionState txnState) {
+    public void postCommitEditLog(TransactionState txnState) {
         // add publish version tasks. set task to null as a placeholder.
         // tasks will be created when publishing version.
         for (long backendId : totalInvolvedBackends) {
