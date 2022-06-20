@@ -74,11 +74,11 @@ docker exec --privileged $container_name /bin/bash -c "$cmd"
 echo "script run over-----"
 
 if [ "$GITHUB_PR_TARGET_BRANCH" == "testing" ];then
-    cd $ROOT/resource/starrocks/fe/fe-core/target
+    cd $ROOT/starrocks/fe/fe-core/target
     jacoco_result="jacoco_${GITHUB_PR_NUMBER}.exec"
     mv jacoco.exec $jacoco_result || true
 
-    java -jar $ROOT/../jacococli.jar report ./$jacoco_result --classfiles ./classes/ --html ./result --sourcefiles $ROOT/resource/starrocks/fe/fe-core/src/main/java/ --encoding utf-8 --name fe-coverage
+    java -jar $ROOT/../jacococli.jar report ./$jacoco_result --classfiles ./classes/ --html ./result --sourcefiles $ROOT/starrocks/fe/fe-core/src/main/java/ --encoding utf-8 --name fe-coverage
 
     cd $ROOT/../cover-checker
     time_count=0
@@ -87,7 +87,7 @@ if [ "$GITHUB_PR_TARGET_BRANCH" == "testing" ];then
         if (( $time_count == 3 ));then
             exit 1
         fi
-        timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar --cover $ROOT/resource/starrocks/fe/fe-core/target/result/ --github-token 66e4c48809eb7e058eb73668b8c816867e6d7cbe  --repo StarRocks/starrocks --threshold 80 --github-url api.github.com  --pr ${GITHUB_PR_NUMBER} -type jacoco
+        timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar --cover $ROOT/starrocks/fe/fe-core/target/result/ --github-token 66e4c48809eb7e058eb73668b8c816867e6d7cbe  --repo StarRocks/starrocks --threshold 80 --github-url api.github.com  --pr ${GITHUB_PR_NUMBER} -type jacoco
         pull_status=$?
         time_count=`expr $time_count + 1`
     done
