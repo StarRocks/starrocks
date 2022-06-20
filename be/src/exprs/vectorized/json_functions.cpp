@@ -219,7 +219,9 @@ ColumnPtr JsonFunctions::get_json_string(FunctionContext* context, const Columns
     auto paths = columns[1];
 
     jsons = json_query(context, Columns{jsons, paths});
-    return json_string(context, Columns{jsons});
+    auto strs = json_string(context, Columns{jsons});
+
+    return _unquote_string(context, Columns{strs});
 }
 
 ColumnPtr JsonFunctions::parse_json(FunctionContext* context, const Columns& columns) {
@@ -322,6 +324,26 @@ ColumnPtr JsonFunctions::_string_json(FunctionContext* context, const Columns& c
             } else {
                 result.append(std::move(json_value));
             }
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr JsonFunctions::_unquote_string(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
+    ColumnBuilder<TYPE_VARCHAR> result(columns[0]->size());
+
+    for (int row = 0; row < columns[0]->size(); row++) {
+        if (viewer.is_null(row)) {
+            result.append_null();
+        } else {
+            auto str = viewer.value(row).to_string();
+            str.erase(str.begin(), std::find_if(str.begin(), str.end(), [](unsigned char ch) { return ch != '"'; }));
+
+            str.erase(std::find_if(str.rbegin(), str.rend(), [](unsigned char ch) { return ch != '"'; }).base(),
+                      str.end());
+
+            result.append(std::move(str));
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
