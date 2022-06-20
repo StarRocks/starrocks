@@ -73,32 +73,3 @@ docker exec --privileged $container_name /bin/bash -c "$cmd"
 
 echo "script run over-----"
 
-if [ "$GITHUB_PR_TARGET_BRANCH" == "testing" ];then
-    cd $ROOT/starrocks/fe/fe-core/target
-    jacoco_result="jacoco_${GITHUB_PR_NUMBER}.exec"
-    mv jacoco.exec $jacoco_result || true
-
-    java -jar $ROOT/../jacococli.jar report ./$jacoco_result --classfiles ./classes/ --html ./result --sourcefiles $ROOT/starrocks/fe/fe-core/src/main/java/ --encoding utf-8 --name fe-coverage
-
-    cd $ROOT/../cover-checker
-    time_count=0
-    pull_status=1
-    while (( $pull_status != 0 ));do
-        if (( $time_count == 3 ));then
-            exit 1
-        fi
-        timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar --cover $ROOT/starrocks/fe/fe-core/target/result/ --github-token 66e4c48809eb7e058eb73668b8c816867e6d7cbe  --repo StarRocks/starrocks --threshold 80 --github-url api.github.com  --pr ${GITHUB_PR_NUMBER} -type jacoco
-        pull_status=$?
-        time_count=`expr $time_count + 1`
-    done
-fi
-
-export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-11.0.14.1.1-1.el7_9.x86_64
-export PATH=$JAVA_HOME/bin:$PATH
-
-cd $ROOT/starrocks/fe
-mvn clean -DskipTests verify sonar:sonar   -Dsonar.projectKey=StarRocks-${GITHUB_PR_NUMBER}   -Dsonar.host.url=http://39.101.206.100:9000   -Dsonar.login=5da9593bf8f8af7060968672bc2451700139349f
-rm -rf fe-core/target/generated-sources/
-
-docker stop $container_name || echo 1
-chown -R jenkins:jenkins $ROOT/../
