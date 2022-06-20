@@ -494,6 +494,12 @@ public class AnalyzeSingleTest {
 
         list = SqlParser.parse("select * from t1 where a1 = 'x\"x;asf';", 0);
         Assert.assertEquals(1, list.size());
+
+        list = SqlParser.parse("-- xxx;\nselect 1;", 0);
+        Assert.assertEquals(1, list.size());
+
+        list = SqlParser.parse("/* xx; x */select 1;", 0);
+        Assert.assertEquals(1, list.size());
     }
 
     @Test
