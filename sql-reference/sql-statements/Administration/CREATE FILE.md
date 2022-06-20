@@ -41,7 +41,7 @@ PROPERTIES
 
 (
 
-    "url" = "https://starrocks-public.oss-cn-xxxx.aliyuncs.com/key/test.pem",
+    "url" = "http://starrocks-public.oss-cn-xxxx.aliyuncs.com/key/test.pem",
 
     "catalog" = "kafka"
 
