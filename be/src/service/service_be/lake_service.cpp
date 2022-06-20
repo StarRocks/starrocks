@@ -39,18 +39,21 @@ Status LakeServiceImpl::publish(lake::Tablet* tablet, const ::starrocks::lake::P
     const auto new_version = request->new_version();
 
     // Read base version metadata
-    auto base_metadata = tablet->get_metadata(base_version);
-    if (base_metadata.status().is_not_found() && tablet->get_metadata(new_version).ok()) {
-        // base version metadata does not exist but the new version metadata has been generated, maybe
-        // this is a duplicated publish version request.
-        return Status::OK();
-    } else if (!base_metadata.ok()) {
-        LOG(WARNING) << "Fail to get " << tablet->metadata_path(base_version) << ": " << base_metadata.status();
-        return base_metadata.status();
+    auto res = tablet->get_metadata(base_version);
+    if (!res.ok()) {
+        // Check if the new version metadata exist.
+        if (res.status().is_not_found() && tablet->get_metadata(new_version).ok()) {
+        // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ optimization, there is no need to invoke `get_metadata` in all
+        // circumstances, e.g, network and permission problems.
+            return Status::OK();
+        } 
+        LOG(WARNING) << "Fail to get " << tablet->metadata_path(base_version) << ": " << res.status();
+        return res.status();
     }
+    const lake::TabletMetadataPtr& base_metadata = res.value();
 
     // make a copy of metadata
-    auto new_metadata = std::make_shared<lake::TabletMetadata>(**base_metadata);
+    auto new_metadata = std::make_shared<lake::TabletMetadata>(*base_metadata);
     new_metadata->set_version(new_version);
 
     // Apply txn logs
