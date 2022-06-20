@@ -28,8 +28,7 @@ import java.util.stream.Collectors;
 public class ExpressionStatisticCalculator {
     private static final Logger LOG = LogManager.getLogger(ExpressionStatisticCalculator.class);
 
-    private static final int DAYS_FROM_0_TO_1970 = 719528;
-    private static final int BC_EPOCH_JULIAN = 1721060;
+    public static final int DAYS_FROM_0_TO_1970 = 719528;
 
     public static ColumnStatistic calculate(ScalarOperator operator, Statistics input) {
         return calculate(operator, input, input != null ? input.getOutputRowCount() : 0);
@@ -184,7 +183,7 @@ public class ExpressionStatisticCalculator {
                     distinctValue = 1;
                     break;
                 case FunctionSet.CURDATE:
-                    minValue = getJulianDate(LocalDate.now());
+                    minValue = LocalDate.now().atStartOfDay().atZone(ZoneId.systemDefault()).toEpochSecond();
                     maxValue = minValue;
                     distinctValue = 1;
                     break;
@@ -304,16 +303,30 @@ public class ExpressionStatisticCalculator {
                     distinctValue = 60;
                     break;
                 case FunctionSet.TO_DATE:
-                    minValue = getJulianDate(Utils.getDatetimeFromLong((long) minValue).toLocalDate());
-                    maxValue = getJulianDate(Utils.getDatetimeFromLong((long) maxValue).toLocalDate());
+                    minValue = Utils.getDatetimeFromLong((long) minValue).toLocalDate()
+                            .atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
+                    maxValue = Utils.getDatetimeFromLong((long) maxValue).toLocalDate()
+                            .atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
                     break;
                 case FunctionSet.TO_DAYS:
-                    minValue = minValue - BC_EPOCH_JULIAN;
-                    maxValue = maxValue - BC_EPOCH_JULIAN;
+                    minValue =
+                            Utils.getDatetimeFromLong((long) minValue).toLocalDate().toEpochDay() + DAYS_FROM_0_TO_1970;
+                    maxValue =
+                            Utils.getDatetimeFromLong((long) maxValue).toLocalDate().toEpochDay() + DAYS_FROM_0_TO_1970;
                     break;
                 case FunctionSet.FROM_DAYS:
-                    minValue = minValue + BC_EPOCH_JULIAN;
-                    maxValue = maxValue + BC_EPOCH_JULIAN;
+                    if (minValue < DAYS_FROM_0_TO_1970) {
+                        minValue = LocalDate.ofEpochDay(0).atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
+                    } else {
+                        minValue = LocalDate.ofEpochDay((long) (minValue - DAYS_FROM_0_TO_1970))
+                                .atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
+                    }
+                    if (maxValue < DAYS_FROM_0_TO_1970) {
+                        maxValue = LocalDate.ofEpochDay(0).atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
+                    } else {
+                        maxValue = LocalDate.ofEpochDay((long) (maxValue - DAYS_FROM_0_TO_1970))
+                                .atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
+                    }
                     break;
                 case FunctionSet.TIMESTAMP:
                     break;
@@ -331,10 +344,13 @@ public class ExpressionStatisticCalculator {
                     break;
                 case FunctionSet.ACOS:
                 case FunctionSet.ASIN:
-                case FunctionSet.ATAN:
-                case FunctionSet.ATAN2:
                     minValue = 0;
                     maxValue = Math.PI;
+                    break;
+                case FunctionSet.ATAN:
+                case FunctionSet.ATAN2:
+                    minValue = -Math.PI / 2;
+                    maxValue = Math.PI / 2;
                     break;
                 case FunctionSet.SIN:
                 case FunctionSet.COS:
@@ -370,10 +386,10 @@ public class ExpressionStatisticCalculator {
                     maxValue = 1;
                     break;
                 case FunctionSet.NEGATIVE:
-                    double negativeMinValue = -maxValue;
-                    double negativeMaxValue = -minValue;
-                    minValue = negativeMinValue;
-                    maxValue = negativeMaxValue;
+                    double negativeMinValue = -minValue;
+                    double negativeMaxValue = -maxValue;
+                    minValue = Math.min(negativeMinValue, negativeMaxValue);
+                    maxValue = Math.max(negativeMinValue, negativeMaxValue);
                     break;
                 case FunctionSet.POSITIVE:
                 case FunctionSet.FLOOR:
@@ -407,6 +423,7 @@ public class ExpressionStatisticCalculator {
             double nullsFraction = 1 - ((1 - left.getNullsFraction()) * (1 - right.getNullsFraction()));
             double distinctValues = Math.max(left.getDistinctValuesCount(), right.getDistinctValuesCount());
             double averageRowSize = callOperator.getType().getTypeSize();
+            long interval;
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.ADD:
                 case FunctionSet.DATE_ADD:
@@ -426,39 +443,38 @@ public class ExpressionStatisticCalculator {
                             Utils.getDatetimeFromLong((long) right.getMinValue()).toLocalDate().toEpochDay();
                     break;
                 case FunctionSet.YEARS_DIFF:
-                    minValue = left.getMinValue() - right.getMaxValue();
-                    maxValue = left.getMaxValue() - right.getMinValue();
-                    distinctValues = Math.min(distinctValues, distinctOfInterval(minValue, maxValue, 3600 * 24 * 365));
+                    interval = 3600 * 24 * 365;
+                    minValue = (left.getMinValue() - right.getMaxValue()) / interval;
+                    maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
                     break;
                 case FunctionSet.MONTHS_DIFF:
-                    minValue = left.getMinValue() - right.getMaxValue();
-                    maxValue = left.getMaxValue() - right.getMinValue();
-                    distinctValues = Math.min(distinctValues, distinctOfInterval(minValue, maxValue, 3600 * 24 * 31));
+                    interval = 3600 * 24 * 31;
+                    minValue = (left.getMinValue() - right.getMaxValue()) / interval;
+                    maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
                     break;
                 case FunctionSet.WEEKS_DIFF:
-                    minValue = left.getMinValue() - right.getMaxValue();
-                    maxValue = left.getMaxValue() - right.getMinValue();
-                    distinctValues = Math.min(distinctValues, distinctOfInterval(minValue, maxValue, 3600 * 24 * 7));
+                    interval = 3600 * 24 * 7;
+                    minValue = (left.getMinValue() - right.getMaxValue()) / interval;
+                    maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
                     break;
                 case FunctionSet.DAYS_DIFF:
-                    minValue = left.getMinValue() - right.getMaxValue();
-                    maxValue = left.getMaxValue() - right.getMinValue();
-                    distinctValues = Math.min(distinctValues, distinctOfInterval(minValue, maxValue, 3600 * 24));
+                    interval = 3600 * 24;
+                    minValue = (left.getMinValue() - right.getMaxValue()) / interval;
+                    maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
                     break;
                 case FunctionSet.HOURS_DIFF:
-                    minValue = left.getMinValue() - right.getMaxValue();
-                    maxValue = left.getMaxValue() - right.getMinValue();
-                    distinctValues = Math.min(distinctValues, distinctOfInterval(minValue, maxValue, 3600));
+                    interval = 3600;
+                    minValue = (left.getMinValue() - right.getMaxValue()) / interval;
+                    maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
                     break;
                 case FunctionSet.MINUTES_DIFF:
-                    minValue = left.getMinValue() - right.getMaxValue();
-                    maxValue = left.getMaxValue() - right.getMinValue();
-                    distinctValues = Math.min(distinctValues, distinctOfInterval(minValue, maxValue, 60));
+                    interval = 60;
+                    minValue = (left.getMinValue() - right.getMaxValue()) / interval;
+                    maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
                     break;
                 case FunctionSet.SECONDS_DIFF:
                     minValue = left.getMinValue() - right.getMaxValue();
                     maxValue = left.getMaxValue() - right.getMinValue();
-                    distinctValues = Math.min(distinctValues, distinctOfInterval(minValue, maxValue, 1));
                     break;
                 case FunctionSet.MULTIPLY:
                     minValue = Math.min(Math.min(
@@ -521,34 +537,6 @@ public class ExpressionStatisticCalculator {
 
         private double divisorNotZero(double value) {
             return value == 0 ? 1.0 : value;
-        }
-
-        private double distinctOfInterval(double min, double max, double interval) {
-            return ((max - min) / interval) + 2;
-        }
-
-        private int getJulianDate(LocalDate date) {
-            int year = date.getYear();
-            int month = date.getMonthValue();
-            int day = date.getDayOfMonth();
-
-            int century;
-            int julian;
-
-            if (month > 2) {
-                month += 1;
-                year += 4800;
-            } else {
-                month += 13;
-                year += 4799;
-            }
-
-            century = year / 100;
-            julian = year * 365 - 32167;
-            julian += year / 4 - century + century / 4;
-            julian += 7834 * month / 256 + day;
-
-            return julian;
         }
     }
 }
