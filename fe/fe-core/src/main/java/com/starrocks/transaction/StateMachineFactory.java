@@ -6,14 +6,13 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.lake.LakeTable;
 
-public class TableCommitterFactory {
-    public TableCommitter create(DatabaseTransactionMgr dbTxnMgr, Table table) {
+public class StateMachineFactory {
+    public StateMachine create(DatabaseTransactionMgr dbTxnMgr, Table table) {
         if (table instanceof LakeTable) {
-            // todo
-            return null;
+            return null; // todo
         }
         if (table instanceof OlapTable) {
-            return new OlapTableCommitter(dbTxnMgr, (OlapTable) table);
+            return new OlapTableStateMachine(dbTxnMgr, (OlapTable) table);
         }
         return null;
     }

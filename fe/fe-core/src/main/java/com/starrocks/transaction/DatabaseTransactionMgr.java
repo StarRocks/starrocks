@@ -54,7 +54,6 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -136,7 +135,7 @@ public class DatabaseTransactionMgr {
 
     private long commitTsInc = 0;
 
-    private TableCommitterFactory committerFactory = new TableCommitterFactory();
+    private final StateMachineFactory stateMachineFactory = new StateMachineFactory();
 
     protected void readLock() {
         this.transactionLock.readLock().lock();
@@ -399,7 +398,7 @@ public class DatabaseTransactionMgr {
         StringBuilder tableListString = new StringBuilder();
         txnSpan.addEvent("commit_start");
 
-        List<TableCommitter> committers = Lists.newArrayList();
+        List<StateMachine> committers = Lists.newArrayList();
         for (Long tableId : transactionState.getTableIdList()) {
             Table table = db.getTable(tableId);
             if (table == null) {
@@ -407,16 +406,16 @@ public class DatabaseTransactionMgr {
                 // or table really not exist.
                 continue;
             }
-            TableCommitter committer = committerFactory.create(this, table);
-            if (committer == null) {
+            StateMachine stateMachine = stateMachineFactory.create(this, table);
+            if (stateMachine == null) {
                 throw new TransactionCommitFailedException(table.getName() + " does not support write");
             }
-            committer.preCommit(transactionState, tabletCommitInfos);
+            stateMachine.preCommit(transactionState, tabletCommitInfos);
             if (tableListString.length() != 0) {
                 tableListString.append(',');
             }
             tableListString.append(table.getName());
-            committers.add(committer);
+            committers.add(stateMachine);
         }
         int numPartitions = 0;
         for (Map.Entry<Long, TableCommitInfo> entry : transactionState.getIdToTableCommitInfos().entrySet()) {
@@ -806,7 +805,7 @@ public class DatabaseTransactionMgr {
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
-    protected void unprotectedCommitTransaction(TransactionState transactionState, List<TableCommitter> committers) {
+    protected void unprotectedCommitTransaction(TransactionState transactionState, List<StateMachine> committers) {
         // transaction state is modified during check if the transaction could committed
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARE) {
             return;
@@ -827,14 +826,14 @@ public class DatabaseTransactionMgr {
         // update transaction state version
         transactionState.setTransactionStatus(TransactionStatus.COMMITTED);
 
-        for (TableCommitter committer : committers) {
+        for (StateMachine committer : committers) {
             committer.postCommit(transactionState);
         }
 
         // persist transactionState
         unprotectUpsertTransactionState(transactionState, false);
 
-        for (TableCommitter committer : committers) {
+        for (StateMachine committer : committers) {
             committer.postEditLog(transactionState);
         }
     }
@@ -1203,104 +1202,19 @@ public class DatabaseTransactionMgr {
     }
 
     private void updateCatalogAfterCommitted(TransactionState transactionState, Database db) {
-        Set<Long> errorReplicaIds = transactionState.getErrorReplicas();
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             long tableId = tableCommitInfo.getTableId();
-            OlapTable table = (OlapTable) db.getTable(tableId);
-            for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-                long partitionId = partitionCommitInfo.getPartitionId();
-                Partition partition = table.getPartition(partitionId);
-                if (!partition.isUseStarOS()) {
-                    List<MaterializedIndex> allIndices =
-                            partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
-                    for (MaterializedIndex index : allIndices) {
-                        for (Tablet tablet : index.getTablets()) {
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                                if (errorReplicaIds.contains(replica.getId())) {
-                                    // should get from transaction state
-                                    replica.updateLastFailedVersion(partitionCommitInfo.getVersion());
-                                }
-                            }
-                        }
-                    }
-                }
-                partition.setNextVersion(partition.getNextVersion() + 1);
-            }
+            Table table = db.getTable(tableId);
+            StateMachine stateMachine = stateMachineFactory.create(this, table);
+            stateMachine.applyCommit(transactionState, tableCommitInfo);
         }
     }
 
     private boolean updateCatalogAfterVisible(TransactionState transactionState, Database db) {
-        Set<Long> errorReplicaIds = transactionState.getErrorReplicas();
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
-            long tableId = tableCommitInfo.getTableId();
-            OlapTable table = (OlapTable) db.getTable(tableId);
-            List<String> validDictCacheColumns = Lists.newArrayList();
-            long maxPartitionVersionTime = -1;
-            for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-                long partitionId = partitionCommitInfo.getPartitionId();
-                long newCommitVersion = partitionCommitInfo.getVersion();
-                Partition partition = table.getPartition(partitionId);
-                if (!partition.isUseStarOS()) {
-                    List<MaterializedIndex> allIndices =
-                            partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
-                    for (MaterializedIndex index : allIndices) {
-                        for (Tablet tablet : index.getTablets()) {
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                                long lastFailedVersion = replica.getLastFailedVersion();
-                                long newVersion = newCommitVersion;
-                                long lastSucessVersion = replica.getLastSuccessVersion();
-                                if (!errorReplicaIds.contains(replica.getId())) {
-                                    if (replica.getLastFailedVersion() > 0) {
-                                        // if the replica is a failed replica, then not changing version
-                                        newVersion = replica.getVersion();
-                                    } else if (!replica.checkVersionCatchUp(partition.getVisibleVersion(), true)) {
-                                        // this means the replica has error in the past, but we did not observe it
-                                        // during upgrade, one job maybe in quorum finished state, for example, A,B,C 3 replica
-                                        // A,B 's version is 10, C's version is 10 but C' 10 is abnormal should be rollback
-                                        // then we will detect this and set C's last failed version to 10 and last success version to 11
-                                        // this logic has to be replayed in checkpoint thread
-                                        lastFailedVersion = partition.getVisibleVersion();
-                                        newVersion = replica.getVersion();
-                                    }
-
-                                    // success version always move forward
-                                    lastSucessVersion = newCommitVersion;
-                                } else {
-                                    // for example, A,B,C 3 replicas, B,C failed during publish version, then B C will be set abnormal
-                                    // all loading will failed, B,C will have to recovery by clone, it is very inefficient and maybe lost data
-                                    // Using this method, B,C will publish failed, and fe will publish again, not update their last failed version
-                                    // if B is publish successfully in next turn, then B is normal and C will be set abnormal so that quorum is maintained
-                                    // and loading will go on.
-                                    newVersion = replica.getVersion();
-                                    if (newCommitVersion > lastFailedVersion) {
-                                        lastFailedVersion = newCommitVersion;
-                                    }
-                                }
-                                replica.updateVersionInfo(newVersion, lastFailedVersion, lastSucessVersion);
-                            }
-                        }
-                    } // end for indices
-                }
-                long version = partitionCommitInfo.getVersion();
-                long versionTime = partitionCommitInfo.getVersionTime();
-                partition.updateVisibleVersion(version, versionTime);
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("transaction state {} set partition {}'s version to [{}]",
-                            transactionState, partition.getId(), version);
-                }
-                if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
-                    for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
-                        IDictManager.getInstance().removeGlobalDict(tableId, column);
-                    }
-                }
-                if (!partitionCommitInfo.getValidDictCacheColumns().isEmpty()) {
-                    validDictCacheColumns = partitionCommitInfo.getValidDictCacheColumns();
-                }
-                maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
-            }
-            for (String column : validDictCacheColumns) {
-                IDictManager.getInstance().updateGlobalDict(tableId, column, maxPartitionVersionTime);
-            }
+            Table table = db.getTable(tableCommitInfo.getTableId());
+            StateMachine stateMachine = stateMachineFactory.create(this, table);
+            stateMachine.applyPublishVersion(transactionState, tableCommitInfo);
         }
         return true;
     }
