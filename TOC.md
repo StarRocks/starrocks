@@ -402,7 +402,7 @@
     + 百分位函数
       + [percentile_approx_raw](/sql-reference/sql-functions/percentile-functions/percentile_approx_raw.md)
       + [percentile_empty](/sql-reference/sql-functions/percentile-functions/percentile_empty.md)
-      + [percenntile_hash](/sql-reference/sql-functions/percentile-functions/percentile_hash.md)
+      + [percentile_hash](/sql-reference/sql-functions/percentile-functions/percentile_hash.md)
       + [percentile_union](/sql-reference/sql-functions/percentile-functions/percentile_union.md)
     + 数学函数
       + [abs](/sql-reference/sql-functions/math-functions/abs.md)

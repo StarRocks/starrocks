@@ -269,7 +269,7 @@ PARTITION BY RANGE (datekey) (
 
 更详细的语法规则请参考：（[数据分布-批量创建和修改分区](../table_design/Data_distribution.md)）。
 
-#### **distribution_des**
+#### **distribution_desc**
 
 Hash 分桶
 
