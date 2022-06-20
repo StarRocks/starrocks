@@ -154,7 +154,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     nullable_column->append_nulls(1);
                 }
             }
-            break ;
+            break;
         }
         case 9: {
             // ERROR_CODE
