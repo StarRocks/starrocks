@@ -104,6 +104,7 @@ void run_publish_version_task(ThreadPool& threadpool, const TAgentTaskRequest& p
                     LOG(WARNING) << "Publish txn failed tablet:" << tablet->tablet_id() << " version:" << task.version
                                  << " partition:" << task.partition_id << " txn_id: " << task.txn_id
                                  << " rowset:" << task.rowset->rowset_id();
+                    tablet_span->SetStatus(trace::StatusCode::kError, task.st.get_error_msg());
                 } else {
                     LOG(INFO) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
                               << " partition:" << task.partition_id << " txn_id: " << task.txn_id
