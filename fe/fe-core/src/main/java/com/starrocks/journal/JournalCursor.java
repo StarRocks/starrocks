@@ -20,7 +20,9 @@ package com.starrocks.journal;
 // This class is like JDBC ResultSet.
 public interface JournalCursor {
 
-    // Return the next journal. return null when there is no more journals
+    // Return the next journal.
+    // Return null when there is no more journals, or if need to retry from outside.
+    // Raise a JournalException if there is an error in reading from the underlying storage.
     public JournalEntity next() throws InterruptedException, JournalException;
 
     public void close();

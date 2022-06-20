@@ -101,7 +101,7 @@ public class BDBJournalCursor implements JournalCursor {
 
         String dbName = Long.toString(dbNames.get(nextDbPositionIndex));
         JournalException exception = null;
-        for (int i = 0; i != RETRY_TIME; ++ i) {
+        for (int i = 0; i < RETRY_TIME; ++ i) {
             try {
                 if (i != 0) {
                     Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
@@ -131,7 +131,7 @@ public class BDBJournalCursor implements JournalCursor {
         throw exception;
     }
 
-    protected JournalEntity serializedData(DatabaseEntry data) throws JournalException {
+    protected JournalEntity deserializedData(DatabaseEntry data) throws JournalException {
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(data.getData()));
         JournalEntity ret = new JournalEntity();
         try {
@@ -166,7 +166,7 @@ public class BDBJournalCursor implements JournalCursor {
 
         DatabaseEntry theData = new DatabaseEntry();
         JournalException exception = null;
-        for (int i = 0; i != RETRY_TIME; i++) {
+        for (int i = 0; i < RETRY_TIME; i++) {
             // 1. sleep after retry
             if (i != 0) {
                 Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
@@ -178,7 +178,7 @@ public class BDBJournalCursor implements JournalCursor {
 
                 if (operationStatus == OperationStatus.SUCCESS) {
                     // 3. serialized
-                    JournalEntity entity = serializedData(theData);
+                    JournalEntity entity = deserializedData(theData);
                     currentKey++;
                     return entity;
                 } else if (operationStatus == OperationStatus.NOTFOUND) {
