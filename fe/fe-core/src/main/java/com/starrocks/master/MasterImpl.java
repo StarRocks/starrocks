@@ -148,7 +148,14 @@ public class MasterImpl {
     }
 
     public TMasterResult finishTask(TFinishTaskRequest request) {
+        // if current node is not master, reject the request
         TMasterResult result = new TMasterResult();
+        if (!Catalog.getCurrentCatalog().isMaster()) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+            result.setStatus(status);
+            return result;
+        }
         TStatus tStatus = new TStatus(TStatusCode.OK);
         result.setStatus(tStatus);
         // check task status
@@ -905,6 +912,14 @@ public class MasterImpl {
     }
 
     public TMasterResult report(TReportRequest request) throws TException {
+        // if current node is not master, reject the request
+        TMasterResult result = new TMasterResult();
+        if (!Catalog.getCurrentCatalog().isMaster()) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+            result.setStatus(status);
+            return result;
+        }
         return reportHandler.handleReport(request);
     }
 
