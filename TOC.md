@@ -365,6 +365,7 @@
       + [bitmap_to_string](/sql-reference/sql-functions/bitmap-functions/bitmap_to_string.md)
       + [bitmap_to_array](/sql-reference/sql-functions/bitmap-functions/bitmap_to_array.md)
       + [bitmap_union](/sql-reference/sql-functions/bitmap-functions/bitmap_union.md)
+      + [bitmap_union_count](/sql-reference/sql-functions/bitmap-functions/bitmap_union_count.md)
       + [bitmap_xor](/sql-reference/sql-functions/bitmap-functions/bitmap_xor.md)
       + [to_bitmap](/sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
     + 数组函数
