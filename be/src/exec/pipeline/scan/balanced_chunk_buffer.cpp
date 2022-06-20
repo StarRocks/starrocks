@@ -17,10 +17,8 @@ BalancedChunkBuffer::BalancedChunkBuffer(BalanceStrategy strategy, int output_ru
 
 BalancedChunkBuffer::~BalancedChunkBuffer() {
     for (int i = 0; i < _output_runs; i++) {
-        if (!_sub_buffers[i]->empty()) {
-            LOG(INFO) << fmt::format("BalancedChunkBuffer destory but remained {} chunks in buffer {}",
-                                     _sub_buffers[i]->get_size(), i);
-        }
+        DCHECK(_sub_buffers[i]->empty()) << fmt::format(
+                "BalancedChunkBuffer destory but remained {} chunks in buffer {}", _sub_buffers[i]->get_size(), i);
     }
 }
 

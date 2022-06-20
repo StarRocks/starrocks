@@ -95,6 +95,9 @@ bool ScanOperator::has_output() const {
     if (has_shared_chunk_source()) {
         return true;
     }
+    if (has_shared_output()) {
+        return true;
+    }
 
     for (const auto& chunk_source : _chunk_sources) {
         if (chunk_source != nullptr && (chunk_source->has_output())) {
@@ -149,6 +152,9 @@ bool ScanOperator::is_finished() const {
     if (has_shared_chunk_source()) {
         return false;
     }
+    if (has_shared_output()) {
+        return false;
+    }
 
     // Remain some data in the chunksource
     for (const auto& chunk_source : _chunk_sources) {
@@ -175,6 +181,14 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         _workgroup->incr_period_ask_chunk_num(1);
     }
 
+    vectorized::ChunkPtr res = get_chunk_from_buffer();
+    if (res == nullptr) {
+        return nullptr;
+    }
+    eval_runtime_bloom_filters(res.get());
+    return res;
+
+    /*
     for (auto& chunk_source : _chunk_sources) {
         if (chunk_source != nullptr && chunk_source->has_output()) {
             auto&& chunk = chunk_source->get_next_chunk_from_buffer();
@@ -185,6 +199,7 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     }
 
     return nullptr;
+    */
 }
 
 int64_t ScanOperator::global_rf_wait_timeout_ns() const {

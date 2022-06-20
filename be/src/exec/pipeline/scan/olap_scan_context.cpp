@@ -29,6 +29,10 @@ bool OlapScanContext::has_active_input() const {
     return !_active_inputs.empty();
 }
 
+BalancedChunkBuffer& OlapScanContext::get_shared_buffer() {
+    return _chunk_buffer;
+}
+
 Status OlapScanContext::prepare(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
     RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));

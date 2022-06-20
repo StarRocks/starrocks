@@ -46,6 +46,8 @@ public:
     void attach_chunk_source(int32_t source_index) override;
     void detach_chunk_source(int32_t source_index) override;
     bool has_shared_chunk_source() const override;
+    bool has_shared_output() const override;
+    ChunkPtr get_chunk_from_buffer() override;
 
     size_t max_scan_concurrency() const override;
 

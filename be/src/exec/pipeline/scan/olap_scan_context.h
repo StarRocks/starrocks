@@ -54,6 +54,7 @@ public:
     void attach_shared_input(int32_t operator_seq, int32_t source_index);
     void detach_shared_input(int32_t operator_seq, int32_t source_index);
     bool has_active_input() const;
+    BalancedChunkBuffer& get_shared_buffer();
 
     void update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows);
     size_t avg_row_bytes() const { return _avg_row_bytes; }

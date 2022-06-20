@@ -105,6 +105,18 @@ bool OlapScanOperator::has_shared_chunk_source() const {
     return _ctx->has_active_input();
 }
 
+bool OlapScanOperator::has_shared_output() const {
+    return !_ctx->get_chunk_buffer().empty(_driver_sequence);
+}
+
+ChunkPtr OlapScanOperator::get_chunk_from_buffer() {
+    vectorized::ChunkPtr chunk = nullptr;
+    if (_ctx->get_chunk_buffer().try_get(_driver_sequence, &chunk)) {
+        return chunk;
+    }
+    return nullptr;
+}
+
 size_t OlapScanOperator::max_scan_concurrency() const {
     int64_t query_limit = runtime_state()->query_mem_tracker_ptr()->limit();
 
