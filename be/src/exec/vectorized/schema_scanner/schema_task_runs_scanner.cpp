@@ -15,6 +15,7 @@ SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"EXPIRE_TIME", TYPE_DATETIME, sizeof(StringValue), true},
         {"ERROR_CODE", TYPE_BIGINT, sizeof(StringValue), true},
         {"ERROR_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true}};
 
@@ -136,9 +137,29 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 8: {
-            // ERROR_CODE
+            // EXPIRE_TIME
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
+                auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                if (task_run_info.__isset.expire_time) {
+                    int64_t expire_time = task_run_info.expire_time;
+                    if (expire_time <= 0) {
+                        nullable_column->append_nulls(1);
+                    } else {
+                        DateTimeValue t;
+                        t.from_unixtime(expire_time, TimezoneUtils::default_time_zone);
+                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                    }
+                } else {
+                    nullable_column->append_nulls(1);
+                }
+            }
+            break;
+        }
+        case 9: {
+            // ERROR_CODE
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
                 if (task_run_info.__isset.error_code) {
                     int64_t value = task_run_info.error_code;
                     fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
@@ -148,10 +169,10 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 9: {
+        case 10: {
             // ERROR_MESSAGE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
                 if (task_run_info.__isset.error_message) {
                     const std::string* str = &task_run_info.error_message;
                     Slice value(str->c_str(), str->length());
