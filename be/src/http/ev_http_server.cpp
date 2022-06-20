@@ -39,6 +39,7 @@
 #include "http/http_request.h"
 #include "service/brpc.h"
 #include "util/debug_util.h"
+#include "util/errno.h"
 #include "util/thread.h"
 
 namespace starrocks {
@@ -99,40 +100,71 @@ Status EvHttpServer::start() {
     for (int i = 0; i < _num_workers; ++i) {
         auto worker = [this, i]() {
             LOG(INFO) << "EvHttpServer worker start, id=" << i;
-            std::shared_ptr<event_base> base(event_base_new(), [](event_base* base) { event_base_free(base); });
+            struct event_base* base = event_base_new();
             if (base == nullptr) {
                 LOG(WARNING) << "Couldn't create an event_base.";
                 return;
             }
+            _event_bases.push_back(base);
+
             /* Create a new evhttp object to handle requests. */
-            std::shared_ptr<evhttp> http(evhttp_new(base.get()), [](evhttp* http) { evhttp_free(http); });
+            struct evhttp* http = evhttp_new(base);
             if (http == nullptr) {
                 LOG(WARNING) << "Couldn't create an evhttp.";
                 return;
             }
-            auto res = evhttp_accept_socket(http.get(), _server_fd);
+            _https.push_back(http);
+
+            auto res = evhttp_accept_socket(http, _server_fd);
             if (res < 0) {
-                LOG(WARNING) << "evhttp accept socket failed";
+                LOG(WARNING) << "evhttp accept socket failed"
+                             << ", error:" << errno_to_string(errno);
                 return;
             }
 
-            evhttp_set_newreqcb(http.get(), on_connection, this);
-            evhttp_set_gencb(http.get(), on_request, this);
+            evhttp_set_newreqcb(http, on_connection, this);
+            evhttp_set_gencb(http, on_request, this);
 
-            event_base_dispatch(base.get());
+            event_base_dispatch(base);
         };
         _workers.emplace_back(worker);
-        Thread::set_thread_name(_workers.back(), "ev_http_server");
-        _workers[i].detach();
+        Thread::set_thread_name(_workers.back(), "http_server");
     }
     return Status::OK();
 }
 
 void EvHttpServer::stop() {
+    // break the base to stop the event
+    for (auto base : _event_bases) {
+        event_base_loopbreak(base);
+    }
+
+    // shutdown the socket to wake up the epoll_wait
+    shutdown(_server_fd, SHUT_RDWR);
+
+    // join the thread before close the socket
+    join();
+
+    // close the socket at last
     close(_server_fd);
+
+    // free the evhttp and event_base
+    for (auto http : _https) {
+        evhttp_free(http);
+    }
+
+    for (auto base : _event_bases) {
+        event_base_free(base);
+    }
 }
 
-void EvHttpServer::join() {}
+void EvHttpServer::join() {
+    for (auto& thread : _workers) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+}
 
 Status EvHttpServer::_bind() {
     butil::EndPoint point;
@@ -146,10 +178,8 @@ Status EvHttpServer::_bind() {
     // default reuse_addr is true and reuse_port is false.
     _server_fd = butil::tcp_listen(point);
     if (_server_fd < 0) {
-        char buf[64];
         std::stringstream ss;
-        ss << "tcp listen failed, errno=" << errno << ", errmsg=webserver_port:" << _port << ". "
-           << strerror_r(errno, buf, sizeof(buf));
+        ss << "Failed to listen port. port: " << _port << ", error: " << errno_to_string(errno);
         return Status::InternalError(ss.str());
     }
     if (_port == 0) {
@@ -162,10 +192,8 @@ Status EvHttpServer::_bind() {
     }
     res = butil::make_non_blocking(_server_fd);
     if (res < 0) {
-        char buf[64];
         std::stringstream ss;
-        ss << "make socket to non_blocking failed, errno=" << errno
-           << ", errmsg=" << strerror_r(errno, buf, sizeof(buf));
+        ss << "Failed to generate a non-blocking socket. error: " << errno_to_string(errno);
         return Status::InternalError(ss.str());
     }
     return Status::OK();
