@@ -131,7 +131,7 @@ public class BDBJournalCursor implements JournalCursor {
         throw exception;
     }
 
-    protected JournalEntity deserializedData(DatabaseEntry data) throws JournalException {
+    protected JournalEntity deserializeData(DatabaseEntry data) throws JournalException {
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(data.getData()));
         JournalEntity ret = new JournalEntity();
         try {
@@ -178,7 +178,7 @@ public class BDBJournalCursor implements JournalCursor {
 
                 if (operationStatus == OperationStatus.SUCCESS) {
                     // 3. serialized
-                    JournalEntity entity = deserializedData(theData);
+                    JournalEntity entity = deserializeData(theData);
                     currentKey++;
                     return entity;
                 } else if (operationStatus == OperationStatus.NOTFOUND) {
