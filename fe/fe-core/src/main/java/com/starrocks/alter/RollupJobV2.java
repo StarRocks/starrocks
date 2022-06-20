@@ -26,12 +26,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.MVColumnItem;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -52,7 +50,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.io.Text;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -78,7 +75,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.StringReader;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -825,8 +821,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             return;
         }
         // parse the define stmt to schema
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(origStmt.originStmt),
-                SqlModeHelper.MODE_DEFAULT));
         ConnectContext connectContext = new ConnectContext();
         connectContext.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -834,13 +828,13 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             return;
         }
         connectContext.setDatabase(db.getFullName());
-        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), connectContext);
-        analyzer.setIgnoreCast();
         CreateMaterializedViewStmt stmt = null;
         try {
-            stmt = (CreateMaterializedViewStmt) SqlParserUtils.getStmt(parser, origStmt.idx);
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(
+                    origStmt.originStmt, SqlModeHelper.MODE_DEFAULT);
+            stmt = (CreateMaterializedViewStmt) stmts.get(origStmt.idx);
             stmt.setIsReplay(true);
-            stmt.analyze(analyzer);
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
         } catch (Exception e) {
             // Under normal circumstances, the stmt will not fail to analyze.
             throw new IOException("error happens when parsing create materialized view stmt: " + stmt, e);

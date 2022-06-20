@@ -188,6 +188,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         if (defineStmt == null) {
             return;
         }
+        // TODO here we should use the new parser, but there are some compatibility issues that will resolve in later PR
         // parse the define stmt to schema
         SqlParser parser = new SqlParser(new SqlScanner(new StringReader(defineStmt.originStmt),
                 SqlModeHelper.MODE_DEFAULT));
