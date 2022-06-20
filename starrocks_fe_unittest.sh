@@ -8,7 +8,7 @@ ROOT=`cd "$ROOT/.."; pwd`
 
 GITHUB_PR_NUMBER=${1:?"need GITHUB_PR_NUMBER parameter"}
 GITHUB_PR_TARGET_BRANCH=${2:?"need GITHUB_PR_TARGET_BRANCH parameter"}
-GITHUB_PR_TARGET_BRANCH="main"
+
 #GITHUB_PR_COMMENT_BODY=${3:-"default"}
 echo "the github number"$GITHUB_PR_NUMBE
 echo "the branch="$GITHUB_PR_TARGET_BRANCH
@@ -60,7 +60,7 @@ docker rm $container_name || echo 1
 echo "the docker map path="$ROOT
 echo "the root ls="`ls /home/runner/work/starrocks/starrocks`
 m2Path="/home/runner/"
-docker run --privileged -v $m2Path/.m2:/root/.m2 -v $ROOT/starrocks:/root/starrocks -v /etc/timezone:/etc/timezone:ro -v /etc/localtime:/etc/localtime:ro --name $container_name -d starrocks/dev-env:$GITHUB_PR_TARGET_BRANCH /bin/bash -c "while true;do echo hello;sleep 1;done"
+docker run --privileged -v $m2Path/.m2:/root/.m2 -v $ROOT/starrocks:/root/starrocks -v /etc/timezone:/etc/timezone:ro -v /etc/localtime:/etc/localtime:ro --name $container_name -d starrocks/dev-env:main /bin/bash -c "while true;do echo hello;sleep 1;done"
 sleep 10
 
 echo "run docker for script"
