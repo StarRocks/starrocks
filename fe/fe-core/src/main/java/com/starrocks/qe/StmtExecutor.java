@@ -1104,7 +1104,8 @@ public class StmtExecutor {
                 }
             }
 
-            if (loadedRows == 0 && filteredRows == 0) {
+            if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
+                    || stmt instanceof UpdateStmt)) {
                 if (targetTable instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
                     Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
