@@ -157,6 +157,7 @@ public class EsScanNode extends ScanNode {
         Map<String, String> properties = Maps.newHashMap();
         properties.put(EsTable.USER, table.getUserName());
         properties.put(EsTable.PASSWORD, table.getPasswd());
+        properties.put(EsTable.ES_NET_SSL, String.valueOf(table.sslEnabled()));
         TEsScanNode esScanNode = new TEsScanNode(desc.getId().asInt());
         esScanNode.setProperties(properties);
         if (table.isDocValueScanEnable()) {
