@@ -136,7 +136,7 @@ public class DatabaseTransactionMgr {
 
     private long commitTsInc = 0;
 
-    private TransactionCommitterFactory committerFactory = new TransactionCommitterFactory();
+    private TableCommitterFactory committerFactory = new TableCommitterFactory();
 
     protected void readLock() {
         this.transactionLock.readLock().lock();

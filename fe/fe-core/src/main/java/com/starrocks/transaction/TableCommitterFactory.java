@@ -6,7 +6,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.lake.LakeTable;
 
-public class TransactionCommitterFactory {
+public class TableCommitterFactory {
     public TableCommitter create(DatabaseTransactionMgr dbTxnMgr, Table table) {
         if (table instanceof LakeTable) {
             // todo
@@ -17,5 +17,4 @@ public class TransactionCommitterFactory {
         }
         return null;
     }
-
 }
