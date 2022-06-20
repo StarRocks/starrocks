@@ -1,10 +1,10 @@
 package com.starrocks.sql.optimizer.rule.mv;
 
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
@@ -20,7 +20,7 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         Assert.assertTrue(plan.getScanNodes().get(0) instanceof OlapScanNode);
         OlapScanNode olapScanNode = (OlapScanNode) plan.getScanNodes().get(0);
         Long selectedIndexid = olapScanNode.getSelectedIndexId();
-        Catalog globalStateMgr = starRocksAssert.getCtx().getCatalog();
+        GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
         Database database = globalStateMgr.getDb("default_cluster:test");
         Table table = database.getTable("lineorder_flat_for_mv");
         Assert.assertTrue(table instanceof OlapTable);
@@ -30,7 +30,7 @@ public class MaterializedViewRuleTest extends PlanTestBase {
 
     @Test
     public void testKeyColumnsMatch() throws Exception {
-        Catalog globalStateMgr = starRocksAssert.getCtx().getCatalog();
+        GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
         Database database = globalStateMgr.getDb("default_cluster:test");
         Table table = database.getTable("lineorder_flat_for_mv");
         OlapTable baseTable = (OlapTable) table;
