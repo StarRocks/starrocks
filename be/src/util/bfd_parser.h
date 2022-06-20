@@ -25,6 +25,10 @@
 #define PACKAGE_VERSION
 #endif
 
+// Following macros are redefined in bfd.h
+#undef DIAGNOSTIC_PUSH
+#undef DIAGNOSTIC_POP
+#undef DIAGNOSTIC_IGNORE
 #include <bfd.h>
 
 #include <mutex>

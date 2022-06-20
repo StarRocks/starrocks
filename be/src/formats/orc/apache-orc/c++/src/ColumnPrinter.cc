@@ -319,7 +319,7 @@ void LongColumnPrinter::printRow(uint64_t rowId) {
         writeString(buffer, "null");
     } else {
         char numBuffer[64];
-        snprintf(numBuffer, sizeof(numBuffer), "%" INT64_FORMAT_STRING "d", static_cast<int64_t>(data[rowId]));
+        snprintf(numBuffer, sizeof(numBuffer), "%" INT64_FORMAT_STRING "d", static_cast<long long int>(data[rowId]));
         writeString(buffer, numBuffer);
     }
 }
@@ -539,7 +539,7 @@ void UnionColumnPrinter::printRow(uint64_t rowId) {
     } else {
         writeString(buffer, "{\"tag\": ");
         char numBuffer[64];
-        snprintf(numBuffer, sizeof(numBuffer), "%" INT64_FORMAT_STRING "d", static_cast<int64_t>(tags[rowId]));
+        snprintf(numBuffer, sizeof(numBuffer), "%" INT64_FORMAT_STRING "d", static_cast<long long int>(tags[rowId]));
         writeString(buffer, numBuffer);
         writeString(buffer, ", \"value\": ");
         fieldPrinter[tags[rowId]]->printRow(offsets[rowId]);
@@ -680,7 +680,7 @@ void TimestampColumnPrinter::printRow(uint64_t rowId) {
         }
         char numBuffer[64];
         snprintf(numBuffer, sizeof(numBuffer), "%0*" INT64_FORMAT_STRING "d\"",
-                 static_cast<int>(NANO_DIGITS - zeroDigits), static_cast<int64_t>(nanos));
+                 static_cast<int>(NANO_DIGITS - zeroDigits), static_cast<long long int>(nanos));
         writeString(buffer, numBuffer);
     }
 }
