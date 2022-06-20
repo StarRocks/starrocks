@@ -31,7 +31,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.ExpressionPartitionUtil;
+import com.starrocks.sql.common.ExpressionPartitionUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.plugin.AuditEvent;
