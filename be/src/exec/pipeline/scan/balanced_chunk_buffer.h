@@ -19,7 +19,7 @@ enum BalanceStrategy {
 class BalancedChunkBuffer {
 public:
     BalancedChunkBuffer(BalanceStrategy strategy, int output_runs);
-    ~BalancedChunkBuffer() = default;
+    ~BalancedChunkBuffer();
 
     size_t size(int buffer_index) const;
     bool empty(int buffer_index) const;

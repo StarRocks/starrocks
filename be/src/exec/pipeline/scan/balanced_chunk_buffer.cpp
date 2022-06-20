@@ -2,6 +2,7 @@
 
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 
+#include "fmt/format.h"
 #include "util/blocking_queue.hpp"
 
 namespace starrocks::pipeline {
@@ -11,6 +12,15 @@ BalancedChunkBuffer::BalancedChunkBuffer(BalanceStrategy strategy, int output_ru
     DCHECK_GT(output_runs, 0);
     for (int i = 0; i < output_runs; i++) {
         _sub_buffers.emplace_back(std::make_unique<QueueT>());
+    }
+}
+
+BalancedChunkBuffer::~BalancedChunkBuffer() {
+    for (int i = 0; i < _output_runs; i++) {
+        if (!_sub_buffers[i]->empty()) {
+            LOG(INFO) << fmt::format("BalancedChunkBuffer destory but remained {} chunks in buffer {}",
+                                     _sub_buffers[i]->get_size(), i);
+        }
     }
 }
 
@@ -42,13 +52,21 @@ bool BalancedChunkBuffer::empty(int buffer_index) const {
 }
 
 bool BalancedChunkBuffer::try_get(int buffer_index, vectorized::ChunkPtr* output_chunk) {
+    LOG(INFO) << "BalancedChunkBuffer get chunk " << buffer_index;
     return _get_sub_buffer(buffer_index)->try_get(output_chunk);
 }
 
 bool BalancedChunkBuffer::put(int buffer_index, vectorized::ChunkPtr chunk) {
-    int target_index = _output_index.fetch_add(1);
-    target_index %= _output_runs;
-    return _get_sub_buffer(target_index)->put(chunk);
+    LOG(INFO) << "BalancedChunkBuffer put chunk " << buffer_index;
+    if (_strategy == BalanceStrategy::kDirect) {
+        return _get_sub_buffer(buffer_index)->put(chunk);
+    } else if (_strategy == BalanceStrategy::kRoundRobin) {
+        int target_index = _output_index.fetch_add(1);
+        target_index %= _output_runs;
+        return _get_sub_buffer(target_index)->put(chunk);
+    } else {
+        CHECK(false) << "unreachable";
+    }
 }
 
 } // namespace starrocks::pipeline

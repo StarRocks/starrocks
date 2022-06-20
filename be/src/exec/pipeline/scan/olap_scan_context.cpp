@@ -9,6 +9,26 @@ namespace starrocks::pipeline {
 
 using namespace vectorized;
 
+void OlapScanContext::attach_shared_input(int32_t operator_seq, int32_t source_index) {
+    auto key = std::make_pair(operator_seq, source_index);
+    DCHECK(_active_inputs.count(key) == 0);
+    LOG(INFO) << fmt::format("attach_shared_input ({}, {}), active {}", operator_seq, source_index,
+                             _active_inputs.size());
+    _active_inputs.emplace(key);
+}
+
+void OlapScanContext::detach_shared_input(int32_t operator_seq, int32_t source_index) {
+    auto key = std::make_pair(operator_seq, source_index);
+    DCHECK(_active_inputs.count(key) == 1);
+    LOG(INFO) << fmt::format("detach_shared_input ({}, {}), remain {}", operator_seq, source_index,
+                             _active_inputs.size());
+    _active_inputs.erase(key);
+}
+
+bool OlapScanContext::has_active_input() const {
+    return !_active_inputs.empty();
+}
+
 Status OlapScanContext::prepare(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
     RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));

@@ -39,6 +39,7 @@ ScanOperator::~ScanOperator() {
         if (_chunk_sources[i] != nullptr) {
             _chunk_sources[i]->close(state);
             _chunk_sources[i] = nullptr;
+            detach_chunk_source(i);
         }
     }
 }
@@ -73,6 +74,7 @@ void ScanOperator::close(RuntimeState* state) {
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i]) {
             _chunk_sources[i]->close(state);
             _chunk_sources[i] = nullptr;
+            detach_chunk_source(i);
         }
     }
 
@@ -90,8 +92,12 @@ bool ScanOperator::has_output() const {
         return true;
     }
 
+    if (has_shared_chunk_source()) {
+        return true;
+    }
+
     for (const auto& chunk_source : _chunk_sources) {
-        if (chunk_source != nullptr && (chunk_source->has_output() || chunk_source->has_shared_output())) {
+        if (chunk_source != nullptr && (chunk_source->has_output())) {
             return true;
         }
     }
@@ -111,7 +117,8 @@ bool ScanOperator::has_output() const {
 
     // Can trigger_next_scan for the picked-up morsel.
     for (int i = 0; i < MAX_IO_TASKS_PER_OP; ++i) {
-        if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
+        if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk() &&
+            _chunk_sources[i]->has_shared_output()) {
             return true;
         }
     }
@@ -138,8 +145,15 @@ bool ScanOperator::is_finished() const {
         return false;
     }
 
+    // Any shared chunk source from other ScanOperator
+    if (has_shared_chunk_source()) {
+        return false;
+    }
+
+    // Remain some data in the chunksource
     for (const auto& chunk_source : _chunk_sources) {
-        if (chunk_source != nullptr && (chunk_source->has_output() || chunk_source->has_next_chunk())) {
+        if (chunk_source != nullptr &&
+            (chunk_source->has_output() || chunk_source->has_next_chunk() || chunk_source->has_shared_output())) {
             return false;
         }
     }
@@ -196,7 +210,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
             RETURN_IF_ERROR(_pickup_morsel(state, i));
         } else if (_chunk_sources[i]->has_next_chunk()) {
             RETURN_IF_ERROR(_trigger_next_scan(state, i));
-        } else if (!_chunk_sources[i]->has_output()) {
+        } else {
             RETURN_IF_ERROR(_pickup_morsel(state, i));
         }
     }
@@ -277,6 +291,11 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 _decrease_committed_scan_tasks();
                 _num_running_io_tasks--;
                 _is_io_task_running[chunk_source_index] = false;
+                // Close the chunk source if no more chunk
+                if (!_chunk_sources[chunk_source_index]->has_next_chunk()) {
+                    _chunk_sources[chunk_source_index]->close(state);
+                    _chunk_sources[chunk_source_index] = nullptr;
+                }
             }
         };
         // TODO(by satanson): set a proper priority
@@ -306,7 +325,17 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     if (_chunk_sources[chunk_source_index] != nullptr) {
         _chunk_sources[chunk_source_index]->close(state);
         _chunk_sources[chunk_source_index] = nullptr;
+        detach_chunk_source(chunk_source_index);
     }
+
+    // NOTE: attach a active source before really creating it, to avoid the race condition
+    bool need_detach = true;
+    attach_chunk_source(chunk_source_index);
+    DeferOp defer([&]() {
+        if (need_detach) {
+            detach_chunk_source(chunk_source_index);
+        }
+    });
 
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
     if (morsel != nullptr) {
@@ -317,6 +346,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
             _is_finished = true;
             return status;
         }
+        need_detach = false;
         RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
     }
 
