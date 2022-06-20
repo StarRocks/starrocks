@@ -54,6 +54,7 @@ HttpServiceBE::HttpServiceBE(ExecEnv* env, int port, int num_threads)
           _web_page_handler(new WebPageHandler(_ev_http_server.get())) {}
 
 HttpServiceBE::~HttpServiceBE() {
+    _ev_http_server->stop();
     _ev_http_server.reset();
     _web_page_handler.reset();
     STLDeleteElements(&_http_handlers);
