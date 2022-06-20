@@ -755,8 +755,12 @@ void OlapScanNode::_close_pending_scanners() {
 }
 
 pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
-    auto scan_ctx =
-            std::make_shared<pipeline::OlapScanContext>(this, context->degree_of_parallelism(), _enable_shared_scan);
+    // TODO(mofei) simplify it
+    auto& morsel_queues = context->fragment_context()->morsel_queues();
+    auto* morsel_queue = morsel_queues[id()].get();
+    size_t dop = std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
+
+    auto scan_ctx = std::make_shared<pipeline::OlapScanContext>(this, dop, _enable_shared_scan);
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
 
     // scan_prepare_op.
