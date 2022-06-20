@@ -19,7 +19,7 @@ inline Status apply_txn_log(const lake::TxnLog& log, lake::TabletMetadata* metad
             auto rowset = metadata->add_rowsets();
             rowset->CopyFrom(log.op_write().rowset());
             rowset->set_id(metadata->next_rowset_id());
-            metadata->set_next_rowset_id(metadata->next_rowset_id() + std::max<int>(1, rowset->segments_size()));
+            metadata->set_next_rowset_id(metadata->next_rowset_id() + rowset->segments_size());
         }
     }
 
