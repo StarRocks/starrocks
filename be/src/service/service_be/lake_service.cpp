@@ -148,7 +148,7 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     for (const auto& tablet_id : request->tablet_ids()) {
         auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
         if (!tablet.ok()) {
-            LOG(WARNING) << tablet.status();
+            LOG(WARNING) << "Fail to get tablet " << tablet_id << ": " << tablet.status();
             continue;
         }
         // TODO: batch deletion
