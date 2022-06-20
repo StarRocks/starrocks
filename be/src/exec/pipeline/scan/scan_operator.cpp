@@ -221,9 +221,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
             continue;
         }
 
-        if (_chunk_sources[i] == nullptr) {
-            RETURN_IF_ERROR(_pickup_morsel(state, i));
-        } else if (_chunk_sources[i]->has_next_chunk()) {
+        if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
             RETURN_IF_ERROR(_trigger_next_scan(state, i));
         } else {
             RETURN_IF_ERROR(_pickup_morsel(state, i));
@@ -304,13 +302,13 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 }
 
                 _decrease_committed_scan_tasks();
-                _num_running_io_tasks--;
-                _is_io_task_running[chunk_source_index] = false;
                 // Close the chunk source if no more chunk
                 if (!_chunk_sources[chunk_source_index]->has_next_chunk()) {
                     _chunk_sources[chunk_source_index]->close(state);
                     _chunk_sources[chunk_source_index] = nullptr;
                 }
+                _num_running_io_tasks--;
+                _is_io_task_running[chunk_source_index] = false;
             }
         };
         // TODO(by satanson): set a proper priority
