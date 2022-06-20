@@ -165,6 +165,7 @@ public class OlapTableCommitter extends TableCommitter {
         Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.COMMITTED);
         TableCommitInfo tableCommitInfo = new TableCommitInfo(table.getId());
         boolean isFirstPartition = true;
+        txnState.getErrorReplicas().addAll(errorReplicaIds);
         for (long partitionId : dirtyPartitionSet) {
             Partition partition = table.getPartition(partitionId);
             PartitionCommitInfo partitionCommitInfo;
@@ -187,7 +188,6 @@ public class OlapTableCommitter extends TableCommitter {
 
     @Override
     public void postEditLog(TransactionState txnState) {
-        txnState.getErrorReplicas().addAll(errorReplicaIds);
         // add publish version tasks. set task to null as a placeholder.
         // tasks will be created when publishing version.
         for (long backendId : totalInvolvedBackends) {
