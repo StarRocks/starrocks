@@ -17,8 +17,8 @@ echo "the env="$GITHUB_REF_NAME
 # chown -R jenkins:jenkins $ROOT/../
 
 #cd $ROOT/resource/starrocks/
-cd $ROOT/starrocks/
-rm -rf fe/fe-core/target
+#cd $ROOT/starrocks/
+#rm -rf fe/fe-core/target
 
 #git config  user.email "wanpengfei91@163.com"
 #git config  user.name "wanpengfei-git"
