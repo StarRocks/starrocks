@@ -107,7 +107,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
 
             if (fe.getHost().equals(globalStateMgr.getSelfNode().first)) {
                 info.add("true");
-                info.add(Long.toString(globalStateMgr.getEditLog().getMaxJournalId()));
+                info.add(Long.toString(globalStateMgr.getMaxJournalId()));
             } else {
                 info.add(String.valueOf(fe.isAlive()));
                 info.add(Long.toString(fe.getReplayedJournalId()));

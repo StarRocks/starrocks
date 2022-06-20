@@ -21,7 +21,6 @@
 
 package com.starrocks.persist;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.alter.DecommissionBackendJob;
@@ -47,10 +46,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.ha.MasterInfo;
-import com.starrocks.journal.Journal;
-import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
-import com.starrocks.journal.JournalFactory;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
@@ -82,7 +78,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -95,51 +90,10 @@ public class EditLog {
     public static final Logger LOG = LogManager.getLogger(EditLog.class);
     private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
-    private final Journal journal;
-
     private BlockingQueue<JournalTask> journalQueue;
 
-    @VisibleForTesting
-    public EditLog(Journal journal, BlockingQueue<JournalTask> journalQueue) {
-        this.journal = journal;
+    public EditLog(BlockingQueue<JournalTask> journalQueue) {
         this.journalQueue = journalQueue;
-    }
-
-    public EditLog(String nodeName) {
-        journal = JournalFactory.create(nodeName);
-        journalQueue = new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
-    }
-
-    public BlockingQueue<JournalTask> getJournalQueue() {
-        return journalQueue;
-    }
-
-    public long getMaxJournalId() {
-        return journal.getMaxJournalId();
-    }
-
-    public JournalCursor read(long fromId, long toId) {
-        return journal.read(fromId, toId);
-    }
-
-    public long getFinalizedJournalId() {
-        return journal.getFinalizedJournalId();
-    }
-
-    public void deleteJournals(long deleteToJournalId) {
-        journal.deleteJournals(deleteToJournalId);
-    }
-
-    public List<Long> getDatabaseNames() {
-        return journal.getDatabaseNames();
-    }
-
-    public synchronized int getNumEditStreams() {
-        return journal == null ? 0 : 1;
-    }
-
-    public Journal getJournal() {
-        return journal;
     }
 
     public static void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal) {
@@ -895,17 +849,6 @@ public class EditLog {
             LOG.error("Operation Type {}", opCode, e);
             System.exit(-1);
         }
-    }
-
-    /**
-     * Shutdown the file store.
-     */
-    public synchronized void close() throws IOException {
-        journal.close();
-    }
-
-    public void open() {
-        journal.open();
     }
 
     /**

@@ -364,7 +364,7 @@ public class StarRocksFE {
             try {
                 Thread t = new Thread(() -> {
                     try {
-                        Journal journal = GlobalStateMgr.getCurrentState().getEditLog().getJournal();
+                        Journal journal = GlobalStateMgr.getCurrentState().getJournal();
                         if (journal instanceof BDBJEJournal) {
                             BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
                             if (bdbEnvironment != null) {

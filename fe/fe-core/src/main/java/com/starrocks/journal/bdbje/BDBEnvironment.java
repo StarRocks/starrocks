@@ -44,14 +44,18 @@ import com.sleepycat.je.rep.StateChangeListener;
 import com.sleepycat.je.rep.util.DbResetRepGroup;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.BDBStateChangeListener;
 import com.starrocks.ha.HAProtocol;
+import com.starrocks.journal.JournalException;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -69,6 +73,7 @@ import java.util.logging.Level;
 public class BDBEnvironment {
     private static final Logger LOG = LogManager.getLogger(BDBEnvironment.class);
     private static final int RETRY_TIME = 3;
+    private static final int SLEEP_INTERVAL_SEC = 5;
     private static final int MEMORY_CACHE_PERCENT = 20;
 
     public static final String STARROCKS_JOURNAL_GROUP = "PALO_JOURNAL_GROUP";
@@ -95,7 +100,44 @@ public class BDBEnvironment {
     private final String helperHostPort;
     private final boolean isElectable;
 
-    public BDBEnvironment(File envHome, String selfNodeName, String selfNodeHostPort,
+    /**
+     * init & return bdb environment
+     * @param nodeName
+     * @return
+     * @throws JournalException
+     */
+    public static BDBEnvironment initBDBEnvironment(String nodeName) throws JournalException {
+        Pair<String, Integer> selfNode = GlobalStateMgr.getCurrentState().getSelfNode();
+        try {
+
+            if (NetUtils.isPortUsing(selfNode.first, selfNode.second)) {
+                String errMsg = String.format("edit_log_port %d is already in use. will exit.", selfNode.second);
+                LOG.error(errMsg);
+                throw new JournalException(errMsg);
+            }
+        } catch (IOException e) {
+            String errMsg = String.format("failed to check if %s:%s is used!", selfNode.first, selfNode.second);
+            LOG.error(errMsg, e);
+            JournalException journalException = new JournalException(errMsg);
+            journalException.initCause(e);
+            throw journalException;
+        }
+
+        String selfNodeHostPort = selfNode.first + ":" + selfNode.second;
+
+        String environmentPath = GlobalStateMgr.getCurrentState().getBdbDir();
+        File dbEnv = new File(environmentPath);
+
+        Pair<String, Integer> helperNode = GlobalStateMgr.getCurrentState().getHelperNode();
+        String helperHostPort = helperNode.first + ":" + helperNode.second;
+
+        BDBEnvironment bdbEnvironment = new BDBEnvironment(dbEnv, nodeName, selfNodeHostPort,
+                helperHostPort, GlobalStateMgr.getCurrentState().isElectable());
+        bdbEnvironment.setup();
+        return bdbEnvironment;
+    }
+
+    protected BDBEnvironment(File envHome, String selfNodeName, String selfNodeHostPort,
                           String helperHostPort, boolean isElectable) {
         this.envHome = envHome;
         this.selfNodeName = selfNodeName;
@@ -107,15 +149,16 @@ public class BDBEnvironment {
     }
 
     // The setup() method opens the environment and database
-    public void setup() {
+    protected void setup() throws JournalException {
 
         this.closing = false;
 
         // Almost never used, just in case the master can not restart
         if (Config.metadata_failure_recovery.equals("true")) {
             if (!isElectable) {
-                LOG.error("Current node is not in the electable_nodes list. will exit");
-                System.exit(-1);
+                String errMsg = "Current node is not in the electable_nodes list. will exit";
+                LOG.error(errMsg);
+                throw new JournalException(errMsg);
             }
             DbResetRepGroup resetUtility = new DbResetRepGroup(envHome, STARROCKS_JOURNAL_GROUP, selfNodeName,
                     selfNodeHostPort);
@@ -230,13 +273,16 @@ public class BDBEnvironment {
                 LOG.warn("database exception", e);
                 if (i < RETRY_TIME - 1) {
                     try {
-                        Thread.sleep(5 * 1000);
+                        Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
                     } catch (InterruptedException e1) {
                         e1.printStackTrace();
                     }
                 } else {
-                    LOG.error("error to open replicated environment. will exit.", e);
-                    System.exit(-1);
+                    String errMsg = "error to open replicated environment. will exit.";
+                    LOG.error(errMsg, e);
+                    JournalException exception = new JournalException(errMsg);
+                    exception.initCause(e);
+                    throw exception;
                 }
             }
         }
