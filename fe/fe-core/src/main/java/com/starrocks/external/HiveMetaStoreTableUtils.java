@@ -110,6 +110,13 @@ public class HiveMetaStoreTableUtils {
         return allHiveColumns;
     }
 
+    public static List<FieldSchema> getAllColumns(Table table) {
+        List<FieldSchema> allColumns = table.getSd().getCols();
+        List<FieldSchema> partHiveColumns = table.getPartitionKeys();
+        allColumns.addAll(partHiveColumns);
+        return allColumns;
+    }
+
     public static boolean validateColumnType(String hiveType, Type type) {
         if (hiveType == null) {
             return false;
@@ -231,10 +238,9 @@ public class HiveMetaStoreTableUtils {
             throw new DdlException("Hive view table is not supported.");
         }
 
-        Map<String, FieldSchema> allHiveColumns = getAllHiveColumns(hiveTable);
+        List<FieldSchema> allHiveColumns = getAllColumns(hiveTable);
         List<Column> fullSchema = Lists.newArrayList();
-        for (Map.Entry<String, FieldSchema> entry : allHiveColumns.entrySet()) {
-            FieldSchema fieldSchema = entry.getValue();
+        for (FieldSchema fieldSchema : allHiveColumns) {
             Type srType = convertColumnType(fieldSchema.getType());
             Column column = new Column(fieldSchema.getName(), srType, true);
             fullSchema.add(column);

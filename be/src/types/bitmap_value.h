@@ -98,9 +98,9 @@ public:
     // TODO should the return type be uint64_t?
     int64_t cardinality() const;
 
-    uint64_t max() const;
+    std::optional<uint64_t> max() const;
 
-    int64_t min() const;
+    std::optional<uint64_t> min() const;
 
     // Return how many bytes are required to serialize this bitmap.
     // See BitmapTypeCode for the serialized format.

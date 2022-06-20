@@ -54,7 +54,6 @@ private:
     void _sort_column_inc();
     void _append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final);
 
-    bool _is_aggregate_needed();
     void _init_aggregator_if_needed();
     void _aggregate(bool is_final);
 
@@ -70,7 +69,6 @@ private:
 
     int64_t _tablet_id;
     Schema _vectorized_schema;
-    const TabletSchema* _tablet_schema;
     // the slot in _slot_descs are in order of tablet's schema
     const std::vector<SlotDescriptor*>* _slot_descs;
     KeysType _keys_type;
@@ -85,7 +83,6 @@ private:
     bool _has_op_slot = false;
     std::unique_ptr<Column> _deletes;
 
-    bool _use_slot_desc = true;
     int64_t _max_buffer_size = config::write_buffer_size;
 
     // memory statistic

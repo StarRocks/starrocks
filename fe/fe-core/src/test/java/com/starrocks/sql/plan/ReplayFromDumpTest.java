@@ -423,8 +423,17 @@ public class ReplayFromDumpTest {
     public void testMergeGroupWithDeleteBestExpression() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/merge_group_delete_best_expression"), null, TExplainLevel.NORMAL);
-        // check without expression
+        // check without exception
         Assert.assertTrue(replayPair.second.contains("14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)"));
+    }
+
+    @Test
+    public void testJoinReOrderPruneColumns() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null, TExplainLevel.NORMAL);
+        System.out.println(replayPair.second);
+        // check without exception
+        Assert.assertTrue(replayPair.second.contains("<slot 19> : 19: id_tinyint"));
     }
 }

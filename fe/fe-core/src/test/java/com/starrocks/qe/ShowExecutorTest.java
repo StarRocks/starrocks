@@ -199,14 +199,6 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = null;
 
-                globalStateMgr.getClusterDbNames("testCluster");
-                minTimes = 0;
-                result = Lists.newArrayList("testCluster:testDb");
-
-                globalStateMgr.getClusterDbNames("");
-                minTimes = 0;
-                result = Lists.newArrayList("");
-
                 globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
@@ -494,7 +486,8 @@ public class ShowExecutorTest {
 
     @Test(expected = AnalysisException.class)
     public void testShowCreateTableEmptyDb() throws AnalysisException, DdlException {
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("testCluster:emptyDb", "testTable"));
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("testCluster:emptyDb", "testTable"),
+                ShowCreateTableStmt.CreateTableType.TABLE);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
@@ -503,7 +496,8 @@ public class ShowExecutorTest {
 
     @Test(expected = AnalysisException.class)
     public void testShowCreateTableEmptyTbl() throws AnalysisException, DdlException {
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("testCluster:testDb", "emptyTable"));
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("testCluster:testDb", "emptyTable"),
+                ShowCreateTableStmt.CreateTableType.TABLE);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 

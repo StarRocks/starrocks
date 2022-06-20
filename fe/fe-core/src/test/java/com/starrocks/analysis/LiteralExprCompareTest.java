@@ -142,7 +142,8 @@ public class LiteralExprCompareTest {
         Assert.assertTrue(0 == decimal1.compareLiteral(decimal1));
     }
 
-    public void floatAndDoubleExpr() {
+    @Test
+    public void floatAndDoubleExpr() throws AnalysisException {
         LiteralExpr float1 = new FloatLiteral(1.12345, ScalarType.FLOAT);
         LiteralExpr float2 = new FloatLiteral(1.12345, ScalarType.FLOAT);
         LiteralExpr float3 = new FloatLiteral(1.12346, ScalarType.FLOAT);

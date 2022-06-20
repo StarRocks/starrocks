@@ -70,10 +70,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_MEM_LIMIT = "query_mem_limit";
 
     public static final String QUERY_TIMEOUT = "query_timeout";
+
+    public static final String QUERY_DELIVERY_TIMEOUT = "query_delivery_timeout";
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String PROFILING = "profiling";
     public static final String SQL_MODE = "sql_mode";
+    /**
+     * Because we modified the default value of sql_mode.
+     * The default value in v1 version is 0, and in v2 we support sql mode not set only_full_group_by.
+     * In order to ensure the consistency of logic,
+     * the storage name of sql_mode is changed here, in order to achieve compatibility
+     */
+    public static final String SQL_MODE_STORAGE_NAME = "sql_mode_v2";
     public static final String RESOURCE_GROUP = "resource_group";
     public static final String AUTO_COMMIT = "autocommit";
     public static final String TX_ISOLATION = "tx_isolation";
@@ -250,6 +259,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = QUERY_TIMEOUT)
     private int queryTimeoutS = 300;
 
+    // Execution of a query contains two phase.
+    // 1. Deliver all the fragment instances to BEs.
+    // 2. Pull data from BEs, after all the fragments are prepared and ready to execute in BEs.
+    // queryDeliveryTimeoutS is the timeout of the first phase.
+    @VariableMgr.VarAttr(name = QUERY_DELIVERY_TIMEOUT)
+    private int queryDeliveryTimeoutS = 300;
+
     // query timeout in millisecond, currently nouse, only for compatible.
     @VariableMgr.VarAttr(name = MAX_EXECUTION_TIME)
     private long maxExecutionTime = 3000000;
@@ -263,7 +279,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean openProfile = false;
 
     // Default sqlMode is ONLY_FULL_GROUP_BY
-    @VariableMgr.VarAttr(name = SQL_MODE)
+    @VariableMgr.VarAttr(name = SQL_MODE_STORAGE_NAME, alias = SQL_MODE, show = SQL_MODE)
     private long sqlMode = 32L;
 
     // The specified resource group of this session
@@ -687,8 +703,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             if (pipelineDop > 0) {
                 return pipelineDop * parallelExecInstanceNum;
             }
-            int avgNumOfCores = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
-            return avgNumOfCores < 2 ? 1 : avgNumOfCores / 2;
+            return BackendCoreStat.getDefaultDOP();
         } else {
             return parallelExecInstanceNum;
         }
@@ -1016,6 +1031,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setBuffer_pool_limit(maxExecMemByte);
         // Avoid integer overflow
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
+        tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
         tResult.setIs_report_success(isReportSucc);
         tResult.setCodegen_level(codegenLevel);
         tResult.setBatch_size(chunkSize);

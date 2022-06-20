@@ -15,6 +15,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -26,7 +27,7 @@ import java.util.List;
 public class DecimalV3FunctionAnalyzerTest {
 
     @Test
-    public void testGetFnOfTruncateForDouble() {
+    public void testGetFnOfTruncateForDouble() throws AnalysisException {
         List<Expr> params = Lists.newArrayList();
         params.add(new FloatLiteral(18450.76));
         params.add(new IntLiteral(1));

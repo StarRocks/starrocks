@@ -82,14 +82,6 @@ public class ShowDbStmtTest {
                 minTimes = 0;
                 result = null;
 
-                globalStateMgr.getClusterDbNames("testCluster");
-                minTimes = 0;
-                result = Lists.newArrayList("testCluster:testDb");
-
-                globalStateMgr.getClusterDbNames("");
-                minTimes = 0;
-                result = Lists.newArrayList("");
-
                 globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;

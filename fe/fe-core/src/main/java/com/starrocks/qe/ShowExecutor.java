@@ -37,7 +37,6 @@ import com.starrocks.analysis.ShowAuthorStmt;
 import com.starrocks.analysis.ShowBackendsStmt;
 import com.starrocks.analysis.ShowBackupStmt;
 import com.starrocks.analysis.ShowBrokerStmt;
-import com.starrocks.analysis.ShowClusterStmt;
 import com.starrocks.analysis.ShowCollationStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
@@ -54,7 +53,6 @@ import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowLoadStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.analysis.ShowMigrationsStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowPluginsStmt;
 import com.starrocks.analysis.ShowProcStmt;
@@ -86,10 +84,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetadataViewer;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -100,7 +100,6 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.View;
 import com.starrocks.clone.DynamicPartitionScheduler;
-import com.starrocks.cluster.BaseParam;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
@@ -222,10 +221,6 @@ public class ShowExecutor {
             handleShowBackup();
         } else if (stmt instanceof ShowRestoreStmt) {
             handleShowRestore();
-        } else if (stmt instanceof ShowClusterStmt) {
-            handleShowCluster();
-        } else if (stmt instanceof ShowMigrationsStmt) {
-            handleShowMigrations();
         } else if (stmt instanceof ShowBrokerStmt) {
             handleShowBroker();
         } else if (stmt instanceof ShowResourcesStmt) {
@@ -447,39 +442,6 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(metaData, finalRows);
     }
 
-    // Show clusters
-    private void handleShowCluster() {
-        final ShowClusterStmt showStmt = (ShowClusterStmt) stmt;
-        final List<List<String>> rows = Lists.newArrayList();
-        final List<String> clusterNames = ctx.getGlobalStateMgr().getClusterNames();
-
-        final Set<String> clusterNameSet = Sets.newTreeSet();
-        for (String cluster : clusterNames) {
-            clusterNameSet.add(cluster);
-        }
-
-        for (String clusterName : clusterNameSet) {
-            rows.add(Lists.newArrayList(clusterName));
-        }
-
-        resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
-    }
-
-    // Show clusters
-    private void handleShowMigrations() {
-        final ShowMigrationsStmt showStmt = (ShowMigrationsStmt) stmt;
-        final List<List<String>> rows = Lists.newArrayList();
-        final Set<BaseParam> infos = ctx.getGlobalStateMgr().getMigrations();
-
-        for (BaseParam param : infos) {
-            final int percent = (int) (param.getFloatParam(0) * 100f);
-            rows.add(Lists.newArrayList(param.getStringParam(0), param.getStringParam(1), param.getStringParam(2),
-                    String.valueOf(percent + "%")));
-        }
-
-        resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
-    }
-
     // Show databases statement
     private void handleShowDb() throws AnalysisException {
         ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
@@ -666,15 +628,26 @@ public class ShowExecutor {
             }
 
             if (table instanceof View) {
+                if (showStmt.getType() == ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_OBJECT, showStmt.getDb(),
+                            showStmt.getTable(), "MATERIALIZED VIEW");
+                }
                 View view = (View) table;
                 StringBuilder sb = new StringBuilder();
                 sb.append("CREATE VIEW `").append(table.getName()).append("` AS ").append(view.getInlineViewDef());
                 rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0), "utf8", "utf8_general_ci"));
                 resultSet = new ShowResultSet(ShowCreateTableStmt.getViewMetaData(), rows);
-            } else {
-                if (showStmt.isView()) {
+            } else if (table instanceof MaterializedView) {
+                if (showStmt.getType() == ShowCreateTableStmt.CreateTableType.VIEW) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_OBJECT, showStmt.getDb(),
                             showStmt.getTable(), "VIEW");
+                }
+                rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0)));
+                resultSet = new ShowResultSet(ShowCreateTableStmt.getMaterializedViewMetaData(), rows);
+            } else {
+                if (showStmt.getType() != ShowCreateTableStmt.CreateTableType.TABLE) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_OBJECT, showStmt.getDb(),
+                            showStmt.getTable(), showStmt.getType().getValue());
                 }
                 rows.add(Lists.newArrayList(table.getName(), createTableStmt.get(0)));
                 resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
@@ -711,7 +684,7 @@ public class ShowExecutor {
                             continue;
                         }
                         final String columnName = col.getName();
-                        final String columnType = col.getType().toString().toLowerCase();
+                        final String columnType = col.getType().canonicalName().toLowerCase();
                         final String isAllowNull = col.isAllowNull() ? "YES" : "NO";
                         final String isKey = col.isKey() ? "YES" : "NO";
                         final String defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
@@ -1554,7 +1527,7 @@ public class ShowExecutor {
     private void handleShowCatalogs() {
         ShowCatalogsStmt showCatalogsStmt = (ShowCatalogsStmt) stmt;
         List<List<String>> rowSet = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogsInfo();
-        rowSet.add(Arrays.asList("default", "default", "internal catalog"));
+        rowSet.add(Arrays.asList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "Internal", "Internal Catalog"));
         rowSet.sort(new Comparator<List<String>>() {
             @Override
             public int compare(List<String> o1, List<String> o2) {

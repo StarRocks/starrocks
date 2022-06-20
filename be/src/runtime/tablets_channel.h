@@ -5,8 +5,11 @@
 #include <sstream>
 #include <string>
 
+#include "common/status.h"
 #include "gen_cpp/Types_types.h"
+#include "gen_cpp/types.pb.h"
 #include "gutil/ref_counted.h"
+#include "util/uid_util.h"
 
 namespace brpc {
 class Controller;
@@ -28,7 +31,7 @@ class TabletsChannel : public RefCountedThreadSafe<TabletsChannel> {
 public:
     TabletsChannel() = default;
 
-    virtual Status open(const PTabletWriterOpenRequest& params) = 0;
+    [[nodiscard]] virtual Status open(const PTabletWriterOpenRequest& params) = 0;
 
     virtual void add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
                            PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) = 0;
@@ -37,6 +40,7 @@ public:
 
 private:
     friend class RefCountedThreadSafe<TabletsChannel>;
+    friend class LakeTabletsChannel;
     friend class LocalTabletsChannel;
 
     virtual ~TabletsChannel() = default;
@@ -52,7 +56,7 @@ struct TabletsChannelKey {
 
     bool operator==(const TabletsChannelKey& rhs) const noexcept { return index_id == rhs.index_id && id == rhs.id; }
 
-    std::string to_string() const;
+    [[nodiscard]] std::string to_string() const;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const TabletsChannelKey& key) {

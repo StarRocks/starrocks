@@ -118,7 +118,7 @@ public:
 
     RowsetSharedPtr rowset_with_max_version() const;
 
-    Status add_inc_rowset(const RowsetSharedPtr& rowset);
+    Status add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version);
     void delete_expired_inc_rowsets();
 
     /// Delete stale rowset by timing. This delete policy uses now() munis
@@ -192,6 +192,9 @@ public:
     // This function to find max continuous version from the beginning.
     // For example: If there are 1, 2, 3, 5, 6, 7 versions belongs tablet, then 3 is target.
     Version max_continuous_version_from_beginning() const;
+
+    // Same as max_continuous_version_from_beginning, only return end version, using a more efficient implementation
+    int64_t max_continuous_version() const;
 
     int64_t last_cumu_compaction_failure_time() { return _last_cumu_compaction_failure_millis; }
     void set_last_cumu_compaction_failure_time(int64_t millis) { _last_cumu_compaction_failure_millis = millis; }

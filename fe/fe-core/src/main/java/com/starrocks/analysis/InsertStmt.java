@@ -94,7 +94,7 @@ public class InsertStmt extends DmlStmt {
     public static final String STREAMING = "STREAMING";
 
     private final TableName tblName;
-    private final PartitionNames targetPartitionNames;
+    private PartitionNames targetPartitionNames;
     // parsed from targetPartitionNames.
     // if targetPartitionNames is not set, add all formal partitions' id of the table into it
     private List<Long> targetPartitionIds = Lists.newArrayList();
@@ -127,12 +127,19 @@ public class InsertStmt extends DmlStmt {
     private DataPartition dataPartition;
 
     private List<Column> targetColumns = Lists.newArrayList();
+    private boolean isOverwrite;
+    private long overwriteJobId = -1;
 
     /*
      * InsertStmt may be analyzed twice, but transaction must be only begun once.
      * So use a boolean to check if transaction already begun.
      */
     private boolean isTransactionBegin = false;
+
+    // The default value of this variable is false, which means that the insert operation created by the user
+    // it is not allowed to write data to the materialized view.
+    // If this is set to true it means a system refresh operation, which is allowed to write to materialized view.
+    private boolean isSystem = false;
 
     public InsertStmt(InsertTarget target, String label, List<String> cols, InsertSource source, List<String> hints) {
         this.tblName = target.getTblName();
@@ -148,13 +155,14 @@ public class InsertStmt extends DmlStmt {
     }
 
     public InsertStmt(InsertTarget target, String label, List<String> cols, QueryStatement queryStatement,
-                      List<String> hints) {
+                      List<String> hints, boolean isOverwrite) {
         this.tblName = target.getTblName();
         this.targetPartitionNames = target.getPartitionNames();
         this.label = label;
         this.queryStatement = queryStatement;
         this.planHints = hints;
         this.targetColumnNames = cols;
+        this.isOverwrite = isOverwrite;
 
         if (!Strings.isNullOrEmpty(label)) {
             isUserSpecifiedLabel = true;
@@ -196,6 +204,22 @@ public class InsertStmt extends DmlStmt {
 
     public String getDb() {
         return tblName.getDb();
+    }
+
+    public boolean isOverwrite() {
+        return isOverwrite;
+    }
+
+    public void setOverwrite(boolean overwrite) {
+        isOverwrite = overwrite;
+    }
+
+    public void setOverwriteJobId(long overwriteJobId) {
+        this.overwriteJobId = overwriteJobId;
+    }
+
+    public boolean hasOverwriteJob() {
+        return overwriteJobId > 0;
     }
 
     // TODO(zc): used to get all dbs for lock
@@ -278,6 +302,14 @@ public class InsertStmt extends DmlStmt {
 
     public boolean isTransactionBegin() {
         return isTransactionBegin;
+    }
+
+    public boolean isSystem() {
+        return isSystem;
+    }
+
+    public void setSystem(boolean system) {
+        isSystem = system;
     }
 
     @Override
@@ -885,6 +917,10 @@ public class InsertStmt extends DmlStmt {
 
     public List<String> getTargetColumnNames() {
         return targetColumnNames;
+    }
+
+    public void setTargetPartitionNames(PartitionNames targetPartitionNames) {
+        this.targetPartitionNames = targetPartitionNames;
     }
 
     public void setTargetPartitionIds(List<Long> targetPartitionIds) {

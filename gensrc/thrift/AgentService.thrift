@@ -52,7 +52,8 @@ enum TStorageFormat {
 
 enum TTabletType {
     TABLET_TYPE_DISK = 0,
-    TABLET_TYPE_MEMORY = 1
+    TABLET_TYPE_MEMORY = 1,
+    TABLET_TYPE_LAKE = 2
 }
 
 struct TCreateTabletReq {
@@ -240,6 +241,7 @@ struct TPublishVersionRequest {
     // strict mode means BE will check tablet missing version
     3: optional bool strict_mode = false // Deprecated
     4: optional i64 commit_timestamp
+    5: optional string txn_trace_parent
 }
 
 struct TClearAlterTaskRequest {

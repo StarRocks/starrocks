@@ -6,6 +6,7 @@
 #include <string>
 
 #include "common/statusor.h"
+#include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 
@@ -15,10 +16,12 @@ class TabletSchema;
 
 namespace starrocks::lake {
 
-class MetadataIterator;
 class TabletManager;
 class TabletReader;
 class TabletWriter;
+template <typename T>
+class MetadataIterator;
+using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 
 class Tablet {
 public:
@@ -45,7 +48,7 @@ public:
 
     StatusOr<TabletMetadataPtr> get_metadata(int64_t version);
 
-    StatusOr<MetadataIterator> list_metadata();
+    StatusOr<TabletMetadataIter> list_metadata();
 
     Status delete_metadata(int64_t version);
 

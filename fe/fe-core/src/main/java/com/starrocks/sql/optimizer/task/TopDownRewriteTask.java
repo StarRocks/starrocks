@@ -3,9 +3,12 @@ package com.starrocks.sql.optimizer.task;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerTraceInfo;
+import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Binder;
 import com.starrocks.sql.optimizer.rule.Rule;
@@ -34,6 +37,7 @@ public abstract class TopDownRewriteTask extends OptimizerTask {
 
         GroupExpression curGroupExpression = group.getLogicalExpressions().get(0);
         filterInValidRules(curGroupExpression, candidateRules, validRules);
+        SessionVariable sessionVariable = context.getOptimizerContext().getSessionVariable();
 
         for (Rule rule : validRules) {
             // Apply rule and get all new OptExpressions
@@ -46,7 +50,12 @@ public abstract class TopDownRewriteTask extends OptimizerTask {
                     extractExpr = binder.next();
                     continue;
                 }
-                newExpressions.addAll(rule.transform(extractExpr, context.getOptimizerContext()));
+                List<OptExpression> targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
+                newExpressions.addAll(targetExpressions);
+
+                OptimizerTraceInfo traceInfo = context.getOptimizerContext().getTraceInfo();
+                OptimizerTraceUtil.logApplyRule(sessionVariable, traceInfo, rule, extractExpr, targetExpressions);
+
                 Preconditions.checkState(newExpressions.size() <= 1,
                         "Rewrite rule should provide at most 1 expression");
 

@@ -5,7 +5,6 @@
 #include <memory>
 
 #include "column/json_column.h"
-#include "column/type_traits.h"
 #include "common/logging.h"
 #include "exec/vectorized/sorting/sorting.h"
 #include "runtime/current_thread.h"
@@ -14,7 +13,6 @@
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/schema.h"
-#include "util/orlp/pdqsort.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 
@@ -36,7 +34,6 @@ void MemTable::_init_aggregator_if_needed() {
 MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs,
                    MemTableSink* sink, MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
-          _tablet_schema(tablet_schema),
           _slot_descs(slot_descs),
           _keys_type(tablet_schema->keys_type()),
           _sink(sink),
@@ -57,13 +54,11 @@ MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const s
 MemTable::MemTable(int64_t tablet_id, const Schema& schema, MemTableSink* sink, int64_t max_buffer_size,
                    MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
-          _vectorized_schema(std::move(schema)),
-          _tablet_schema(nullptr),
+          _vectorized_schema(schema),
           _slot_descs(nullptr),
           _keys_type(schema.keys_type()),
           _sink(sink),
           _aggregator(nullptr),
-          _use_slot_desc(false),
           _max_buffer_size(max_buffer_size),
           _mem_tracker(mem_tracker) {
     _init_aggregator_if_needed();
@@ -105,7 +100,8 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
         _chunk = ChunkHelper::new_chunk(_vectorized_schema, 0);
     }
 
-    if (_use_slot_desc) {
+    size_t cur_row_count = _chunk->num_rows();
+    if (_slot_descs != nullptr) {
         // For schema change, FE will construct a shadow column.
         // The shadow column is not exist in _vectorized_schema
         // So the chunk can only be accessed by the subscript
@@ -125,7 +121,7 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
 
     if (chunk.has_rows()) {
         _chunk_memory_usage += chunk.memory_usage() * size / chunk.num_rows();
-        _chunk_bytes_usage += chunk.bytes_usage() * size / chunk.num_rows();
+        _chunk_bytes_usage += _chunk->bytes_usage(cur_row_count, size);
     }
 
     // if memtable is full, push it to the flush executor,
@@ -218,7 +214,7 @@ Status MemTable::flush() {
         return Status::OK();
     }
     std::string msg;
-    if (_result_chunk->reach_capacity_limit(&msg)) {
+    if (_result_chunk->capacity_limit_reached(&msg)) {
         return Status::InternalError(
                 fmt::format("memtable of tablet {} reache the capacity limit, detail msg: {}", _tablet_id, msg));
     }
@@ -279,7 +275,7 @@ void MemTable::_aggregate(bool is_final) {
 }
 
 void MemTable::_sort(bool is_final) {
-    SmallPermutation perm = create_small_permutation(_chunk->num_rows());
+    SmallPermutation perm = create_small_permutation(static_cast<uint32_t>(_chunk->num_rows()));
     std::swap(perm, _permutations);
     _sort_column_inc();
 

@@ -11,7 +11,6 @@
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
-#include "util/coding.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
 #include "util/raw_container.h"
@@ -207,6 +206,23 @@ void BinaryColumnBase<T>::_build_slices() const {
     }
 
     _slices_cache = true;
+}
+
+template <typename T>
+void BinaryColumnBase<T>::fill_default(const Filter& filter) {
+    std::vector<uint32_t> indexes;
+    for (size_t i = 0; i < filter.size(); i++) {
+        size_t len = _offsets[i + 1] - _offsets[i];
+        if (filter[i] == 1 && len > 0) {
+            indexes.push_back(i);
+        }
+    }
+    if (indexes.empty()) {
+        return;
+    }
+    auto default_column = clone_empty();
+    default_column->append_default(indexes.size());
+    update_rows(*default_column, indexes.data());
 }
 
 template <typename T>
@@ -610,7 +626,7 @@ bool BinaryColumnBase<T>::has_large_column() const {
 }
 
 template <typename T>
-bool BinaryColumnBase<T>::reach_capacity_limit(std::string* msg) const {
+bool BinaryColumnBase<T>::capacity_limit_reached(std::string* msg) const {
     static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
     if constexpr (std::is_same_v<T, uint32_t>) {
         // The size limit of a single element is 2^32 - 1.

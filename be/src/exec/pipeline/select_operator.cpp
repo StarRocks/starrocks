@@ -12,6 +12,8 @@ Status SelectOperator::prepare(RuntimeState* state) {
 }
 
 void SelectOperator::close(RuntimeState* state) {
+    _curr_chunk.reset();
+    _pre_output_chunk.reset();
     Operator::close(state);
 }
 

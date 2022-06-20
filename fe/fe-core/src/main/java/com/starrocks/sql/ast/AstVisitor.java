@@ -27,6 +27,7 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
@@ -54,6 +55,7 @@ import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowStmt;
@@ -152,6 +154,10 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    public R visitCreateTableStatement(CreateTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -205,6 +211,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowTableStmt(ShowTableStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowCreateTableStmt(ShowCreateTableStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 

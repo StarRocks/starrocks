@@ -338,9 +338,10 @@ ColumnPtr BitmapFunctions::bitmap_to_array(FunctionContext* context, const starr
 }
 
 ColumnPtr BitmapFunctions::array_to_bitmap(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    const constexpr PrimitiveType TYPE = TYPE_BIGINT;
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
-    const constexpr PrimitiveType TYPE = TYPE_BIGINT;
 
     Column* data_column = ColumnHelper::get_data_column(columns[0].get());
     NullData::pointer null_data = columns[0]->is_nullable()
@@ -374,7 +375,9 @@ ColumnPtr BitmapFunctions::array_to_bitmap(FunctionContext* context, const starr
             if (element_null_data && element_null_data[j]) {
                 continue;
             }
-            bitmap.add(element_container[j]);
+            if (element_container[j] >= 0) {
+                bitmap.add(element_container[j]);
+            }
         }
         // append bitmap
         builder.append(std::move(bitmap));
@@ -386,13 +389,17 @@ ColumnPtr BitmapFunctions::bitmap_max(FunctionContext* context, const starrocks:
     ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 
     size_t size = columns[0]->size();
-    ColumnBuilder<TYPE_BIGINT> builder(size);
+    ColumnBuilder<TYPE_LARGEINT> builder(size);
     for (int row = 0; row < size; ++row) {
         if (viewer.is_null(row)) {
             builder.append_null();
         } else {
-            int64_t value = viewer.value(row)->max();
-            builder.append(value);
+            if (auto max_value = viewer.value(row)->max(); max_value.has_value()) {
+                int128_t value128 = max_value.value();
+                builder.append(value128);
+            } else {
+                builder.append_null();
+            }
         }
     }
 
@@ -403,13 +410,17 @@ ColumnPtr BitmapFunctions::bitmap_min(FunctionContext* context, const starrocks:
     ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 
     size_t size = columns[0]->size();
-    ColumnBuilder<TYPE_BIGINT> builder(size);
+    ColumnBuilder<TYPE_LARGEINT> builder(size);
     for (int row = 0; row < size; ++row) {
         if (viewer.is_null(row)) {
             builder.append_null();
         } else {
-            int64_t value = viewer.value(row)->min();
-            builder.append(value);
+            if (auto min_value = viewer.value(row)->min(); min_value.has_value()) {
+                int128_t value128 = min_value.value();
+                builder.append(value128);
+            } else {
+                builder.append_null();
+            }
         }
     }
 

@@ -365,7 +365,7 @@ public class ExpressionAnalyzer {
         List<String> addDateFunctions = Lists.newArrayList(FunctionSet.DATE_ADD,
                 FunctionSet.ADDDATE, FunctionSet.DAYS_ADD, FunctionSet.TIMESTAMPADD);
         List<String> subDateFunctions = Lists.newArrayList(FunctionSet.DATE_SUB, FunctionSet.SUBDATE,
-                FunctionSet.DATE_SUB);
+                FunctionSet.DAYS_SUB);
 
         @Override
         public Void visitTimestampArithmeticExpr(TimestampArithmeticExpr node, Scope scope) {
@@ -537,12 +537,6 @@ public class ExpressionAnalyzer {
                 //TODO: fix how we equal count distinct.
                 fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                if (fn instanceof AggregateFunction) {
-                    throw new SemanticException("Time Type can not used in %s function",
-                            fnName);
-                }
             } else if (FunctionSet.decimalRoundFunctions.contains(fnName) ||
                     Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
                 // Since the priority of decimal version is higher than double version (according functionId),
@@ -551,6 +545,12 @@ public class ExpressionAnalyzer {
                 // lacking of specific decimal type process defined in `getDecimalV3Function`. So we force round functions
                 // to go through `getDecimalV3Function` here
                 fn = getDecimalV3Function(node, argumentTypes);
+            } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                if (fn instanceof AggregateFunction) {
+                    throw new SemanticException("Time Type can not used in %s function",
+                            fnName);
+                }
             } else if (FunctionSet.STR_TO_DATE.equals(fnName)) {
                 fn = getStrToDateFunction(node, argumentTypes);
             } else {

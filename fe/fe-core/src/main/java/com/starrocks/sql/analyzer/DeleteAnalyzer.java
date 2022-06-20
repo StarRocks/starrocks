@@ -10,6 +10,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -28,8 +29,15 @@ public class DeleteAnalyzer {
     public static void analyze(DeleteStmt deleteStatement, ConnectContext session) {
         TableName tableName = deleteStatement.getTableName();
         MetaUtils.normalizationTableName(session, tableName);
-        MetaUtils.getStarRocks(session, tableName);
-        Table table = MetaUtils.getStarRocksTable(session, tableName);
+        MetaUtils.getDatabase(session, tableName);
+        Table table = MetaUtils.getTable(session, tableName);
+
+        if (table instanceof MaterializedView) {
+            throw new SemanticException(
+                    "The data of '%s' cannot be deleted because '%s' is a materialized view," +
+                            "and the data of materialized view must be consistent with the base table.",
+                    tableName.getTbl(), tableName.getTbl());
+        }
 
         if (!(table instanceof OlapTable && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS)) {
             try {

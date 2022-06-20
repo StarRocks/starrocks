@@ -36,6 +36,7 @@ add_library(Storage STATIC
     del_vector.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
+    metadata_util.cpp
     kv_store.cpp
     olap_common.cpp
     olap_server.cpp
@@ -108,7 +109,6 @@ add_library(Storage STATIC
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
     task/engine_storage_migration_task.cpp
-    task/engine_publish_version_task.cpp
     task/engine_alter_tablet_task.cpp
     column_vector.cpp
     aggregate_iterator.cpp
@@ -158,8 +158,11 @@ add_library(Storage STATIC
     compaction_task_factory.cpp
     base_and_cumulative_compaction_policy.cpp
     cluster_id_mgr.cpp
+    lake/async_delta_writer.cpp
     lake/delta_writer.cpp
     lake/general_tablet_writer.cpp
+    lake/starlet_group_assigner.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp
+    lake/metadata_iterator.cpp
 )

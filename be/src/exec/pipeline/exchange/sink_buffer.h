@@ -9,7 +9,12 @@
 #include <queue>
 #include <unordered_set>
 
-#include "bthread/mutex.h"
+#include "common/compiler_util.h"
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <bthread/mutex.h>
+DIAGNOSTIC_POP
+
 #include "column/chunk.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"

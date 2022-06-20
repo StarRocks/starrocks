@@ -98,10 +98,6 @@ private:
     static void* _create_tablet_worker_thread_callback(void* arg_this);
     static void* _drop_tablet_worker_thread_callback(void* arg_this);
     static void* _push_worker_thread_callback(void* arg_this);
-    static Status _publish_version_in_parallel(void* arg_this, std::unique_ptr<ThreadPool>& threadpool,
-                                               const TPublishVersionRequest publish_version_req,
-                                               std::set<TTabletId>* tablet_ids,
-                                               std::vector<TTabletId>* error_tablet_ids);
     static void* _publish_version_worker_thread_callback(void* arg_this);
     static void* _clear_transaction_task_worker_thread_callback(void* arg_this);
     static void* _alter_tablet_worker_thread_callback(void* arg_this);
@@ -145,7 +141,7 @@ private:
     CALLBACK_FUNCTION _callback_function;
 
     static FrontendServiceClientCache _master_service_client_cache;
-    static std::atomic_ulong _s_report_version;
+    static std::atomic<int64_t> _s_report_version;
 
     static std::mutex _s_task_signatures_locks[TTaskType::type::NUM_TASK_TYPE];
     static std::set<int64_t> _s_task_signatures[TTaskType::type::NUM_TASK_TYPE];

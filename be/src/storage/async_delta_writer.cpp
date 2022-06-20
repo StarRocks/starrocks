@@ -5,7 +5,6 @@
 #include <fmt/format.h>
 
 #include "runtime/current_thread.h"
-#include "storage/async_delta_writer_executor.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks::vectorized {

@@ -16,10 +16,12 @@ statement
     : queryStatement                                                                        #query
 
     // Table Statement
+    | createTableStatement                                                                  #createTable
     | createTableAsSelectStatement                                                          #createTableAsSelect
     | alterTableStatement                                                                   #alterTable
     | dropTableStatement                                                                    #dropTable
     | showTableStatement                                                                    #showTables
+    | showCreateTableStatement                                                              #showCreateTable
     | showColumnStatement                                                                   #showColumn
     | showTableStatusStatement                                                              #showTableStatus
     | createIndexStatement                                                                  #createIndex
@@ -64,6 +66,8 @@ statement
     | analyzeStatement                                                                      #analyze
     | createAnalyzeStatement                                                                #createAnalyze
     | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
+    | analyzeHistogramStatement                                                             #analyzeHistogram
+    | dropAnalyzeHistogramStatement                                                         #dropHistogram
     | showAnalyzeStatement                                                                  #showAnalyze
 
     // Work Group Statement
@@ -85,7 +89,80 @@ statement
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
     ;
 
+
+
 // ------------------------------------------- Table Statement ---------------------------------------------------------
+
+createTableStatement
+    : CREATE EXTERNAL? TABLE (IF NOT EXISTS)? qualifiedName
+          '(' columnDesc (',' columnDesc)* (',' indexDesc)* ')'
+          engineDesc?
+          charsetDesc?
+          keyDesc?
+          comment?
+          partitionDesc?
+          distributionDesc?
+          rollupDesc?
+          properties?
+          extProperties?
+     ;
+
+columnDesc
+    : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)? defaultDesc? comment?
+    ;
+
+charsetName
+    : CHAR SET identifier
+    | CHARSET identifier
+    ;
+
+defaultDesc
+    : DEFAULT (string| NULL | CURRENT_TIMESTAMP)
+    ;
+
+indexDesc
+    : INDEX indexName=identifier identifierList indexType? comment?
+    ;
+
+engineDesc
+    : ENGINE EQ identifier
+    ;
+
+charsetDesc
+    : DEFAULT? CHARSET EQ? identifierOrString
+    ;
+
+
+keyDesc
+    : (AGGREGATE | UNIQUE | PRIMARY | DUPLICATE) KEY identifierList
+    ;
+
+aggDesc
+    : SUM
+    | MAX
+    | MIN
+    | REPLACE
+    | HLL_UNION
+    | BITMAP_UNION
+    | PERCENTILE_UNION
+    | REPLACE_IF_NOT_NULL
+    ;
+
+rollupDesc
+    : ROLLUP '(' addRollupClause (',' addRollupClause)* ')'
+    ;
+
+addRollupClause
+    : rollupName=identifier identifierList (dupKeys)? (fromRollup)? properties?
+    ;
+
+dupKeys
+    : DUPLICATE KEY identifierList
+    ;
+
+fromRollup
+    : FROM identifier
+    ;
 
 createTableAsSelectStatement
     : CREATE TABLE (IF NOT EXISTS)? qualifiedName
@@ -120,6 +197,10 @@ indexType
 
 showTableStatement
     : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showCreateTableStatement
+    : SHOW CREATE (TABLE | VIEW | MATERIALIZED VIEW) table=qualifiedName
     ;
 
 showColumnStatement
@@ -255,7 +336,7 @@ modifyFrontendHostClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT INTO qualifiedName partitionNames?
+    : explainDesc? INSERT (INTO | OVERWRITE) qualifiedName partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
@@ -272,6 +353,15 @@ deleteStatement
 
 analyzeStatement
     : ANALYZE FULL? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    ;
+
+analyzeHistogramStatement
+    : ANALYZE TABLE qualifiedName UPDATE HISTOGRAM ON identifier (',' identifier)*
+        (WITH bucket=INTEGER_VALUE BUCKETS)? properties?
+    ;
+
+dropAnalyzeHistogramStatement
+    : ANALYZE TABLE qualifiedName DROP HISTOGRAM ON identifier (',' identifier)*
     ;
 
 createAnalyzeStatement
@@ -676,7 +766,25 @@ explainDesc
     ;
 
 partitionDesc
-    : PARTITION BY RANGE identifierList '(' rangePartitionDesc (',' rangePartitionDesc)* ')'
+    : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
+    | PARTITION BY LIST identifierList '(' (listPartitionDesc (',' listPartitionDesc)*)? ')'
+    ;
+
+listPartitionDesc
+    : singleItemListPartitionDesc
+    | multiItemListPartitionDesc
+    ;
+
+singleItemListPartitionDesc
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN stringList propertyList?
+    ;
+
+multiItemListPartitionDesc
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN '(' stringList (',' stringList)* ')' propertyList?
+    ;
+
+stringList
+    : '(' string (',' string)* ')'
     ;
 
 rangePartitionDesc
@@ -685,7 +793,7 @@ rangePartitionDesc
     ;
 
 singleRangePartition
-    : PARTITION identifier VALUES partitionKeyDesc
+    : PARTITION (IF NOT EXISTS)? identifier VALUES partitionKeyDesc propertyList?
     ;
 
 multiRangePartition
@@ -695,7 +803,7 @@ multiRangePartition
 
 partitionKeyDesc
     : LESS THAN (MAXVALUE | partitionValueList)
-    | '[' partitionValueList ',' partitionValueList ']'
+    | '[' partitionValueList ',' partitionValueList ')'
     ;
 
 partitionValueList
@@ -718,6 +826,14 @@ refreshSchemeDesc
 
 properties
     : PROPERTIES '(' property (',' property)* ')'
+    ;
+
+extProperties
+    : BROKER properties
+    ;
+
+propertyList
+    : '(' property (',' property)* ')'
     ;
 
 property
@@ -763,7 +879,7 @@ unitIdentifier
 
 type
     : baseType
-    | decimalType ('(' precision=INTEGER_VALUE (',' scale=INTEGER_VALUE)? ')')?
+    | decimalType
     | arrayType
     ;
 
@@ -777,12 +893,13 @@ typeParameter
 
 baseType
     : BOOLEAN
-    | TINYINT
-    | SMALLINT
-    | INT
-    | INTEGER
-    | BIGINT
-    | LARGEINT
+    | TINYINT typeParameter?
+    | SMALLINT typeParameter?
+    | SIGNED INT?
+    | INT typeParameter?
+    | INTEGER typeParameter?
+    | BIGINT typeParameter?
+    | LARGEINT typeParameter?
     | FLOAT
     | DOUBLE
     | DATE
@@ -798,7 +915,7 @@ baseType
     ;
 
 decimalType
-    : DECIMAL | DECIMALV2 | DECIMAL32 | DECIMAL64 | DECIMAL128
+    : (DECIMAL | DECIMALV2 | DECIMAL32 | DECIMAL64 | DECIMAL128) ('(' precision=INTEGER_VALUE (',' scale=INTEGER_VALUE)? ')')?
     ;
 
 qualifiedName
@@ -850,12 +967,12 @@ nonReserved
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FILE | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
     | GLOBAL | GRANTS
-    | HASH | HELP | HLL_UNION | HOUR
+    | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR
     | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
     | MANUAL | MATERIALIZED | MAX | MIN | MINUTE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NULLS
-    | OBSERVER | OFFSET | ONLY | OPEN
+    | OBSERVER | OFFSET | ONLY | OPEN | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA

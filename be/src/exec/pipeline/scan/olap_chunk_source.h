@@ -63,6 +63,8 @@ private:
     // if it runs in the worker thread owned by other workgroup, which has running drivers.
     static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 20'000'000L;
 
+    static constexpr int UPDATE_AVG_ROW_BYTES_FREQUENCY = 8;
+
     Status _get_tablet(const TInternalScanRange* scan_range);
     Status _init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges,
                                const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
@@ -75,6 +77,8 @@ private:
     void _update_counter();
     void _update_realtime_counter(vectorized::Chunk* chunk);
     void _decide_chunk_size();
+
+    void _update_avg_row_bytes(vectorized::Chunk* chunk, size_t chunk_index, size_t batch_size);
 
 private:
     vectorized::TabletReaderParams _params{};
@@ -116,6 +120,9 @@ private:
     int64_t _raw_rows_read = 0;
     int64_t _compressed_bytes_read = 0;
     int64_t _last_spent_cpu_time_ns = 0;
+
+    size_t _local_sum_row_bytes = 0;
+    size_t _local_num_rows = 0;
 
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;

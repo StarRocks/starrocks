@@ -15,6 +15,7 @@ Status ProjectOperator::prepare(RuntimeState* state) {
 }
 
 void ProjectOperator::close(RuntimeState* state) {
+    _cur_chunk.reset();
     Operator::close(state);
 }
 

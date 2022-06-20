@@ -5,6 +5,7 @@
 #include <string_view>
 
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/unary_function.h"
 #include "runtime/datetime_value.h"
@@ -56,7 +57,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
 
     if (v1->is_constant()) {
         auto value = ColumnHelper::get_const_value<Type>(v1);
-        if (value.is_valid()) {
+        if (value.is_valid_non_strict()) {
             return v1;
         } else {
             return ColumnHelper::create_const_null_column(v1->size());
@@ -73,7 +74,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
         int size = v->size();
         for (int i = 0; i < size; ++i) {
             // if null or is invalid
-            null_result[i] = nulls[i] | (!values[i].is_valid());
+            null_result[i] = nulls[i] | (!values[i].is_valid_non_strict());
         }
 
         return NullableColumn::create(v->data_column(), null_column);
@@ -85,7 +86,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
 
         int size = v1->size();
         for (int i = 0; i < size; ++i) {
-            nulls[i] = (!values[i].is_valid());
+            nulls[i] = (!values[i].is_valid_non_strict());
         }
 
         return NullableColumn::create(v1, null_column);
@@ -1163,9 +1164,14 @@ ColumnPtr TimeFunctions::from_unix_to_datetime_with_format(FunctionContext* cont
 
 // from_days
 DEFINE_UNARY_FN_WITH_IMPL(from_daysImpl, v) {
+    //return 00-00-00 if the argument is negative or too large, according to MySQL
     DateValue dv{date::BC_EPOCH_JULIAN + v};
+    if (!dv.is_valid()) {
+        return DateValue{date::ZERO_EPOCH_JULIAN};
+    }
     return dv;
 }
+
 ColumnPtr TimeFunctions::from_days(FunctionContext* context, const Columns& columns) {
     return date_valid<TYPE_DATE>(
             VectorizedStrictUnaryFunction<from_daysImpl>::evaluate<TYPE_INT, TYPE_DATE>(VECTORIZED_FN_ARGS(0)));
