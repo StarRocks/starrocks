@@ -1687,7 +1687,7 @@ public class GlobalStateMgr {
                 System.exit(-1);
             }
 
-            // EOF
+            // EOF or aggressive retry
             if (entity == null) {
                 break;
             }

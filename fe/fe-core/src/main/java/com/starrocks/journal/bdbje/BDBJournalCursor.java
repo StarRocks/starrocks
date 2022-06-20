@@ -40,8 +40,8 @@ import java.util.List;
 
 public class BDBJournalCursor implements JournalCursor {
     private static final Logger LOG = LogManager.getLogger(JournalCursor.class);
-    static final int RETRY_TIME = 3;
-    static final long SLEEP_INTERVAL_SEC = 5;
+    private static final int RETRY_TIME = 3;
+    private static final long SLEEP_INTERVAL_SEC = 3;
 
     private long toKey;
     private long currentKey;
@@ -64,8 +64,6 @@ public class BDBJournalCursor implements JournalCursor {
         this.currentKey = fromKey;
         this.dbNames = env.getDatabaseNames();
         if (dbNames == null) {
-            // TODO we should raise JournalException in getDatabaseNames()
-            //   now we haven swallowed the details
             throw new JournalException("failed to get db names!");
         }
         this.nextDbPositionIndex = 0;
@@ -197,6 +195,7 @@ public class BDBJournalCursor implements JournalCursor {
                             key, database);
                     return null;
                 } else {
+                    // other error status, will record error message and retry
                     String errMsg = String.format("failed to read after retried %d times! key = %d, db = %s, status = %s",
                             i + 1, key, database, operationStatus);
                     LOG.warn(errMsg);
