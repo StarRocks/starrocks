@@ -41,7 +41,7 @@ public class TaskRunManager {
             return new SubmitResult(taskRun.getStatus().getQueryId(), SubmitResult.SubmitStatus.FAILED);
         }
 
-        if (pendingTaskRunMap.keySet().size() > Config.task_runs_queue_length) {
+        if (pendingTaskRunMap.keySet().size() >= Config.task_runs_queue_length) {
             LOG.warn("pending TaskRun exceeds task_runs_queue_length:{}, reject the submit.",
                     Config.task_runs_queue_length);
             return new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
