@@ -2,6 +2,7 @@
 
 package com.starrocks.connector;
 
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.thrift.TScanRangeLocations;
 
 public interface ConnectorScanRangeMgr {
@@ -10,7 +11,7 @@ public interface ConnectorScanRangeMgr {
      * Used to get scan range locations for given connector.
      * @return
      */
-    default TScanRangeLocations getSplits()
+    default TScanRangeLocations getScanRanges(PhysicalScanOperator scanOperator)
     {
         return null;
     }

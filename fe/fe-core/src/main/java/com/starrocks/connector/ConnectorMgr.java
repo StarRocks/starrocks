@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.hive.HiveConnectorFactory;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.ScanRangeMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -21,9 +22,11 @@ public class ConnectorMgr {
     private final ReadWriteLock connectorLock = new ReentrantReadWriteLock();
 
     private final MetadataMgr metadataMgr;
+    private final ScanRangeMgr scanRangeMgr;
 
-    public ConnectorMgr(MetadataMgr metadataMgr) {
+    public ConnectorMgr(MetadataMgr metadataMgr, ScanRangeMgr scanRangeMgr) {
         this.metadataMgr = metadataMgr;
+        this.scanRangeMgr = scanRangeMgr;
         init();
     }
 
@@ -108,10 +111,12 @@ public class ConnectorMgr {
 
     private void registerConnectorInternal(Connector connector, ConnectorContext context) throws Exception {
         metadataMgr.addMetadata(context.getCatalogName(), connector.getMetadata());
+        scanRangeMgr.addScanRangeMgr(context.getCatalogName(), connector.getScanRangeMgr());
     }
 
     private void removeConnectorInternal(String catalogName) {
         metadataMgr.removeMetadata(catalogName);
+        scanRangeMgr.removeScanRangeMgr(catalogName);
     }
 
     private void readLock() {
