@@ -21,11 +21,13 @@
 
 package com.starrocks.journal.bdbje;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.sleepycat.bind.tuple.TupleBinding;
 import com.sleepycat.je.Database;
 import com.sleepycat.je.DatabaseEntry;
 import com.sleepycat.je.DatabaseException;
 import com.sleepycat.je.OperationStatus;
+import com.sleepycat.je.Transaction;
 import com.sleepycat.je.rep.InsufficientLogException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
@@ -57,7 +59,8 @@ import java.util.concurrent.atomic.AtomicLong;
 public class BDBJEJournal implements Journal {
     public static final Logger LOG = LogManager.getLogger(BDBJEJournal.class);
     private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
-    private static final int RETRY_TIME = 3;
+    static final int RETRY_TIME = 3;
+    static final int SLEEP_INTERVAL_SEC = 5;
 
     private String environmentPath = null;
     private String selfNodeName;
@@ -65,8 +68,16 @@ public class BDBJEJournal implements Journal {
 
     private BDBEnvironment bdbEnvironment = null;
     private CloseSafeDatabase currentJournalDB;
-    // the next journal's id. start from 1.
+    protected Transaction currentTrasaction = null;
+    // only kept for profile test, will remove in the next PR
+    @VisibleForTesting
     private AtomicLong nextJournalId = new AtomicLong(1);
+
+    @VisibleForTesting
+    public BDBJEJournal(BDBEnvironment bdbEnvironment, CloseSafeDatabase currentJournalDB) {
+        this.bdbEnvironment = bdbEnvironment;
+        this.currentJournalDB = currentJournalDB;
+    }
 
     public BDBJEJournal(String nodeName) {
         initBDBEnv(nodeName);
@@ -99,13 +110,12 @@ public class BDBJEJournal implements Journal {
      * The next database's name is 201
      */
     @Override
-    public synchronized void rollJournal() {
+    public synchronized void rollJournal(long newName) {
         // Doesn't need to roll if current database contains no journals
         if (currentJournalDB.getDb().count() == 0) {
             return;
         }
 
-        long newName = nextJournalId.get();
         String currentDbName = currentJournalDB.getDb().getDatabaseName();
         long currentName = Long.parseLong(currentDbName);
         long newNameVerify = currentName + currentJournalDB.getDb().count();
@@ -122,6 +132,11 @@ public class BDBJEJournal implements Journal {
         }
     }
 
+    /**
+     * TODO remove this method in later PR
+     * Now we only kept it for profile test
+     */
+    @VisibleForTesting
     @Override
     public synchronized void write(short op, Writable writable) {
         JournalEntity entity = new JournalEntity();
@@ -311,9 +326,6 @@ public class BDBJEJournal implements Journal {
                     LOG.warn("fail to open database {}. retried {} times", dbName, i);
                     continue;
                 }
-
-                // set next journal id
-                nextJournalId.set(getMaxJournalId() + 1);
                 return;
             } catch (InsufficientLogException insufficientLogEx) {
                 LOG.warn("catch insufficient log exception. please restart", insufficientLogEx);
@@ -393,6 +405,143 @@ public class BDBJEJournal implements Journal {
 
     public BDBEnvironment getBdbEnvironment() {
         return bdbEnvironment;
+    }
+
+    /**
+     * start batch write
+     * for BDB: start transaction.
+     */
+    @Override
+    public void batchWriteBegin() throws InterruptedException, JournalException {
+        if (currentTrasaction != null) {
+            throw new JournalException(String.format(
+                    "failed to begin batch write because has running txn = %s", currentTrasaction));
+        }
+
+        JournalException exception = null;
+        for (int i = 0; i < RETRY_TIME; i++) {
+            try {
+                // sleep before retry
+                if (i != 0) {
+                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+                }
+
+                currentTrasaction = currentJournalDB.getDb().getEnvironment().beginTransaction(
+                        null, bdbEnvironment.getTxnConfig());
+                return;
+            } catch (DatabaseException e) {
+                String errMsg = String.format("failed to begin txn after retried %d times! db = %s",
+                        i + 1, currentJournalDB);
+                LOG.error(errMsg, e);
+                exception = new JournalException(errMsg);
+                exception.initCause(e);
+            }
+        }
+        // failed after retried
+        throw exception;
+    }
+
+    /**
+     * append buffer to current batch
+     * for bdb: write to transaction, no commit
+     */
+    @Override
+    public void batchWriteAppend(long journalId, DataOutputBuffer buffer) throws InterruptedException, JournalException {
+        if (currentTrasaction == null) {
+            throw new JournalException("failed to append because no running txn!");
+        }
+        // id is the key
+        DatabaseEntry theKey = new DatabaseEntry();
+        TupleBinding<Long> idBinding = TupleBinding.getPrimitiveBinding(Long.class);
+        idBinding.objectToEntry(journalId, theKey);
+        // entity is the value
+        DatabaseEntry theData = new DatabaseEntry(buffer.getData(), 0, buffer.getLength());
+
+        JournalException exception = null;
+        for (int i = 0; i < RETRY_TIME; i++) {
+            try {
+                // sleep before retry
+                if (i != 0) {
+                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+                }
+
+                OperationStatus status = currentJournalDB.put(currentTrasaction, theKey, theData);
+                if (status != OperationStatus.SUCCESS) {
+                    throw new JournalException(String.format(
+                            "failed to append journal after retried %d times! status[%s] db[%s] key[%s] data[%s]",
+                            i + 1, status, currentJournalDB, theKey, theData));
+                }
+                // success
+                return;
+            } catch (DatabaseException e) {
+                String errMsg = String.format(
+                        "failed to append journal after retried %d times! key[%s] value[%s] txn[%s] db[%s]",
+                        i + 1, theKey, theData, currentTrasaction, currentJournalDB);
+                LOG.error(errMsg, e);
+                exception = new JournalException(errMsg);
+                exception.initCause(e);
+            } catch (JournalException e) {
+                LOG.error("failed to write journal", e);
+                exception = e;
+            }
+        }
+        // failed after retried
+        throw exception;
+    }
+
+    /**
+     * persist current batch
+     * for bdb: commit current transaction
+     */
+    @Override
+    public void batchWriteCommit() throws InterruptedException, JournalException {
+        if (currentTrasaction == null) {
+            throw new JournalException("failed to commit because no running txn!");
+        }
+
+        JournalException exception = null;
+        for (int i = 0; i < RETRY_TIME; i++) {
+            try {
+                // sleep before retry
+                if (i != 0) {
+                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+                }
+
+                currentTrasaction.commit();
+                currentTrasaction = null;
+                return;
+            } catch (DatabaseException e) {
+                String errMsg = String.format("failed to commit journal after retried %d times! txn[%s] db[%s]",
+                        i + 1, currentTrasaction, currentJournalDB);
+                LOG.error(errMsg, e);
+                exception = new JournalException(errMsg);
+                exception.initCause(e);
+            }
+        }
+        // failed after retried
+        throw exception;
+    }
+
+    /**
+     * abort current transaction
+     * for bdb: abort current transaction.
+     */
+    @Override
+    public void batchWriteAbort() throws InterruptedException, JournalException {
+        if (currentTrasaction == null) {
+            LOG.warn("failed to abort transaction because no running transaction, will just ignore and return.");
+            return;
+        }
+        try {
+            currentTrasaction.abort();
+        } catch (DatabaseException e) {
+            JournalException exception = new JournalException(String.format(
+                    "failed to abort batch write! txn[%s] db[%s]", currentTrasaction, currentJournalDB));
+            exception.initCause(e);
+            throw exception;
+        } finally {
+            currentTrasaction = null;
+        }
     }
 
 }

@@ -141,7 +141,9 @@ void CmdlineAction::handle(HttpRequest* req) {
         return;
     }
     char buf[1024];
-    fscanf(fp, "%s ", buf);
+    if (fscanf(fp, "%s ", buf) != 1) {
+        strcpy(buf, "read cmdline failed");
+    }
     fclose(fp);
     std::string str = buf;
 

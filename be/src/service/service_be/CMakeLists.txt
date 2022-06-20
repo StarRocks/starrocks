@@ -29,5 +29,6 @@ add_library(ServiceBE
     backend_service.cpp
     http_service.cpp
     internal_service.cpp
+    lake_service.cpp
     starrocks_be.cpp
 )

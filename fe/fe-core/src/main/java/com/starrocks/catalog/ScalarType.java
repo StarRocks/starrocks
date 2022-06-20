@@ -663,45 +663,6 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     @Override
-    public int getStorageLayoutBytes() {
-        switch (type) {
-            case BOOLEAN:
-            case TINYINT:
-                return 1;
-            case SMALLINT:
-                return 2;
-            case INT:
-            case FLOAT:
-            case DECIMAL32:
-                return 4;
-            case BIGINT:
-            case TIME:
-            case DATETIME:
-            case DECIMAL64:
-                return 8;
-            case DECIMAL128:
-            case LARGEINT:
-            case DECIMALV2:
-                return 16;
-            case DOUBLE:
-                return 12;
-            case DATE:
-                return 3;
-            case CHAR:
-            case VARCHAR:
-                return len;
-            case HLL:
-                return 16385;
-            case BITMAP:
-                return 1024; // this is a estimated value
-            case JSON:
-                return 128; // estimated value
-            default:
-                return 0;
-        }
-    }
-
-    @Override
     public TColumnType toColumnTypeThrift() {
         TColumnType thrift = new TColumnType();
         thrift.type = type.toThrift();
@@ -727,5 +688,15 @@ public class ScalarType extends Type implements Cloneable {
     @Override
     public ScalarType clone() {
         return (ScalarType) super.clone();
+    }
+
+    @Override
+    public String canonicalName() {
+        if (isDecimalOfAnyVersion()) {
+            Preconditions.checkArgument(!isWildcardDecimal());
+            return String.format("DECIMAL(%d,%d)", precision, scale);
+        } else {
+            return toString();
+        }
     }
 }

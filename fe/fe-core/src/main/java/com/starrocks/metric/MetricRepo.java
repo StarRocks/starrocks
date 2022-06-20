@@ -99,6 +99,9 @@ public final class MetricRepo {
 
     public static Histogram HISTO_QUERY_LATENCY;
     public static Histogram HISTO_EDIT_LOG_WRITE_LATENCY;
+    public static Histogram HISTO_JOURNAL_WRITE_LATENCY;
+    public static Histogram HISTO_JOURNAL_WRITE_BATCH;
+    public static Histogram HISTO_JOURNAL_WRITE_BYTES;
 
     // following metrics will be updated by metric calculator
     public static GaugeMetricImpl<Double> GAUGE_QUERY_PER_SECOND;
@@ -113,6 +116,7 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P99;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P999;
     public static GaugeMetricImpl<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
+    public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
     private static ScheduledThreadPoolExecutor metricTimer =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
@@ -261,6 +265,11 @@ public final class MetricRepo {
         GAUGE_MAX_TABLET_COMPACTION_SCORE.setValue(0L);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_MAX_TABLET_COMPACTION_SCORE);
 
+        GAUGE_STACKED_JOURNAL_NUM = new GaugeMetricImpl<>(
+                "editlog_stacked_num", MetricUnit.OPERATIONS, "counter of edit log that are stacked");
+        GAUGE_STACKED_JOURNAL_NUM.setValue(0L);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_STACKED_JOURNAL_NUM);
+
         GAUGE_QUERY_LATENCY_MEAN =
                 new GaugeMetricImpl<>("query_latency", MetricUnit.MILLISECONDS, "mean of query latency");
         GAUGE_QUERY_LATENCY_MEAN.addLabel(new MetricLabel("type", "mean"));
@@ -363,6 +372,12 @@ public final class MetricRepo {
         HISTO_QUERY_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("query", "latency", "ms"));
         HISTO_EDIT_LOG_WRITE_LATENCY =
                 METRIC_REGISTER.histogram(MetricRegistry.name("editlog", "write", "latency", "ms"));
+        HISTO_JOURNAL_WRITE_LATENCY =
+                METRIC_REGISTER.histogram(MetricRegistry.name("journal", "write", "latency", "ms"));
+        HISTO_JOURNAL_WRITE_BATCH =
+                METRIC_REGISTER.histogram(MetricRegistry.name("journal", "write", "batch"));
+        HISTO_JOURNAL_WRITE_BYTES =
+                METRIC_REGISTER.histogram(MetricRegistry.name("journal", "write", "bytes"));
 
         // init system metrics
         initSystemMetrics();

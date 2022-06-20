@@ -12,7 +12,6 @@ DIAGNOSTIC_POP
 
 #include <chrono>
 #include <cstdint>
-#include <shared_mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -85,7 +84,9 @@ private:
 
         void add_finished_tablet(int64_t tablet_id) {
             std::lock_guard l(_mtx);
-            _response->add_tablet_vec()->set_tablet_id(tablet_id);
+            auto info = _response->add_tablet_vec();
+            info->set_tablet_id(tablet_id);
+            info->set_schema_hash(0); // required field
         }
 
     private:
@@ -260,6 +261,12 @@ void LakeTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAd
             for (auto& [tablet_id, dw] : _delta_writers) {
                 if (_dirty_partitions.count(dw->partition_id()) == 0) {
                     // This is a clean AsyncDeltaWriter, skip calling `finish()`
+                    count_down_latch.count_down();
+                    continue;
+                }
+                // This AsyncDeltaWriter may have not been `open()`ed
+                if (auto st = dw->open(); !st.ok()) {
+                    context->update_status(st);
                     count_down_latch.count_down();
                     continue;
                 }

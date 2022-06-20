@@ -63,6 +63,7 @@ import static com.starrocks.catalog.AggregateType.HLL_UNION;
 public class CreateTableStmt extends DdlStmt {
 
     private static final String DEFAULT_ENGINE_NAME = "olap";
+    public static final String LAKE_ENGINE_NAME = "starrocks";
     private static final String DEFAULT_CHARSET_NAME = "utf8";
 
     private boolean ifNotExists;
@@ -99,6 +100,7 @@ public class CreateTableStmt extends DdlStmt {
         engineNames.add("iceberg");
         engineNames.add("hudi");
         engineNames.add("jdbc");
+        engineNames.add(LAKE_ENGINE_NAME);
     }
 
     static {
@@ -265,6 +267,18 @@ public class CreateTableStmt extends DdlStmt {
         this.engineName = engineName;
     }
 
+    public boolean isOlapEngine() {
+        return engineName.equals("olap");
+    }
+
+    public boolean isLakeEngine() {
+        return engineName.equals(LAKE_ENGINE_NAME);
+    }
+
+    public boolean isOlapOrLakeEngine() {
+        return isOlapEngine() || isLakeEngine();
+    }
+
     public String getCharsetName() {
         return charsetName;
     }
@@ -319,7 +333,7 @@ public class CreateTableStmt extends DdlStmt {
         if (!(engineName.equals("mysql") || engineName.equals("broker") ||
                 engineName.equals("hive") || engineName.equals("iceberg") ||
                 engineName.equals("hudi") || engineName.equals("jdbc"))) {
-            // olap table
+            // olap table or lake table
             if (keysDesc == null) {
                 List<String> keysColumnNames = Lists.newArrayList();
                 int keyLength = 0;
@@ -403,13 +417,12 @@ public class CreateTableStmt extends DdlStmt {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLE_MUST_HAVE_COLUMNS);
         }
 
-        int rowLengthBytes = 0;
         boolean hasHll = false;
         boolean hasBitmap = false;
         boolean hasJson = false;
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
-            columnDef.analyze(engineName.equals("olap"));
+            columnDef.analyze(isOlapOrLakeEngine());
 
             if (columnDef.getAggregateType() == HLL_UNION) {
                 hasHll = true;
@@ -426,13 +439,6 @@ public class CreateTableStmt extends DdlStmt {
             if (!columnSet.add(columnDef.getName())) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
             }
-
-            rowLengthBytes += columnDef.getType().getStorageLayoutBytes();
-        }
-
-        if (rowLengthBytes > Config.max_layout_length_per_row && engineName.equals("olap")) {
-            throw new AnalysisException("The size of a row (" + rowLengthBytes + ") exceed the maximal row size: "
-                    + Config.max_layout_length_per_row);
         }
 
         if (hasHll && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
@@ -443,7 +449,7 @@ public class CreateTableStmt extends DdlStmt {
             throw new AnalysisException("BITMAP_UNION must be used in AGG_KEYS");
         }
 
-        if (engineName.equals("olap")) {
+        if (isOlapOrLakeEngine()) {
             // analyze partition
             if (partitionDesc != null) {
                 if (partitionDesc.getType() == PartitionType.RANGE || partitionDesc.getType() == PartitionType.LIST) {
@@ -468,7 +474,7 @@ public class CreateTableStmt extends DdlStmt {
                 }
             }
             distributionDesc.analyze(columnSet);
-        } else if (engineName.equalsIgnoreCase("elasticsearch")) {
+        } else if (engineName.equals("elasticsearch")) {
             EsUtil.analyzePartitionAndDistributionDesc(partitionDesc, distributionDesc);
         } else {
             if (partitionDesc != null || distributionDesc != null) {
@@ -495,7 +501,7 @@ public class CreateTableStmt extends DdlStmt {
 
             for (IndexDef indexDef : indexDefs) {
                 indexDef.analyze();
-                if (!engineName.equalsIgnoreCase("olap")) {
+                if (!isOlapOrLakeEngine()) {
                     throw new AnalysisException("index only support in olap engine at current version.");
                 }
                 for (String indexColName : indexDef.getColumns()) {
@@ -554,6 +560,10 @@ public class CreateTableStmt extends DdlStmt {
 
         if (!engineNames.contains(engineName)) {
             throw new AnalysisException("Unknown engine name: " + engineName);
+        }
+
+        if (isLakeEngine() && !Config.use_staros) {
+            throw new AnalysisException("Engine " + engineName + " needs 'use_staros = true' config in fe.conf");
         }
     }
 
@@ -662,7 +672,7 @@ public class CreateTableStmt extends DdlStmt {
 
     @Override
     public boolean needAuditEncryption() {
-        return !engineName.equals("olap");
+        return !isOlapOrLakeEngine();
     }
 
     @Override

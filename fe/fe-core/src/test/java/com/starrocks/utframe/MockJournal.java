@@ -4,6 +4,7 @@ package com.starrocks.utframe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.journal.Journal;
@@ -11,7 +12,11 @@ import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.collections.map.HashedMap;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class MockJournal implements Journal {
     private final AtomicLong nextJournalId = new AtomicLong(1);
     private final Map<Long, JournalEntity> values = Maps.newConcurrentMap();
+    private Map<Long, JournalEntity> staggingEntityMap = new HashedMap();
 
     public MockJournal() {
     }
@@ -30,7 +36,8 @@ public class MockJournal implements Journal {
     }
 
     @Override
-    public void rollJournal() {
+    public void rollJournal(long journalId) {
+
     }
 
     @Override
@@ -82,6 +89,36 @@ public class MockJournal implements Journal {
     @Override
     public List<Long> getDatabaseNames() {
         return Lists.newArrayList(0L);
+    }
+
+    @Override
+    public void batchWriteBegin() throws InterruptedException, JournalException {
+        staggingEntityMap.clear();
+    }
+
+    @Override
+    public void batchWriteAppend(long journalId, DataOutputBuffer buffer)
+            throws InterruptedException, JournalException {
+        JournalEntity je = new JournalEntity();
+        try {
+            DataInputStream in = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
+            je.setOpCode(in.readShort());
+            je.setData(null);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        staggingEntityMap.put(journalId, je);
+    }
+
+    @Override
+    public void batchWriteCommit() throws InterruptedException, JournalException {
+        values.putAll(staggingEntityMap);
+        staggingEntityMap.clear();
+    }
+
+    @Override
+    public void batchWriteAbort() throws InterruptedException, JournalException {
+        staggingEntityMap.clear();
     }
 
     private static class MockJournalCursor implements JournalCursor {

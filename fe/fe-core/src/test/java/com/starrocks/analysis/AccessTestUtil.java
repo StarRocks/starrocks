@@ -147,10 +147,6 @@ public class AccessTestUtil {
                     minTimes = 0;
                     result = new Load();
 
-                    globalStateMgr.getClusterDbNames("testCluster");
-                    minTimes = 0;
-                    result = Lists.newArrayList("testCluster:testDb");
-
                     globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
                     minTimes = 0;
                     result = new DdlException("failed");
@@ -165,8 +161,6 @@ public class AccessTestUtil {
             };
             return globalStateMgr;
         } catch (DdlException e) {
-            return null;
-        } catch (AnalysisException e) {
             return null;
         }
     }
@@ -301,10 +295,6 @@ public class AccessTestUtil {
                     minTimes = 0;
                     result = Lists.newArrayList("testCluster:testDb");
 
-                    globalStateMgr.getClusterDbNames("testCluster");
-                    minTimes = 0;
-                    result = Lists.newArrayList("testCluster:testDb");
-
                     globalStateMgr.getDb("emptyCluster");
                     minTimes = 0;
                     result = null;
@@ -312,8 +302,6 @@ public class AccessTestUtil {
             };
             return globalStateMgr;
         } catch (DdlException e) {
-            return null;
-        } catch (AnalysisException e) {
             return null;
         }
     }

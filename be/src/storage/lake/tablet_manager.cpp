@@ -39,6 +39,10 @@ std::string TabletManager::tablet_metadata_path(const std::string& group, const 
     }
 }
 
+std::string TabletManager::tablet_metadata_cache_key(int64_t tablet_id, int64_t version) {
+    return fmt::format("tbl_{:016X}_{:016X}", tablet_id, version);
+}
+
 // trnslog path rule $Bucket:/$ServiceID/$GroupID/txn_${TabletID}_${TxnID}
 std::string TabletManager::txn_log_path(const std::string& group, int64_t tablet_id, int64_t txn_id) {
     if (group.back() != '/') {
@@ -54,6 +58,56 @@ std::string TabletManager::txn_log_path(const std::string& group, const std::str
     } else {
         return fmt::format("{}{}", group, txnlog_path);
     }
+}
+
+std::string TabletManager::txn_log_cache_key(int64_t tablet_id, int64_t txn_id) {
+    return fmt::format("txn_{:016X}_{:016X}", tablet_id, txn_id);
+}
+
+static void tablet_metadata_deleter(const CacheKey& key, void* value) {
+    std::string_view name(key.data(), key.size());
+    if (HasPrefixString(name, "tbl_")) {
+        TabletMetadataPtr* ptr = static_cast<TabletMetadataPtr*>(value);
+        delete ptr;
+    } else if (HasPrefixString(name, "txn_")) {
+        TxnLogPtr* ptr = static_cast<TxnLogPtr*>(value);
+        delete ptr;
+    }
+}
+
+bool TabletManager::fill_metacache(const std::string& key, void* ptr, int size) {
+    Cache::Handle* handle = _metacache->insert(CacheKey(key), ptr, size, tablet_metadata_deleter);
+    bool res = true;
+    if (handle == nullptr) {
+        res = false;
+    } else {
+        _metacache->release(handle);
+    }
+    return res;
+}
+
+TabletMetadataPtr TabletManager::lookup_tablet_metadata(const std::string& key) {
+    auto handle = _metacache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        return nullptr;
+    }
+    auto ptr = *(static_cast<TabletMetadataPtr*>(_metacache->value(handle)));
+    _metacache->release(handle);
+    return ptr;
+}
+
+TxnLogPtr TabletManager::lookup_txn_log(const std::string& key) {
+    auto handle = _metacache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        return nullptr;
+    }
+    auto ptr = *(static_cast<TxnLogPtr*>(_metacache->value(handle)));
+    _metacache->release(handle);
+    return ptr;
+}
+
+void TabletManager::erase_metacache(const std::string& key) {
+    _metacache->erase(CacheKey(key));
 }
 
 Status TabletManager::create_tablet(const TCreateTabletReq& req) {
@@ -82,7 +136,17 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(metadata_path));
     ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(metadata_path));
     RETURN_IF_ERROR(wf->append(tablet_metadata_pb.SerializeAsString()));
-    return wf->close();
+    RETURN_IF_ERROR(wf->close());
+
+    // put tabletmetadata into cache after tabletmetadata object write successfully. just log if put failed.
+    auto cache_key = tablet_metadata_cache_key(tablet_metadata_pb.id(), tablet_metadata_pb.version());
+    auto value_ptr = new std::shared_ptr<TabletMetadata>(new TabletMetadata(tablet_metadata_pb));
+    bool inserted = fill_metacache(cache_key, static_cast<void*>(value_ptr), tablet_metadata_pb.SpaceUsedLong());
+    if (!inserted) {
+        delete value_ptr;
+        LOG(WARNING) << "Failed to put tabletmetadata into cache " << metadata_path;
+    }
+    return Status::OK();
 }
 
 StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
@@ -107,18 +171,11 @@ Status TabletManager::drop_tablet(int64_t tablet_id) {
 
     RETURN_IF_ERROR(fs->iterate_dir(group_path, scan_cb));
     for (const auto& obj : objects) {
+        erase_metacache(obj);
         (void)fs->delete_file(fmt::format("{}/{}", group_path, obj));
     }
 
     return Status::OK();
-}
-
-Status TabletManager::put_tablet_metadata(const std::string& group, const TabletMetadata& metadata) {
-    auto metadata_path = tablet_metadata_path(group, metadata.id(), metadata.version());
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(metadata_path));
-    ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(metadata_path));
-    RETURN_IF_ERROR(wf->append(metadata.SerializeAsString()));
-    return wf->close();
 }
 
 Status TabletManager::put_tablet_metadata(const std::string& group, TabletMetadataPtr metadata) {
@@ -126,7 +183,22 @@ Status TabletManager::put_tablet_metadata(const std::string& group, TabletMetada
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(metadata_path));
     ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(metadata_path));
     RETURN_IF_ERROR(wf->append(metadata->SerializeAsString()));
-    return wf->close();
+    RETURN_IF_ERROR(wf->close());
+
+    // put into metacache
+    auto cache_key = tablet_metadata_cache_key(metadata->id(), metadata->version());
+    auto value_ptr = new std::shared_ptr<const TabletMetadata>(metadata);
+    bool inserted = fill_metacache(cache_key, static_cast<void*>(value_ptr), metadata->SpaceUsedLong());
+    if (!inserted) {
+        delete value_ptr;
+        LOG(WARNING) << "Failed to put into meta cache " << metadata_path;
+    }
+    return Status::OK();
+}
+
+Status TabletManager::put_tablet_metadata(const std::string& group, const TabletMetadata& metadata) {
+    auto metadata_ptr = std::make_shared<TabletMetadata>(metadata);
+    return put_tablet_metadata(group, std::move(metadata_ptr));
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& metadata_path) {
@@ -148,16 +220,45 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& met
 
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const std::string& group, int64_t tablet_id,
                                                                int64_t version) {
+    // search metacache
+    auto cache_key = tablet_metadata_cache_key(tablet_id, version);
+    auto ptr = lookup_tablet_metadata(cache_key);
+    RETURN_IF(ptr != nullptr, ptr);
+
     auto metadata_path = tablet_metadata_path(group, tablet_id, version);
-    return get_tablet_metadata(metadata_path);
+    ASSIGN_OR_RETURN(ptr, get_tablet_metadata(metadata_path));
+
+    auto value_ptr = new std::shared_ptr<const TabletMetadata>(ptr);
+    bool inserted = fill_metacache(cache_key, static_cast<void*>(value_ptr), ptr->SpaceUsedLong());
+    if (!inserted) {
+        delete value_ptr;
+        LOG(WARNING) << "Failed to put tabletmetadata into cache " << cache_key;
+    }
+    return ptr;
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const std::string& group, const string& path) {
+    // search metacache
+    auto ptr = lookup_tablet_metadata(path);
+    RETURN_IF(ptr != nullptr, ptr);
+
     auto metadata_path = tablet_metadata_path(group, path);
-    return get_tablet_metadata(metadata_path);
+    ASSIGN_OR_RETURN(ptr, get_tablet_metadata(metadata_path));
+
+    auto value_ptr = new std::shared_ptr<const TabletMetadata>(ptr);
+    bool inserted = fill_metacache(path, static_cast<void*>(value_ptr), ptr->SpaceUsedLong());
+    if (!inserted) {
+        delete value_ptr;
+        LOG(WARNING) << "Failed to put tabletmetadata into cache " << path;
+    }
+    return ptr;
 }
 
 Status TabletManager::delete_tablet_metadata(const std::string& group, int64_t tablet_id, int64_t version) {
+    // drop from metacache first
+    auto cache_key = tablet_metadata_cache_key(tablet_id, version);
+    erase_metacache(cache_key);
+
     auto metadata_path = tablet_metadata_path(group, tablet_id, version);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(metadata_path));
     return fs->delete_file(metadata_path);
@@ -205,21 +306,38 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& txnlog_path) {
 }
 
 StatusOr<TxnLogPtr> TabletManager::get_txn_log(const string& group, const std::string& path) {
+    // search metacache
+    auto ptr = lookup_txn_log(path);
+    RETURN_IF(ptr != nullptr, ptr);
+
     auto txnlog_path = txn_log_path(group, path);
-    return get_txn_log(txnlog_path);
+    ASSIGN_OR_RETURN(ptr, get_txn_log(txnlog_path));
+
+    auto value_ptr = new std::shared_ptr<const TxnLog>(ptr);
+    bool inserted = fill_metacache(path, static_cast<void*>(value_ptr), ptr->SpaceUsedLong());
+    if (!inserted) {
+        delete value_ptr;
+        LOG(WARNING) << "Failed to put tabletmetadata into cache " << path;
+    }
+    return ptr;
 }
 
 StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id) {
-    auto txnlog_path = txn_log_path(group, tablet_id, txn_id);
-    return get_txn_log(txnlog_path);
-}
+    // search metacache
+    auto cache_key = txn_log_cache_key(tablet_id, txn_id);
+    auto ptr = lookup_txn_log(cache_key);
+    RETURN_IF(ptr != nullptr, ptr);
 
-Status TabletManager::put_txn_log(const std::string& group, const TxnLog& log) {
-    auto txnlog_path = txn_log_path(group, log.tablet_id(), log.txn_id());
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txnlog_path));
-    ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(txnlog_path));
-    RETURN_IF_ERROR(wf->append(log.SerializeAsString()));
-    return wf->close();
+    auto txnlog_path = txn_log_path(group, tablet_id, txn_id);
+    ASSIGN_OR_RETURN(ptr, get_txn_log(txnlog_path));
+
+    auto value_ptr = new std::shared_ptr<const TxnLog>(ptr);
+    bool inserted = fill_metacache(cache_key, static_cast<void*>(value_ptr), ptr->SpaceUsedLong());
+    if (!inserted) {
+        delete value_ptr;
+        LOG(WARNING) << "Failed to put tabletmetadata into cache " << cache_key;
+    }
+    return ptr;
 }
 
 Status TabletManager::put_txn_log(const std::string& group, TxnLogPtr log) {
@@ -228,10 +346,28 @@ Status TabletManager::put_txn_log(const std::string& group, TxnLogPtr log) {
     ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(txnlog_path));
     RETURN_IF_ERROR(wf->append(log->SerializeAsString()));
     RETURN_IF_ERROR(wf->close());
+
+    // put txnlog into cache
+    auto cache_key = txn_log_cache_key(log->tablet_id(), log->txn_id());
+    auto value_ptr = new std::shared_ptr<const TxnLog>(log);
+    bool inserted = fill_metacache(cache_key, static_cast<void*>(value_ptr), log->SpaceUsedLong());
+    if (!inserted) {
+        delete value_ptr;
+        LOG(WARNING) << "Failed to put txnlog into cache " << txnlog_path;
+    }
     return Status::OK();
 }
 
+Status TabletManager::put_txn_log(const std::string& group, const TxnLog& log) {
+    auto txnlog_ptr = std::make_shared<TxnLog>(log);
+    return put_txn_log(group, std::move(txnlog_ptr));
+}
+
 Status TabletManager::delete_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id) {
+    // drop from metacache first
+    auto cache_key = txn_log_cache_key(tablet_id, txn_id);
+    erase_metacache(cache_key);
+
     auto txnlog_path = txn_log_path(group, tablet_id, txn_id);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txnlog_path));
     return fs->delete_file(txnlog_path);

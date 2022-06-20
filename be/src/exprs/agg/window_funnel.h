@@ -365,15 +365,14 @@ public:
         for (uint8_t i = 0; i < ele_vector.size(); i++) {
             if (!ele_vector[i].is_null() && ele_vector[i].get_uint8() > 0) {
                 event_level = i + 1;
-                break;
+                if constexpr (PT == TYPE_DATETIME) {
+                    this->data(state).update(tv.to_unix_second(), event_level);
+                } else if constexpr (PT == TYPE_DATE) {
+                    this->data(state).update(tv.julian(), event_level);
+                }
             }
         }
         this->data(state).events_size = ele_vector.size();
-        if constexpr (PT == TYPE_DATETIME) {
-            this->data(state).update(tv.to_unix_second(), event_level);
-        } else if constexpr (PT == TYPE_DATE) {
-            this->data(state).update(tv.julian(), event_level);
-        }
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {

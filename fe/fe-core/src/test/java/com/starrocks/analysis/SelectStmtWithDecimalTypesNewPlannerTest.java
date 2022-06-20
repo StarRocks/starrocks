@@ -4,6 +4,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -466,6 +467,52 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         System.out.println("plan = " + plan);
         Assert.assertTrue(plan.contains("round[(cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(18,0))); args: DECIMAL128; result: DECIMAL128(38,0); args nullable: true; result nullable: true]"));
+    }
+
+    @Test
+    public void testDoubleLiteralMul() throws Exception {
+        String sql;
+        String plan;
+        sql = "select 123456789000000000000000000000000000.00 * 123456789.123456789 * 123456789.123456789;";
+        final long sqlMode = ctx.getSessionVariable().getSqlMode();
+        final long code = SqlModeHelper.encode("MODE_DOUBLE_LITERAL");
+        ctx.getSessionVariable().setSqlMode(code|sqlMode);
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("  |  2 <-> 1.8816763755525075E51"));
+        ctx.getSessionVariable().setSqlMode(sqlMode);
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("  |  2 <-> 123456789000000000000000000000000000 * 123456789.123456789 * 123456789.123456789"));
+    }
+
+    @Test
+    public void testTruncate() throws Exception {
+        String sql = "select TRUNCATE(0.6798916342905857, TIMEDIFF('1969-12-27 10:06:26', '1969-12-09 21:35:14'));";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("truncate[(0.6798916342905857, cast(1513872.0 as INT)); args: DOUBLE,INT; " +
+                "result: DOUBLE; args nullable: true; result nullable: true]"));
+
+        sql = "select TRUNCATE(0.6798916342905857, '10');";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("truncate[(0.6798916342905857, 10); args: DOUBLE,INT; result: DOUBLE; " +
+                "args nullable: false; result nullable: true]"));
+
+
+        sql = "select TRUNCATE(0.6798916342905857, to_base64('abc'));";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("truncate[(0.6798916342905857, cast(to_base64[('abc'); args: VARCHAR; " +
+                "result: VARCHAR; args nullable: false; result nullable: true] as INT)); " +
+                "args: DOUBLE,INT; result: DOUBLE; args nullable: true; result nullable: true]"));
+
+        sql = "select TRUNCATE(0.6798916342905857, 3.13);";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("truncate[(0.6798916342905857, cast(3.13 as INT)); args: DOUBLE,INT; " +
+                "result: DOUBLE; args nullable: true; result nullable: true]"));
+
+        sql = "select TRUNCATE(0.6798916342905857, cast('2000-01-31 12:00:00' as datetime));";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("truncate[(0.6798916342905857, cast('2000-01-31 12:00:00' as INT)); " +
+                "args: DOUBLE,INT; result: DOUBLE; args nullable: true; result nullable: true]"));
     }
 }
 

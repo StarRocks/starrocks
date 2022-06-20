@@ -299,6 +299,17 @@ StatusOr<vectorized::ChunkPtr> OlapChunkSource::get_next_chunk_from_buffer() {
     return chunk;
 }
 
+void OlapChunkSource::_update_avg_row_bytes(vectorized::Chunk* chunk, size_t chunk_index, size_t batch_size) {
+    _local_sum_row_bytes += chunk->memory_usage();
+    _local_num_rows += chunk->num_rows();
+
+    if (chunk_index % UPDATE_AVG_ROW_BYTES_FREQUENCY == 0 || chunk_index == batch_size - 1) {
+        _scan_ctx->update_avg_row_bytes(_local_sum_row_bytes, _local_num_rows);
+        _local_sum_row_bytes = 0;
+        _local_num_rows = 0;
+    }
+}
+
 Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state) {
     if (!_status.ok()) {
         return _status;
@@ -312,12 +323,16 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, Run
         if (!_status.ok()) {
             // end of file is normal case, need process chunk
             if (_status.is_end_of_file()) {
+                _update_avg_row_bytes(chunk.get(), i, batch_size);
                 _chunk_buffer.put(std::move(chunk));
             }
             break;
         }
+
+        _update_avg_row_bytes(chunk.get(), i, batch_size);
         _chunk_buffer.put(std::move(chunk));
     }
+
     return _status;
 }
 
@@ -341,12 +356,14 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
                     ++(*num_read_chunks);
+                    _update_avg_row_bytes(chunk.get(), i, batch_size);
                     _chunk_buffer.put(std::move(chunk));
                 }
                 break;
             }
 
             ++(*num_read_chunks);
+            _update_avg_row_bytes(chunk.get(), i, batch_size);
             _chunk_buffer.put(std::move(chunk));
         }
 

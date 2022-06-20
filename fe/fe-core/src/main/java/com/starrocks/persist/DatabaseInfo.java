@@ -22,7 +22,6 @@
 package com.starrocks.persist;
 
 import com.starrocks.analysis.AlterDatabaseQuotaStmt.QuotaType;
-import com.starrocks.catalog.Database.DbState;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -38,7 +37,6 @@ public class DatabaseInfo implements Writable {
     private String newDbName;
     private long quota;
     private String clusterName;
-    private DbState dbState;
     private QuotaType quotaType;
 
     public DatabaseInfo() {
@@ -47,7 +45,6 @@ public class DatabaseInfo implements Writable {
         this.newDbName = "";
         this.quota = 0;
         this.clusterName = "";
-        this.dbState = DbState.NORMAL;
         this.quotaType = QuotaType.DATA;
     }
 
@@ -56,7 +53,6 @@ public class DatabaseInfo implements Writable {
         this.newDbName = newDbName;
         this.quota = quota;
         this.clusterName = "";
-        this.dbState = DbState.NORMAL;
         this.quotaType = quotaType;
     }
 
@@ -84,7 +80,8 @@ public class DatabaseInfo implements Writable {
         Text.writeString(out, newDbName);
         out.writeLong(quota);
         Text.writeString(out, this.clusterName);
-        Text.writeString(out, this.dbState.name());
+        // compatible with dbState
+        Text.writeString(out, "NORMAL");
         Text.writeString(out, this.quotaType.name());
     }
 
@@ -96,7 +93,8 @@ public class DatabaseInfo implements Writable {
         this.quota = in.readLong();
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
             this.clusterName = Text.readString(in);
-            this.dbState = DbState.valueOf(Text.readString(in));
+            // Compatible with dbState
+            Text.readString(in);
         }
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_81) {
             this.quotaType = QuotaType.valueOf(Text.readString(in));
@@ -109,10 +107,6 @@ public class DatabaseInfo implements Writable {
 
     public void setClusterName(String clusterName) {
         this.clusterName = clusterName;
-    }
-
-    public DbState getDbState() {
-        return dbState;
     }
 
     public QuotaType getQuotaType() {

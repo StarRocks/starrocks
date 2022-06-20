@@ -35,6 +35,7 @@
 #include "common/status.h"
 #include "gutil/ref_counted.h"
 #include "util/monotime.h"
+#include "util/priority_queue.h"
 
 namespace starrocks {
 
@@ -156,6 +157,12 @@ private:
 //    thread_pool->SubmitFunc(std::bind(&Func, 10));
 class ThreadPool {
 public:
+    enum Priority {
+        LOW_PRIORITY = 0,
+        HIGH_PRIORITY,
+        NUM_PRIORITY,
+    };
+
     ~ThreadPool();
 
     // Wait for the running tasks to complete and then shutdown the threads.
@@ -167,10 +174,10 @@ public:
     void shutdown();
 
     // Submits a Runnable class.
-    Status submit(std::shared_ptr<Runnable> r);
+    Status submit(std::shared_ptr<Runnable> r, Priority pri = LOW_PRIORITY);
 
     // Submits a function bound using std::bind(&FuncName, args...).
-    Status submit_func(std::function<void()> f);
+    Status submit_func(std::function<void()> f, Priority pri = LOW_PRIORITY);
 
     // Waits until all the tasks are completed.
     void wait();
@@ -190,6 +197,7 @@ public:
         // Tasks submitted via this token may be executed concurrently.
         CONCURRENT,
     };
+
     std::unique_ptr<ThreadPoolToken> new_token(ExecutionMode mode);
 
     // Return the number of threads currently running (or in the process of starting up)
@@ -230,7 +238,7 @@ private:
     void check_not_pool_thread_unlocked();
 
     // Submits a task to be run via token.
-    Status do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token);
+    Status do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token, ThreadPool::Priority pri);
 
     // Releases token 't' and invalidates it.
     void release_token(ThreadPoolToken* t);
@@ -337,11 +345,11 @@ public:
     // called first to take care of them.
     ~ThreadPoolToken();
 
-    // Submits a Runnable class.
-    Status submit(std::shared_ptr<Runnable> r);
+    // Submits a Runnable class with specified priority.
+    Status submit(std::shared_ptr<Runnable> r, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
 
-    // Submits a function bound using std::bind(&FuncName, args...).
-    Status submit_func(std::function<void()> f);
+    // Submits a function bound using std::bind(&FuncName, args...)  with specified priority.
+    Status submit_func(std::function<void()> f, ThreadPool::Priority pri = ThreadPool::LOW_PRIORITY);
 
     // Marks the token as unusable for future submissions. Any queued tasks not
     // yet running are destroyed. If tasks are in flight, Shutdown() will wait
@@ -420,7 +428,7 @@ private:
     State _state;
 
     // Queued client tasks.
-    std::deque<ThreadPool::Task> _entries;
+    PriorityQueue<ThreadPool::NUM_PRIORITY, ThreadPool::Task> _entries;
 
     // Condition variable for "token is idle". Waiters wake up when the token
     // transitions to IDLE or QUIESCED.

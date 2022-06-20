@@ -14,12 +14,15 @@ public class AnalyzeStmt extends StatementBase {
     private List<String> columnNames;
     private final boolean isSample;
     private Map<String, String> properties;
+    private AnalyzeTypeDesc analyzeTypeDesc;
 
-    public AnalyzeStmt(TableName tbl, List<String> columns, Map<String, String> properties, boolean isSample) {
+    public AnalyzeStmt(TableName tbl, List<String> columns, Map<String, String> properties, boolean isSample,
+                       AnalyzeTypeDesc analyzeTypeDesc) {
         this.tbl = tbl;
         this.columnNames = columns;
         this.isSample = isSample;
         this.properties = properties;
+        this.analyzeTypeDesc = analyzeTypeDesc;
     }
 
     public List<String> getColumnNames() {
@@ -44,6 +47,10 @@ public class AnalyzeStmt extends StatementBase {
 
     public void setProperties(Map<String, String> properties) {
         this.properties = properties;
+    }
+
+    public AnalyzeTypeDesc getAnalyzeTypeDesc() {
+        return analyzeTypeDesc;
     }
 
     @Override

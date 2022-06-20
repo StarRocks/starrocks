@@ -2,26 +2,191 @@
 
 #include "runtime/local_tablets_channel.h"
 
+#include "common/compiler_util.h"
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <brpc/controller.h>
+#include <bthread/condition_variable.h>
+#include <bthread/mutex.h>
+DIAGNOSTIC_POP
 #include <fmt/format.h>
 
 #include <chrono>
+#include <cstdint>
+#include <shared_mutex>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
+#include "column/chunk.h"
 #include "common/closure_guard.h"
+#include "common/statusor.h"
 #include "exec/tablet_info.h"
-#include "gutil/strings/substitute.h"
+#include "gen_cpp/internal_service.pb.h"
+#include "gutil/ref_counted.h"
+#include "runtime/descriptors.h"
+#include "runtime/global_dict/types.h"
 #include "runtime/load_channel.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
+#include "storage/async_delta_writer.h"
 #include "storage/delta_writer.h"
 #include "storage/memtable.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
 #include "util/block_compression.h"
+#include "util/countdown_latch.h"
 #include "util/faststring.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
+
+class LocalTabletsChannel : public TabletsChannel {
+    using AsyncDeltaWriter = vectorized::AsyncDeltaWriter;
+    using AsyncDeltaWriterCallback = vectorized::AsyncDeltaWriterCallback;
+    using AsyncDeltaWriterRequest = vectorized::AsyncDeltaWriterRequest;
+    using CommittedRowsetInfo = vectorized::CommittedRowsetInfo;
+
+public:
+    LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker);
+
+    LocalTabletsChannel(const LocalTabletsChannel&) = delete;
+    LocalTabletsChannel(LocalTabletsChannel&&) = delete;
+    void operator=(const LocalTabletsChannel&) = delete;
+    void operator=(LocalTabletsChannel&&) = delete;
+
+    const TabletsChannelKey& key() const { return _key; }
+
+    Status open(const PTabletWriterOpenRequest& params) override;
+
+    void add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
+                   PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) override;
+
+    void cancel() override;
+
+    MemTracker* mem_tracker() { return _mem_tracker; }
+
+private:
+    using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
+
+    ~LocalTabletsChannel() override;
+
+    static std::atomic<uint64_t> _s_tablet_writer_count;
+
+    struct Sender {
+        bthread::Mutex lock;
+
+        std::set<int64_t> receive_sliding_window;
+        std::set<int64_t> success_sliding_window;
+
+        int64_t last_sliding_packet_seq = -1;
+    };
+
+    class WriteContext : public RefCountedThreadSafe<WriteContext> {
+    public:
+        explicit WriteContext(PTabletWriterAddBatchResult* response) : _response(response), _latch(nullptr) {}
+
+        WriteContext(const WriteContext&) = delete;
+        void operator=(const WriteContext&) = delete;
+        WriteContext(WriteContext&&) = delete;
+        void operator=(WriteContext&&) = delete;
+
+        void update_status(const Status& status) {
+            if (status.ok() || _response == nullptr) {
+                return;
+            }
+            std::lock_guard l(_response_lock);
+            if (_response->status().status_code() == TStatusCode::OK) {
+                status.to_protobuf(_response->mutable_status());
+            }
+        }
+
+        void add_committed_tablet_info(PTabletInfo* tablet_info) {
+            DCHECK(_response != nullptr);
+            std::lock_guard l(_response_lock);
+            _response->add_tablet_vec()->Swap(tablet_info);
+        }
+
+        void set_count_down_latch(BThreadCountDownLatch* latch) { _latch = latch; }
+
+    private:
+        friend class LocalTabletsChannel;
+        friend class RefCountedThreadSafe<WriteContext>;
+        ~WriteContext() {
+            if (_latch) _latch->count_down();
+        }
+
+        mutable std::mutex _response_lock;
+        PTabletWriterAddBatchResult* _response;
+        BThreadCountDownLatch* _latch;
+
+        vectorized::Chunk _chunk;
+        std::unique_ptr<uint32_t[]> _row_indexes;
+        std::unique_ptr<uint32_t[]> _channel_row_idx_start_points;
+    };
+
+    class WriteCallback : public AsyncDeltaWriterCallback {
+    public:
+        explicit WriteCallback(WriteContext* context) : _context(context) { _context->AddRef(); }
+
+        ~WriteCallback() override { _context->Release(); }
+
+        void run(const Status& st, const CommittedRowsetInfo* info) override;
+
+        WriteCallback(const WriteCallback&) = delete;
+        void operator=(const WriteCallback&) = delete;
+        WriteCallback(WriteCallback&&) = delete;
+        void operator=(WriteCallback&&) = delete;
+
+    private:
+        WriteContext* _context;
+    };
+
+    Status _open_all_writers(const PTabletWriterOpenRequest& params);
+
+    Status _build_chunk_meta(const ChunkPB& pb_chunk);
+
+    StatusOr<scoped_refptr<WriteContext>> _create_write_context(const PTabletWriterAddChunkRequest& request,
+                                                                PTabletWriterAddBatchResult* response);
+
+    int _close_sender(const int64_t* partitions, size_t partitions_size);
+
+    Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk, faststring* uncompressed_buffer);
+
+    LoadChannel* _load_channel;
+
+    TabletsChannelKey _key;
+
+    MemTracker* _mem_tracker;
+
+    // initialized in open function
+    int64_t _txn_id = -1;
+    int64_t _index_id = -1;
+    OlapTableSchemaParam* _schema = nullptr;
+    TupleDescriptor* _tuple_desc = nullptr;
+    RowDescriptor* _row_desc = nullptr;
+
+    // next sequence we expect
+    std::atomic<int> _num_remaining_senders;
+    std::vector<Sender> _senders;
+    size_t _max_sliding_window_size = config::max_load_dop * 3;
+
+    mutable std::mutex _partitions_ids_lock;
+    std::unordered_set<int64_t> _partition_ids;
+
+    mutable std::mutex _chunk_meta_lock;
+    serde::ProtobufChunkMeta _chunk_meta;
+    std::atomic<bool> _has_chunk_meta;
+
+    std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
+    // tablet_id -> TabletChannel
+    std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
+
+    vectorized::GlobalDictByNameMaps _global_dicts;
+    std::unique_ptr<MemPool> _mem_pool;
+};
 
 std::atomic<uint64_t> LocalTabletsChannel::_s_tablet_writer_count;
 
@@ -130,7 +295,7 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
         }
     }
 
-    auto res = _create_write_context(request, response, done);
+    auto res = _create_write_context(request, response);
     if (!res.ok()) {
         res.status().to_protobuf(response->mutable_status());
         return;
@@ -185,7 +350,8 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
     if (request.eos() && _close_sender(request.partition_ids().data(), request.partition_ids_size()) == 0) {
         close_channel = true;
         std::lock_guard l1(_partitions_ids_lock);
-        for (auto& [_, delta_writer] : _delta_writers) {
+        for (auto& [tablet_id, delta_writer] : _delta_writers) {
+            (void)tablet_id;
             if (UNLIKELY(_partition_ids.count(delta_writer->partition_id()) == 0)) {
                 // no data load, abort txn without printing log
                 delta_writer->abort(false);
@@ -229,18 +395,16 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
         _load_channel->remove_tablets_channel(_index_id);
 
         // persist txn.
-        auto tablet_ids = request.tablet_ids();
-        std::vector<TabletSharedPtr> tablets(tablet_ids.size());
-        for (const auto tablet_id : tablet_ids) {
+        std::vector<TabletSharedPtr> tablets;
+        tablets.reserve(request.tablet_ids().size());
+        for (const auto tablet_id : request.tablet_ids()) {
             TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
             if (tablet != nullptr) {
-                tablets.push_back(tablet);
+                tablets.emplace_back(std::move(tablet));
             }
         }
         auto st = StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
-        if (!st.ok()) {
-            LOG(WARNING) << "failed to persist transactions, tablets num: " << tablets.size() << " err: " << st;
-        }
+        LOG_IF(WARNING, !st.ok()) << "failed to persist transactions: " << st;
     }
 }
 
@@ -344,7 +508,7 @@ Status LocalTabletsChannel::_deserialize_chunk(const ChunkPB& pchunk, vectorized
             chunk = std::move(res).value();
         });
     } else {
-        size_t uncompressed_size = 0;
+        [[maybe_unused]] size_t uncompressed_size;
         {
             const BlockCompressionCodec* codec = nullptr;
             RETURN_IF_ERROR(get_block_compression_codec(pchunk.compress_type(), &codec));
@@ -367,8 +531,7 @@ Status LocalTabletsChannel::_deserialize_chunk(const ChunkPB& pchunk, vectorized
 }
 
 StatusOr<scoped_refptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel::_create_write_context(
-        const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response,
-        google::protobuf::Closure* done) {
+        const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
     if (!request.has_chunk() && !request.eos()) {
         return Status::InvalidArgument("PTabletWriterAddChunkRequest has no chunk or eos");
     }
@@ -441,6 +604,11 @@ void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRo
         _context->add_committed_tablet_info(&tablet_info);
     }
     delete this;
+}
+
+scoped_refptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
+                                                        MemTracker* mem_tracker) {
+    return scoped_refptr<TabletsChannel>(new LocalTabletsChannel(load_channel, key, mem_tracker));
 }
 
 } // namespace starrocks

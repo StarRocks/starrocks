@@ -49,7 +49,6 @@ TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size)
     _txn_map_locks = std::unique_ptr<std::shared_mutex[]>(new std::shared_mutex[_txn_map_shard_size]);
     _txn_tablet_maps = std::unique_ptr<txn_tablet_map_t[]>(new txn_tablet_map_t[_txn_map_shard_size]);
     _txn_partition_maps = std::unique_ptr<txn_partition_map_t[]>(new txn_partition_map_t[_txn_map_shard_size]);
-    _txn_mutex = std::unique_ptr<std::mutex[]>(new std::mutex[_txn_shard_size]);
 }
 
 Status TxnManager::prepare_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
@@ -146,7 +145,6 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
         return Status::InternalError(msg);
     }
 
-    std::lock_guard txn_lock(_get_txn_lock(transaction_id));
     {
         // get tx
         std::shared_lock rdlock(_get_txn_map_lock(transaction_id));
@@ -211,40 +209,20 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
 
 Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                                int64_t version, const RowsetSharedPtr& rowset) {
-    auto span = Tracer::Instance().start_trace_txn_tablet("txn_publish", transaction_id, tablet->tablet_id());
-    span->SetAttribute("version", version);
-    auto scoped = trace::Scope(span);
-    {
-        std::lock_guard txn_lock(_get_txn_lock(transaction_id));
-        if (tablet->updates() != nullptr) {
-            StarRocksMetrics::instance()->update_rowset_commit_request_total.increment(1);
-            auto st = tablet->rowset_commit(version, rowset);
-            if (!st.ok()) {
-                StarRocksMetrics::instance()->update_rowset_commit_request_failed.increment(1);
-                return st;
-            }
-        } else {
-            // TODO(ygl): rowset is already set version here, memory is changed, if save failed
-            // it maybe a fatal error
-            rowset->make_visible({version, version});
-            auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
-            Status st = RowsetMetaManager::save(tablet->data_dir()->get_meta(), tablet->tablet_uid(), rowset_meta_pb);
-            if (!st.ok()) {
-                LOG(WARNING) << "Fail to save committed rowset. "
-                             << "tablet_id: " << tablet->tablet_id() << ", txn_id: " << transaction_id
-                             << ", rowset_id: " << rowset->rowset_id();
-                return Status::InternalError(fmt::format("Fail to save committed rowset. tablet_id: {}, txn_id: {}",
-                                                         tablet->tablet_id(), transaction_id));
-            }
-            // add visible rowset to tablet
-            st = tablet->add_inc_rowset(rowset);
-            if (!st.ok() && !st.is_already_exist()) {
-                // TODO: rollback saved rowset if error?
-                LOG(WARNING) << "fail to add visible rowset to tablet. rowset_id=" << rowset->rowset_id()
-                             << ", tablet_id=" << tablet->tablet_id() << ", txn_id=" << transaction_id
-                             << ", res=" << st;
-                return st;
-            }
+    if (tablet->updates() != nullptr) {
+        StarRocksMetrics::instance()->update_rowset_commit_request_total.increment(1);
+        auto st = tablet->rowset_commit(version, rowset);
+        if (!st.ok()) {
+            StarRocksMetrics::instance()->update_rowset_commit_request_failed.increment(1);
+            return st;
+        }
+    } else {
+        auto st = tablet->add_inc_rowset(rowset, version);
+        if (!st.ok() && !st.is_already_exist()) {
+            // TODO: rollback saved rowset if error?
+            LOG(WARNING) << "fail to add visible rowset to tablet. rowset_id=" << rowset->rowset_id()
+                         << ", tablet_id=" << tablet->tablet_id() << ", txn_id=" << transaction_id << ", res=" << st;
+            return st;
         }
     }
     std::unique_lock wrlock(_get_txn_map_lock(transaction_id));

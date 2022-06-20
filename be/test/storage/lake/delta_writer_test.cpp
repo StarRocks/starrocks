@@ -90,6 +90,8 @@ protected:
     }
 
     void TearDown() override {
+        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
+        tablet.delete_txn_log(_txn_id);
         _txn_id++;
         (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_group_assigner(_backup_group_assigner);
         (void)fs::remove_all(kTestGroupPath);
@@ -141,7 +143,7 @@ TEST_F(DeltaWriterTest, test_open) {
         class MockGroupAssigner : public GroupAssigner {
         public:
             StatusOr<std::string> get_group(int64_t) override { return Status::InternalError("injected error"); }
-            Status list_group(std::vector<std::string>*) override { return Status::InternalError("injected error"); }
+            Status list_group(std::set<std::string>*) override { return Status::InternalError("injected error"); }
         };
         MockGroupAssigner mock;
         auto old = _tablet_manager->TEST_set_group_assigner(&mock);
