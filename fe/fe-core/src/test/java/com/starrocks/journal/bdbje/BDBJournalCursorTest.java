@@ -315,4 +315,38 @@ public class BDBJournalCursorTest {
         bdbJournalCursor.next();
         Assert.fail();
     }
+
+    @Test(expected = JournalException.class)
+    public void testDatabaseNamesFails() throws Exception {
+        new Expectations(environment) {
+            {
+                environment.getDatabaseNames();
+                minTimes = 0;
+                result = null;
+            }
+        };
+        BDBJournalCursor.getJournalCursor(environment, 10, 10);
+        Assert.fail();
+    }
+
+    @Test(expected = JournalException.class)
+    public void testNegativeToKey() throws Exception {
+        BDBJournalCursor.getJournalCursor(environment, 10, -1);
+        Assert.fail();
+    }
+
+    @Test(expected = JournalException.class)
+    public void testInvalidKeyRange() throws Exception {
+        // db = [10, 12]
+        // from 9,9
+        new Expectations(environment) {
+            {
+                environment.getDatabaseNames();
+                minTimes = 0;
+                result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
+            }
+        };
+        BDBJournalCursor.getJournalCursor(environment, 9, 9);
+        Assert.fail();
+    }
 }
