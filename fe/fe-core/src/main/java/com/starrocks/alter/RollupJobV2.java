@@ -57,6 +57,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -834,7 +835,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                     origStmt.originStmt, SqlModeHelper.MODE_DEFAULT);
             stmt = (CreateMaterializedViewStmt) stmts.get(origStmt.idx);
             stmt.setIsReplay(true);
-            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+            Analyzer.analyze(stmt, connectContext);
         } catch (Exception e) {
             // Under normal circumstances, the stmt will not fail to analyze.
             throw new IOException("error happens when parsing create materialized view stmt: " + stmt, e);
