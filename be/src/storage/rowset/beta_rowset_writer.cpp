@@ -548,6 +548,9 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
             if (!source_masks->empty()) {
                 RETURN_IF_ERROR(mask_buffer->write(*source_masks));
             }
+            if (!source_masks->empty()) {
+                source_masks->clear();
+            }
         }
         itr->close();
         _vertical_beta_rowset_writer->flush_columns();
