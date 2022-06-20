@@ -360,6 +360,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setSchedule("MANUAL");
             info.setDatabase(task.getDbName());
             info.setDefinition(task.getDefinition());
+            info.setExpire_time(task.getExpireTime() / 1000);
             tasksResult.add(info);
         }
 
@@ -398,6 +399,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setDefinition(status.getDefinition());
             info.setError_code(status.getErrorCode());
             info.setError_message(status.getErrorMessage());
+            info.setExpire_time(status.getExpireTime() / 1000);
             tasksResult.add(info);
         }
         return result;
