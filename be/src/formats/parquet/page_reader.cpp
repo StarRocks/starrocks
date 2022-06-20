@@ -29,8 +29,9 @@ Status PageReader::next_header() {
 
     uint32_t header_length = 0;
     size_t nbytes = kHeaderBufSize;
-
+    size_t remaining = _finish_offset - _offset;
     do {
+        nbytes = std::min(nbytes, remaining);
         RETURN_IF_ERROR(_stream->get_bytes(&page_buf, _offset, &nbytes));
 
         header_length = nbytes;
