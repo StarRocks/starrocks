@@ -167,7 +167,7 @@ set(EXEC_FILES
         ./storage/rowset/bloom_filter_index_reader_writer_test.cpp
         ./storage/rowset/column_reader_writer_test.cpp
         ./storage/rowset/encoding_info_test.cpp
-        #./storage/rowset/frame_of_reference_page_test.cpp
+        ./storage/rowset/frame_of_reference_page_test.cpp
         ./storage/rowset/ordinal_page_index_test.cpp
         ./storage/rowset/plain_page_test.cpp
         ./storage/rowset/rle_page_test.cpp
