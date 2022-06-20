@@ -268,7 +268,7 @@ NTILE() 函数不能使用 window_clause。
 
 ~~~~sql
 select id, x, y,
-    htile(2)
+    ntile(2)
         over (
             partition by x
             order by y
