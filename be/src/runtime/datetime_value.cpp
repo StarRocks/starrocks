@@ -458,12 +458,12 @@ int64_t DateTimeValue::to_datetime_int64() const {
 }
 
 int64_t DateTimeValue::to_date_int64() const {
-    return _year * 10000 + _month * 100 + _day;
+    return _year * 10000L + _month * 100 + _day;
 }
 
 int64_t DateTimeValue::to_time_int64() const {
     int sign = _neg == 0 ? 1 : -1;
-    return sign * (_hour * 10000 + _minute * 100 + _second);
+    return sign * (_hour * 10000L + _minute * 100 + _second);
 }
 
 int64_t DateTimeValue::to_int64() const {
