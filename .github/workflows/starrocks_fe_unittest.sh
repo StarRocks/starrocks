@@ -4,7 +4,7 @@ source ~/.bash_profile
 set -eo pipefail
 
 ROOT=`dirname "$0"`
-ROOT=`cd "$ROOT/../.."; pwd`
+ROOT=`cd "$ROOT/../../.."; pwd`
 
 GITHUB_PR_NUMBER=${1:?"need GITHUB_PR_NUMBER parameter"}
 GITHUB_PR_TARGET_BRANCH=${2:?"need GITHUB_PR_TARGET_BRANCH parameter"}
