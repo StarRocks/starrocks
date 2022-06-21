@@ -492,8 +492,8 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                 itr = new_aggregate_iterator(new_mask_merge_iterator(seg_iterators, mask_buffer.get()), true);
             } else {
                 return Status::NotSupported(
-                        fmt::format("HorizontalBetaRowsetWriter not support {} key type final merge",
-                                    _context.tablet_schema->keys_type()));
+                        fmt::format("final merge: schema change with sorting do not support {} type",
+                                    KeysType_Name(_context.tablet_schema->keys_type())));
             }
         } else {
             itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), true);
@@ -605,8 +605,8 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                     itr = new_aggregate_iterator(new_mask_merge_iterator(seg_iterators, mask_buffer.get()), false);
                 } else {
                     return Status::NotSupported(
-                            fmt::format("HorizontalBetaRowsetWriter not support {} key type final merge",
-                                        _context.tablet_schema->keys_type()));
+                            fmt::format("final merge: schema change with sorting do not support {} type",
+                                        KeysType_Name(_context.tablet_schema->keys_type())));
                 }
             } else {
                 itr = new_aggregate_iterator(new_mask_merge_iterator(seg_iterators, mask_buffer.get()), false);
@@ -695,8 +695,8 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                 itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), 0);
             } else {
                 return Status::NotSupported(
-                        fmt::format("HorizontalBetaRowsetWriter not support {} key type final merge",
-                                    _context.tablet_schema->keys_type()));
+                        fmt::format("final merge: schema change with sorting do not support {} type",
+                                    KeysType_Name(_context.tablet_schema->keys_type())));
             }
             _context.write_tmp = false;
         } else {
