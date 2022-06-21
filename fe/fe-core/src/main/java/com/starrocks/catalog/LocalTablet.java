@@ -464,10 +464,6 @@ public class LocalTablet extends Tablet {
             }
             stable++;
 
-            if (!backend.getOwnerClusterName().equals(clusterName)) {
-                // this replica is available, version complete, but not in right cluster
-                continue;
-            }
             availableInCluster++;
 
             if (replica.needFurtherRepair() && needFurtherRepairReplica == null) {

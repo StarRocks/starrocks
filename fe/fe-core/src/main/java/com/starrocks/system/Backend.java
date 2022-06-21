@@ -79,7 +79,6 @@ public class Backend implements Writable {
 
     private AtomicBoolean isDecommissioned;
     private volatile int decommissionType;
-    private volatile String ownerClusterName;
     // to index the state in some cluster
     private volatile int backendState;
     // private BackendState backendState;
@@ -120,7 +119,6 @@ public class Backend implements Writable {
         this.starletPort = 0;
         this.disksRef = ImmutableMap.of();
 
-        this.ownerClusterName = "";
         this.backendState = BackendState.free.ordinal();
 
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
@@ -141,7 +139,6 @@ public class Backend implements Writable {
         this.isAlive = new AtomicBoolean(false);
         this.isDecommissioned = new AtomicBoolean(false);
 
-        this.ownerClusterName = "";
         this.backendState = BackendState.free.ordinal();
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
     }
@@ -519,7 +516,8 @@ public class Backend implements Writable {
             entry.getValue().write(out);
         }
 
-        Text.writeString(out, ownerClusterName);
+        // For compatible with ownerClusterName
+        Text.writeString(out, "");
         out.writeInt(backendState);
         out.writeInt(decommissionType);
 
@@ -557,11 +555,11 @@ public class Backend implements Writable {
             disksRef = ImmutableMap.copyOf(disks);
         }
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
-            ownerClusterName = Text.readString(in);
+            // for compatible for ownerClusterName
+            Text.readString(in);
             backendState = in.readInt();
             decommissionType = in.readInt();
         } else {
-            ownerClusterName = SystemInfoService.DEFAULT_CLUSTER;
             backendState = BackendState.using.ordinal();
             decommissionType = DecommissionType.SystemDecommission.ordinal();
         }
@@ -590,18 +588,6 @@ public class Backend implements Writable {
     public String toString() {
         return "Backend [id=" + id + ", host=" + host + ", heartbeatPort=" + heartbeatPort + ", alive=" +
                 isAlive.get() + "]";
-    }
-
-    public String getOwnerClusterName() {
-        return ownerClusterName;
-    }
-
-    public void setOwnerClusterName(String name) {
-        ownerClusterName = name;
-    }
-
-    public void clearClusterName() {
-        ownerClusterName = "";
     }
 
     public BackendState getBackendState() {

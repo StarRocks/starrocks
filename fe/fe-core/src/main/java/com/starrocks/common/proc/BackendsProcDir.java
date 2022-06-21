@@ -96,20 +96,7 @@ public class BackendsProcDir implements ProcDirInterface {
     public static List<List<String>> getClusterBackendInfos(String clusterName) {
         final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<List<String>> backendInfos = new LinkedList<>();
-        List<Long> backendIds;
-        if (!Strings.isNullOrEmpty(clusterName)) {
-            final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(clusterName);
-            // root not in any cluster
-            if (null == cluster) {
-                return backendInfos;
-            }
-            backendIds = cluster.getBackendIdList();
-        } else {
-            backendIds = clusterInfoService.getBackendIds(false);
-            if (backendIds == null) {
-                return backendInfos;
-            }
-        }
+        List<Long> backendIds = clusterInfoService.getBackendIds();
 
         long start = System.currentTimeMillis();
         Stopwatch watch = Stopwatch.createUnstarted();
@@ -125,7 +112,7 @@ public class BackendsProcDir implements ProcDirInterface {
             watch.stop();
             List<Comparable> backendInfo = Lists.newArrayList();
             backendInfo.add(String.valueOf(backendId));
-            backendInfo.add(backend.getOwnerClusterName());
+            backendInfo.add(SystemInfoService.DEFAULT_CLUSTER);
             backendInfo.add(backend.getHost());
             if (Strings.isNullOrEmpty(clusterName)) {
                 backendInfo.add(String.valueOf(backend.getHeartbeatPort()));

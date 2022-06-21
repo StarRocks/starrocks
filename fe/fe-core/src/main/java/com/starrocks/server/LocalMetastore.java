@@ -3472,7 +3472,6 @@ public class LocalMetastore implements ConnectorMetadata {
     private void unprotectCreateCluster(Cluster cluster) {
         for (Long id : cluster.getBackendIdList()) {
             final Backend backend = stateMgr.getClusterInfo().getBackend(id);
-            backend.setOwnerClusterName(cluster.getName());
             backend.setBackendState(Backend.BackendState.using);
         }
 
@@ -3594,10 +3593,9 @@ public class LocalMetastore implements ConnectorMetadata {
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
         for (long id : info.getBackendList()) {
             final Backend backend = stateMgr.getClusterInfo().getBackend(id);
-            final Cluster cluster = nameToCluster.get(backend.getOwnerClusterName());
+            final Cluster cluster = nameToCluster.get(SystemInfoService.DEFAULT_CLUSTER);
             cluster.removeBackend(id);
             backend.setDecommissioned(false);
-            backend.clearClusterName();
             backend.setBackendState(Backend.BackendState.free);
         }
     }

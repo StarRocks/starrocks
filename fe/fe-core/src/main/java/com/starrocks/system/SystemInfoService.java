@@ -133,7 +133,6 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(clusterName);
         Preconditions.checkState(cluster != null);
         cluster.addBackend(backend.getId());
-        backend.setOwnerClusterName(clusterName);
         backend.setBackendState(BackendState.using);
     }
 
@@ -300,7 +299,7 @@ public class SystemInfoService {
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
 
         // update cluster
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(droppedBackend.getOwnerClusterName());
+        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(DEFAULT_CLUSTER);
         if (null != cluster) {
             // remove worker
             if (Config.integrate_starmgr) {
@@ -314,7 +313,7 @@ public class SystemInfoService {
 
             cluster.removeBackend(droppedBackend.getId());
         } else {
-            LOG.error("Cluster " + droppedBackend.getOwnerClusterName() + " no exist.");
+            LOG.error("Cluster " + DEFAULT_CLUSTER + " no exist.");
         }
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logDropBackend(droppedBackend);
@@ -672,7 +671,6 @@ public class SystemInfoService {
     public void replayAddBackend(Backend newBackend) {
         // update idToBackend
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            newBackend.setOwnerClusterName(DEFAULT_CLUSTER);
             newBackend.setBackendState(BackendState.using);
         }
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
@@ -710,11 +708,11 @@ public class SystemInfoService {
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
 
         // update cluster
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(backend.getOwnerClusterName());
+        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(DEFAULT_CLUSTER);
         if (null != cluster) {
             cluster.removeBackend(backend.getId());
         } else {
-            LOG.error("Cluster " + backend.getOwnerClusterName() + " no exist.");
+            LOG.error("Cluster " + DEFAULT_CLUSTER + " no exist.");
         }
     }
 
@@ -739,7 +737,6 @@ public class SystemInfoService {
         memoryBe.setLastStartTime(be.getLastStartTime());
         memoryBe.setDisks(be.getDisks());
         memoryBe.setBackendState(be.getBackendState());
-        memoryBe.setOwnerClusterName(be.getOwnerClusterName());
         memoryBe.setDecommissionType(be.getDecommissionType());
     }
 
@@ -788,14 +785,7 @@ public class SystemInfoService {
     }
 
     public Set<String> getClusterNames() {
-        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
-        Set<String> clusterNames = Sets.newHashSet();
-        for (Backend backend : idToBackend.values()) {
-            if (!Strings.isNullOrEmpty(backend.getOwnerClusterName())) {
-                clusterNames.add(backend.getOwnerClusterName());
-            }
-        }
-        return clusterNames;
+        return Sets.newHashSet(DEFAULT_CLUSTER);
     }
 
     /*

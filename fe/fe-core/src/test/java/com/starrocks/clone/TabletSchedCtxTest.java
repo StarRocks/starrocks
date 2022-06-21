@@ -93,7 +93,6 @@ public class TabletSchedCtxTest {
 
         be1.setDisks(ImmutableMap.copyOf(disks));
         be1.setAlive(true);
-        be1.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
 
         // be2
         be2 = new Backend(10002, "192.168.0.2", 9052);
@@ -106,7 +105,6 @@ public class TabletSchedCtxTest {
 
         be2.setDisks(ImmutableMap.copyOf(disks));
         be2.setAlive(true);
-        be2.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
 
         systemInfoService = new SystemInfoService();
         systemInfoService.addBackend(be1);

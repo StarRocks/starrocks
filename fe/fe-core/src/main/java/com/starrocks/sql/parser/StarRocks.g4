@@ -310,7 +310,7 @@ tableRenameClause
     ;
 
 addBackendClause
-   : ADD FREE? BACKEND (TO identifier)? string (',' string)*
+   : ADD BACKEND string (',' string)*
    ;
 
 dropBackendClause

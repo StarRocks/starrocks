@@ -231,7 +231,6 @@ public class DecommissionBackendJob extends AlterJob {
                         List<Long> backendList = Lists.newArrayList();
                         for (long id : idToBackend.keySet()) {
                             final Backend backend = idToBackend.get(id);
-                            backend.clearClusterName();
                             backend.setBackendState(BackendState.free);
                             backend.setDecommissioned(false);
                             backendList.add(id);
