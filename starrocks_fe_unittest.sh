@@ -53,7 +53,7 @@ docker stop $container_name || echo 1
 docker rm $container_name || echo 1
 
 echo "the docker map path="$ROOT
-echo "the root ls="`ls /home/runner/work/starrocks/starrocks`
+echo "the root ls="`ls /home/runner/work/starrocks`
 m2Path="/home/runner/"
 docker run --privileged -v $m2Path/.m2:/root/.m2 -v $ROOT/starrocks:/root/starrocks -v /etc/timezone:/etc/timezone:ro -v /etc/localtime:/etc/localtime:ro --name $container_name -d starrocks/dev-env:main /bin/bash -c "while true;do echo hello;sleep 1;done"
 sleep 10
@@ -68,7 +68,21 @@ docker exec --privileged $container_name /bin/bash -c "$cmd"
 
 echo "script run over-----"
 
-cp $ROOT/*.jar ~
-cd ~
-pwd
-ls -al
+if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
+    cd $ROOT/fe/fe-core/target
+    jacoco_result="jacoco_${GITHUB_PR_NUMBER}.exec"
+    mv jacoco.exec $jacoco_result || true
+
+    java -jar ~/jacococli.jar report ./$jacoco_result --classfiles ./classes/ --html ./result --sourcefiles $ROOT/fe/fe-core/src/main/java/ --encoding utf-8 --name fe-coverage
+
+    time_count=0
+    pull_status=1
+    while (( $pull_status != 0 ));do
+        if (( $time_count == 3 ));then
+            exit 1
+        fi
+        timeout 180 java -jar ~/cover-checker-console-1.4.0-jar-with-dependencies.jar --cover $ROOT/fe/fe-core/target/result/ --github-token 66e4c48809eb7e058eb73668b8c816867e6d7cbe  --repo StarRocks/starrocks --threshold 80 --github-url api.github.com  --pr ${GITHUB_PR_NUMBER} -type jacoco
+        pull_status=$?
+        time_count=`expr $time_count + 1`
+    done
+fi
