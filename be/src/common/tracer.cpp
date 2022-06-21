@@ -20,7 +20,7 @@ Tracer::~Tracer() {
 Tracer& Tracer::Instance() {
     static Tracer global_tracer;
     static std::once_flag oc;
-    std::call_once(oc, [&]() { global_tracer.init("starrocks"); });
+    std::call_once(oc, [&]() { global_tracer.init("starrocks-be"); });
     return global_tracer;
 }
 

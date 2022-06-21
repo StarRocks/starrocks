@@ -964,6 +964,9 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
 
     Expr::close(_output_expr_ctxs, state);
     _vectorized_partition->close(state);
+    if (!status.ok()) {
+        _span->SetStatus(trace::StatusCode::kError, status.get_error_msg());
+    }
     return status;
 }
 
