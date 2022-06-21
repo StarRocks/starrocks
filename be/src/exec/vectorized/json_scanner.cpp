@@ -645,8 +645,9 @@ Status JsonReader::_build_slot_descs() {
 
     // get the first row of json.
     simdjson::ondemand::object obj;
-    if (!_parser->get_current(&obj).ok()) {
-        return Status::DataQualityError("can not get first row of json");
+    auto st = _parser->get_current(&obj);
+    if (!st.ok()) {
+        return Status::DataQualityError(fmt::format("can not get first row of json, err: {}", st.get_error_msg()));
     }
     std::ostringstream oss;
     simdjson::ondemand::raw_json_string json_str;
