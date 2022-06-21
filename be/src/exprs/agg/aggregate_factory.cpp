@@ -30,6 +30,7 @@
 #include "exprs/agg/window.h"
 #include "exprs/agg/window_funnel.h"
 #include "percentile_union.h"
+#include "runtime/primitive_type.h"
 #include "udf/java/java_function_fwd.h"
 
 namespace starrocks::vectorized {
@@ -528,7 +529,25 @@ public:
     }
 
     template <PrimitiveType ArgPT, PrimitiveType ReturnPT, bool is_null>
-    std::enable_if_t<!isArithmeticPT<ArgPT>, AggregateFunctionPtr> create_function(std::string& name) {
+    std::enable_if_t<pt_is_json<ArgPT>, AggregateFunctionPtr> create_function(std::string& name) {
+        // TODO: support more functions for JSON type
+        if constexpr (is_null) {
+            if (name == "any_value") {
+                auto any_value = AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<AnyValueAggregateData<ArgPT>>(any_value);
+                return AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
+            }
+        } else {
+            if (name == "any_value") {
+                return AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
+            }
+        }
+        return nullptr;
+    }
+
+    template <PrimitiveType ArgPT, PrimitiveType ReturnPT, bool is_null>
+    std::enable_if_t<!isArithmeticPT<ArgPT> && !pt_is_json<ArgPT>, AggregateFunctionPtr> create_function(
+            std::string& name) {
         using ArgType = RunTimeCppType<ArgPT>;
         if constexpr (is_null) {
             if (name == "avg") {
@@ -657,6 +676,7 @@ AggregateFuncResolver::AggregateFuncResolver() {
     ADD_ALL_TYPE("max");
     ADD_ALL_TYPE("min");
     ADD_ALL_TYPE("any_value");
+    add_aggregate_mapping<TYPE_JSON, TYPE_JSON>("any_value");
 
     add_aggregate_mapping<TYPE_BOOLEAN, TYPE_BIGINT>("multi_distinct_count");
     add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT>("multi_distinct_count");

@@ -99,6 +99,19 @@ struct AnyValueAggregateData<PT, BinaryPTGuard<PT>> {
     }
 };
 
+template <PrimitiveType PT>
+struct AnyValueAggregateData<PT, JsonGuard<PT>> {
+    bool has_value = false;
+    JsonValue value;
+
+    const JsonValue* json() const { return &value; }
+
+    void reset() {
+        value = JsonValue();
+        has_value = false;
+    }
+};
+
 template <PrimitiveType PT, typename State, typename = guard::Guard>
 struct AnyValueElement {
     using T = RunTimeCppType<PT>;
@@ -117,6 +130,16 @@ struct AnyValueElement<PT, AnyValueAggregateData<PT>, BinaryPTGuard<PT>> {
             state.buffer.resize(right.size);
             memcpy(state.buffer.data(), right.data, right.size);
             state.size = right.size;
+        }
+    }
+};
+
+template <PrimitiveType PT>
+struct AnyValueElement<PT, AnyValueAggregateData<PT>, JsonGuard<PT>> {
+    void operator()(AnyValueAggregateData<PT>& state, const JsonValue* right) const {
+        if (UNLIKELY(!state.has_value)) {
+            state.has_value = true;
+            state.value = *right;
         }
     }
 };
@@ -227,6 +250,58 @@ public:
         BinaryColumn* column = down_cast<BinaryColumn*>(dst);
         for (size_t i = start; i < end; ++i) {
             column->append(this->data(state).slice());
+        }
+    }
+
+    std::string get_name() const override { return "any_value"; }
+};
+
+// Specialized for JSON type
+template <PrimitiveType PT, typename State, class OP>
+class AnyValueAggregateFunction<PT, State, OP, RunTimeCppType<PT>, JsonGuard<PT>> final
+        : public AggregateFunctionBatchHelper<State, AnyValueAggregateFunction<PT, State, OP, RunTimeCppType<PT>>> {
+public:
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        this->data(state).reset();
+    }
+
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
+        const JsonValue* value = columns[0]->get(row_num).get_json();
+        OP()(this->data(state), value);
+    }
+
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
+                                   AggDataPtr __restrict state) const override {
+        update(ctx, columns, state, 0);
+    }
+
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        const JsonValue* value = column->get(row_num).get_json();
+        OP()(this->data(state), value);
+    }
+
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        JsonColumn* column = down_cast<JsonColumn*>(to);
+        column->append(this->data(state).json());
+    }
+
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
+        *dst = src[0];
+    }
+
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        JsonColumn* column = down_cast<JsonColumn*>(to);
+        column->append(this->data(state).json());
+    }
+
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
+        DCHECK_GT(end, start);
+        JsonColumn* column = down_cast<JsonColumn*>(dst);
+        for (size_t i = start; i < end; ++i) {
+            column->append(this->data(state).json());
         }
     }
 
