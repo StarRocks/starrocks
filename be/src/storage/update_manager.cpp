@@ -171,6 +171,40 @@ string UpdateManager::memory_stats() {
                       PrettyPrinter::print_bytes(_update_mem_tracker->limit()));
 }
 
+string UpdateManager::detail_memory_stats() {
+    auto primary_index_stats = _index_cache.get_entry_sizes();
+    std::sort(primary_index_stats.begin(), primary_index_stats.end(),
+              [](const std::pair<uint64_t, size_t>& lhs, const std::pair<uint64_t, size_t>& rhs) {
+                  return lhs.second > rhs.second;
+              });
+    size_t total_memory = 0;
+    for (const auto& e : primary_index_stats) {
+        total_memory += e.second;
+    }
+    string ret;
+    StringAppendF(&ret, "primary index stats: total:%zu memory:%zu\n  tabletid       memory\n",
+                  primary_index_stats.size(), total_memory);
+    for (size_t i = 0; i < std::min(primary_index_stats.size(), (size_t)200); i++) {
+        auto& e = primary_index_stats[i];
+        StringAppendF(&ret, "%10lu %12zu\n", (unsigned long)e.first, e.second);
+    }
+    return ret;
+}
+
+string UpdateManager::topn_memory_stats(size_t topn) {
+    auto primary_index_stats = _index_cache.get_entry_sizes();
+    std::sort(primary_index_stats.begin(), primary_index_stats.end(),
+              [](const std::pair<uint64_t, size_t>& lhs, const std::pair<uint64_t, size_t>& rhs) {
+                  return lhs.second > rhs.second;
+              });
+    string ret;
+    for (size_t i = 0; i < std::min(primary_index_stats.size(), topn); i++) {
+        auto& e = primary_index_stats[i];
+        StringAppendF(&ret, "%lu(%zuM)", (unsigned long)e.first, e.second / (1024 * 1024));
+    }
+    return ret;
+}
+
 Status UpdateManager::get_latest_del_vec(KVStore* meta, const TabletSegmentId& tsid, DelVectorPtr* pdelvec) {
     std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
     auto itr = _del_vec_cache.find(tsid);

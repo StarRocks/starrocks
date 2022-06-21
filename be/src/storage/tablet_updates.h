@@ -69,6 +69,8 @@ public:
 
     bool is_error() const { return _error; }
 
+    std::string get_error_msg() const { return _error_msg; }
+
     using IteratorList = std::vector<std::shared_ptr<vectorized::ChunkIterator>>;
 
     // get latest version's number of rows
@@ -307,7 +309,7 @@ private:
 
     void _print_rowsets(std::vector<uint32_t>& rowsets, std::string* dst, bool abbr) const;
 
-    void _set_error();
+    void _set_error(const std::string& msg);
 
     Status _load_from_pb(const TabletUpdatesPB& updates);
 

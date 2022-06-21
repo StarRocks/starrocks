@@ -73,6 +73,10 @@ public:
 
     string memory_stats();
 
+    string detail_memory_stats();
+
+    string topn_memory_stats(size_t topn);
+
 private:
     // default 6min
     int64_t _cache_expire_ms = 360000;
