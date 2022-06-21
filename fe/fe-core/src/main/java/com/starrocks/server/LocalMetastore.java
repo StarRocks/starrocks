@@ -3470,11 +3470,6 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private void unprotectCreateCluster(Cluster cluster) {
-        for (Long id : cluster.getBackendIdList()) {
-            final Backend backend = stateMgr.getClusterInfo().getBackend(id);
-            backend.setBackendState(Backend.BackendState.using);
-        }
-
         idToCluster.put(cluster.getId(), cluster);
         nameToCluster.put(cluster.getName(), cluster);
 
@@ -3500,17 +3495,6 @@ public class LocalMetastore implements ConnectorMetadata {
             for (long i = 0; i < clusterCount; ++i) {
                 final Cluster cluster = Cluster.read(dis);
                 checksum ^= cluster.getId();
-
-                List<Long> latestBackendIds = stateMgr.getClusterInfo().getBackendIds();
-                if (latestBackendIds.size() != cluster.getBackendIdList().size()) {
-                    LOG.warn("Cluster:" + cluster.getName() + ", backends in Cluster is "
-                            + cluster.getBackendIdList().size() + ", backends in SystemInfoService is "
-                            + cluster.getBackendIdList().size());
-                }
-                // The number of BE in cluster is not same as in SystemInfoService, when perform 'ALTER
-                // SYSTEM ADD BACKEND TO ...' or 'ALTER SYSTEM ADD BACKEND ...', because both of them are
-                // for adding BE to some Cluster, but loadCluster is after loadBackend.
-                cluster.setBackendIdList(latestBackendIds);
 
                 String dbName = InfoSchemaDb.getFullInfoSchemaDbName(cluster.getName());
                 InfoSchemaDb db;
@@ -3539,36 +3523,12 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void initDefaultCluster() {
-        final List<Long> backendList = Lists.newArrayList();
-        final List<Backend> defaultClusterBackends =
-                systemInfoService.getBackends();
-        for (Backend backend : defaultClusterBackends) {
-            backendList.add(backend.getId());
-        }
-
         final long id = getNextId();
         final Cluster cluster = new Cluster(SystemInfoService.DEFAULT_CLUSTER, id);
-
-        // make sure one host hold only one backend.
-        Set<String> beHost = Sets.newHashSet();
-        for (Backend be : defaultClusterBackends) {
-            if (beHost.contains(be.getHost())) {
-                // we can not handle this situation automatically.
-                LOG.error("found more than one backends in same host: {}", be.getHost());
-                System.exit(-1);
-            } else {
-                beHost.add(be.getHost());
-            }
-        }
-
-        // we create default_cluster to meet the need for ease of use, because
-        // most users hava no multi tenant needs.
-        cluster.setBackendIdList(backendList);
         unprotectCreateCluster(cluster);
         for (Database db : idToDb.values()) {
             db.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         }
-
         // no matter default_cluster is created or not,
         // mark isDefaultClusterCreated as true
         stateMgr.setIsDefaultClusterCreated(true);
@@ -3593,8 +3553,6 @@ public class LocalMetastore implements ConnectorMetadata {
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
         for (long id : info.getBackendList()) {
             final Backend backend = stateMgr.getClusterInfo().getBackend(id);
-            final Cluster cluster = nameToCluster.get(SystemInfoService.DEFAULT_CLUSTER);
-            cluster.removeBackend(id);
             backend.setDecommissioned(false);
             backend.setBackendState(Backend.BackendState.free);
         }

@@ -21,7 +21,6 @@
 
 package com.starrocks.system;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterators;
@@ -39,7 +38,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -94,19 +92,7 @@ public class SystemInfoService {
         pathHashToDishInfoRef = ImmutableMap.<Long, DiskInfo>of();
     }
 
-    // for deploy manager
-    public void addBackends(List<Pair<String, Integer>> hostPortPairs, boolean isFree) throws DdlException {
-        addBackends(hostPortPairs, isFree, "");
-    }
-
-    /**
-     * @param hostPortPairs : backend's host and port
-     * @param isFree        : if true the backend is not owned by any cluster
-     * @param destCluster   : if not null or empty backend will be added to destCluster
-     * @throws DdlException
-     */
-    public void addBackends(List<Pair<String, Integer>> hostPortPairs,
-                            boolean isFree, String destCluster) throws DdlException {
+    public void addBackends(List<Pair<String, Integer>> hostPortPairs) throws DdlException {
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
             if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
@@ -115,7 +101,7 @@ public class SystemInfoService {
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            addBackend(pair.first, pair.second, isFree, destCluster);
+            addBackend(pair.first, pair.second);
         }
     }
 
@@ -129,15 +115,8 @@ public class SystemInfoService {
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
     }
 
-    private void setBackendOwner(Backend backend, String clusterName) {
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(clusterName);
-        Preconditions.checkState(cluster != null);
-        cluster.addBackend(backend.getId());
-        backend.setBackendState(BackendState.using);
-    }
-
     // Final entry of adding backend
-    private void addBackend(String host, int heartbeatPort, boolean isFree, String destCluster) throws DdlException {
+    private void addBackend(String host, int heartbeatPort) throws DdlException {
         Backend newBackend = new Backend(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         // update idToBackend
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
@@ -149,15 +128,8 @@ public class SystemInfoService {
         copiedReportVersions.put(newBackend.getId(), new AtomicLong(0L));
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
 
-        if (!Strings.isNullOrEmpty(destCluster)) {
-            // add backend to destCluster
-            setBackendOwner(newBackend, destCluster);
-        } else if (!isFree) {
-            // add backend to DEFAULT_CLUSTER
-            setBackendOwner(newBackend, DEFAULT_CLUSTER);
-        } else {
-            // backend is free
-        }
+        // add backend to DEFAULT_CLUSTER
+        newBackend.setBackendState(BackendState.using);
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddBackend(newBackend);
@@ -298,23 +270,16 @@ public class SystemInfoService {
         copiedReportVerions.remove(droppedBackend.getId());
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
 
-        // update cluster
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(DEFAULT_CLUSTER);
-        if (null != cluster) {
-            // remove worker
-            if (Config.integrate_starmgr) {
-                long starletPort = droppedBackend.getStarletPort();
-                if (starletPort == 0) {
-                    throw new DdlException("starletPort has not been updated by heartbeat from this backend");
-                }
-                String workerAddr = droppedBackend.getHost() + ":" + starletPort;
-                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
+        // remove worker
+        if (Config.integrate_starmgr) {
+            long starletPort = droppedBackend.getStarletPort();
+            if (starletPort == 0) {
+                throw new DdlException("starletPort has not been updated by heartbeat from this backend");
             }
-
-            cluster.removeBackend(droppedBackend.getId());
-        } else {
-            LOG.error("Cluster " + DEFAULT_CLUSTER + " no exist.");
+            String workerAddr = droppedBackend.getHost() + ":" + starletPort;
+            GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
         }
+
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logDropBackend(droppedBackend);
         LOG.info("finished to drop {}", droppedBackend);
@@ -681,18 +646,6 @@ public class SystemInfoService {
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.put(newBackend.getId(), new AtomicLong(0L));
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
-
-        // to add be to DEFAULT_CLUSTER
-        if (newBackend.getBackendState() == BackendState.using) {
-            final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(DEFAULT_CLUSTER);
-            if (null != cluster) {
-                // replay log
-                cluster.addBackend(newBackend.getId());
-            } else {
-                // This happens in loading image when fe is restarted, because loadCluster is after loadBackend,
-                // cluster is not created. Be in cluster will be updated in loadCluster.
-            }
-        }
     }
 
     public void replayDropBackend(Backend backend) {
@@ -706,14 +659,6 @@ public class SystemInfoService {
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.remove(backend.getId());
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
-
-        // update cluster
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(DEFAULT_CLUSTER);
-        if (null != cluster) {
-            cluster.removeBackend(backend.getId());
-        } else {
-            LOG.error("Cluster " + DEFAULT_CLUSTER + " no exist.");
-        }
     }
 
     public void updateBackendState(Backend be) {

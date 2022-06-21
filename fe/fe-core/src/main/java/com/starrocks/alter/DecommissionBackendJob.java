@@ -28,7 +28,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TabletInvertedIndex;
-import com.starrocks.cluster.Cluster;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MetaNotFoundException;
@@ -227,14 +226,12 @@ public class DecommissionBackendJob extends AlterJob {
                 if (decommissionType == DecommissionType.ClusterDecommission) {
                     for (String clusterName : clusterBackendsMap.keySet()) {
                         final Map<Long, Backend> idToBackend = clusterBackendsMap.get(clusterName);
-                        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(clusterName);
                         List<Long> backendList = Lists.newArrayList();
                         for (long id : idToBackend.keySet()) {
                             final Backend backend = idToBackend.get(id);
                             backend.setBackendState(BackendState.free);
                             backend.setDecommissioned(false);
                             backendList.add(id);
-                            cluster.removeBackend(id);
                         }
                         BackendIdsUpdateInfo updateInfo = new BackendIdsUpdateInfo(backendList);
                         GlobalStateMgr.getCurrentState().getEditLog().logUpdateClusterAndBackendState(updateInfo);

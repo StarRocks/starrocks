@@ -40,12 +40,6 @@ public class AddBackendClause extends BackendClause {
         this.destCluster = "";
     }
 
-    public AddBackendClause(List<String> hostPorts, String destCluster) {
-        super(hostPorts);
-        this.isFree = false;
-        this.destCluster = destCluster;
-    }
-
     @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();

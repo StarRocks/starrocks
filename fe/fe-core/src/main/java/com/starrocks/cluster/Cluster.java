@@ -21,16 +21,12 @@
 
 package com.starrocks.cluster;
 
-import com.google.common.collect.Lists;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * cluster only save db and user's id and name
@@ -39,8 +35,6 @@ public class Cluster implements Writable {
 
     private Long id;
     private String name;
-    // backend which cluster own
-    private Set<Long> backendIdSet = ConcurrentHashMap.newKeySet();
 
     private Cluster() {
         // for persist
@@ -59,26 +53,6 @@ public class Cluster implements Writable {
         return name;
     }
 
-    public List<Long> getBackendIdList() {
-        return Lists.newArrayList(backendIdSet);
-    }
-
-    public void setBackendIdList(List<Long> backendIdList) {
-        if (backendIdList == null) {
-            return;
-        }
-        backendIdSet = ConcurrentHashMap.newKeySet();
-        backendIdSet.addAll(backendIdList);
-    }
-
-    public void addBackend(long backendId) {
-        backendIdSet.add(backendId);
-    }
-
-    public void removeBackend(long removedBackendId) {
-        backendIdSet.remove((Long) removedBackendId);
-    }
-
     public static Cluster read(DataInput in) throws IOException {
         Cluster cluster = new Cluster();
         cluster.readFields(in);
@@ -90,10 +64,8 @@ public class Cluster implements Writable {
         out.writeLong(id);
         Text.writeString(out, name);
 
-        out.writeLong(backendIdSet.size());
-        for (Long id : backendIdSet) {
-            out.writeLong(id);
-        }
+        // For compatible for backendIdSet
+        out.writeLong(0);
 
         // dbNames and dbIds are not used anymore, so we write two zeros here.
         out.writeInt(0);
@@ -107,12 +79,12 @@ public class Cluster implements Writable {
     public void readFields(DataInput in) throws IOException {
         id = in.readLong();
         name = Text.readString(in);
+
+        // For compatible for backendIdSet: List<Long>
         Long len = in.readLong();
         while (len-- > 0) {
-            Long id = in.readLong();
-            backendIdSet.add(id);
+            in.readLong();
         }
-
         // compatible for dbNames, skip a string
         int count = in.readInt();
         while (count-- > 0) {
