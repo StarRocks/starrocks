@@ -212,7 +212,16 @@ void HdfsScannerContext::set_columns_from_file(const std::unordered_set<std::str
     }
 }
 
-void HdfsScannerContext::append_not_exised_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
+void HdfsScannerContext::update_not_existed_columns_of_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
+    if (not_existed_slots.empty() || row_count <= 0) return;
+
+    ChunkPtr& ck = (*chunk);
+    for (auto* slot_desc : not_existed_slots) {
+        ck->get_column_by_slot_id(slot_desc->id())->append_default(row_count);
+    }
+}
+
+void HdfsScannerContext::append_not_existed_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
     if (not_existed_slots.size() == 0) return;
 
     ChunkPtr& ck = (*chunk);
@@ -231,13 +240,33 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
 
     // build chunk for evaluation.
     ChunkPtr chunk = std::make_shared<Chunk>();
-    append_not_exised_columns_to_chunk(&chunk, 1);
+    append_not_existed_columns_to_chunk(&chunk, 1);
     // do evaluation.
     {
         SCOPED_RAW_TIMER(&stats->expr_filter_ns);
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(conjunct_ctxs_of_non_existed_slots, chunk.get()));
     }
     return !(chunk->has_rows());
+}
+
+void HdfsScannerContext::update_partition_column_of_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
+    if (partition_columns.empty() || row_count <= 0) return;
+
+    ChunkPtr& ck = (*chunk);
+    for (size_t i = 0; i < partition_columns.size(); i++) {
+        SlotDescriptor* slot_desc = partition_columns[i].slot_desc;
+        DCHECK(partition_values[i]->is_constant());
+        auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(partition_values[i]);
+        ColumnPtr data_column = const_column->data_column();
+        auto chunk_part_column = ck->get_column_by_slot_id(slot_desc->id());
+
+        if (data_column->is_nullable()) {
+            chunk_part_column->append_nulls(1);
+        } else {
+            chunk_part_column->append(*data_column, 0, 1);
+        }
+        chunk_part_column->assign(row_count, 0);
+    }
 }
 
 void HdfsScannerContext::append_partition_column_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count) {
