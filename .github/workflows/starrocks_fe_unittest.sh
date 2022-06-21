@@ -15,6 +15,7 @@ echo "the branch="$GITHUB_PR_TARGET_BRANCH
 echo "the root path="$ROOT
 echo "the env="$GITHUB_REF_NAME
 # chown -R jenkins:jenkins $ROOT/../
+ls -al
 
 #git config  user.email "wanpengfei91@163.com"
 #git config  user.name "wanpengfei-git"
