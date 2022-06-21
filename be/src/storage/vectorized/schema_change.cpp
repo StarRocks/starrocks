@@ -520,7 +520,7 @@ bool ChunkChanger::change_chunkV2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, con
                     Datum base_datum = base_col->get(row_index);
                     Datum new_datum;
                     Status st = converter->convert_datum(ref_type_info.get(), base_datum, new_type_info.get(),
-                                                         new_datum, mem_pool);
+                                                         &new_datum, mem_pool);
                     if (!st.ok()) {
                         LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
                                      << field_type_to_string(new_type);
