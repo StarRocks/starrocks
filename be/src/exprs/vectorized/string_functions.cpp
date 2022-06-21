@@ -1742,7 +1742,7 @@ static inline const char* skip_leading_spaces(const char* begin, const char* end
         }
     }
 #endif
-    for (; p < end && *p == ' '; ++p) {
+    for (; p < end && * p == ' '; ++p) {
     }
     return p;
 }
@@ -2530,7 +2530,7 @@ Status StringFunctions::regexp_prepare(starrocks_udf::FunctionContext* context,
         return Status::OK();
     }
 
-    StringFunctionsState* state = new StringFunctionsState();
+    auto* state = new StringFunctionsState();
     context->set_function_state(scope, state);
 
     state->options = std::make_unique<re2::RE2::Options>();
@@ -2561,7 +2561,7 @@ Status StringFunctions::regexp_prepare(starrocks_udf::FunctionContext* context,
 
 Status StringFunctions::regexp_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        StringFunctionsState* state =
+        auto* state =
                 reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
         delete state;
     }
