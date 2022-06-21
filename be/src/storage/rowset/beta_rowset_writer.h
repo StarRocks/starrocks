@@ -74,6 +74,8 @@ protected:
 
     // counters and statistics maintained during data write
     int64_t _num_rows_written;
+    int64_t _num_rows_flushed = 0;
+    std::vector<int64_t> _num_rows_of_tmp_segment_files;
     int64_t _num_rows_del;
     int64_t _total_row_size;
     int64_t _total_data_size;

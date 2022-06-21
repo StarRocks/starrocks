@@ -451,6 +451,9 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         seg_options.stats = &stats;
 
         for (int seg_id = 0; seg_id < _num_segment; ++seg_id) {
+            if (_num_rows_of_tmp_segment_files[seg_id] == 0) {
+                continue;
+            }
             std::string tmp_segment_file =
                     BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
             auto segment_ptr = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), _fs, tmp_segment_file,
@@ -458,9 +461,6 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
             if (!segment_ptr.ok()) {
                 LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
                 return segment_ptr.status();
-            }
-            if ((*segment_ptr)->num_rows() == 0) {
-                continue;
             }
             auto res = (*segment_ptr)->new_iterator(schema, seg_options);
             if (res.status().is_end_of_file()) {
@@ -547,8 +547,6 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
             }
             if (!source_masks->empty()) {
                 RETURN_IF_ERROR(mask_buffer->write(*source_masks));
-            }
-            if (!source_masks->empty()) {
                 source_masks->clear();
             }
         }
@@ -572,6 +570,9 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
             seg_options.stats = &stats;
 
             for (int seg_id = 0; seg_id < num_tmp_segment; ++seg_id) {
+                if (_num_rows_of_tmp_segment_files[seg_id] == 0) {
+                    continue;
+                }
                 std::string tmp_segment_file =
                         BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
                 auto segment_ptr = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), _fs,
@@ -579,9 +580,6 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                 if (!segment_ptr.ok()) {
                     LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
                     return segment_ptr.status();
-                }
-                if ((*segment_ptr)->num_rows() == 0) {
-                    continue;
                 }
                 auto res = (*segment_ptr)->new_iterator(schema, seg_options);
                 if (res.status().is_end_of_file()) {
@@ -662,6 +660,9 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         seg_options.stats = &stats;
 
         for (int seg_id = 0; seg_id < _num_segment; ++seg_id) {
+            if (_num_rows_of_tmp_segment_files[seg_id] == 0) {
+                continue;
+            }
             std::string tmp_segment_file =
                     BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
             auto segment_ptr = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), _fs, tmp_segment_file,
@@ -669,9 +670,6 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
             if (!segment_ptr.ok()) {
                 LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
                 return segment_ptr.status();
-            }
-            if ((*segment_ptr)->num_rows() == 0) {
-                continue;
             }
             auto res = (*segment_ptr)->new_iterator(schema, seg_options);
             if (res.status().is_end_of_file()) {
@@ -773,6 +771,8 @@ Status HorizontalBetaRowsetWriter::_flush_segment_writer(std::unique_ptr<Segment
     uint64_t index_size;
     uint64_t footer_position;
     RETURN_IF_ERROR((*segment_writer)->finalize(&segment_size, &index_size, &footer_position));
+    _num_rows_of_tmp_segment_files.push_back(_num_rows_written - _num_rows_flushed);
+    _num_rows_flushed = _num_rows_written;
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
         uint64_t footer_size = segment_size - footer_position;
         auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
