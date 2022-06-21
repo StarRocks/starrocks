@@ -101,6 +101,9 @@ Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& 
                                                 in_filters.end());
         _conjuncts_and_in_filters_is_cached = true;
     }
+    if (_cached_conjuncts_and_in_filters.empty()) {
+        return Status::OK();
+    }
     if (chunk == nullptr || chunk->is_empty()) {
         return Status::OK();
     }
@@ -149,7 +152,7 @@ void Operator::_init_rf_counters(bool init_bloom) {
 
 void Operator::_init_conjuct_counters() {
     if (_conjuncts_timer == nullptr) {
-        _conjuncts_timer = ADD_TIMER(_common_metrics, "JoinRuntimeFilterTime");
+        _conjuncts_timer = ADD_TIMER(_common_metrics, "ConjunctsTime");
         _conjuncts_input_counter = ADD_COUNTER(_common_metrics, "ConjunctsInputRows", TUnit::UNIT);
         _conjuncts_output_counter = ADD_COUNTER(_common_metrics, "ConjunctsOutputRows", TUnit::UNIT);
         _conjuncts_eval_counter = ADD_COUNTER(_common_metrics, "ConjunctsEvaluate", TUnit::UNIT);
