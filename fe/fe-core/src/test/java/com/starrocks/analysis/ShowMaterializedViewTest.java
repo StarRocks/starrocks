@@ -81,7 +81,7 @@ public class ShowMaterializedViewTest {
                 "SHOW MATERIALIZED VIEW FROM abc where name = 'mv1';", ctx);
         Assert.assertEquals("testCluster:abc", stmt.getDb());
         Assert.assertEquals(
-                "SELECT id AS id, name AS name, database_name AS database_name, text AS text, rows AS rows FROM information_schema.materialized_views WHERE name = 'mv1'",
+                "SELECT MATERIALIZED_VIEW_ID AS id, TABLE_NAME AS name, TABLE_SCHEMA AS database_name, MATERIALIZED_VIEW_DEFINITION AS text, TABLE_ROWS AS rows FROM information_schema.materialized_views WHERE TABLE_NAME = 'mv1'",
                 AST2SQL.toString(stmt.toSelectStmt()));
         Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("id", stmt.getMetaData().getColumn(0).getName());
