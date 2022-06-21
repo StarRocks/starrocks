@@ -326,12 +326,8 @@ struct TTableStatus {
     20: optional string ddl_sql
     // id for materialized view
     21: optional string id
-    // database_name for materialized view
-    22: optional string database_name
-    // ddl_sql for materialized view
-    23: optional string text
     // row_count for materialized view
-    24: optional string rows
+    22: optional string rows
 }
 
 struct TListTableStatusResult {

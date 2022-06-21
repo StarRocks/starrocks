@@ -10,11 +10,11 @@ namespace starrocks::vectorized {
 
 SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"id", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"name", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"database_name", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"text", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"rows", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"MATERIALIZED_VIEW_ID", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"MATERIALIZED_VIEW_DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"TABLE_ROWS", TYPE_VARCHAR, sizeof(StringValue), false},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()
@@ -55,7 +55,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
     for (const auto& [slot_id, index] : slot_id_to_index_map) {
         switch (slot_id) {
         case 1: {
-            // id
+            // TABLE_ID
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
                 const std::string* str = &tbl_status.id;
@@ -65,37 +65,37 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 2: {
-            // name
+            // TABLE_SCHEMA
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
+                Slice value(db_name.c_str(), db_name.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 3: {
+            // TABLE_NAME
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
                 const std::string* str = &tbl_status.name;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
-        case 3: {
-            // database_name
-            {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
-                const std::string* str = &tbl_status.database_name;
-                Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-            }
-            break;
-        }
         case 4: {
-            // text
+            // VIEW_DEFINITION
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
-                const std::string* str = &tbl_status.text;
+                const std::string* str = &tbl_status.ddl_sql;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
         case 5: {
-            // rows
+            // TABLE_ROWS
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
                 const std::string* str = &tbl_status.rows;

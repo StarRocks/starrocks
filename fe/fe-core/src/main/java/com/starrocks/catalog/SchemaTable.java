@@ -450,12 +450,12 @@ public class SchemaTable extends Table {
                                     "materialized_views",
                                     TableType.SCHEMA,
                                     builder()
-                                            .column("id", ScalarType.createVarchar(50))
-                                            .column("name", ScalarType.createVarchar(50))
-                                            .column("database_name", ScalarType.createVarchar(20))
-                                            .column("text",
+                                            .column("MATERIALIZED_VIEW_ID", ScalarType.createVarchar(50))
+                                            .column("TABLE_SCHEMA", ScalarType.createVarchar(20))
+                                            .column("TABLE_NAME", ScalarType.createVarchar(50))
+                                            .column("MATERIALIZED_VIEW_DEFINITION",
                                                     ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
-                                            .column("rows", ScalarType.createVarchar(50))
+                                            .column("TABLE_ROWS", ScalarType.createVarchar(50))
                                             .build()))
                     .build();
 

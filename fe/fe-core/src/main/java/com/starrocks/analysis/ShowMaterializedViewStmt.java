@@ -97,23 +97,23 @@ public class ShowMaterializedViewStmt extends ShowStmt {
         SelectList selectList = new SelectList();
         ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
         // id
-        SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, "id"), "id");
+        SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, "MATERIALIZED_VIEW_ID"), "id");
         selectList.addItem(item);
         aliasMap.put(new SlotRef(null, "id"), item.getExpr().clone(null));
         // name
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "name"), "name");
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_NAME"), "name");
         selectList.addItem(item);
         aliasMap.put(new SlotRef(null, "name"), item.getExpr().clone(null));
         // database_name
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "database_name"), "database_name");
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_SCHEMA"), "database_name");
         selectList.addItem(item);
         aliasMap.put(new SlotRef(null, "database_name"), item.getExpr().clone(null));
         // text
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "text"), "text");
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "MATERIALIZED_VIEW_DEFINITION"), "text");
         selectList.addItem(item);
         aliasMap.put(new SlotRef(null, "text"), item.getExpr().clone(null));
         // rows
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "rows"), "rows");
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_ROWS"), "rows");
         selectList.addItem(item);
         aliasMap.put(new SlotRef(null, "rows"), item.getExpr().clone(null));
         where = where.substitute(aliasMap);

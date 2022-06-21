@@ -359,8 +359,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 TTableStatus status = new TTableStatus();
                 status.setId(String.valueOf(mvTable.getId()));
                 status.setName(mvTable.getName());
-                status.setDatabase_name(dbName);
-                status.setText(mvTable.getViewDefineSql());
+                status.setDdl_sql(mvTable.getViewDefineSql());
                 status.setRows(String.valueOf(mvTable.getRowCount()));
                 status.setType(mvTable.getMysqlType());
                 status.setComment(mvTable.getComment());
@@ -386,7 +385,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         TTableStatus status = new TTableStatus();
                         status.setId(String.valueOf(mvIdx.getId()));
                         status.setName(olapTable.getIndexNameById(mvIdx.getId()));
-                        status.setDatabase_name(dbName);
                         if (mvMeta.getOriginStmt() == null) {
                             StringBuilder originStmtBuilder = new StringBuilder(
                                     "create materialized view " + olapTable.getIndexNameById(mvIdx.getId()) +
@@ -408,9 +406,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             originStmtBuilder.append(" from ").append(olapTable.getName()).append(" group by ")
                                     .append(groupByString);
                             originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
-                            status.setText(originStmtBuilder.toString());
+                            status.setDdl_sql(originStmtBuilder.toString());
                         } else {
-                            status.setText(mvMeta.getOriginStmt().replace("\n", "").replace("\t", "")
+                            status.setDdl_sql(mvMeta.getOriginStmt().replace("\n", "").replace("\t", "")
                                     .replaceAll("[ ]+", " "));
                         }
                         status.setRows(String.valueOf(mvIdx.getRowCount()));
