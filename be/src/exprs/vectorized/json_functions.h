@@ -198,7 +198,7 @@ private:
      * @paramType: 
      * @return: BinaryColumn
      */
-    DEFINE_VECTORIZED_FN(_unquote_string);
+    DEFINE_VECTORIZED_FN(_unescape_and_unquote_string);
 
     /**
      * Convert json column to int column

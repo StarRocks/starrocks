@@ -14,6 +14,8 @@
 #include "common/status.h"
 #include "exprs/vectorized/jsonpath.h"
 #include "glog/logging.h"
+#include "gutil/strings/escaping.h"
+#include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "udf/udf.h"
 #include "util/json.h"
@@ -221,7 +223,7 @@ ColumnPtr JsonFunctions::get_json_string(FunctionContext* context, const Columns
     jsons = json_query(context, Columns{jsons, paths});
     auto strs = json_string(context, Columns{jsons});
 
-    return _unquote_string(context, Columns{strs});
+    return _unescape_and_unquote_string(context, Columns{strs});
 }
 
 ColumnPtr JsonFunctions::parse_json(FunctionContext* context, const Columns& columns) {
@@ -329,7 +331,7 @@ ColumnPtr JsonFunctions::_string_json(FunctionContext* context, const Columns& c
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr JsonFunctions::_unquote_string(FunctionContext* context, const Columns& columns) {
+ColumnPtr JsonFunctions::_unescape_and_unquote_string(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
     ColumnBuilder<TYPE_VARCHAR> result(columns[0]->size());
 
@@ -341,9 +343,13 @@ ColumnPtr JsonFunctions::_unquote_string(FunctionContext* context, const Columns
             if (str.length() <= 2) {
                 result.append(std::move(str));
             }  else {
+                // Since the string extract from json may be escaped, unescaping is needed.
+                str = UnescapeCEscapeString(str);
+
                 // Try to trim the first/last quote.
                 if (str[0] == '"') str = str.substr(1, str.size() - 1);
                 if (str[str.size() - 1] == '"') str = str.substr(0, str.size() - 1);
+                
                 result.append(std::move(str));
             }
         }
