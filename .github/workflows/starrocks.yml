@@ -31,7 +31,7 @@ jobs:
      - name: Cache local testing file
        uses: actions/cache@v3
        with:
-         path: ~/*.jar
+         path: $STARROCKS_HOME/*.jar
          key: ${{ runner.os }}-testing-${{ hashFiles('*.jar') }}
          restore-keys: |
            ${{ runner.os }}-testing-
