@@ -446,7 +446,7 @@ public class TaskManager {
         taskRunManager.getTaskRunHistory().getAllHistory().removeIf(runStatus -> index.containsKey(runStatus.getQueryId()));
     }
 
-    public void removeOldTaskInfo() {
+    public void removeExpiredTasks() {
         long currentTimeMs = System.currentTimeMillis();
 
         List<Long> taskIdToDelete = Lists.newArrayList();
@@ -468,7 +468,7 @@ public class TaskManager {
         dropTasks(taskIdToDelete, true);
     }
 
-    public void removeOldTaskRunHistory() {
+    public void removeExpiredTaskRuns() {
         long currentTimeMs = System.currentTimeMillis();
 
         List<String> historyToDelete = Lists.newArrayList();

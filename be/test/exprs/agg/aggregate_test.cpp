@@ -811,8 +811,8 @@ TEST_F(AggregateTest, test_window_funnel) {
     std::vector<FunctionContext::TypeDesc> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_BIGINT)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATETIME)),
-             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_INT)),
-              AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_ARRAY))};
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_INT)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_ARRAY))};
 
     auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_INT));
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
@@ -829,27 +829,27 @@ TEST_F(AggregateTest, test_window_funnel) {
     auto data_col = builder.build(false);
 
     auto offsets = UInt32Column::create();
-    offsets->append(2); // [true, true]
-    offsets->append(4); // [true, true]
-    offsets->append(6); // [true, true]
-    auto column4 = ArrayColumn::create(data_col, offsets);  // array_column, 4th column
+    offsets->append(2);                                    // [true, true]
+    offsets->append(4);                                    // [true, true]
+    offsets->append(6);                                    // [true, true]
+    auto column4 = ArrayColumn::create(data_col, offsets); // array_column, 4th column
 
-    auto column1 = Int64Column::create();   // first column, but there use const.
+    auto column1 = Int64Column::create(); // first column, but there use const.
     column1->append(1800);
     // column1->append(1800);
 
     auto column2 = TimestampColumn::create();
-    column2->append(TimestampValue::create(2022, 6, 10, 12, 30, 30));  // 2nd column.
+    column2->append(TimestampValue::create(2022, 6, 10, 12, 30, 30)); // 2nd column.
 
     auto const_column1 = ColumnHelper::create_const_column<TYPE_BIGINT>(1800, 1);
     auto column3 = ColumnHelper::create_const_column<TYPE_INT>(2, 1);
     Columns const_columns;
-    const_columns.emplace_back(const_column1);    // first column
+    const_columns.emplace_back(const_column1); // first column
     const_columns.emplace_back(column3);
-    const_columns.emplace_back(column3);         // 3rd const column
+    const_columns.emplace_back(column3); // 3rd const column
     local_ctx->impl()->set_constant_columns(const_columns);
 
-    std::vector<const Column*> raw_column;  // to column list.
+    std::vector<const Column*> raw_column; // to column list.
     raw_column.resize(4);
     raw_column[0] = column1.get();
     raw_column[1] = column2.get();
