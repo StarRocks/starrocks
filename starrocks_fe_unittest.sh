@@ -8,14 +8,12 @@ ROOT=`cd "$ROOT/.."; pwd`
 
 GITHUB_PR_NUMBER=${1:?"need GITHUB_PR_NUMBER parameter"}
 GITHUB_PR_TARGET_BRANCH=${2:?"need GITHUB_PR_TARGET_BRANCH parameter"}
-
 #GITHUB_PR_COMMENT_BODY=${3:-"default"}
+
 echo "the github number"$GITHUB_PR_NUMBE
 echo "the branch="$GITHUB_PR_TARGET_BRANCH
 echo "the root path="$ROOT
 echo "the env="$GITHUB_REF_NAME
-# chown -R jenkins:jenkins $ROOT/../
-ls -al
 
 #git config  user.email "wanpengfei91@163.com"
 #git config  user.name "wanpengfei-git"
@@ -69,6 +67,7 @@ timeout 3600 sh run-fe-ut.sh --run com.starrocks.utframe.Demo#testCreateDbAndTab
 docker exec --privileged $container_name /bin/bash -c "$cmd"
 
 echo "script run over-----"
+
 cd ~
 pwd
 ls -al
