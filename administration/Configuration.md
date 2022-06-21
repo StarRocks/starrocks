@@ -173,15 +173,13 @@ After the service is started, you may adjust the configuration parameters to mee
 |base_compaction_num_threads_per_disk|1|Number of BaseCompaction threads per disk|
 |base_cumulative_delta_ratio|0.3|BaseCompaction trigger: The target ratio between cumulative and base files |
 |base_compaction_interval_seconds_since_last_operation|86400|BaseCompaction trigger: The interval for triggering the next BaseCompaction|
-|base_compaction_write_mbytes_per_sec|5| Speed limit of BaseCompaction to write disk |
 |cumulative_compaction_check_interval_seconds|10| Interval of CumulativeCompaction thread polling |
 |min_cumulative_compaction_num_singleton_deltas|5| CumulativeCompaction trigger: the lower limit on the number of Singleton files to be reached |
 |max_cumulative_compaction_num_singleton_deltas|1000| CumulativeCompaction trigger: the upper limit on the number of Singleton files to be reached |
-|cumulative_compaction_num_threads_per_disk|1| Number of CumulativeCompaction threads per disk |
-|cumulative_compaction_budgeted_bytes|104857600|BaseCompaction trigger: The sum limit of Singleton file size, default by 100MB |
 |cumulative_compaction_write_mbytes_per_sec|100| Speed limit of CumulativeCompaction to write disk |
-|min_compaction_failure_interval_sec|600| Interval for Tablet Compaction to be scheduled again after a failure. |
-|max_compaction_concurrency|-1| Maximum concurrency for BaseCompaction and CumulativeCompaction.-1 indicates no limit |
+|min_compaction_failure_interval_sec|600| Interval for Tablet Compaction to be scheduled again after a failure |
+|max_compaction_concurrency|4| Maximum concurrency for BaseCompaction and CumulativeCompaction. -1 indicates no limit |
+|compaction_trace_threshold|60|Time threshold for each compaction to print the trace. System will print trace log once a compaction exceeds this threshold. Unit: second |
 |webserver_port|8040| Http Server port |
 |webserver_num_workers|5| Number of Http Server threads |
 |periodic_counter_update_period_ms|500| Interval for getting counter statistics |
