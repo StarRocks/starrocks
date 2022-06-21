@@ -415,7 +415,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.IF() != null,
                 targetTableName,
                 colWithComments,
-                context.viewComment == null ? null : visit(context.viewComment).toString(),
+                context.comment() == null ? null : ((StringLiteral) visit(context.comment())).getStringValue(),
                 (QueryStatement) visit(context.queryStatement()));
     }
 
@@ -435,8 +435,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitColumnNameWithComment(StarRocksParser.ColumnNameWithCommentContext context) {
         String comment = null;
-        if (context.string() != null) {
-            comment = ((StringLiteral) visit(context.string())).getStringValue();
+        if (context.comment() != null) {
+            comment = ((StringLiteral) visit(context.comment())).getStringValue();
         }
 
         return new ColWithComment(((Identifier) visit(context.identifier())).getValue(), comment);
