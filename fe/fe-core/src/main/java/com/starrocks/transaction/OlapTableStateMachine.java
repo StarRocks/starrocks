@@ -163,7 +163,7 @@ public class OlapTableStateMachine extends StateMachine {
     }
 
     @Override
-    public void postCommit(TransactionState txnState) {
+    public void preWriteCommitLog(TransactionState txnState) {
         Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.COMMITTED);
         TableCommitInfo tableCommitInfo = new TableCommitInfo(table.getId());
         boolean isFirstPartition = true;
@@ -189,7 +189,7 @@ public class OlapTableStateMachine extends StateMachine {
     }
 
     @Override
-    public void postCommitEditLog(TransactionState txnState) {
+    public void postWriteCommitLog(TransactionState txnState) {
         // add publish version tasks. set task to null as a placeholder.
         // tasks will be created when publishing version.
         for (long backendId : totalInvolvedBackends) {
@@ -198,7 +198,7 @@ public class OlapTableStateMachine extends StateMachine {
     }
 
     @Override
-    public void applyCommit(TransactionState txnState, TableCommitInfo commitInfo) {
+    public void applyCommitLog(TransactionState txnState, TableCommitInfo commitInfo) {
         Set<Long> errorReplicaIds = txnState.getErrorReplicas();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             long partitionId = partitionCommitInfo.getPartitionId();
@@ -222,7 +222,7 @@ public class OlapTableStateMachine extends StateMachine {
     }
 
     @Override
-    public void applyPublishVersion(TransactionState txnState, TableCommitInfo commitInfo) {
+    public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo) {
         Set<Long> errorReplicaIds = txnState.getErrorReplicas();
         long tableId = table.getId();
         List<String> validDictCacheColumns = Lists.newArrayList();

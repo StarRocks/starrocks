@@ -827,14 +827,14 @@ public class DatabaseTransactionMgr {
         transactionState.setTransactionStatus(TransactionStatus.COMMITTED);
 
         for (StateMachine stateMachine : stateMachineList) {
-            stateMachine.postCommit(transactionState);
+            stateMachine.preWriteCommitLog(transactionState);
         }
 
         // persist transactionState
         unprotectUpsertTransactionState(transactionState, false);
 
         for (StateMachine stateMachine : stateMachineList) {
-            stateMachine.postCommitEditLog(transactionState);
+            stateMachine.postWriteCommitLog(transactionState);
         }
     }
 
@@ -1206,7 +1206,7 @@ public class DatabaseTransactionMgr {
             long tableId = tableCommitInfo.getTableId();
             Table table = db.getTable(tableId);
             StateMachine stateMachine = stateMachineFactory.create(this, table);
-            stateMachine.applyCommit(transactionState, tableCommitInfo);
+            stateMachine.applyCommitLog(transactionState, tableCommitInfo);
         }
     }
 
@@ -1214,7 +1214,7 @@ public class DatabaseTransactionMgr {
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             Table table = db.getTable(tableCommitInfo.getTableId());
             StateMachine stateMachine = stateMachineFactory.create(this, table);
-            stateMachine.applyPublishVersion(transactionState, tableCommitInfo);
+            stateMachine.applyVisibleLog(transactionState, tableCommitInfo);
         }
         return true;
     }
