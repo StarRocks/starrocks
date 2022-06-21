@@ -82,7 +82,7 @@ public class TaskRun {
         ConnectContext newCtx = new ConnectContext();
         newCtx.setCluster(ctx.getClusterName());
         newCtx.setGlobalStateMgr(ctx.getGlobalStateMgr());
-        newCtx.setDatabase(ctx.getDatabase());
+        newCtx.setDatabase(task.getDbName());
         newCtx.setQualifiedUser(ctx.getQualifiedUser());
         newCtx.setCurrentUserIdentity(ctx.getCurrentUserIdentity());
         newCtx.getState().reset();
