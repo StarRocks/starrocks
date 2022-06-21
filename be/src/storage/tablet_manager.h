@@ -186,7 +186,7 @@ private:
 
     Status _update_tablet_map_and_partition_info(const TabletSharedPtr& tablet);
 
-    Status _create_inital_rowset_unlocked(const TCreateTabletReq& request, Tablet* tablet);
+    static Status _create_inital_rowset_unlocked(const TCreateTabletReq& request, Tablet* tablet);
 
     Status _drop_tablet_directly_unlocked(TTabletId tablet_id, TabletDropFlag flag);
 
