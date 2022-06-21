@@ -960,7 +960,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     private void unprotectedFinishClone(TFinishTaskRequest request, Database db, Partition partition,
                                         short replicationNum) throws SchedException {
-        List<Long> aliveBeIdsInCluster = infoService.getClusterBackendIds(db.getClusterName(), true);
+        List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
         Pair<TabletStatus, TabletSchedCtx.Priority> pair = tablet.getHealthStatusWithPriority(
                 infoService, db.getClusterName(), visibleVersion, replicationNum,
                 aliveBeIdsInCluster);

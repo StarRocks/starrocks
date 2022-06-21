@@ -1974,16 +1974,13 @@ public class AuthTest {
             }
         };
         String newCluster = "another_cluster";
-        Assert.assertFalse(auth.checkCanEnterCluster(ctx, newCluster));
 
         TablePattern tablePattern = new TablePattern("db1", "test_table");
         tablePattern.analyze(newCluster);
         PrivBitSet privileges = AccessPrivilege.SELECT_PRIV.toPrivilege();
         auth.grantPrivs(userIdentity, tablePattern, privileges, false);
-        Assert.assertTrue(auth.checkCanEnterCluster(ctx, newCluster));
 
         auth.revokePrivs(userIdentity, tablePattern, privileges, false);
-        Assert.assertFalse(auth.checkCanEnterCluster(ctx, newCluster));
     }
 
     @Test

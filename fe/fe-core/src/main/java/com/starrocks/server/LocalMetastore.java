@@ -698,7 +698,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // only internal table should check quota and cluster capacity
         if (!stmt.isExternal()) {
             // check cluster capacity
-            systemInfoService.checkClusterCapacity(stmt.getClusterName());
+            systemInfoService.checkClusterCapacity();
             // check db quota
             db.checkQuota();
         }
@@ -2349,7 +2349,7 @@ public class LocalMetastore implements ConnectorMetadata {
     private List<Long> chosenBackendIdBySeq(int replicationNum, String clusterName, TStorageMedium storageMedium)
             throws DdlException {
         List<Long> chosenBackendIds = systemInfoService.seqChooseBackendIdsByStorageMedium(replicationNum,
-                true, true, clusterName, storageMedium);
+                true, true, storageMedium);
         if (chosenBackendIds == null) {
             throw new DdlException(
                     "Failed to find enough host with storage medium is " + storageMedium + " in all backends. need: " +
@@ -2360,7 +2360,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private List<Long> chosenBackendIdBySeq(int replicationNum, String clusterName) throws DdlException {
         List<Long> chosenBackendIds =
-                systemInfoService.seqChooseBackendIds(replicationNum, true, true, clusterName);
+                systemInfoService.seqChooseBackendIds(replicationNum, true, true);
         if (chosenBackendIds == null) {
             List<Long> backendIds = systemInfoService.getBackendIds(true);
             throw new DdlException("Failed to find enough host in all backends. need: " + replicationNum +
@@ -3502,7 +3502,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 final Cluster cluster = Cluster.read(dis);
                 checksum ^= cluster.getId();
 
-                List<Long> latestBackendIds = stateMgr.getClusterInfo().getClusterBackendIds(cluster.getName());
+                List<Long> latestBackendIds = stateMgr.getClusterInfo().getBackendIds();
                 if (latestBackendIds.size() != cluster.getBackendIdList().size()) {
                     LOG.warn("Cluster:" + cluster.getName() + ", backends in Cluster is "
                             + cluster.getBackendIdList().size() + ", backends in SystemInfoService is "
@@ -3542,7 +3542,7 @@ public class LocalMetastore implements ConnectorMetadata {
     public void initDefaultCluster() {
         final List<Long> backendList = Lists.newArrayList();
         final List<Backend> defaultClusterBackends =
-                systemInfoService.getClusterBackends(SystemInfoService.DEFAULT_CLUSTER);
+                systemInfoService.getBackends();
         for (Backend backend : defaultClusterBackends) {
             backendList.add(backend.getId());
         }

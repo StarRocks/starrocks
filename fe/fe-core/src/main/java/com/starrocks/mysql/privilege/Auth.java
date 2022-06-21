@@ -1609,28 +1609,6 @@ public class Auth implements Writable {
         }
     }
 
-    // user can enter a cluster, if it has any privs of database or table in this cluster.
-    public boolean checkCanEnterCluster(ConnectContext ctx, String clusterName) {
-        readLock();
-        try {
-            if (checkGlobalPriv(ctx, PrivPredicate.ALL)) {
-                return true;
-            }
-
-            if (dbPrivTable.hasClusterPriv(ctx, clusterName)) {
-                return true;
-            }
-
-            if (tablePrivTable.hasClusterPriv(ctx, clusterName)) {
-                return true;
-            }
-
-            return false;
-        } finally {
-            readUnlock();
-        }
-    }
-
     private void initUser() {
         try {
             UserIdentity rootUser = new UserIdentity(ROOT_USER, "%");

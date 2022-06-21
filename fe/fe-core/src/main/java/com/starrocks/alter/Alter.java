@@ -107,7 +107,7 @@ public class Alter {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
         // check cluster capacity
-        GlobalStateMgr.getCurrentSystemInfo().checkClusterCapacity(stmt.getClusterName());
+        GlobalStateMgr.getCurrentSystemInfo().checkClusterCapacity();
         // check db quota
         db.checkQuota();
 
@@ -211,7 +211,7 @@ public class Alter {
 
         // check cluster capacity and db quota, only need to check once.
         if (currentAlterOps.needCheckCapacity()) {
-            GlobalStateMgr.getCurrentSystemInfo().checkClusterCapacity(clusterName);
+            GlobalStateMgr.getCurrentSystemInfo().checkClusterCapacity();
             db.checkQuota();
         }
 

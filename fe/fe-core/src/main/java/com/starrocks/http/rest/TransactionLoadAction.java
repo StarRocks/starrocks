@@ -84,7 +84,7 @@ public class TransactionLoadAction extends RestBaseAction {
         synchronized (this) {
             if (op.equalsIgnoreCase(TXN_BEGIN)) {
                 // Choose a backend sequentially.
-                List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false, clusterName);
+                List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
                 if (backendIds == null) {
                     throw new DdlException("No backend alive.");
                 }

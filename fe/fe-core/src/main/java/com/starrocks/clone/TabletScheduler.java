@@ -183,7 +183,7 @@ public class TabletScheduler extends MasterDaemon {
      * update working slots at the beginning of each round
      */
     private boolean updateWorkingSlots() {
-        ImmutableMap<Long, Backend> backends = infoService.getBackendsInCluster(null);
+        ImmutableMap<Long, Backend> backends = infoService.getIdToBackend();
         for (Backend backend : backends.values()) {
             if (!backend.hasPathHash() && backend.isAlive()) {
                 // when upgrading, backend may not get path info yet. so return false and wait for next round.
@@ -563,7 +563,7 @@ public class TabletScheduler extends MasterDaemon {
                 statusPair = Pair.create(st, Priority.HIGH);
                 tabletCtx.setColocateGroupBackendIds(backendsSet);
             } else {
-                List<Long> aliveBeIdsInCluster = infoService.getClusterBackendIds(db.getClusterName(), true);
+                List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
                 statusPair = tablet.getHealthStatusWithPriority(
                         infoService, tabletCtx.getCluster(),
                         partition.getVisibleVersion(),

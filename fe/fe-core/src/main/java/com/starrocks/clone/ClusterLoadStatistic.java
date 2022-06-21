@@ -69,7 +69,7 @@ public class ClusterLoadStatistic {
     }
 
     public void init() {
-        ImmutableMap<Long, Backend> backends = infoService.getBackendsInCluster(clusterName);
+        ImmutableMap<Long, Backend> backends = infoService.getIdToBackend();
         for (Backend backend : backends.values()) {
             BackendLoadStatistic beStatistic = new BackendLoadStatistic(backend.getId(),
                     backend.getOwnerClusterName(), infoService, invertedIndex);
