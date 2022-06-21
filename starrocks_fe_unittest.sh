@@ -4,8 +4,9 @@ source ~/.bash_profile
 set -eo pipefail
 
 ROOT=`dirname "$0"`
+ls -al
 ROOT=`cd "$ROOT/.."; pwd`
-
+ls -al
 GITHUB_PR_NUMBER=${1:?"need GITHUB_PR_NUMBER parameter"}
 GITHUB_PR_TARGET_BRANCH=${2:?"need GITHUB_PR_TARGET_BRANCH parameter"}
 #GITHUB_PR_COMMENT_BODY=${3:-"default"}
@@ -68,7 +69,7 @@ docker exec --privileged $container_name /bin/bash -c "$cmd"
 
 echo "script run over-----"
 
-if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
+if [ "$GITHUB_PR_TARGET_BRANCH" == "testing" ];then
     cd $ROOT/fe/fe-core/target
     jacoco_result="jacoco_${GITHUB_PR_NUMBER}.exec"
     mv jacoco.exec $jacoco_result || true
