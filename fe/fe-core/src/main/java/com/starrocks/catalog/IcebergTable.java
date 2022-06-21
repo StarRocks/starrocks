@@ -233,9 +233,7 @@ public class IcebergTable extends Table {
             case BOOLEAN:
                 return primitiveType == PrimitiveType.BOOLEAN;
             case INTEGER:
-                return primitiveType == PrimitiveType.INT ||
-                        primitiveType == PrimitiveType.TINYINT ||
-                        primitiveType == PrimitiveType.SMALLINT;
+                return primitiveType == PrimitiveType.INT;
             case LONG:
                 return primitiveType == PrimitiveType.BIGINT;
             case FLOAT:
