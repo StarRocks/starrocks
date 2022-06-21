@@ -3,9 +3,11 @@
 source ~/.bash_profile
 set -eo pipefail
 
-ROOT=`dirname "$0"`
+PROJECT=`dirname "$0"`
+pwd
 ls -al
-ROOT=`cd "$ROOT/.."; pwd`
+ROOT=`cd "$PROJECT/.."; pwd`
+pwd
 ls -al
 GITHUB_PR_NUMBER=${1:?"need GITHUB_PR_NUMBER parameter"}
 GITHUB_PR_TARGET_BRANCH=${2:?"need GITHUB_PR_TARGET_BRANCH parameter"}
@@ -70,11 +72,11 @@ docker exec --privileged $container_name /bin/bash -c "$cmd"
 echo "script run over-----"
 
 if [ "$GITHUB_PR_TARGET_BRANCH" == "testing" ];then
-    cd $ROOT/fe/fe-core/target
+    cd $PROJECT/fe/fe-core/target
     jacoco_result="jacoco_${GITHUB_PR_NUMBER}.exec"
     mv jacoco.exec $jacoco_result || true
 
-    java -jar ~/jacococli.jar report ./$jacoco_result --classfiles ./classes/ --html ./result --sourcefiles $ROOT/fe/fe-core/src/main/java/ --encoding utf-8 --name fe-coverage
+    java -jar ~/jacococli.jar report ./$jacoco_result --classfiles ./classes/ --html ./result --sourcefiles $PROJECT/fe/fe-core/src/main/java/ --encoding utf-8 --name fe-coverage
 
     time_count=0
     pull_status=1
@@ -82,7 +84,7 @@ if [ "$GITHUB_PR_TARGET_BRANCH" == "testing" ];then
         if (( $time_count == 3 ));then
             exit 1
         fi
-        timeout 180 java -jar ~/cover-checker-console-1.4.0-jar-with-dependencies.jar --cover $ROOT/fe/fe-core/target/result/ --github-token 66e4c48809eb7e058eb73668b8c816867e6d7cbe  --repo StarRocks/starrocks --threshold 80 --github-url api.github.com  --pr ${GITHUB_PR_NUMBER} -type jacoco
+        timeout 180 java -jar ~/cover-checker-console-1.4.0-jar-with-dependencies.jar --cover $PROJECT/fe/fe-core/target/result/ --github-token 66e4c48809eb7e058eb73668b8c816867e6d7cbe  --repo StarRocks/starrocks --threshold 80 --github-url api.github.com  --pr ${GITHUB_PR_NUMBER} -type jacoco
         pull_status=$?
         time_count=`expr $time_count + 1`
     done
