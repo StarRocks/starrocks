@@ -6,7 +6,6 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -34,11 +33,13 @@ public class OlapTableStateMachine extends StateMachine {
 
     private final DatabaseTransactionMgr dbTxnMgr;
     private final OlapTable table;
-    private final Set<Long> totalInvolvedBackends = Sets.newHashSet();
-    private final Set<Long> errorReplicaIds = Sets.newHashSet();
-    private final Set<Long> dirtyPartitionSet = Sets.newHashSet();
-    private final Set<String> invalidDictCacheColumns = Sets.newHashSet();
-    private final Set<String> validDictCacheColumns = Sets.newHashSet();
+
+    // Following variables only used by FE master, lazy initialize in preCommit.
+    private Set<Long> totalInvolvedBackends;
+    private Set<Long> errorReplicaIds;
+    private Set<Long> dirtyPartitionSet;
+    private Set<String> invalidDictCacheColumns;
+    private Set<String> validDictCacheColumns;
 
     public OlapTableStateMachine(DatabaseTransactionMgr dbTxnMgr, OlapTable table) {
         this.dbTxnMgr = dbTxnMgr;
@@ -47,10 +48,16 @@ public class OlapTableStateMachine extends StateMachine {
 
     @Override
     public void preCommit(TransactionState txnState, List<TabletCommitInfo> tabletCommitInfos) throws TransactionException {
-        Database db = dbTxnMgr.getGlobalStateMgr().getDb(txnState.getDbId());
-        if (db == null) {
-            throw new TransactionCommitFailedException("database does not exist. id=" + txnState.getDbId());
+        Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
+        if (table.getState() == OlapTable.OlapTableState.RESTORE) {
+            throw new TransactionCommitFailedException("Cannot write RESTORE state table \"" + table.getName() + "\"");
         }
+        totalInvolvedBackends = Sets.newHashSet();
+        errorReplicaIds = Sets.newHashSet();
+        dirtyPartitionSet = Sets.newHashSet();
+        invalidDictCacheColumns = Sets.newHashSet();
+        validDictCacheColumns = Sets.newHashSet();
+
         TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
         Map<Long, Set<Long>> tabletToBackends = new HashMap<>();
 
@@ -72,11 +79,6 @@ public class OlapTableStateMachine extends StateMachine {
             if (tableId != table.getId()) {
                 continue;
             }
-            if (table.getState() == OlapTable.OlapTableState.RESTORE) {
-                throw new TransactionCommitFailedException("Table " + table.getName() + " is in restore process. "
-                        + "Can not load into it");
-            }
-
             long partitionId = tabletMeta.getPartitionId();
             if (table.getPartition(partitionId) == null) {
                 // this can happen when partitionId == -1 (tablet being dropping)
