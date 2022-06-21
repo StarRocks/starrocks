@@ -11,7 +11,7 @@ import com.starrocks.qe.DdlExecutor;
 import com.starrocks.qe.ShowResultSet;
 
 public class DataDefinitionExecutorFactory {
-    private final static ImmutableMap<Class<? extends StatementBase>, DataDefinitionExecutor> executorMap =
+    private static final ImmutableMap<Class<? extends StatementBase>, DataDefinitionExecutor> executorMap =
             new ImmutableMap.Builder<Class<? extends StatementBase>, DataDefinitionExecutor>()
                     .put(CreateDbStmt.class, new CreateDbExecutor()).
                     build();
