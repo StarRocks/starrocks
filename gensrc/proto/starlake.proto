@@ -63,8 +63,10 @@ message TxnLogPB {
 message PublishVersionRequest {
     repeated int64 tablet_ids = 1;
     repeated int64 txn_ids = 2;
-    // The version to be published. base version would be version - txn_ids_size()
-    optional int64 version = 3;
+    // |base_version| would be |new_version - txn_ids_size()| now, define
+    // it explicitly for more clarity and better forward compatibility.
+    optional int64 base_version = 3;
+    optional int64 new_version = 4;
 }
 
 message PublishVersionResponse {
