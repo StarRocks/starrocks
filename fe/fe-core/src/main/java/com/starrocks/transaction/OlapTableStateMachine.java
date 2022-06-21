@@ -205,16 +205,14 @@ public class OlapTableStateMachine extends StateMachine {
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             long partitionId = partitionCommitInfo.getPartitionId();
             Partition partition = table.getPartition(partitionId);
-            if (!partition.isUseStarOS()) {
-                List<MaterializedIndex> allIndices =
-                        partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
-                for (MaterializedIndex index : allIndices) {
-                    for (Tablet tablet : index.getTablets()) {
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                            if (errorReplicaIds.contains(replica.getId())) {
-                                // should get from transaction state
-                                replica.updateLastFailedVersion(partitionCommitInfo.getVersion());
-                            }
+            List<MaterializedIndex> allIndices =
+                    partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+            for (MaterializedIndex index : allIndices) {
+                for (Tablet tablet : index.getTablets()) {
+                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        if (errorReplicaIds.contains(replica.getId())) {
+                            // should get from transaction state
+                            replica.updateLastFailedVersion(partitionCommitInfo.getVersion());
                         }
                     }
                 }
@@ -233,47 +231,45 @@ public class OlapTableStateMachine extends StateMachine {
             long partitionId = partitionCommitInfo.getPartitionId();
             long newCommitVersion = partitionCommitInfo.getVersion();
             Partition partition = table.getPartition(partitionId);
-            if (!partition.isUseStarOS()) {
-                List<MaterializedIndex> allIndices =
-                        partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
-                for (MaterializedIndex index : allIndices) {
-                    for (Tablet tablet : index.getTablets()) {
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                            long lastFailedVersion = replica.getLastFailedVersion();
-                            long newVersion = newCommitVersion;
-                            long lastSucessVersion = replica.getLastSuccessVersion();
-                            if (!errorReplicaIds.contains(replica.getId())) {
-                                if (replica.getLastFailedVersion() > 0) {
-                                    // if the replica is a failed replica, then not changing version
-                                    newVersion = replica.getVersion();
-                                } else if (!replica.checkVersionCatchUp(partition.getVisibleVersion(), true)) {
-                                    // this means the replica has error in the past, but we did not observe it
-                                    // during upgrade, one job maybe in quorum finished state, for example, A,B,C 3 replica
-                                    // A,B 's version is 10, C's version is 10 but C' 10 is abnormal should be rollback
-                                    // then we will detect this and set C's last failed version to 10 and last success version to 11
-                                    // this logic has to be replayed in checkpoint thread
-                                    lastFailedVersion = partition.getVisibleVersion();
-                                    newVersion = replica.getVersion();
-                                }
-
-                                // success version always move forward
-                                lastSucessVersion = newCommitVersion;
-                            } else {
-                                // for example, A,B,C 3 replicas, B,C failed during publish version, then B C will be set abnormal
-                                // all loading will failed, B,C will have to recovery by clone, it is very inefficient and maybe lost data
-                                // Using this method, B,C will publish failed, and fe will publish again, not update their last failed version
-                                // if B is publish successfully in next turn, then B is normal and C will be set abnormal so that quorum is maintained
-                                // and loading will go on.
+            List<MaterializedIndex> allIndices =
+                    partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+            for (MaterializedIndex index : allIndices) {
+                for (Tablet tablet : index.getTablets()) {
+                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        long lastFailedVersion = replica.getLastFailedVersion();
+                        long newVersion = newCommitVersion;
+                        long lastSucessVersion = replica.getLastSuccessVersion();
+                        if (!errorReplicaIds.contains(replica.getId())) {
+                            if (replica.getLastFailedVersion() > 0) {
+                                // if the replica is a failed replica, then not changing version
                                 newVersion = replica.getVersion();
-                                if (newCommitVersion > lastFailedVersion) {
-                                    lastFailedVersion = newCommitVersion;
-                                }
+                            } else if (!replica.checkVersionCatchUp(partition.getVisibleVersion(), true)) {
+                                // this means the replica has error in the past, but we did not observe it
+                                // during upgrade, one job maybe in quorum finished state, for example, A,B,C 3 replica
+                                // A,B 's version is 10, C's version is 10 but C' 10 is abnormal should be rollback
+                                // then we will detect this and set C's last failed version to 10 and last success version to 11
+                                // this logic has to be replayed in checkpoint thread
+                                lastFailedVersion = partition.getVisibleVersion();
+                                newVersion = replica.getVersion();
                             }
-                            replica.updateVersionInfo(newVersion, lastFailedVersion, lastSucessVersion);
+
+                            // success version always move forward
+                            lastSucessVersion = newCommitVersion;
+                        } else {
+                            // for example, A,B,C 3 replicas, B,C failed during publish version, then B C will be set abnormal
+                            // all loading will failed, B,C will have to recovery by clone, it is very inefficient and maybe lost data
+                            // Using this method, B,C will publish failed, and fe will publish again, not update their last failed version
+                            // if B is publish successfully in next turn, then B is normal and C will be set abnormal so that quorum is maintained
+                            // and loading will go on.
+                            newVersion = replica.getVersion();
+                            if (newCommitVersion > lastFailedVersion) {
+                                lastFailedVersion = newCommitVersion;
+                            }
                         }
+                        replica.updateVersionInfo(newVersion, lastFailedVersion, lastSucessVersion);
                     }
-                } // end for indices
-            }
+                }
+            } // end for indices
             long version = partitionCommitInfo.getVersion();
             long versionTime = partitionCommitInfo.getVersionTime();
             partition.updateVisibleVersion(version, versionTime);
