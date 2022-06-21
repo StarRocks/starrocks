@@ -431,13 +431,13 @@ public class DatabaseTransactionMgr {
         try {
             unprotectedCommitTransaction(transactionState, stateMachineList);
             txnOperated = true;
+        } finally {
+            writeUnlock();
             int numPartitions = 0;
             for (Map.Entry<Long, TableCommitInfo> entry : transactionState.getIdToTableCommitInfos().entrySet()) {
                 numPartitions += entry.getValue().getIdToPartitionCommitInfo().size();
             }
             txnSpan.setAttribute("num_partition", numPartitions);
-        } finally {
-            writeUnlock();
             unprotectedCommitSpan.end();
             // after state transform
             transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
