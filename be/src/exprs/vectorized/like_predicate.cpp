@@ -12,23 +12,23 @@
 namespace starrocks::vectorized {
 
 // A regex to match any regex pattern is equivalent to a substring search.
-static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]*)(?:\.\*)*)");
+static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]*)(?:\.\*)*)", re2::RE2::Quiet);
 
 // A regex to match any regex pattern which is equivalent to matching a constant string
 // at the end of the string values.
-static const RE2 ENDS_WITH_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]*)\$)");
+static const RE2 ENDS_WITH_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]*)\$)", re2::RE2::Quiet);
 
 // A regex to match any regex pattern which is equivalent to matching a constant string
 // at the end of the string values.
-static const RE2 STARTS_WITH_RE(R"(\^([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]*)(?:\.\*)*)");
+static const RE2 STARTS_WITH_RE(R"(\^([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]*)(?:\.\*)*)", re2::RE2::Quiet);
 
 // A regex to match any regex pattern which is equivalent to a constant string match.
-static const RE2 EQUALS_RE(R"(\^([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]*)\$)");
+static const RE2 EQUALS_RE(R"(\^([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]*)\$)", re2::RE2::Quiet);
 
-static const re2::RE2 LIKE_SUBSTRING_RE(R"((?:%+)(((\\%)|(\\_)|([^%_]))+)(?:%+))");
-static const re2::RE2 LIKE_ENDS_WITH_RE(R"((?:%+)(((\\%)|(\\_)|([^%_]))+))");
-static const re2::RE2 LIKE_STARTS_WITH_RE(R"((((\\%)|(\\_)|([^%_]))+)(?:%+))");
-static const re2::RE2 LIKE_EQUALS_RE(R"((((\\%)|(\\_)|([^%_]))+))");
+static const re2::RE2 LIKE_SUBSTRING_RE(R"((?:%+)(((\\%)|(\\_)|([^%_]))+)(?:%+))", re2::RE2::Quiet);
+static const re2::RE2 LIKE_ENDS_WITH_RE(R"((?:%+)(((\\%)|(\\_)|([^%_]))+))", re2::RE2::Quiet);
+static const re2::RE2 LIKE_STARTS_WITH_RE(R"((((\\%)|(\\_)|([^%_]))+)(?:%+))", re2::RE2::Quiet);
+static const re2::RE2 LIKE_EQUALS_RE(R"((((\\%)|(\\_)|([^%_]))+))", re2::RE2::Quiet);
 
 Status LikePredicate::hs_compile_and_alloc_scratch(const std::string& pattern, LikePredicateState* state,
                                                    starrocks_udf::FunctionContext* context, const Slice& slice) {
@@ -390,6 +390,7 @@ ColumnPtr LikePredicate::regex_match_full(FunctionContext* context, const starro
     RE2::Options opts;
     opts.set_never_nl(false);
     opts.set_dot_nl(true);
+    opts.set_log_errors(false);
 
     for (int row = 0; row < value_viewer.size(); ++row) {
         if (value_viewer.is_null(row) || pattern_viewer.is_null(row)) {
@@ -436,6 +437,7 @@ ColumnPtr LikePredicate::regex_match_partial(FunctionContext* context, const sta
     RE2::Options opts;
     opts.set_never_nl(false);
     opts.set_dot_nl(true);
+    opts.set_log_errors(false);
 
     for (int row = 0; row < value_viewer.size(); ++row) {
         if (value_viewer.is_null(row) || pattern_viewer.is_null(row)) {
