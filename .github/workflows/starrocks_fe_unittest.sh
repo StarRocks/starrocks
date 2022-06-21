@@ -63,7 +63,7 @@ echo "run docker for script"
 
 cmd="cd /root/starrocks;
 export FE_UT_PARALLEL=16;
-timeout 3600 sh "$ROOT"/run-fe-ut.sh --run com.starrocks.utframe.Demo#testCreateDbAndTable+test2"
+timeout 3600 sh "$ROOT"/starrocks/run-fe-ut.sh --run com.starrocks.utframe.Demo#testCreateDbAndTable+test2"
 
 docker exec --privileged $container_name /bin/bash -c "$cmd"
 
