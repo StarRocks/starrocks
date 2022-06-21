@@ -54,7 +54,6 @@ import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
-import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFileStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -97,9 +96,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 
 public class DdlExecutor {
     public static ShowResultSet execute(GlobalStateMgr globalStateMgr, DdlStmt ddlStmt) throws Exception {
-        if (ddlStmt instanceof DropDbStmt) {
-            globalStateMgr.dropDb((DropDbStmt) ddlStmt);
-        } else if (ddlStmt instanceof CreateFunctionStmt) {
+        if (ddlStmt instanceof CreateFunctionStmt) {
             globalStateMgr.createFunction((CreateFunctionStmt) ddlStmt);
         } else if (ddlStmt instanceof DropFunctionStmt) {
             globalStateMgr.dropFunction((DropFunctionStmt) ddlStmt);
