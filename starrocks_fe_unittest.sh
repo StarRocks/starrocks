@@ -18,6 +18,7 @@ echo "the env="$GITHUB_REF_NAME
 
 #cd $ROOT/resource/starrocks/
 cd $ROOT/starrocks/
+ls -al
 rm -rf fe/fe-core/target
 
 #git config  user.email "wanpengfei91@163.com"
