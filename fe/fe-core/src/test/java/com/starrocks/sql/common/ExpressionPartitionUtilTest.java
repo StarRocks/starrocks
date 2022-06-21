@@ -57,11 +57,11 @@ public class ExpressionPartitionUtilTest {
         upperBound = "2021-04-21 20:43:00";
         PartitionValue lowerValue = new PartitionValue(lowerBound);
         PartitionValue upperValue = new PartitionValue(upperBound);
-        PartitionKey lowerBound = PartitionKey.createPartitionKey(Collections.singletonList(lowerValue),
+        PartitionKey lowerBoundPartitionKey = PartitionKey.createPartitionKey(Collections.singletonList(lowerValue),
                 Collections.singletonList(partitionColumn));
-        PartitionKey upperBound = PartitionKey.createPartitionKey(Collections.singletonList(upperValue),
+        PartitionKey upperBoundPartitionKey = PartitionKey.createPartitionKey(Collections.singletonList(upperValue),
                 Collections.singletonList(partitionColumn));
-        basePartitionKeyRange = Range.closedOpen(lowerBound, upperBound);
+        basePartitionKeyRange = Range.closedOpen(lowerBoundPartitionKey, upperBoundPartitionKey);
     }
 
     @Test

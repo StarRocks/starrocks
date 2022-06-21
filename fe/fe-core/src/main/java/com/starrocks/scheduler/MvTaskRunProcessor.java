@@ -67,6 +67,8 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         Set<Long> baseTableIds = materializedView.getBaseTableIds();
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
+            // must create partition when creating mv
+            Preconditions.checkState(materializedView.getPartitions().size() != 0);
             Map<Long, Map<Long, Long>> baseTableVisibleVersionMap =
                     materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
             for (Long baseTableId : baseTableIds) {

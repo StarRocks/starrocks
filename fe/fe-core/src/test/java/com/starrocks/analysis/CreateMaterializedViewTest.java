@@ -8,8 +8,10 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RefreshType;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.Config;
@@ -737,6 +739,10 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testNoPartitionExp() {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {}
+        };
         String sql = "create materialized view mv1 " +
                 "distributed by hash(k2) " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
@@ -744,10 +750,29 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, tbl1.k2 from tbl1;";
+        Database testDb = null;
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            testDb = currentState.getDb("default_cluster:test");
+            Table mv1 = testDb.getTable("mv1");
+            assertTrue(mv1 instanceof MaterializedView);
+
+            MaterializedView materializedView = (MaterializedView) mv1;
+            PartitionInfo partitionInfo = materializedView.getPartitionInfo();
+            assertTrue(partitionInfo instanceof SinglePartitionInfo);
+            assertEquals(materializedView.getPartitions().size(),1);
+            Partition partition = materializedView.getPartitions().iterator().next();
+            assertTrue(partition != null);
+            assertEquals(partition.getName(),"mv1");
+            // test sync
         } catch (Exception e) {
             Assert.fail(e.getMessage());
+        } finally {
+            if (testDb != null) {
+                testDb.dropTable("mv1");
+            }
         }
 
     }

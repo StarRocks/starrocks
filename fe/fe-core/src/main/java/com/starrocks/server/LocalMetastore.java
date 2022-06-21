@@ -2867,12 +2867,13 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException(e.getMessage());
         }
         // set storage medium
+        DataProperty dataProperty;
         try {
             boolean hasMedium = false;
             if (properties != null) {
                 hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
             }
-            DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+            dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
                     DataProperty.DEFAULT_DATA_PROPERTY);
             if (hasMedium) {
                 materializedView.setStorageMedium(dataProperty.getStorageMedium());
@@ -2890,6 +2891,20 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException(e.getMessage());
         }
         boolean createMvSuccess;
+        Set<Long> tabletIdSet = new HashSet<>();
+        // process single partition info
+        if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+            long partitionId = GlobalStateMgr.getCurrentState().getNextId();
+            Preconditions.checkNotNull(dataProperty);
+            partitionInfo.setDataProperty(partitionId, dataProperty);
+            partitionInfo.setReplicationNum(partitionId, replicationNum);
+            partitionInfo.setIsInMemory(partitionId, false);
+            partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
+            Long version = Partition.PARTITION_INIT_VERSION;
+            Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet);
+            buildPartitions(db, materializedView, Collections.singletonList(partition));
+            materializedView.addPartition(partition);
+        }
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -2900,6 +2915,9 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             createMvSuccess = db.createMaterializedWithLock(materializedView, false);
             if (!createMvSuccess) {
+                for (Long tabletId : tabletIdSet) {
+                    GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+                }
                 if (!stmt.isIfNotExists()) {
                     ErrorReport
                             .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, materializedView,
