@@ -46,7 +46,7 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UnsupportedStmt;
 import com.starrocks.analysis.UpdateStmt;
-import com.starrocks.analysis.UseStmt;
+import com.starrocks.sql.ast.UseStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
@@ -823,11 +823,7 @@ public class StmtExecutor {
     private void handleUseStmt() throws AnalysisException {
         UseStmt useStmt = (UseStmt) parsedStmt;
         try {
-            if (Strings.isNullOrEmpty(useStmt.getClusterName())) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER);
-            }
-            // TODO: refactor useStmt and rename getDatabase
-            context.getGlobalStateMgr().changeCatalogDb(context, useStmt.getDatabase());
+            context.getGlobalStateMgr().changeCatalogDb(context, useStmt.getIdentifier());
         } catch (DdlException e) {
             context.getState().setError(e.getMessage());
             return;

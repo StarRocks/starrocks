@@ -31,6 +31,7 @@ import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UpdateStmt;
+import com.starrocks.sql.ast.UseStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.PlanFragment;
@@ -224,6 +225,7 @@ public class StatementPlanner {
                 || statement instanceof ShowTableStatusStmt
                 || statement instanceof ShowVariablesStmt
                 || statement instanceof ShowWorkGroupStmt
-                || statement instanceof SubmitTaskStmt;
+                || statement instanceof SubmitTaskStmt
+                || statement instanceof UseStmt;
     }
 }
