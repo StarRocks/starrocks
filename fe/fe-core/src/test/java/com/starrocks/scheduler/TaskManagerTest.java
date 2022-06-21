@@ -134,7 +134,6 @@ public class TaskManagerTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv1"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
-        task.setExpireTime(0L);
 
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         taskManager.createTask(task, true);

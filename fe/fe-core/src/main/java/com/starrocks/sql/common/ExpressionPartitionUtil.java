@@ -32,16 +32,16 @@ import java.util.Map;
  */
 public class ExpressionPartitionUtil {
 
-    public static final Map<String, GetBorderFunction> FN_NAME_TO_GET_BORDER;
+    public static final Map<String, GetBoundFunction> FN_NAME_TO_GET_BOUND;
 
     @FunctionalInterface
-    public interface GetBorderFunction {
+    public interface GetBoundFunction {
         LiteralExpr process(FunctionCallExpr expr, LiteralExpr literalExpr, PrimitiveType type, int step);
     }
 
     static {
-        FN_NAME_TO_GET_BORDER = Maps.newHashMap();
-        FN_NAME_TO_GET_BORDER.put("date_trunc", ExpressionPartitionUtil::dateTruncGetBorder);
+        FN_NAME_TO_GET_BOUND = Maps.newHashMap();
+        FN_NAME_TO_GET_BOUND.put("date_trunc", ExpressionPartitionUtil::dateTruncGetBound);
     }
 
     public static Range<PartitionKey> getPartitionKeyRange(
@@ -66,13 +66,13 @@ public class ExpressionPartitionUtil {
         } else if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
 
-            LiteralExpr lowerLiteralExpr = ExpressionPartitionUtil.getBorder(
+            LiteralExpr lowerLiteralExpr = ExpressionPartitionUtil.getBound(
                     functionCallExpr, baseLowerLiteralExpr, partitionColumn.getPrimitiveType(), 0);
-            LiteralExpr upperLiteralExpr = ExpressionPartitionUtil.getBorder(
+            LiteralExpr upperLiteralExpr = ExpressionPartitionUtil.getBound(
                     functionCallExpr, baseUpperLiteralExpr, partitionColumn.getPrimitiveType(), 0);
-            if (ExpressionPartitionUtil.compareBorder(baseUpperLiteralExpr, upperLiteralExpr) > 0) {
-                // increase upperBorder
-                upperLiteralExpr = ExpressionPartitionUtil.getBorder(
+            if (ExpressionPartitionUtil.compareBound(baseUpperLiteralExpr, upperLiteralExpr) > 0) {
+                // increase upperBound
+                upperLiteralExpr = ExpressionPartitionUtil.getBound(
                         functionCallExpr, upperLiteralExpr, partitionColumn.getPrimitiveType(), 1);
             }
             try {
@@ -95,13 +95,13 @@ public class ExpressionPartitionUtil {
                             // range full coverage
                             return null;
                         } else if (existLowerPartitionKey.compareTo(lowerPartitionKey) <= 0) {
-                            lowerLiteralExpr = ExpressionPartitionUtil.getBorder(
+                            lowerLiteralExpr = ExpressionPartitionUtil.getBound(
                                     functionCallExpr, lowerLiteralExpr, partitionColumn.getPrimitiveType(), 1);
                             if (lowerLiteralExpr.equals(upperLiteralExpr)) {
                                 return null;
                             }
                         } else if (existUpperPartitionKey.compareTo(upperPartitionKey) >= 0) {
-                            upperLiteralExpr = ExpressionPartitionUtil.getBorder(
+                            upperLiteralExpr = ExpressionPartitionUtil.getBound(
                                     functionCallExpr, upperLiteralExpr, partitionColumn.getPrimitiveType(), -1);
                             if (upperLiteralExpr.equals(lowerLiteralExpr)) {
                                 return null;
@@ -124,22 +124,23 @@ public class ExpressionPartitionUtil {
         }
     }
 
-    public static LiteralExpr getBorder(FunctionCallExpr functionCallExpr, LiteralExpr border, PrimitiveType type, int step) {
-        GetBorderFunction processPartitionFunction =
-                FN_NAME_TO_GET_BORDER.get(functionCallExpr.getFnName().getFunction());
+    public static LiteralExpr getBound(FunctionCallExpr functionCallExpr, LiteralExpr bound, PrimitiveType type, int step) {
+        GetBoundFunction processPartitionFunction =
+                FN_NAME_TO_GET_BOUND.get(functionCallExpr.getFnName().getFunction());
         if (processPartitionFunction == null) {
             throw new SemanticException("Do not support function:" + functionCallExpr.toSql());
         }
-        return processPartitionFunction.process(functionCallExpr, border, type, step);
+        return processPartitionFunction.process(functionCallExpr, bound, type, step);
     }
 
-    public static int compareBorder(LiteralExpr literalExpr1, LiteralExpr literalExpr2) {
+    public static int compareBound(LiteralExpr literalExpr1, LiteralExpr literalExpr2) {
         return literalExpr1.compareTo(literalExpr2);
     }
 
-    private static LiteralExpr dateTruncGetBorder(FunctionCallExpr expr, LiteralExpr border, PrimitiveType type, int step) {
+    private static LiteralExpr dateTruncGetBound(FunctionCallExpr expr, LiteralExpr boundLiteralExpr,
+                                                 PrimitiveType type, int step) {
         String fmtStr = ((StringLiteral) expr.getChild(0)).getValue();
-        DateLiteral dateLiteral = (DateLiteral) border;
+        DateLiteral dateLiteral = (DateLiteral) boundLiteralExpr;
         // if dateLiteral is min value ,return it.
         if (dateLiteral.isMinValue() && step <= 0) {
             return dateLiteral;
@@ -193,15 +194,15 @@ public class ExpressionPartitionUtil {
         }
     }
 
-    public static String getFormattedPartitionName(String lowerBorder, String upperBorder, PrimitiveType type) {
+    public static String getFormattedPartitionName(String lowerBound, String upperBound, PrimitiveType type) {
         if (type.isDateType()) {
-            lowerBorder = lowerBorder.replace("-", "")
+            lowerBound = lowerBound.replace("-", "")
                     .replace(":", "")
                     .replace(" ", "");
-            upperBorder = upperBorder.replace("-", "")
+            upperBound = upperBound.replace("-", "")
                     .replace(":", "")
                     .replace(" ", "");
         }
-        return lowerBorder + "_" + upperBorder;
+        return lowerBound + "_" + upperBound;
     }
 }

@@ -81,7 +81,6 @@ public class MvTaskRunProcessorTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv1"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
-        task.setExpireTime(0L);
 
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());

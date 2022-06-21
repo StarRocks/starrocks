@@ -14,11 +14,6 @@ import java.util.Map;
 
 public class Task implements Writable {
 
-    public enum TaskSource {
-        CTAS,
-        MV
-    }
-
     @SerializedName("id")
     private long id;
 
@@ -41,7 +36,7 @@ public class Task implements Writable {
     private long expireTime = -1;
 
     @SerializedName("source")
-    private TaskSource source;
+    private Constants.TaskSource source = Constants.TaskSource.CTAS;
 
     public long getId() {
         return id;
@@ -99,11 +94,11 @@ public class Task implements Writable {
         this.expireTime = expireTime;
     }
 
-    public TaskSource getSource() {
+    public Constants.TaskSource getSource() {
         return source;
     }
 
-    public void setSource(TaskSource source) {
+    public void setSource(Constants.TaskSource source) {
         this.source = source;
     }
 

@@ -52,6 +52,23 @@ public class MaterializedViewAnalyzer {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
     }
 
+    public static void analyzeExp(Expr expr, QueryStatement queryStatement, ConnectContext context) {
+        Map<String, TableRelation> tableRelations =
+                AnalyzerUtils.collectAllTableRelation(queryStatement);
+        List<Field> fields = Lists.newArrayList();
+        for (TableRelation value : tableRelations.values()) {
+            fields.addAll(value.getRelationFields().getAllFields());
+        }
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(fields));
+        if (expr instanceof FunctionCallExpr) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+            if (functionCallExpr.getFn() == null) {
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(),
+                        scope, context);
+            }
+        }
+    }
+
     static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
         @Override
@@ -110,7 +127,7 @@ public class MaterializedViewAnalyzer {
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, tableNameTableMap);
                 // analyze expression
-                analyzeExp(statement, context);
+                analyzeExp(statement.getPartitionExpDesc().getExpr(), statement.getQueryStatement(), context);
             }
             // check and analyze distribution
             checkDistribution(statement);
@@ -276,24 +293,6 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private void analyzeExp(CreateMaterializedViewStatement statement,
-                                ConnectContext context) {
-            ExpressionPartitionDesc partitionExpDesc = statement.getPartitionExpDesc();
-            Map<String, TableRelation> tableRelations =
-                    AnalyzerUtils.collectAllTableRelation(statement.getQueryStatement());
-            List<Field> fields = Lists.newArrayList();
-            for (TableRelation value : tableRelations.values()) {
-                fields.addAll(value.getRelationFields().getAllFields());
-            }
-            Scope scope = new Scope(RelationId.anonymous(), new RelationFields(fields));
-            if (partitionExpDesc.isFunction()) {
-                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpDesc.getExpr();
-                if (functionCallExpr.getFn() == null) {
-                    ExpressionAnalyzer.analyzeExpression(partitionExpDesc.getExpr(), new AnalyzeState(),
-                            scope, context);
-                }
-            }
-        }
 
         private void checkDistribution(CreateMaterializedViewStatement statement) {
             DistributionDesc distributionDesc = statement.getDistributionDesc();

@@ -32,9 +32,9 @@ public class ExpressionPartitionUtilTest {
 
     private static Column partitionColumn;
 
-    private static String lowerBorder;
+    private static String lowerBound;
 
-    private static String upperBorder;
+    private static String upperBound;
 
     private static FunctionCallExpr quarterFunctionCallExpr;
 
@@ -53,10 +53,10 @@ public class ExpressionPartitionUtilTest {
                 new FunctionCallExpr("date_trunc", Arrays.asList(yearStringLiteral, slotRef));
 
         partitionColumn = new Column("k1", ScalarType.DATETIME);
-        lowerBorder = "2020-04-21 20:43:00";
-        upperBorder = "2021-04-21 20:43:00";
-        PartitionValue lowerValue = new PartitionValue(lowerBorder);
-        PartitionValue upperValue = new PartitionValue(upperBorder);
+        lowerBound = "2020-04-21 20:43:00";
+        upperBound = "2021-04-21 20:43:00";
+        PartitionValue lowerValue = new PartitionValue(lowerBound);
+        PartitionValue upperValue = new PartitionValue(upperBound);
         PartitionKey lowerBound = PartitionKey.createPartitionKey(Collections.singletonList(lowerValue),
                 Collections.singletonList(partitionColumn));
         PartitionKey upperBound = PartitionKey.createPartitionKey(Collections.singletonList(upperValue),
@@ -72,8 +72,8 @@ public class ExpressionPartitionUtilTest {
                 ExpressionPartitionUtil.getPartitionKeyRange(slotRef, partitionColumn,
                         existPartitionKeyRanges, basePartitionKeyRange, 0);
         Assert.assertTrue(partitionKeyRange != null);
-        Assert.assertEquals(partitionKeyRange.lowerEndpoint().getKeys().get(0).getStringValue(), lowerBorder);
-        Assert.assertEquals(partitionKeyRange.upperEndpoint().getKeys().get(0).getStringValue(), upperBorder);
+        Assert.assertEquals(partitionKeyRange.lowerEndpoint().getKeys().get(0).getStringValue(), lowerBound);
+        Assert.assertEquals(partitionKeyRange.upperEndpoint().getKeys().get(0).getStringValue(), upperBound);
         // date_trunc quarter test
         Range<PartitionKey> quarterPartitionKeyRange =
                 ExpressionPartitionUtil.getPartitionKeyRange(quarterFunctionCallExpr, partitionColumn,
@@ -163,7 +163,7 @@ public class ExpressionPartitionUtilTest {
     }
 
     @Test
-    public void testGetBorder() throws AnalysisException {
+    public void testGetBound() throws AnalysisException {
         LiteralExpr dateLiteralExpr = DateLiteral.create("2020-04-21", Type.DATE);
         LiteralExpr dateTimeLiteralExpr = DateLiteral.create("2020-04-21 20:43:00", Type.DATETIME);
 
@@ -171,59 +171,59 @@ public class ExpressionPartitionUtilTest {
         LiteralExpr minDatetimeLiteralExpr = DateLiteral.createMinValue(Type.DATETIME);
 
         // date_trunc quarter test
-        Assert.assertEquals("2020-04-01", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("2020-04-01", ExpressionPartitionUtil.getBound(
                 quarterFunctionCallExpr, dateLiteralExpr, PrimitiveType.DATE, 0).getStringValue());
-        Assert.assertEquals("2020-07-01", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("2020-07-01", ExpressionPartitionUtil.getBound(
                 quarterFunctionCallExpr, dateLiteralExpr, PrimitiveType.DATE, 1).getStringValue());
-        Assert.assertEquals("2021-07-01", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("2021-07-01", ExpressionPartitionUtil.getBound(
                 quarterFunctionCallExpr, dateLiteralExpr, PrimitiveType.DATE, 5).getStringValue());
 
-        Assert.assertEquals("2020-04-01 00:00:00", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("2020-04-01 00:00:00", ExpressionPartitionUtil.getBound(
                 quarterFunctionCallExpr, dateTimeLiteralExpr, PrimitiveType.DATETIME, 0).getStringValue());
-        Assert.assertEquals("2020-07-01 00:00:00", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("2020-07-01 00:00:00", ExpressionPartitionUtil.getBound(
                 quarterFunctionCallExpr, dateTimeLiteralExpr, PrimitiveType.DATETIME, 1).getStringValue());
-        Assert.assertEquals("2021-07-01 00:00:00", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("2021-07-01 00:00:00", ExpressionPartitionUtil.getBound(
                 quarterFunctionCallExpr, dateTimeLiteralExpr, PrimitiveType.DATETIME, 5).getStringValue());
 
 
-        Assert.assertEquals("0000-01-01", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("0000-01-01", ExpressionPartitionUtil.getBound(
                 quarterFunctionCallExpr, minDateLiteralExpr, PrimitiveType.DATE, -1).getStringValue());
-        Assert.assertEquals("0000-01-01", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("0000-01-01", ExpressionPartitionUtil.getBound(
                 quarterFunctionCallExpr, minDateLiteralExpr, PrimitiveType.DATE, 0).getStringValue());
-        Assert.assertEquals("0000-04-01", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("0000-04-01", ExpressionPartitionUtil.getBound(
                 quarterFunctionCallExpr, minDateLiteralExpr, PrimitiveType.DATE, 1).getStringValue());
 
-        Assert.assertEquals("0000-01-01 00:00:00", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("0000-01-01 00:00:00", ExpressionPartitionUtil.getBound(
                 quarterFunctionCallExpr, minDatetimeLiteralExpr, PrimitiveType.DATETIME, -1).getStringValue());
-        Assert.assertEquals("0000-01-01 00:00:00", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("0000-01-01 00:00:00", ExpressionPartitionUtil.getBound(
                 quarterFunctionCallExpr, minDatetimeLiteralExpr, PrimitiveType.DATETIME, 0).getStringValue());
-        Assert.assertEquals("0000-04-01 00:00:00", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("0000-04-01 00:00:00", ExpressionPartitionUtil.getBound(
                 quarterFunctionCallExpr, minDatetimeLiteralExpr, PrimitiveType.DATETIME, 1).getStringValue());
 
         // date_trunc year test
-        Assert.assertEquals("2020-01-01", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("2020-01-01", ExpressionPartitionUtil.getBound(
                 yearFunctionCallExpr, dateLiteralExpr, PrimitiveType.DATE, 0).getStringValue());
-        Assert.assertEquals("2021-01-01", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("2021-01-01", ExpressionPartitionUtil.getBound(
                 yearFunctionCallExpr, dateLiteralExpr, PrimitiveType.DATE, 1).getStringValue());
-        Assert.assertEquals("2025-01-01", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("2025-01-01", ExpressionPartitionUtil.getBound(
                 yearFunctionCallExpr, dateLiteralExpr, PrimitiveType.DATE, 5).getStringValue());
 
-        Assert.assertEquals("2020-01-01 00:00:00", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("2020-01-01 00:00:00", ExpressionPartitionUtil.getBound(
                 yearFunctionCallExpr, dateTimeLiteralExpr, PrimitiveType.DATETIME, 0).getStringValue());
-        Assert.assertEquals("2021-01-01 00:00:00", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("2021-01-01 00:00:00", ExpressionPartitionUtil.getBound(
                 yearFunctionCallExpr, dateTimeLiteralExpr, PrimitiveType.DATETIME, 1).getStringValue());
-        Assert.assertEquals("2025-01-01 00:00:00", ExpressionPartitionUtil.getBorder(
+        Assert.assertEquals("2025-01-01 00:00:00", ExpressionPartitionUtil.getBound(
                 yearFunctionCallExpr, dateTimeLiteralExpr, PrimitiveType.DATETIME, 5).getStringValue());
 
     }
 
     @Test
-    public void testGetBorderHasNoSupportFunction() throws AnalysisException {
+    public void testGetBoundHasNoSupportFunction() throws AnalysisException {
         LiteralExpr dateTimeLiteralExpr = DateLiteral.create("2020-04-21 20:43:00", Type.DATETIME);
         StringLiteral stringLiteral = new StringLiteral("yyyy-MM-dd");
         FunctionCallExpr functionCallExpr = new FunctionCallExpr("date_format", Arrays.asList(slotRef, stringLiteral));
         try {
-            ExpressionPartitionUtil.getBorder(functionCallExpr, dateTimeLiteralExpr, PrimitiveType.DATETIME, 0);
+            ExpressionPartitionUtil.getBound(functionCallExpr, dateTimeLiteralExpr, PrimitiveType.DATETIME, 0);
         } catch (Exception e) {
             Assert.assertEquals("Do not support function:date_format(`db1`.`table1`.`k1`, 'yyyy-MM-dd')",
                     e.getMessage());
@@ -231,23 +231,23 @@ public class ExpressionPartitionUtilTest {
     }
 
     @Test
-    public void testCompareBorder() throws AnalysisException {
+    public void testCompareBound() throws AnalysisException {
 
-        LiteralExpr dateBorder1 = DateLiteral.create("2020-04-21", Type.DATE);
-        LiteralExpr dateBorder2 = DateLiteral.create("2021-04-21", Type.DATE);
-        LiteralExpr dateTimeBorder1 = DateLiteral.create("2020-04-21 20:43:00", Type.DATETIME);
-        LiteralExpr dateTimeBorder2 = DateLiteral.create("2021-04-21 20:43:00", Type.DATETIME);;
+        LiteralExpr dateBound1 = DateLiteral.create("2020-04-21", Type.DATE);
+        LiteralExpr dateBound2 = DateLiteral.create("2021-04-21", Type.DATE);
+        LiteralExpr dateTimeBound1 = DateLiteral.create("2020-04-21 20:43:00", Type.DATETIME);
+        LiteralExpr dateTimeBound2 = DateLiteral.create("2021-04-21 20:43:00", Type.DATETIME);;
 
-        Assert.assertEquals(ExpressionPartitionUtil.compareBorder(dateBorder1, dateBorder2), -1);
-        Assert.assertEquals(ExpressionPartitionUtil.compareBorder(dateBorder2, dateBorder1), 1);
-        Assert.assertEquals(ExpressionPartitionUtil.compareBorder(dateBorder1, dateBorder1), 0);
+        Assert.assertEquals(ExpressionPartitionUtil.compareBound(dateBound1, dateBound2), -1);
+        Assert.assertEquals(ExpressionPartitionUtil.compareBound(dateBound2, dateBound1), 1);
+        Assert.assertEquals(ExpressionPartitionUtil.compareBound(dateBound1, dateBound1), 0);
 
         Assert.assertEquals(
-                ExpressionPartitionUtil.compareBorder(dateTimeBorder1, dateTimeBorder2), -1);
+                ExpressionPartitionUtil.compareBound(dateTimeBound1, dateTimeBound2), -1);
         Assert.assertEquals(
-                ExpressionPartitionUtil.compareBorder(dateTimeBorder2, dateTimeBorder1), 1);
+                ExpressionPartitionUtil.compareBound(dateTimeBound2, dateTimeBound1), 1);
         Assert.assertEquals(
-                ExpressionPartitionUtil.compareBorder(dateTimeBorder1, dateTimeBorder1), 0);
+                ExpressionPartitionUtil.compareBound(dateTimeBound1, dateTimeBound1), 0);
     }
 
     @Test

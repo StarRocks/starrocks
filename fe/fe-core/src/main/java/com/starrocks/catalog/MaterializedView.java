@@ -1,13 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.catalog;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
@@ -16,16 +14,10 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.analyzer.ExpressionAnalyzer;
-import com.starrocks.sql.analyzer.Field;
-import com.starrocks.sql.analyzer.RelationFields;
-import com.starrocks.sql.analyzer.RelationId;
-import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.SystemInfoService;
@@ -300,24 +292,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             QueryStatement queryStatement = ((QueryStatement) SqlParser.parse(
                     this.viewDefineSql, connectContext.getSessionVariable().getSqlMode()).get(0));
             Analyzer.analyze(queryStatement, connectContext);
-            Map<String, TableRelation> tableRelations = AnalyzerUtils.collectAllTableRelation(queryStatement);
-            List<Field> fields = Lists.newArrayList();
-            for (TableRelation value : tableRelations.values()) {
-                fields.addAll(value.getRelationFields().getAllFields());
-            }
-            Scope scope = new Scope(RelationId.anonymous(), new RelationFields(fields));
-            if (partitionExpr instanceof FunctionCallExpr) {
-                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-                if (functionCallExpr.getFn() == null) {
-                    // set fn into functionCallExpr, because FunctionCallExpr serialized use sql
-                    ExpressionAnalyzer.analyzeExpression(functionCallExpr, new AnalyzeState(),
-                            scope, connectContext);
-                }
-            }
+            MaterializedViewAnalyzer.analyzeExp(partitionExpr, queryStatement, connectContext);
         } catch (ParsingException parsingException) {
             LOG.warn("Parsing viewDefineSql:{} failed, exception:{}", this.viewDefineSql, parsingException.getMessage());
+        } catch (SemanticException semanticException) {
+            LOG.warn("Analyzing viewDefineSql:{} failed, exception:{}", this.viewDefineSql, semanticException.getMessage());
         }
-
     }
 
     @Override

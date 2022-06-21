@@ -2919,8 +2919,6 @@ public class LocalMetastore implements ConnectorMetadata {
             if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC) {
                 // create task
                 Task task = TaskBuilder.buildMvTask(materializedView, dbName);
-                // never expires
-                task.setExpireTime(0L);
                 TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
                 taskManager.createTask(task, true);
                 // run task

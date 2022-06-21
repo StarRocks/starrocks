@@ -30,6 +30,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.StmtExecutor;
@@ -262,13 +263,13 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
     private void addPartition(Database database, MaterializedView materializedView, long basePartitionId,
                               Range<PartitionKey> partitionKeyRange, Map<String, String> partitionProperties,
                               DistributionDesc distributionDesc) {
-        String lowerBorder = partitionKeyRange.lowerEndpoint().getKeys().get(0).getStringValue();
-        String upperBorder = partitionKeyRange.upperEndpoint().getKeys().get(0).getStringValue();
+        String lowerBound = partitionKeyRange.lowerEndpoint().getKeys().get(0).getStringValue();
+        String upperBound = partitionKeyRange.upperEndpoint().getKeys().get(0).getStringValue();
         PrimitiveType type = partitionKeyRange.lowerEndpoint().getKeys().get(0).getType().getPrimitiveType();
         PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(
-                Collections.singletonList(new PartitionValue(lowerBorder)),
-                Collections.singletonList(new PartitionValue(upperBorder)));
-        String partitionName = "p" + ExpressionPartitionUtil.getFormattedPartitionName(lowerBorder, upperBorder, type);
+                Collections.singletonList(new PartitionValue(lowerBound)),
+                Collections.singletonList(new PartitionValue(upperBound)));
+        String partitionName = "p" + ExpressionPartitionUtil.getFormattedPartitionName(lowerBound, upperBound, type);
         SingleRangePartitionDesc singleRangePartitionDesc =
                 new SingleRangePartitionDesc(false, partitionName, partitionKeyDesc, partitionProperties);
         try {
@@ -374,10 +375,11 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             throw new SemanticException("Refresh materialized view failed:" + insertSql, e);
         } finally {
             if (executor != null) {
-                auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog(), true);
+                auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog(),
+                        AuditEvent.EventSource.MV);
             } else {
                 // executor can be null if we encounter analysis error.
-                auditAfterExec(context, null, null, true);
+                auditAfterExec(context, null, null, AuditEvent.EventSource.MV);
             }
         }
     }
