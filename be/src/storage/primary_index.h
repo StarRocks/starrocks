@@ -103,8 +103,11 @@ private:
 
     Status _do_load(Tablet* tablet);
 
-    Status _build_persistent_values(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
-                                    uint32_t idx_begin, uint32_t idx_end, std::vector<uint64_t>* values);
+    Status _build_persistent_values(uint32_t rssid, uint32_t rowid_start, uint32_t idx_begin, uint32_t idx_end,
+                                    std::vector<uint64_t>* values);
+
+    Status _build_persistent_values(uint32_t rssid, const vector<uint32_t>& rowids, uint32_t idx_begin,
+                                    uint32_t idx_end, std::vector<uint64_t>* values);
 
     Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks);
 
