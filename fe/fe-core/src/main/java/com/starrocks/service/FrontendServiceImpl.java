@@ -357,11 +357,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setCreate_time(task.getCreateTime() / 1000);
             // Now there are only MANUAL types of Tasks
             info.setSchedule("MANUAL");
-            String dbName = task.getDbName();
-            if (dbName.startsWith(SystemInfoService.DEFAULT_CLUSTER + ":")) {
-                dbName = dbName.replace(SystemInfoService.DEFAULT_CLUSTER + ":", "");
-            }
-            info.setDatabase(dbName);
+            info.setDatabase(ClusterNamespace.getNameFromFullName(task.getDbName()));
             info.setDefinition(task.getDefinition());
             info.setExpire_time(task.getExpireTime() / 1000);
             tasksResult.add(info);
@@ -398,11 +394,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setCreate_time(status.getCreateTime() / 1000);
             info.setFinish_time(status.getFinishTime() / 1000);
             info.setState(status.getState().toString());
-            String dbName = status.getDbName();
-            if (dbName.startsWith(SystemInfoService.DEFAULT_CLUSTER + ":")) {
-                dbName = dbName.replace(SystemInfoService.DEFAULT_CLUSTER + ":", "");
-            }
-            info.setDatabase(dbName);
+            info.setDatabase(ClusterNamespace.getNameFromFullName(status.getDbName()));
             info.setDefinition(status.getDefinition());
             info.setError_code(status.getErrorCode());
             info.setError_message(status.getErrorMessage());
