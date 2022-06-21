@@ -6,9 +6,14 @@
 
 namespace starrocks {
 class ExecEnv;
-}
+class Status;
+} // namespace starrocks
 
 namespace starrocks {
+
+namespace lake {
+class Tablet;
+}
 
 class LakeServiceImpl : public ::starrocks::lake::LakeService {
 public:
@@ -25,6 +30,8 @@ public:
                    ::starrocks::lake::AbortTxnResponse* response, ::google::protobuf::Closure* done) override;
 
 private:
+    Status publish(lake::Tablet* tablet, const ::starrocks::lake::PublishVersionRequest* request);
+
     ExecEnv* _env;
 };
 
