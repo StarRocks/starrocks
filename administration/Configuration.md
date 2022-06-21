@@ -363,15 +363,13 @@ BE 配置项暂不支持在线修改，生效需在 be.conf 中修改并重启 b
 |base_compaction_num_threads_per_disk|1|每个磁盘 BaseCompaction 线程的数目|
 |base_cumulative_delta_ratio|0.3|BaseCompaction 触发条件之一：Cumulative 文件大小达到 Base 文件的比例|
 |base_compaction_interval_seconds_since_last_operation|86400|BaseCompaction 触发条件之一：上一轮 BaseCompaction 距今的间隔|
-|base_compaction_write_mbytes_per_sec|5|BaseCompaction 写磁盘的限速|
 |cumulative_compaction_check_interval_seconds|10|CumulativeCompaction 线程轮询的间隔|
 |min_cumulative_compaction_num_singleton_deltas|5|CumulativeCompaction 触发条件之一：Singleton 文件数目要达到的下限|
 |max_cumulative_compaction_num_singleton_deltas|1000|CumulativeCompaction 触发条件之一：Singleton 文件数目要达到的上限|
-|cumulative_compaction_num_threads_per_disk|1|每个磁盘 CumulativeCompaction 线程的数目|
-|cumulative_compaction_budgeted_bytes|104857600|BaseCompaction 触发条件之一：Singleton 文件大小的总和限制，100MB|
 |cumulative_compaction_write_mbytes_per_sec|100|CumulativeCompaction 写磁盘的限速|
 |min_compaction_failure_interval_sec|600|Tablet Compaction 失败之后，再次被调度的间隔。|
-|max_compaction_concurrency|-1|BaseCompaction + CumulativeCompaction 的最大并发，-1 就是没有限制|
+|max_compaction_concurrency|4|BaseCompaction + CumulativeCompaction 的最大并发， -1 代表没有限制。|
+|compaction_trace_threshold|60|单次 Compaction 打印 trace 的时间阈值，如果单次 compaction 时间超过该阈值就打印 trace，单位为秒|
 |webserver_port|8040|Http Server 端口|
 |webserver_num_workers|5|Http Server 线程数|
 |periodic_counter_update_period_ms|500|Counter 统计信息的间隔|
