@@ -238,7 +238,7 @@ EXPLAIN SELECT store_id, SUM(sale_amt) FROM sales_records GROUP BY store_id;
 删除已经创建完成的物化视图:
 
 ~~~SQL
-DROP MATERIALIZED VIEW IF EXISTS store_amt on sales_records;
+DROP MATERIALIZED VIEW IF EXISTS store_amt;
 ~~~
 
 删除处于创建中的物化视图，需要先取消异步任务，然后再删除物化视图，以表 `db0.table0` 上的物化视图 mv 为例:
