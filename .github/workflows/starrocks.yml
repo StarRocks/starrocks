@@ -30,7 +30,14 @@ jobs:
 
      - name: bash script
        run: | 
-         ./.github/workflows/starrocks_fe_unittest.sh ${GITHUB_RUN_NUMBER} ${GITHUB_REF_NAME}
+         ./starrocks_fe_unittest.sh ${GITHUB_RUN_NUMBER} ${GITHUB_REF_NAME}
        shell: bash
        env:
          GITHUB_REF_NAME: ${GITHUB_ACTION_PATH}
+         
+     - name: Archive Jar Artifacts
+       uses: actions/upload-artifact@v3
+       with:
+         name: java-code-coverage-related
+         path: |
+           *.jar
