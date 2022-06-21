@@ -469,7 +469,7 @@ public class MaterializedViewHandler extends AlterHandler {
                     ++numOfKeys;
                 }
                 Preconditions.checkNotNull(baseColumn,
-                        "The materialized view column of aggregation or unique or primary table " +
+                        "The materialized view column[" + mvColumnName + "] of aggregation or unique or primary table " +
                                 "cannot be transformed from original column[" +
                                 mvColumnItem.getBaseColumnName() + "]");
                 AggregateType baseAggregationType = baseColumn.getAggregationType();
