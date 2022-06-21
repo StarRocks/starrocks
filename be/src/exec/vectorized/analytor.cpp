@@ -505,7 +505,7 @@ bool Analytor::find_and_check_partition_end() {
     return _input_eos;
 }
 
-bool Analytor::find_and_check_peer_group_end(bool found_partition_end) {
+bool Analytor::find_and_check_peer_group_end(bool is_found_partition_end_genuine_boundary) {
     // current peer group data don't output finished
     if (_current_row_position < _peer_group_end) {
         return false;
@@ -526,7 +526,7 @@ bool Analytor::find_and_check_peer_group_end(bool found_partition_end) {
     }
 
     DCHECK_EQ(_found_peer_group_end, _found_partition_end);
-    if (found_partition_end) {
+    if (is_found_partition_end_genuine_boundary) {
         // _found_peer_group_end is the genuine partition boundary
         _peer_group_end = _found_peer_group_end;
         return true;
@@ -583,6 +583,7 @@ void Analytor::remove_unused_buffer_values(RuntimeState* state) {
     _current_row_position -= remove_count;
     _peer_group_start -= remove_count;
     _peer_group_end -= remove_count;
+    _found_peer_group_end -= remove_count;
 
     _removed_chunk_index += BUFFER_CHUNK_NUMBER;
 

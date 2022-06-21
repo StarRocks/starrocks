@@ -112,7 +112,9 @@ public:
     int64_t get_total_position(int64_t local_position);
     bool find_and_check_partition_end();
     void find_peer_group_end();
-    bool find_and_check_peer_group_end(bool found_partition_end = false);
+    // is_found_partition_end_genuine_boundary = true means _found_partition_end point at
+    // the genuine partition boundary
+    bool find_and_check_peer_group_end(bool is_found_partition_end_genuine_boundary = false);
     void reset_state_for_cur_partition();
     void reset_state_for_next_partition();
 

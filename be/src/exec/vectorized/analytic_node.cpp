@@ -175,7 +175,11 @@ Status AnalyticNode::_get_next_for_unbounded_preceding_range_frame(RuntimeState*
         while (_analytor->current_row_position() < _analytor->partition_end() &&
                _analytor->window_result_position() < chunk_size) {
             if (_analytor->current_row_position() >= _analytor->peer_group_end()) {
+                // The condition `partition_start <= current_row_position < partition_end` is satisfied
+                // so `partition_end` must point at the genuine partition boundary, and found_partition_end must equals
+                // to partition_end if current partition haven't finished processing
                 DCHECK_EQ(_analytor->partition_end(), _analytor->found_partition_end());
+                // So the found_partition_end also points at genuine partition boundary, then we pass true to the following function
                 _analytor->find_and_check_peer_group_end(true);
                 DCHECK_GE(_analytor->peer_group_end(), _analytor->peer_group_start());
                 _analytor->update_window_batch(_analytor->peer_group_start(), _analytor->peer_group_end(),
