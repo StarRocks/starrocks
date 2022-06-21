@@ -193,15 +193,6 @@ public class WindowTransformer {
                     windowFrame.getRightBoundary());
         }
 
-        // min/max is not currently supported on sliding windows (i.e. start bound is not unbounded).
-        if (windowFrame != null
-                && (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.MIN)
-                || (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.MAX)))
-                && windowFrame.getLeftBoundary().getType() != AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING) {
-            throw new SemanticException(
-                    analyticExpr.toSql() + " is only supported with an UNBOUNDED PRECEDING start bound.");
-        }
-
         // remove duplicate partition expr
         Set<Expr> duplicateCheck = Sets.newHashSet();
         List<Expr> partitions = Lists.newArrayList();
