@@ -502,4 +502,15 @@ public class AnalyzeSingleTest {
         SelectRelation queryRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
         Assert.assertEquals("[1, 2, 3]", ((TableRelation) queryRelation.getRelation()).getTabletIds().toString());
     }
+
+    @Test
+    public void testSetVar() {
+        StatementBase statementBase = analyzeSuccess("SELECT /*+ SET_VAR(time_zone='Asia/Shanghai') */ current_timestamp() AS time");
+        SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
+        Assert.assertEquals("Asia/Shanghai", selectRelation.getSelectList().getOptHints().get("time_zone"));
+
+        statementBase = analyzeSuccess("select /*+ SET_VAR(broadcast_row_limit=1) */ * from t0");
+        selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
+        Assert.assertEquals("1", selectRelation.getSelectList().getOptHints().get("broadcast_row_limit"));
+    }
 }
