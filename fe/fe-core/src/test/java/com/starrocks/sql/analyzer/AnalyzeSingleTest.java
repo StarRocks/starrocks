@@ -497,6 +497,7 @@ public class AnalyzeSingleTest {
 
         list = SqlParser.parse("-- xxx;\nselect 1;", 0);
         Assert.assertEquals(1, list.size());
+        Assert.assertTrue(list.get(0) instanceof QueryStatement);
 
         list = SqlParser.parse("/* xx; x */select 1;", 0);
         Assert.assertEquals(1, list.size());
