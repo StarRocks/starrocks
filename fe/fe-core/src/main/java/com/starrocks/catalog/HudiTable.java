@@ -312,9 +312,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                 } else if (logicalType instanceof LogicalTypes.TimeMillis) {
                     return primitiveType == PrimitiveType.TIME;
                 } else {
-                    return primitiveType == PrimitiveType.INT ||
-                            primitiveType == PrimitiveType.TINYINT ||
-                            primitiveType == PrimitiveType.SMALLINT;
+                    return primitiveType == PrimitiveType.INT;
                 }
             case LONG:
                 if (logicalType instanceof LogicalTypes.TimeMicros) {
