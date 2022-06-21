@@ -135,8 +135,80 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
+<<<<<<< HEAD
         if (!Config.enable_materialized_view) {
             throw new AnalysisException("The materialized view is disabled");
+=======
+    }
+
+    public Map<String, Expr> parseDefineExprWithoutAnalyze() throws AnalysisException {
+        Map<String, Expr> result = Maps.newHashMap();
+        SelectList selectList = selectStmt.getSelectList();
+        for (SelectListItem selectListItem : selectList.getItems()) {
+            Expr selectListItemExpr = selectListItem.getExpr();
+            if (selectListItemExpr instanceof SlotRef) {
+                SlotRef slotRef = (SlotRef) selectListItemExpr;
+                result.put(slotRef.getColumnName(), null);
+            } else if (selectListItemExpr instanceof FunctionCallExpr) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectListItemExpr;
+                List<SlotRef> slots = new ArrayList<>();
+                functionCallExpr.collect(SlotRef.class, slots);
+                Preconditions.checkArgument(slots.size() == 1);
+                String baseColumnName = slots.get(0).getColumnName().toLowerCase();
+                String functionName = functionCallExpr.getFnName().getFunction();
+                SlotRef baseSlotRef = slots.get(0);
+                switch (functionName.toLowerCase()) {
+                    case "sum":
+                    case "min":
+                    case "max":
+                        result.put(baseColumnName, null);
+                        break;
+                    case FunctionSet.BITMAP_UNION:
+                        if (functionCallExpr.getChild(0) instanceof FunctionCallExpr) {
+                            CastExpr castExpr = new CastExpr(new TypeDef(Type.VARCHAR), baseSlotRef);
+                            List<Expr> params = Lists.newArrayList();
+                            params.add(castExpr);
+                            FunctionCallExpr defineExpr = new FunctionCallExpr(FunctionSet.TO_BITMAP, params);
+                            result.put(mvColumnBuilder(functionName, baseColumnName), defineExpr);
+                        } else {
+                            result.put(baseColumnName, null);
+                        }
+                        break;
+                    case FunctionSet.HLL_UNION:
+                        if (functionCallExpr.getChild(0) instanceof FunctionCallExpr) {
+                            CastExpr castExpr = new CastExpr(new TypeDef(Type.VARCHAR), baseSlotRef);
+                            List<Expr> params = Lists.newArrayList();
+                            params.add(castExpr);
+                            FunctionCallExpr defineExpr = new FunctionCallExpr(FunctionSet.HLL_HASH, params);
+                            result.put(mvColumnBuilder(functionName, baseColumnName), defineExpr);
+                        } else {
+                            result.put(baseColumnName, null);
+                        }
+                        break;
+                    case FunctionSet.PERCENTILE_UNION:
+                        if (functionCallExpr.getChild(0) instanceof FunctionCallExpr) {
+                            CastExpr castExpr = new CastExpr(new TypeDef(Type.VARCHAR), baseSlotRef);
+                            List<Expr> params = Lists.newArrayList();
+                            params.add(castExpr);
+                            FunctionCallExpr defineExpr = new FunctionCallExpr(FunctionSet.PERCENTILE_HASH, params);
+                            result.put(mvColumnBuilder(functionName, baseColumnName), defineExpr);
+                        } else {
+                            result.put(baseColumnName, null);
+                        }
+                        break;
+                    case FunctionSet.COUNT:
+                        Expr defineExpr = new CaseExpr(null, Lists.newArrayList(
+                                new CaseWhenClause(new IsNullPredicate(slots.get(0), false),
+                                        new IntLiteral(0, Type.BIGINT))), new IntLiteral(1, Type.BIGINT));
+                        result.put(mvColumnBuilder(functionName, baseColumnName), defineExpr);
+                        break;
+                    default:
+                        throw new AnalysisException("Unsupported function:" + functionName);
+                }
+            } else {
+                throw new AnalysisException("Unsupported select item:" + selectListItem.toSql());
+            }
+>>>>>>> 2c4f754c5 (Routine load failed when fe restart (#7567))
         }
         super.analyze(analyzer);
         FeNameFormat.checkTableName(mvName);
