@@ -30,7 +30,7 @@ jobs:
 
      - name: bash script
        run: | 
-         ./starrocks_fe_unittest.sh ${GITHUB_RUN_NUMBER} ${GITHUB_REF_NAME}
+         ./.github/workflows/starrocks_fe_unittest.sh ${GITHUB_RUN_NUMBER} ${GITHUB_REF_NAME}
        shell: bash
        env:
          GITHUB_REF_NAME: ${GITHUB_ACTION_PATH}
