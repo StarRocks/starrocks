@@ -159,18 +159,30 @@ struct HdfsScannerContext {
     // user create table with 3 fields A, B, C, and there is one file F1
     // but user change schema and add one field like D.
     // when user select(A, B, C, D), then D is the non-existed column in file F1.
+<<<<<<< HEAD
     void update_not_existed_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
+=======
+    void update_not_existed_columns_of_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
+>>>>>>> 40e07231a ([BugFix] Fix wrong column order (#7482))
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
     StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
     std::vector<SlotDescriptor*> not_existed_slots;
     std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
 
     // other helper functions.
+<<<<<<< HEAD
     void update_partition_column_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
     bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
 
 private:
     void append_not_existed_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
+=======
+    void update_partition_column_of_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
+    bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
+
+    void append_not_existed_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
+    void append_partition_column_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
+>>>>>>> 40e07231a ([BugFix] Fix wrong column order (#7482))
 };
 
 // if *lvalue == expect, swap(*lvalue,*rvalue)

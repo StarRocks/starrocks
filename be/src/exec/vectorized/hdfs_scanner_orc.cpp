@@ -454,7 +454,20 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         return Status::EndOfFile("");
     }
 
-    ChunkPtr& ck = *chunk;
+    ChunkPtr ck = std::make_shared<vectorized::Chunk>();
+    // The column order of chunk is required to be invariable. When a table performs schema change,
+    // says we want to add a new column to table A, the reader of old files of table A will append new
+    // column to the tail of the chunk, while the reader of new files of table A will put the new column
+    // in the chunk according to the order it's stored. This will lead two chunk from different file to
+    // different column order, so we need to adjust the column order according to the input chunk to make
+    // sure every chunk has same column order
+    auto convert_to_output = [chunk, &ck]() {
+        const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
+        for (auto iter = slot_id_to_index_map.begin(); iter != slot_id_to_index_map.end(); iter++) {
+            (*chunk)->get_column_by_slot_id(iter->first)->swap_column(*ck->get_column_by_slot_id(iter->first));
+        }
+    };
+
     // this infinite for loop is for retry.
     for (;;) {
         orc::RowReader::ReadPosition position;
@@ -483,12 +496,21 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                     ret = _orc_reader->get_active_chunk(chunk);
                 }
                 RETURN_IF_ERROR(ret);
+<<<<<<< HEAD
+=======
+                ck = std::move(ret.value());
+>>>>>>> 40e07231a ([BugFix] Fix wrong column order (#7482))
             }
 
             // important to add columns before evaluation
             // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
+<<<<<<< HEAD
             _scanner_ctx.update_not_existed_columns_to_chunk(chunk, ck->num_rows());
             _scanner_ctx.update_partition_column_to_chunk(chunk, ck->num_rows());
+=======
+            _scanner_ctx.append_not_existed_columns_to_chunk(&ck, ck->num_rows());
+            _scanner_ctx.append_partition_column_to_chunk(&ck, ck->num_rows());
+>>>>>>> 40e07231a ([BugFix] Fix wrong column order (#7482))
             chunk_size = ck->num_rows();
             // do stats before we filter rows which does not match.
             _stats.raw_rows_read += chunk_size;
@@ -513,6 +535,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         }
 
         if (!_orc_reader->has_lazy_load_context()) {
+            convert_to_output();
             return Status::OK();
         }
 
@@ -534,6 +557,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
             StatusOr<ChunkPtr> ret = _orc_reader->get_lazy_chunk(chunk);
             RETURN_IF_ERROR(ret);
         }
+        convert_to_output();
         return Status::OK();
     }
     __builtin_unreachable();
