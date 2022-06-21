@@ -32,6 +32,7 @@ DeltaWriter::DeltaWriter(const DeltaWriterOptions& opt, MemTracker* mem_tracker,
           _tablet(nullptr),
           _cur_rowset(nullptr),
           _rowset_writer(nullptr),
+          _schema_initialized(false),
           _mem_table(nullptr),
           _mem_table_sink(nullptr),
           _tablet_schema(nullptr),
@@ -265,8 +266,12 @@ Status DeltaWriter::_flush_memtable() {
 }
 
 void DeltaWriter::_reset_mem_table() {
-    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), _tablet_schema, _opt.slots, _mem_table_sink.get(),
-                                            _mem_tracker);
+    if (!_schema_initialized) {
+        _vectorized_schema = std::move(MemTable::convert_schema(_tablet_schema, _opt.slots));
+        _schema_initialized = true;
+    }
+    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
+                                            _mem_table_sink.get(), _mem_tracker);
 }
 
 Status DeltaWriter::commit() {

@@ -5,7 +5,9 @@
 #include <gtest/gtest.h>
 
 #include "column/array_column.h"
+#include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/base64.h"
 #include "types/bitmap_value.h"
 #include "udf/udf.h"
@@ -1903,6 +1905,44 @@ TEST_F(VecBitmapFunctionsTest, base64ToBitmapTest) {
     // judge encode and decode bitmap data
     ASSERT_EQ(bitmap_src.to_string(), bitmap_decode.to_string());
     free(src);
+}
+
+TEST_F(VecBitmapFunctionsTest, array_to_bitmap_test) {
+    auto builder = [](const Buffer<int64_t>& val) {
+        auto ele_column = Int64Column::create();
+        ele_column->append(val);
+        auto offset_column = UInt32Column::create();
+        offset_column->append(0);
+        offset_column->append(val.size());
+        return ArrayColumn::create(ele_column, offset_column);
+    };
+
+    auto nullable_builder = [](const Buffer<int64_t>& val, const Buffer<int32_t>& null_idx) {
+        auto ele_column = Int64Column::create();
+        ele_column->append(val);
+
+        auto nullable_column = NullableColumn::create(ele_column, NullColumn::create(val.size()));
+        for (auto idx : null_idx) {
+            nullable_column->set_null(idx);
+        }
+        auto offset_column = UInt32Column::create();
+        offset_column->append(0);
+        offset_column->append(val.size());
+        return ArrayColumn::create(nullable_column, offset_column);
+    };
+
+    Columns columns = {builder(Buffer<int64_t>{1, 2, 3, 4})};
+    auto res = BitmapFunctions::array_to_bitmap(nullptr, columns);
+    ASSERT_EQ(res->debug_item(0), "1,2,3,4");
+    columns = {ColumnHelper::create_const_null_column(1)};
+    res = BitmapFunctions::array_to_bitmap(nullptr, columns);
+    ASSERT_EQ(res->debug_item(0), "CONST: NULL");
+    columns = {nullable_builder(Buffer<int64_t>{1, 2, 3, 4}, {0})};
+    res = BitmapFunctions::array_to_bitmap(nullptr, columns);
+    ASSERT_EQ(res->debug_item(0), "2,3,4");
+    columns = {nullable_builder(Buffer<int64_t>{1, 2, 3, 4}, {0, 1, 2, 3})};
+    res = BitmapFunctions::array_to_bitmap(nullptr, columns);
+    ASSERT_EQ(res->debug_item(0), "");
 }
 
 } // namespace vectorized

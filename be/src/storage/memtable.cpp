@@ -5,7 +5,6 @@
 #include <memory>
 
 #include "column/json_column.h"
-#include "column/type_traits.h"
 #include "common/logging.h"
 #include "exec/vectorized/sorting/sorting.h"
 #include "runtime/current_thread.h"
@@ -14,7 +13,6 @@
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/schema.h"
-#include "util/orlp/pdqsort.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 
@@ -24,43 +22,48 @@ namespace starrocks::vectorized {
 static const string LOAD_OP_COLUMN = "__op";
 static const size_t kPrimaryKeyLimitSize = 128;
 
+Schema MemTable::convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs) {
+    Schema schema = std::move(ChunkHelper::convert_schema_to_format_v2(*tablet_schema));
+    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
+        // load slots have __op field, so add to _vectorized_schema
+        auto op_column = std::make_shared<starrocks::vectorized::Field>((ColumnId)-1, LOAD_OP_COLUMN,
+                                                                        FieldType::OLAP_FIELD_TYPE_TINYINT, false);
+        op_column->set_aggregate_method(OLAP_FIELD_AGGREGATION_REPLACE);
+        schema.append(op_column);
+    }
+    return schema;
+}
+
 void MemTable::_init_aggregator_if_needed() {
     if (_keys_type != KeysType::DUP_KEYS) {
         // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
         // which is not suitable for obtaining Chunk from ColumnPool,
         // otherwise it will take up a lot of memory and may not be released.
-        _aggregator = std::make_unique<ChunkAggregator>(&_vectorized_schema, 0, INT_MAX, 0);
+        _aggregator = std::make_unique<ChunkAggregator>(_vectorized_schema, 0, INT_MAX, 0);
     }
 }
 
-MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs,
+MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
                    MemTableSink* sink, MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
-          _tablet_schema(tablet_schema),
+          _vectorized_schema(schema),
           _slot_descs(slot_descs),
-          _keys_type(tablet_schema->keys_type()),
+          _keys_type(schema->keys_type()),
           _sink(sink),
           _aggregator(nullptr),
           _mem_tracker(mem_tracker) {
-    _vectorized_schema = std::move(ChunkHelper::convert_schema(*tablet_schema));
     if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
-        // load slots have __op field, so add to _vectorized_schema
-        auto op_column = std::make_shared<starrocks::vectorized::Field>((ColumnId)-1, LOAD_OP_COLUMN,
-                                                                        FieldType::OLAP_FIELD_TYPE_TINYINT, false);
-        op_column->set_aggregate_method(OLAP_FIELD_AGGREGATION_REPLACE);
-        _vectorized_schema.append(op_column);
         _has_op_slot = true;
     }
     _init_aggregator_if_needed();
 }
 
-MemTable::MemTable(int64_t tablet_id, const Schema& schema, MemTableSink* sink, int64_t max_buffer_size,
+MemTable::MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, int64_t max_buffer_size,
                    MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
-          _vectorized_schema(std::move(schema)),
-          _tablet_schema(nullptr),
+          _vectorized_schema(schema),
           _slot_descs(nullptr),
-          _keys_type(schema.keys_type()),
+          _keys_type(schema->keys_type()),
           _sink(sink),
           _aggregator(nullptr),
           _max_buffer_size(max_buffer_size),
@@ -101,9 +104,10 @@ bool MemTable::is_full() const {
 
 bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (_chunk == nullptr) {
-        _chunk = ChunkHelper::new_chunk(_vectorized_schema, 0);
+        _chunk = ChunkHelper::new_chunk(*_vectorized_schema, 0);
     }
 
+    size_t cur_row_count = _chunk->num_rows();
     if (_slot_descs != nullptr) {
         // For schema change, FE will construct a shadow column.
         // The shadow column is not exist in _vectorized_schema
@@ -115,7 +119,7 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
             dest->append_selective(*src, indexes, from, size);
         }
     } else {
-        for (int i = 0; i < _vectorized_schema.num_fields(); i++) {
+        for (int i = 0; i < _vectorized_schema->num_fields(); i++) {
             const ColumnPtr& src = chunk.get_column_by_index(i);
             ColumnPtr& dest = _chunk->get_column_by_index(i);
             dest->append_selective(*src, indexes, from, size);
@@ -124,7 +128,7 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
 
     if (chunk.has_rows()) {
         _chunk_memory_usage += chunk.memory_usage() * size / chunk.num_rows();
-        _chunk_bytes_usage += chunk.bytes_usage() * size / chunk.num_rows();
+        _chunk_bytes_usage += _chunk->bytes_usage(cur_row_count, size);
     }
 
     // if memtable is full, push it to the flush executor,
@@ -185,7 +189,7 @@ Status MemTable::finalize() {
 
             _result_chunk = _aggregator->aggregate_result();
             if (_keys_type == PRIMARY_KEYS &&
-                PrimaryKeyEncoder::encode_exceed_limit(_vectorized_schema, *_result_chunk.get(), 0,
+                PrimaryKeyEncoder::encode_exceed_limit(*_vectorized_schema, *_result_chunk.get(), 0,
                                                        _result_chunk->num_rows(), kPrimaryKeyLimitSize)) {
                 _aggregator.reset();
                 _aggregator_memory_usage = 0;
@@ -278,7 +282,7 @@ void MemTable::_aggregate(bool is_final) {
 }
 
 void MemTable::_sort(bool is_final) {
-    SmallPermutation perm = create_small_permutation(_chunk->num_rows());
+    SmallPermutation perm = create_small_permutation(static_cast<uint32_t>(_chunk->num_rows()));
     std::swap(perm, _permutations);
     _sort_column_inc();
 
@@ -333,9 +337,9 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::u
     *upserts = src->clone_empty_with_schema(nupsert);
     (*upserts)->append_selective(*src, indexes[TOpType::UPSERT].data(), 0, nupsert);
     if (!(*deletes)) {
-        auto st = PrimaryKeyEncoder::create_column(_vectorized_schema, deletes);
+        auto st = PrimaryKeyEncoder::create_column(*_vectorized_schema, deletes);
         if (!st.ok()) {
-            LOG(ERROR) << "create column for primary key encoder failed, schema:" << _vectorized_schema
+            LOG(ERROR) << "create column for primary key encoder failed, schema:" << *_vectorized_schema
                        << ", status:" << st.to_string();
             return st;
         }
@@ -346,7 +350,7 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::u
         (*deletes)->reset_column();
     }
     auto& delidx = indexes[TOpType::DELETE];
-    PrimaryKeyEncoder::encode_selective(_vectorized_schema, *src, delidx.data(), delidx.size(), deletes->get());
+    PrimaryKeyEncoder::encode_selective(*_vectorized_schema, *src, delidx.data(), delidx.size(), deletes->get());
     return Status::OK();
 }
 
@@ -354,7 +358,7 @@ void MemTable::_sort_column_inc() {
     Columns columns;
     std::vector<int> sort_orders;
     std::vector<int> null_firsts;
-    for (int i = 0; i < _vectorized_schema.num_key_fields(); i++) {
+    for (int i = 0; i < _vectorized_schema->num_key_fields(); i++) {
         columns.push_back(_chunk->get_column_by_index(i));
         // Ascending, null first
         sort_orders.push_back(1);

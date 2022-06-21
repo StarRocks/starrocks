@@ -397,7 +397,14 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
             } else {
                 auto it = eval_context.selectivity.end();
                 it--;
-                if (selectivity < it->first) {
+                // In case of  all the runtime filters' selectivity is above 0.01 and below 0.5,
+                // the top 3 runtime filters of the highest selectivity are chosen to filter data, but if we have
+                // more than 3 runtime filters, the 4th, 5th, etc. can take place of the chosen runtime-filter of
+                // the lowest selectivity only in two cases:
+                // 1. current rf is a local rf;
+                // 2. current rf is a global rf and the chosen rf of the lowest selectivity is also a global rf.
+                // A global rf should not take place of local rf since global rf costs more time than local rf.
+                if (selectivity < it->first && (rf_desc->is_local() || !it->second->is_local())) {
                     eval_context.selectivity.erase(it);
                     eval_context.selectivity.emplace(selectivity, rf_desc);
                 }

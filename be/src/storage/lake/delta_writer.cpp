@@ -55,7 +55,8 @@ public:
               _txn_id(txn_id),
               _partition_id(partition_id),
               _slots(slots),
-              _mem_tracker(mem_tracker) {}
+              _mem_tracker(mem_tracker),
+              _schema_initialized(false) {}
 
     ~DeltaWriterImpl() = default;
 
@@ -95,10 +96,16 @@ private:
     std::unique_ptr<MemTableSink> _mem_table_sink;
     std::unique_ptr<FlushToken> _flush_token;
     std::shared_ptr<const TabletSchema> _tablet_schema;
+    vectorized::Schema _vectorized_schema;
+    bool _schema_initialized;
 };
 
 inline void DeltaWriterImpl::reset_memtable() {
-    _mem_table.reset(new MemTable(_tablet_id, _tablet_schema.get(), _slots, _mem_table_sink.get(), _mem_tracker));
+    if (_schema_initialized == false) {
+        _vectorized_schema = std::move(MemTable::convert_schema(_tablet_schema.get(), _slots));
+        _schema_initialized = true;
+    }
+    _mem_table.reset(new MemTable(_tablet_id, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker));
 }
 
 inline Status DeltaWriterImpl::flush_async() {

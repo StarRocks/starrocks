@@ -302,10 +302,11 @@ void GlobalDriverExecutor::_simplify_common_metrics(RuntimeProfile* driver_profi
         DCHECK(common_metrics != nullptr);
 
         // Remove runtime filter related counters if it's value is 0
-        static std::string counter_names[] = {
-                "RuntimeInFilterNum",          "RuntimeBloomFilterNum",     "JoinRuntimeFilterInputRows",
-                "JoinRuntimeFilterOutputRows", "JoinRuntimeFilterEvaluate", "JoinRuntimeFilterTime",
-                "ConjunctsInputRows",          "ConjunctsOutputRows",       "ConjunctsEvaluate"};
+        static std::string counter_names[] = {"RuntimeInFilterNum",         "RuntimeBloomFilterNum",
+                                              "JoinRuntimeFilterInputRows", "JoinRuntimeFilterOutputRows",
+                                              "JoinRuntimeFilterEvaluate",  "JoinRuntimeFilterTime",
+                                              "ConjunctsInputRows",         "ConjunctsOutputRows",
+                                              "ConjunctsEvaluate",          "ConjunctsTime"};
         for (auto& name : counter_names) {
             auto* counter = common_metrics->get_counter(name);
             if (counter != nullptr && counter->value() == 0) {

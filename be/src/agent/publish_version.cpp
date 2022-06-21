@@ -8,6 +8,7 @@ DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bvar/bvar.h>
 DIAGNOSTIC_POP
 
+#include "common/tracer.h"
 #include "fmt/format.h"
 #include "gutil/strings/join.h"
 #include "storage/data_dir.h"
@@ -39,6 +40,12 @@ void run_publish_version_task(ThreadPool& threadpool, const TAgentTaskRequest& p
     int64_t start_ts = MonotonicMillis();
     auto& publish_version_req = publish_version_task.publish_version_req;
     int64_t transaction_id = publish_version_req.transaction_id;
+
+    Span span = Tracer::Instance().start_trace_or_add_span("run_publish_version_task",
+                                                           publish_version_req.txn_trace_parent);
+    span->SetAttribute("txn_id", transaction_id);
+    auto scoped = trace::Scope(span);
+
     size_t num_partition = publish_version_req.partition_version_infos.size();
     size_t num_tablet = 0;
     std::vector<std::map<TabletInfo, RowsetSharedPtr>> partitions(num_partition);
@@ -47,6 +54,8 @@ void run_publish_version_task(ThreadPool& threadpool, const TAgentTaskRequest& p
                 transaction_id, publish_version_req.partition_version_infos[i].partition_id, &partitions[i]);
         num_tablet += partitions[i].size();
     }
+    span->SetAttribute("num_partition", num_partition);
+    span->SetAttribute("num_tablet", num_tablet);
     std::vector<TabletPublishVersionTask> tablet_tasks(num_tablet);
     size_t tablet_idx = 0;
     for (size_t i = 0; i < publish_version_req.partition_version_infos.size(); i++) {
@@ -66,6 +75,11 @@ void run_publish_version_task(ThreadPool& threadpool, const TAgentTaskRequest& p
         while (retry_time++ < PUBLISH_VERSION_SUBMIT_MAX_RETRY) {
             st = threadpool.submit_func([&, i]() {
                 auto& task = tablet_tasks[i];
+                auto tablet_span = Tracer::Instance().add_span("tablet_publish_txn", span);
+                auto scoped_tablet_span = trace::Scope(tablet_span);
+                tablet_span->SetAttribute("txn_id", transaction_id);
+                tablet_span->SetAttribute("tablet_id", task.tablet_id);
+                tablet_span->SetAttribute("version", task.version);
                 if (!task.rowset) {
                     task.st = Status::NotFound(
                             fmt::format("rowset not found  of tablet: {}, txn_id: {}", task.tablet_id, task.txn_id));
@@ -90,6 +104,7 @@ void run_publish_version_task(ThreadPool& threadpool, const TAgentTaskRequest& p
                     LOG(WARNING) << "Publish txn failed tablet:" << tablet->tablet_id() << " version:" << task.version
                                  << " partition:" << task.partition_id << " txn_id: " << task.txn_id
                                  << " rowset:" << task.rowset->rowset_id();
+                    tablet_span->SetStatus(trace::StatusCode::kError, task.st.get_error_msg());
                 } else {
                     LOG(INFO) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
                               << " partition:" << task.partition_id << " txn_id: " << task.txn_id
@@ -102,6 +117,7 @@ void run_publish_version_task(ThreadPool& threadpool, const TAgentTaskRequest& p
                 LOG(WARNING) << "publish version threadpool is busy, retry in  " << retry_sleep_ms
                              << "ms. txn_id: " << transaction_id << ", tablet:" << tablet_tasks[i].tablet_id;
                 // In general, publish version is fast. A small sleep is needed here.
+                auto wait_span = Tracer::Instance().add_span("retry_wait", span);
                 SleepFor(MonoDelta::FromMilliseconds(retry_sleep_ms));
                 continue;
             } else {
@@ -112,7 +128,9 @@ void run_publish_version_task(ThreadPool& threadpool, const TAgentTaskRequest& p
             tablet_tasks[i].st = std::move(st);
         }
     }
+    span->AddEvent("all_task_submitted");
     threadpool.wait();
+    span->AddEvent("all_task_finished");
 
     Status st;
     finish_task.__isset.tablet_versions = true;

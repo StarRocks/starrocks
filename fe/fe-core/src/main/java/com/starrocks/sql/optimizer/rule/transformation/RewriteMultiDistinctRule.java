@@ -54,8 +54,8 @@ public class RewriteMultiDistinctRule extends TransformationRule {
                 .filter(CallOperator::isDistinct).collect(Collectors.toList());
 
         boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getChildren().size() > 1);
-        return (distinctAggOperatorList.size() > 1 && !hasMultiColumns) || agg.getAggregations().values().stream()
-                .anyMatch(call -> call.isDistinct() && call.getFnName().equals(FunctionSet.AVG));
+        return (distinctAggOperatorList.size() > 1  || agg.getAggregations().values().stream()
+                .anyMatch(call -> call.isDistinct() && call.getFnName().equals(FunctionSet.AVG))) && !hasMultiColumns;
     }
 
     @Override

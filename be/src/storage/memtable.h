@@ -21,10 +21,10 @@ class MemTableSink;
 
 class MemTable {
 public:
-    MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs,
+    MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
              MemTableSink* sink, MemTracker* mem_tracker);
 
-    MemTable(int64_t tablet_id, const Schema& schema, MemTableSink* sink, int64_t max_buffer_size,
+    MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, int64_t max_buffer_size,
              MemTracker* mem_tracker);
 
     ~MemTable();
@@ -47,6 +47,8 @@ public:
 
     bool is_full() const;
 
+    static Schema convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs);
+
 private:
     void _merge();
 
@@ -54,7 +56,6 @@ private:
     void _sort_column_inc();
     void _append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final);
 
-    bool _is_aggregate_needed();
     void _init_aggregator_if_needed();
     void _aggregate(bool is_final);
 
@@ -62,15 +63,14 @@ private:
 
     ChunkPtr _chunk;
     ChunkPtr _result_chunk;
-    vector<uint8_t> _result_deletes;
 
     // for sort by columns
     SmallPermutation _permutations;
     std::vector<uint32_t> _selective_values;
 
     int64_t _tablet_id;
-    Schema _vectorized_schema;
-    const TabletSchema* _tablet_schema;
+
+    const Schema* _vectorized_schema;
     // the slot in _slot_descs are in order of tablet's schema
     const std::vector<SlotDescriptor*>* _slot_descs;
     KeysType _keys_type;

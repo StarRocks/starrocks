@@ -292,7 +292,6 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
     // publish version for txn
     auto tablet = tablet_manager->get_tablet(12345);
     for (auto& tablet_rs : tablet_related_rs) {
-        const TabletInfo& tablet_info = tablet_rs.first;
         const RowsetSharedPtr& rowset = tablet_rs.second;
         auto st = StorageEngine::instance()->txn_manager()->publish_txn(10, tablet, 2222, version, rowset);
         // success because the related transaction is GCed

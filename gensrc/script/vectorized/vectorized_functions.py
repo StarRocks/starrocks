@@ -477,7 +477,7 @@ vectorized_functions = [
     [90600, 'bitmap_max', 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_max', False],
     [90700, 'bitmap_min', 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_min', False],
     [90800, 'base64_to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::base64_to_bitmap', False],
-    [90900, 'array_to_bitmap', 'ARRAY_BIGINT', ['BITMAP'], 'BitmapFunctions::array_to_bitmap', False],
+    [90900, 'array_to_bitmap', 'BITMAP', ['ARRAY_BIGINT'], 'BitmapFunctions::array_to_bitmap', False],
 
     # hash function
     [100010, 'murmur_hash3_32', 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
@@ -492,11 +492,11 @@ vectorized_functions = [
 
     # json string function
     [110000, "get_json_int", "INT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_int",
-     "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close", False],
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110001, "get_json_double", "DOUBLE", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_double",
-     "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close", False],
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110002, "get_json_string", "VARCHAR", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_string",
-     "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close", False],
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
 
     # json type function
     [110003, "parse_json", "JSON", ["VARCHAR"], "JsonFunctions::parse_json", False],
@@ -735,4 +735,7 @@ vectorized_functions = [
 
     [150270, 'array_cum_sum', 'ARRAY_BIGINT', ['ARRAY_BIGINT'], 'ArrayFunctions::array_cum_sum_bigint'],
     [150271, 'array_cum_sum', 'ARRAY_DOUBLE', ['ARRAY_DOUBLE'], 'ArrayFunctions::array_cum_sum_double'],
+
+    # reserve 150281
+    [150282, 'array_contains_all', 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'], 'ArrayFunctions::array_contains_all'],
 ]

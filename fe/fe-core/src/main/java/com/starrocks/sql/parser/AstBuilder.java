@@ -134,6 +134,8 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AnalyzeBasicDesc;
+import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CTERelation;
@@ -352,7 +354,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (defaultDescContext != null) {
                 if (defaultDescContext.string() != null) {
                     String value = ((StringLiteral) visit(defaultDescContext.string())).getStringValue();
-                    defaultValueDef =  new ColumnDef.DefaultValueDef(true, new StringLiteral(value));
+                    defaultValueDef = new ColumnDef.DefaultValueDef(true, new StringLiteral(value));
                 } else if (defaultDescContext.NULL() != null) {
                     defaultValueDef = ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
                 } else if (defaultDescContext.CURRENT_TIMESTAMP() != null) {
@@ -588,12 +590,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             qualifiedName = getQualifiedName(context.qualifiedName());
         }
         Map<String, String> properties = new HashMap<>();
-        if (context.hint() != null) {
-            for (StarRocksParser.HintContext hintContext : context.hint()) {
+        if (context.setVarHint() != null) {
+            for (StarRocksParser.SetVarHintContext hintContext : context.setVarHint()) {
                 for (StarRocksParser.HintMapContext hintMapContext : hintContext.hintMap()) {
-                    String key = hintMapContext.k.getText();
-                    String value = hintMapContext.v.getText();
-                    properties.put(key, value);
+                    properties.put(hintMapContext.k.getText(),
+                            ((LiteralExpr) visit(hintMapContext.v)).getStringValue());
                 }
             }
         }
@@ -940,7 +941,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        return new AnalyzeStmt(tableName, columnNames, properties, context.FULL() == null);
+        return new AnalyzeStmt(tableName, columnNames, properties, context.FULL() == null, new AnalyzeBasicDesc());
     }
 
     @Override
@@ -980,6 +981,36 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowAnalyzeStatement(StarRocksParser.ShowAnalyzeStatementContext context) {
         return new ShowAnalyzeStmt();
+    }
+
+    @Override
+    public ParseNode visitAnalyzeHistogramStatement(StarRocksParser.AnalyzeHistogramStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName tableName = qualifiedNameToTableName(qualifiedName);
+
+        List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
+        List<String> columnNames = null;
+        if (columns != null) {
+            columnNames = columns.stream().map(Identifier::getValue).collect(toList());
+        }
+
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        long bucket;
+        if (context.bucket != null) {
+            bucket = Long.parseLong(context.bucket.getText());
+        } else {
+            bucket = Config.histogram_buckets_size;
+        }
+        long mcv = Config.histogram_topn_size;
+
+        return new AnalyzeStmt(tableName, columnNames, properties, true, new AnalyzeHistogramDesc(bucket, mcv));
     }
 
     // ------------------------------------------- Work Group Statement -------------------------------------------------
@@ -1208,13 +1239,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         boolean isDistinct = context.setQuantifier() != null && context.setQuantifier().DISTINCT() != null;
         SelectList selectList = new SelectList(selectItems, isDistinct);
-        if (context.hint() != null) {
+        if (context.setVarHint() != null) {
             Map<String, String> selectHints = new HashMap<>();
-            for (StarRocksParser.HintContext hintContext : context.hint()) {
+            for (StarRocksParser.SetVarHintContext hintContext : context.setVarHint()) {
                 for (StarRocksParser.HintMapContext hintMapContext : hintContext.hintMap()) {
-                    String key = hintMapContext.k.getText();
-                    String value = hintMapContext.v.getText();
-                    selectHints.put(key, value);
+                    selectHints.put(hintMapContext.k.getText(),
+                            ((LiteralExpr) visit(hintMapContext.v)).getStringValue());
                 }
             }
             selectList.setOptHints(selectHints);
@@ -1423,8 +1453,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         TableRelation tableRelation = new TableRelation(tableName, partitionNames, tabletIds);
-        if (context.hint() != null) {
-            for (TerminalNode hint : context.hint().IDENTIFIER()) {
+        if (context.bracketHint() != null) {
+            for (TerminalNode hint : context.bracketHint().IDENTIFIER()) {
                 if (hint.getText().equalsIgnoreCase("_META_")) {
                     tableRelation.setMetaQuery(true);
                 }
@@ -1496,8 +1526,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         JoinRelation joinRelation = new JoinRelation(joinType, left, right, predicate, context.LATERAL() != null);
         joinRelation.setUsingColNames(usingColNames);
-        if (context.hint() != null) {
-            joinRelation.setJoinHint(context.hint().IDENTIFIER(0).getText());
+        if (context.bracketHint() != null) {
+            joinRelation.setJoinHint(context.bracketHint().IDENTIFIER(0).getText());
         }
 
         return joinRelation;
@@ -2171,14 +2201,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDoubleValue(StarRocksParser.DoubleValueContext context) {
         try {
-            BigDecimal decimal = new BigDecimal(context.getText());
-            int precision = DecimalLiteral.getRealPrecision(decimal);
-            int scale = DecimalLiteral.getRealScale(decimal);
-            int integerPartWidth = precision - scale;
-            if (integerPartWidth > 38) {
+            if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_DOUBLE_LITERAL)) {
                 return new FloatLiteral(context.getText());
+            } else {
+                BigDecimal decimal = new BigDecimal(context.getText());
+                int precision = DecimalLiteral.getRealPrecision(decimal);
+                int scale = DecimalLiteral.getRealScale(decimal);
+                int integerPartWidth = precision - scale;
+                if (integerPartWidth > 38) {
+                    return new FloatLiteral(context.getText());
+                }
+                return new DecimalLiteral(decimal);
             }
-            return new DecimalLiteral(decimal);
+
         } catch (AnalysisException | NumberFormatException e) {
             throw new ParsingException(e.getMessage());
         }
@@ -2187,10 +2222,30 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDecimalValue(StarRocksParser.DecimalValueContext context) {
         try {
-            return new DecimalLiteral(context.getText());
+            if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_DOUBLE_LITERAL)) {
+                return new FloatLiteral(context.getText());
+            } else {
+                return new DecimalLiteral(context.getText());
+            }
         } catch (AnalysisException e) {
             throw new ParsingException(e.getMessage());
         }
+    }
+
+    @Override
+    public ParseNode visitDateLiteral(StarRocksParser.DateLiteralContext context) {
+        String value = ((StringLiteral) visit(context.string())).getValue();
+        try {
+            if (context.DATE() != null) {
+                return new DateLiteral(value, Type.DATE);
+            }
+            if (context.DATETIME() != null) {
+                return new DateLiteral(value, Type.DATETIME);
+            }
+        } catch (AnalysisException e) {
+            throw new ParsingException(e.getMessage());
+        }
+        throw new ParsingException("Parse Error : unknown type " + context.getText());
     }
 
     @Override
@@ -2300,22 +2355,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitUnitIdentifier(StarRocksParser.UnitIdentifierContext context) {
         return new UnitIdentifier(context.getText());
-    }
-
-    @Override
-    public ParseNode visitTypeConstructor(StarRocksParser.TypeConstructorContext context) {
-        String value = ((StringLiteral) visit(context.string())).getValue();
-        try {
-            if (context.DATE() != null) {
-                return new DateLiteral(value, Type.DATE);
-            }
-            if (context.DATETIME() != null) {
-                return new DateLiteral(value, Type.DATETIME);
-            }
-        } catch (AnalysisException e) {
-            throw new ParsingException(e.getMessage());
-        }
-        throw new ParsingException("Parse Error : unknown type " + context.getText());
     }
 
     @Override

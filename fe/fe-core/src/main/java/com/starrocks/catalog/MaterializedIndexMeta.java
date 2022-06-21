@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
@@ -119,10 +120,12 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         }
     }
 
-    private void setColumnsDefineExpr(Map<String, Expr> columnNameToDefineExpr) {
+    // The column names of the materialized view are all lowercase, but the column names may be uppercase
+    @VisibleForTesting
+    public void setColumnsDefineExpr(Map<String, Expr> columnNameToDefineExpr) {
         for (Map.Entry<String, Expr> entry : columnNameToDefineExpr.entrySet()) {
             for (Column column : schema) {
-                if (column.getName().equals(entry.getKey())) {
+                if (column.getName().equalsIgnoreCase(entry.getKey())) {
                     column.setDefineExpr(entry.getValue());
                     break;
                 }

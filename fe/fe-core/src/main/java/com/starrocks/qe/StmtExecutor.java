@@ -32,7 +32,6 @@ import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DmlStmt;
-import com.starrocks.analysis.EnterStmt;
 import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InsertStmt;
@@ -382,6 +381,8 @@ public class StmtExecutor {
                         //reset query id for each retry
                         if (i > 0) {
                             uuid = UUID.randomUUID();
+                            LOG.info("transfer QueryId: {} to {}", DebugUtil.printId(context.getQueryId()),
+                                    DebugUtil.printId(uuid));
                             context.setExecutionId(
                                     new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
                         }
@@ -415,8 +416,6 @@ public class StmtExecutor {
                 }
             } else if (parsedStmt instanceof SetStmt) {
                 handleSetStmt();
-            } else if (parsedStmt instanceof EnterStmt) {
-                handleEnterStmt();
             } else if (parsedStmt instanceof UseStmt) {
                 handleUseStmt();
             } else if (parsedStmt instanceof CreateTableAsSelectStmt) {
@@ -568,7 +567,8 @@ public class StmtExecutor {
         profile.computeTimeInChildProfile();
         long profileEndTime = System.currentTimeMillis();
         profile.getChildMap().get("Summary")
-                .addInfoString(ProfileManager.PROFILE_TIME, DebugUtil.getPrettyStringMs(profileEndTime - profileBeginTime));
+                .addInfoString(ProfileManager.PROFILE_TIME,
+                        DebugUtil.getPrettyStringMs(profileEndTime - profileBeginTime));
         StringBuilder builder = new StringBuilder();
         profile.prettyPrint(builder, "");
         String profileContent = ProfileManager.getInstance().pushProfile(profile);
@@ -955,19 +955,6 @@ public class StmtExecutor {
         }
     }
 
-    // process enter cluster
-    private void handleEnterStmt() {
-        final EnterStmt enterStmt = (EnterStmt) parsedStmt;
-        try {
-            context.getGlobalStateMgr().changeCluster(context, enterStmt.getClusterName());
-            context.setDatabase("");
-        } catch (DdlException e) {
-            context.getState().setError(e.getMessage());
-            return;
-        }
-        context.getState().setOk();
-    }
-
     private void handleExportStmt(UUID queryId) throws Exception {
         ExportStmt exportStmt = (ExportStmt) parsedStmt;
         exportStmt.setExportStartTime(context.getStartTime());
@@ -1200,8 +1187,8 @@ public class StmtExecutor {
                 }
             }
 
-            // To fix https://github.com/StarRocks/starrocks/issues/6461.
-            if (loadedRows == 0 && filteredRows == 0 && stmt instanceof DeleteStmt) {
+            if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
+                    || stmt instanceof UpdateStmt)) {
                 if (targetTable instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(

@@ -8,12 +8,8 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
 
-#include "column/column_builder.h"
-#include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/status.h"
-#include "exprs/vectorized/function_helper.h"
-#include "exprs/vectorized/json_functions.h"
 #include "glog/logging.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
@@ -22,9 +18,9 @@
 
 namespace starrocks::vectorized {
 
-static const re2::RE2 JSONPATH_PATTERN(R"(^([^\"\[\]]*)(?:\[([0-9\:\*]+)\])?)");
-static const re2::RE2 ARRAY_SINGLE_SELECTOR(R"(\d+)");
-static const re2::RE2 ARRAY_SLICE_SELECTOR(R"(\d+\:\d+)");
+static const re2::RE2 JSONPATH_PATTERN(R"(^([^\"\[\]]*)(?:\[([0-9\:\*]+)\])?)", re2::RE2::Quiet);
+static const re2::RE2 ARRAY_SINGLE_SELECTOR(R"(\d+)", re2::RE2::Quiet);
+static const re2::RE2 ARRAY_SLICE_SELECTOR(R"(\d+\:\d+)", re2::RE2::Quiet);
 static const std::string JSONPATH_ROOT = "$";
 
 bool ArraySelectorSingle::match(const std::string& input) {
@@ -109,6 +105,8 @@ Status ArraySelector::parse(const std::string& index, std::unique_ptr<ArraySelec
 }
 
 Status JsonPathPiece::parse(const std::string& path_string, std::vector<JsonPathPiece>* parsed_paths) {
+    if (path_string.size() == 0) return Status::InvalidArgument("Empty json path");
+
     // split path by ".", and escape quota by "\"
     // eg:
     //    '$.text#abc.xyz'  ->  [$, text#abc, xyz]

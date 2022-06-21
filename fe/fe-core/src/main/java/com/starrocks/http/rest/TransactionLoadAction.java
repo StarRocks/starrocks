@@ -57,7 +57,7 @@ public class TransactionLoadAction extends RestBaseAction {
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
         TransactionLoadAction ac = new TransactionLoadAction(controller);
-        controller.registerHandler(HttpMethod.PUT, "/api/{" + DB_KEY + "}/transaction/{" + TXN_OP_KEY + "}", ac);
+        controller.registerHandler(HttpMethod.POST, "/api/{" + DB_KEY + "}/transaction/{" + TXN_OP_KEY + "}", ac);
         controller.registerHandler(HttpMethod.PUT,
                 "/api/{" + DB_KEY + "}/transaction/{" + TXN_OP_KEY + "}/{" + TABLE_KEY + "}", ac);
     }

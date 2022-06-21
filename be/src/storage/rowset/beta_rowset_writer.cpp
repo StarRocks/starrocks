@@ -688,9 +688,6 @@ Status VerticalBetaRowsetWriter::flush_columns() {
 }
 
 Status VerticalBetaRowsetWriter::final_flush() {
-    if (_segment_writers.empty()) {
-        return Status::OK();
-    }
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         if (auto st = segment_writer->finalize_footer(&segment_size); !st.ok()) {

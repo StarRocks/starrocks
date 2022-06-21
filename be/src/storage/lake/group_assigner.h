@@ -2,8 +2,8 @@
 
 #pragma once
 
+#include <set>
 #include <string>
-#include <vector>
 
 #include "common/statusor.h"
 
@@ -29,7 +29,7 @@ public:
     // in each return.
     //
     // All implementations must be thread-safe.
-    virtual Status list_group(std::vector<std::string>* groups) = 0;
+    virtual Status list_group(std::set<std::string>* groups) = 0;
 };
 
 } // namespace starrocks::lake

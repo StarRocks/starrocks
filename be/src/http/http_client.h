@@ -34,7 +34,6 @@ class HttpClient {
 public:
     HttpClient();
     ~HttpClient();
-
     // you can call this function to execute HTTP request with retry,
     // if callback return OK, this function will end and return OK.
     // This function will return FAIL if three are more than retry_times
@@ -86,6 +85,10 @@ public:
 
     void set_timeout_ms(int64_t timeout_ms) { curl_easy_setopt(_curl, CURLOPT_TIMEOUT_MS, timeout_ms); }
 
+    void trust_all_ssl() {
+        curl_easy_setopt(_curl, CURLOPT_SSL_VERIFYPEER, 0L);
+        curl_easy_setopt(_curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    }
     // used to get content length
     int64_t get_content_length() const {
         double cl = 0.0f;

@@ -402,14 +402,29 @@ struct AggHashMapVariant {
         return 0;
     }
 
-    size_t memory_usage() const {
+    size_t reserved_memory_usage(const MemPool* pool) const {
         switch (type) {
 #define M(NAME)      \
     case Type::NAME: \
-        return NAME->hash_map.dump_bound();
+        return NAME->hash_map.dump_bound() + pool->total_reserved_bytes();
+
             APPLY_FOR_AGG_VARIANT_ALL(M)
 #undef M
         }
+
+        return 0;
+    }
+
+    size_t allocated_memory_usage(const MemPool* pool) const {
+        switch (type) {
+#define M(NAME)      \
+    case Type::NAME: \
+        return sizeof(decltype(NAME)::element_type::KeyType) * NAME->hash_map.size() + pool->total_allocated_bytes();
+
+            APPLY_FOR_AGG_VARIANT_ALL(M)
+#undef M
+        }
+
         return 0;
     }
 };
@@ -676,14 +691,27 @@ struct AggHashSetVariant {
         return 0;
     }
 
-    size_t memory_usage() const {
+    size_t reserved_memory_usage(const MemPool* pool) const {
         switch (type) {
 #define M(NAME)      \
     case Type::NAME: \
-        return NAME->hash_set.dump_bound();
+        return NAME->hash_set.dump_bound() + pool->total_reserved_bytes();
             APPLY_FOR_AGG_VARIANT_ALL(M)
 #undef M
         }
+        return 0;
+    }
+
+    size_t allocated_memory_usage(const MemPool* pool) const {
+        switch (type) {
+#define M(NAME)      \
+    case Type::NAME: \
+        return sizeof(decltype(NAME)::element_type::KeyType) * NAME->hash_set.size() + pool->total_allocated_bytes();
+
+            APPLY_FOR_AGG_VARIANT_ALL(M)
+#undef M
+        }
+
         return 0;
     }
 };

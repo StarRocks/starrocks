@@ -27,4 +27,24 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         OlapTable baseTable = (OlapTable) table;
         Assert.assertEquals(baseTable.getIndexIdByName("lo_count_mv"), selectedIndexid);
     }
+
+    @Test
+    public void testKeyColumnsMatch() throws Exception {
+        GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
+        Database database = globalStateMgr.getDb("default_cluster:test");
+        Table table = database.getTable("lineorder_flat_for_mv");
+        OlapTable baseTable = (OlapTable) table;
+
+        String sql = "select count(LO_ORDERDATE) from lineorder_flat_for_mv group by LO_ORDERDATE;";
+        ExecPlan plan = getExecPlan(sql);
+        OlapScanNode olapScanNode = (OlapScanNode) plan.getScanNodes().get(0);
+        Long selectedIndexid = olapScanNode.getSelectedIndexId();
+        Assert.assertNotEquals(baseTable.getIndexIdByName("lo_count_mv"), selectedIndexid);
+
+        sql = "select max(LO_ORDERDATE) from lineorder_flat_for_mv group by LO_ORDERDATE;";
+        plan = getExecPlan(sql);
+        olapScanNode = (OlapScanNode) plan.getScanNodes().get(0);
+        selectedIndexid = olapScanNode.getSelectedIndexId();
+        Assert.assertEquals(baseTable.getIndexIdByName("lo_count_mv"), selectedIndexid);
+    }
 }
