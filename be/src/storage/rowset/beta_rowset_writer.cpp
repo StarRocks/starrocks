@@ -463,9 +463,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                 return segment_ptr.status();
             }
             auto res = (*segment_ptr)->new_iterator(schema, seg_options);
-            if (res.status().is_end_of_file()) {
-                continue;
-            } else if (!res.ok()) {
+            if (!res.ok()) {
                 return res.status();
             } else if (res.value() == nullptr) {
                 continue;
@@ -582,9 +580,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                     return segment_ptr.status();
                 }
                 auto res = (*segment_ptr)->new_iterator(schema, seg_options);
-                if (res.status().is_end_of_file()) {
-                    continue;
-                } else if (!res.ok()) {
+                if (!res.ok()) {
                     return res.status();
                 } else if (res.value() == nullptr) {
                     continue;
@@ -672,9 +668,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                 return segment_ptr.status();
             }
             auto res = (*segment_ptr)->new_iterator(schema, seg_options);
-            if (res.status().is_end_of_file()) {
-                continue;
-            } else if (!res.ok()) {
+            if (!res.ok()) {
                 return res.status();
             } else if (res.value() == nullptr) {
                 continue;
