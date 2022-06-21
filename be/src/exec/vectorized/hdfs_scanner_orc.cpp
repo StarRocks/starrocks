@@ -456,6 +456,12 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     }
 
     ChunkPtr ck = std::make_shared<vectorized::Chunk>();
+    // The column order of chunk is required to be invariable. When a table performs schema change,
+    // says we want to add a new column to table A, the reader of old files of table A will append new
+    // column to the tail of the chunk, while the reader of new files of table A will put the new column
+    // in the chunk according to the order it's stored. This will lead two chunk from different file to
+    // different column order, so we need to adjust the column order according to the input chunk to make
+    // sure every chunk has same column order
     auto convert_to_output = [chunk, &ck]() {
         const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
         for (auto iter = slot_id_to_index_map.begin(); iter != slot_id_to_index_map.end(); iter++) {
