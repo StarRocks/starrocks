@@ -8,11 +8,11 @@ import com.staros.journal.Journal;
 import com.staros.journal.JournalWriter;
 import com.starrocks.persist.EditLog;
 
-// wrapper for star manager to use dbdje
-public class BDBJournalWriter implements JournalWriter {
+// wrapper for star manager to use bdbje
+public class BDBJEJournalWriter implements JournalWriter {
     private EditLog editLog;
 
-    public BDBJournalWriter(EditLog editLog) {
+    public BDBJEJournalWriter(EditLog editLog) {
         this.editLog = editLog;
     }
 

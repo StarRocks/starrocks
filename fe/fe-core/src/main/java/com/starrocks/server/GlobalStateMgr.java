@@ -223,7 +223,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
-import com.starrocks.staros.BDBJournalWriter;
+import com.starrocks.staros.BDBJEJournalWriter;
 import com.starrocks.staros.StarMgrIdGenerator;
 import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.StatisticAutoCollector;
@@ -3219,36 +3219,37 @@ public class GlobalStateMgr {
     }
 
     private void startStarMgrServer() {
-        if (Config.integrate_starmgr) {
-            try {
-                String[] starMgrAddr = Config.starmgr_address.split(":");
-                if (starMgrAddr.length != 2) {
-                    LOG.fatal("Config.starmgr_address {} bad format.", Config.starmgr_address);
-                    System.exit(-1);
-                }
-                int port = Integer.parseInt(starMgrAddr[1]);
-
-                if (Config.starmgr_s3_bucket.isEmpty()) {
-                    LOG.fatal("Config.starmgr_s3_bucket is not set.");
-                    System.exit(-1);
-                }
-
-                // necessary starMgr config setting
-                com.staros.util.Config.STARMGR_IP = FrontendOptions.getLocalHostAddress();
-                com.staros.util.Config.STARMGR_RPC_PORT = port;
-                com.staros.util.Config.S3_BUCKET = Config.starmgr_s3_bucket;
-
-                BDBJournalWriter journalWriter = new BDBJournalWriter(editLog);
-                JournalSystem.overrideJournalWriter(journalWriter);
-
-                StarMgrIdGenerator generator = new StarMgrIdGenerator(idGenerator);
-                GlobalIdGenerator.overrideIdGenerator(generator);
-
-                this.starMgrServer.start(com.staros.util.Config.STARMGR_RPC_PORT);
-            } catch (Exception e) {
-                LOG.fatal("start star manager failed, {}.", e.getMessage());
+        if (!Config.integrate_starmgr) {
+            return;
+        }
+        try {
+            String[] starMgrAddr = Config.starmgr_address.split(":");
+            if (starMgrAddr.length != 2) {
+                LOG.fatal("Config.starmgr_address {} bad format.", Config.starmgr_address);
                 System.exit(-1);
             }
+            int port = Integer.parseInt(starMgrAddr[1]);
+
+            if (Config.starmgr_s3_bucket.isEmpty()) {
+                LOG.fatal("Config.starmgr_s3_bucket is not set.");
+                System.exit(-1);
+            }
+
+            // necessary starMgr config setting
+            com.staros.util.Config.STARMGR_IP = FrontendOptions.getLocalHostAddress();
+            com.staros.util.Config.STARMGR_RPC_PORT = port;
+            com.staros.util.Config.S3_BUCKET = Config.starmgr_s3_bucket;
+
+            BDBJEJournalWriter journalWriter = new BDBJEJournalWriter(editLog);
+            JournalSystem.overrideJournalWriter(journalWriter);
+
+            StarMgrIdGenerator generator = new StarMgrIdGenerator(idGenerator);
+            GlobalIdGenerator.overrideIdGenerator(generator);
+
+            this.starMgrServer.start(com.staros.util.Config.STARMGR_RPC_PORT);
+        } catch (Exception e) {
+            LOG.fatal("start star manager failed, {}.", e.getMessage());
+            System.exit(-1);
         }
     }
 }
