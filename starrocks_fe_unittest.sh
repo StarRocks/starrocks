@@ -68,6 +68,7 @@ docker exec --privileged $container_name /bin/bash -c "$cmd"
 
 echo "script run over-----"
 
+cp *.jar ~
 cd ~
 pwd
 ls -al
