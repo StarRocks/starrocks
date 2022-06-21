@@ -30,7 +30,7 @@ public class AnalyzeAlterTableStatementTest {
 
     @Test
     public void testTableRename() {
-        AlterTableStmt alterTableStmt = (AlterTableStmt) analyzeSuccess("alter table test rename test1");
+        AlterTableStmt alterTableStmt = (AlterTableStmt) analyzeSuccess("alter table t0 rename test1");
         Assert.assertEquals(alterTableStmt.getOps().size(), 1);
         Assert.assertTrue(alterTableStmt.getOps().get(0) instanceof TableRenameClause);
         analyzeFail("alter table test rename");
@@ -57,7 +57,7 @@ public class AnalyzeAlterTableStatementTest {
 
     @Test
     public void testCreateIndex() {
-        String sql = "CREATE INDEX index1 ON `db`.`table` (`col1`) USING BITMAP COMMENT 'balabala'";
+        String sql = "CREATE INDEX index1 ON `test`.`t0` (`col1`) USING BITMAP COMMENT 'balabala'";
         analyzeSuccess(sql);
 
         sql = "alter table t0 add index index1 (v2)";
@@ -66,7 +66,7 @@ public class AnalyzeAlterTableStatementTest {
 
     @Test
     public void testDropIndex() {
-        String sql = "DROP INDEX index1 ON db.t0";
+        String sql = "DROP INDEX index1 ON test.t0";
         analyzeSuccess(sql);
 
         sql = "alter table t0 drop index index1";

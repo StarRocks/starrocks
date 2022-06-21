@@ -287,7 +287,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
     public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
         if (FunctionSet.IF.equalsIgnoreCase(call.getFnName())) {
             return ifCall(call);
-        } else if (FunctionSet.IF_NULL.equalsIgnoreCase(call.getFnName())) {
+        } else if (FunctionSet.IFNULL.equalsIgnoreCase(call.getFnName())) {
             return ifNull(call);
         }
 

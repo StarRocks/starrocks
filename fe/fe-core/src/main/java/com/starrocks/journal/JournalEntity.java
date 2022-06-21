@@ -183,6 +183,7 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_CREATE_MATERIALIZED_VIEW:
             case OperationType.OP_CREATE_TABLE: {
                 data = new CreateTableInfo();
                 ((CreateTableInfo) data).readFields(in);
@@ -536,7 +537,8 @@ public class JournalEntity implements Writable {
             case OperationType.OP_DYNAMIC_PARTITION:
             case OperationType.OP_MODIFY_IN_MEMORY:
             case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
-            case OperationType.OP_MODIFY_REPLICATION_NUM: {
+            case OperationType.OP_MODIFY_REPLICATION_NUM:
+            case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
                 data = ModifyTablePropertyOperationLog.read(in);
                 isRead = true;
                 break;

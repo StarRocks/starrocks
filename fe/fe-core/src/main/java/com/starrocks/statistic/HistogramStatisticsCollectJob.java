@@ -31,7 +31,7 @@ public class HistogramStatisticsCollectJob extends BaseCollectJob {
         context.getSessionVariable().setNewPlanerAggStage(1);
 
         long totalRows = table.getRowCount();
-        long sampleRows = (long) (totalRows * Double.parseDouble(analyzeJob.getProperties().get(Constants.PRO_SAMPLE_RATIO)));
+        long sampleRows = Long.parseLong(analyzeJob.getProperties().get(Constants.PROP_SAMPLE_COLLECT_ROWS_KEY));
         long bucketNum = Long.parseLong(analyzeJob.getProperties().get(Constants.PRO_BUCKET_NUM));
 
         for (String column : analyzeJob.getColumns()) {
@@ -61,7 +61,11 @@ public class HistogramStatisticsCollectJob extends BaseCollectJob {
         context.put("sampleRows", sampleRows);
         context.put("bucketNum", bucketNum);
 
-        context.put("sampleTableHint", getSampleTableHint(table, sampleRows));
+        if (sampleRows >= totalRows) {
+            context.put("sampleTableHint", "");
+        } else {
+            context.put("sampleTableHint", getSampleTableHint(table, sampleRows));
+        }
 
         builder.append(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
         return builder.toString();

@@ -28,6 +28,7 @@ import org.junit.Test;
 
 import java.time.LocalDateTime;
 
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
@@ -68,11 +69,7 @@ public class AnalyzeStmtTest {
     @Test
     public void testProperties() {
         String sql = "analyze full table db.tbl properties('expire_sec' = '30')";
-        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
-
-        Assert.assertFalse(analyzeStmt.isSample());
-        Assert.assertEquals(1, analyzeStmt.getProperties().size());
-        Assert.assertEquals("30", analyzeStmt.getProperties().getOrDefault("expire_sec", "2"));
+        analyzeFail(sql, "Property 'expire_sec' is not valid");
     }
 
     @Test
@@ -99,13 +96,13 @@ public class AnalyzeStmtTest {
         Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, {}, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00, Test Failed]",
                 ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
 
-        sql = "show analyze meta";
+        sql = "show stats meta";
         ShowBasicStatsMetaStmt showAnalyzeMetaStmt = (ShowBasicStatsMetaStmt) analyzeSuccess(sql);
 
         BasicStatsMeta basicStatsMeta = new BasicStatsMeta(10002, 10004, Constants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
         basicStatsMeta.setHealthy(0.5);
-        Assert.assertEquals("[test, t0, FULL, 2020-01-01 01:01:00, 50%]",
+        Assert.assertEquals("[test, t0, FULL, 2020-01-01 01:01:00, {}, 50%]",
                 ShowBasicStatsMetaStmt.showBasicStatsMeta(basicStatsMeta).toString());
     }
 
@@ -118,7 +115,7 @@ public class AnalyzeStmtTest {
         Assert.assertEquals("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
                         "cast(avg(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  max(max), min(min) " +
                         "FROM column_statistics WHERE table_id = 10004 and column_name in ('v1', 'v2') GROUP BY db_id, table_id, column_name",
-                StatisticSQLBuilder.buildQueryFullStatisticsSQL(10004L, Lists.newArrayList("v1", "v2")));
+                StatisticSQLBuilder.buildQueryFullStatisticsSQL(10002L, 10004L, Lists.newArrayList("v1", "v2")));
         Assert.assertEquals("SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
                         "data_size, distinct_count, null_count, max, min " +
                         "FROM table_statistic_v1 WHERE db_id = 10002 and table_id = 10004 and column_name in ('v1', 'v2')",

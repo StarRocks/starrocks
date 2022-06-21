@@ -161,12 +161,29 @@ public class AnalyzeStmtAnalyzer {
                 }
 
                 Map<String, String> properties = statement.getProperties();
-                statement.getProperties().put(Constants.PRO_BUCKET_NUM,
-                        String.valueOf(((AnalyzeHistogramDesc) analyzeTypeDesc).getBuckets()));
 
-                if (properties.get(Constants.PRO_SAMPLE_RATIO) == null) {
-                    properties.put(Constants.PRO_SAMPLE_RATIO, String.valueOf(Config.histogram_sample_ratio));
+                long bucket = ((AnalyzeHistogramDesc) analyzeTypeDesc).getBuckets();
+                if (bucket <= 0) {
+                    throw new SemanticException("Bucket number can't less than 1");
                 }
+                statement.getProperties().put(Constants.PRO_BUCKET_NUM, String.valueOf(bucket));
+
+                properties.computeIfAbsent(Constants.PRO_SAMPLE_RATIO, p -> String.valueOf(Config.histogram_sample_ratio));
+
+                long minSampleRows;
+                if (properties.get(Constants.PROP_SAMPLE_COLLECT_ROWS_KEY) == null) {
+                    minSampleRows = Config.statistic_sample_collect_rows;
+                    properties.put(Constants.PROP_SAMPLE_COLLECT_ROWS_KEY, String.valueOf(minSampleRows));
+                } else {
+                    minSampleRows = Long.parseLong(Constants.PROP_SAMPLE_COLLECT_ROWS_KEY);
+                }
+
+                long totalRows = analyzeTable.getRowCount();
+                long sampleRows = (long) (totalRows * Double.parseDouble(properties.get(Constants.PRO_SAMPLE_RATIO)));
+                if (sampleRows < minSampleRows) {
+                    sampleRows = Math.min(minSampleRows, totalRows);
+                }
+                properties.put(Constants.PROP_SAMPLE_COLLECT_ROWS_KEY, String.valueOf(sampleRows));
             }
         }
     }

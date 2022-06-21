@@ -103,4 +103,11 @@ public class RangeExtractTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("PREDICATES: abs(4: v4) > 2, 4: v4 IN (1, 3)\n"));
     }
 
+    @Test
+    public void testRangePredicate12() throws Exception {
+        String sql = "select * from test_all_type where t1a = '12345' and t1a = 12345";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PREDICATES: 1: t1a = '12345'\n"));
+    }
+
 }

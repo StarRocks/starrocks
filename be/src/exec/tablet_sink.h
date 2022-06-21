@@ -32,6 +32,7 @@
 
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "common/tracer.h"
 #include "exec/data_sink.h"
 #include "exec/tablet_info.h"
 #include "exec/vectorized/tablet_info.h"
@@ -311,6 +312,8 @@ private:
     // unique load id
     PUniqueId _load_id;
     int64_t _txn_id = -1;
+    std::string _txn_trace_parent;
+    Span _span;
     int _num_repicas = -1;
     bool _need_gen_rollup = false;
     int _tuple_desc_id = -1;

@@ -593,12 +593,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             qualifiedName = getQualifiedName(context.qualifiedName());
         }
         Map<String, String> properties = new HashMap<>();
-        if (context.hint() != null) {
-            for (StarRocksParser.HintContext hintContext : context.hint()) {
+        if (context.setVarHint() != null) {
+            for (StarRocksParser.SetVarHintContext hintContext : context.setVarHint()) {
                 for (StarRocksParser.HintMapContext hintMapContext : hintContext.hintMap()) {
-                    String key = hintMapContext.k.getText();
-                    String value = hintMapContext.v.getText();
-                    properties.put(key, value);
+                    properties.put(hintMapContext.k.getText(),
+                            ((LiteralExpr) visit(hintMapContext.v)).getStringValue());
                 }
             }
         }
@@ -1258,13 +1257,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         boolean isDistinct = context.setQuantifier() != null && context.setQuantifier().DISTINCT() != null;
         SelectList selectList = new SelectList(selectItems, isDistinct);
-        if (context.hint() != null) {
+        if (context.setVarHint() != null) {
             Map<String, String> selectHints = new HashMap<>();
-            for (StarRocksParser.HintContext hintContext : context.hint()) {
+            for (StarRocksParser.SetVarHintContext hintContext : context.setVarHint()) {
                 for (StarRocksParser.HintMapContext hintMapContext : hintContext.hintMap()) {
-                    String key = hintMapContext.k.getText();
-                    String value = hintMapContext.v.getText();
-                    selectHints.put(key, value);
+                    selectHints.put(hintMapContext.k.getText(),
+                            ((LiteralExpr) visit(hintMapContext.v)).getStringValue());
                 }
             }
             selectList.setOptHints(selectHints);
@@ -1473,8 +1471,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         TableRelation tableRelation = new TableRelation(tableName, partitionNames, tabletIds);
-        if (context.hint() != null) {
-            for (TerminalNode hint : context.hint().IDENTIFIER()) {
+        if (context.bracketHint() != null) {
+            for (TerminalNode hint : context.bracketHint().IDENTIFIER()) {
                 if (hint.getText().equalsIgnoreCase("_META_")) {
                     tableRelation.setMetaQuery(true);
                 }
@@ -1546,8 +1544,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         JoinRelation joinRelation = new JoinRelation(joinType, left, right, predicate, context.LATERAL() != null);
         joinRelation.setUsingColNames(usingColNames);
-        if (context.hint() != null) {
-            joinRelation.setJoinHint(context.hint().IDENTIFIER(0).getText());
+        if (context.bracketHint() != null) {
+            joinRelation.setJoinHint(context.bracketHint().IDENTIFIER(0).getText());
         }
 
         return joinRelation;
@@ -2221,14 +2219,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDoubleValue(StarRocksParser.DoubleValueContext context) {
         try {
-            BigDecimal decimal = new BigDecimal(context.getText());
-            int precision = DecimalLiteral.getRealPrecision(decimal);
-            int scale = DecimalLiteral.getRealScale(decimal);
-            int integerPartWidth = precision - scale;
-            if (integerPartWidth > 38) {
+            if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_DOUBLE_LITERAL)) {
                 return new FloatLiteral(context.getText());
+            } else {
+                BigDecimal decimal = new BigDecimal(context.getText());
+                int precision = DecimalLiteral.getRealPrecision(decimal);
+                int scale = DecimalLiteral.getRealScale(decimal);
+                int integerPartWidth = precision - scale;
+                if (integerPartWidth > 38) {
+                    return new FloatLiteral(context.getText());
+                }
+                return new DecimalLiteral(decimal);
             }
-            return new DecimalLiteral(decimal);
+
         } catch (AnalysisException | NumberFormatException e) {
             throw new ParsingException(e.getMessage());
         }
@@ -2237,10 +2240,30 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDecimalValue(StarRocksParser.DecimalValueContext context) {
         try {
-            return new DecimalLiteral(context.getText());
+            if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_DOUBLE_LITERAL)) {
+                return new FloatLiteral(context.getText());
+            } else {
+                return new DecimalLiteral(context.getText());
+            }
         } catch (AnalysisException e) {
             throw new ParsingException(e.getMessage());
         }
+    }
+
+    @Override
+    public ParseNode visitDateLiteral(StarRocksParser.DateLiteralContext context) {
+        String value = ((StringLiteral) visit(context.string())).getValue();
+        try {
+            if (context.DATE() != null) {
+                return new DateLiteral(value, Type.DATE);
+            }
+            if (context.DATETIME() != null) {
+                return new DateLiteral(value, Type.DATETIME);
+            }
+        } catch (AnalysisException e) {
+            throw new ParsingException(e.getMessage());
+        }
+        throw new ParsingException("Parse Error : unknown type " + context.getText());
     }
 
     @Override
@@ -2350,22 +2373,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitUnitIdentifier(StarRocksParser.UnitIdentifierContext context) {
         return new UnitIdentifier(context.getText());
-    }
-
-    @Override
-    public ParseNode visitTypeConstructor(StarRocksParser.TypeConstructorContext context) {
-        String value = ((StringLiteral) visit(context.string())).getValue();
-        try {
-            if (context.DATE() != null) {
-                return new DateLiteral(value, Type.DATE);
-            }
-            if (context.DATETIME() != null) {
-                return new DateLiteral(value, Type.DATETIME);
-            }
-        } catch (AnalysisException e) {
-            throw new ParsingException(e.getMessage());
-        }
-        throw new ParsingException("Parse Error : unknown type " + context.getText());
     }
 
     @Override

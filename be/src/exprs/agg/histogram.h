@@ -47,8 +47,14 @@ public:
         int64_t sample_rows = columns[2]->get(0).get_int64();
         int64_t bucket_num = columns[3]->get(0).get_int64();
 
-        int64_t bucket_size = sample_rows / bucket_num;
-        double sample_ratio = total_rows / sample_rows;
+        int64_t bucket_size = ceil(sample_rows / bucket_num);
+
+        double sample_ratio;
+        if (sample_rows == 0) {
+            sample_ratio = 1;
+        } else {
+            sample_ratio = total_rows / sample_rows;
+        }
         this->data(state).sample_ratio = sample_ratio;
 
         T v;

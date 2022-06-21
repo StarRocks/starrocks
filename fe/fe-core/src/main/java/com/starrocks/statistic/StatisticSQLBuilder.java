@@ -67,7 +67,7 @@ public class StatisticSQLBuilder {
         return build(context, QUERY_SAMPLE_STATISTIC_TEMPLATE);
     }
 
-    public static String buildQueryFullStatisticsSQL(Long tableId, List<String> columnNames) {
+    public static String buildQueryFullStatisticsSQL(Long dbId, Long tableId, List<String> columnNames) {
         VelocityContext context = new VelocityContext();
         context.put("updateTime", "now()");
 
@@ -84,6 +84,23 @@ public class StatisticSQLBuilder {
         context.put("predicate", Joiner.on(" and ").join(predicateList));
 
         return build(context, QUERY_FULL_STATISTIC_TEMPLATE);
+    }
+
+    public static String buildQueryHistogramStatisticsSQL(Long tableId, List<String> columnNames) {
+        VelocityContext context = new VelocityContext();
+
+        List<String> predicateList = Lists.newArrayList();
+        if (tableId != null) {
+            predicateList.add("table_id = " + tableId);
+        }
+
+        if (!columnNames.isEmpty()) {
+            predicateList.add("column_name in (" + Joiner.on(", ")
+                    .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")");
+        }
+
+        context.put("predicate", Joiner.on(" and ").join(predicateList));
+        return build(context, QUERY_HISTOGRAM_STATISTIC_TEMPLATE);
     }
 
     private static String build(VelocityContext context, String template) {

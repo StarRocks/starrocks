@@ -86,8 +86,8 @@ public:
 
     StatusOr<std::string> get_group(int64_t /*tablet_id*/) override { return _path; }
 
-    [[maybe_unused]] Status list_group(std::vector<std::string>* groups) override {
-        groups->emplace_back(_path);
+    [[maybe_unused]] Status list_group(std::set<std::string>* groups) override {
+        groups->emplace(_path);
         return Status::OK();
     }
 

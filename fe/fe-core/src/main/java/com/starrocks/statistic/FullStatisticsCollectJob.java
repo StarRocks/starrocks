@@ -14,7 +14,7 @@ import java.util.List;
 public class FullStatisticsCollectJob extends BaseCollectJob {
 
     private static final String COLLECT_FULL_STATISTIC_TEMPLATE =
-            " SELECT $tableId, $partitionId, '$columnName'," +
+            " SELECT $tableId, $partitionId, '$columnName', $dbId," +
                     " '$dbName.$tableName', '$partitionName'," +
                     " COUNT(1), $dataSize, $countDistinctFunction, $countNullFunction, $maxFunction, $minFunction, NOW() "
                     + "FROM $dbName.$tableName partition $partitionName";

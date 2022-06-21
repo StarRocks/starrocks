@@ -390,6 +390,8 @@ public class StmtExecutor {
                         //reset query id for each retry
                         if (i > 0) {
                             uuid = UUID.randomUUID();
+                            LOG.info("transfer QueryId: {} to {}", DebugUtil.printId(context.getQueryId()),
+                                    DebugUtil.printId(uuid));
                             context.setExecutionId(
                                     new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
                         }
@@ -574,7 +576,8 @@ public class StmtExecutor {
         profile.computeTimeInChildProfile();
         long profileEndTime = System.currentTimeMillis();
         profile.getChildMap().get("Summary")
-                .addInfoString(ProfileManager.PROFILE_TIME, DebugUtil.getPrettyStringMs(profileEndTime - profileBeginTime));
+                .addInfoString(ProfileManager.PROFILE_TIME,
+                        DebugUtil.getPrettyStringMs(profileEndTime - profileBeginTime));
         StringBuilder builder = new StringBuilder();
         profile.prettyPrint(builder, "");
         String profileContent = ProfileManager.getInstance().pushProfile(profile);
@@ -1200,8 +1203,8 @@ public class StmtExecutor {
                 }
             }
 
-            // To fix https://github.com/StarRocks/starrocks/issues/6461.
-            if (loadedRows == 0 && filteredRows == 0 && stmt instanceof DeleteStmt) {
+            if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
+                    || stmt instanceof UpdateStmt)) {
                 if (targetTable instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(

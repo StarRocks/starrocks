@@ -186,13 +186,20 @@ public class Config extends ConfigBase {
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
 
     /**
-     *  for task set expire time
+     * For Task framework do some background operation like cleanup Task/TaskRun.
+     * It will run every *task_check_interval_second* to do background job.
+     */
+    @ConfField
+    public static int task_check_interval_second = 4 * 3600; // 4 hours
+
+    /**
+     * for task set expire time
      */
     @ConfField(mutable = true)
     public static int task_ttl_second = 3 * 24 * 3600;         // 3 day
 
     /**
-     *  for task run set expire time
+     * for task run set expire time
      */
     @ConfField(mutable = true)
     public static int task_runs_ttl_second = 3 * 24 * 3600;     // 3 day
@@ -754,13 +761,13 @@ public class Config extends ConfigBase {
      * Limitation of the pending TaskRun queue length.
      * Default is 500.
      */
-    @ConfField(mutable = false)
+    @ConfField(mutable = true)
     public static int task_runs_queue_length = 500;
     /**
      * Limitation of the running TaskRun.
      * Default is 20.
      */
-    @ConfField(mutable = false)
+    @ConfField(mutable = true)
     public static int task_runs_concurrency = 20;
     /**
      * Default timeout of export jobs.
@@ -827,13 +834,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_allowed_in_element_num_of_delete = 10000;
-
-    /**
-     * only limit for Row-based storage.
-     * set to Integer.MAX_VALUE, cause starrocks is already Column-based storage
-     */
-    @ConfField(mutable = true)
-    public static int max_layout_length_per_row = Integer.MAX_VALUE;
 
     /**
      * The multi cluster feature will be deprecated in version 0.12
@@ -1300,7 +1300,7 @@ public class Config extends ConfigBase {
      * default bucket size of histogram statistics
      */
     @ConfField(mutable = true)
-    public static long histogram_buckets_size = 256;
+    public static long histogram_buckets_size = 64;
 
     /**
      * default sample ratio of histogram statistics
@@ -1503,7 +1503,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = false;
-  
+
     @ConfField
     public static boolean enable_dict_optimize_routine_load = false;
 
@@ -1538,9 +1538,38 @@ public class Config extends ConfigBase {
     public static int quorom_publish_wait_time_ms = 5000;
 
     /**
+     * FE journal queue size
+     * Write log will fail if queue is full
+     **/
+    @ConfField(mutable = true)
+    public static int metadata_journal_queue_size = 1000;
+
+    /**
+     * The maxium size(key+value) of journal entity to write as a batch
+     * Increase this configuration if journal queue is always full
+     * TODO: set default value
+     **/
+    @ConfField(mutable = true)
+    public static int metadata_journal_max_batch_size_mb = 10;
+
+    /**
+     * The maxium number of journal entity to write as a batch
+     * Increase this configuration if journal queue is always full
+     * TODO: set default value
+     **/
+    @ConfField(mutable = true)
+    public static int metadata_journal_max_batch_cnt = 100;
+
+    /**
      * Fqdn function switch, 
      * this switch will be deleted after release the fqdn func
      */
     @ConfField(mutable = true)
     public static boolean enable_fqdn_func = false;
+
+    /**
+     * jaeger tracing endpoint, empty thing disables tracing
+     */
+    @ConfField
+    public static String jaeger_grpc_endpoint = "";
 }

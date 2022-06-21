@@ -2,7 +2,6 @@
 
 package com.starrocks.statistic;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -50,7 +49,6 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static com.starrocks.sql.parser.SqlParser.parseFirstStatement;
 import static com.starrocks.statistic.Constants.STATISTIC_HISTOGRAM_VERSION;
@@ -69,7 +67,7 @@ public class StatisticExecutor {
         if (Config.enable_collect_full_statistics) {
             BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
             if (meta != null && meta.getType().equals(Constants.AnalyzeType.FULL)) {
-                sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNames);
+                sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(dbId, tableId, columnNames);
             } else {
                 sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
             }
@@ -101,14 +99,7 @@ public class StatisticExecutor {
     }
 
     public List<TStatisticData> queryHistogram(Long tableId, List<String> columnNames) throws Exception {
-        String sql = "SELECT cast(" + STATISTIC_HISTOGRAM_VERSION + " as INT), table_id, column_name, histogram"
-                + " FROM " + Constants.HistogramStatisticsTableName;
-
-        sql += " WHERE ";
-        sql += "table_id = " + tableId;
-        sql += "column_name in (" + Joiner.on(", ")
-                .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")";
-
+        String sql = StatisticSQLBuilder.buildQueryHistogramStatisticsSQL(tableId, columnNames);
         ConnectContext context = StatisticUtils.buildConnectContext();
         StatementBase parsedStmt = parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
         try {

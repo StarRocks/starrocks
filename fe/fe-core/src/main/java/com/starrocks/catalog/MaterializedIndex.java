@@ -21,8 +21,10 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -208,13 +210,23 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public long getReplicaCount() {
-        // Support LakeTablet later.
-        long replicaCount = 0;
-        for (Tablet tablet : getTablets()) {
-            LocalTablet localTablet = (LocalTablet) tablet;
-            replicaCount += localTablet.getReplicas().size();
+        if (tablets.isEmpty()) {
+            return 0L;
         }
-        return replicaCount;
+
+        Tablet t = tablets.get(0);
+        if (t instanceof LakeTablet) {
+            return tablets.size();
+        } else {
+            Preconditions.checkState(t instanceof LocalTablet);
+
+            long replicaCount = 0;
+            for (Tablet tablet : getTablets()) {
+                LocalTablet localTablet = (LocalTablet) tablet;
+                replicaCount += localTablet.getReplicas().size();
+            }
+            return replicaCount;
+        }
     }
 
     public int getTabletOrderIdx(long tabletId) {

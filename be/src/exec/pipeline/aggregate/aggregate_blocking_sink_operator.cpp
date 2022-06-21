@@ -75,8 +75,7 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const vect
         APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
 
-        _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() +
-                          _aggregator->mem_pool()->total_reserved_bytes());
+        _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
     }
     if (_aggregator->is_none_group_by_exprs()) {

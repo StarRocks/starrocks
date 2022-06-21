@@ -27,9 +27,11 @@ import java.util.List;
  * TODO: support table api like Iceberg
  */
 public class LakeTable extends OlapTable {
+    public static final String STORAGE_GROUP = "storageGroup";
+
     // Currently, storage group is table level, which stores all the tablets data and metadata of this table.
     // Format: service storage uri (from StarOS) + table id
-    @SerializedName(value = "storageGroup")
+    @SerializedName(value = STORAGE_GROUP)
     private String storageGroup;
 
     public LakeTable(long id, String tableName, List<Column> baseSchema, KeysType keysType, PartitionInfo partitionInfo,

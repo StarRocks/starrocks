@@ -32,6 +32,7 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
@@ -360,6 +361,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setSchedule("MANUAL");
             info.setDatabase(task.getDbName());
             info.setDefinition(task.getDefinition());
+            info.setExpire_time(task.getExpireTime() / 1000);
             tasksResult.add(info);
         }
 
@@ -398,6 +400,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setDefinition(status.getDefinition());
             info.setError_code(status.getErrorCode());
             info.setError_message(status.getErrorMessage());
+            info.setExpire_time(status.getExpireTime() / 1000);
             tasksResult.add(info);
         }
         return result;
@@ -765,6 +768,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn begin request: {}", request);
 
         TLoadTxnBeginResult result = new TLoadTxnBeginResult();
+        // if current node is not master, reject the request
+        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+            result.setStatus(status);
+            return result;
+        }
+
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
         try {
@@ -833,6 +844,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn commit request: {}", request);
 
         TLoadTxnCommitResult result = new TLoadTxnCommitResult();
+        // if current node is not master, reject the request
+        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+            result.setStatus(status);
+            return result;
+        }
+
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
         try {
@@ -945,6 +964,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn rollback request: {}", request);
 
         TLoadTxnRollbackResult result = new TLoadTxnRollbackResult();
+        // if current node is not master, reject the request
+        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+            result.setStatus(status);
+            return result;
+        }
+
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
         try {
@@ -1043,6 +1070,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             if (!(table instanceof OlapTable)) {
                 throw new UserException("load table type is not OlapTable, type=" + table.getClass());
+            }
+            if (table instanceof MaterializedView) {
+                throw new UserException(String.format(
+                        "The data of '%s' cannot be inserted because '%s' is a materialized view," +
+                                "and the data of materialized view must be consistent with the base table.",
+                        table.getName(), table.getName()));
             }
             StreamLoadTask streamLoadTask = StreamLoadTask.fromTStreamLoadPutRequest(request, db);
             StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadTask);

@@ -142,6 +142,7 @@ message PTabletWriterOpenRequest {
     optional int64 load_channel_timeout_s = 9;
     optional bool is_vectorized = 20; // Deprecate if we confirm all customer have upgrade to 2.1
     optional bool is_lake_tablet = 21;
+    optional string txn_trace_parent = 22;
 };
 
 message PTabletWriterOpenResult {
@@ -181,6 +182,7 @@ message PTabletWriterAddChunkRequest {
     // only valid when eos is true
     // valid partition ids that would write in this writer
     repeated int64 partition_ids = 8;
+    optional int64 txn_id = 9;
 };
 
 message PTabletWriterAddBatchResult {
@@ -195,6 +197,7 @@ message PTabletWriterCancelRequest {
     required PUniqueId id = 1;
     required int64 index_id = 2;
     required int32 sender_id = 3;
+    optional int64 txn_id = 4;
 };
 
 message PTabletWriterCancelResult {

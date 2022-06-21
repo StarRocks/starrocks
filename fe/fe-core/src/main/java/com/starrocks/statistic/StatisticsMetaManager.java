@@ -77,6 +77,7 @@ public class StatisticsMetaManager extends MasterDaemon {
                 new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                 new ColumnDef("partition_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                 new ColumnDef("column_name", new TypeDef(columnNameType)),
+                new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                 new ColumnDef("table_name", new TypeDef(tableNameType)),
                 new ColumnDef("partition_name", new TypeDef(partitionNameType)),
                 new ColumnDef("row_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
