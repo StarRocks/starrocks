@@ -669,6 +669,20 @@ public class MaterializedViewRule extends Rule {
             }
         }
 
+        /*
+        If all the columns in the query are key column and materialized view is AGG_KEYS.
+        We should skip this query for given materialized view.
+        ISSUE-6984: https://github.com/StarRocks/starrocks/issues/6984
+        */
+        if (candidateIndexMeta.getKeysType() == KeysType.AGG_KEYS && !queryExprList.stream()
+                .filter(queryExpr -> {
+                    String fnName = queryExpr.getFnName();
+                    return !(fnName.equals(FunctionSet.COUNT) && fnName.equals(FunctionSet.SUM))
+                            || !keyColumns.containsAll(queryExpr.getUsedColumns());
+                }).findAny().isPresent()) {
+            return false;
+        }
+
         for (CallOperator queryExpr : queryExprList) {
             boolean match = false;
             for (CallOperator mvExpr : mvColumnExprList) {
@@ -777,7 +791,7 @@ public class MaterializedViewRule extends Rule {
                     return false;
                 }
                 String mvColumnName = MVUtils.getMVColumnName(mvColumn, queryFnName, queryColumn.getName());
-                if (mvColumnName.equals(mvColumn.getName())) {
+                if (mvColumnName.equalsIgnoreCase(mvColumn.getName())) {
                     if (!rewriteContexts.containsKey(indexId)) {
                         rewriteContexts.put(indexId, Lists.newArrayList());
                     }
