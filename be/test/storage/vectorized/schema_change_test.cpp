@@ -734,7 +734,6 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
     delete tablet_rowset_reader;
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1203);
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1204);
->>>>>>> 365e91429... [branch-2.1] Optimize schema change (#5265)
 }
 
 } // namespace starrocks::vectorized
