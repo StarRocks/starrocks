@@ -204,15 +204,15 @@ public class Optimizer {
         // because of the Filter node needs to be merged first to avoid the Limit node
         // cannot merge
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
-        ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
-        ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownAggToMetaScanRule());
-
         cleanUpMemoGroup(memo);
 
+        ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
+        ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownAggToMetaScanRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownPredicateWindowRankRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
-
+        cleanUpMemoGroup(memo);
+        
         // After prune columns, the output column in the logical property may outdated, because of the following rule
         // will use the output column, we need to derive the logical property here.
         memo.deriveAllGroupLogicalProperty();
@@ -280,7 +280,7 @@ public class Optimizer {
     private void cleanUpMemoGroup(Memo memo) {
         // Rewrite maybe produce empty groups, we need to remove them.
         memo.removeAllEmptyGroup();
-        memo.removeUnreachableGroup();
+        memo.rebuildGroupExpressions();
     }
 
     /**
