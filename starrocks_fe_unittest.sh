@@ -69,5 +69,6 @@ timeout 3600 sh run-fe-ut.sh --run com.starrocks.utframe.Demo#testCreateDbAndTab
 docker exec --privileged $container_name /bin/bash -c "$cmd"
 
 echo "script run over-----"
+cd ~
 pwd
 ls -al
