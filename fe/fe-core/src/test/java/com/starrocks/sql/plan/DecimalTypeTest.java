@@ -161,4 +161,10 @@ public class DecimalTypeTest extends PlanTestBase {
                 + "     rollup: test_all_type\n"));
     }
 
+    @Test
+    public void testExpressionRangeCheck() throws Exception {
+        String sql = "select * from tab1 where c_1_3 between c_1_3 and 1000";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 4: c_1_3 <= 1000");
+    }
 }

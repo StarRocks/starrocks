@@ -84,6 +84,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
+import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
@@ -119,6 +120,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule.DecodeVisitor;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TPartitionType;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1289,13 +1291,9 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
-            boolean notNeedLocalShuffle = aggregationNode.isNeedsFinalize() &&
-                    hasNoExchangeNodes(inputFragment.getPlanRoot());
-            boolean pipelineDopEnabled = ConnectContext.get() != null &&
-                    ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
-                    inputFragment.getPlanRoot().canUsePipeLine();
-            if (pipelineDopEnabled && notNeedLocalShuffle) {
-                inputFragment.setNeedsLocalShuffle(false);
+            // One phase aggregation prefer the inter-instance parallel to avoid local shuffle
+            if (node.isOnePhaseAgg()) {
+                estimateDopOfOnePhaseAgg(inputFragment);
             }
 
             inputFragment.setPlanRoot(aggregationNode);
@@ -1342,7 +1340,7 @@ public class PlanFragmentBuilder {
                             new Type[] {functionCallExpr.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF));
                     replaceExpr.getParams().setIsDistinct(false);
-                } else if (functionName.equalsIgnoreCase("SUM")) {
+                } else if (functionName.equalsIgnoreCase(FunctionSet.SUM)) {
                     replaceExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_SUM, functionCallExpr.getParams());
                     replaceExpr.setFn(Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_SUM,
                             new Type[] {functionCallExpr.getChild(0).getType()},
@@ -1412,15 +1410,16 @@ public class PlanFragmentBuilder {
             PhysicalTopNOperator topN = (PhysicalTopNOperator) optExpr.getOp();
             Preconditions.checkState(topN.getOffset() >= 0);
             if (!topN.isSplit()) {
-                return buildPartialTopNFragment(optExpr, context, topN.getOrderSpec(), topN.getLimit(),
-                        topN.getOffset(),
-                        inputFragment);
+                return buildPartialTopNFragment(optExpr, context, topN.getPartitionByColumns(),
+                        topN.getPartitionLimit(), topN.getOrderSpec(),
+                        topN.getTopNType(), topN.getLimit(), topN.getOffset(), inputFragment);
             } else {
-                return buildFinalTopNFragment(context, topN.getLimit(), topN.getOffset(), inputFragment, optExpr);
+                return buildFinalTopNFragment(context, topN.getTopNType(), topN.getLimit(), topN.getOffset(),
+                        inputFragment, optExpr);
             }
         }
 
-        private PlanFragment buildFinalTopNFragment(ExecPlan context, long limit, long offset,
+        private PlanFragment buildFinalTopNFragment(ExecPlan context, TopNType topNType, long limit, long offset,
                                                     PlanFragment inputFragment,
                                                     OptExpression optExpr) {
             ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
@@ -1432,9 +1431,16 @@ public class PlanFragmentBuilder {
 
             Preconditions.checkState(inputFragment.getPlanRoot() instanceof SortNode);
             SortNode sortNode = (SortNode) inputFragment.getPlanRoot();
+            sortNode.setTopNType(topNType);
             exchangeNode.setMergeInfo(sortNode.getSortInfo(), offset);
             exchangeNode.computeStatistics(optExpr.getStatistics());
-            exchangeNode.setLimit(limit);
+            if (TopNType.ROW_NUMBER.equals(topNType)) {
+                exchangeNode.setLimit(limit);
+            } else {
+                // if TopNType is RANK or DENSE_RANK, the number of rows may be greater than limit
+                // So we cannot set limit at exchange
+                exchangeNode.unsetLimit();
+            }
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), exchangeNode, dataPartition);
@@ -1447,11 +1453,21 @@ public class PlanFragmentBuilder {
         }
 
         private PlanFragment buildPartialTopNFragment(OptExpression optExpr, ExecPlan context,
-                                                      OrderSpec orderSpec, long limit, long offset,
+                                                      List<ColumnRefOperator> partitionByColumns, long partitionLimit,
+                                                      OrderSpec orderSpec, TopNType topNType, long limit, long offset,
                                                       PlanFragment inputFragment) {
-            List<Expr> resolvedTupleExprs = new ArrayList<>();
-            List<Expr> sortExprs = new ArrayList<>();
+            List<Expr> resolvedTupleExprs = Lists.newArrayList();
+            List<Expr> partitionExprs = Lists.newArrayList();
+            List<Expr> sortExprs = Lists.newArrayList();
             TupleDescriptor sortTuple = context.getDescTbl().createTupleDescriptor();
+
+            if (CollectionUtils.isNotEmpty(partitionByColumns)) {
+                for (ColumnRefOperator partitionByColumn : partitionByColumns) {
+                    Expr expr = ScalarOperatorToExpr.buildExecExpression(partitionByColumn,
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+                    partitionExprs.add(expr);
+                }
+            }
 
             for (Ordering ordering : orderSpec.getOrderDescs()) {
                 Expr sortExpr = ScalarOperatorToExpr.buildExecExpression(ordering.getColumnRef(),
@@ -1494,8 +1510,7 @@ public class PlanFragmentBuilder {
             }
 
             sortTuple.computeMemLayout();
-            SortInfo sortInfo = new SortInfo(
-                    sortExprs,
+            SortInfo sortInfo = new SortInfo(partitionExprs, partitionLimit, sortExprs,
                     orderSpec.getOrderDescs().stream().map(Ordering::isAscending).collect(Collectors.toList()),
                     orderSpec.getOrderDescs().stream().map(Ordering::isNullsFirst).collect(Collectors.toList()));
             sortInfo.setMaterializedTupleInfo(sortTuple, resolvedTupleExprs);
@@ -1507,6 +1522,7 @@ public class PlanFragmentBuilder {
                     limit != Operator.DEFAULT_LIMIT,
                     limit == Operator.DEFAULT_LIMIT,
                     0);
+            sortNode.setTopNType(topNType);
             sortNode.setLimit(limit);
             sortNode.setOffset(offset);
             sortNode.resolvedTupleExprs = resolvedTupleExprs;
@@ -1540,9 +1556,7 @@ public class PlanFragmentBuilder {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
-            fragment.setPipelineDop(fragment.getParallelExecNum());
-            fragment.setParallelExecNum(1);
-            fragment.setDopEstimated();
+            fragment.preferPipelineParallel();
         }
 
         /**
@@ -1555,9 +1569,7 @@ public class PlanFragmentBuilder {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
-            fragment.setPipelineDop(fragment.getParallelExecNum());
-            fragment.setParallelExecNum(1);
-            fragment.setDopEstimated();
+            fragment.preferPipelineParallel();
         }
 
         /**
@@ -1570,28 +1582,53 @@ public class PlanFragmentBuilder {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
-            // To prevent ancestor nodes from adjusting parallelExecNum and pipelineDop.
-            fragment.setDopEstimated();
+            fragment.preferInstanceParallel();
+        }
+
+        private void estimateDopOfOnePhaseAgg(PlanFragment fragment) {
+            if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
+                return;
+            }
+            fragment.preferInstanceParallel();
+        }
+
+        // when enable_pipeline_engine=true and enable_global_runtime_filter=false, global runtime filter
+        // also needs be planned, because in pipeline engine, operators need local_rf_waiting_set constructed
+        // from global runtime filters to determine local runtime filters generated by which HashJoinNode
+        // to be waited to be completed. in this scenario, global runtime filters are built just for
+        // obtaining local_rf_waiting_set, so they are cleaned before deliver fragment instances to BEs.
+        private boolean shouldBuildGlobalRuntimeFilter() {
+            return ConnectContext.get() != null &&
+                    (ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter() ||
+                            ConnectContext.get().getSessionVariable().isEnablePipelineEngine());
         }
 
         @Override
         public PlanFragment visitPhysicalHashJoin(OptExpression optExpr, ExecPlan context) {
-            return visitPhysicalJoin(optExpr, context);
+            PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
+            PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+            return visitPhysicalJoin(leftFragment, rightFragment, optExpr, context);
         }
 
         @Override
         public PlanFragment visitPhysicalMergeJoin(OptExpression optExpr, ExecPlan context) {
-            PlanNode leftPlanRoot = visit(optExpr.inputAt(0), context).getPlanRoot();
-            PlanNode rightPlanRoot = visit(optExpr.inputAt(1), context).getPlanRoot();
-            context.getFragments().clear();
+            PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
+            PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+            PlanNode leftPlanRoot = leftFragment.getPlanRoot();
+            PlanNode rightPlanRoot = rightFragment.getPlanRoot();
+
             OptExpression leftExpression = optExpr.inputAt(0);
             OptExpression rightExpression = optExpr.inputAt(1);
+
             boolean needDealSort = leftExpression.getInputs().size() > 0 && rightExpression.getInputs().size() > 0;
             if (needDealSort) {
                 optExpr.setChild(0, leftExpression.inputAt(0));
                 optExpr.setChild(1, rightExpression.inputAt(0));
+                leftFragment.setPlanRoot(leftPlanRoot.getChild(0));
+                rightFragment.setPlanRoot(rightPlanRoot.getChild(0));
             }
-            PlanFragment planFragment = visitPhysicalJoin(optExpr, context);
+
+            PlanFragment planFragment = visitPhysicalJoin(leftFragment, rightFragment, optExpr, context);
             if (needDealSort) {
                 leftExpression.setChild(0, optExpr.inputAt(0));
                 rightExpression.setChild(0, optExpr.inputAt(1));
@@ -1603,9 +1640,9 @@ public class PlanFragmentBuilder {
             return planFragment;
         }
 
-        private PlanFragment visitPhysicalJoin(OptExpression optExpr, ExecPlan context) {
-            PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
-            PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+        private PlanFragment visitPhysicalJoin(PlanFragment leftFragment, PlanFragment rightFragment,
+                                               OptExpression optExpr, ExecPlan context) {
+
             PhysicalJoinOperator node = (PhysicalJoinOperator) optExpr.getOp();
 
             ColumnRefSet leftChildColumns = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
@@ -1655,6 +1692,10 @@ public class PlanFragmentBuilder {
 
                 if (!(joinNode.getChild(1) instanceof ExchangeNode)) {
                     joinNode.setReplicated(true);
+                }
+
+                if (shouldBuildGlobalRuntimeFilter()) {
+                    joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator);
                 }
 
                 leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
@@ -1783,17 +1824,8 @@ public class PlanFragmentBuilder {
                 joinNode.setLimit(node.getLimit());
                 joinNode.computeStatistics(optExpr.getStatistics());
 
-                // when enable_pipeline_engine=true and enable_global_runtime_filter=false, global runtime filter
-                // also needs be planned, because in pipeline engine, operators need local_rf_waiting_set constructed
-                // from global runtime filters to determine local runtime filters generated by which HashJoinNode
-                // to be waited to be completed. in this scenario, global runtime filters are built just for
-                // obtaining local_rf_waiting_set, so they are cleaned before deliver fragment instances to BEs.
-                boolean shouldBuildGlobalRuntimeFilter = ConnectContext.get() != null &&
-                        (ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter() ||
-                                ConnectContext.get().getSessionVariable().isEnablePipelineEngine());
-                if (shouldBuildGlobalRuntimeFilter) {
-                    joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator, joinNode.getChild(1),
-                            joinNode.getEqJoinConjuncts(), joinOperator);
+                if (shouldBuildGlobalRuntimeFilter()) {
+                    joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator);
                 }
 
                 if (distributionMode.equals(JoinNode.DistributionMode.BROADCAST)) {
@@ -2262,6 +2294,7 @@ public class PlanFragmentBuilder {
                             .collect(Collectors.toList()),
                     Arrays.stream(physicalTableFunction.getFnResultColumnRefSet().getColumnIds()).boxed()
                             .collect(Collectors.toList()));
+            tableFunctionNode.computeStatistics(optExpression.getStatistics());
             tableFunctionNode.setLimit(physicalTableFunction.getLimit());
             inputFragment.setPlanRoot(tableFunctionNode);
             return inputFragment;

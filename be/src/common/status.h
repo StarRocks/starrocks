@@ -14,7 +14,7 @@
 
 namespace starrocks {
 
-class PStatus;
+class StatusPB;
 class TStatus;
 
 template <typename T>
@@ -56,7 +56,7 @@ public:
     // "Copy" c'tor from TStatus.
     Status(const TStatus& status); // NOLINT
 
-    Status(const PStatus& pstatus); // NOLINT
+    Status(const StatusPB& pstatus); // NOLINT
 
     static Status OK() { return Status(); }
 
@@ -158,7 +158,7 @@ public:
 
     // Convert into TStatus.
     void to_thrift(TStatus* status) const;
-    void to_protobuf(PStatus* status) const;
+    void to_protobuf(StatusPB* status) const;
 
     std::string get_error_msg() const {
         auto msg = message();
@@ -255,9 +255,9 @@ inline const Status& to_status(const StatusOr<T>& st) {
 // Some generally useful macros.
 #define RETURN_IF_ERROR(stmt)                                                                         \
     do {                                                                                              \
-        const auto& _status_ = (stmt);                                                                \
-        if (UNLIKELY(!_status_.ok())) {                                                               \
-            return to_status(_status_).clone_and_append_context(__FILE__, __LINE__, AS_STRING(stmt)); \
+        auto&& status__ = (stmt);                                                                     \
+        if (UNLIKELY(!status__.ok())) {                                                               \
+            return to_status(status__).clone_and_append_context(__FILE__, __LINE__, AS_STRING(stmt)); \
         }                                                                                             \
     } while (false)
 
@@ -271,36 +271,36 @@ inline const Status& to_status(const StatusOr<T>& st) {
 
 #define EXIT_IF_ERROR(stmt)                        \
     do {                                           \
-        const Status& _status_ = (stmt);           \
-        if (UNLIKELY(!_status_.ok())) {            \
-            string msg = _status_.get_error_msg(); \
+        auto&& status__ = (stmt);                  \
+        if (UNLIKELY(!status__.ok())) {            \
+            string msg = status__.get_error_msg(); \
             LOG(ERROR) << msg;                     \
             exit(1);                               \
         }                                          \
     } while (false)
 
 /// @brief Emit a warning if @c to_call returns a bad status.
-#define WARN_IF_ERROR(to_call, warning_prefix)                          \
-    do {                                                                \
-        const Status& _s = (to_call);                                   \
-        if (UNLIKELY(!_s.ok())) {                                       \
-            LOG(WARNING) << (warning_prefix) << ": " << _s.to_string(); \
-        }                                                               \
+#define WARN_IF_ERROR(to_call, warning_prefix)                \
+    do {                                                      \
+        auto&& st__ = (to_call);                              \
+        if (UNLIKELY(!st__.ok())) {                           \
+            LOG(WARNING) << (warning_prefix) << ": " << st__; \
+        }                                                     \
     } while (0);
 
-#define RETURN_IF_ERROR_WITH_WARN(stmt, warning_prefix)                        \
-    do {                                                                       \
-        const Status& _s = (stmt);                                             \
-        if (UNLIKELY(!_s.ok())) {                                              \
-            LOG(WARNING) << (warning_prefix) << ", error: " << _s.to_string(); \
-            return _s;                                                         \
-        }                                                                      \
+#define RETURN_IF_ERROR_WITH_WARN(stmt, warning_prefix)              \
+    do {                                                             \
+        auto&& st__ = (stmt);                                        \
+        if (UNLIKELY(!st__.ok())) {                                  \
+            LOG(WARNING) << (warning_prefix) << ", error: " << st__; \
+            return st__;                                             \
+        }                                                            \
     } while (0);
 
-#define DCHECK_IF_ERROR(stmt)       \
-    do {                            \
-        const Status& _st = (stmt); \
-        DCHECK(_st.ok());           \
+#define DCHECK_IF_ERROR(stmt)      \
+    do {                           \
+        auto&& st__ = (stmt);      \
+        DCHECK(st__.ok()) << st__; \
     } while (0)
 
 } // namespace starrocks

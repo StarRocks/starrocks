@@ -78,14 +78,13 @@ public:
                       const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery);
 
     Status publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
-                       const Version& version);
+                       int64_t version, const RowsetSharedPtr& rowset);
 
     // persist_tablet_related_txns persists the tablets' meta and make it crash-safe.
     Status persist_tablet_related_txns(const std::vector<TabletSharedPtr>& tablets);
 
-    // publish_txn for updatable tablet
-    Status publish_txn2(TTransactionId transaction_id, TPartitionId partition_id, const TabletSharedPtr& tablet,
-                        int64_t version);
+    // persist metadata of affected_dirs and make it crash-safe
+    static void flush_dirs(std::unordered_set<DataDir*>& affected_dirs);
 
     // delete the txn from manager if it is not committed(not have a valid rowset)
     Status rollback_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
@@ -101,10 +100,6 @@ public:
     Status commit_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
                       SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id,
                       const RowsetSharedPtr& rowset_ptr, bool is_recovery);
-
-    // remove a txn from txn manager & persist rowset meta
-    Status publish_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                       SchemaHash schema_hash, const TabletUid& tablet_uid, const Version& version);
 
     // delete the txn from manager if it is not committed(not have a valid rowset)
     Status rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
@@ -165,8 +160,6 @@ private:
 
     txn_partition_map_t& _get_txn_partition_map(TTransactionId transactionId);
 
-    std::mutex& _get_txn_lock(TTransactionId transactionId);
-
     // insert or remove (transaction_id, partition_id) from _txn_partition_map
     // get _txn_map_lock before calling
     void _insert_txn_partition_map_unlocked(int64_t transaction_id, int64_t partition_id);
@@ -187,8 +180,6 @@ private:
 
     std::unique_ptr<std::shared_mutex[]> _txn_map_locks;
 
-    std::unique_ptr<std::mutex[]> _txn_mutex;
-
     TxnManager(const TxnManager&) = delete;
     const TxnManager& operator=(const TxnManager&) = delete;
 }; // TxnManager
@@ -203,10 +194,6 @@ inline TxnManager::txn_tablet_map_t& TxnManager::_get_txn_tablet_map(TTransactio
 
 inline TxnManager::txn_partition_map_t& TxnManager::_get_txn_partition_map(TTransactionId transactionId) {
     return _txn_partition_maps[transactionId & (_txn_map_shard_size - 1)];
-}
-
-inline std::mutex& TxnManager::_get_txn_lock(TTransactionId transactionId) {
-    return _txn_mutex[transactionId & (_txn_shard_size - 1)];
 }
 
 } // namespace starrocks

@@ -32,6 +32,7 @@
 #include "fs/fs.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "storage/cluster_id_mgr.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_id_generator.h"
@@ -46,9 +47,8 @@ class TxnManager;
 // Now, After DataDir was created, it will never be deleted for easy implementation.
 class DataDir {
 public:
-    explicit DataDir(std::string path, TStorageMedium::type storage_medium = TStorageMedium::HDD,
+    explicit DataDir(const std::string& path, TStorageMedium::type storage_medium = TStorageMedium::HDD,
                      TabletManager* tablet_manager = nullptr, TxnManager* txn_manager = nullptr);
-
     ~DataDir();
 
     DataDir(const DataDir&) = delete;
@@ -61,7 +61,7 @@ public:
     int64_t path_hash() const { return _path_hash; }
     bool is_used() const { return _is_used; }
     void set_is_used(bool is_used) { _is_used = is_used; }
-    int32_t cluster_id() const { return _cluster_id; }
+    int32_t cluster_id() const { return _cluster_id_mgr->cluster_id(); }
 
     DataDirInfo get_dir_info() {
         DataDirInfo info;
@@ -116,21 +116,16 @@ public:
     // so in order to avoid running out of disk capacity, we currently use the actual
     // disk available capacity and total capacity to do the calculation.
     // So that the capacity StarRocks actually used may exceeds the user specified capacity.
-    bool reach_capacity_limit(int64_t incoming_data_size);
+    bool capacity_limit_reached(int64_t incoming_data_size);
 
     Status update_capacity();
 
 private:
-    std::string _cluster_id_path() const { return _path + CLUSTER_ID_PREFIX; }
-    Status _init_cluster_id();
     Status _init_data_dir();
     Status _init_tmp_dir();
     Status _init_meta(bool read_only = false);
 
     Status _read_and_write_test_file();
-    Status _read_cluster_id(const std::string& cluster_id_path, int32_t* cluster_id);
-    Status _write_cluster_id_to_path(const std::string& path, int32_t cluster_id);
-    Status _add_version_info_to_cluster_id(const std::string& path);
 
     void _process_garbage_path(const std::string& path);
 
@@ -148,7 +143,7 @@ private:
 
     TabletManager* _tablet_manager;
     TxnManager* _txn_manager;
-    int32_t _cluster_id;
+    std::shared_ptr<ClusterIdMgr> _cluster_id_mgr;
 
     // used to protect _current_shard and _tablet_set
     std::mutex _mutex;

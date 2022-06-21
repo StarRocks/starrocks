@@ -100,6 +100,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateTableFun
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateToExternalTableScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateWindowRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectToCTEAnchorRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2OuterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoteScanPartitionPruneRule;
@@ -275,7 +276,8 @@ public class RuleSet {
         rewriteRules.put(RuleSetType.PRUNE_PROJECT, ImmutableList.of(
                 new PruneProjectRule(),
                 new PruneProjectEmptyRule(),
-                new MergeTwoProjectRule()
+                new MergeTwoProjectRule(),
+                new PushDownProjectToCTEAnchorRule()
         ));
 
         rewriteRules.put(RuleSetType.COLLECT_CTE, ImmutableList.of(
@@ -332,8 +334,8 @@ public class RuleSet {
     }
 
     public void addAutoJoinImplementationRule() {
-        this.implementRules.add(MergeJoinImplementationRule.getInstance());
         this.implementRules.add(HashJoinImplementationRule.getInstance());
+        this.implementRules.add(MergeJoinImplementationRule.getInstance());
     }
 
 }

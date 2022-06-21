@@ -41,20 +41,20 @@
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/MasterService_types.h"
 #include "runtime/heartbeat_flags.h"
-#include "storage/compaction_manager.h"
+#include "storage/cluster_id_mgr.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/tablet.h"
-#include "storage/tablet_manager.h"
-#include "storage/task/engine_task.h"
-#include "storage/txn_manager.h"
+
+namespace bthread {
+class Executor;
+}
 
 namespace starrocks {
 
-class AsyncDeltaWriterExecutor;
 class DataDir;
 class EngineTask;
 class MemTableFlushExecutor;
@@ -69,7 +69,7 @@ class CompactionManager;
 class StorageEngine {
 public:
     StorageEngine(const EngineOptions& options);
-    ~StorageEngine();
+    virtual ~StorageEngine();
 
     static Status open(const EngineOptions& options, StorageEngine** engine_ptr);
 
@@ -81,8 +81,6 @@ public:
     void clear_transaction_task(const TTransactionId transaction_id, const std::vector<TPartitionId>& partition_ids);
 
     void load_data_dirs(const std::vector<DataDir*>& stores);
-
-    Cache* index_stream_lru_cache() { return _index_stream_lru_cache; }
 
     template <bool include_unused = false>
     std::vector<DataDir*> get_stores();
@@ -99,7 +97,7 @@ public:
 
     uint32_t available_storage_medium_type_count() { return _available_storage_medium_type_count; }
 
-    Status set_cluster_id(int32_t cluster_id);
+    virtual Status set_cluster_id(int32_t cluster_id);
     int32_t effective_cluster_id() const { return _effective_cluster_id; }
 
     double delete_unused_rowset();
@@ -158,7 +156,7 @@ public:
 
     CompactionManager* compaction_manager() { return _compaction_manager.get(); }
 
-    AsyncDeltaWriterExecutor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
+    bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
 
@@ -175,7 +173,7 @@ public:
     void set_heartbeat_flags(HeartbeatFlags* heartbeat_flags) { _heartbeat_flags = heartbeat_flags; }
 
     // start all backgroud threads. This should be call after env is ready.
-    Status start_bg_threads();
+    virtual Status start_bg_threads();
 
     void stop();
 
@@ -184,6 +182,10 @@ public:
     MemTracker* tablet_meta_mem_tracker() { return _options.tablet_meta_mem_tracker; }
 
     void compaction_check();
+
+protected:
+    static StorageEngine* _s_instance;
+    int32_t _effective_cluster_id;
 
 private:
     // Instance should be inited from `static open()`
@@ -277,12 +279,7 @@ private:
     std::map<std::string, DataDir*> _store_map;
     uint32_t _available_storage_medium_type_count;
 
-    int32_t _effective_cluster_id;
     bool _is_all_cluster_id_exist;
-
-    Cache* _index_stream_lru_cache = nullptr;
-
-    static StorageEngine* _s_instance;
 
     std::mutex _gc_mutex;
     // map<rowset_id(str), RowsetSharedPtr>, if we use RowsetId as the key, we need custom hash func
@@ -329,7 +326,7 @@ private:
 
     std::unique_ptr<RowsetIdGenerator> _rowset_id_generator;
 
-    std::unique_ptr<AsyncDeltaWriterExecutor> _async_delta_writer_executor;
+    std::unique_ptr<bthread::Executor> _async_delta_writer_executor;
 
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
 
@@ -341,6 +338,18 @@ private:
 
     StorageEngine(const StorageEngine&) = delete;
     const StorageEngine& operator=(const StorageEngine&) = delete;
+};
+
+// DummyStorageEngine is used for ComputeNode, it only stores cluster id.
+class DummyStorageEngine : public StorageEngine {
+    std::string _conf_path;
+    std::unique_ptr<ClusterIdMgr> cluster_id_mgr;
+
+public:
+    DummyStorageEngine(const EngineOptions& options);
+    static Status open(const EngineOptions& options, StorageEngine** engine_ptr);
+    Status set_cluster_id(int32_t cluster_id) override;
+    Status start_bg_threads() override { return Status::OK(); };
 };
 
 } // namespace starrocks

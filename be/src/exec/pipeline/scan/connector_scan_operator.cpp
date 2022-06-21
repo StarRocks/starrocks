@@ -29,14 +29,14 @@ void ConnectorScanOperatorFactory::do_close(RuntimeState* state) {
 }
 
 OperatorPtr ConnectorScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
-    return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, _scan_node);
+    return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, _scan_node, _num_committed_scan_tasks);
 }
 
 // ==================== ConnectorScanOperator ====================
 
 ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence,
-                                             ScanNode* scan_node)
-        : ScanOperator(factory, id, driver_sequence, scan_node) {}
+                                             ScanNode* scan_node, std::atomic<int>& num_committed_scan_tasks)
+        : ScanOperator(factory, id, driver_sequence, scan_node, num_committed_scan_tasks) {}
 
 Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     return Status::OK();
@@ -45,7 +45,7 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
 void ConnectorScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
-    vectorized::ConnectorScanNode* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
+    auto* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
     return std::make_shared<ConnectorChunkSource>(_chunk_source_profiles[chunk_source_index].get(), std::move(morsel),
                                                   this, scan_node);
 }
@@ -86,6 +86,8 @@ void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
     _closed = true;
     _data_source->close(state);
+    _chunk_buffer.shutdown();
+    _chunk_buffer.clear();
 }
 
 bool ConnectorChunkSource::has_next_chunk() const {
@@ -159,7 +161,8 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(siz
         }
 
         if (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(worker_id, running_wg)) {
+            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(workgroup::TypeHdfsScanExecutor,
+                                                                               worker_id, running_wg)) {
             break;
         }
     }

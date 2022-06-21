@@ -103,21 +103,28 @@ public:
     /**
      * @param: 
      * @paramType columns: [TYPE_OBJECT]
-     * @return ARRAY_VARCHAR
+     * @return ARRAY_BIGINT
      */
     DEFINE_VECTORIZED_FN(bitmap_to_array);
 
     /**
      * @param:
+     * @paramType columns: [ARRAY_BIGINT]
+     * @return TYPE_OBJECT
+     */
+    DEFINE_VECTORIZED_FN(array_to_bitmap);
+
+    /**
+     * @param:
      * @paramType columns: [TYPE_OBJECT]
-     * @return TYPE_BIGINT
+     * @return TYPE_LARGEINT
      */
     DEFINE_VECTORIZED_FN(bitmap_max);
 
     /**
      * @param:
      * @paramType columns: [TYPE_OBJECT]
-     * @return TYPE_BIGINT
+     * @return TYPE_LARGEINT
      */
     DEFINE_VECTORIZED_FN(bitmap_min);
 

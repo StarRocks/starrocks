@@ -13,6 +13,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
+#include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "service/backend_options.h"
 #include "util/brpc_stub_cache.h"
@@ -505,7 +506,7 @@ static inline Status receive_total_runtime_filter_pipeline(
         return Status::OK();
     }
     // the query is already finished, so it is needless to cache rf.
-    if (query_ctx->has_no_active_instances() || query_ctx->is_expired()) {
+    if (query_ctx->has_no_active_instances() || query_ctx->is_query_expired()) {
         return Status::OK();
     }
 

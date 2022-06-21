@@ -10,6 +10,8 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -24,6 +26,13 @@ public class AlterTableStatementAnalyzer {
     public static void analyze(AlterTableStmt statement, ConnectContext context) {
         TableName tbl = statement.getTbl();
         MetaUtils.normalizationTableName(context, tbl);
+        Table table = MetaUtils.getTable(context, tbl);
+        if (table instanceof MaterializedView) {
+            throw new SemanticException(
+                    "The '%s' cannot be alter by 'ALTER TABLE', because '%s' is a materialized view," +
+                            "you can use 'ALTER MATERIALIZED VIEW' to alter it.",
+                    tbl.getTbl(), tbl.getTbl());
+        }
         try {
             CatalogUtils.checkOlapTableHasStarOSPartition(tbl.getDb(), tbl.getTbl());
         } catch (AnalysisException e) {
@@ -47,11 +56,7 @@ public class AlterTableStatementAnalyzer {
         @Override
         public Void visitCreateIndexClause(CreateIndexClause clause, ConnectContext context) {
             IndexDef indexDef = clause.getIndexDef();
-            try {
-                indexDef.analyze();
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
-            }
+            indexDef.analyze();
             clause.setIndex(new Index(indexDef.getIndexName(), indexDef.getColumns(),
                     indexDef.getIndexType(), indexDef.getComment()));
             return null;

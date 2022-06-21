@@ -32,6 +32,7 @@
 
 #include "common/config.h"
 #include "common/status.h"
+#include "common/tracer.h"
 #include "http/ev_http_server.h"
 #include "http/http_channel.h"
 #include "http/http_handler.h"
@@ -101,6 +102,7 @@ void ProfileAction::handle(HttpRequest* req) {
     HttpChannel::send_reply(req, str);
 #else
     std::lock_guard<std::mutex> lock(kPprofActionMutex);
+    auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_profile"));
 
     int seconds = kPprofDefaultSampleSecs;
     const std::string& seconds_str = req->param(SECOND_KEY);
@@ -139,7 +141,9 @@ void CmdlineAction::handle(HttpRequest* req) {
         return;
     }
     char buf[1024];
-    fscanf(fp, "%s ", buf);
+    if (fscanf(fp, "%s ", buf) != 1) {
+        strcpy(buf, "read cmdline failed");
+    }
     fclose(fp);
     std::string str = buf;
 

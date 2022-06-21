@@ -7,9 +7,9 @@
 #include "column/nullable_column.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
-#include "runtime/date_value.h"
-#include "runtime/timestamp_value.h"
 #include "storage/chunk_helper.h"
+#include "types/date_value.h"
+#include "types/timestamp_value.h"
 #include "udf/udf.h"
 #include "util/thrift_util.h"
 
@@ -62,8 +62,10 @@ void PipelineTestBase::_prepare() {
 
     _query_ctx = _exec_env->query_context_mgr()->get_or_register(query_id);
     _query_ctx->set_total_fragments(1);
-    _query_ctx->set_expire_seconds(60);
-    _query_ctx->extend_lifetime();
+    _query_ctx->set_delivery_expire_seconds(60);
+    _query_ctx->set_query_expire_seconds(60);
+    _query_ctx->extend_delivery_lifetime();
+    _query_ctx->extend_query_lifetime();
     _query_ctx->init_mem_tracker(_exec_env->query_pool_mem_tracker()->limit(), _exec_env->query_pool_mem_tracker());
 
     _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
@@ -77,7 +79,7 @@ void PipelineTestBase::_prepare() {
     _runtime_state = _fragment_ctx->runtime_state();
 
     _runtime_state->set_chunk_size(config::vector_chunk_size);
-    _runtime_state->init_mem_trackers(_query_ctx->mem_tracker()->limit(), _query_ctx->mem_tracker());
+    _runtime_state->init_mem_trackers(_query_ctx->mem_tracker());
     _runtime_state->set_be_number(_request.backend_num);
 
     _obj_pool = _runtime_state->obj_pool();

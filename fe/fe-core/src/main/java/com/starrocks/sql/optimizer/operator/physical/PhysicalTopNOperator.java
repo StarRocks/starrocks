@@ -12,21 +12,29 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.SortPhase;
+import com.starrocks.sql.optimizer.operator.TopNType;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
 public class PhysicalTopNOperator extends PhysicalOperator {
     private final long offset;
+    private final List<ColumnRefOperator> partitionByColumns;
+    private final long partitionLimit;
     private final SortPhase sortPhase;
+    private final TopNType topNType;
     private final boolean isSplit;
-
-    private boolean isEnforced;
+    private final boolean isEnforced;
 
     // If limit is -1, means global sort
     public PhysicalTopNOperator(OrderSpec spec, long limit, long offset,
+                                List<ColumnRefOperator> partitionByColumns,
+                                long partitionLimit,
                                 SortPhase sortPhase,
+                                TopNType topNType,
                                 boolean isSplit,
                                 boolean isEnforced,
                                 ScalarOperator predicate,
@@ -34,15 +42,30 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         super(OperatorType.PHYSICAL_TOPN, spec);
         this.limit = limit;
         this.offset = offset;
+        this.partitionByColumns = partitionByColumns;
+        this.partitionLimit = partitionLimit;
         this.sortPhase = sortPhase;
+        this.topNType = topNType;
         this.isSplit = isSplit;
         this.isEnforced = isEnforced;
         this.predicate = predicate;
         this.projection = projection;
     }
 
+    public List<ColumnRefOperator> getPartitionByColumns() {
+        return partitionByColumns;
+    }
+
+    public long getPartitionLimit() {
+        return partitionLimit;
+    }
+
     public SortPhase getSortPhase() {
         return sortPhase;
+    }
+
+    public TopNType getTopNType() {
+        return topNType;
     }
 
     public boolean isSplit() {

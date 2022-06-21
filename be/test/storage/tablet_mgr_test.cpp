@@ -18,15 +18,18 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+
 #include <filesystem>
 #include <string>
 
+#include "fs/fs_util.h"
 #include "gtest/gtest.h"
+#include "runtime/mem_tracker.h"
 #include "storage/kv_store.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/txn_manager.h"
-#include "util/file_utils.h"
 
 #ifndef BE_TEST
 #define BE_TEST
@@ -48,8 +51,8 @@ public:
         string test_engine_data_path = "./be/test/storage/test_data/tablet_mgr_test/data";
         _engine_data_path = "./be/test/storage/test_data/tablet_mgr_test/tmp";
         std::filesystem::remove_all(_engine_data_path);
-        FileUtils::create_dir(_engine_data_path);
-        FileUtils::create_dir(_engine_data_path + "/meta");
+        fs::create_directories(_engine_data_path);
+        fs::create_directories(_engine_data_path + "/meta");
 
         std::vector<StorePath> paths;
         paths.emplace_back("_engine_data_path");
@@ -123,7 +126,7 @@ TEST_F(TabletMgrTest, CreateTablet) {
     TabletSharedPtr tablet = _tablet_mgr->get_tablet(111);
     ASSERT_TRUE(tablet != nullptr);
     // check dir exist
-    bool dir_exist = FileUtils::check_exist(tablet->schema_hash_path());
+    bool dir_exist = fs::path_exist(tablet->schema_hash_path());
     ASSERT_TRUE(dir_exist);
     // check meta has this tablet
     TabletMetaSharedPtr new_tablet_meta(new TabletMeta());
@@ -159,7 +162,7 @@ TEST_F(TabletMgrTest, DropTablet) {
 
     // check dir exist
     std::string tablet_path = tablet->schema_hash_path();
-    bool dir_exist = FileUtils::check_exist(tablet_path);
+    bool dir_exist = fs::path_exist(tablet_path);
     ASSERT_TRUE(dir_exist);
 
     // do trash sweep, tablet will not be garbage collected
@@ -168,7 +171,7 @@ TEST_F(TabletMgrTest, DropTablet) {
     ASSERT_TRUE(trash_st.ok()) << trash_st.to_string();
     tablet = _tablet_mgr->get_tablet(111, true);
     ASSERT_TRUE(tablet != nullptr);
-    dir_exist = FileUtils::check_exist(tablet_path);
+    dir_exist = fs::path_exist(tablet_path);
     ASSERT_TRUE(dir_exist);
 
     // reset tablet ptr
@@ -177,7 +180,7 @@ TEST_F(TabletMgrTest, DropTablet) {
     ASSERT_TRUE(trash_st.ok()) << trash_st.to_string();
     tablet = _tablet_mgr->get_tablet(111, true);
     ASSERT_TRUE(tablet == nullptr);
-    dir_exist = FileUtils::check_exist(tablet_path);
+    dir_exist = fs::path_exist(tablet_path);
     ASSERT_TRUE(!dir_exist);
 }
 

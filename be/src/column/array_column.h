@@ -80,6 +80,8 @@ public:
 
     void append_default(size_t count) override;
 
+    void fill_default(const Filter& filter) override;
+
     Status update_rows(const Column& src, const uint32_t* indexes) override;
 
     void remove_first_n_values(size_t count) override {}
@@ -119,6 +121,8 @@ public:
 
     Datum get(size_t idx) const override;
 
+    size_t get_element_size(size_t idx) const;
+
     bool set_null(size_t idx) override;
 
     size_t memory_usage() const override { return _elements->memory_usage() + _offsets->memory_usage(); }
@@ -145,8 +149,8 @@ public:
 
     std::string debug_string() const override;
 
-    bool reach_capacity_limit() const override {
-        return _elements->reach_capacity_limit() || _offsets->reach_capacity_limit();
+    bool capacity_limit_reached(std::string* msg = nullptr) const override {
+        return _elements->capacity_limit_reached(msg) || _offsets->capacity_limit_reached(msg);
     }
 
     StatusOr<ColumnPtr> upgrade_if_overflow() override;

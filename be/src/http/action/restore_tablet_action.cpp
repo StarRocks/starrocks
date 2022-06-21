@@ -29,6 +29,7 @@
 
 #include "boost/lexical_cast.hpp"
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_channel.h"
@@ -40,9 +41,9 @@
 #include "storage/olap_define.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_meta.h"
 #include "storage/utils.h"
-#include "util/file_utils.h"
 #include "util/json_util.h"
 
 namespace starrocks {
@@ -121,7 +122,7 @@ Status RestoreTabletAction::_reload_tablet(const std::string& key, const std::st
         // path: /root_path/data/shard/tablet_id
         std::string tablet_path = strings::Substitute("$0/$1/$2", shard_path, tablet_id, schema_hash);
         LOG(INFO) << "remove schema_hash_path:" << tablet_path;
-        if (!FileUtils::remove_all(tablet_path).ok()) {
+        if (!fs::remove_all(tablet_path).ok()) {
             LOG(WARNING) << "remove invalid tablet schema hash path:" << tablet_path << " failed";
         }
         return res;
@@ -148,14 +149,14 @@ Status RestoreTabletAction::_restore(const std::string& key, int64_t tablet_id, 
     std::string original_header_path = latest_tablet_path + "/" + std::to_string(tablet_id) + ".hdr";
     std::string original_meta_path = latest_tablet_path + "/meta";
     TabletMeta tablet_meta;
-    if (FileUtils::check_exist(original_header_path)) {
-        DCHECK(!FileUtils::check_exist(original_meta_path));
+    if (fs::path_exist(original_header_path)) {
+        DCHECK(!fs::path_exist(original_meta_path));
         if (Status load_status = tablet_meta.create_from_file(original_header_path); !load_status.ok()) {
             LOG(WARNING) << "header load and init error, header path:" << original_header_path;
             return Status::InternalError(load_status.to_string());
         }
-    } else if (FileUtils::check_exist(original_meta_path)) {
-        DCHECK(!FileUtils::check_exist(original_header_path));
+    } else if (fs::path_exist(original_meta_path)) {
+        DCHECK(!fs::path_exist(original_header_path));
         _is_primary_key = true;
         auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(original_meta_path);
         if (!snapshot_meta.ok()) {
@@ -174,7 +175,7 @@ Status RestoreTabletAction::_restore(const std::string& key, int64_t tablet_id, 
             DataDir::get_root_path_from_schema_hash_path_in_trash(latest_tablet_path));
     std::string restore_schema_hash_path =
             store->get_absolute_tablet_path(tablet_meta.shard_id(), tablet_meta.tablet_id(), tablet_meta.schema_hash());
-    Status s = FileUtils::create_dir(restore_schema_hash_path);
+    Status s = fs::create_directories(restore_schema_hash_path);
     if (!s.ok()) {
         LOG(WARNING) << "create tablet path failed:" << restore_schema_hash_path;
         return s;
@@ -182,7 +183,7 @@ Status RestoreTabletAction::_restore(const std::string& key, int64_t tablet_id, 
     // create hard link for files in /root_path/data/shard/tablet_id/schema_hash
     s = _create_hard_link_recursive(latest_tablet_path, restore_schema_hash_path);
     if (!s.ok()) {
-        RETURN_IF_ERROR(FileUtils::remove_all(restore_schema_hash_path));
+        RETURN_IF_ERROR(fs::remove_all(restore_schema_hash_path));
         return s;
     }
     std::string restore_shard_path = store->get_absolute_shard_path(tablet_meta.shard_id());
@@ -191,12 +192,13 @@ Status RestoreTabletAction::_restore(const std::string& key, int64_t tablet_id, 
 
 Status RestoreTabletAction::_create_hard_link_recursive(const std::string& src, const std::string& dst) {
     std::vector<std::string> files;
-    RETURN_IF_ERROR(FileUtils::list_files(FileSystem::Default(), src, &files));
+    RETURN_IF_ERROR(FileSystem::Default()->get_children(src, &files));
     for (auto& file : files) {
         std::string from = src + "/" + file;
         std::string to = dst + "/" + file;
-        if (FileUtils::is_dir(from)) {
-            RETURN_IF_ERROR(FileUtils::create_dir(to));
+        ASSIGN_OR_RETURN(auto is_dir, fs::is_directory(from));
+        if (is_dir) {
+            RETURN_IF_ERROR(fs::create_directories(to));
             RETURN_IF_ERROR(_create_hard_link_recursive(from, to));
         } else {
             int link_ret = link(from.c_str(), to.c_str());
@@ -222,7 +224,7 @@ bool RestoreTabletAction::_get_latest_tablet_path_from_trash(int64_t tablet_id, 
     std::vector<std::string> schema_hash_paths;
     for (auto& tablet_path : tablet_paths) {
         std::string schema_hash_path = tablet_path + "/" + std::to_string(schema_hash);
-        if (FileUtils::check_exist(schema_hash_path)) {
+        if (fs::path_exist(schema_hash_path)) {
             schema_hash_paths.emplace_back(std::move(schema_hash_path));
         }
     }

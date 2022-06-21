@@ -2,19 +2,24 @@
 
 package com.starrocks.scheduler;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskRunStatusChange;
+import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.Future;
-import java.util.stream.Collectors;
 
 public class TaskRunManager {
+
+    private static final Logger LOG = LogManager.getLogger(TaskRunManager.class);
 
     // taskId -> pending TaskRun Queue, for each Task only support 1 running taskRun currently,
     // so the map value is FIFO queue
@@ -30,42 +35,33 @@ public class TaskRunManager {
     // Use to execute actual TaskRun
     private final TaskRunExecutor taskRunExecutor = new TaskRunExecutor();
 
-    public String addTaskRun(TaskRun taskRun) {
+    public SubmitResult submitTaskRun(TaskRun taskRun) {
         // duplicate submit
         if (taskRun.getStatus() != null) {
-            return null;
+            return new SubmitResult(taskRun.getStatus().getQueryId(), SubmitResult.SubmitStatus.FAILED);
+        }
+
+        int validPendingCount = 0;
+        for (Long taskId : pendingTaskRunMap.keySet()) {
+            if (!pendingTaskRunMap.get(taskId).isEmpty()) {
+                validPendingCount++;
+            }
+        }
+
+        if (validPendingCount >= Config.task_runs_queue_length) {
+            LOG.warn("pending TaskRun exceeds task_runs_queue_length:{}, reject the submit.",
+                    Config.task_runs_queue_length);
+            return new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
         }
 
         String queryId = UUIDUtil.genUUID().toString();
-        TaskRunStatus status = taskRun.initStatus(queryId);
-        // GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(status);
+        TaskRunStatus status = taskRun.initStatus(queryId, System.currentTimeMillis());
+        GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(status);
         long taskId = taskRun.getTaskId();
 
         Queue<TaskRun> taskRuns = pendingTaskRunMap.computeIfAbsent(taskId, u -> Queues.newConcurrentLinkedQueue());
         taskRuns.offer(taskRun);
-        return queryId;
-    }
-
-    public List<TaskRunStatus> showTaskRunStatus(String dbName) {
-        List<TaskRunStatus> taskRunList = Lists.newArrayList();
-        if (dbName == null) {
-            for (Queue<TaskRun> pTaskRunQueue : pendingTaskRunMap.values()) {
-                taskRunList.addAll(pTaskRunQueue.stream().map(TaskRun::getStatus).collect(Collectors.toList()));
-            }
-            taskRunList.addAll(runningTaskRunMap.values().stream().map(TaskRun::getStatus).collect(Collectors.toList()));
-            taskRunList.addAll(taskRunHistory.getAllHistory());
-        } else {
-            for (Queue<TaskRun> pTaskRunQueue : pendingTaskRunMap.values()) {
-                taskRunList.addAll(pTaskRunQueue.stream().map(TaskRun::getStatus)
-                        .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
-            }
-            taskRunList.addAll(runningTaskRunMap.values().stream().map(TaskRun::getStatus)
-                    .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
-            taskRunList.addAll(taskRunHistory.getAllHistory().stream()
-                    .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
-
-        }
-        return taskRunList;
+        return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED);
     }
 
     // check if a running TaskRun is complete and remove it from running TaskRun map
@@ -74,19 +70,26 @@ public class TaskRunManager {
         while (runningIterator.hasNext()) {
             Long taskId = runningIterator.next();
             TaskRun taskRun = runningTaskRunMap.get(taskId);
+            if (taskRun == null) {
+                LOG.warn("failed to get running TaskRun by taskId:{}", taskId);
+                runningIterator.remove();
+                return;
+            }
             Future<?> future = taskRun.getFuture();
             if (future.isDone()) {
                 runningIterator.remove();
                 taskRunHistory.addHistory(taskRun.getStatus());
-                // TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun,
-                //        Constants.TaskRunStatus.RUNNING, taskRun.getStatus());
-                // GlobalStateMgr.getCurrentState().getEditLog().logTaskRunStatusChange(statusChange);
+                TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
+                        Constants.TaskRunState.RUNNING, taskRun.getStatus().getState());
+                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
             }
         }
     }
 
     // schedule the pending TaskRun that can be run into running TaskRun map
     public void scheduledPendingTaskRun() {
+        int currentRunning = runningTaskRunMap.size();
+
         Iterator<Long> pendingIterator = pendingTaskRunMap.keySet().iterator();
         while (pendingIterator.hasNext()) {
             Long taskId = pendingIterator.next();
@@ -96,16 +99,31 @@ public class TaskRunManager {
                 if (taskRunQueue.size() == 0) {
                     pendingIterator.remove();
                 } else {
+                    if (currentRunning >= Config.task_runs_concurrency) {
+                        break;
+                    }
                     TaskRun pendingTaskRun = taskRunQueue.poll();
                     taskRunExecutor.executeTaskRun(pendingTaskRun);
                     runningTaskRunMap.put(taskId, pendingTaskRun);
-                    // TaskRunStatusChange statusChange =
-                    //        new TaskRunStatusChange(pendingTaskRun, Constants.TaskRunStatus.PENDING,
-                    //                Constants.TaskRunStatus.RUNNING);
-                    // GlobalStateMgr.getCurrentState().getEditLog().logTaskRunStatusChange(statusChange);
+                    // RUNNING state persistence is for FE FOLLOWER update state
+                    TaskRunStatusChange statusChange = new TaskRunStatusChange(taskId, pendingTaskRun.getStatus(),
+                            Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
+                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                    currentRunning++;
                 }
             }
         }
     }
 
+    public Map<Long, Queue<TaskRun>> getPendingTaskRunMap() {
+        return pendingTaskRunMap;
+    }
+
+    public Map<Long, TaskRun> getRunningTaskRunMap() {
+        return runningTaskRunMap;
+    }
+
+    public TaskRunHistory getTaskRunHistory() {
+        return taskRunHistory;
+    }
 }

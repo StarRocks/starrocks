@@ -6,6 +6,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -97,7 +98,7 @@ public class AnalyzeDecimalV3Test {
         List<Expr> items = ((SelectRelation) queryRelation).getOutputExpr();
         Assert.assertTrue(items.size() == 2 && items.get(1) != null);
         Type type = items.get(1).getType();
-        Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 2));
+        Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2));
     }
 
     @Test
@@ -217,13 +218,13 @@ public class AnalyzeDecimalV3Test {
         Type[] expectArgTypes = Arrays.asList(
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 4),
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 15, 10),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 30)
+                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 18)
         ).toArray(new Type[0]);
 
         Type[] expectReturnTypes = Arrays.asList(
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 4),
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 10),
-                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 30)
+                ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 18)
         ).toArray(new Type[0]);
         Assert.assertTrue(items.size() == 9);
         Assert.assertTrue(expectArgTypes.length == 3);
@@ -244,8 +245,8 @@ public class AnalyzeDecimalV3Test {
             Assert.assertEquals(type, expectReturnType);
             Assert.assertEquals(argType, expectArgType);
             System.out.printf("%s: %s\n", fn.functionName(), serdeType);
-            if (fn.functionName().equalsIgnoreCase("sum") ||
-                    fn.functionName().equalsIgnoreCase("sum_distinct")) {
+            if (fn.functionName().equalsIgnoreCase(FunctionSet.SUM) ||
+                    fn.functionName().equalsIgnoreCase(FunctionSet.SUM_DISTINCT)) {
                 Assert.assertEquals(serdeType, null);
             } else {
                 Assert.assertEquals(serdeType, Type.VARCHAR);

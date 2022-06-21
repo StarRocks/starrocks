@@ -24,6 +24,7 @@
 #include <string_view>
 #include <variant>
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/json_column.h"
 #include "column/vectorized_fwd.h"
@@ -32,7 +33,6 @@
 #include "fmt/core.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
-#include "storage/null_predicate.h"
 #include "util/radix_sort.h"
 
 #define __StarRocksMysql MYSQL

@@ -78,6 +78,10 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return type;
     }
 
+    public boolean isOnePhaseAgg() {
+        return type.isGlobal() && !isSplit;
+    }
+
     public List<ColumnRefOperator> getPartitionByColumns() {
         return partitionByColumns;
     }

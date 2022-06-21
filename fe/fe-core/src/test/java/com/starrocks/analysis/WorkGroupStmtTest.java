@@ -3,6 +3,7 @@ package com.starrocks.analysis;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.catalog.WorkGroupClassifier;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -21,13 +22,15 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.ErrorCode.ERROR_NO_WG_ERROR;
+
 public class WorkGroupStmtTest {
     private static final Pattern idPattern = Pattern.compile("\\bid=(\\b\\d+\\b)");
     private static StarRocksAssert starRocksAssert;
     private String createRg1Sql = "create resource group rg1\n" +
             "to\n" +
-            "    (user='rg1_user1', role='rg1_role1', query_type in ('select', 'insert'), source_ip='192.168.2.1/24'),\n" +
-            "    (user='rg1_user2', query_type in ('mv'), source_ip='192.168.3.1/24'),\n" +
+            "    (user='rg1_user1', role='rg1_role1', query_type in ('select'), source_ip='192.168.2.1/24'),\n" +
+            "    (user='rg1_user2', query_type in ('select'), source_ip='192.168.3.1/24'),\n" +
             "    (user='rg1_user3', source_ip='192.168.4.1/24'),\n" +
             "    (user='rg1_user4')\n" +
             "with (\n" +
@@ -38,7 +41,7 @@ public class WorkGroupStmtTest {
             ");";
     private String createRg1IfNotExistsSql = "create resource group if not exists rg1\n" +
             "to\n" +
-            "    (user='rg1_if_not_exists', role='rg1_role1', query_type in ('select', 'insert'), source_ip='192.168.2.1/24')\n" +
+            "    (user='rg1_if_not_exists', role='rg1_role1', query_type in ('select'), source_ip='192.168.2.1/24')\n" +
             "with (\n" +
             "    'cpu_core_limit' = '10',\n" +
             "    'mem_limit' = '20%',\n" +
@@ -48,7 +51,7 @@ public class WorkGroupStmtTest {
 
     private String createRg1OrReplaceSql = "create resource group or replace rg1\n" +
             "to\n" +
-            "    (user='rg1_or_replace', role='rg1_role1', query_type in ('select', 'insert'), source_ip='192.168.2.1/24')\n" +
+            "    (user='rg1_or_replace', role='rg1_role1', query_type in ('select'), source_ip='192.168.2.1/24')\n" +
             "with (\n" +
             "    'cpu_core_limit' = '10',\n" +
             "    'mem_limit' = '20%',\n" +
@@ -58,7 +61,7 @@ public class WorkGroupStmtTest {
 
     private String createRg1IfNotExistsOrReplaceSql = "create resource group if not exists or replace rg1\n" +
             "to\n" +
-            "    (user='rg1_if_not_exists_or_replace', role='rg1_role1', query_type in ('select', 'insert'), source_ip='192.168.2.1/24')\n" +
+            "    (user='rg1_if_not_exists_or_replace', role='rg1_role1', query_type in ('select'), source_ip='192.168.2.1/24')\n" +
             "with (\n" +
             "    'cpu_core_limit' = '10',\n" +
             "    'mem_limit' = '20%',\n" +
@@ -68,7 +71,7 @@ public class WorkGroupStmtTest {
 
     private String createRg2Sql = "create resource group rg2\n" +
             "to\n" +
-            "    (role='rg2_role1', query_type in ('select', 'insert'), source_ip='192.168.5.1/24'),\n" +
+            "    (role='rg2_role1', query_type in ('select' ), source_ip='192.168.5.1/24'),\n" +
             "    (role='rg2_role2', source_ip='192.168.6.1/24'),\n" +
             "    (role='rg2_role3')\n" +
             "with (\n" +
@@ -79,8 +82,8 @@ public class WorkGroupStmtTest {
             ");";
     private String createRg3Sql = "create resource group rg3\n" +
             "to\n" +
-            "    (query_type in ('select', 'insert'), source_ip='192.168.6.1/24'),\n" +
-            "    (query_type in ('select', 'insert'))\n" +
+            "    (query_type in ('select'), source_ip='192.168.6.1/24'),\n" +
+            "    (query_type in ('select'))\n" +
             "with (\n" +
             "    'cpu_core_limit' = '32',\n" +
             "    'mem_limit' = '80%',\n" +
@@ -101,7 +104,7 @@ public class WorkGroupStmtTest {
             ");";
     private String createRg5Sql = "create resource group rg5\n" +
             "to\n" +
-            "     (`database`='db1')\n" +
+            "     (`db`='db1')\n" +
             "with (\n" +
             "    'cpu_core_limit' = '25',\n" +
             "    'mem_limit' = '80%',\n" +
@@ -154,8 +157,14 @@ public class WorkGroupStmtTest {
             starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP " + name);
         }
         List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource groups all");
-        Assert.assertTrue(rows.isEmpty());
+        Assert.assertTrue(rows.toString(), rows.isEmpty());
     }
+
+    private void assertWorkGroupNotExist(String wg) {
+        Assert.assertThrows(ERROR_NO_WG_ERROR.formatErrorMsg(wg), AnalysisException.class,
+                () -> starRocksAssert.executeWorkGroupShowSql("show resource group " + wg));
+    }
+
 
     @Test
     public void testCreateResourceGroup() throws Exception {
@@ -163,17 +172,17 @@ public class WorkGroupStmtTest {
         List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource groups all");
         String result = rowsToString(rows);
         String expect = "" +
-                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.409375, user=rg1_user1, role=rg1_role1, query_type in (INSERT, SELECT), source_ip=192.168.2.1/24)\n" +
-                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=3.459375, user=rg1_user2, query_type in (MV), source_ip=192.168.3.1/24)\n" +
+                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.459375, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)\n" +
+                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=3.459375, user=rg1_user2, query_type in (SELECT), source_ip=192.168.3.1/24)\n" +
                 "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=2.359375, user=rg1_user3, source_ip=192.168.4.1/24)\n" +
                 "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=1.0, user=rg1_user4)\n" +
-                "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=3.409375, role=rg2_role1, query_type in (INSERT, SELECT), source_ip=192.168.5.1/24)\n" +
+                "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=3.459375, role=rg2_role1, query_type in (SELECT), source_ip=192.168.5.1/24)\n" +
                 "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=2.359375, role=rg2_role2, source_ip=192.168.6.1/24)\n" +
                 "rg2|30|50.0%|0|0|0|20|NORMAL|(weight=1.0, role=rg2_role3)\n" +
-                "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=2.409375, query_type in (INSERT, SELECT), source_ip=192.168.6.1/24)\n" +
-                "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))\n" +
+                "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
+                "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
                 "rg4|25|80.0%|1024|1024|1024|10|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
-                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, database='default_cluster:db1')";
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='default_cluster:db1')";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }
@@ -182,14 +191,12 @@ public class WorkGroupStmtTest {
     public void testCreateDuplicateResourceGroup() throws Exception {
         starRocksAssert.executeWorkGroupDdlSql(createRg1Sql);
         starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP rg1");
-        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
-        String actual = rowsToString(rows);
-        Assert.assertTrue(actual.isEmpty());
+        assertWorkGroupNotExist("rg1");
 
         starRocksAssert.executeWorkGroupDdlSql(createRg1IfNotExistsSql);
-        rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
+        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
         Assert.assertEquals(rows.size(), 1);
-        actual = rowsToString(rows);
+        String actual = rowsToString(rows);
         Assert.assertTrue(actual.contains("rg1_if_not_exists"));
 
         starRocksAssert.executeWorkGroupDdlSql(createRg1OrReplaceSql);
@@ -205,9 +212,7 @@ public class WorkGroupStmtTest {
         Assert.assertTrue(actual.contains("rg1_or_replace"));
 
         starRocksAssert.executeWorkGroupDdlSql("DROP resource group rg1");
-        rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
-        actual = rowsToString(rows);
-        Assert.assertTrue(actual.isEmpty());
+        assertWorkGroupNotExist("rg1");
 
         starRocksAssert.executeWorkGroupDdlSql(createRg1OrReplaceSql);
         rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
@@ -224,7 +229,6 @@ public class WorkGroupStmtTest {
 
         starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP rg1");
     }
-
     @Test
     public void testCreateDuplicateResourceGroupFail() throws Exception {
         starRocksAssert.executeWorkGroupDdlSql(createRg1Sql);
@@ -234,6 +238,40 @@ public class WorkGroupStmtTest {
         } catch (Exception ignored) {
         }
         starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP rg1");
+    }
+
+    @Test
+    public void testCreateDResourceGroupWithUnknownProperty() throws Exception {
+        String sql = "create resource group rg_unknown\n" +
+                "to\n" +
+                "    (user='rg1_user3', source_ip='192.168.4.1/24'),\n" +
+                "    (user='rg1_user4')\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '10',\n" +
+                "    'mem_limit' = '20%',\n" +
+                "    'concurrency_limit' = '11',\n" +
+                "    'type' = 'normal', \n" +
+                "    'unknown' = 'unknown'" +
+                ");";
+        try {
+            starRocksAssert.executeWorkGroupDdlSql(sql);
+            Assert.fail("should throw error");
+        } catch (Exception e) {
+            Assert.assertEquals("Unknown property: unknown", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testQueryType() throws Exception {
+        String sql1 = "create resource group rg_insert\n" +
+                "to (user='rg_user3', query_type in ('insert')) with ('cpu_core_limit' = '10', 'mem_limit' = '20%')";
+        try {
+            starRocksAssert.executeWorkGroupDdlSql(sql1);
+            Assert.fail("should throw error");
+        } catch (Exception e) {
+            Assert.assertEquals("Unsupported query_type: 'insert'", e.getMessage());
+        }
+
     }
 
     @Test
@@ -329,6 +367,18 @@ public class WorkGroupStmtTest {
     }
 
     @Test
+    public void testShowUnknownOrNotExistWorkGroup() throws Exception {
+        starRocksAssert.executeWorkGroupDdlSql(createRg1Sql);
+
+        starRocksAssert.executeWorkGroupDdlSql("ALTER RESOURCE GROUP rg1 DROP ALL;");
+        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
+        Assert.assertTrue(rows.isEmpty());
+
+        starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP rg1");
+        assertWorkGroupNotExist("rg1");
+    }
+
+    @Test
     public void testChooseResourceGroup() throws Exception {
         createResourceGroups();
         String qualifiedUser = "default_cluster:rg1_user1";
@@ -396,9 +446,9 @@ public class WorkGroupStmtTest {
                 starRocksAssert.getCtx(), false);
         String result = rowsToString(rows);
         String expect = "" +
-                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, database='default_cluster:db1')\n" +
-                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.409375, user=rg1_user1, role=rg1_role1, query_type in (INSERT, SELECT), source_ip=192.168.2.1/24)\n" +
-                "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))";
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='default_cluster:db1')\n" +
+                "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.459375, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)\n" +
+                "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.1, query_type in (SELECT))";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }
@@ -441,17 +491,17 @@ public class WorkGroupStmtTest {
         List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("SHOW RESOURCE GROUPS all");
         String result = rowsToString(rows);
         String expect = "" +
-                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=4.409375, user=rg1_user1, role=rg1_role1, query_type in (INSERT, SELECT), source_ip=192.168.2.1/24)\n" +
-                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=3.459375, user=rg1_user2, query_type in (MV), source_ip=192.168.3.1/24)\n" +
+                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=4.459375, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)\n" +
+                "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=3.459375, user=rg1_user2, query_type in (SELECT), source_ip=192.168.3.1/24)\n" +
                 "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=2.359375, user=rg1_user3, source_ip=192.168.4.1/24)\n" +
                 "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=1.0, user=rg1_user4)\n" +
-                "rg2|30|37.0%|0|0|0|20|NORMAL|(weight=3.409375, role=rg2_role1, query_type in (INSERT, SELECT), source_ip=192.168.5.1/24)\n" +
+                "rg2|30|37.0%|0|0|0|20|NORMAL|(weight=3.459375, role=rg2_role1, query_type in (SELECT), source_ip=192.168.5.1/24)\n" +
                 "rg2|30|37.0%|0|0|0|20|NORMAL|(weight=2.359375, role=rg2_role2, source_ip=192.168.6.1/24)\n" +
                 "rg2|30|37.0%|0|0|0|20|NORMAL|(weight=1.0, role=rg2_role3)\n" +
-                "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=2.409375, query_type in (INSERT, SELECT), source_ip=192.168.6.1/24)\n" +
-                "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=1.05, query_type in (INSERT, SELECT))\n" +
+                "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=2.459375, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
+                "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
                 "rg4|13|41.0%|1024|1024|1024|23|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
-                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, database='default_cluster:db1')";
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='default_cluster:db1')";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }

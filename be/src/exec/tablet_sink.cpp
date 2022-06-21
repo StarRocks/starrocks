@@ -32,10 +32,11 @@
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
 #include "simd/simd.h"
-#include "storage/hll.h"
+#include "types/hll.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression_utils.h"
 #include "util/defer_op.h"
@@ -98,6 +99,7 @@ Status NodeChannel::init(RuntimeState* state) {
     // Initialize _cur_request
     _cur_request.set_allocated_id(&_parent->_load_id);
     _cur_request.set_index_id(_index_id);
+    _cur_request.set_txn_id(_parent->_txn_id);
     _cur_request.set_sender_id(_parent->_sender_id);
     _cur_request.set_eos(false);
 
@@ -126,7 +128,7 @@ Status NodeChannel::init(RuntimeState* state) {
     // for get global_dict
     _runtime_state = state;
 
-    _load_info = "load_id=" + print_id(_parent->_load_id) + ", txn_id=" + std::to_string(_parent->_txn_id) +
+    _load_info = "load_id=" + print_id(_parent->_load_id) + ", txn_id: " + std::to_string(_parent->_txn_id) +
                  ", parallel=" + std::to_string(_max_parallel_request_size) +
                  ", compress_type=" + std::to_string(_compress_type);
     _name = "NodeChannel[" + std::to_string(_index_id) + "-" + std::to_string(_node_id) + "]";
@@ -138,7 +140,9 @@ void NodeChannel::open() {
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(_index_id);
     request.set_txn_id(_parent->_txn_id);
+    request.set_txn_trace_parent(_parent->_txn_trace_parent);
     request.set_allocated_schema(_parent->_schema->to_protobuf());
+    request.set_is_lake_tablet(_parent->_is_lake_table);
     for (auto& tablet : _all_tablets) {
         auto ptablet = request.add_tablets();
         ptablet->set_partition_id(tablet.partition_id);
@@ -470,8 +474,11 @@ Status NodeChannel::close_wait(RuntimeState* state) {
 }
 
 void NodeChannel::cancel(const Status& err_st) {
-    // we don't need to wait last rpc finished, cause closure's release/reset will join.
-    // But do we need brpc::StartCancel(call_id)?
+    // cancel rpc request, accelerate the release of related resources
+    for (auto closure : _add_batch_closures) {
+        closure->cancel();
+    }
+
     _cancelled = true;
     _err_st = err_st;
 
@@ -479,6 +486,7 @@ void NodeChannel::cancel(const Status& err_st) {
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(_index_id);
     request.set_sender_id(_parent->_sender_id);
+    request.set_txn_id(_parent->_txn_id);
 
     auto closure = new RefCountClosure<PTabletWriterCancelResult>();
 
@@ -557,9 +565,12 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     _load_id.set_hi(table_sink.load_id.hi);
     _load_id.set_lo(table_sink.load_id.lo);
     _txn_id = table_sink.txn_id;
+    _txn_trace_parent = table_sink.txn_trace_parent;
+    _span = Tracer::Instance().start_trace_or_add_span("olap_table_sink", _txn_trace_parent);
     _num_repicas = table_sink.num_replicas;
     _need_gen_rollup = table_sink.need_gen_rollup;
     _tuple_desc_id = table_sink.tuple_id;
+    _is_lake_table = table_sink.is_lake_table;
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema));
     _vectorized_partition = _pool->add(new vectorized::OlapTablePartitionParam(_schema, table_sink.partition));
@@ -577,6 +588,7 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
 }
 
 Status OlapTableSink::prepare(RuntimeState* state) {
+    _span->AddEvent("prepare");
     RETURN_IF_ERROR(DataSink::prepare(state));
 
     _sender_id = state->per_fragment_instance_idx();
@@ -589,6 +601,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
 
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(_vectorized_partition->prepare(state));
 
     // get table's tuple descriptor
     _output_tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_desc_id);
@@ -684,10 +697,12 @@ Status OlapTableSink::prepare(RuntimeState* state) {
 }
 
 Status OlapTableSink::open(RuntimeState* state) {
+    auto open_span = Tracer::Instance().add_span("open", _span);
     SCOPED_TIMER(_profile->total_time_counter());
     SCOPED_TIMER(_open_timer);
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+    RETURN_IF_ERROR(_vectorized_partition->open(state));
 
     for (auto& index_channel : _channels) {
         index_channel->for_each_node_channel([](NodeChannel* ch) { ch->open(); });
@@ -766,8 +781,8 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
         SCOPED_TIMER(_pack_chunk_timer);
         uint32_t num_rows_after_validate = SIMD::count_nonzero(_validate_selection);
         int invalid_row_index = 0;
-        _vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes, &_validate_selection,
-                                            &invalid_row_index);
+        RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes, &_validate_selection,
+                                                            &invalid_row_index));
 
         // Note: must padding char column after find_tablets.
         _padding_char_column(chunk);
@@ -863,6 +878,10 @@ Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel
 }
 
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
+    DeferOp end_span([&] { _span->End(); });
+    _span->AddEvent("close");
+    _span->SetAttribute("input_rows", _number_input_rows);
+    _span->SetAttribute("output_rows", _number_output_rows);
     Status status = close_status;
     if (status.ok()) {
         // only if status is ok can we call this _profile->total_time_counter().
@@ -944,6 +963,7 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
     }
 
     Expr::close(_output_expr_ctxs, state);
+    _vectorized_partition->close(state);
     return status;
 }
 
@@ -983,7 +1003,6 @@ void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, con
     if (state->has_reached_max_error_msg_num()) {
         return;
     }
-    std::stringstream ss;
     auto decimal_str = DecimalV3Cast::to_string<CppType>(decimal, desc->type().precision, desc->type().scale);
     std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
                                                 desc->col_name(), desc->type().debug_string());
@@ -1004,8 +1023,8 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, vectorized::Column* c
     auto* data = &data_column->get_data().front();
 
     int precision = desc->type().precision;
-    const auto max_decimal = get_scale_factor<CppType>(precision);
-    const auto min_decimal = -max_decimal;
+    const auto max_decimal = get_max_decimal<CppType>(precision);
+    const auto min_decimal = get_min_decimal<CppType>(precision);
 
     for (auto i = 0; i < num_rows; ++i) {
         if ((*validate_selection)[i] == VALID_SEL_OK) {

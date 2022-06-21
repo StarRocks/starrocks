@@ -27,7 +27,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
@@ -38,8 +41,13 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.CreateTableInfo;
+import com.starrocks.persist.DropInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTask;
+import com.starrocks.task.AgentTaskExecutor;
+import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -48,6 +56,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -98,13 +107,6 @@ public class Database extends MetaObject implements Writable {
 
     private long lastSlowLockLogTime = 0;
 
-    public enum DbState {
-        NORMAL, LINK, MOVE
-    }
-
-    private String attachDbName;
-    private DbState dbState;
-
     public Database() {
         this(0, null);
     }
@@ -120,8 +122,6 @@ public class Database extends MetaObject implements Writable {
         this.nameToTable = new ConcurrentHashMap<>();
         this.dataQuotaBytes = FeConstants.default_db_data_quota_bytes;
         this.replicaQuotaSize = FeConstants.default_db_replica_quota_size;
-        this.dbState = DbState.NORMAL;
-        this.attachDbName = "";
         this.clusterName = "";
     }
 
@@ -349,6 +349,96 @@ public class Database extends MetaObject implements Writable {
         return result;
     }
 
+    public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
+        Table table;
+        HashMap<Long, AgentBatchTask> batchTaskMap;
+        writeLock();
+        try {
+            table = getTable(tableName);
+            // double check because the table may be dropped
+            if (table == null) {
+                if (isSetIfExists) {
+                    LOG.info("drop table[{}] which does not exist", tableName);
+                    return;
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+                }
+            }
+            if (!isForce) {
+                if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .existCommittedTxns(id, table.getId(), null)) {
+                    throw new DdlException(
+                            "There are still some transactions in the COMMITTED state waiting to be completed. " +
+                                    "The table [" + table.getName() +
+                                    "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
+                                    " please use \"DROP table FORCE\".");
+                }
+            }
+            batchTaskMap = unprotectDropTable(table.getId(), isForce, false);
+            DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
+            GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info);
+        } finally {
+            writeUnlock();
+        }
+        sendDropTabletTasks(batchTaskMap);
+        LOG.info("finished dropping table: {}, type:{} from db: {}, is force: {}",
+                table.getName(), table.getType(), fullQualifiedName, isForce);
+    }
+
+    public HashMap<Long, AgentBatchTask> unprotectDropTable(long tableId, boolean isForceDrop,
+                                                            boolean isReplay) {
+        HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
+        Table table = getTable(tableId);
+        // delete from db meta
+        if (table == null) {
+            return batchTaskMap;
+        }
+
+        table.onDrop();
+
+        dropTable(table.getName());
+        if (!isForceDrop) {
+            Table oldTable = GlobalStateMgr.getCurrentState().getRecycleBin().recycleTable(id, table);
+            if (oldTable != null && oldTable.getType() == Table.TableType.OLAP) {
+                batchTaskMap = GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) oldTable, false);
+            }
+        } else {
+            if (table.getType() == Table.TableType.OLAP) {
+                batchTaskMap = GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) table, isReplay);
+            }
+        }
+
+        LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), getFullName(),
+                table.getId());
+        return batchTaskMap;
+    }
+
+    public void sendDropTabletTasks(HashMap<Long, AgentBatchTask> batchTaskMap) {
+        int numDropTaskPerBe = Config.max_agent_tasks_send_per_be;
+        for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
+            AgentBatchTask originTasks = entry.getValue();
+            if (originTasks.getTaskNum() > numDropTaskPerBe) {
+                AgentBatchTask partTask = new AgentBatchTask();
+                List<AgentTask> allTasks = originTasks.getAllTasks();
+                int curTask = 1;
+                for (AgentTask task : allTasks) {
+                    partTask.addTask(task);
+                    if (curTask++ > numDropTaskPerBe) {
+                        AgentTaskExecutor.submit(partTask);
+                        curTask = 1;
+                        partTask = new AgentBatchTask();
+                        ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
+                    }
+                }
+                if (partTask.getAllTasks().size() > 0) {
+                    AgentTaskExecutor.submit(partTask);
+                }
+            } else {
+                AgentTaskExecutor.submit(originTasks);
+            }
+        }
+    }
+
     public void dropTableWithLock(String tableName) {
         writeLock();
         try {
@@ -367,6 +457,33 @@ public class Database extends MetaObject implements Writable {
         if (table != null) {
             this.nameToTable.remove(tableName);
             this.idToTable.remove(table.getId());
+        }
+    }
+
+    public boolean createMaterializedWithLock(MaterializedView materializedView, boolean isReplay) {
+        writeLock();
+        try {
+            String mvName = materializedView.getName();
+            if (nameToTable.containsKey(mvName)) {
+                return false;
+            } else {
+                idToTable.put(materializedView.getId(), materializedView);
+                nameToTable.put(materializedView.getName(), materializedView);
+                // ref base table with mv
+                Set<Long> baseTableIds = materializedView.getBaseTableIds();
+                for (Long baseTableId : baseTableIds) {
+                    ((OlapTable) idToTable.get(baseTableId)).addRelatedMaterializedView(materializedView.getId());
+                }
+                if (!isReplay) {
+                    // Write edit log
+                    CreateTableInfo info = new CreateTableInfo(fullQualifiedName, materializedView);
+                    GlobalStateMgr.getCurrentState().getEditLog().logCreateMaterializedView(info);
+                }
+                materializedView.onCreate();
+            }
+            return true;
+        } finally {
+            writeUnlock();
         }
     }
 
@@ -410,28 +527,6 @@ public class Database extends MetaObject implements Writable {
         return idToTable.get(tableId);
     }
 
-    public int getMaxReplicationNum() {
-        int ret = 0;
-        readLock();
-        try {
-            for (Table table : idToTable.values()) {
-                if (table.getType() != TableType.OLAP) {
-                    continue;
-                }
-                OlapTable olapTable = (OlapTable) table;
-                for (Partition partition : olapTable.getAllPartitions()) {
-                    short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
-                    if (ret < replicationNum) {
-                        ret = replicationNum;
-                    }
-                }
-            }
-        } finally {
-            readUnlock();
-        }
-        return ret;
-    }
-
     public static Database read(DataInput in) throws IOException {
         Database db = new Database();
         db.readFields(in);
@@ -467,8 +562,10 @@ public class Database extends MetaObject implements Writable {
 
         out.writeLong(dataQuotaBytes);
         Text.writeString(out, clusterName);
-        Text.writeString(out, dbState.name());
-        Text.writeString(out, attachDbName);
+        // compatible for dbState
+        Text.writeString(out, "NORMAL");
+        // NOTE: compatible attachDbName
+        Text.writeString(out, "");
 
         // write functions
         out.writeInt(name2Function.size());
@@ -506,8 +603,10 @@ public class Database extends MetaObject implements Writable {
             clusterName = SystemInfoService.DEFAULT_CLUSTER;
         } else {
             clusterName = Text.readString(in);
-            dbState = DbState.valueOf(Text.readString(in));
-            attachDbName = Text.readString(in);
+            // Compatible for dbState
+            Text.readString(in);
+            // Compatible for attachDbName
+            Text.readString(in);
         }
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_47) {
@@ -566,25 +665,6 @@ public class Database extends MetaObject implements Writable {
 
     public void setClusterName(String clusterName) {
         this.clusterName = clusterName;
-    }
-
-    public DbState getDbState() {
-        return dbState;
-    }
-
-    public void setDbState(DbState dbState) {
-        if (dbState == null) {
-            return;
-        }
-        this.dbState = dbState;
-    }
-
-    public void setAttachDb(String name) {
-        this.attachDbName = name;
-    }
-
-    public String getAttachDb() {
-        return this.attachDbName;
     }
 
     public void setName(String name) {

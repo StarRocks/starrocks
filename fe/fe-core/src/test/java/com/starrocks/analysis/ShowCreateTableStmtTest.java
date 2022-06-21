@@ -1,7 +1,3 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/test/java/org/apache/doris/analysis/ShowCreateTableStmtTest.java
-
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -21,34 +17,28 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
-import mockit.Mocked;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 public class ShowCreateTableStmtTest {
-    private Analyzer analyzer;
-
-    @Mocked
-    private Auth auth;
-    @Mocked
     private ConnectContext ctx;
 
     @Before
     public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
-        MockedAuth.mockedAuth(auth);
-        MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
     }
 
     @Test
-    public void testNormal() throws AnalysisException {
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("testDb", "testTbl"));
-        stmt.analyze(analyzer);
+    public void testNormal() throws Exception {
+        ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setCluster("testCluster");
+        ctx.setDatabase("testDb");
+        ShowCreateTableStmt stmt =
+                new ShowCreateTableStmt(new TableName("testDb", "testTbl"), ShowCreateTableStmt.CreateTableType.TABLE);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("SHOW CREATE TABLE testCluster:testDb.testTbl", stmt.toString());
         Assert.assertEquals("testCluster:testDb", stmt.getDb());
         Assert.assertEquals("testTbl", stmt.getTable());
@@ -57,10 +47,11 @@ public class ShowCreateTableStmtTest {
         Assert.assertEquals("Create Table", stmt.getMetaData().getColumn(1).getName());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoTbl() throws AnalysisException {
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(null);
-        stmt.analyze(analyzer);
+    @Test(expected = SemanticException.class)
+    public void testNoTbl() throws Exception {
+        ctx = UtFrameUtils.createDefaultCtx();
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(null, ShowCreateTableStmt.CreateTableType.TABLE);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No Exception throws.");
     }
 }

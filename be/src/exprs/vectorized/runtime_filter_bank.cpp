@@ -7,6 +7,7 @@
 #include "column/column.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
+#include "exprs/vectorized/literal.h"
 #include "exprs/vectorized/runtime_filter.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type.h"
@@ -117,6 +118,36 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, P
     return Status::OK();
 }
 
+StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_as_runtime_filter(ObjectPool* pool, ExprContext* conjunct,
+                                                                      Chunk* chunk) {
+    auto left_child = conjunct->root()->get_child(0);
+    auto right_child = conjunct->root()->get_child(1);
+    // all of the child(1) in expr is in build chunk
+    ASSIGN_OR_RETURN(auto res, conjunct->evaluate(right_child, chunk));
+    DCHECK_EQ(res->size(), 1);
+    ColumnPtr col;
+    if (res->is_constant()) {
+        col = res;
+    } else if (res->is_nullable()) {
+        if (res->is_null(0)) {
+            col = ColumnHelper::create_const_null_column(1);
+        } else {
+            auto data_col = down_cast<NullableColumn*>(res.get())->data_column();
+            col = std::make_shared<ConstColumn>(data_col, 1);
+        }
+    } else {
+        col = std::make_shared<ConstColumn>(res, 1);
+    }
+
+    auto literal = pool->add(new VectorizedLiteral(std::move(col), right_child->type()));
+    auto new_expr = conjunct->root()->clone(pool);
+    auto new_left = left_child->clone(pool);
+    new_expr->clear_children();
+    new_expr->add_child(new_left);
+    new_expr->add_child(literal);
+    return pool->add(new ExprContext(new_expr));
+}
+
 Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc) {
     _filter_id = desc.filter_id;
     _build_expr_order = desc.expr_order;
@@ -153,6 +184,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     _is_local = !desc.has_remote_targets;
     _build_plan_node_id = desc.build_plan_node_id;
     _runtime_filter.store(nullptr);
+    _join_mode = desc.build_join_mode;
 
     bool not_found = true;
     if (desc.__isset.plan_node_id_to_target_expr) {
@@ -161,6 +193,10 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
             not_found = false;
             RETURN_IF_ERROR(Expr::create_expr_tree(pool, it->second, &_probe_expr_ctx));
         }
+    }
+
+    if (desc.__isset.bucketseq_to_instance) {
+        _bucketseq_to_partition = desc.bucketseq_to_instance;
     }
 
     if (not_found) {
@@ -276,6 +312,8 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
             }
             auto* ctx = rf_desc->probe_expr_ctx();
             ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
+            // for colocate grf
+            eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
             filter->evaluate(column.get(), &eval_context.running_context);
             // true_count is accummulated
             true_count = SIMD::count_nonzero(selection);
@@ -339,6 +377,8 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
         }
         auto ctx = rf_desc->probe_expr_ctx();
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
+        // for colocate grf
+        eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
         // true count is not accummulated, it is evaluated for each RF respectively
         auto true_count = filter->evaluate(column.get(), &eval_context.running_context);
         eval_context.run_filter_nums += 1;
@@ -357,7 +397,14 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
             } else {
                 auto it = eval_context.selectivity.end();
                 it--;
-                if (selectivity < it->first) {
+                // In case of  all the runtime filters' selectivity is above 0.01 and below 0.5,
+                // the top 3 runtime filters of the highest selectivity are chosen to filter data, but if we have
+                // more than 3 runtime filters, the 4th, 5th, etc. can take place of the chosen runtime-filter of
+                // the lowest selectivity only in two cases:
+                // 1. current rf is a local rf;
+                // 2. current rf is a global rf and the chosen rf of the lowest selectivity is also a global rf.
+                // A global rf should not take place of local rf since global rf costs more time than local rf.
+                if (selectivity < it->first && (rf_desc->is_local() || !it->second->is_local())) {
                     eval_context.selectivity.erase(it);
                     eval_context.selectivity.emplace(selectivity, rf_desc);
                 }

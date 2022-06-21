@@ -72,14 +72,13 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     return Status::OK();
 }
 
-std::vector<OlapScanRange*> OlapScanContext::key_ranges() const {
-    std::vector<OlapScanRange*> results;
-    results.reserve(_key_ranges.size());
-    for (const auto& key_range : _key_ranges) {
-        results.emplace_back(key_range.get());
+void OlapScanContext::update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    _sum_row_bytes += added_sum_row_bytes;
+    _num_rows += added_num_rows;
+    if (_num_rows > 0) {
+        _avg_row_bytes = _sum_row_bytes / _num_rows;
     }
-
-    return results;
 }
 
 } // namespace starrocks::pipeline

@@ -27,6 +27,7 @@
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
+#include "fs/fs_util.h"
 #include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -37,7 +38,7 @@
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
-#include "util/file_utils.h"
+#include "storage/tablet_manager.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -123,14 +124,7 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
             RETURN_IF_ERROR(_report_every(10, &report_counter, finished_num, total_num, TTaskType::type::UPLOAD));
 
             // calc md5sum of localfile
-            std::string md5sum;
-            status = FileUtils::md5sum(src_path + "/" + local_file, &md5sum);
-            if (!status.ok()) {
-                std::stringstream ss;
-                ss << "failed to get md5sum of file: " << local_file << ": " << status.get_error_msg();
-                LOG(WARNING) << ss.str();
-                return Status::InternalError(ss.str());
-            }
+            ASSIGN_OR_RETURN(auto md5sum, fs::md5sum(src_path + "/" + local_file));
             VLOG(2) << "get file checksum: " << local_file << ": " << md5sum;
             local_files_with_checksum.push_back(local_file + "." + md5sum);
 
@@ -166,7 +160,7 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
 
             ASSIGN_OR_RETURN(auto input_file, FileSystem::Default()->new_sequential_file(local_file_path));
 
-            auto res = FileUtils::copy(input_file.get(), broker_file.get(), 1024 * 1024);
+            auto res = fs::copy(input_file.get(), broker_file.get(), 1024 * 1024);
             if (!res.ok()) {
                 return res.status();
             }
@@ -275,15 +269,14 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
                     need_download = true;
                 } else {
                     // check checksum
-                    std::string local_md5sum;
-                    Status st = FileUtils::md5sum(local_path + "/" + remote_file, &local_md5sum);
-                    if (!st.ok()) {
+                    auto local_md5sum = fs::md5sum(local_path + "/" + remote_file);
+                    if (!local_md5sum.ok()) {
                         LOG(WARNING) << "failed to get md5sum of local file: " << remote_file
-                                     << ". msg: " << st.get_error_msg() << ". download it";
+                                     << ". msg: " << local_md5sum.status() << ". download it";
                         need_download = true;
                     } else {
-                        VLOG(2) << "get local file checksum: " << remote_file << ": " << local_md5sum;
-                        if (file_stat.md5 != local_md5sum) {
+                        VLOG(2) << "get local file checksum: " << remote_file << ": " << *local_md5sum;
+                        if (file_stat.md5 != *local_md5sum) {
                             // file's checksum does not equal, download it.
                             need_download = true;
                         }
@@ -307,7 +300,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             size_t file_len = file_stat.size;
 
             // check disk capacity
-            if (data_dir->reach_capacity_limit(file_len)) {
+            if (data_dir->capacity_limit_reached(file_len)) {
                 return Status::InternalError("capacity limit reached");
             }
 
@@ -322,21 +315,14 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
             ASSIGN_OR_RETURN(auto local_file, FileSystem::Default()->new_writable_file(opts, full_local_file));
 
-            auto res = FileUtils::copy(broker_file.get(), local_file.get(), 1024 * 1024);
+            auto res = fs::copy(broker_file.get(), local_file.get(), 1024 * 1024);
             if (!res.ok()) {
                 return res.status();
             }
             RETURN_IF_ERROR(local_file->close());
 
             // 5. check md5 of the downloaded file
-            std::string downloaded_md5sum;
-            status = FileUtils::md5sum(full_local_file, &downloaded_md5sum);
-            if (!status.ok()) {
-                std::stringstream ss;
-                ss << "failed to get md5sum of file: " << full_local_file;
-                LOG(WARNING) << ss.str();
-                return Status::InternalError(ss.str());
-            }
+            ASSIGN_OR_RETURN(auto downloaded_md5sum, fs::md5sum(full_local_file));
             VLOG(2) << "get downloaded file checksum: " << full_local_file << ": " << downloaded_md5sum;
             if (downloaded_md5sum != file_stat.md5) {
                 std::stringstream ss;
@@ -550,9 +536,10 @@ Status SnapshotLoader::_check_local_snapshot_paths(const std::map<std::string, s
         } else {
             path = pair.second;
         }
-        if (!FileUtils::is_dir(path)) {
+        ASSIGN_OR_RETURN(auto is_dir, fs::is_directory(path));
+        if (!is_dir) {
             std::stringstream ss;
-            ss << "snapshot path is not directory or does not exist: " << path;
+            ss << "snapshot path is not directory: " << path;
             LOG(WARNING) << ss.str();
             return Status::RuntimeError(ss.str());
         }
@@ -626,7 +613,7 @@ Status SnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnection& 
 
 Status SnapshotLoader::_get_existing_files_from_local(const std::string& local_path,
                                                       std::vector<std::string>* local_files) {
-    Status status = FileUtils::list_files(FileSystem::Default(), local_path, local_files);
+    Status status = FileSystem::Default()->get_children(local_path, local_files);
     if (!status.ok()) {
         std::stringstream ss;
         ss << "failed to list files in local path: " << local_path << ", msg: " << status.get_error_msg();

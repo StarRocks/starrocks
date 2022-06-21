@@ -49,6 +49,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.MasterDaemon;
@@ -63,7 +64,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -107,7 +110,7 @@ public class BackupHandler extends MasterDaemon implements Writable {
         this.globalStateMgr = globalStateMgr;
     }
 
-    public void setCatalog(GlobalStateMgr globalStateMgr) {
+    public void setGlobalStateMgr(GlobalStateMgr globalStateMgr) {
         this.globalStateMgr = globalStateMgr;
     }
 
@@ -167,7 +170,7 @@ public class BackupHandler extends MasterDaemon implements Writable {
         }
 
         for (AbstractJob job : dbIdToBackupOrRestoreJob.values()) {
-            job.setCatalog(globalStateMgr);
+            job.setGlobalStateMgr(globalStateMgr);
             job.run();
         }
     }
@@ -542,7 +545,7 @@ public class BackupHandler extends MasterDaemon implements Writable {
                         existingJob, job);
                 return;
             }
-            existingJob.setCatalog(globalStateMgr);
+            existingJob.setGlobalStateMgr(globalStateMgr);
             existingJob.replayCancel();
         } else if (!job.isPending()) {
             AbstractJob existingJob = dbIdToBackupOrRestoreJob.get(job.getDbId());
@@ -600,6 +603,20 @@ public class BackupHandler extends MasterDaemon implements Writable {
             AbstractJob job = AbstractJob.read(in);
             dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
         }
+    }
+
+    public long saveBackupHandler(DataOutputStream dos, long checksum) throws IOException {
+        write(dos);
+        return checksum;
+    }
+
+    public long loadBackupHandler(DataInputStream dis, long checksum, GlobalStateMgr globalStateMgr) throws IOException {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_42) {
+            readFields(dis);
+        }
+        setGlobalStateMgr(globalStateMgr);
+        LOG.info("finished replay backupHandler from image");
+        return checksum;
     }
 }
 

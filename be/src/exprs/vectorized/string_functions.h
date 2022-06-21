@@ -9,6 +9,7 @@
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "exprs/vectorized/function_helper.h"
+#include "udf/udf.h"
 #include "util/url_parser.h"
 
 namespace starrocks {
@@ -393,22 +394,6 @@ private:
     static int index_of(const char* source, int source_count, const char* target, int target_count, int from_index);
 
 private:
-    struct StringFunctionsState {
-        std::unique_ptr<re2::RE2> regex;
-        std::unique_ptr<re2::RE2::Options> options;
-        bool const_pattern{false};
-
-        StringFunctionsState() : regex(), options() {}
-    };
-
-    static ColumnPtr regexp_extract_const(re2::RE2* const_re, const Columns& columns);
-    static ColumnPtr regexp_extract_general(FunctionContext* context, re2::RE2::Options* options,
-                                            const Columns& columns);
-
-    static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns);
-    static ColumnPtr regexp_replace_general(FunctionContext* context, re2::RE2::Options* options,
-                                            const Columns& columns);
-
     struct CurrencyFormat : std::moneypunct<char> {
         pattern do_pos_format() const override { return {{none, sign, none, value}}; }
         pattern do_neg_format() const override { return {{none, sign, none, value}}; }
@@ -459,8 +444,20 @@ void StringFunctions::money_format_decimal_impl(FunctionContext* context, Column
         CppType rounded_cent_money;
         auto overflow = DecimalV3Cast::round<CppType, ROUND_HALF_EVEN, scale_up, check_overflow>(
                 money_value, scale_factor, &rounded_cent_money);
-        auto str = DecimalV3Cast::to_string<CppType>(rounded_cent_money, max_precision, 0);
-        std::string concurr_format = transform_currency_format(context, str);
+        std::string concurr_format;
+        if (rounded_cent_money == 0) {
+            concurr_format = "0.00";
+        } else {
+            bool is_negative = rounded_cent_money < 0;
+            CppType abs_rounded_cent_money = is_negative ? -rounded_cent_money : rounded_cent_money;
+            auto str = DecimalV3Cast::to_string<CppType>(abs_rounded_cent_money, max_precision, 0);
+            std::string prefix = is_negative ? "-" : "";
+            // if there is only fractional part, we need to add leading zeros so that transform_currency_format can work
+            if (abs_rounded_cent_money < 100) {
+                prefix.append(abs_rounded_cent_money < 10 ? "00" : "0");
+            }
+            concurr_format = transform_currency_format(context, prefix + str);
+        }
         result->append(Slice(concurr_format.data(), concurr_format.size()), overflow);
     }
 }

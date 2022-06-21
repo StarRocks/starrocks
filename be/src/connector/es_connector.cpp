@@ -158,10 +158,6 @@ static std::string get_host_port(const std::vector<TNetworkAddress>& es_hosts) {
 
 Status ESDataSource::_create_scanner() {
     // create scanner.
-    std::vector<ExprContext*> scanner_expr_ctxs;
-    auto status = Expr::clone_if_not_exists(_conjunct_ctxs, _runtime_state, &scanner_expr_ctxs);
-    RETURN_IF_ERROR(status);
-
     const TEsScanRange& es_scan_range = _scan_range;
     _properties[ESScanReader::KEY_INDEX] = es_scan_range.index;
     if (es_scan_range.__isset.type) {
@@ -201,11 +197,13 @@ void ESDataSource::_init_counter() {
 }
 
 Status ESDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
-    SCOPED_TIMER(_read_timer);
+    // Notice that some variables are not initialized
+    // if `_no_data == true` because of short-circuits logic.
     if (_no_data || (_line_eof && _batch_eof)) {
         return Status::EndOfFile("");
     }
 
+    SCOPED_TIMER(_read_timer);
     while (!_batch_eof) {
         RETURN_IF_CANCELLED(state);
         COUNTER_UPDATE(_read_counter, 1);

@@ -34,11 +34,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.StarOSTablet;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
@@ -49,6 +49,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -66,6 +67,7 @@ import com.starrocks.task.ClearTransactionTask;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TUniqueId;
+import io.opentelemetry.api.trace.Span;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -298,7 +300,7 @@ public class DatabaseTransactionMgr {
             checkRunningTxnExceedLimit(sourceType);
 
             long tid = idGenerator.getNextTransactionId();
-            LOG.info("begin transaction: txn id {} with label {} from coordinator {}, listner id: {}",
+            LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
                     tid, label, coordinator, listenerId);
             TransactionState transactionState =
                     new TransactionState(dbId, tableIdList, tid, label, requestId, sourceType,
@@ -378,6 +380,11 @@ public class DatabaseTransactionMgr {
             throw new TransactionCommitFailedException(
                     transactionState == null ? "transaction not found" : transactionState.getReason());
         }
+        Span txnSpan = transactionState.getTxnSpan();
+        txnSpan.setAttribute("db", db.getFullName());
+        StringBuilder tableListString = new StringBuilder();
+        int numPartition = 0;
+        txnSpan.addEvent("commit_start");
 
         if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
             LOG.debug("transaction is already visible: {}", transactionId);
@@ -438,36 +445,26 @@ public class DatabaseTransactionMgr {
                 continue;
             }
 
-            if (!tableToPartition.containsKey(tableId)) {
-                tableToPartition.put(tableId, new HashSet<>());
-            }
-            tableToPartition.get(tableId).add(partitionId);
-            if (!tabletToBackends.containsKey(tabletId)) {
-                tabletToBackends.put(tabletId, new HashSet<>());
-            }
-            tabletToBackends.get(tabletId).add(tabletCommitInfos.get(i).getBackendId());
+            tableToPartition.computeIfAbsent(tableId, id -> new HashSet<>()).add(partitionId);
+            tabletToBackends.computeIfAbsent(tabletId, id -> new HashSet<>())
+                    .add(tabletCommitInfos.get(i).getBackendId());
 
-            if (!tableToInvalidDictCacheColumns.containsKey(tableId)) {
-                tableToInvalidDictCacheColumns.put(tableId, new HashSet<>());
-            }
             // Invalid column set should union
-            tableToInvalidDictCacheColumns.get(tableId).addAll(tabletCommitInfos.get(i).getInvalidDictCacheColumns());
+            tableToInvalidDictCacheColumns.computeIfAbsent(tableId, id -> new HashSet<>())
+                    .addAll(tabletCommitInfos.get(i).getInvalidDictCacheColumns());
 
-            if (!tableToValidDictCacheColumns.containsKey(tableId)) {
-                tableToValidDictCacheColumns.put(tableId, new HashSet<>());
-            }
             // Valid column set should intersect and remove all invalid columns
             // Only need to add valid column set once
-            if (tableToValidDictCacheColumns.get(tableId).isEmpty() &&
+            Set<String> validColumns = tableToValidDictCacheColumns.computeIfAbsent(tableId, id -> new HashSet<>());
+            if (validColumns.isEmpty() &&
                     !tabletCommitInfos.get(i).getValidDictCacheColumns().isEmpty()) {
-                tableToValidDictCacheColumns.get(tableId).addAll(tabletCommitInfos.get(i).getValidDictCacheColumns());
+                validColumns.addAll(tabletCommitInfos.get(i).getValidDictCacheColumns());
             }
 
             if (i == tabletMetaList.size() - 1) {
-                tableToValidDictCacheColumns.get(tableId).removeAll(tableToInvalidDictCacheColumns.get(tableId));
+                validColumns.removeAll(tableToInvalidDictCacheColumns.get(tableId));
             }
         }
-
 
         Set<Long> errorReplicaIds = Sets.newHashSet();
         Set<Long> totalInvolvedBackends = Sets.newHashSet();
@@ -476,10 +473,15 @@ public class DatabaseTransactionMgr {
             if (table == null) {
                 throw new MetaNotFoundException("Table does not exist: " + tableId);
             }
+            if (tableListString.length() != 0) {
+                tableListString.append(',');
+            }
+            tableListString.append(table.getName());
             for (Partition partition : table.getAllPartitions()) {
                 if (!tableToPartition.get(tableId).contains(partition.getId())) {
                     continue;
                 }
+                numPartition++;
 
                 boolean useStarOS = partition.isUseStarOS();
 
@@ -491,7 +493,7 @@ public class DatabaseTransactionMgr {
                         Set<Long> commitBackends = tabletToBackends.get(tabletId);
 
                         if (useStarOS) {
-                            long backendId = ((StarOSTablet) tablet).getPrimaryBackendId();
+                            long backendId = ((LakeTablet) tablet).getPrimaryBackendId();
                             totalInvolvedBackends.add(backendId);
                             if (!commitBackends.contains(backendId)) {
                                 throw new TransactionCommitFailedException(
@@ -548,10 +550,14 @@ public class DatabaseTransactionMgr {
             }
         }
 
+        txnSpan.setAttribute("tables", tableListString.toString());
+        txnSpan.setAttribute("num_partition", numPartition);
         // before state transform
-        transactionState.beforeStateTransform(TransactionStatus.COMMITTED);
+        TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.COMMITTED);
         // transaction state transform
         boolean txnOperated = false;
+
+        Span unprotectedCommitSpan = TraceManager.startSpan("unprotectedCommitTransaction", txnSpan);
         writeLock();
         try {
             unprotectedCommitTransaction(transactionState, errorReplicaIds, tableToPartition,
@@ -560,12 +566,18 @@ public class DatabaseTransactionMgr {
             txnOperated = true;
         } finally {
             writeUnlock();
+            unprotectedCommitSpan.end();
             // after state transform
-            transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated);
+            transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
         }
 
         // 6. update nextVersion because of the failure of persistent transaction resulting in error version
-        updateCatalogAfterCommitted(transactionState, db);
+        Span updateCatalogAfterCommittedSpan = TraceManager.startSpan("updateCatalogAfterCommitted", txnSpan);
+        try {
+            updateCatalogAfterCommitted(transactionState, db);
+        } finally {
+            updateCatalogAfterCommittedSpan.end();
+        }
         LOG.info("transaction:[{}] successfully committed", transactionState);
     }
 
@@ -584,7 +596,7 @@ public class DatabaseTransactionMgr {
             case VISIBLE:
                 break;
             default:
-                LOG.warn("transaction commit failed, db={}, txn={}", db.getFullName(), transactionId);
+                LOG.warn("transaction commit failed, db={}, txn_id: {}", db.getFullName(), transactionId);
                 throw new TransactionCommitFailedException("transaction commit failed");
         }
 
@@ -702,8 +714,8 @@ public class DatabaseTransactionMgr {
                                             && (unfinishedBackends == null
                                             || !unfinishedBackends.contains(replica.getBackendId()))) {
                                         ++successHealthyReplicaNum;
-                                    // replica report version has greater cur transaction commit version
-                                    // This can happen when the BE publish succeeds but fails to send a response to FE
+                                        // replica report version has greater cur transaction commit version
+                                        // This can happen when the BE publish succeeds but fails to send a response to FE
                                     } else if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
                                         ++successHealthyReplicaNum;
                                     } else if (unfinishedBackends != null
@@ -728,7 +740,7 @@ public class DatabaseTransactionMgr {
                             if (successHealthyReplicaNum != replicaNum
                                     && !unfinishedBackends.isEmpty()
                                     && currentTs
-                                            - txn.getCommitTime() < Config.quorom_publish_wait_time_ms) {
+                                    - txn.getCommitTime() < Config.quorom_publish_wait_time_ms) {
                                 return false;
                             }
                         }
@@ -771,6 +783,7 @@ public class DatabaseTransactionMgr {
                 writeUnlock();
             }
         }
+        Span finishSpan = TraceManager.startSpan("finishTransaction", transactionState.getTxnSpan());
         db.writeLock();
         try {
             boolean hasError = false;
@@ -908,9 +921,15 @@ public class DatabaseTransactionMgr {
                 writeUnlock();
                 transactionState.afterStateTransform(TransactionStatus.VISIBLE, txnOperated);
             }
-            updateCatalogAfterVisible(transactionState, db);
+            Span updateCatalogSpan = TraceManager.startSpan("updateCatalogAfterVisible", finishSpan);
+            try {
+                updateCatalogAfterVisible(transactionState, db);
+            } finally {
+                updateCatalogSpan.end();
+            }
         } finally {
             db.writeUnlock();
+            finishSpan.end();
         }
         LOG.info("finish transaction {} successfully", transactionState);
     }
@@ -1072,14 +1091,14 @@ public class DatabaseTransactionMgr {
         }
 
         // before state transform
-        transactionState.beforeStateTransform(TransactionStatus.ABORTED);
+        TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.ABORTED);
         boolean txnOperated = false;
         writeLock();
         try {
             txnOperated = unprotectAbortTransaction(transactionId, reason);
         } finally {
             writeUnlock();
-            transactionState.afterStateTransform(TransactionStatus.ABORTED, txnOperated, reason);
+            transactionState.afterStateTransform(TransactionStatus.ABORTED, txnOperated, callback, reason);
         }
 
         // send clear txn task to BE to clear the transactions on BE.
@@ -1449,7 +1468,7 @@ public class DatabaseTransactionMgr {
                     continue;
                 }
                 if (entry.getKey() <= endTransactionId) {
-                    LOG.debug("find a running txn with txn_id={} on db: {}, less than watermark txn_id {}",
+                    LOG.debug("find a running txn with txn_id: {} on db: {}, less than watermark txn_id {}",
                             entry.getKey(), dbId, endTransactionId);
                     return false;
                 }
@@ -1523,6 +1542,10 @@ public class DatabaseTransactionMgr {
                 updateCatalogAfterVisible(transactionState, db);
             }
             unprotectUpsertTransactionState(transactionState, true);
+            if (transactionState.isExpired(System.currentTimeMillis())) {
+                LOG.info("remove expired transaction: {}", transactionState);
+                deleteTransaction(transactionState);
+            }
         } finally {
             writeUnlock();
         }

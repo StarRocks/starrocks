@@ -1,7 +1,3 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/external/elasticsearch/PartitionPhase.java
-
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -23,6 +19,7 @@ package com.starrocks.external.elasticsearch;
 
 import com.starrocks.catalog.EsTable;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -42,6 +39,15 @@ public class PartitionPhase implements SearchPhase {
     public void execute(SearchContext context) throws StarRocksESException {
         shardPartitions = client.searchShards(context.sourceIndex());
         nodesInfo = client.getHttpNodes();
+        if (!context.wanOnly()) {
+            nodesInfo = client.getHttpNodes();
+        } else {
+            nodesInfo = new HashMap<>();
+            String[] seeds = context.esTable().getSeeds();
+            for (int i = 0; i < seeds.length; i++) {
+                nodesInfo.put(String.valueOf(i), new EsNodeInfo(String.valueOf(i), seeds[i]));
+            }
+        }
     }
 
     @Override

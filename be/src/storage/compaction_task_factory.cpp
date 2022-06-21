@@ -4,6 +4,7 @@
 
 #include "column/schema.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_task.h"
@@ -18,7 +19,13 @@
 namespace starrocks {
 
 std::shared_ptr<CompactionTask> CompactionTaskFactory::create_compaction_task() {
-    size_t segment_iterator_num = Rowset::get_segment_num(_input_rowsets);
+    auto iterator_num_res = Rowset::get_segment_num(_input_rowsets);
+    if (!iterator_num_res.ok()) {
+        LOG(WARNING) << "fail to get segment iterator num. tablet=" << _tablet->tablet_id()
+                     << ", err=" << iterator_num_res.status().to_string();
+        return nullptr;
+    }
+    size_t segment_iterator_num = iterator_num_res.value();
     int64_t max_columns_per_group = config::vertical_compaction_max_columns_per_group;
     size_t num_columns = _tablet->num_columns();
     CompactionAlgorithm algorithm =

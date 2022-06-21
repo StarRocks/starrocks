@@ -18,6 +18,7 @@
 #include "fmt/core.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
+#include "testutil/assert.h"
 #include "util/json.h"
 
 namespace starrocks::vectorized {
@@ -100,14 +101,20 @@ public:
         col_mkt_sgmt_1->append_datum(Datum(Slice("HOUSEHOLD")));
 
         col_cust_key_2->append_datum(Datum(int32_t(69)));
-        col_nation_2->append_datum(Datum());
-        col_region_2->append_datum(Datum());
-        col_mkt_sgmt_2->append_datum(Datum());
+        col_nation_2->append_datum(Datum(Slice("null0")));
+        col_region_2->append_datum(Datum(Slice("null0")));
+        col_mkt_sgmt_2->append_datum(Datum(Slice("null0")));
+        col_nation_2->set_null(col_nation_2->size() - 1);
+        col_region_2->set_null(col_region_2->size() - 1);
+        col_mkt_sgmt_2->set_null(col_mkt_sgmt_2->size() - 1);
 
         col_cust_key_3->append_datum(Datum(int32_t(70)));
-        col_nation_3->append_datum(Datum());
-        col_region_3->append_datum(Datum());
-        col_mkt_sgmt_3->append_datum(Datum());
+        col_nation_3->append_datum(Datum(Slice("null1")));
+        col_region_3->append_datum(Datum(Slice("null1")));
+        col_mkt_sgmt_3->append_datum(Datum(Slice("null1")));
+        col_nation_3->set_null(col_nation_3->size() - 1);
+        col_region_3->set_null(col_region_3->size() - 1);
+        col_mkt_sgmt_3->set_null(col_mkt_sgmt_3->size() - 1);
 
         col_cust_key_1->append_datum(Datum(int32_t(71)));
         col_nation_1->append_datum(Datum());
@@ -191,6 +198,20 @@ static Permutation make_permutation(int len) {
     return perm;
 }
 
+static std::vector<ChunkPtr> consume_pages_from_sorter(ChunksSorter& sorter) {
+    std::vector<ChunkPtr> result;
+
+    bool eos = false;
+    while (!eos) {
+        ChunkPtr chunk;
+        sorter.get_next(&chunk, &eos);
+        if (chunk) {
+            result.push_back(chunk);
+        }
+    }
+    return result;
+}
+
 static ChunkPtr consume_page_from_sorter(ChunksSorter& sorter) {
     ChunkPtr res;
     bool eos = false;
@@ -220,7 +241,6 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
 
     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
-    sorter.set_compare_strategy(ColumnInc);
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
     sorter.update(_runtime_state.get(), _chunk_1);
     sorter.update(_runtime_state.get(), _chunk_2);
@@ -241,6 +261,42 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
 
     clear_sort_exprs(sort_exprs);
 }
+
+// NOTE: this test case runs too slow
+// TEST_F(ChunksSorterTest, full_sort_chunk_overflow) {
+//     std::vector<bool> is_asc{true};
+//     std::vector<bool> is_null_first{true};
+//     auto expr_varchar = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 0);
+//     std::vector<ExprContext*> sort_exprs{new ExprContext(expr_varchar.get())};
+//     DeferOp defer([&]() { clear_sort_exprs(sort_exprs); });
+
+//     std::string big_string(1024, 'a');
+//     ColumnPtr big_column = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false);
+//     for (int i = 0; i < 1024; i++) {
+//         big_column->append_datum(Datum(Slice(big_string)));
+//     }
+//     Columns columns{big_column};
+//     Chunk::SlotHashMap slots;
+//     slots[0] = 0;
+//     ChunkPtr big_chunk = std::make_shared<Chunk>(columns, slots);
+//     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
+
+//     // Update until overflow
+//     size_t total_bytes = 0;
+//     while (total_bytes < Column::MAX_CAPACITY_LIMIT) {
+//         total_bytes += big_column->byte_size();
+//         std::cerr << "total bytes: " << total_bytes << std::endl;
+//         sorter.update(_runtime_state.get(), big_chunk);
+//     }
+//     ASSERT_OK(sorter.done(_runtime_state.get()));
+//     std::vector<ChunkPtr> output = consume_pages_from_sorter(sorter);
+//     size_t output_bytes = 0;
+//     for (auto& output_chunk : output) {
+//         ASSERT_TRUE(output_chunk->has_large_column());
+//         output_bytes += output_chunk->get_column_by_index(0)->byte_size();
+//     }
+//     ASSERT_EQ(total_bytes, output_bytes);
+// }
 
 TEST_F(ChunksSorterTest, topn_sort_limit_prune) {
     {
@@ -303,7 +359,6 @@ TEST_F(ChunksSorterTest, topn_sort_with_limit) {
         for (int limit = 1; limit < kTotalRows; limit++) {
             std::cerr << fmt::format("order by column {} limit {}", name, limit) << std::endl;
             ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 0, limit);
-            sorter.set_compare_strategy(ColumnInc);
             size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
             sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release()));
             sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release()));
@@ -327,10 +382,6 @@ TEST_F(ChunksSorterTest, topn_sort_with_limit) {
     }
 }
 
-static std::vector<CompareStrategy> all_compare_strategy() {
-    return {RowWise, ColumnWise, ColumnInc};
-}
-
 // NOLINTNEXTLINE
 TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_first) {
     std::vector<bool> is_asc, is_null_first;
@@ -342,29 +393,25 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_first) {
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
 
-    for (auto strategy : all_compare_strategy()) {
-        std::cerr << "sort with strategy: " << strategy << std::endl;
-        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
-        sorter.set_compare_strategy(strategy);
-        size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
-        sorter.update(_runtime_state.get(), _chunk_1);
-        sorter.update(_runtime_state.get(), _chunk_2);
-        sorter.update(_runtime_state.get(), _chunk_3);
-        sorter.done(_runtime_state.get());
+    ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
+    size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
+    sorter.update(_runtime_state.get(), _chunk_1);
+    sorter.update(_runtime_state.get(), _chunk_2);
+    sorter.update(_runtime_state.get(), _chunk_3);
+    sorter.done(_runtime_state.get());
 
-        ChunkPtr page_1 = consume_page_from_sorter(sorter);
+    ChunkPtr page_1 = consume_page_from_sorter(sorter);
 
-        ASSERT_EQ(16, total_rows);
-        ASSERT_EQ(16, page_1->num_rows());
-        const size_t Size = 16;
-        std::vector<int32_t> permutation{69, 70, 71, 2, 4, 6, 12, 16, 24, 41, 49, 52, 54, 55, 56, 58};
-        std::vector<int32_t> result;
-        for (size_t i = 0; i < Size; ++i) {
-            result.push_back(page_1->get(i).get(0).get_int32());
-        }
-        EXPECT_EQ(permutation, result);
-        fmt::print("result: {}\n", fmt::join(result, ","));
+    ASSERT_EQ(16, total_rows);
+    ASSERT_EQ(16, page_1->num_rows());
+    const size_t Size = 16;
+    std::vector<int32_t> permutation{69, 70, 71, 2, 4, 6, 12, 16, 24, 41, 49, 52, 54, 55, 56, 58};
+    std::vector<int32_t> result;
+    for (size_t i = 0; i < Size; ++i) {
+        result.push_back(page_1->get(i).get(0).get_int32());
     }
+    EXPECT_EQ(permutation, result);
+    fmt::print("result: {}\n", fmt::join(result, ","));
 
     clear_sort_exprs(sort_exprs);
 }
@@ -380,28 +427,24 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_last) {
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
 
-    for (auto strategy : all_compare_strategy()) {
-        std::cerr << "sort with strategy: " << strategy << std::endl;
-        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
-        sorter.set_compare_strategy(strategy);
-        size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
-        sorter.update(_runtime_state.get(), _chunk_1);
-        sorter.update(_runtime_state.get(), _chunk_2);
-        sorter.update(_runtime_state.get(), _chunk_3);
-        sorter.done(_runtime_state.get());
+    ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
+    size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
+    sorter.update(_runtime_state.get(), _chunk_1);
+    sorter.update(_runtime_state.get(), _chunk_2);
+    sorter.update(_runtime_state.get(), _chunk_3);
+    sorter.done(_runtime_state.get());
 
-        ChunkPtr page_1 = consume_page_from_sorter(sorter);
+    ChunkPtr page_1 = consume_page_from_sorter(sorter);
 
-        ASSERT_EQ(16, total_rows);
-        ASSERT_EQ(16, page_1->num_rows());
-        const size_t Size = 16;
-        std::vector<int32_t> permutation{58, 56, 55, 54, 52, 49, 41, 24, 16, 12, 6, 4, 2, 71, 70, 69};
-        std::vector<int32_t> result;
-        for (size_t i = 0; i < Size; ++i) {
-            result.push_back(page_1->get(i).get(0).get_int32());
-        }
-        EXPECT_EQ(permutation, result);
+    ASSERT_EQ(16, total_rows);
+    ASSERT_EQ(16, page_1->num_rows());
+    const size_t Size = 16;
+    std::vector<int32_t> permutation{58, 56, 55, 54, 52, 49, 41, 24, 16, 12, 6, 4, 2, 71, 70, 69};
+    std::vector<int32_t> result;
+    for (size_t i = 0; i < Size; ++i) {
+        result.push_back(page_1->get(i).get(0).get_int32());
     }
+    EXPECT_EQ(permutation, result);
 
     clear_sort_exprs(sort_exprs);
 }
@@ -420,28 +463,24 @@ TEST_F(ChunksSorterTest, full_sort_by_3_columns) {
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
 
-    for (auto strategy : all_compare_strategy()) {
-        std::cerr << "sort with strategy: " << strategy << std::endl;
-        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
-        sorter.set_compare_strategy(strategy);
-        size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
-        sorter.update(_runtime_state.get(), _chunk_1);
-        sorter.update(_runtime_state.get(), _chunk_2);
-        sorter.update(_runtime_state.get(), _chunk_3);
-        sorter.done(_runtime_state.get());
+    ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
+    size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
+    sorter.update(_runtime_state.get(), _chunk_1);
+    sorter.update(_runtime_state.get(), _chunk_2);
+    sorter.update(_runtime_state.get(), _chunk_3);
+    sorter.done(_runtime_state.get());
 
-        ChunkPtr page_1 = consume_page_from_sorter(sorter);
+    ChunkPtr page_1 = consume_page_from_sorter(sorter);
 
-        ASSERT_EQ(16, total_rows);
-        ASSERT_EQ(16, page_1->num_rows());
-        const size_t Size = 16;
-        std::vector<int32_t> permutation{71, 70, 69, 54, 4, 56, 55, 49, 41, 16, 52, 58, 24, 12, 2, 6};
-        std::vector<int32_t> result;
-        for (size_t i = 0; i < Size; ++i) {
-            result.push_back(page_1->get(i).get(0).get_int32());
-        }
-        ASSERT_EQ(permutation, result);
+    ASSERT_EQ(16, total_rows);
+    ASSERT_EQ(16, page_1->num_rows());
+    const size_t Size = 16;
+    std::vector<int32_t> permutation{71, 70, 69, 54, 4, 56, 55, 49, 41, 16, 52, 58, 24, 12, 2, 6};
+    std::vector<int32_t> result;
+    for (size_t i = 0; i < Size; ++i) {
+        result.push_back(page_1->get(i).get(0).get_int32());
     }
+    ASSERT_EQ(permutation, result);
 
     clear_sort_exprs(sort_exprs);
 }
@@ -463,29 +502,25 @@ TEST_F(ChunksSorterTest, full_sort_by_4_columns) {
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
 
-    for (auto strategy : all_compare_strategy()) {
-        std::cerr << "sort with strategy: " << strategy << std::endl;
-        ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
-        sorter.set_compare_strategy(strategy);
-        size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
-        sorter.update(_runtime_state.get(), _chunk_1);
-        sorter.update(_runtime_state.get(), _chunk_2);
-        sorter.update(_runtime_state.get(), _chunk_3);
-        sorter.done(_runtime_state.get());
+    ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
+    size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
+    sorter.update(_runtime_state.get(), _chunk_1);
+    sorter.update(_runtime_state.get(), _chunk_2);
+    sorter.update(_runtime_state.get(), _chunk_3);
+    sorter.done(_runtime_state.get());
 
-        ChunkPtr page_1 = consume_page_from_sorter(sorter);
-        // print_chunk(page_1);
+    ChunkPtr page_1 = consume_page_from_sorter(sorter);
+    // print_chunk(page_1);
 
-        ASSERT_EQ(16, total_rows);
-        ASSERT_EQ(16, page_1->num_rows());
-        const size_t Size = 16;
-        std::vector<int32_t> permutation{24, 55, 4, 58, 12, 52, 41, 56, 49, 16, 6, 2, 54, 71, 70, 69};
-        std::vector<int32_t> result;
-        for (size_t i = 0; i < Size; ++i) {
-            result.push_back(page_1->get(i).get(0).get_int32());
-        }
-        EXPECT_EQ(permutation, result);
+    ASSERT_EQ(16, total_rows);
+    ASSERT_EQ(16, page_1->num_rows());
+    const size_t Size = 16;
+    std::vector<int32_t> permutation{24, 55, 4, 58, 12, 52, 41, 56, 49, 16, 6, 2, 54, 71, 70, 69};
+    std::vector<int32_t> result;
+    for (size_t i = 0; i < Size; ++i) {
+        result.push_back(page_1->get(i).get(0).get_int32());
     }
+    EXPECT_EQ(permutation, result);
 
     clear_sort_exprs(sort_exprs);
 }
@@ -504,27 +539,24 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_fisrt) {
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
 
-    for (auto strategy : all_compare_strategy()) {
-        std::cerr << "sort with strategy: " << strategy << std::endl;
-        ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 2, 7, 2);
-        sorter.set_compare_strategy(strategy);
+    ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 2, 7, TTopNType::ROW_NUMBER,
+                            2);
 
-        size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
-        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release()));
-        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release()));
-        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release()));
-        sorter.done(_runtime_state.get());
+    size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
+    sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release()));
+    sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release()));
+    sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release()));
+    sorter.done(_runtime_state.get());
 
-        ChunkPtr page_1 = consume_page_from_sorter(sorter);
+    ChunkPtr page_1 = consume_page_from_sorter(sorter);
 
-        ASSERT_EQ(16, total_rows);
-        ASSERT_EQ(7, page_1->num_rows());
-        // full sort: {69, 70, 71, 4, 54, 16, 41, 49, 55, 56, 52, 2, 12, 24, 58, 6};
-        const size_t Size = 7;
-        int32_t permutation[Size] = {71, 4, 54, 16, 41, 49, 55};
-        for (size_t i = 0; i < Size; ++i) {
-            ASSERT_EQ(permutation[i], page_1->get(i).get(0).get_int32());
-        }
+    ASSERT_EQ(16, total_rows);
+    ASSERT_EQ(7, page_1->num_rows());
+    // full sort: {69, 70, 71, 4, 54, 16, 41, 49, 55, 56, 52, 2, 12, 24, 58, 6};
+    const size_t Size = 7;
+    int32_t permutation[Size] = {71, 4, 54, 16, 41, 49, 55};
+    for (size_t i = 0; i < Size; ++i) {
+        ASSERT_EQ(permutation[i], page_1->get(i).get(0).get_int32());
     }
 
     clear_sort_exprs(sort_exprs);
@@ -544,41 +576,38 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_last) {
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
 
-    for (auto strategy : all_compare_strategy()) {
-        int offset = 7;
-        for (int limit = 8; limit + offset <= 16; limit++) {
-            std::cerr << "sort with strategy: " << strategy << " limit:" << limit << std::endl;
-            ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", offset, limit, 2);
-            sorter.set_compare_strategy(strategy);
-            size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
-            sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release()));
-            sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release()));
-            sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release()));
-            sorter.done(_runtime_state.get());
+    int offset = 7;
+    for (int limit = 8; limit + offset <= 16; limit++) {
+        ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", offset, limit,
+                                TTopNType::ROW_NUMBER, 2);
+        size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
+        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release()));
+        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release()));
+        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release()));
+        sorter.done(_runtime_state.get());
 
-            ChunkPtr page_1 = consume_page_from_sorter(sorter);
+        ChunkPtr page_1 = consume_page_from_sorter(sorter);
 
-            ASSERT_EQ(16, total_rows);
-            ASSERT_EQ(limit, page_1->num_rows());
-            // full sort: {4, 54, 16, 41, 49, 55, 56, 52, 2, 12, 24, 58, 6, 69, 70, 71};
-            std::vector<int32_t> permutation{52, 2, 12, 24, 58, 6, 69, 70, 71};
-            std::vector<int32_t> result;
-            for (size_t i = 0; i < page_1->num_rows(); ++i) {
-                result.push_back(page_1->get(i).get(0).get_int32());
-            }
-            permutation.resize(limit);
-            EXPECT_EQ(permutation, result);
-
-            // part sort with large offset
-            ChunksSorterTopn sorter2(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 100, limit, 2);
-            sorter2.set_compare_strategy(strategy);
-            sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release()));
-            sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release()));
-            sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release()));
-            sorter2.done(_runtime_state.get());
-            page_1 = consume_page_from_sorter(sorter2);
-            ASSERT_TRUE(page_1 == nullptr);
+        ASSERT_EQ(16, total_rows);
+        ASSERT_EQ(limit, page_1->num_rows());
+        // full sort: {4, 54, 16, 41, 49, 55, 56, 52, 2, 12, 24, 58, 6, 69, 70, 71};
+        std::vector<int32_t> permutation{52, 2, 12, 24, 58, 6, 69, 70, 71};
+        std::vector<int32_t> result;
+        for (size_t i = 0; i < page_1->num_rows(); ++i) {
+            result.push_back(page_1->get(i).get(0).get_int32());
         }
+        permutation.resize(limit);
+        EXPECT_EQ(permutation, result);
+
+        // part sort with large offset
+        ChunksSorterTopn sorter2(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 100, limit,
+                                 TTopNType::ROW_NUMBER, 2);
+        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release()));
+        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release()));
+        sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release()));
+        sorter2.done(_runtime_state.get());
+        page_1 = consume_page_from_sorter(sorter2);
+        ASSERT_TRUE(page_1 == nullptr);
     }
 
     clear_sort_exprs(sort_exprs);
@@ -596,7 +625,8 @@ TEST_F(ChunksSorterTest, order_by_with_unequal_sized_chunks) {
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
 
     // partial sort
-    ChunksSorterTopn full_sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 1, 6, 2);
+    ChunksSorterTopn full_sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 1, 6,
+                                 TTopNType::ROW_NUMBER, 2);
     ChunkPtr chunk_1 = _chunk_1->clone_empty();
     ChunkPtr chunk_2 = _chunk_2->clone_empty();
     for (size_t i = 0; i < _chunk_1->num_columns(); ++i) {

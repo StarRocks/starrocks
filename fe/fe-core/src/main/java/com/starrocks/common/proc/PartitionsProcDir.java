@@ -49,11 +49,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.Pair;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.monitor.unit.ByteSizeValue;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -294,10 +293,8 @@ public class PartitionsProcDir implements ProcDirInterface {
                 partitionInfo.add(TimeUtils.longToTimeString(partition.getLastCheckTime()));
 
                 long dataSize = partition.getDataSize();
-                Pair<Double, String> sizePair = DebugUtil.getByteUint(dataSize);
-                String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(sizePair.first) + " "
-                        + sizePair.second;
-                partitionInfo.add(readableSize);
+                ByteSizeValue byteSizeValue = new ByteSizeValue(dataSize);
+                partitionInfo.add(byteSizeValue);
                 partitionInfo.add(tblPartitionInfo.getIsInMemory(partitionId));
                 if (Config.use_staros) {
                     partitionInfo.add(partition.isUseStarOS());

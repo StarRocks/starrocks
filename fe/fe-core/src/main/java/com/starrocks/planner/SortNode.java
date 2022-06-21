@@ -33,6 +33,7 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SortInfo;
 import com.starrocks.common.UserException;
+import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -49,10 +50,13 @@ import java.util.List;
 // The old query optimizer related codes could be deleted safely.
 // TODO: Remove old query optimizer related codes before 2021-09-30
 public class SortNode extends PlanNode {
+
     private static final Logger LOG = LogManager.getLogger(SortNode.class);
     private final SortInfo info;
     private final boolean useTopN;
     private final boolean isDefaultLimit;
+
+    private TopNType topNType = TopNType.ROW_NUMBER;
 
     private long offset;
     // if true, the output of this node feeds an AnalyticNode
@@ -93,7 +97,7 @@ public class SortNode extends PlanNode {
 
     public SortNode(PlanNodeId id, PlanNode input, SortInfo info, boolean useTopN,
                     boolean isDefaultLimit, long offset) {
-        super(id, useTopN ? "TOP-N" : "SORT");
+        super(id, useTopN ? "TOP-N" : (info.getPartitionExprs().isEmpty() ? "SORT" : "PARTITION-TOP-N"));
         this.info = info;
         this.useTopN = useTopN;
         this.isDefaultLimit = isDefaultLimit;
@@ -108,12 +112,21 @@ public class SortNode extends PlanNode {
      * Clone 'inputSortNode' for distributed Top-N
      */
     public SortNode(PlanNodeId id, SortNode inputSortNode, PlanNode child) {
-        super(id, inputSortNode, inputSortNode.useTopN ? "TOP-N" : "SORT");
+        super(id, inputSortNode, inputSortNode.useTopN ? "TOP-N" :
+                (inputSortNode.info.getPartitionExprs().isEmpty() ? "SORT" : "PARTITION-TOP-N"));
         this.info = inputSortNode.info;
         this.useTopN = inputSortNode.useTopN;
         this.isDefaultLimit = inputSortNode.isDefaultLimit;
         this.children.add(child);
         this.offset = inputSortNode.offset;
+    }
+
+    public TopNType getTopNType() {
+        return topNType;
+    }
+
+    public void setTopNType(TopNType topNType) {
+        this.topNType = topNType;
     }
 
     public long getOffset() {
@@ -172,6 +185,11 @@ public class SortNode extends PlanNode {
         msg.sort_node = new TSortNode(sortInfo, useTopN);
         msg.sort_node.setOffset(offset);
 
+        if (info.getPartitionExprs() != null) {
+            msg.sort_node.setPartition_exprs(Expr.treesToThrift(info.getPartitionExprs()));
+            msg.sort_node.setPartition_limit(info.getPartitionLimit());
+        }
+        msg.sort_node.setTopn_type(topNType.toThrift());
         // TODO(lingbin): remove blew codes, because it is duplicate with TSortInfo
         msg.sort_node.setOrdering_exprs(Expr.treesToThrift(info.getOrderingExprs()));
         msg.sort_node.setIs_asc_order(info.getIsAscOrder());
@@ -200,20 +218,42 @@ public class SortNode extends PlanNode {
     @Override
     protected String getNodeExplainString(String detailPrefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
-        output.append(detailPrefix).append("order by: ");
-        Iterator<Expr> expr = info.getOrderingExprs().iterator();
-        Iterator<Boolean> isAsc = info.getIsAscOrder().iterator();
+        if (!TopNType.ROW_NUMBER.equals(topNType)) {
+            output.append(detailPrefix).append("type: ").append(topNType.toString()).append("\n");
+        }
+        Iterator<Expr> partitionExpr = info.getPartitionExprs().iterator();
         boolean start = true;
-        while (expr.hasNext()) {
+        while (partitionExpr.hasNext()) {
+            if (start) {
+                start = false;
+                output.append(detailPrefix).append("partition by: ");
+            } else {
+                output.append(", ");
+            }
+            if (detailLevel.equals(TExplainLevel.NORMAL)) {
+                output.append(partitionExpr.next().toSql()).append(" ");
+            } else {
+                output.append(partitionExpr.next().explain()).append(" ");
+            }
+        }
+        if (!start) {
+            output.append("\n");
+            output.append(detailPrefix).append("partition limit: ").append(info.getPartitionLimit()).append("\n");
+        }
+        output.append(detailPrefix).append("order by: ");
+        Iterator<Expr> orderExpr = info.getOrderingExprs().iterator();
+        Iterator<Boolean> isAsc = info.getIsAscOrder().iterator();
+        start = true;
+        while (orderExpr.hasNext()) {
             if (start) {
                 start = false;
             } else {
                 output.append(", ");
             }
             if (detailLevel.equals(TExplainLevel.NORMAL)) {
-                output.append(expr.next().toSql()).append(" ");
+                output.append(orderExpr.next().toSql()).append(" ");
             } else {
-                output.append(expr.next().explain()).append(" ");
+                output.append(orderExpr.next().explain()).append(" ");
             }
             output.append(isAsc.next() ? "ASC" : "DESC");
         }

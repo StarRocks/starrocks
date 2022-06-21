@@ -1,7 +1,3 @@
-# This file is made available under Elastic License 2.0.
-# This file is based on code available under the Apache license here:
-#   https://github.com/apache/orc/blob/main/CMakeLists.txt 
-
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -162,10 +158,6 @@ if (NOT DEFINED ENV{STARROCKS_HOME}) # starrocks: no need to install doc
 install(
   FILES LICENSE NOTICE
   DESTINATION "share/doc/orc")
-endif()
-
-if (BUILD_JAVA)
-  add_subdirectory(java)
 endif()
 
 if (BUILD_TOOLS)

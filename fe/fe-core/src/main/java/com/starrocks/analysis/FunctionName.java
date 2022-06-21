@@ -1,7 +1,3 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/FunctionName.java
-
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -29,8 +25,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TFunctionName;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -42,8 +36,6 @@ import java.util.Objects;
  * db.function_name.
  */
 public class FunctionName implements Writable {
-    private static final Logger LOG = LogManager.getLogger(FunctionName.class);
-
     private String db_;
     private String fn_;
 
@@ -76,6 +68,15 @@ public class FunctionName implements Writable {
         return name;
     }
 
+    public static FunctionName createFnName(String fn) {
+        final String[] dbWithFn = fn.split("\\.");
+        if (dbWithFn.length == 2) {
+            return new FunctionName(dbWithFn[0], dbWithFn[1]);
+        } else {
+            return new FunctionName(null, fn);
+        }
+    }
+
     public static FunctionName fromThrift(TFunctionName fnName) {
         return new FunctionName(fnName.getDb_name(), fnName.getFunction_name());
     }
@@ -86,18 +87,7 @@ public class FunctionName implements Writable {
             return false;
         }
         FunctionName o = (FunctionName) obj;
-        if ((db_ == null || o.db_ == null) && (db_ != o.db_)) {
-            if (db_ == null && o.db_ != null) {
-                return false;
-            }
-            if (db_ != null && o.db_ == null) {
-                return false;
-            }
-            if (!db_.equalsIgnoreCase(o.db_)) {
-                return false;
-            }
-        }
-        return fn_.equalsIgnoreCase(o.fn_);
+        return Objects.equals(db_, o.db_) && Objects.equals(fn_, o.fn_);
     }
 
     public String getDb() {
@@ -163,13 +153,6 @@ public class FunctionName implements Writable {
             }
             db_ = ClusterNamespace.getFullName(analyzer.getClusterName(), db_);
         }
-
-        // If the function name is not fully qualified, it must not be the same as a builtin
-        //        if (!isFullyQualified() && OpcodeRegistry.instance().getFunctionOperator(
-        //          getFunction()) != FunctionOperator.INVALID_OPERATOR) {
-        //            throw new AnalysisException(
-        //              "Function cannot have the same name as a builtin: " + getFunction());
-        //        }
     }
 
     private boolean isValidCharacter(char c) {

@@ -2,9 +2,8 @@
 
 #pragma once
 
-#include "column/column.h"
 #include "column/column_builder.h"
-#include "column/column_viewer.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/vectorized/builtin_functions.h"
 #include "exprs/vectorized/function_helper.h"
 #include "udf/udf.h"
@@ -12,6 +11,7 @@
 
 namespace starrocks {
 namespace vectorized {
+
 // TODO:
 class TimeFunctions {
 public:
@@ -127,6 +127,24 @@ public:
     DEFINE_VECTORIZED_FN(week_of_year);
 
     /**
+     * Get week of the year.
+     * @param context
+     * @param column[0] [TimestampColumn] Columns that hold timestamps.
+     * @param mode's value is default 0.
+     * @return  IntColumn week of the year:
+     */
+    DEFINE_VECTORIZED_FN(week_of_year_with_default_mode);
+
+    /**
+     * Get week of the year.
+     * @param context
+     * @param column[0] [TimestampColumn] Columns that hold timestamps.
+     * @param column[1] [IntColumn] Columns that hold mode.
+     * @return  IntColumn week of the year:
+     */
+    DEFINE_VECTORIZED_FN(week_of_year_with_mode);
+
+    /**
      * Get hour of the day
      * @param context
      * @param columns [TimestampColumn] Columns that hold timestamps.
@@ -200,24 +218,24 @@ public:
                                        starrocks_udf::FunctionContext::FunctionStateScope scope);
 
     /*
-     * Called by datetime_floor
+     * Called by time_slice
      * Floor to the corresponding period
      */
-    DEFINE_VECTORIZED_FN(datetime_floor_second);
-    DEFINE_VECTORIZED_FN(datetime_floor_minute);
-    DEFINE_VECTORIZED_FN(datetime_floor_hour);
-    DEFINE_VECTORIZED_FN(datetime_floor_day);
-    DEFINE_VECTORIZED_FN(datetime_floor_month);
-    DEFINE_VECTORIZED_FN(datetime_floor_year);
-    DEFINE_VECTORIZED_FN(datetime_floor_week);
-    DEFINE_VECTORIZED_FN(datetime_floor_quarter);
-    // datetime_floor for sql.
-    DEFINE_VECTORIZED_FN(datetime_floor);
+    DEFINE_VECTORIZED_FN(time_slice_second);
+    DEFINE_VECTORIZED_FN(time_slice_minute);
+    DEFINE_VECTORIZED_FN(time_slice_hour);
+    DEFINE_VECTORIZED_FN(time_slice_day);
+    DEFINE_VECTORIZED_FN(time_slice_month);
+    DEFINE_VECTORIZED_FN(time_slice_year);
+    DEFINE_VECTORIZED_FN(time_slice_week);
+    DEFINE_VECTORIZED_FN(time_slice_quarter);
+    // time_slice for sql.
+    DEFINE_VECTORIZED_FN(time_slice);
 
-    static Status datetime_floor_prepare(starrocks_udf::FunctionContext* context,
-                                         starrocks_udf::FunctionContext::FunctionStateScope scope);
-    static Status datetime_floor_close(starrocks_udf::FunctionContext* context,
-                                       starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status time_slice_prepare(starrocks_udf::FunctionContext* context,
+                                     starrocks_udf::FunctionContext::FunctionStateScope scope);
+    static Status time_slice_close(starrocks_udf::FunctionContext* context,
+                                   starrocks_udf::FunctionContext::FunctionStateScope scope);
     /*
      * Called by date_trunc
      * Truncate to the corresponding part
@@ -444,10 +462,10 @@ public:
      */
     DEFINE_VECTORIZED_FN(str_to_date);
 
-    /** 
-     * 
+    /**
+     *
      * cast string to date, the function will call by FE getStrToDateFunction, and is invisible to user
-     * 
+     *
      */
     DEFINE_VECTORIZED_FN(str2date);
 
@@ -539,6 +557,21 @@ public:
      */
     DEFINE_VECTORIZED_FN(time_to_sec);
 
+    // Following const variables used to obtains number days of year
+    constexpr static int NUMBER_OF_LEAP_YEAR = 366;
+    constexpr static int NUMBER_OF_NON_LEAP_YEAR = 365;
+
+    static long compute_daynr(uint year, uint month, uint day);
+    static int compute_weekday(long daynr, bool sunday_first_day_of_week);
+    static uint32_t compute_days_in_year(uint year);
+    static uint week_mode(uint mode);
+    static int32_t compute_week(uint year, uint month, uint day, uint week_behaviour);
+
+    /** Flags for calc_week() function.  */
+    constexpr static const unsigned int WEEK_MONDAY_FIRST = 1;
+    constexpr static const unsigned int WEEK_YEAR = 2;
+    constexpr static const unsigned int WEEK_FIRST_WEEKDAY = 4;
+
 private:
     // internal approach to process string content, based on any string format.
     static void str_to_date_internal(TimestampValue* ts, const Slice& fmt, const Slice& str,
@@ -599,7 +632,7 @@ private:
         char* fmt;
     };
 
-    // method for datetime_trunc and datetime_floor
+    // method for datetime_trunc and time_slice
     struct DateTruncCtx {
         ScalarFunction function;
     };

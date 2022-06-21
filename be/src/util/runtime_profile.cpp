@@ -59,7 +59,7 @@ const std::string RuntimeProfile::ROOT_COUNTER = ""; // NOLINT
 RuntimeProfile::PeriodicCounterUpdateState RuntimeProfile::_s_periodic_counter_update_state;
 
 const std::unordered_set<std::string> RuntimeProfile::NON_MERGE_COUNTER_NAMES = {
-        "DegreeOfParallelism", "RuntimeBloomFilterNum", "RuntimeInFilterNum", "PushdownPredicates"};
+        "DegreeOfParallelism", "RuntimeBloomFilterNum", "RuntimeInFilterNum", "PushdownPredicates", "MemoryLimit"};
 
 RuntimeProfile::RuntimeProfile(std::string name, bool is_averaged_profile)
         : _parent(nullptr),
@@ -320,6 +320,7 @@ void RuntimeProfile::reverse_childs() {
 void RuntimeProfile::add_child_unlock(RuntimeProfile* child, bool indent, ChildVector::iterator pos) {
     DCHECK(child != nullptr);
     DCHECK(child->_parent == nullptr);
+    DCHECK(_child_map.find(child->_name) == _child_map.end());
     _child_map[child->_name] = child;
     _children.insert(pos, std::make_pair(child, indent));
     child->_parent = this;
@@ -1015,7 +1016,8 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
                 const auto exist_type = it->second;
                 if (counter->type() != exist_type) {
                     LOG(WARNING) << "find non-isomorphic counter, profile_name=" << profile0->name()
-                                 << ", name=" << name;
+                                 << ", counter_name=" << name << ", exist_type=" << std::to_string(exist_type)
+                                 << ", another_type=" << std::to_string(counter->type());
                     return;
                 }
             }
@@ -1040,7 +1042,8 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
                 }
                 if (type != counter->type()) {
                     LOG(WARNING) << "find non-isomorphic counter, profile_name=" << profile0->name()
-                                 << ", name=" << name;
+                                 << ", counter_name=" << name << ", exist_type=" << std::to_string(type)
+                                 << ", another_type=" << std::to_string(counter->type());
                     return;
                 }
 
@@ -1096,7 +1099,9 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
                 auto* profile = profiles[j];
                 if (i >= profile->num_children()) {
                     LOG(WARNING) << "find non-isomorphic children, profile_name=" << profile0->name()
-                                 << ", another profile_name=" << profile->name();
+                                 << ", children_names=" << profile0->get_children_name_string()
+                                 << ", another profile_name=" << profile->name()
+                                 << ", another children_names=" << profile->get_children_name_string();
                     return;
                 }
                 auto* child = profile->get_child(i);
@@ -1159,6 +1164,22 @@ void RuntimeProfile::print_child_counters(const std::string& prefix, const std::
             RuntimeProfile::print_child_counters(prefix + "  ", child_counter, counter_map, child_counter_map, s);
         }
     }
+}
+std::string RuntimeProfile::get_children_name_string() {
+    std::stringstream ss;
+    ss << "[";
+
+    for (int i = 0; i < _children.size(); ++i) {
+        auto* child = _children[i].first;
+        if (i != 0) {
+            ss << ", ";
+        }
+        ss << child->name();
+    }
+
+    ss << "]";
+
+    return ss.str();
 }
 
 } // namespace starrocks

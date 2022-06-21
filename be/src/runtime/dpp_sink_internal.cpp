@@ -26,8 +26,10 @@
 #include "common/object_pool.h"
 #include "exprs/expr.h"
 #include "gen_cpp/DataSinks_types.h"
+#include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "util/string_parser.hpp"
 
 namespace starrocks {
 

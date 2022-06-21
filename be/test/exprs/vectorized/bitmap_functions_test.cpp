@@ -5,8 +5,13 @@
 #include <gtest/gtest.h>
 
 #include "column/array_column.h"
+#include "column/column_helper.h"
+#include "column/column_viewer.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/base64.h"
-#include "util/bitmap_value.h"
+#include "types/bitmap_value.h"
+#include "udf/udf.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -1733,14 +1738,23 @@ TEST_F(VecBitmapFunctionsTest, bitmapMaxTest) {
 
         auto column = BitmapFunctions::bitmap_max(ctx, columns);
 
-        ASSERT_TRUE(column->is_numeric());
+        ASSERT_FALSE(column->is_numeric());
 
-        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(column);
+        ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 
-        ASSERT_EQ(0, p->get_data()[0]);
-        ASSERT_EQ(0, p->get_data()[1]);
-        ASSERT_EQ(4, p->get_data()[2]);
-        ASSERT_EQ(4123102120, p->get_data()[3]);
+        auto max_value0 = viewer.value(0)->max();
+        ASSERT_TRUE(max_value0.has_value());
+        ASSERT_EQ(0, max_value0.value());
+
+        ASSERT_TRUE(column->is_null(1));
+
+        auto max_value2 = viewer.value(2)->max();
+        ASSERT_TRUE(max_value2.has_value());
+        ASSERT_EQ(4, max_value2.value());
+
+        auto max_value3 = viewer.value(3)->max();
+        ASSERT_TRUE(max_value3.has_value());
+        ASSERT_EQ(4123102120, max_value3.value());
     }
 
     {
@@ -1765,12 +1779,18 @@ TEST_F(VecBitmapFunctionsTest, bitmapMaxTest) {
 
         ASSERT_TRUE(v->is_nullable());
 
-        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(ColumnHelper::as_column<NullableColumn>(v)->data_column());
+        ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 
-        ASSERT_EQ(0, p->get_data()[0]);
+        auto max_value0 = viewer.value(0)->max();
+        ASSERT_TRUE(max_value0.has_value());
+        ASSERT_EQ(0, max_value0.value());
+
         ASSERT_TRUE(v->is_null(1));
         ASSERT_TRUE(v->is_null(2));
-        ASSERT_EQ(4123102120, p->get_data()[3]);
+
+        auto max_value3 = viewer.value(3)->max();
+        ASSERT_TRUE(max_value3.has_value());
+        ASSERT_EQ(4123102120, max_value3.value());
     }
 }
 
@@ -1809,14 +1829,23 @@ TEST_F(VecBitmapFunctionsTest, bitmapMinTest) {
 
         auto column = BitmapFunctions::bitmap_min(ctx, columns);
 
-        ASSERT_TRUE(column->is_numeric());
+        ASSERT_FALSE(column->is_numeric());
 
-        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(column);
+        ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
 
-        ASSERT_EQ(0, p->get_data()[0]);
-        ASSERT_EQ(-1, p->get_data()[1]);
-        ASSERT_EQ(1, p->get_data()[2]);
-        ASSERT_EQ(23074, p->get_data()[3]);
+        auto min_value0 = viewer.value(0)->min();
+        ASSERT_TRUE(min_value0.has_value());
+        ASSERT_EQ(0, min_value0.value());
+
+        ASSERT_TRUE(column->is_null(1));
+
+        auto min_value2 = viewer.value(2)->min();
+        ASSERT_TRUE(min_value2.has_value());
+        ASSERT_EQ(1, min_value2.value());
+
+        auto min_value3 = viewer.value(3)->min();
+        ASSERT_TRUE(min_value3.has_value());
+        ASSERT_EQ(23074, min_value3.value());
     }
 
     {
@@ -1841,9 +1870,9 @@ TEST_F(VecBitmapFunctionsTest, bitmapMinTest) {
 
         ASSERT_TRUE(v->is_nullable());
 
-        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(ColumnHelper::as_column<NullableColumn>(v)->data_column());
+        auto p = ColumnHelper::cast_to<TYPE_LARGEINT>(ColumnHelper::as_column<NullableColumn>(v)->data_column());
 
-        ASSERT_EQ(0, p->get_data()[0]);
+        ASSERT_EQ(NULL, p->get_data()[0]);
         ASSERT_TRUE(v->is_null(1));
         ASSERT_TRUE(v->is_null(2));
         ASSERT_EQ(23074, p->get_data()[3]);
@@ -1876,6 +1905,44 @@ TEST_F(VecBitmapFunctionsTest, base64ToBitmapTest) {
     // judge encode and decode bitmap data
     ASSERT_EQ(bitmap_src.to_string(), bitmap_decode.to_string());
     free(src);
+}
+
+TEST_F(VecBitmapFunctionsTest, array_to_bitmap_test) {
+    auto builder = [](const Buffer<int64_t>& val) {
+        auto ele_column = Int64Column::create();
+        ele_column->append(val);
+        auto offset_column = UInt32Column::create();
+        offset_column->append(0);
+        offset_column->append(val.size());
+        return ArrayColumn::create(ele_column, offset_column);
+    };
+
+    auto nullable_builder = [](const Buffer<int64_t>& val, const Buffer<int32_t>& null_idx) {
+        auto ele_column = Int64Column::create();
+        ele_column->append(val);
+
+        auto nullable_column = NullableColumn::create(ele_column, NullColumn::create(val.size()));
+        for (auto idx : null_idx) {
+            nullable_column->set_null(idx);
+        }
+        auto offset_column = UInt32Column::create();
+        offset_column->append(0);
+        offset_column->append(val.size());
+        return ArrayColumn::create(nullable_column, offset_column);
+    };
+
+    Columns columns = {builder(Buffer<int64_t>{1, 2, 3, 4})};
+    auto res = BitmapFunctions::array_to_bitmap(nullptr, columns);
+    ASSERT_EQ(res->debug_item(0), "1,2,3,4");
+    columns = {ColumnHelper::create_const_null_column(1)};
+    res = BitmapFunctions::array_to_bitmap(nullptr, columns);
+    ASSERT_EQ(res->debug_item(0), "CONST: NULL");
+    columns = {nullable_builder(Buffer<int64_t>{1, 2, 3, 4}, {0})};
+    res = BitmapFunctions::array_to_bitmap(nullptr, columns);
+    ASSERT_EQ(res->debug_item(0), "2,3,4");
+    columns = {nullable_builder(Buffer<int64_t>{1, 2, 3, 4}, {0, 1, 2, 3})};
+    res = BitmapFunctions::array_to_bitmap(nullptr, columns);
+    ASSERT_EQ(res->debug_item(0), "");
 }
 
 } // namespace vectorized

@@ -14,6 +14,7 @@
 #include "runtime/user_function_cache.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
 #include "util/cpu_info.h"
 #include "util/disk_info.h"

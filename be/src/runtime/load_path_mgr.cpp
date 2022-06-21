@@ -28,12 +28,13 @@
 #include <boost/algorithm/string/join.hpp>
 #include <string>
 
+#include "common/config.h"
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
-#include "util/file_utils.h"
 #include "util/thread.h"
 
 namespace starrocks {
@@ -56,7 +57,7 @@ Status LoadPathMgr::init() {
     // error log is saved in first root path
     _error_log_dir = _exec_env->store_paths()[0].path + ERROR_LOG_PREFIX;
     // check and make dir
-    RETURN_IF_ERROR(FileUtils::create_dir(_error_log_dir));
+    RETURN_IF_ERROR(fs::create_directories(_error_log_dir));
 
     _idx = 0;
     _stop_future = _stop.get_future();
@@ -98,7 +99,7 @@ Status LoadPathMgr::allocate_dir(const std::string& db, const std::string& label
             path = _path_vec[_idx] + "/" + db + "/" + shard + "/" + label;
             _idx = (_idx + 1) % size;
         }
-        status = FileUtils::create_dir(path);
+        status = fs::create_directories(path);
         if (LIKELY(status.ok())) {
             *prefix = path;
             return Status::OK();
@@ -152,7 +153,7 @@ void LoadPathMgr::process_path(time_t now, const std::string& path, int64_t rese
         return;
     }
     LOG(INFO) << "Going to remove path. path=" << path;
-    Status status = FileUtils::remove_all(path);
+    Status status = fs::remove_all(path);
     if (status.ok()) {
         LOG(INFO) << "Remove path success. path=" << path;
     } else {
@@ -164,7 +165,7 @@ void LoadPathMgr::clean_one_path(const std::string& path) {
     FileSystem* fs = FileSystem::Default();
 
     std::vector<std::string> dbs;
-    Status status = FileUtils::list_files(fs, path, &dbs);
+    Status status = fs->get_children(path, &dbs);
     // path may not exist
     if (!status.ok() && !status.is_not_found()) {
         LOG(WARNING) << "scan one path to delete directory failed. path=" << path;
@@ -175,7 +176,7 @@ void LoadPathMgr::clean_one_path(const std::string& path) {
     for (auto& db : dbs) {
         std::string db_dir = path + "/" + db;
         std::vector<std::string> sub_dirs;
-        status = FileUtils::list_files(fs, db_dir, &sub_dirs);
+        status = fs->get_children(db_dir, &sub_dirs);
         if (!status.ok()) {
             LOG(WARNING) << "scan db of trash dir failed, continue. dir=" << db_dir;
             continue;
@@ -188,7 +189,7 @@ void LoadPathMgr::clean_one_path(const std::string& path) {
                 // sub_dir starts with SHARD_PREFIX
                 // process shard sub dir
                 std::vector<std::string> labels;
-                Status status = FileUtils::list_files(fs, sub_path, &labels);
+                Status status = fs->get_children(sub_path, &labels);
                 if (!status.ok()) {
                     LOG(WARNING) << "scan one path to delete directory failed. path=" << sub_path;
                     continue;
@@ -217,7 +218,7 @@ void LoadPathMgr::clean_error_log() {
 
     time_t now = time(nullptr);
     std::vector<std::string> sub_dirs;
-    Status status = FileUtils::list_files(fs, _error_log_dir, &sub_dirs);
+    Status status = fs->get_children(_error_log_dir, &sub_dirs);
     if (!status.ok()) {
         LOG(WARNING) << "scan error_log dir failed. dir=" << _error_log_dir;
         return;
@@ -230,7 +231,7 @@ void LoadPathMgr::clean_error_log() {
             // sub_dir starts with SHARD_PREFIX
             // process shard sub dir
             std::vector<std::string> error_log_files;
-            Status status = FileUtils::list_files(fs, sub_path, &error_log_files);
+            Status status = fs->get_children(sub_path, &error_log_files);
             if (!status.ok()) {
                 LOG(WARNING) << "scan one path to delete directory failed. path=" << sub_path;
                 continue;

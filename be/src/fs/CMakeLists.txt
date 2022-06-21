@@ -33,7 +33,12 @@ set(EXEC_FILES
     fs_memory.cpp
     fs_s3.cpp
     fs_hdfs.cpp
+    fs_util.cpp
     )
+
+if ("${USE_STAROS}" STREQUAL "ON")
+    list(APPEND EXEC_FILES fs_starlet.cpp)
+endif()
 
 add_library(FileSystem STATIC
     ${EXEC_FILES}

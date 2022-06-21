@@ -21,6 +21,8 @@
 
 #include "storage/base_tablet.h"
 
+#include <fmt/format.h>
+
 #include "storage/data_dir.h"
 #include "util/path_util.h"
 

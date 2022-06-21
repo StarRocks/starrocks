@@ -32,8 +32,10 @@
 #include <sstream>
 #include <utility>
 
+#include "common/config.h"
 #include "common/version.h"
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
@@ -42,11 +44,12 @@
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage/txn_manager.h"
 #include "storage/utils.h" // for check_dir_existed
 #include "util/defer_op.h"
 #include "util/errno.h"
-#include "util/file_utils.h"
 #include "util/monotime.h"
 #include "util/string_util.h"
 
@@ -57,16 +60,16 @@ namespace starrocks {
 static const char* const kMtabPath = "/etc/mtab";
 static const char* const kTestFilePath = "/.testfile";
 
-DataDir::DataDir(std::string path, TStorageMedium::type storage_medium, TabletManager* tablet_manager,
+DataDir::DataDir(const std::string& path, TStorageMedium::type storage_medium, TabletManager* tablet_manager,
                  TxnManager* txn_manager)
-        : _path(std::move(path)),
+        : _path(path),
           _available_bytes(0),
           _disk_capacity_bytes(0),
           _storage_medium(storage_medium),
           _is_used(false),
           _tablet_manager(tablet_manager),
           _txn_manager(txn_manager),
-          _cluster_id(-1),
+          _cluster_id_mgr(std::make_shared<ClusterIdMgr>(path)),
           _current_shard(0) {}
 
 DataDir::~DataDir() {
@@ -76,10 +79,7 @@ DataDir::~DataDir() {
 
 Status DataDir::init(bool read_only) {
     ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
-    if (!FileUtils::check_exist(_fs.get(), _path)) {
-        RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("opendir failed, path=$0", _path)),
-                                  "check file exist failed");
-    }
+    RETURN_IF_ERROR(_fs->path_exists(_path));
     std::string align_tag_path = _path + ALIGN_TAG_PREFIX;
     if (access(align_tag_path.c_str(), F_OK) == 0) {
         RETURN_IF_ERROR_WITH_WARN(Status::NotFound(Substitute("align tag $0 was found", align_tag_path)),
@@ -87,7 +87,7 @@ Status DataDir::init(bool read_only) {
     }
 
     RETURN_IF_ERROR_WITH_WARN(update_capacity(), "update_capacity failed");
-    RETURN_IF_ERROR_WITH_WARN(_init_cluster_id(), "_init_cluster_id failed");
+    RETURN_IF_ERROR_WITH_WARN(_cluster_id_mgr->init(), "_cluster_id_mgr init failed");
     RETURN_IF_ERROR_WITH_WARN(_init_data_dir(), "_init_data_dir failed");
     RETURN_IF_ERROR_WITH_WARN(_init_tmp_dir(), "_init_tmp_dir failed");
     RETURN_IF_ERROR_WITH_WARN(_init_meta(read_only), "_init_meta failed");
@@ -101,95 +101,18 @@ void DataDir::stop_bg_worker() {
     _cv.notify_one();
 }
 
-Status DataDir::_init_cluster_id() {
-    std::string cluster_id_path = _path + CLUSTER_ID_PREFIX;
-    if (access(cluster_id_path.c_str(), F_OK) != 0) {
-        int fd = open(cluster_id_path.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
-        if (fd < 0 || close(fd) < 0) {
-            RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("failed to create cluster id file $0, err=$1",
-                                                                          cluster_id_path, errno_to_string(errno))),
-                                      "create file failed");
-        }
-    }
-
-    // obtain lock of all cluster id paths
-    FILE* fp = nullptr;
-    fp = fopen(cluster_id_path.c_str(), "r+b");
-    if (fp == nullptr) {
-        RETURN_IF_ERROR_WITH_WARN(
-                Status::IOError(strings::Substitute("failed to open cluster id file $0", cluster_id_path)),
-                "open file failed");
-    }
-
-    DeferOp close_fp([&]() {
-        fclose(fp);
-        fp = nullptr;
-    });
-
-    int lock_res = flock(fp->_fileno, LOCK_EX | LOCK_NB);
-    if (lock_res < 0) {
-        RETURN_IF_ERROR_WITH_WARN(
-                Status::IOError(strings::Substitute("failed to flock cluster id file $0", cluster_id_path)),
-                "flock file failed");
-    }
-
-    // obtain cluster id of all root paths
-    auto st = _read_cluster_id(cluster_id_path, &_cluster_id);
-    return st;
-}
-
-Status DataDir::_read_cluster_id(const std::string& path, int32_t* cluster_id) {
-    RETURN_IF_ERROR(_add_version_info_to_cluster_id(path));
-
-    std::fstream fs(path.c_str(), std::fstream::in);
-    if (!fs.is_open()) {
-        RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("failed to open cluster id file $0", path)),
-                                  "open file failed");
-    }
-
-    std::string cluster_id_str;
-    fs >> cluster_id_str;
-    fs.close();
-    int32_t tmp_cluster_id = -1;
-    if (!cluster_id_str.empty()) {
-        size_t pos = cluster_id_str.find('-');
-        if (pos != std::string::npos) {
-            tmp_cluster_id = std::stoi(cluster_id_str.substr(0, pos));
-        } else {
-            tmp_cluster_id = std::stoi(cluster_id_str);
-        }
-    }
-
-    if (tmp_cluster_id == -1 && (fs.rdstate() & std::fstream::eofbit) != 0) {
-        *cluster_id = -1;
-    } else if (tmp_cluster_id >= 0 && (fs.rdstate() & std::fstream::eofbit) != 0) {
-        *cluster_id = tmp_cluster_id;
-    } else {
-        RETURN_IF_ERROR_WITH_WARN(Status::Corruption(strings::Substitute(
-                                          "cluster id file $0 is corrupt. [id=$1 eofbit=$2 failbit=$3 badbit=$4]", path,
-                                          tmp_cluster_id, fs.rdstate() & std::fstream::eofbit,
-                                          fs.rdstate() & std::fstream::failbit, fs.rdstate() & std::fstream::badbit)),
-                                  "file content is error");
-    }
-    return Status::OK();
-}
-
 Status DataDir::_init_data_dir() {
     std::string data_path = _path + DATA_PREFIX;
-    if (!FileUtils::check_exist(_fs.get(), data_path) && !FileUtils::create_dir(_fs.get(), data_path).ok()) {
-        RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("failed to create data root path $0", data_path)),
-                                  "check_exist failed");
-    }
-    return Status::OK();
+    auto st = _fs->create_dir_recursive(data_path);
+    LOG_IF(ERROR, !st.ok()) << "failed to create data directory " << data_path;
+    return st;
 }
 
 Status DataDir::_init_tmp_dir() {
     std::string tmp_path = _path + TMP_PREFIX;
-    if (!FileUtils::check_exist(_fs.get(), tmp_path) && !FileUtils::create_dir(_fs.get(), tmp_path).ok()) {
-        RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("failed to create tmp path $0", tmp_path)),
-                                  "check_exist failed");
-    }
-    return Status::OK();
+    auto st = _fs->create_dir_recursive(tmp_path);
+    LOG_IF(ERROR, !st.ok()) << "failed to create temp directory " << tmp_path;
+    return st;
 }
 
 Status DataDir::_init_meta(bool read_only) {
@@ -209,57 +132,7 @@ Status DataDir::_init_meta(bool read_only) {
 }
 
 Status DataDir::set_cluster_id(int32_t cluster_id) {
-    if (_cluster_id != -1) {
-        if (_cluster_id == cluster_id) {
-            return Status::OK();
-        }
-        LOG(ERROR) << "going to set cluster id to already assigned store, cluster_id=" << _cluster_id
-                   << ", new_cluster_id=" << cluster_id;
-        return Status::InternalError("going to set cluster id to already assigned store");
-    }
-    return _write_cluster_id_to_path(_cluster_id_path(), cluster_id);
-}
-
-Status DataDir::_write_cluster_id_to_path(const std::string& path, int32_t cluster_id) {
-    std::fstream fs(path.c_str(), std::fstream::out);
-    if (!fs.is_open()) {
-        LOG(WARNING) << "fail to open cluster id path. path=" << path;
-        return Status::InternalError("IO Error");
-    }
-    fs << cluster_id;
-    fs << "-" << std::string(STARROCKS_VERSION);
-    fs.close();
-    return Status::OK();
-}
-
-// This function is to add version info into file named cluster_id
-// This feacture is used to restrict the degrading from StarRocks-1.17.2 to lower version
-// Because the StarRocks with lower version cannot read the file written by RocksDB-6.22.1
-// This feature takes into effect after StarRocks-1.17.2
-// Without this feature, staring BE will be failed
-Status DataDir::_add_version_info_to_cluster_id(const std::string& path) {
-    std::fstream in_fs(path.c_str(), std::fstream::in);
-    if (!in_fs.is_open()) {
-        RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("failed to open cluster id file $0", path)),
-                                  "open file failed");
-    }
-    std::string cluster_id_str;
-    in_fs >> cluster_id_str;
-    in_fs.close();
-
-    if (cluster_id_str.empty() || cluster_id_str.find('-') != std::string::npos) {
-        return Status::OK();
-    }
-
-    std::fstream out_fs(path.c_str(), std::fstream::out);
-    if (!out_fs.is_open()) {
-        RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("failed to open cluster id file $0", path)),
-                                  "open file failed");
-    }
-    out_fs << cluster_id_str;
-    out_fs << "-" << std::string(STARROCKS_VERSION);
-    out_fs.close();
-    return Status::OK();
+    return _cluster_id_mgr->set_cluster_id(cluster_id);
 }
 
 void DataDir::health_check() {
@@ -290,10 +163,7 @@ Status DataDir::get_shard(uint64_t* shard) {
     }
     shard_path_stream << _path << DATA_PREFIX << "/" << next_shard;
     std::string shard_path = shard_path_stream.str();
-    if (!FileUtils::check_exist(_fs.get(), shard_path)) {
-        RETURN_IF_ERROR(FileUtils::create_dir(_fs.get(), shard_path));
-    }
-
+    RETURN_IF_ERROR(_fs->create_dir_recursive(shard_path));
     *shard = next_shard;
     return Status::OK();
 }
@@ -331,15 +201,16 @@ void DataDir::find_tablet_in_trash(int64_t tablet_id, std::vector<std::string>* 
     // path: /root_path/trash/time_label/tablet_id/schema_hash
     std::string trash_path = _path + TRASH_PREFIX;
     std::vector<std::string> sub_dirs;
-    FileUtils::list_files(_fs.get(), trash_path, &sub_dirs);
+    (void)_fs->get_children(trash_path, &sub_dirs);
     for (auto& sub_dir : sub_dirs) {
         // sub dir is time_label
         std::string sub_path = trash_path + "/" + sub_dir;
-        if (!FileUtils::is_dir(_fs.get(), sub_path)) {
+        auto is_dir = _fs->is_directory(sub_path);
+        if (!is_dir.ok() || !is_dir.value()) {
             continue;
         }
         std::string tablet_path = sub_path + "/" + std::to_string(tablet_id);
-        if (FileUtils::check_exist(_fs.get(), tablet_path)) {
+        if (_fs->path_exists(tablet_path).ok()) {
             paths->emplace_back(std::move(tablet_path));
         }
     }
@@ -459,11 +330,12 @@ Status DataDir::load() {
                     rowset_meta->tablet_schema_hash(), rowset_meta->tablet_uid(), rowset_meta->load_id(), rowset, true);
             if (!commit_txn_status.ok() && !commit_txn_status.is_already_exist()) {
                 LOG(WARNING) << "Fail to add committed rowset=" << rowset_meta->rowset_id()
-                             << " tablet=" << rowset_meta->tablet_id() << " txn=" << rowset_meta->txn_id();
+                             << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();
             } else {
                 LOG(INFO) << "Added committed rowset=" << rowset_meta->rowset_id()
                           << " tablet=" << rowset_meta->tablet_id()
-                          << " schema hash=" << rowset_meta->tablet_schema_hash() << " txn=" << rowset_meta->txn_id();
+                          << " schema hash=" << rowset_meta->tablet_schema_hash()
+                          << " txn_id: " << rowset_meta->txn_id();
             }
         } else if (rowset_meta->rowset_state() == RowsetStatePB::VISIBLE &&
                    rowset_meta->tablet_uid() == tablet->tablet_uid()) {
@@ -477,7 +349,7 @@ Status DataDir::load() {
         } else {
             LOG(WARNING) << "Found invalid rowset=" << rowset_meta->rowset_id()
                          << " tablet id=" << rowset_meta->tablet_id() << " tablet uid=" << rowset_meta->tablet_uid()
-                         << " schema hash=" << rowset_meta->tablet_schema_hash() << " txn=" << rowset_meta->txn_id()
+                         << " schema hash=" << rowset_meta->tablet_schema_hash() << " txn_id: " << rowset_meta->txn_id()
                          << " current valid tablet uid=" << tablet->tablet_uid();
         }
     }
@@ -586,7 +458,7 @@ void DataDir::perform_path_scan() {
         std::set<std::string> shards;
         std::string data_path = _path + DATA_PREFIX;
 
-        Status ret = FileUtils::list_dirs_files(_fs.get(), data_path, &shards, nullptr);
+        Status ret = fs::list_dirs_files(_fs.get(), data_path, &shards, nullptr);
         if (!ret.ok()) {
             LOG(WARNING) << "fail to walk dir. path=[" + data_path << "] error[" << ret.to_string() << "]";
             return;
@@ -595,7 +467,7 @@ void DataDir::perform_path_scan() {
         for (const auto& shard : shards) {
             std::string shard_path = data_path + "/" + shard;
             std::set<std::string> tablet_ids;
-            ret = FileUtils::list_dirs_files(_fs.get(), shard_path, &tablet_ids, nullptr);
+            ret = fs::list_dirs_files(_fs.get(), shard_path, &tablet_ids, nullptr);
             if (!ret.ok()) {
                 LOG(WARNING) << "fail to walk dir. [path=" << shard_path << "] error[" << ret.to_string() << "]";
                 continue;
@@ -603,7 +475,7 @@ void DataDir::perform_path_scan() {
             for (const auto& tablet_id : tablet_ids) {
                 std::string tablet_id_path = shard_path + "/" + tablet_id;
                 std::set<std::string> schema_hashes;
-                ret = FileUtils::list_dirs_files(_fs.get(), tablet_id_path, &schema_hashes, nullptr);
+                ret = fs::list_dirs_files(_fs.get(), tablet_id_path, &schema_hashes, nullptr);
                 if (!ret.ok()) {
                     LOG(WARNING) << "fail to walk dir. [path=" << tablet_id_path << "]"
                                  << " error[" << ret.to_string() << "]";
@@ -614,7 +486,7 @@ void DataDir::perform_path_scan() {
                     _all_tablet_schemahash_paths.insert(tablet_schema_hash_path);
                     std::set<std::string> rowset_files;
 
-                    ret = FileUtils::list_dirs_files(_fs.get(), tablet_schema_hash_path, nullptr, &rowset_files);
+                    ret = fs::list_dirs_files(_fs.get(), tablet_schema_hash_path, nullptr, &rowset_files);
                     if (!ret.ok()) {
                         LOG(WARNING) << "fail to walk dir. [path=" << tablet_schema_hash_path << "] error["
                                      << ret.to_string() << "]";
@@ -633,9 +505,10 @@ void DataDir::perform_path_scan() {
 }
 
 void DataDir::_process_garbage_path(const std::string& path) {
-    if (FileUtils::check_exist(_fs.get(), path)) {
+    if (_fs->path_exists(path).ok()) {
         LOG(INFO) << "collect garbage dir path: " << path;
-        WARN_IF_ERROR(FileUtils::remove_all(_fs.get(), path), "remove garbage dir failed. path: " + path);
+        auto st = _fs->delete_dir_recursive(path);
+        LOG_IF(WARNING, !st.ok()) << "failed to remove garbage dir " << path << ": " << st;
     }
 }
 
@@ -648,7 +521,7 @@ Status DataDir::update_capacity() {
     return Status::OK();
 }
 
-bool DataDir::reach_capacity_limit(int64_t incoming_data_size) {
+bool DataDir::capacity_limit_reached(int64_t incoming_data_size) {
     double used_pct = (_disk_capacity_bytes - _available_bytes + incoming_data_size) / (double)_disk_capacity_bytes;
     int64_t left_bytes = _disk_capacity_bytes - _available_bytes - incoming_data_size;
 

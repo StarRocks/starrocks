@@ -58,7 +58,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
             size_t input_chunk_size = input_chunk->num_rows();
             _aggregator->update_num_input_rows(input_chunk_size);
             COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
-            _aggregator->evaluate_exprs(input_chunk.get());
+            RETURN_IF_ERROR(_aggregator->evaluate_exprs(input_chunk.get()));
 
             if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_STREAMING) {
                 // force execute streaming
@@ -88,8 +88,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                     _aggregator->compute_batch_agg_states(input_chunk_size);
                 }
 
-                _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() +
-                                  _aggregator->mem_pool()->total_reserved_bytes());
+                _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
                 TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
 
                 COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
@@ -136,8 +135,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                         _aggregator->compute_batch_agg_states(input_chunk_size);
                     }
 
-                    _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() +
-                                      _aggregator->mem_pool()->total_reserved_bytes());
+                    _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
                     TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
                     continue;

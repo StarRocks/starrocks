@@ -47,11 +47,42 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private static final Logger LOG = LogManager.getLogger(SessionVariable.class);
 
     public static final String EXEC_MEM_LIMIT = "exec_mem_limit";
+
+    /**
+     * configure the mem limit of load process on BE.
+     * Previously users used exec_mem_limit to set memory limits.
+     * To maintain compatibility, the default value of load_mem_limit is 0,
+     * which means that the load memory limit is still using exec_mem_limit.
+     * Users can set a value greater than zero to explicitly specify the load memory limit.
+     * This variable is mainly for INSERT operation, because INSERT operation has both query and load part.
+     * Using only the exec_mem_limit variable does not make a good distinction of memory limit between the two parts.
+     */
+    public static final String LOAD_MEM_LIMIT = "load_mem_limit";
+
+    /**
+     * The mem limit of query on BE. It takes effects only when enabling pipeline engine.
+     * - If `query_mem_limit` > 0, use it to limit the memory of a query.
+     *   The memory a query able to be used is just `query_mem_limit`.
+     * - Otherwise, use `exec_mem_limit` to limit the memory of a query.
+     *   The memory a query able to be used is `exec_mem_limit * num_fragments * pipeline_dop`.
+     * To maintain compatibility, the default value is 0.
+     */
+    public static final String QUERY_MEM_LIMIT = "query_mem_limit";
+
     public static final String QUERY_TIMEOUT = "query_timeout";
+
+    public static final String QUERY_DELIVERY_TIMEOUT = "query_delivery_timeout";
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String PROFILING = "profiling";
     public static final String SQL_MODE = "sql_mode";
+    /**
+     * Because we modified the default value of sql_mode.
+     * The default value in v1 version is 0, and in v2 we support sql mode not set only_full_group_by.
+     * In order to ensure the consistency of logic,
+     * the storage name of sql_mode is changed here, in order to achieve compatibility
+     */
+    public static final String SQL_MODE_STORAGE_NAME = "sql_mode_v2";
     public static final String RESOURCE_GROUP = "resource_group";
     public static final String AUTO_COMMIT = "autocommit";
     public static final String TX_ISOLATION = "tx_isolation";
@@ -90,16 +121,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String FORWARD_TO_MASTER = "forward_to_master";
     // user can set instance num after exchange, no need to be equal to nums of before exchange
     public static final String PARALLEL_EXCHANGE_INSTANCE_NUM = "parallel_exchange_instance_num";
-    /*
-     * configure the mem limit of load process on BE.
-     * Previously users used exec_mem_limit to set memory limits.
-     * To maintain compatibility, the default value of load_mem_limit is 0,
-     * which means that the load memory limit is still using exec_mem_limit.
-     * Users can set a value greater than zero to explicitly specify the load memory limit.
-     * This variable is mainly for INSERT operation, because INSERT operation has both query and load part.
-     * Using only the exec_mem_limit variable does not make a good distinction of memory limit between the two parts.
-     */
-    public static final String LOAD_MEM_LIMIT = "load_mem_limit";
     public static final String EVENT_SCHEDULER = "event_scheduler";
     public static final String STORAGE_ENGINE = "storage_engine";
     public static final String DIV_PRECISION_INCREMENT = "div_precision_increment";
@@ -125,6 +146,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // memory limit etc. in BE.
     public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
 
+    public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String PIPELINE_DOP = "pipeline_dop";
 
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
@@ -175,6 +197,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
+    public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -204,6 +227,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
 
+    public static final String STATISTIC_COLLECT_PARALLEL = "statistic_collect_parallel";
+
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
 
@@ -213,17 +238,33 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP)
     private boolean enableResourceGroup = false;
 
+    @VariableMgr.VarAttr(name = ENABLE_TABLET_INTERNAL_PARALLEL)
+    private boolean enableTabletInternalParallel = false;
+
     // max memory used on every backend.
     public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;
     @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT)
     public long maxExecMemByte = DEFAULT_EXEC_MEM_LIMIT;
 
-    @VariableMgr.VarAttr(name = ENABLE_SPILLING)
+    @VariableMgr.VarAttr(name = LOAD_MEM_LIMIT)
+    private long loadMemLimit = 0L;
+
+    @VariableMgr.VarAttr(name = QUERY_MEM_LIMIT)
+    private long queryMemLimit = 0L;
+
+    @VariableMgr.VarAttr(name = ENABLE_SPILLING, flag = VariableMgr.INVISIBLE)
     public boolean enableSpilling = false;
 
     // query timeout in second.
     @VariableMgr.VarAttr(name = QUERY_TIMEOUT)
     private int queryTimeoutS = 300;
+
+    // Execution of a query contains two phase.
+    // 1. Deliver all the fragment instances to BEs.
+    // 2. Pull data from BEs, after all the fragments are prepared and ready to execute in BEs.
+    // queryDeliveryTimeoutS is the timeout of the first phase.
+    @VariableMgr.VarAttr(name = QUERY_DELIVERY_TIMEOUT)
+    private int queryDeliveryTimeoutS = 300;
 
     // query timeout in millisecond, currently nouse, only for compatible.
     @VariableMgr.VarAttr(name = MAX_EXECUTION_TIME)
@@ -233,11 +274,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = IS_REPORT_SUCCESS)
     private boolean isReportSucc = false;
     // only for Aliyun DTS, useless.
-    @VariableMgr.VarAttr(name = PROFILING)
+    @Deprecated
+    @VariableMgr.VarAttr(name = PROFILING, flag = VariableMgr.INVISIBLE)
     private boolean openProfile = false;
 
     // Default sqlMode is ONLY_FULL_GROUP_BY
-    @VariableMgr.VarAttr(name = SQL_MODE)
+    @VariableMgr.VarAttr(name = SQL_MODE_STORAGE_NAME, alias = SQL_MODE, show = SQL_MODE)
     private long sqlMode = 32L;
 
     // The specified resource group of this session
@@ -319,7 +361,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int netBufferLength = 16384;
 
     // if true, need report to coordinator when plan fragment execute successfully.
-    @VariableMgr.VarAttr(name = CODEGEN_LEVEL)
+    @Deprecated
+    @VariableMgr.VarAttr(name = CODEGEN_LEVEL, flag = VariableMgr.INVISIBLE)
     private int codegenLevel = 0;
 
     @VariableMgr.VarAttr(name = BATCH_SIZE, flag = VariableMgr.INVISIBLE)
@@ -328,7 +371,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CHUNK_SIZE, flag = VariableMgr.INVISIBLE)
     private int chunkSize = 4096;
 
-    public static final int PIPELINE_BATCH_SIZE = 16384;
+    public static final int PIPELINE_BATCH_SIZE = 4096;
 
     @VariableMgr.VarAttr(name = DISABLE_STREAMING_PREAGGREGATIONS)
     private boolean disableStreamPreaggregations = false;
@@ -379,9 +422,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = FORWARD_TO_MASTER)
     private boolean forwardToMaster = false;
 
-    @VariableMgr.VarAttr(name = LOAD_MEM_LIMIT)
-    private long loadMemLimit = 0L;
-
     // compatible with some mysql client connect, say DataGrip of JetBrains
     @VariableMgr.VarAttr(name = EVENT_SCHEDULER)
     private String eventScheduler = "OFF";
@@ -411,16 +451,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
 
-    @VariableMgr.VarAttr(name = CBO_ENABLE_DP_JOIN_REORDER)
+    @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE, flag = VariableMgr.INVISIBLE)
+    private int cboMaxReorderNode = 50;
+
+    @VariableMgr.VarAttr(name = CBO_ENABLE_DP_JOIN_REORDER, flag = VariableMgr.INVISIBLE)
     private boolean cboEnableDPJoinReorder = true;
 
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_DP)
     private long cboMaxReorderNodeUseDP = 10;
 
-    @VariableMgr.VarAttr(name = CBO_ENABLE_GREEDY_JOIN_REORDER)
+    @VariableMgr.VarAttr(name = CBO_ENABLE_GREEDY_JOIN_REORDER, flag = VariableMgr.INVISIBLE)
     private boolean cboEnableGreedyJoinReorder = true;
 
-    @VariableMgr.VarAttr(name = CBO_ENABLE_REPLICATED_JOIN)
+    @VariableMgr.VarAttr(name = CBO_ENABLE_REPLICATED_JOIN, flag = VariableMgr.INVISIBLE)
     private boolean enableReplicationJoin = true;
 
     @VariableMgr.VarAttr(name = TRANSACTION_VISIBLE_WAIT_TIMEOUT)
@@ -525,6 +568,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
     private boolean enableOptimizerTraceLog = false;
+
+    @VarAttr(name = STATISTIC_COLLECT_PARALLEL)
+    private int statisticCollectParallelism = 1;
+
+    public int getStatisticCollectParallelism() {
+        return statisticCollectParallelism;
+    }
+
+    public void setStatisticCollectParallelism(int statisticCollectParallelism) {
+        this.statisticCollectParallelism = statisticCollectParallelism;
+    }
 
     public long getRuntimeFilterScanWaitTime() {
         return runtimeFilterScanWaitTime;
@@ -636,10 +690,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return disableColocateJoin;
     }
 
-    public boolean isDisableBucketJoin() {
-        return disableBucketJoin;
-    }
-
     public int getParallelExecInstanceNum() {
         return parallelExecInstanceNum;
     }
@@ -653,8 +703,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             if (pipelineDop > 0) {
                 return pipelineDop * parallelExecInstanceNum;
             }
-            int avgNumOfCores = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
-            return avgNumOfCores < 2 ? 1 : avgNumOfCores / 2;
+            return BackendCoreStat.getDefaultDOP();
         } else {
             return parallelExecInstanceNum;
         }
@@ -758,6 +807,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void enableGreedyJoinReorder() {
         this.cboEnableGreedyJoinReorder = true;
+    }
+
+    public int getCboMaxReorderNode() {
+        return cboMaxReorderNode;
     }
 
     public long getTransactionVisibleWaitTimeout() {
@@ -968,6 +1021,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public TQueryOptions toThrift() {
         TQueryOptions tResult = new TQueryOptions();
         tResult.setMem_limit(maxExecMemByte);
+        if (queryMemLimit > 0) {
+            tResult.setQuery_mem_limit(queryMemLimit);
+        }
 
         tResult.setMin_reservation(0);
         tResult.setMax_reservation(maxExecMemByte);
@@ -975,6 +1031,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setBuffer_pool_limit(maxExecMemByte);
         // Avoid integer overflow
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
+        tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
         tResult.setIs_report_success(isReportSucc);
         tResult.setCodegen_level(codegenLevel);
         tResult.setBatch_size(chunkSize);
@@ -1016,6 +1073,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 tResult.setPipeline_profile_level(TPipelineProfileLevel.CORE_METRICS);
                 break;
         }
+
+        tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
+
         return tResult;
     }
 

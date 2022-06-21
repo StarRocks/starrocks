@@ -48,6 +48,7 @@ import com.starrocks.qe.DdlExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.SystemInfoService;
@@ -139,7 +140,7 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert withTable(String sql) throws Exception {
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         return this;
     }
@@ -174,9 +175,17 @@ public class StarRocksAssert {
     // Add materialized view to the schema
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
         CreateMaterializedViewStmt createMaterializedViewStmt =
-                (CreateMaterializedViewStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+                (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
         checkAlterJob();
+        return this;
+    }
+
+    // why create this ? because query statement before property in old mv grammar
+    public StarRocksAssert withNewMaterializedView(String sql) throws Exception {
+        CreateMaterializedViewStatement createMaterializedViewStatement =
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
         return this;
     }
 
@@ -190,7 +199,7 @@ public class StarRocksAssert {
 
     // With catalog
     public StarRocksAssert withCatalog(String sql) throws Exception {
-        CreateCatalogStmt createCatalogStmt = (CreateCatalogStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+        CreateCatalogStmt createCatalogStmt = (CreateCatalogStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(createCatalogStmt);
         return this;
     }

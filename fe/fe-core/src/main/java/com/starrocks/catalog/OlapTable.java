@@ -26,6 +26,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
@@ -48,6 +49,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
@@ -78,8 +80,9 @@ import java.util.zip.Adler32;
 /**
  * Internal representation of tableFamilyGroup-related metadata. A OlaptableFamilyGroup contains several tableFamily.
  * Note: when you add a new olap table property, you should modify TableProperty class
+ * ATTN: serialize by gson is used by MaterializedView
  */
-public class OlapTable extends Table {
+public class OlapTable extends Table implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(OlapTable.class);
 
     public enum OlapTableState {
@@ -99,31 +102,47 @@ public class OlapTable extends Table {
         WAITING_STABLE
     }
 
+    @SerializedName(value = "clusterId")
     protected int clusterId;
 
+    @SerializedName(value = "state")
     protected OlapTableState state;
 
     // index id -> index meta
+    @SerializedName(value = "indexIdToMeta")
     protected Map<Long, MaterializedIndexMeta> indexIdToMeta = Maps.newHashMap();
     // index name -> index id
+    @SerializedName(value = "indexNameToId")
     protected Map<String, Long> indexNameToId = Maps.newHashMap();
 
+    @SerializedName(value = "keysType")
     protected KeysType keysType;
+
+    @SerializedName(value = "partitionInfo")
     protected PartitionInfo partitionInfo;
+
+    @SerializedName(value = "idToPartition")
     protected Map<Long, Partition> idToPartition = new HashMap<>();
     protected Map<String, Partition> nameToPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
 
+    @SerializedName(value = "defaultDistributionInfo")
     protected DistributionInfo defaultDistributionInfo;
 
     // all info about temporary partitions are save in "tempPartitions"
+    @SerializedName(value = "tempPartitions")
     protected TempPartitions tempPartitions = new TempPartitions();
 
     // bloom filter columns
+    @SerializedName(value = "bfColumns")
     protected Set<String> bfColumns;
+
+    @SerializedName(value = "bfFpp")
     protected double bfFpp;
 
+    @SerializedName(value = "colocateGroup")
     protected String colocateGroup;
 
+    @SerializedName(value = "indexes")
     protected TableIndexes indexes;
 
     // In former implementation, base index id is same as table id.
@@ -132,13 +151,23 @@ public class OlapTable extends Table {
     // So we add this 'baseIndexId' to explicitly specify the base index id,
     // which should be different with table id.
     // The init value is -1, which means there is not partition and index at all.
+    @SerializedName(value = "baseIndexId")
     protected long baseIndexId = -1;
 
+    @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
 
+    // not serialized field
+    // record all materialized views based on this OlapTable
+    private Set<Long> relatedMaterializedViews;
+
     public OlapTable() {
+        this(TableType.OLAP);
+    }
+
+    public OlapTable(TableType type) {
         // for persist
-        super(TableType.OLAP);
+        super(type);
 
         this.clusterId = GlobalStateMgr.getCurrentState().getClusterId();
 
@@ -150,6 +179,7 @@ public class OlapTable extends Table {
         this.indexes = null;
 
         this.tableProperty = null;
+        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
@@ -160,13 +190,20 @@ public class OlapTable extends Table {
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
                      PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo, TableIndexes indexes) {
         this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
-                GlobalStateMgr.getCurrentState().getClusterId(), indexes);
+                GlobalStateMgr.getCurrentState().getClusterId(), indexes, TableType.OLAP);
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
                      PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
                      int clusterId, TableIndexes indexes) {
-        super(id, tableName, TableType.OLAP, baseSchema);
+        this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
+                clusterId, indexes, TableType.OLAP);
+    }
+
+    public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
+                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
+                     int clusterId, TableIndexes indexes, TableType tableType) {
+        super(id, tableName, tableType, baseSchema);
 
         this.clusterId = clusterId;
         this.state = OlapTableState.NORMAL;
@@ -184,6 +221,7 @@ public class OlapTable extends Table {
         this.indexes = indexes;
 
         this.tableProperty = null;
+        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
     public void setTableProperty(TableProperty tableProperty) {
@@ -315,7 +353,7 @@ public class OlapTable extends Table {
     // the order of columns in fullSchema is meaningless
     public void rebuildFullSchema() {
         fullSchema.clear();
-        nameToColumn.clear();
+        nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Column baseColumn : indexIdToMeta.get(baseIndexId).getSchema()) {
             fullSchema.add(baseColumn);
             nameToColumn.put(baseColumn.getName(), baseColumn);
@@ -1129,7 +1167,7 @@ public class OlapTable extends Table {
 
         int partitionCount = in.readInt();
         for (int i = 0; i < partitionCount; ++i) {
-            Partition partition = Partition.read(in, partitionInfo);
+            Partition partition = Partition.read(in);
             idToPartition.put(partition.getId(), partition);
             nameToPartition.put(partition.getName(), partition);
         }
@@ -1192,6 +1230,20 @@ public class OlapTable extends Table {
         // After that, some properties of fullSchema and nameToColumn may be not same as properties of base columns.
         // So, here we need to rebuild the fullSchema to ensure the correctness of the properties.
         rebuildFullSchema();
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        // In the present, the fullSchema could be rebuilt by schema change while the properties is changed by MV.
+        // After that, some properties of fullSchema and nameToColumn may be not same as properties of base columns.
+        // So, here we need to rebuild the fullSchema to ensure the correctness of the properties.
+        rebuildFullSchema();
+
+        // Recover nameToPartition from idToPartition
+        nameToPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        for (Partition partition : idToPartition.values()) {
+            nameToPartition.put(partition.getName(), partition);
+        }
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {
@@ -1475,6 +1527,11 @@ public class OlapTable extends Table {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium.name());
     }
 
+    public String getStorageMedium() {
+        return tableProperty.getProperties().
+                getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, TStorageMedium.HDD.name());
+    }
+
     public boolean hasDelete() {
         if (tableProperty == null) {
             return false;
@@ -1613,6 +1670,31 @@ public class OlapTable extends Table {
         }
     }
 
+    // used for unpartitioned table in insert overwrite
+    // replace partition with temp partition
+    public void replacePartition(String sourcePartitionName, String tempPartitionName) {
+        if (partitionInfo.getType() != PartitionType.UNPARTITIONED) {
+            return;
+        }
+        // drop source partition
+        Partition srcPartition = nameToPartition.get(sourcePartitionName);
+        if (srcPartition != null) {
+            idToPartition.remove(srcPartition.getId());
+            nameToPartition.remove(sourcePartitionName);
+            partitionInfo.dropPartition(srcPartition.getId());
+            GlobalStateMgr.getCurrentState().onErasePartition(srcPartition);
+        }
+
+        Partition partition = tempPartitions.getPartition(tempPartitionName);
+        // add
+        addPartition(partition);
+        // drop
+        tempPartitions.dropPartition(tempPartitionName, false);
+
+        // rename partition
+        renamePartition(tempPartitionName, sourcePartitionName);
+    }
+
     public void addTempPartition(Partition partition) {
         tempPartitions.addPartition(partition);
     }
@@ -1641,6 +1723,20 @@ public class OlapTable extends Table {
             return TStorageFormat.DEFAULT;
         }
         return tableProperty.getStorageFormat();
+    }
+
+    // should call this when create materialized view
+    public void addRelatedMaterializedView(long mvId) {
+        relatedMaterializedViews.add(mvId);
+    }
+
+    // should call this when drop materialized view
+    public void removeRelatedMaterializedView(long mvId) {
+        relatedMaterializedViews.remove(mvId);
+    }
+
+    public Set<Long> getRelatedMaterializedViews() {
+        return relatedMaterializedViews;
     }
 
     @Override

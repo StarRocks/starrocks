@@ -74,17 +74,6 @@ public class TabletInvertedIndex {
     // replica id -> tablet id
     private Map<Long, Long> replicaToTabletMap = Maps.newHashMap();
 
-    /*
-     *  we use this to save memory.
-     *  we do not need create TabletMeta instance for each tablet,
-     *  cause tablets in one (Partition-MaterializedIndex) has same parent info
-     *      (dbId, tableId, partitionId, indexId, schemaHash)
-     *  we use 'tabletMetaTable' to do the update things
-     *      (eg. update schema hash in TabletMeta)
-     *  partition id -> (index id -> tablet meta)
-     */
-    private Table<Long, Long, TabletMeta> tabletMetaTable = HashBasedTable.create();
-
     // tablet id -> (backend id -> replica)
     private Table<Long, Long, Replica> replicaMetaTable = HashBasedTable.create();
     // backing replica table, for visiting backend replicas faster.
@@ -242,7 +231,7 @@ public class TabletInvertedIndex {
                                                  */
                                                 LOG.info(
                                                         "failed to find partition commit info. table: {}, " +
-                                                                "partition: {}, tablet: {}, txn id: {}",
+                                                                "partition: {}, tablet: {}, txn_id: {}",
                                                         tabletMeta.getTableId(), partitionId, tabletId,
                                                         transactionState.getTransactionId());
                                             } else {
@@ -407,14 +396,7 @@ public class TabletInvertedIndex {
         }
         writeLock();
         try {
-            if (tabletMetaMap.containsKey(tabletId)) {
-                return;
-            }
-            tabletMetaMap.put(tabletId, tabletMeta);
-            if (!tabletMetaTable.contains(tabletMeta.getPartitionId(), tabletMeta.getIndexId())) {
-                tabletMetaTable.put(tabletMeta.getPartitionId(), tabletMeta.getIndexId(), tabletMeta);
-                LOG.debug("add tablet meta: {}", tabletId);
-            }
+            tabletMetaMap.putIfAbsent(tabletId, tabletMeta);
 
             LOG.debug("add tablet: {}", tabletId);
         } finally {
@@ -438,11 +420,7 @@ public class TabletInvertedIndex {
                     backingReplicaMetaTable.remove(backendId, tabletId);
                 }
             }
-            TabletMeta tabletMeta = tabletMetaMap.remove(tabletId);
-            if (tabletMeta != null) {
-                tabletMetaTable.remove(tabletMeta.getPartitionId(), tabletMeta.getIndexId());
-                LOG.debug("delete tablet meta: {}", tabletId);
-            }
+            tabletMetaMap.remove(tabletId);
 
             LOG.debug("delete tablet: {}", tabletId);
         } finally {
@@ -511,63 +489,6 @@ public class TabletInvertedIndex {
         } finally {
             readUnlock();
         }
-    }
-
-    public void setNewSchemaHash(long partitionId, long indexId, int newSchemaHash) {
-        if (GlobalStateMgr.isCheckpointThread()) {
-            return;
-        }
-        writeLock();
-        try {
-            Preconditions.checkState(tabletMetaTable.contains(partitionId, indexId));
-            tabletMetaTable.get(partitionId, indexId).setNewSchemaHash(newSchemaHash);
-        } finally {
-            writeUnlock();
-        }
-    }
-
-    public void updateToNewSchemaHash(long partitionId, long indexId) {
-        if (GlobalStateMgr.isCheckpointThread()) {
-            return;
-        }
-        writeLock();
-        try {
-            Preconditions.checkState(tabletMetaTable.contains(partitionId, indexId));
-            tabletMetaTable.get(partitionId, indexId).updateToNewSchemaHash();
-        } finally {
-            writeUnlock();
-        }
-    }
-
-    public void deleteNewSchemaHash(long partitionId, long indexId) {
-        if (GlobalStateMgr.isCheckpointThread()) {
-            return;
-        }
-        writeLock();
-        try {
-            TabletMeta tabletMeta = tabletMetaTable.get(partitionId, indexId);
-            if (tabletMeta != null) {
-                tabletMeta.deleteNewSchemaHash();
-            }
-        } finally {
-            writeUnlock();
-        }
-    }
-
-    /**
-     * @return array of pair(partitionId, indexId)
-     */
-    public List<Pair<Long, Long>> getAllPartitionIndex() {
-        List<Pair<Long, Long>> partitionIndexList = new ArrayList<>(tabletMetaTable.size());
-        readLock();
-        try {
-            tabletMetaTable.values().forEach(tabletMeta ->
-                    partitionIndexList.add(new Pair<>(tabletMeta.getPartitionId(), tabletMeta.getIndexId()))
-            );
-        } finally {
-            readUnlock();
-        }
-        return partitionIndexList;
     }
 
     public List<Long> getTabletIdsByBackendId(long backendId) {
@@ -655,16 +576,11 @@ public class TabletInvertedIndex {
         try {
             tabletMetaMap.clear();
             replicaToTabletMap.clear();
-            tabletMetaTable.clear();
             replicaMetaTable.clear();
             backingReplicaMetaTable.clear();
         } finally {
             writeUnlock();
         }
-    }
-
-    public Map<Long, Long> getReplicaToTabletMap() {
-        return replicaToTabletMap;
     }
 }
 

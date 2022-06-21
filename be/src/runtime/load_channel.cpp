@@ -24,34 +24,47 @@
 #include <memory>
 
 #include "common/closure_guard.h"
+#include "runtime/lake_tablets_channel.h"
 #include "runtime/load_channel_mgr.h"
+#include "runtime/local_tablets_channel.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/tablets_channel.h"
 #include "util/lru_cache.h"
 
 namespace starrocks {
 
-LoadChannel::LoadChannel(LoadChannelMgr* mgr, const UniqueId& load_id, int64_t timeout_s,
-                         std::unique_ptr<MemTracker> mem_tracker)
+LoadChannel::LoadChannel(LoadChannelMgr* mgr, const UniqueId& load_id, const std::string& txn_trace_parent,
+                         int64_t timeout_s, std::unique_ptr<MemTracker> mem_tracker)
         : _load_mgr(mgr),
           _load_id(load_id),
           _timeout_s(timeout_s),
           _mem_tracker(std::move(mem_tracker)),
-          _last_updated_time(time(nullptr)) {}
+          _last_updated_time(time(nullptr)) {
+    _span = Tracer::Instance().start_trace_or_add_span("load_channel", txn_trace_parent);
+    _span->SetAttribute("load_id", load_id.to_string());
+}
+
+LoadChannel::~LoadChannel() {
+    _span->SetAttribute("num_chunk", _num_chunk);
+    _span->End();
+}
 
 void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
                        PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
+    _span->AddEvent("open_index", {{"index_id", request.index_id()}});
+    auto scoped = trace::Scope(_span);
     ClosureGuard done_guard(done);
 
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
     int64_t index_id = request.index_id();
+    bool is_lake_tablet = request.has_is_lake_tablet() && request.is_lake_tablet();
 
     Status st;
     {
         std::lock_guard<std::mutex> l(_lock);
         if (_tablets_channels.find(index_id) == _tablets_channels.end()) {
             TabletsChannelKey key(request.id(), index_id);
-            scoped_refptr<TabletsChannel> channel(new TabletsChannel(this, key, _mem_tracker.get()));
+            auto channel = is_lake_tablet ? new_lake_tablets_channel(this, key, _mem_tracker.get())
+                                          : new_local_tablets_channel(this, key, _mem_tracker.get());
             if (st = channel->open(request); st.ok()) {
                 _tablets_channels.insert({index_id, std::move(channel)});
             }
@@ -64,6 +77,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
 
 void LoadChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
                             PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) {
+    _num_chunk++;
     ClosureGuard done_guard(done);
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
     auto channel = get_tablets_channel(request.index_id());
@@ -76,6 +90,8 @@ void LoadChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkR
 }
 
 void LoadChannel::cancel() {
+    _span->AddEvent("cancel");
+    auto scoped = trace::Scope(_span);
     std::lock_guard l(_lock);
     for (auto& it : _tablets_channels) {
         it.second->cancel();

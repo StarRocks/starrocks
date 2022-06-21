@@ -24,6 +24,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.ArithmeticExpr.Operator;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -70,7 +71,7 @@ public class TimestampArithmeticExpr extends Expr {
 
     // C'tor for function-call like arithmetic, e.g., 'date_add(a, interval b year)'.
     public TimestampArithmeticExpr(String funcName, Expr e1, Expr e2, String timeUnitIdent) {
-        this.funcName = funcName;
+        this.funcName = funcName.toLowerCase();
         this.timeUnitIdent = timeUnitIdent;
         this.intervalFirst = false;
         children.add(e1);
@@ -158,14 +159,14 @@ public class TimestampArithmeticExpr extends Expr {
             funcOpName = String.format("%sS_%s", timeUnit, "DIFF");
         } else {
             if (funcName != null) {
-                if (funcName.toUpperCase().equals("DATE_ADD")
-                        || funcName.toUpperCase().equals("DAYS_ADD")
-                        || funcName.toUpperCase().equals("ADDDATE")
-                        || funcName.toUpperCase().equals("TIMESTAMPADD")) {
+                if (funcName.equalsIgnoreCase(FunctionSet.DATE_ADD)
+                        || funcName.equalsIgnoreCase(FunctionSet.DAYS_ADD)
+                        || funcName.equalsIgnoreCase(FunctionSet.ADDDATE)
+                        || funcName.equalsIgnoreCase(FunctionSet.TIMESTAMPADD)) {
                     op = ArithmeticExpr.Operator.ADD;
-                } else if (funcName.toUpperCase().equals("DATE_SUB")
-                        || funcName.toUpperCase().equals("DAYS_SUB")
-                        || funcName.toUpperCase().equals("SUBDATE")) {
+                } else if (funcName.equalsIgnoreCase(FunctionSet.DATE_SUB)
+                        || funcName.equalsIgnoreCase(FunctionSet.DAYS_SUB)
+                        || funcName.equalsIgnoreCase(FunctionSet.SUBDATE)) {
                     op = ArithmeticExpr.Operator.SUBTRACT;
                 } else {
                     throw new AnalysisException("Encountered function name '" + funcName

@@ -31,7 +31,6 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -67,6 +66,7 @@ import java.io.StringReader;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousCloseException;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
@@ -88,14 +88,13 @@ public class ConnectProcessor {
 
     // COM_INIT_DB: change current database of this session.
     private void handleInitDb() {
-        String dbName = new String(packetBuf.array(), 1, packetBuf.limit() - 1);
+        String identifier = new String(packetBuf.array(), 1, packetBuf.limit() - 1);
         if (Strings.isNullOrEmpty(ctx.getClusterName())) {
             ctx.getState().setError("Please enter cluster");
             return;
         }
-        dbName = ClusterNamespace.getFullName(ctx.getClusterName(), dbName);
         try {
-            ctx.getGlobalStateMgr().changeDb(ctx, dbName);
+            ctx.getGlobalStateMgr().changeCatalogDb(ctx, identifier);
         } catch (DdlException e) {
             ctx.getState().setError(e.getMessage());
             return;
@@ -147,6 +146,8 @@ public class ConnectProcessor {
                 .setState(ctx.getState().toString()).setErrorCode(ctx.getErrorCode()).setQueryTime(elapseMs)
                 .setScanBytes(statistics == null ? 0 : statistics.scanBytes)
                 .setScanRows(statistics == null ? 0 : statistics.scanRows)
+                .setCpuCostNs(statistics == null || statistics.cpuCostNs == null ? 0 : statistics.cpuCostNs)
+                .setMemCostBytes(statistics == null || statistics.memCostBytes == null ? 0 : statistics.memCostBytes)
                 .setReturnRows(ctx.getReturnRows())
                 .setStmtId(ctx.getStmtId())
                 .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString());
@@ -237,19 +238,12 @@ public class ConnectProcessor {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
         // convert statement to Java string
         String originStmt = null;
-        try {
-            byte[] bytes = packetBuf.array();
-            int ending = packetBuf.limit() - 1;
-            while (ending >= 1 && bytes[ending] == '\0') {
-                ending--;
-            }
-            originStmt = new String(bytes, 1, ending, "UTF-8");
-        } catch (UnsupportedEncodingException e) {
-            // impossible
-            LOG.error("UTF8 is not supported in this environment.");
-            ctx.getState().setError("Unsupported character set(UTF-8)");
-            return;
+        byte[] bytes = packetBuf.array();
+        int ending = packetBuf.limit() - 1;
+        while (ending >= 1 && bytes[ending] == '\0') {
+            ending--;
         }
+        originStmt = new String(bytes, 1, ending, StandardCharsets.UTF_8);
         ctx.getAuditEventBuilder().reset();
         ctx.getAuditEventBuilder()
                 .setTimestamp(System.currentTimeMillis())
@@ -528,7 +522,7 @@ public class ConnectProcessor {
     public TMasterOpResult proxyExecute(TMasterOpRequest request) {
         ctx.setDatabase(request.db);
         ctx.setQualifiedUser(request.user);
-        ctx.setCatalog(GlobalStateMgr.getCurrentState());
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.getState().reset();
         if (request.isSetCluster()) {
             ctx.setCluster(request.cluster);

@@ -25,12 +25,13 @@
 #include <vector>
 
 #include "gen_cpp/AgentService_types.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 
+class ExecEnv;
 class MultiWorkerPool;
 class TaskWorkerPool;
+class TMasterInfo;
 
 // Each method corresponds to one RPC from FE Master, see BackendService.
 class AgentServer {
@@ -61,7 +62,7 @@ private:
     std::unique_ptr<TaskWorkerPool> _create_tablet_workers;
     std::unique_ptr<TaskWorkerPool> _drop_tablet_workers;
     std::unique_ptr<TaskWorkerPool> _push_workers;
-    std::unique_ptr<MultiWorkerPool> _publish_version_workers;
+    std::unique_ptr<TaskWorkerPool> _publish_version_workers;
     std::unique_ptr<TaskWorkerPool> _clear_transaction_task_workers;
     std::unique_ptr<TaskWorkerPool> _delete_workers;
     std::unique_ptr<TaskWorkerPool> _alter_tablet_workers;

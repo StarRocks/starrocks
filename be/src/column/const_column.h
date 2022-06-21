@@ -116,6 +116,8 @@ public:
 
     void append_default(size_t count) override { _size += count; }
 
+    void fill_default(const Filter& filter) override;
+
     Status update_rows(const Column& src, const uint32_t* indexes) override;
 
     uint32_t serialize(size_t idx, uint8_t* pos) override { return _data->serialize(0, pos); }
@@ -212,8 +214,15 @@ public:
         return ss.str();
     }
 
-    bool reach_capacity_limit() const override {
-        return _data->reach_capacity_limit() || _size > Column::MAX_CAPACITY_LIMIT;
+    bool capacity_limit_reached(std::string* msg = nullptr) const override {
+        RETURN_IF_UNLIKELY(_data->capacity_limit_reached(msg), true);
+        if (_size > Column::MAX_CAPACITY_LIMIT) {
+            if (msg != nullptr) {
+                msg->append("Row count of const column reach limit: " + std::to_string(Column::MAX_CAPACITY_LIMIT));
+            }
+            return true;
+        }
+        return false;
     }
 
     void check_or_die() const override;

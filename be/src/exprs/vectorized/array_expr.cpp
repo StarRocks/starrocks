@@ -3,6 +3,7 @@
 #include "exprs/vectorized/array_expr.h"
 
 #include "column/array_column.h"
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"

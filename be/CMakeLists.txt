@@ -71,15 +71,17 @@ message(STATUS "make test: ${MAKE_TEST}")
 
 option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
 
+option(USE_STAROS "Use StarOS to manager tablet info" OFF)
+
 # Check gcc
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.8.2")
         message(FATAL_ERROR "Need GCC version at least 4.8.2")
     endif()
 
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "7.3.0")
-        message(STATUS "GCC version ${CMAKE_CXX_COMPILER_VERSION} is greater than 7.3.0, disable -Werror. Be careful with compile warnings.")
-    else()
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "10.3.0")
+        message(STATUS "GCC version ${CMAKE_CXX_COMPILER_VERSION} is greater than 10.3.0, disable -Werror. Be careful with compile warnings.")
+    elseif(${MAKE_TEST} STREQUAL "OFF")
         #   -Werror: compile warnings should be errors when using the toolchain compiler.
         set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -Werror")
     endif()
@@ -301,6 +303,33 @@ set_target_properties(opentelemetry_resources PROPERTIES IMPORTED_LOCATION ${THI
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
 
+if ("${USE_STAROS}" STREQUAL "ON")
+     find_package(protobuf CONFIG REQUIRED)
+     message(STATUS "Using protobuf ${protobuf_VERSION}")
+     message(STATUS "protobuf include path: ${protobuf_INCLUDE_DIRS}")
+     message(STATUS "protobuf libs: ${protobuf_LIBS}")
+
+     find_package(gRPC CONFIG REQUIRED)
+     message(STATUS "Using gRPC ${gRPC_VERSION}")
+     get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
+     include_directories(${gRPC_INCLUDE_DIR})
+
+     find_package(starlet CONFIG REQUIRED)
+     message(STATUS "Using starlet ${starlet_VERSION}")
+     message(STATUS "starlet inc dir: ${STARLET_INCLUDE_DIRS}")
+     message(STATUS "starlet lib dir: ${STARLET_LIBS}")
+     include_directories(${STARLET_INCLUDE_DIRS})
+     add_library(starlet STATIC IMPORTED)
+     set_target_properties(starlet PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet.a)
+
+     set(STARROCKS_DEPENDENCIES
+        ${STARROCKS_DEPENDENCIES}
+        starlet
+        gRPC::grpc++_reflection
+        gRPC::grpc++
+        )
+endif()
+
 # Check if functions are supported in this platform. All flags will generated
 # in gensrc/build/common/env_config.h.
 # You can check funcion here which depends on platform. Don't forget add this
@@ -331,6 +360,9 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated -Wno-vla -Wno-comment"
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_DATE_TIME_POSIX_TIME_STD_CONFIG")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_SYSTEM_NO_DEPRECATED -DBOOST_UUID_RANDOM_PROVIDER_FORCE_POSIX")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=return-type -Werror=switch")
+if (${USE_STAROS} STREQUAL "ON")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DUSE_STAROS")
+endif()
 
 # When LLVM is used, should give GCC_HOME to get c++11 header to use new string and list
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -464,6 +496,9 @@ set(STARROCKS_LINK_LIBS
     Rowset
     Runtime
     Service
+    ServiceBE
+    ServiceCN
+    Types
     Udf
     Util
     StarRocksGen
@@ -471,7 +506,6 @@ set(STARROCKS_LINK_LIBS
     TestUtil
     Tools
     Geo
-    Plugin
     ${WL_END_GROUP}
 )
 
@@ -545,7 +579,7 @@ set(STARROCKS_DEPENDENCIES
     velocypack
     opentelemetry_trace
     http_client_curl
-    opentelemetry_resources	
+    opentelemetry_resources
     opentelemetry_common
     opentelemetry_exporter_jaeger_trace
     ${WL_END_GROUP}
@@ -630,12 +664,12 @@ add_subdirectory(${SRC_DIR}/runtime)
 add_subdirectory(${SRC_DIR}/serde)
 add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/testutil)
+add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)
 
 add_subdirectory(${SRC_DIR}/tools)
 
 add_subdirectory(${SRC_DIR}/util)
-add_subdirectory(${SRC_DIR}/plugin)
 
 # Utility CMake function to make specifying tests and benchmarks less verbose
 FUNCTION(ADD_BE_TEST TEST_NAME)
@@ -660,7 +694,7 @@ FUNCTION(ADD_BE_BENCH TEST_NAME)
     if (${WITH_BENCH} STREQUAL "OFF")
         return()
     endif()
-    
+
     set(BUILD_OUTPUT_ROOT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/")
     # This gets the directory where the test is from (e.g. 'exprs' or 'runtime')
     get_filename_component(DIR_NAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
@@ -680,24 +714,6 @@ FUNCTION(ADD_BE_BENCH TEST_NAME)
 ENDFUNCTION()
 
 
-FUNCTION(ADD_BE_PLUGIN PLUGIN_NAME)
-    set(BUILD_OUTPUT_ROOT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/")
-
-    get_filename_component(DIR_NAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
-    get_filename_component(PLUGIN_DIR_NAME ${PLUGIN_NAME} PATH)
-    get_filename_component(PLUGIN_FILE_NAME ${PLUGIN_NAME} NAME)
-
-    ADD_LIBRARY(${PLUGIN_FILE_NAME} SHARED ${PLUGIN_NAME}.cpp)
-
-    TARGET_LINK_LIBRARIES(${PLUGIN_FILE_NAME} ${STARROCKS_LINK_LIBS})
-    SET_TARGET_PROPERTIES(${PLUGIN_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
-
-    if (NOT "${PLUGIN_DIR_NAME}" STREQUAL "")
-        SET_TARGET_PROPERTIES(${PLUGIN_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/${PLUGIN_DIR_NAME}")
-    endif ()
-
-ENDFUNCTION()
-
 if (${MAKE_TEST} STREQUAL "ON")
     add_subdirectory(test)
 endif ()
@@ -710,7 +726,9 @@ install(DIRECTORY DESTINATION ${OUTPUT_DIR}/conf)
 install(FILES
     ${BASE_DIR}/../bin/common.sh
     ${BASE_DIR}/../bin/start_be.sh
+    ${BASE_DIR}/../bin/start_cn.sh
     ${BASE_DIR}/../bin/stop_be.sh
+    ${BASE_DIR}/../bin/stop_cn.sh
     ${BASE_DIR}/../bin/show_be_version.sh
     ${BASE_DIR}/../bin/meta_tool.sh
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
@@ -720,6 +738,7 @@ install(FILES
 
 install(FILES
     ${BASE_DIR}/../conf/be.conf
+    ${BASE_DIR}/../conf/cn.conf
     ${BASE_DIR}/../conf/hadoop_env.sh
     DESTINATION ${OUTPUT_DIR}/conf)
 

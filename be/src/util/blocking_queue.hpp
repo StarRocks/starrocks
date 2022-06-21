@@ -279,6 +279,11 @@ public:
         return _items.empty();
     }
 
+    void clear() {
+        std::lock_guard<Lock> l(_lock);
+        _items.clear();
+    }
+
 protected:
     mutable Lock _lock;
     CV _not_empty;

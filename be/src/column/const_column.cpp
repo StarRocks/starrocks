@@ -10,12 +10,13 @@
 
 namespace starrocks::vectorized {
 
-ConstColumn::ConstColumn(ColumnPtr data) : _data(std::move(data)), _size(0) {
-    DCHECK(!_data->is_constant());
-}
+ConstColumn::ConstColumn(ColumnPtr data) : ConstColumn(data, 0) {}
 
 ConstColumn::ConstColumn(ColumnPtr data, size_t size) : _data(std::move(data)), _size(size) {
     DCHECK(!_data->is_constant());
+    if (_data->size() > 1) {
+        _data->resize(1);
+    }
 }
 
 void ConstColumn::append(const Column& src, size_t offset, size_t count) {
@@ -32,6 +33,10 @@ void ConstColumn::append_selective(const Column& src, const uint32_t* indexes, u
 
 void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     append(src, index, size);
+}
+
+void ConstColumn::fill_default(const Filter& filter) {
+    CHECK(false) << "ConstColumn does not support update";
 }
 
 Status ConstColumn::update_rows(const Column& src, const uint32_t* indexes) {

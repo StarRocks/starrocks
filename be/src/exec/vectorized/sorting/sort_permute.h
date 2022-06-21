@@ -10,13 +10,6 @@
 
 namespace starrocks::vectorized {
 
-enum CompareStrategy {
-    Default = 0,
-    RowWise = 1,
-    ColumnWise = 2,
-    ColumnInc = 3,
-};
-
 struct PermutationItem {
     uint32_t chunk_index;
     uint32_t index_in_chunk;
@@ -67,9 +60,9 @@ static inline void restore_inline_permutation(const InlinePermutation<T>& inline
     }
 }
 
-inline SmallPermutation create_small_permutation(int rows) {
+inline SmallPermutation create_small_permutation(uint32_t rows) {
     SmallPermutation perm(rows);
-    for (int i = 0; i < rows; i++) {
+    for (uint32_t i = 0; i < rows; i++) {
         perm[i].index_in_chunk = i;
     }
     return perm;

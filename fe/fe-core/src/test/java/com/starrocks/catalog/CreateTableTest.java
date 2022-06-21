@@ -24,15 +24,12 @@ package com.starrocks.catalog;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -54,7 +51,7 @@ public class CreateTableTest {
     }
 
     private static void createTable(String sql) throws Exception {
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
     }
 
@@ -198,6 +195,14 @@ public class CreateTableTest {
                         + "(k1 int, k2 json)\n"
                         + "distributed by hash(k1) buckets 1\n"
                         + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.json_tbl4 \n" +
+                "(k1 int(40), j json, j1 json, j2 json)\n" +
+                "unique key(k1)\n" +
+                "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.json_tbl5 \n" +
+                "(k1 int(40), j json, j1 json, j2 json)\n" +
+                "primary key(k1)\n" +
+                "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
 
         // failed
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
@@ -221,18 +226,6 @@ public class CreateTableTest {
                         "duplicate key(k1)\n" +
                         "partition by range(k1, j)\n" +
                         "(partition p1 values less than(\"10\"))\n" +
-                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
-                "JSON type could only be used in DUPLICATE KEY table",
-                () -> createTable("create table test.json_tbl0\n" +
-                        "(k1 int(40), j json, j1 json, j2 json)\n" +
-                        "unique key(k1)\n" +
-                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
-                "JSON type could only be used in DUPLICATE KEY table",
-                () -> createTable("create table test.json_tbl0\n" +
-                        "(k1 int(40), j json, j1 json, j2 json)\n" +
-                        "primary key(k1)\n" +
                         "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
     }
 
@@ -272,12 +265,8 @@ public class CreateTableTest {
                         "\"replication_num\" = \"1\"\n" +
                         ")"
         ));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "JSON must be used in duplicate key",
-                () -> alterTable("ALTER TABLE test.t_json_unique_key MODIFY COLUMN k2 JSON"));
         // Add column in unique key
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "JSON must be used in duplicate key",
+        ExceptionChecker.expectThrowsNoException(
                 () -> alterTable("ALTER TABLE test.t_json_unique_key ADD COLUMN k3 JSON"));
 
         // Add column in primary key
@@ -293,77 +282,8 @@ public class CreateTableTest {
                         "\"replication_num\" = \"1\"\n" +
                         ");"
         ));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "JSON must be used in duplicate key",
+        ExceptionChecker.expectThrowsNoException(
                 () -> alterTable("ALTER TABLE test.t_json_primary_key ADD COLUMN k3 JSON"));
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "JSON must be used in duplicate key",
-                () -> alterTable("ALTER TABLE test.t_json_primary_key MODIFY COLUMN k3 JSON"));
-    }
-
-    private void checkOlapTableWithStarOSTablet(String dbName, String tableName) {
-        String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
-        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
-        Table table = db.getTable(tableName);
-        Assert.assertTrue(table instanceof OlapTable);
-        OlapTable olapTable = (OlapTable) table;
-        for (Partition partition : olapTable.getAllPartitions()) {
-            Assert.assertTrue(partition.isUseStarOS());
-        }
-
-        boolean throwException = false;
-        try {
-            CatalogUtils.checkOlapTableHasStarOSPartition(fullDbName, tableName);
-        } catch (AnalysisException e) {
-            throwException = true;
-        }
-        Assert.assertTrue(throwException);
-    }
-
-    private void dropOlapTableWithStarOSTablet(String dbName, String tableName) {
-        String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
-        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
-        Table table = db.getTable(tableName);
-        Assert.assertTrue(table != null);
-        db.dropTable(tableName);
-        table = db.getTable(tableName);
-        Assert.assertTrue(table == null);
-    }
-
-    @Test
-    public void testCreateOlapTableWithStarOSTablet() throws DdlException {
-        Config.use_staros = true;
-
-        // normal
-        ExceptionChecker.expectThrowsNoException(() -> createTable(
-                "create table test.single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
-                        "distributed by hash(key1) buckets 3\n" +
-                        "properties('replication_num' = '1', 'storage_medium' = 's3');"));
-        checkOlapTableWithStarOSTablet("test", "single_partition_duplicate_key");
-        dropOlapTableWithStarOSTablet("test", "single_partition_duplicate_key");
-
-        ExceptionChecker.expectThrowsNoException(() -> createTable(
-                "create table test.multi_partition_aggregate_key (key1 date, key2 varchar(10), v bigint sum)\n" +
-                        "partition by range(key1)\n" +
-                        "(partition p1 values less than (\"2022-03-01\"),\n" +
-                        " partition p2 values less than (\"2022-04-01\"))\n" +
-                        "distributed by hash(key2) buckets 3\n" +
-                        "properties('replication_num' = '1', 'storage_medium' = 's3');"));
-        checkOlapTableWithStarOSTablet("test", "multi_partition_aggregate_key");
-        dropOlapTableWithStarOSTablet("test", "multi_partition_aggregate_key");
-
-        ExceptionChecker.expectThrowsNoException(() -> createTable(
-                "create table test.multi_partition_unique_key (key1 int, key2 varchar(10), v bigint)\n" +
-                        "unique key (key1, key2)\n" +
-                        "partition by range(key1)\n" +
-                        "(partition p1 values less than (\"10\"),\n" +
-                        " partition p2 values less than (\"20\"))\n" +
-                        "distributed by hash(key2) buckets 3\n" +
-                        "properties('replication_num' = '1', 'storage_medium' = 's3');"));
-        checkOlapTableWithStarOSTablet("test", "multi_partition_unique_key");
-        dropOlapTableWithStarOSTablet("test", "multi_partition_unique_key");
-
-        Config.use_staros = false;
     }
 
     @Test

@@ -30,12 +30,12 @@
 
 #include "common/status.h"
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
 #include "runtime/exec_env.h"
-#include "util/file_utils.h"
 #include "util/md5.h"
 #include "util/starrocks_metrics.h"
 
@@ -56,10 +56,10 @@ Status SmallFileMgr::init() {
 }
 
 Status SmallFileMgr::_load_local_files() {
-    RETURN_IF_ERROR(FileUtils::create_dir(_local_path));
+    RETURN_IF_ERROR(fs::create_directories(_local_path));
 
     auto scan_cb = [this](std::string_view file) {
-        if (is_dot_or_dotdot(file)) {
+        if (file == "." || file == "..") {
             return true;
         }
         auto st = _load_single_file(_local_path, std::string(file));
@@ -87,8 +87,7 @@ Status SmallFileMgr::_load_single_file(const std::string& path, const std::strin
         return Status::InternalError(strings::Substitute("File with same id is already been loaded: $0", file_id));
     }
 
-    std::string file_md5;
-    RETURN_IF_ERROR(FileUtils::md5sum(path + "/" + file_name, &file_md5));
+    ASSIGN_OR_RETURN(auto file_md5, fs::md5sum(path + "/" + file_name));
     if (file_md5 != md5) {
         return Status::InternalError(strings::Substitute("Invalid md5 of file: $0", file_name));
     }
@@ -131,7 +130,7 @@ Status SmallFileMgr::get_file(int64_t file_id, const std::string& md5, std::stri
 }
 
 Status SmallFileMgr::_check_file(const CacheEntry& entry, const std::string& md5) {
-    if (!FileUtils::check_exist(entry.path)) {
+    if (!fs::path_exist(entry.path)) {
         return Status::InternalError("file not exist");
     }
     if (!boost::iequals(md5, entry.md5)) {

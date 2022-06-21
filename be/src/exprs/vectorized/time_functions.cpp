@@ -5,10 +5,12 @@
 #include <string_view>
 
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/unary_function.h"
-#include "runtime/date_value.h"
+#include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
+#include "types/date_value.h"
 #include "udf/udf_internal.h"
 
 namespace starrocks::vectorized {
@@ -55,7 +57,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
 
     if (v1->is_constant()) {
         auto value = ColumnHelper::get_const_value<Type>(v1);
-        if (value.is_valid()) {
+        if (value.is_valid_non_strict()) {
             return v1;
         } else {
             return ColumnHelper::create_const_null_column(v1->size());
@@ -72,7 +74,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
         int size = v->size();
         for (int i = 0; i < size; ++i) {
             // if null or is invalid
-            null_result[i] = nulls[i] | (!values[i].is_valid());
+            null_result[i] = nulls[i] | (!values[i].is_valid_non_strict());
         }
 
         return NullableColumn::create(v->data_column(), null_column);
@@ -84,7 +86,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
 
         int size = v1->size();
         for (int i = 0; i < size; ++i) {
-            nulls[i] = (!values[i].is_valid());
+            nulls[i] = (!values[i].is_valid_non_strict());
         }
 
         return NullableColumn::create(v1, null_column);
@@ -488,6 +490,115 @@ DEFINE_UNARY_FN_WITH_IMPL(week_of_yearImpl, v) {
 }
 DEFINE_TIME_UNARY_FN(week_of_year, TYPE_DATETIME, TYPE_INT);
 
+uint TimeFunctions::week_mode(uint mode) {
+    uint week_format = (mode & 7);
+    if (!(week_format & WEEK_MONDAY_FIRST)) week_format ^= WEEK_FIRST_WEEKDAY;
+    return week_format;
+}
+
+/*
+   Calc days in one year.
+   @note Works with both two and four digit years.
+   @return number of days in that year
+*/
+uint TimeFunctions::compute_days_in_year(uint year) {
+    return ((year & 3) == 0 && (year % 100 || (year % 400 == 0 && year)) ? TimeFunctions::NUMBER_OF_LEAP_YEAR
+                                                                         : TimeFunctions::NUMBER_OF_NON_LEAP_YEAR);
+}
+
+/*
+   Calc weekday from daynr.
+   @retval 0 for Monday
+   @retval 6 for Sunday
+*/
+int TimeFunctions::compute_weekday(long daynr, bool sunday_first_day_of_week) {
+    return (static_cast<int>((daynr + 5L + (sunday_first_day_of_week ? 1L : 0L)) % 7));
+}
+
+/*
+  Calculate nr of day since year 0 in new date-system (from 1615).
+  @param year	  Year (exact 4 digit year, no year conversions)
+  @param month  Month
+  @param day	  Day
+  @note 0000-00-00 is a valid date, and will return 0
+  @return Days since 0000-00-00
+*/
+long TimeFunctions::compute_daynr(uint year, uint month, uint day) {
+    long delsum;
+    int temp;
+    int y = year;
+
+    if (y == 0 && month == 0) {
+        return 0;
+    }
+
+    delsum = static_cast<long>(TimeFunctions::NUMBER_OF_NON_LEAP_YEAR * y + 31 * (static_cast<int>(month) - 1) +
+                               static_cast<int>(day));
+    if (month <= 2) {
+        y--;
+    } else {
+        delsum -= static_cast<long>(static_cast<int>(month) * 4 + 23) / 10;
+    }
+    temp = ((y / 100 + 1) * 3) / 4;
+    DCHECK(delsum + static_cast<int>(y) / 4 - temp >= 0);
+    return (delsum + static_cast<int>(y) / 4 - temp);
+}
+
+int32_t TimeFunctions::compute_week(uint year, uint month, uint day, uint week_behaviour) {
+    uint days;
+    ulong daynr = TimeFunctions::compute_daynr((uint)year, (uint)month, (uint)day);
+    ulong first_daynr = TimeFunctions::compute_daynr((uint)year, 1, 1);
+    bool monday_first = (week_behaviour & WEEK_MONDAY_FIRST);
+    bool week_year = (week_behaviour & WEEK_YEAR);
+    bool first_weekday = (week_behaviour & WEEK_FIRST_WEEKDAY);
+
+    uint weekday = TimeFunctions::compute_weekday(first_daynr, !monday_first);
+    uint year_local = year;
+
+    if (month == 1 && day <= 7 - weekday) {
+        if (!week_year && ((first_weekday && weekday != 0) || (!first_weekday && weekday >= 4))) {
+            return 0;
+        }
+        week_year = true;
+        year_local--;
+        first_daynr -= (days = TimeFunctions::compute_days_in_year(year_local));
+        weekday = (weekday + 53 * 7 - days) % 7;
+    }
+
+    if ((first_weekday && weekday != 0) || (!first_weekday && weekday >= 4)) {
+        days = daynr - (first_daynr + (7 - weekday));
+    } else {
+        days = daynr - (first_daynr - weekday);
+    }
+
+    if (week_year && days >= 52 * 7) {
+        weekday = (weekday + TimeFunctions::compute_days_in_year(year_local)) % 7;
+        if ((!first_weekday && weekday < 4) || (first_weekday && weekday == 0)) {
+            year_local++;
+            return 1;
+        }
+    }
+    return days / 7 + 1;
+}
+
+DEFINE_UNARY_FN_WITH_IMPL(week_of_year_with_default_modeImpl, t) {
+    auto date_value = (DateValue)t;
+    int year = 0, month = 0, day = 0;
+    date_value.to_date(&year, &month, &day);
+
+    return TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(0));
+}
+DEFINE_TIME_UNARY_FN(week_of_year_with_default_mode, TYPE_DATETIME, TYPE_INT);
+
+DEFINE_BINARY_FUNCTION_WITH_IMPL(week_of_year_with_modeImpl, t, m) {
+    auto date_value = (DateValue)t;
+    int year = 0, month = 0, day = 0;
+    date_value.to_date(&year, &month, &day);
+
+    return TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(m));
+}
+DEFINE_TIME_BINARY_FN(week_of_year_with_mode, TYPE_DATETIME, TYPE_INT, TYPE_INT);
+
 // to_date
 DEFINE_UNARY_FN_WITH_IMPL(to_dateImpl, v) {
     return (DateValue)v;
@@ -549,8 +660,8 @@ DEFINE_TIME_ADD_AND_SUB_FN(micros, TimeUnit::MICROSECOND);
 #undef DEFINE_TIME_SUB_FN
 #undef DEFINE_TIME_ADD_AND_SUB_FN
 
-Status TimeFunctions::datetime_floor_prepare(starrocks_udf::FunctionContext* context,
-                                             starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context,
+                                         starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
@@ -561,21 +672,21 @@ Status TimeFunctions::datetime_floor_prepare(starrocks_udf::FunctionContext* con
 
     ScalarFunction function;
     if (period_unit == "second") {
-        function = &TimeFunctions::datetime_floor_second;
+        function = &TimeFunctions::time_slice_second;
     } else if (period_unit == "minute") {
-        function = &TimeFunctions::datetime_floor_minute;
+        function = &TimeFunctions::time_slice_minute;
     } else if (period_unit == "hour") {
-        function = &TimeFunctions::datetime_floor_hour;
+        function = &TimeFunctions::time_slice_hour;
     } else if (period_unit == "day") {
-        function = &TimeFunctions::datetime_floor_day;
+        function = &TimeFunctions::time_slice_day;
     } else if (period_unit == "month") {
-        function = &TimeFunctions::datetime_floor_month;
+        function = &TimeFunctions::time_slice_month;
     } else if (period_unit == "year") {
-        function = &TimeFunctions::datetime_floor_year;
+        function = &TimeFunctions::time_slice_year;
     } else if (period_unit == "week") {
-        function = &TimeFunctions::datetime_floor_week;
+        function = &TimeFunctions::time_slice_week;
     } else if (period_unit == "quarter") {
-        function = &TimeFunctions::datetime_floor_quarter;
+        function = &TimeFunctions::time_slice_quarter;
     } else {
         return Status::InternalError("period unit must in {second, minute, hour, day, month, year, week, quarter}");
     }
@@ -586,48 +697,48 @@ Status TimeFunctions::datetime_floor_prepare(starrocks_udf::FunctionContext* con
     return Status::OK();
 }
 
-#define DEFINE_DATETIME_FLOOR_FN(UNIT)                                         \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(datetime_floor_##UNIT##Impl, v, period) { \
-        TimestampValue result = v;                                             \
-        result.floor_to_##UNIT##_period(period);                               \
-        return result;                                                         \
-    }                                                                          \
-                                                                               \
-    DEFINE_TIME_CALC_FN(datetime_floor_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
+#define DEFINE_TIME_SLICE_FN(UNIT)                                         \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_##UNIT##Impl, v, period) { \
+        TimestampValue result = v;                                         \
+        result.floor_to_##UNIT##_period(period);                           \
+        return result;                                                     \
+    }                                                                      \
+                                                                           \
+    DEFINE_TIME_CALC_FN(time_slice_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
 
-// datetime_floor_to_second
-DEFINE_DATETIME_FLOOR_FN(second);
+// time_slice_to_second
+DEFINE_TIME_SLICE_FN(second);
 
-// datetime_floor_to_minute
-DEFINE_DATETIME_FLOOR_FN(minute);
+// time_slice_to_minute
+DEFINE_TIME_SLICE_FN(minute);
 
-// datetime_floor_to_hour
-DEFINE_DATETIME_FLOOR_FN(hour);
+// time_slice_to_hour
+DEFINE_TIME_SLICE_FN(hour);
 
-// datetime_floor_to_day
-DEFINE_DATETIME_FLOOR_FN(day);
+// time_slice_to_day
+DEFINE_TIME_SLICE_FN(day);
 
-// datetime_floor_to_week
-DEFINE_DATETIME_FLOOR_FN(week);
+// time_slice_to_week
+DEFINE_TIME_SLICE_FN(week);
 
-// datetime_floor_to_month
-DEFINE_DATETIME_FLOOR_FN(month);
+// time_slice_to_month
+DEFINE_TIME_SLICE_FN(month);
 
-// datetime_floor_to_quarter
-DEFINE_DATETIME_FLOOR_FN(quarter);
+// time_slice_to_quarter
+DEFINE_TIME_SLICE_FN(quarter);
 
-// datetime_floor_to_year
-DEFINE_DATETIME_FLOOR_FN(year);
+// time_slice_to_year
+DEFINE_TIME_SLICE_FN(year);
 
-#undef DEFINE_DATETIME_FLOOR_FN
+#undef DEFINE_TIME_SLICE_FN
 
-ColumnPtr TimeFunctions::datetime_floor(FunctionContext* context, const Columns& columns) {
+ColumnPtr TimeFunctions::time_slice(FunctionContext* context, const Columns& columns) {
     auto ctc = reinterpret_cast<DateTruncCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     return ctc->function(context, columns);
 }
 
-Status TimeFunctions::datetime_floor_close(starrocks_udf::FunctionContext* context,
-                                           starrocks_udf::FunctionContext::FunctionStateScope scope) {
+Status TimeFunctions::time_slice_close(starrocks_udf::FunctionContext* context,
+                                       starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto fc = reinterpret_cast<DateTruncCtx*>(context->get_function_state(scope));
         delete fc;
@@ -1053,9 +1164,14 @@ ColumnPtr TimeFunctions::from_unix_to_datetime_with_format(FunctionContext* cont
 
 // from_days
 DEFINE_UNARY_FN_WITH_IMPL(from_daysImpl, v) {
+    //return 00-00-00 if the argument is negative or too large, according to MySQL
     DateValue dv{date::BC_EPOCH_JULIAN + v};
+    if (!dv.is_valid()) {
+        return DateValue{date::ZERO_EPOCH_JULIAN};
+    }
     return dv;
 }
+
 ColumnPtr TimeFunctions::from_days(FunctionContext* context, const Columns& columns) {
     return date_valid<TYPE_DATE>(
             VectorizedStrictUnaryFunction<from_daysImpl>::evaluate<TYPE_INT, TYPE_DATE>(VECTORIZED_FN_ARGS(0)));

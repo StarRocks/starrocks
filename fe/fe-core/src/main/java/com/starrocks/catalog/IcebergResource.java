@@ -15,6 +15,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 
+import static com.starrocks.common.util.Util.validateMetastoreUris;
+
 /**
  * Iceberg resource for external Iceberg table
  * <p>
@@ -110,5 +112,35 @@ public class IcebergResource extends Resource {
 
     public IcebergCatalogType getCatalogType() {
         return IcebergCatalogType.fromString(catalogType);
+    }
+
+    /**
+     * <p>alter the resource properties.</p>
+     * <p>the user can not alter the property that the system does not support.
+     *
+     * @param properties the properties that user uses to alter
+     * @throws DdlException
+     */
+    public void alterProperties(Map<String, String> properties) throws DdlException {
+        Preconditions.checkState(properties != null, "properties can not be null");
+
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue();
+            if (ICEBERG_METASTORE_URIS.equals(key)) {
+                if (StringUtils.isBlank(value)) {
+                    throw new DdlException(ICEBERG_METASTORE_URIS + " can not be null");
+                }
+                validateMetastoreUris(value);
+                this.metastoreURIs = value;
+            } else if (ICEBERG_IMPL.equals(key)) {
+                if (StringUtils.isBlank(value)) {
+                    throw new DdlException(ICEBERG_IMPL + " can not be null");
+                }
+                this.catalogImpl = value;
+            } else {
+                throw new DdlException(String.format("property %s has not support yet", key));
+            }
+        }
     }
 }

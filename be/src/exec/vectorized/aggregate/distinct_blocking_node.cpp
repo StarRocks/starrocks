@@ -45,7 +45,7 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
         }
         DCHECK_LE(chunk->num_rows(), runtime_state()->chunk_size());
 
-        _aggregator->evaluate_exprs(chunk.get());
+        RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
 
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
@@ -59,8 +59,7 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
             APPLY_FOR_AGG_VARIANT_ALL(HASH_SET_METHOD)
 #undef HASH_SET_METHOD
 
-            _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +
-                              _aggregator->mem_pool()->total_reserved_bytes());
+            _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
             TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
 
             _aggregator->update_num_input_rows(chunk->num_rows());
@@ -90,7 +89,7 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
 
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
-    _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() + _aggregator->mem_pool()->total_reserved_bytes());
+    _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
 
     return Status::OK();
 }

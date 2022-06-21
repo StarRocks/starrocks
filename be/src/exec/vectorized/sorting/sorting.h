@@ -16,32 +16,36 @@ namespace starrocks::vectorized {
 // @param permutation input and output permutation
 // @param tie input and output tie
 // @param range sort range, {0, 0} means not build tie but sort data
-Status sort_and_tie_column(const bool& cancel, const ColumnPtr column, bool is_asc_order, bool is_null_first,
-                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie);
+Status sort_and_tie_column(const bool cancel, ColumnPtr& column, const bool is_asc_order, const bool is_null_first,
+                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, const bool build_tie);
+Status sort_and_tie_column(const bool cancel, const ColumnPtr& column, const bool is_asc_order,
+                           const bool is_null_first, SmallPermutation& permutation, Tie& tie, std::pair<int, int> range,
+                           const bool build_tie);
 
 // Sort multiple columns using column-wise algorithm, output the order in permutation array
-Status sort_and_tie_columns(const bool& cancel, const Columns& columns, const std::vector<int>& sort_orders,
+Status sort_and_tie_columns(const bool cancel, const Columns& columns, const std::vector<int>& sort_orders,
                             const std::vector<int>& null_firsts, Permutation* permutation);
 
 // Sort multiple columns, and stable
-Status stable_sort_and_tie_columns(const bool& cancel, const Columns& columns, const std::vector<int>& sort_orders,
+Status stable_sort_and_tie_columns(const bool cancel, const Columns& columns, const std::vector<int>& sort_orders,
                                    const std::vector<int>& null_firsts, SmallPermutation* permutation);
 
 // Sort multiple columns in vertical
-Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns, bool is_asc_order,
-                             bool is_null_first, Permutation& permutation, Tie& tie, std::pair<int, int> range,
-                             bool build_tie, size_t limit = 0, size_t* limited = nullptr);
+Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns,
+                             const bool is_asc_order, const bool is_null_first, Permutation& permutation, Tie& tie,
+                             std::pair<int, int> range, const bool build_tie, const size_t limit = 0,
+                             size_t* limited = nullptr);
 
 // Sort multiple chunks in column-wise style
 Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<Columns>& vertical_chunks,
                             const std::vector<int>& sort_orders, const std::vector<int>& null_firsts, Permutation& perm,
-                            size_t limit);
+                            const size_t limit, const bool is_limit_by_rank = false);
 
 // Compare the column with the `rhs_value`, which must have the some type with column.
 // @param cmp_result compare result is written into this array, value must within -1,0,1
 // @param rhs_value the compare value
-int compare_column(const ColumnPtr column, std::vector<int8_t>& cmp_result, Datum rhs_value, int sort_order,
-                   int null_first);
+int compare_column(const ColumnPtr column, std::vector<int8_t>& cmp_result, Datum rhs_value, const int sort_order,
+                   const int null_first);
 void compare_columns(const Columns columns, std::vector<int8_t>& cmp_result, const std::vector<Datum>& rhs_values,
                      const std::vector<int>& sort_orders, const std::vector<int>& null_firsts);
 

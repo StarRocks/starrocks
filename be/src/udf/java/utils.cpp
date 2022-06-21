@@ -1,8 +1,15 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+
 #include "udf/java/utils.h"
 
 #include <memory>
 
-#include "bthread/bthread.h"
+#include "common/compiler_util.h"
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <bthread/bthread.h>
+DIAGNOSTIC_POP
+
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -22,4 +29,16 @@ PromiseStatusPtr call_function_in_pthread(RuntimeState* state, std::function<Sta
     }
     return ms;
 }
+
+PromiseStatusPtr call_hdfs_scan_function_in_pthread(std::function<Status()> func) {
+    PromiseStatusPtr ms = std::make_unique<PromiseStatus>();
+    if (bthread_self()) {
+        ExecEnv::GetInstance()->pipeline_hdfs_scan_io_thread_pool()->offer(
+                [promise = ms.get(), func]() { promise->set_value(func()); });
+    } else {
+        ms->set_value(func());
+    }
+    return ms;
+}
+
 } // namespace starrocks

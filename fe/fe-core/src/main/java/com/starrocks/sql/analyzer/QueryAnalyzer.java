@@ -29,6 +29,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -52,17 +55,21 @@ import com.starrocks.sql.optimizer.base.SetQualifier;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class QueryAnalyzer {
     private final ConnectContext session;
+    private final MetadataMgr metadataMgr;
 
     public QueryAnalyzer(ConnectContext session) {
         this.session = session;
+        this.metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
     }
 
     public void analyze(StatementBase node) {
@@ -149,7 +156,9 @@ public class QueryAnalyzer {
         @Override
         public Scope visitSelect(SelectRelation selectRelation, Scope scope) {
             AnalyzeState analyzeState = new AnalyzeState();
-            Relation resolvedRelation = resolveTableRef(selectRelation.getRelation(), scope);
+            //Record aliases at this level to prevent alias conflicts
+            Set<String> aliasSet = new HashSet<>();
+            Relation resolvedRelation = resolveTableRef(selectRelation.getRelation(), scope, aliasSet);
             if (resolvedRelation instanceof TableFunctionRelation) {
                 throw unsupportedException("Table function must be used with lateral join");
             }
@@ -173,17 +182,23 @@ public class QueryAnalyzer {
             return analyzeState.getOutputScope();
         }
 
-        private Relation resolveTableRef(Relation relation, Scope scope) {
+        private Relation resolveTableRef(Relation relation, Scope scope, Set<String> aliasSet) {
             if (relation instanceof JoinRelation) {
                 JoinRelation join = (JoinRelation) relation;
-                join.setLeft(resolveTableRef(join.getLeft(), scope));
-                Relation rightRelation = resolveTableRef(join.getRight(), scope);
+                join.setLeft(resolveTableRef(join.getLeft(), scope, aliasSet));
+                Relation rightRelation = resolveTableRef(join.getRight(), scope, aliasSet);
                 join.setRight(rightRelation);
                 if (rightRelation instanceof TableFunctionRelation) {
                     join.setLateral(true);
                 }
                 return join;
             } else if (relation instanceof TableRelation) {
+                if (aliasSet.contains(relation.getResolveTableName().getTbl())) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE, relation.getResolveTableName().getTbl());
+                } else {
+                    aliasSet.add(relation.getResolveTableName().getTbl());
+                }
+
                 TableRelation tableRelation = (TableRelation) relation;
                 TableName tableName = tableRelation.getName();
                 if (tableName != null && Strings.isNullOrEmpty(tableName.getDb())) {
@@ -233,6 +248,13 @@ public class QueryAnalyzer {
                     }
                 }
             } else {
+                if (relation.getResolveTableName() != null) {
+                    if (aliasSet.contains(relation.getResolveTableName().getTbl())) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE, relation.getResolveTableName().getTbl());
+                    } else {
+                        aliasSet.add(relation.getResolveTableName().getTbl());
+                    }
+                }
                 return relation;
             }
         }
@@ -259,7 +281,12 @@ public class QueryAnalyzer {
             }
 
             node.setColumns(columns.build());
-            session.getDumpInfo().addTable(node.getName().getDb().split(":")[1], table);
+            String dbName = node.getName().getDb();
+            if (CatalogMgr.isInternalCatalog(node.getName().getCatalog())) {
+                dbName = dbName.split(":")[1];
+            }
+
+            session.getDumpInfo().addTable(dbName, table);
 
             Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
             node.setScope(scope);
@@ -409,7 +436,7 @@ public class QueryAnalyzer {
         @Override
         public Scope visitSubquery(SubqueryRelation subquery, Scope context) {
             if (subquery.getResolveTableName() == null) {
-                throw new SemanticException("Every derived table must have its own alias");
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DERIVED_MUST_HAVE_ALIAS);
             }
 
             Scope queryOutputScope = process(subquery.getQueryStatement(), context);
@@ -623,17 +650,23 @@ public class QueryAnalyzer {
     private Table resolveTable(TableName tableName) {
         try {
             MetaUtils.normalizationTableName(session, tableName);
+            String catalogName = tableName.getCatalog();
             String dbName = tableName.getDb();
             String tbName = tableName.getTbl();
             if (Strings.isNullOrEmpty(dbName)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
             }
 
-            Database database = session.getGlobalStateMgr().getDb(dbName);
+            if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+            }
+
+            Database database = metadataMgr.getDb(catalogName, dbName);
             if (database == null) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
-            Table table = database.getTable(tbName);
+
+            Table table = metadataMgr.getTable(catalogName, dbName, tbName);
             if (table == null) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tbName);
             }

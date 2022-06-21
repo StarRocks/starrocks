@@ -16,6 +16,7 @@ import com.starrocks.external.iceberg.IcebergCatalog;
 import com.starrocks.external.iceberg.IcebergCatalogType;
 import com.starrocks.external.iceberg.IcebergUtil;
 import com.starrocks.external.iceberg.StarRocksIcebergException;
+import com.starrocks.external.iceberg.io.IcebergCachingFileIO;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TIcebergTable;
@@ -76,6 +77,10 @@ public class IcebergTable extends Table {
 
     public String getTable() {
         return table;
+    }
+
+    public String getFileIOMaxTotalBytes() {
+        return icebergProperties.get(IcebergCachingFileIO.FILEIO_CACHE_MAX_TOTAL_BYTES);
     }
 
     public String getResourceName() {
@@ -154,11 +159,18 @@ public class IcebergTable extends Table {
         IcebergCatalogType type = icebergResource.getCatalogType();
         icebergProperties.put(ICEBERG_CATALOG, type.name());
         LOG.info("Iceberg table type is " + type.name());
+
+        String fileIOCacheMaxTotalBytes = copiedProps.get(IcebergCachingFileIO.FILEIO_CACHE_MAX_TOTAL_BYTES);
+        if (!Strings.isNullOrEmpty(fileIOCacheMaxTotalBytes)) {
+            icebergProperties.put(IcebergCachingFileIO.FILEIO_CACHE_MAX_TOTAL_BYTES, fileIOCacheMaxTotalBytes);
+            copiedProps.remove(IcebergCachingFileIO.FILEIO_CACHE_MAX_TOTAL_BYTES);
+        }
+
         IcebergCatalog icebergCatalog;
         switch (type) {
             case HIVE_CATALOG:
                 icebergProperties.put(ICEBERG_METASTORE_URIS, icebergResource.getHiveMetastoreURIs());
-                icebergCatalog = IcebergUtil.getIcebergHiveCatalog(icebergResource.getHiveMetastoreURIs());
+                icebergCatalog = IcebergUtil.getIcebergHiveCatalog(icebergResource.getHiveMetastoreURIs(), icebergProperties);
                 break;
             case CUSTOM_CATALOG:
                 icebergProperties.put(ICEBERG_IMPL, icebergResource.getIcebergImpl());

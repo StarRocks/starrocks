@@ -4,6 +4,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.Expr;
@@ -14,15 +15,17 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
@@ -37,6 +40,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MaterializedViewAnalyzer {
@@ -75,7 +79,8 @@ public class MaterializedViewAnalyzer {
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
             // collect table from query statement
-            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTable(queryStatement);
+            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
+            Set<Long> baseTableIds = Sets.newHashSet();
             tableNameTableMap.forEach((tableName, table) -> {
                 if (!tableName.getDb().equals(statement.getTableName().getDb())) {
                     throw new SemanticException(
@@ -86,7 +91,9 @@ public class MaterializedViewAnalyzer {
                             "Materialized view only support olap table:" + tableName.getTbl() + " type:" +
                                     table.getType().name());
                 }
+                baseTableIds.add(table.getId());
             });
+            statement.setBaseTableIds(baseTableIds);
             Map<Column, Expr> columnExprMap = Maps.newHashMap();
             // get outputExpressions and convert it to columns which in selectRelation
             // set the columns into createMaterializedViewStatement
@@ -129,8 +136,40 @@ public class MaterializedViewAnalyzer {
             List<Expr> outputExpression = queryRelation.getOutputExpression();
             for (int i = 0; i < outputExpression.size(); ++i) {
                 Column column = new Column(columnOutputNames.get(i), outputExpression.get(i).getType());
+                // set default aggregate type, look comments in class Column
+                column.setAggregationType(AggregateType.NONE, false);
                 mvColumns.add(column);
                 columnExprMap.put(column, outputExpression.get(i));
+            }
+            // set duplicate key
+            int theBeginIndexOfValue = 0;
+            int keySizeByte = 0;
+            for (; theBeginIndexOfValue < mvColumns.size(); theBeginIndexOfValue++) {
+                Column column = mvColumns.get(theBeginIndexOfValue);
+                keySizeByte += column.getType().getIndexSize();
+                if (theBeginIndexOfValue + 1 > FeConstants.shortkey_max_column_count ||
+                        keySizeByte > FeConstants.shortkey_maxsize_bytes) {
+                    if (theBeginIndexOfValue == 0 && column.getType().getPrimitiveType().isCharFamily()) {
+                        column.setIsKey(true);
+                        column.setAggregationType(null, false);
+                        theBeginIndexOfValue++;
+                    }
+                    break;
+                }
+                if (!column.getType().canBeMVKey()) {
+                    break;
+                }
+                if (column.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
+                    column.setIsKey(true);
+                    column.setAggregationType(null, false);
+                    theBeginIndexOfValue++;
+                    break;
+                }
+                column.setIsKey(true);
+                column.setAggregationType(null, false);
+            }
+            if (theBeginIndexOfValue == 0) {
+                throw new SemanticException("Data type of first column cannot be " + mvColumns.get(0).getType());
             }
             statement.setMvColumnItems(mvColumns);
         }
@@ -187,7 +226,8 @@ public class MaterializedViewAnalyzer {
             if (expr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = ((FunctionCallExpr) expr);
                 String functionName = functionCallExpr.getFnName().getFunction();
-                CheckPartitionFunction checkPartitionFunction = PartitionFunctionChecker.FN_NAME_TO_PATTERN.get(functionName);
+                CheckPartitionFunction checkPartitionFunction =
+                        PartitionFunctionChecker.FN_NAME_TO_PATTERN.get(functionName);
                 if (checkPartitionFunction == null) {
                     throw new SemanticException("Materialized view partition function " +
                             functionName + " is not support");
@@ -249,13 +289,8 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Materialized view should contain distribution desc");
                 }
             }
-            try {
-                distributionDesc.analyze(
-                        mvColumnItems.stream().map(column -> column.getName()).collect(Collectors.toSet()));
-            } catch (AnalysisException e) {
-                LOG.error("distributionDesc " + distributionDesc + "analyze failed", e);
-                throw new SemanticException(e.getMessage());
-            }
+            distributionDesc.analyze(
+                    mvColumnItems.stream().map(column -> column.getName()).collect(Collectors.toSet()));
         }
 
         @Override
@@ -287,7 +322,7 @@ public class MaterializedViewAnalyzer {
             }
             FunctionCallExpr fnExpr = (FunctionCallExpr) expr;
             String fnNameString = fnExpr.getFnName().getFunction();
-            if (!fnNameString.equals("date_trunc")) {
+            if (!fnNameString.equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
                 return false;
             }
             if (fnExpr.getChild(0) instanceof StringLiteral && fnExpr.getChild(1) instanceof SlotRef) {

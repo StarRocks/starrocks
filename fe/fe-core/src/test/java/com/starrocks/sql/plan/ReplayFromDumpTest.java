@@ -43,6 +43,7 @@ public class ReplayFromDumpTest {
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
     }
@@ -130,6 +131,7 @@ public class ReplayFromDumpTest {
         if (sessionVariable != null) {
             queryDumpInfo.setSessionVariable(sessionVariable);
         }
+        queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000);
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
                         getExplainString(level));
@@ -258,7 +260,7 @@ public class ReplayFromDumpTest {
     public void testTPCDS22() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds22"));
         // check d_date_sk distinct values has adjusted according to the cardinality
-        Assert.assertTrue(replayPair.second.contains("4:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second.contains("  4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  equal join conjunct: [1: inv_date_sk, INT, false] = [5: d_date_sk, INT, false]\n" +
                 "  |  build runtime filters:\n" +
@@ -415,5 +417,23 @@ public class ReplayFromDumpTest {
                 "  |  <slot 2> : 2: t2_c2\n" +
                 "  |  <slot 11> : CAST(CAST(1: t2_c1 AS BIGINT) + 1 AS INT)"));
         Assert.assertTrue(replayPair.second.contains("OLAP TABLE SINK"));
+    }
+
+    @Test
+    public void testMergeGroupWithDeleteBestExpression() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/merge_group_delete_best_expression"), null, TExplainLevel.NORMAL);
+        // check without exception
+        Assert.assertTrue(replayPair.second.contains("14:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)"));
+    }
+
+    @Test
+    public void testJoinReOrderPruneColumns() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null, TExplainLevel.NORMAL);
+        System.out.println(replayPair.second);
+        // check without exception
+        Assert.assertTrue(replayPair.second.contains("<slot 19> : 19: id_tinyint"));
     }
 }

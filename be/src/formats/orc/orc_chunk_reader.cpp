@@ -21,6 +21,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type.h"
 #include "simd/simd.h"
+#include "util/timezone_utils.h"
 
 namespace starrocks::vectorized {
 

@@ -336,4 +336,45 @@ public class CTEPlanTest extends PlanTestBase {
         String thrift = getThriftPlan(sql);
         assertNotContains(thrift, "tuple_id:3");
     }
+
+    @Test
+    public void testCTEAnchorOperatorOutputColumns() throws Exception {
+        String sql = "SELECT \n" +
+                "  CAST(\n" +
+                "    (\n" +
+                "      CAST(t1.v4 AS FLOAT) IN (\n" +
+                "        (\n" +
+                "          SELECT \n" +
+                "            subt0.v1 \n" +
+                "          FROM \n" +
+                "            t0 AS subt0 \n" +
+                "          WHERE \n" +
+                "            NULL\n" +
+                "        )\n" +
+                "      )\n" +
+                "    ) \n" +
+                "    AND CAST(\n" +
+                "      CAST(t1.v4 AS FLOAT) IN (\n" +
+                "        (\n" +
+                "          SELECT \n" +
+                "            subt0.v1 \n" +
+                "          FROM \n" +
+                "            t0 AS subt0 \n" +
+                "          WHERE \n" +
+                "            NULL\n" +
+                "        )\n" +
+                "      ) AS BOOLEAN\n" +
+                "    ) AS INT\n" +
+                "  ) as count \n" +
+                "FROM \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      t1.v4 \n" +
+                "    FROM \n" +
+                "      t1\n" +
+                "  ) t1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  33:Project\n" +
+                "  |  <slot 12> : CAST((7: expr) AND (CASE WHEN (16: countRows IS NULL) OR (16: countRows = 0) THEN FALSE WHEN CAST(CAST(1: v4 AS FLOAT) AS DOUBLE) IS NULL THEN NULL WHEN 14: cast IS NOT NULL THEN TRUE WHEN 17: countNulls < 16: countRows THEN NULL ELSE FALSE END) AS INT)\n");
+    }
 }

@@ -215,7 +215,10 @@ public:
         ASSERT_NE(0, real_port);
     }
 
-    static void TearDownTestCase() { delete mock_es_server; }
+    static void TearDownTestCase() {
+        mock_es_server->stop();
+        delete mock_es_server;
+    }
 };
 
 } // namespace starrocks

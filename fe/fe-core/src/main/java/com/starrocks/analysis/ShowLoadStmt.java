@@ -289,6 +289,6 @@ public class ShowLoadStmt extends ShowStmt {
 
     @Override
     public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
+        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 }

@@ -21,12 +21,14 @@
 
 #include <gflags/gflags.h>
 
+#include <fstream>
 #include <iostream>
 #include <set>
 #include <string>
 
 #include "common/status.h"
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/numbers.h"
@@ -45,7 +47,6 @@
 #include "storage/tablet_schema_map.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
-#include "util/file_utils.h"
 #include "util/path_util.h"
 
 using starrocks::DataDir;
@@ -54,7 +55,6 @@ using starrocks::Status;
 using starrocks::TabletMeta;
 using starrocks::TabletMetaManager;
 using starrocks::MetaStoreStats;
-using starrocks::FileUtils;
 using starrocks::Slice;
 using starrocks::RandomAccessFile;
 using starrocks::MemTracker;
@@ -251,7 +251,7 @@ void list_meta(DataDir* data_dir) {
 
 Status init_data_dir(const std::string& dir, std::unique_ptr<DataDir>* ret, bool read_only = false) {
     std::string root_path;
-    Status st = FileUtils::canonicalize(dir, &root_path);
+    Status st = starrocks::fs::canonicalize(dir, &root_path);
     if (!st.ok()) {
         std::cout << "invalid root path:" << FLAGS_root_path << ", error: " << st.to_string() << std::endl;
         return Status::InternalError("invalid root path");
@@ -305,7 +305,7 @@ void batch_delete_meta(const std::string& tablet_file) {
         }
         // 1. get dir
         std::string dir;
-        Status st = FileUtils::canonicalize(v[0], &dir);
+        Status st = starrocks::fs::canonicalize(v[0], &dir);
         if (!st.ok()) {
             std::cout << "invalid root dir in tablet_file: " << line << std::endl;
             err_num++;
@@ -532,7 +532,7 @@ int meta_tool_main(int argc, char** argv) {
         show_meta();
     } else if (FLAGS_operation == "batch_delete_meta") {
         std::string tablet_file;
-        Status st = FileUtils::canonicalize(FLAGS_tablet_file, &tablet_file);
+        Status st = starrocks::fs::canonicalize(FLAGS_tablet_file, &tablet_file);
         if (!st.ok()) {
             std::cout << "invalid tablet file: " << FLAGS_tablet_file << ", error: " << st.to_string() << std::endl;
             return -1;

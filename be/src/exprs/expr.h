@@ -25,17 +25,12 @@
 #include <string>
 #include <vector>
 
-#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/Opcodes_types.h"
-#include "runtime/datetime_value.h"
-#include "runtime/decimal_value.h"
-#include "runtime/decimalv2_value.h"
 #include "runtime/descriptors.h"
-#include "runtime/string_value.h"
-#include "runtime/string_value.hpp"
 #include "runtime/types.h"
 #include "udf/udf.h"
 
@@ -94,6 +89,10 @@ public:
     int output_scale() const { return _output_scale; }
 
     void add_child(Expr* expr) { _children.push_back(expr); }
+
+    // only the expr after clone can call this function
+    // clear children
+    void clear_children() { _children.clear(); }
     Expr* get_child(int i) const { return _children[i]; }
     int get_num_children() const { return _children.size(); }
 

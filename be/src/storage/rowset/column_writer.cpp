@@ -247,22 +247,18 @@ private:
     vectorized::ColumnPtr _buf_column = nullptr;
 };
 
-Status ColumnWriter::create(const ColumnWriterOptions& opts, const TabletColumn* column, WritableFile* _wfile,
-                            std::unique_ptr<ColumnWriter>* writer) {
+StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterOptions& opts,
+                                                             const TabletColumn* column, WritableFile* wfile) {
     std::unique_ptr<Field> field(FieldFactory::create(*column));
     DCHECK(field.get() != nullptr);
     if (is_string_type(delegate_type(column->type()))) {
         std::unique_ptr<Field> field_clone(FieldFactory::create(*column));
         ColumnWriterOptions str_opts = opts;
         str_opts.need_speculate_encoding = true;
-        auto column_writer = std::make_unique<ScalarColumnWriter>(str_opts, std::move(field_clone), _wfile);
-        *writer = std::make_unique<StringColumnWriter>(str_opts, std::move(field), std::move(column_writer));
-        return Status::OK();
+        auto column_writer = std::make_unique<ScalarColumnWriter>(str_opts, std::move(field_clone), wfile);
+        return std::make_unique<StringColumnWriter>(str_opts, std::move(field), std::move(column_writer));
     } else if (is_scalar_field_type(delegate_type(column->type()))) {
-        std::unique_ptr<ColumnWriter> writer_local =
-                std::unique_ptr<ColumnWriter>(new ScalarColumnWriter(opts, std::move(field), _wfile));
-        *writer = std::move(writer_local);
-        return Status::OK();
+        return std::make_unique<ScalarColumnWriter>(opts, std::move(field), wfile);
     } else {
         switch (column->type()) {
         case FieldType::OLAP_FIELD_TYPE_ARRAY: {
@@ -282,8 +278,7 @@ Status ColumnWriter::create(const ColumnWriterOptions& opts, const TabletColumn*
                 }
             }
 
-            std::unique_ptr<ColumnWriter> element_writer;
-            RETURN_IF_ERROR(ColumnWriter::create(element_options, &element_column, _wfile, &element_writer));
+            ASSIGN_OR_RETURN(auto element_writer, ColumnWriter::create(element_options, &element_column, wfile));
 
             std::unique_ptr<ScalarColumnWriter> null_writer = nullptr;
             if (opts.meta->is_nullable()) {
@@ -297,7 +292,7 @@ Status ColumnWriter::create(const ColumnWriterOptions& opts, const TabletColumn*
                 null_options.meta->set_compression(LZ4);
                 null_options.meta->set_is_nullable(false);
                 std::unique_ptr<Field> bool_field(FieldFactory::create_by_type(FieldType::OLAP_FIELD_TYPE_BOOL));
-                null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(bool_field), _wfile);
+                null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(bool_field), wfile);
             }
 
             ColumnWriterOptions array_size_options;
@@ -314,10 +309,9 @@ Status ColumnWriter::create(const ColumnWriterOptions& opts, const TabletColumn*
             array_size_options.need_bitmap_index = false;
             std::unique_ptr<Field> bigint_field(FieldFactory::create_by_type(FieldType::OLAP_FIELD_TYPE_INT));
             std::unique_ptr<ScalarColumnWriter> offset_writer =
-                    std::make_unique<ScalarColumnWriter>(array_size_options, std::move(bigint_field), _wfile);
-            *writer = std::make_unique<ArrayColumnWriter>(opts, std::move(field), std::move(null_writer),
-                                                          std::move(offset_writer), std::move(element_writer));
-            return Status::OK();
+                    std::make_unique<ScalarColumnWriter>(array_size_options, std::move(bigint_field), wfile);
+            return std::make_unique<ArrayColumnWriter>(opts, std::move(field), std::move(null_writer),
+                                                       std::move(offset_writer), std::move(element_writer));
         }
         default:
             return Status::NotSupported("unsupported type for ColumnWriter: " + std::to_string(field->type()));

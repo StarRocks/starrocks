@@ -50,6 +50,7 @@
 #include "exprs/vectorized/placeholder_ref.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/primitive_type.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 
@@ -144,10 +145,11 @@ Expr::Expr(TypeDescriptor type, bool is_slotref)
         case TYPE_DECIMAL32:
         case TYPE_DECIMAL64:
         case TYPE_DECIMAL128:
+        case TYPE_JSON:
             break;
 
         default:
-            DCHECK(false) << "Invalid type.";
+            DCHECK(false) << "Invalid type." << _type.type;
         }
     }
 }
@@ -341,8 +343,10 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     }
     if (*expr == nullptr) {
-        LOG(WARNING) << "Vectorized engine node type return nullptr: " + std::to_string(texpr_node.node_type);
-        return Status::InternalError("Vectorized engine does not support the operator");
+        std::string err_msg =
+                fmt::format("Vectorized engine does not support the operator, node_type: {}", texpr_node.node_type);
+        LOG(WARNING) << err_msg;
+        return Status::InternalError(err_msg);
     }
 
     return Status::OK();
@@ -446,7 +450,9 @@ Status Expr::open(RuntimeState* state, ExprContext* context, FunctionContext::Fu
 
 void Expr::close(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
     for (auto ctx : ctxs) {
-        ctx->close(state);
+        if (ctx != nullptr) {
+            ctx->close(state);
+        }
     }
 }
 
@@ -477,6 +483,7 @@ Status Expr::clone_if_not_exists(const std::vector<ExprContext*>& ctxs, RuntimeS
         }
         return Status::OK();
     }
+
     new_ctxs->resize(ctxs.size());
     for (int i = 0; i < ctxs.size(); ++i) {
         RETURN_IF_ERROR(ctxs[i]->clone(state, &(*new_ctxs)[i]));

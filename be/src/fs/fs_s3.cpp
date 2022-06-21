@@ -22,6 +22,7 @@
 
 #include "common/config.h"
 #include "common/s3_uri.h"
+#include "fs/output_stream_adapter.h"
 #include "gutil/strings/util.h"
 #include "io/s3_input_stream.h"
 #include "io/s3_output_stream.h"
@@ -46,45 +47,6 @@ static Status to_status(Aws::S3::S3Errors error, const std::string& msg) {
         return Status::InternalError(fmt::format(msg));
     }
 }
-
-// // Wrap a `starrocks::io::OutputStream` into `starrocks::WritableFile`.
-class OutputStreamAdapter : public WritableFile {
-public:
-    explicit OutputStreamAdapter(std::unique_ptr<io::OutputStream> os, std::string name)
-            : _os(std::move(os)), _name(std::move(name)), _bytes_written(0) {}
-
-    Status append(const Slice& data) override {
-        auto st = _os->write(data.data, data.size);
-        _bytes_written += st.ok() ? data.size : 0;
-        return st;
-    }
-
-    Status appendv(const Slice* data, size_t cnt) override {
-        for (size_t i = 0; i < cnt; i++) {
-            RETURN_IF_ERROR(append(data[i]));
-        }
-        return Status::OK();
-    }
-
-    Status pre_allocate(uint64_t size) override { return Status::NotSupported("OutputStreamAdapter::pre_allocate"); }
-
-    Status close() override { return _os->close(); }
-
-    // NOTE: unlike posix file, the file cannot be writen anymore after `flush`ed.
-    Status flush(FlushMode mode) override { return _os->close(); }
-
-    // NOTE: unlike posix file, the file cannot be writen anymore after `sync`ed.
-    Status sync() override { return _os->close(); }
-
-    uint64_t size() const { return _bytes_written; }
-
-    const std::string& filename() const override { return _name; }
-
-private:
-    std::unique_ptr<io::OutputStream> _os;
-    std::string _name;
-    uint64_t _bytes_written;
-};
 
 bool operator==(const Aws::Client::ClientConfiguration& lhs, const Aws::Client::ClientConfiguration& rhs) {
     return lhs.endpointOverride == rhs.endpointOverride && lhs.region == rhs.region &&
@@ -168,11 +130,14 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
 
 static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
-    config.scheme = Aws::Http::Scheme::HTTP; // TODO: use the scheme in uri
     if (!uri.endpoint().empty()) {
         config.endpointOverride = uri.endpoint();
     } else if (!config::object_storage_endpoint.empty()) {
         config.endpointOverride = config::object_storage_endpoint;
+    } else if (config::object_storage_endpoint_use_https) {
+        config.scheme = Aws::Http::Scheme::HTTPS;
+    } else {
+        config.scheme = Aws::Http::Scheme::HTTP;
     }
     if (!config::object_storage_region.empty()) {
         config.region = config::object_storage_region;

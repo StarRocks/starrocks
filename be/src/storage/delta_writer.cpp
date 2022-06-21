@@ -2,13 +2,17 @@
 
 #include "storage/delta_writer.h"
 
+#include "common/tracer.h"
 #include "runtime/current_thread.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
+#include "storage/memtable_rowset_writer_sink.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/schema.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
+#include "storage/txn_manager.h"
 #include "storage/update_manager.h"
 
 namespace starrocks::vectorized {
@@ -29,6 +33,7 @@ DeltaWriter::DeltaWriter(const DeltaWriterOptions& opt, MemTracker* mem_tracker,
           _cur_rowset(nullptr),
           _rowset_writer(nullptr),
           _mem_table(nullptr),
+          _mem_table_sink(nullptr),
           _tablet_schema(nullptr),
           _flush_token(nullptr),
           _with_rollback_log(true) {}
@@ -46,6 +51,7 @@ DeltaWriter::~DeltaWriter() {
         break;
     }
     _mem_table.reset();
+    _mem_table_sink.reset();
     _rowset_writer.reset();
     _cur_rowset.reset();
 }
@@ -183,9 +189,8 @@ Status DeltaWriter::_init() {
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
-
+    _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_rowset_writer.get());
     _tablet_schema = writer_context.tablet_schema;
-    _reset_mem_table();
     _flush_token = _storage_engine->memtable_flush_executor()->create_flush_token();
     _set_state(kWriting);
     return Status::OK();
@@ -193,6 +198,11 @@ Status DeltaWriter::_init() {
 
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    // Delay the creation memtables until we write data.
+    // Because for the tablet which doesn't have any written data, we will not use their memtables.
+    if (_mem_table == nullptr) {
+        _reset_mem_table();
+    }
     auto state = _get_state();
     if (state != kWriting) {
         return Status::InternalError(
@@ -230,7 +240,10 @@ Status DeltaWriter::close() {
     case kClosed:
         return Status::OK();
     case kWriting:
-        auto st = _flush_memtable_async();
+        Status st = Status::OK();
+        if (_mem_table != nullptr) {
+            st = _flush_memtable_async();
+        }
         _set_state(st.ok() ? kClosed : kAborted);
         return st;
     }
@@ -238,6 +251,10 @@ Status DeltaWriter::close() {
 }
 
 Status DeltaWriter::_flush_memtable_async() {
+    // _mem_table is nullptr means write() has not been called
+    if (_mem_table == nullptr) {
+        return Status::OK();
+    }
     RETURN_IF_ERROR(_mem_table->finalize());
     return _flush_token->submit(std::move(_mem_table));
 }
@@ -248,11 +265,13 @@ Status DeltaWriter::_flush_memtable() {
 }
 
 void DeltaWriter::_reset_mem_table() {
-    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), _tablet_schema, _opt.slots, _rowset_writer.get(),
+    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), _tablet_schema, _opt.slots, _mem_table_sink.get(),
                                             _mem_tracker);
 }
 
 Status DeltaWriter::commit() {
+    auto scoped =
+            trace::Scope(Tracer::Instance().start_trace_txn_tablet("delta_writer_commit", _opt.txn_id, _opt.tablet_id));
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     auto state = _get_state();
     switch (state) {
@@ -306,7 +325,7 @@ Status DeltaWriter::commit() {
         return Status::InternalError(fmt::format("Delta writer has been aborted. tablet_id: {}, state: {}",
                                                  _opt.tablet_id, _state_name(state)));
     }
-    LOG(INFO) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
+    VLOG(1) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
     return Status::OK();
 }
 

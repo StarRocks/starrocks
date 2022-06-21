@@ -9,11 +9,14 @@ DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <utility>
 DIAGNOSTIC_POP
 
+#include <re2/re2.h>
+#include <simdjson.h>
+#include <velocypack/vpack.h>
+
 #include "column/column_builder.h"
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/jsonpath.h"
-#include "simdjson.h"
-#include "velocypack/vpack.h"
+#include "udf/udf.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -118,11 +121,6 @@ public:
      */
     DEFINE_VECTORIZED_FN(json_string);
 
-    /**
-     * @param: [json_object, json_path]
-     * @paramType: [JsonColumn, BinaryColumn]
-     * @return: JsonColumn
-     */
     DEFINE_VECTORIZED_FN(json_query);
 
     /**
@@ -186,15 +184,38 @@ public:
     }
 
 private:
+    /**
+     * Parse string column as json column
+     * @param: 
+     * @paramType: 
+     * @return: JsonColumn
+     */
+    DEFINE_VECTORIZED_FN(_string_json);
+
+    /**
+     * Convert json column to int column
+     * @param: [json_column]
+     * @paramType: [JsonColumn]
+     * @return: Int32Column
+     */
+    DEFINE_VECTORIZED_FN(_json_int);
+
+    /**
+     * Convert json column to double column
+     * @param: [json_column]
+     * @paramType: [JsonColumn]
+     * @return: DoubleColumn
+     */
+    DEFINE_VECTORIZED_FN(_json_double);
+
+    /**
+     * @param: [json_object, json_path]
+     * @paramType: [JsonColumn, BinaryColumn]
+     * @return: JsonColumn
+     */
+
     static Status _get_parsed_paths(const std::vector<std::string>& path_exprs,
                                     std::vector<SimpleJsonPath>* parsed_paths);
-
-    /* Following functions are only used in test. */
-    template <PrimitiveType primitive_type>
-    static ColumnPtr _iterate_rows(FunctionContext* context, const Columns& columns);
-
-    template <PrimitiveType primitive_type>
-    static void _build_column(ColumnBuilder<primitive_type>& result, simdjson::ondemand::value& value);
 };
 
 } // namespace vectorized

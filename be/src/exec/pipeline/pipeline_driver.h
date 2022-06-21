@@ -14,6 +14,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/phmap/phmap.h"
@@ -189,10 +190,12 @@ public:
         case DriverState::OUTPUT_FULL:
             _output_full_timer->update(_output_full_timer_sw->elapsed_time());
             break;
-        case DriverState::PRECONDITION_BLOCK: {
+        case DriverState::PRECONDITION_BLOCK:
             _precondition_block_timer->update(_precondition_block_timer_sw->elapsed_time());
             break;
-        }
+        case DriverState::PENDING_FINISH:
+            _pending_finish_timer->update(_pending_finish_timer_sw->elapsed_time());
+            break;
         default:
             break;
         }
@@ -207,6 +210,9 @@ public:
         case DriverState::PRECONDITION_BLOCK:
             _precondition_block_timer_sw->reset();
             break;
+        case DriverState::PENDING_FINISH:
+            _pending_finish_timer_sw->reset();
+            break;
         default:
             break;
         }
@@ -215,6 +221,9 @@ public:
     }
 
     Operators& operators() { return _operators; }
+    ScanOperator* source_scan_operator() {
+        return _operators.empty() ? nullptr : dynamic_cast<ScanOperator*>(_operators.front().get());
+    }
     SourceOperator* source_operator() {
         return _operators.empty() ? nullptr : down_cast<SourceOperator*>(_operators.front().get());
     }
@@ -346,8 +355,6 @@ public:
     void set_in_ready_queue(bool v) { _in_ready_queue.store(v, std::memory_order_release); }
 
 private:
-    // Yield PipelineDriver when maximum number of chunks has been moved in current execution round.
-    static constexpr size_t YIELD_MAX_CHUNKS_MOVED = 100;
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round,
@@ -364,12 +371,10 @@ private:
 
     // Update metrics when the driver yields.
     void _update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
-
-    RuntimeState* _runtime_state = nullptr;
     void _update_overhead_timer();
 
+    RuntimeState* _runtime_state = nullptr;
     Operators _operators;
-
     DriverDependencies _dependencies;
     bool _all_dependencies_ready = false;
 
@@ -406,18 +411,28 @@ private:
     RuntimeProfile::Counter* _active_timer = nullptr;
     RuntimeProfile::Counter* _overhead_timer = nullptr;
     RuntimeProfile::Counter* _schedule_timer = nullptr;
+
+    // Schedule counters
+    RuntimeProfile::Counter* _schedule_counter = nullptr;
+    RuntimeProfile::Counter* _yield_by_time_limit_counter = nullptr;
+    RuntimeProfile::Counter* _block_by_precondition_counter = nullptr;
+    RuntimeProfile::Counter* _block_by_output_full_counter = nullptr;
+    RuntimeProfile::Counter* _block_by_input_empty_counter = nullptr;
+
     RuntimeProfile::Counter* _pending_timer = nullptr;
     RuntimeProfile::Counter* _precondition_block_timer = nullptr;
     RuntimeProfile::Counter* _input_empty_timer = nullptr;
     RuntimeProfile::Counter* _first_input_empty_timer = nullptr;
     RuntimeProfile::Counter* _followup_input_empty_timer = nullptr;
     RuntimeProfile::Counter* _output_full_timer = nullptr;
+    RuntimeProfile::Counter* _pending_finish_timer = nullptr;
 
     MonotonicStopWatch* _total_timer_sw = nullptr;
     MonotonicStopWatch* _pending_timer_sw = nullptr;
     MonotonicStopWatch* _precondition_block_timer_sw = nullptr;
     MonotonicStopWatch* _input_empty_timer_sw = nullptr;
     MonotonicStopWatch* _output_full_timer_sw = nullptr;
+    MonotonicStopWatch* _pending_finish_timer_sw = nullptr;
 };
 
 } // namespace pipeline

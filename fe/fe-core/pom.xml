@@ -38,11 +38,22 @@ under the License.
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.5</jacoco.version>
-        <starrocks.thridparty>${basedir}/../../thirdparty</starrocks.thridparty>
+        <starrocks.thrift>thrift</starrocks.thrift>
         <iceberg.version>0.12.1</iceberg.version>
     </properties>
 
     <profiles>
+        <profile>
+            <id>thrift</id>
+            <activation>
+                <property>
+                    <name>env.THRIFT</name>
+                </property>
+            </activation>
+            <properties>
+                <starrocks.thrift>${env.THRIFT}</starrocks.thrift>
+            </properties>
+        </profile>
         <profile>
             <id>thirdparty</id>
             <activation>
@@ -51,7 +62,7 @@ under the License.
                 </property>
             </activation>
             <properties>
-                <starrocks.thridparty>${env.STARROCKS_THIRDPARTY}</starrocks.thridparty>
+                <starrocks.thrift>${env.STARROCKS_THIRDPARTY}/installed/bin/thrift</starrocks.thrift>
             </properties>
         </profile>
     </profiles>
@@ -154,8 +165,8 @@ under the License.
         </dependency>
 
         <dependency>
-            <groupId>com.starrocks</groupId>
-            <artifactId>starrocks-bdb-je</artifactId>
+            <groupId>com.sleepycat</groupId>
+            <artifactId>je</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.mortbay.jetty/jetty -->
@@ -465,8 +476,28 @@ under the License.
 
         <!-- https://mvnrepository.com/artifact/com.facebook.presto.hive/hive-apache -->
         <dependency>
-            <groupId>com.facebook.presto.hive</groupId>
+            <groupId>io.trino.hive</groupId>
             <artifactId>hive-apache</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.aliyun.datalake/metastore-client-hive3 -->
+        <dependency>
+            <groupId>com.aliyun.datalake</groupId>
+            <artifactId>metastore-client-hive3</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.aliyun</groupId>
+                    <artifactId>tea</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.aliyun</groupId>
+                    <artifactId>tea-openapi</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.aliyun</groupId>
+                    <artifactId>tea-util</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.github.ben-manes.caffeine/caffeine -->
@@ -530,6 +561,30 @@ under the License.
             <groupId>org.apache.hudi</groupId>
             <artifactId>hudi-hadoop-mr</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>starclient</artifactId>
+            <version>0.1.1</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-api -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-api</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-sdk -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-exporter-jaeger -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-jaeger</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -585,7 +640,7 @@ under the License.
                 <artifactId>maven-thrift-plugin</artifactId>
                 <version>0.1.11</version>
                 <configuration>
-                    <thriftExecutable>${starrocks.thridparty}/installed/bin/thrift</thriftExecutable>
+                    <thriftExecutable>${starrocks.thrift}</thriftExecutable>
                     <thriftSourceRoot>${starrocks.home}/gensrc/thrift</thriftSourceRoot>
                     <generator>java</generator>
                 </configuration>
@@ -681,7 +736,8 @@ under the License.
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
                     <argLine>
-                        -javaagent:${settings.localRepository}/org/jmockit/jmockit/1.48/jmockit-1.48.jar -Xmx2048m -Duser.timezone=Asia/Shanghai @{jacocoArgLine}
+                        -javaagent:${settings.localRepository}/org/jmockit/jmockit/1.48/jmockit-1.48.jar -Xmx2048m
+                        -Duser.timezone=Asia/Shanghai @{jacocoArgLine}
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>

@@ -78,7 +78,8 @@ TEST_F(JsonFunctionsTest, get_json_intTest) {
     columns.emplace_back(ints2);
 
     ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
     ColumnPtr result = JsonFunctions::get_json_int(ctx.get(), columns);
 
@@ -88,8 +89,8 @@ TEST_F(JsonFunctionsTest, get_json_intTest) {
         ASSERT_EQ(length_ints[j], v->get_data()[j]);
     }
 
-    ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
-                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -112,7 +113,8 @@ TEST_F(JsonFunctionsTest, get_json_doubleTest) {
     columns.emplace_back(doubles2);
 
     ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
     ColumnPtr result = JsonFunctions::get_json_double(ctx.get(), columns);
 
@@ -122,8 +124,8 @@ TEST_F(JsonFunctionsTest, get_json_doubleTest) {
         ASSERT_EQ(length_doubles[j], v->get_data()[j]);
     }
 
-    ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
-                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -135,10 +137,10 @@ TEST_F(JsonFunctionsTest, get_json_stringTest) {
 
     std::string values[] = {"{\"k1\":\"v1\", \"k2\":\"v2\"}", "{\"k1\":\"v1\", \"my.key\":[\"e1\", \"e2\", \"e3\"]}",
                             "{\"k1.key\":{\"k2\":[\"v1\", \"v2\"]}}",
-                            "[{\"k1\":\"v1\"}, {\"k1\":\"v2\"}, {\"k1\":\"v3\"}, {\"k1\":\"v4\"}]"};
+                            "[{\"k1\":\"v1\"}, {\"k2\":\"v2\"}, {\"k1\":\"v3\"}, {\"k1\":\"v4\"}]"};
 
-    std::string strs[] = {"$.k1", "$.\"my.key\"[1]", "$.\"k1.key\".k2[0]", "$.k1"};
-    std::string length_strings[] = {"v1", "e2", "v1", "v1", "v2", "v3", "v4"};
+    std::string strs[] = {"$.k1", "$.\"my.key\"[1]", "$.\"k1.key\".k2[0]", "$[*].k1"};
+    std::string length_strings[] = {"\"v1\"", "\"e2\"", "\"v1\"", "[\"v1\", \"v3\", \"v4\"]"};
 
     for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
         strings->append(values[j]);
@@ -149,7 +151,8 @@ TEST_F(JsonFunctionsTest, get_json_stringTest) {
     columns.emplace_back(strings2);
 
     ctx.get()->impl()->set_constant_columns(columns);
-    ASSERT_TRUE(JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
     ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns);
 
@@ -159,8 +162,107 @@ TEST_F(JsonFunctionsTest, get_json_stringTest) {
         ASSERT_EQ(length_strings[j], v->get_data()[j].to_string());
     }
 
-    ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
-                                               FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+TEST_F(JsonFunctionsTest, get_json_string_casting) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto strings = BinaryColumn::create();
+    auto strings2 = BinaryColumn::create();
+
+    std::string values[] = {
+            R"({"k1":    1})",          //int, 1 key
+            R"({"k1":    1, "k2": 2})", // 2 keys, get the former
+            R"({"k0":    0, "k1": 1})", // 2 keys, get  the latter
+
+            R"({"k1":    3.14159})",                 //double, 1 key
+            R"({"k0":    2.71828, "k1":  3.14159})", // 2 keys, get  the former
+            R"({"k1":    3.14159, "k2":  2.71828})", // 2 keys, get  the latter
+
+            R"({"k1":    "{\"k11\":       \"v11\"}"})",                                        //string, 1 key
+            R"({"k0":    "{\"k01\":       \"v01\"}",  "k1":     "{\"k11\":       \"v11\"}"})", // 2 keys, get  the former
+            R"({"k1":    "{\"k11\":       \"v11\"}",  "k2":     "{\"k21\": \"v21\"}"})", // 2 keys, get  the latter
+
+            R"({"k1":    {"k11":       "v11"}})",                             //object, 1 key
+            R"({"k0":    {"k01":       "v01"},  "k1":     {"k11": "v11"}})",  // 2 keys, get  the former
+            R"({"k1":    {"k11":       "v11"},  "k2":     {"k21": "v21"}})"}; // 2 keys, get  the latter
+
+    std::string strs[] = {"$.k1", "$.k1", "$.k1", "$.k1", "$.k1", "$.k1",
+                          "$.k1", "$.k1", "$.k1", "$.k1", "$.k1", "$.k1"};
+    std::string length_strings[] = {"1",
+                                    "1",
+                                    "1",
+                                    "3.14159",
+                                    "3.14159",
+                                    "3.14159",
+                                    R"("{\"k11\":       \"v11\"}")",
+                                    R"("{\"k11\":       \"v11\"}")",
+                                    R"("{\"k11\":       \"v11\"}")",
+                                    R"({"k11": "v11"})",
+                                    R"({"k11": "v11"})",
+                                    R"({"k11": "v11"})"};
+
+    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+        strings->append(values[j]);
+        strings2->append(strs[j]);
+    }
+
+    columns.emplace_back(strings);
+    columns.emplace_back(strings2);
+
+    ctx.get()->impl()->set_constant_columns(columns);
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns);
+
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+        ASSERT_EQ(length_strings[j], v->get_data()[j].to_string());
+    }
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+TEST_F(JsonFunctionsTest, get_json_string_array) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto strings = BinaryColumn::create();
+    auto strings2 = BinaryColumn::create();
+
+    std::string values[] = {R"([{"key":    1}, {"key": 2 }])", R"([{"key":    1}, {"key": 2 }])"};
+
+    std::string strs[] = {"$[*].key", "$.[*].key"};
+    std::string length_strings[] = {"[1, 2]", "[1, 2]"};
+
+    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+        strings->append(values[j]);
+        strings2->append(strs[j]);
+    }
+
+    columns.emplace_back(strings);
+    columns.emplace_back(strings2);
+
+    ctx.get()->impl()->set_constant_columns(columns);
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns);
+
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+        ASSERT_EQ(length_strings[j], v->get_data()[j].to_string());
+    }
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 }
 
@@ -184,7 +286,8 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
 
         ctx.get()->impl()->set_constant_columns(columns);
         ASSERT_TRUE(
-                JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+                JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
         ColumnPtr result = JsonFunctions::get_json_double(ctx.get(), columns);
 
@@ -194,8 +297,8 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
             ASSERT_TRUE(v->is_null(j));
         }
 
-        ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
-                                                   FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+        ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                            ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
     }
 
@@ -218,7 +321,8 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
 
         ctx.get()->impl()->set_constant_columns(columns);
         ASSERT_TRUE(
-                JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+                JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
         ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns);
 
@@ -228,8 +332,8 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
             ASSERT_TRUE(v->is_null(j));
         }
 
-        ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
-                                                   FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+        ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                            ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
     }
 
@@ -252,7 +356,8 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
 
         ctx.get()->impl()->set_constant_columns(columns);
         ASSERT_TRUE(
-                JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+                JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
         ColumnPtr result = JsonFunctions::get_json_int(ctx.get(), columns);
 
@@ -262,8 +367,8 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
             ASSERT_TRUE(v->is_null(j));
         }
 
-        ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
-                                                   FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+        ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                            ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
     }
 
@@ -286,7 +391,8 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
 
         ctx.get()->impl()->set_constant_columns(columns);
         ASSERT_TRUE(
-                JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+                JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
         ColumnPtr result = JsonFunctions::get_json_int(ctx.get(), columns);
 
@@ -296,8 +402,8 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
             ASSERT_TRUE(v->is_null(j));
         }
 
-        ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
-                                                   FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+        ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                            ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
     }
 }
@@ -330,7 +436,11 @@ TEST_P(JsonQueryTestFixture, json_query) {
     JsonValue json;
     ASSERT_TRUE(JsonValue::parse(param_json, &json).ok());
     ints->append(&json);
-    builder.append(param_path);
+    if (param_path == "NULL") {
+        builder.append_null();
+    } else {
+        builder.append(param_path);
+    }
 
     Columns columns{ints, builder.build(true)};
 
@@ -363,8 +473,9 @@ INSTANTIATE_TEST_SUITE_P(
         ::testing::Values(
                 // clang-format off
                 // empty
+                std::make_tuple(R"( {"k1":1} )", "NULL", R"(NULL)"),
                 std::make_tuple(R"( {"k1":1} )", "$", R"( {"k1": 1} )"),
-                std::make_tuple(R"( {"k1":1} )", "", R"( {"k1": 1} )"),
+                std::make_tuple(R"( {"k1":1} )", "", R"(NULL)"),
 
                 // various types
                 std::make_tuple(R"( {"k1":1, "k2":"hehe", "k3":[1]} )", "$.k2", R"( "hehe" )"),
@@ -439,7 +550,11 @@ TEST_P(JsonExistTestFixture, json_exists) {
     auto json = JsonValue::parse(param_json);
     ASSERT_TRUE(json.ok());
     ints->append(&*json);
-    builder.append(param_result);
+    if (param_result == "NULL") {
+        builder.append_null();
+    } else {
+        builder.append(param_result);
+    }
 
     Columns columns{ints, builder.build(true)};
 
@@ -489,7 +604,8 @@ INSTANTIATE_TEST_SUITE_P(JsonExistTest, JsonExistTestFixture,
 
                                            // special case
                                            std::make_tuple(R"({ "k1": {}})", "$", true),
-                                           std::make_tuple(R"({ "k1": {}})", "", true),
+                                           std::make_tuple(R"({ "k1": {}})", "", false),
+                                           std::make_tuple(R"( { "k1": 1} )", "NULL", false),
 
                                            // error case
                                            std::make_tuple(R"( {"k1": null} )", std::string(10, 0x1), false)));
@@ -639,21 +755,17 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_F(JsonFunctionsTest, extract_from_object_test) {
     std::string output;
-    Status st;
 
-    st = test_extract_from_object(R"({"data" : 1})", "$.data", &output);
-    EXPECT_OK(st);
+    EXPECT_OK(test_extract_from_object(R"({"data" : 1})", "$.data", &output));
     EXPECT_STREQ(output.data(), "1");
 
-    st = test_extract_from_object(R"({"data" : 1})", "$.dataa", &output);
-    EXPECT_STATUS(Status::NotFound(""), st);
+    EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data" : 1})", "$.dataa", &output));
 
-    st = test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[1].key", &output);
-    EXPECT_OK(st);
+    EXPECT_OK(test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[1].key", &output));
     EXPECT_STREQ(output.data(), "2");
 
-    st = test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[2].key", &output);
-    EXPECT_STATUS(Status::NotFound(""), st);
+    EXPECT_STATUS(Status::NotFound(""),
+                  test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[2].key", &output));
 }
 
 } // namespace vectorized

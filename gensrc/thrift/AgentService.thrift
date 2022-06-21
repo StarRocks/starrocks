@@ -52,7 +52,8 @@ enum TStorageFormat {
 
 enum TTabletType {
     TABLET_TYPE_DISK = 0,
-    TABLET_TYPE_MEMORY = 1
+    TABLET_TYPE_MEMORY = 1,
+    TABLET_TYPE_LAKE = 2
 }
 
 struct TCreateTabletReq {
@@ -135,6 +136,8 @@ struct TPushReq {
     15: optional Descriptors.TDescriptorTable desc_tbl
 
     30: optional bool use_vectorized
+    // 31 are used by spark load
+    31: optional string timezone
 }
 
 struct TCloneReq {
@@ -191,7 +194,7 @@ struct TDownloadReq {
 struct TSnapshotRequest {
     1: required Types.TTabletId tablet_id
     2: required Types.TSchemaHash schema_hash
-    3: optional Types.TVersion version
+    3: optional Types.TVersion version // not used
     4: optional Types.TVersionHash version_hash // Deprecated
     5: optional i64 timeout
     6: optional list<Types.TVersion> missing_version
@@ -199,6 +202,10 @@ struct TSnapshotRequest {
     // if all nodes has been upgraded, it can be removed.
     8: optional bool allow_incremental_clone
     9: optional i32 preferred_snapshot_format = Types.TPREFER_SNAPSHOT_REQ_VERSION
+    // new format to replace `missing_version`, currently only used for primary tablet snapshot
+    // [range1_start, range1_end(inclusive), ... rangeN_start (implicit to INT64_MAX)]
+    // size must be 2*N + 1
+    10:optional list<Types.TVersion> missing_version_ranges
 }
 
 struct TReleaseSnapshotRequest {
@@ -234,6 +241,7 @@ struct TPublishVersionRequest {
     // strict mode means BE will check tablet missing version
     3: optional bool strict_mode = false // Deprecated
     4: optional i64 commit_timestamp
+    5: optional string txn_trace_parent
 }
 
 struct TClearAlterTaskRequest {

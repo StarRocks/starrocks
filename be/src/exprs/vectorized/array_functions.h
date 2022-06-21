@@ -160,6 +160,9 @@ public:
     DEFINE_VECTORIZED_FN(array_cum_sum_bigint);
     DEFINE_VECTORIZED_FN(array_cum_sum_double);
 
+    DEFINE_VECTORIZED_FN(array_contains_any);
+    DEFINE_VECTORIZED_FN(array_contains_all);
+
     enum ArithmeticType { SUM, AVG, MIN, MAX };
 
 private:

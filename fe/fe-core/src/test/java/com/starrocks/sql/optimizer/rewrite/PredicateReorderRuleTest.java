@@ -67,7 +67,7 @@ public class PredicateReorderRuleTest {
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
 
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000000000L);
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
 
         starRocksAssert.withTable("CREATE TABLE `t0` (\n" +

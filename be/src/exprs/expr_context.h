@@ -23,11 +23,12 @@
 
 #include <memory>
 
-#include "column/chunk.h"
-#include "column/column.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "udf/udf.h"
 #include "udf/udf_internal.h" // for ArrayVal
+// Only include column/vectorized_fwd.h in this file, you need include what you need
+// in the source files. Please NOT add unnecessary includes in this file.
 
 #undef USING_STARROCKS_UDF
 #define USING_STARROCKS_UDF using namespace starrocks_udf
@@ -149,6 +150,7 @@ private:
     /// Variables keeping track of current state.
     bool _prepared;
     bool _opened;
+    RuntimeState* _runtime_state = nullptr;
     // In operator, the ExprContext::close method will be called concurrently
     std::atomic<bool> _closed;
 };

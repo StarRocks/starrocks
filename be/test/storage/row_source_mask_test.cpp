@@ -5,8 +5,8 @@
 #include <gtest/gtest.h>
 
 #include "common/config.h"
+#include "fs/fs_util.h"
 #include "storage/olap_define.h"
-#include "util/file_utils.h"
 
 namespace starrocks::vectorized {
 
@@ -19,7 +19,7 @@ protected:
         std::stringstream tmp_dir_s;
         tmp_dir_s << config::storage_root_path << TMP_PREFIX;
         _tmp_dir = tmp_dir_s.str();
-        FileUtils::create_dir(_tmp_dir);
+        fs::create_directories(_tmp_dir);
     }
 
     void TearDown() override {
@@ -27,7 +27,7 @@ protected:
 
         // remove tmp dir
         if (!_tmp_dir.empty()) {
-            FileUtils::remove(_tmp_dir);
+            fs::remove(_tmp_dir);
         }
     }
 

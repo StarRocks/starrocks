@@ -10,6 +10,7 @@
 #include "column/column_visitor.h"
 #include "column/column_visitor_mutable.h"
 #include "column/vectorized_fwd.h"
+#include "common/statusor.h"
 #include "gutil/casts.h"
 #include "storage/delete_condition.h" // for DelCondSatisfied
 
@@ -85,6 +86,8 @@ public:
 
     virtual uint8_t* mutable_raw_data() = 0;
 
+    virtual const uint8_t* continuous_data() const { return raw_data(); }
+
     // Return number of values in column.
     virtual size_t size() const = 0;
 
@@ -146,6 +149,9 @@ public:
     virtual void append(const Column& src, size_t offset, size_t count) = 0;
 
     virtual void append(const Column& src) { append(src, 0, src.size()); }
+
+    // Update elements to default value which hit by the filter
+    virtual void fill_default(const Filter& filter) = 0;
 
     // This function will update data from src according to the input indexes. 'indexes' contains
     // the row index will be update
@@ -342,7 +348,7 @@ public:
 
     virtual void reset_column() { _delete_state = DEL_NOT_SATISFIED; }
 
-    virtual bool reach_capacity_limit() const = 0;
+    virtual bool capacity_limit_reached(std::string* msg = nullptr) const = 0;
 
     virtual Status accept(ColumnVisitor* visitor) const = 0;
 

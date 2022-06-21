@@ -21,7 +21,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
@@ -428,7 +427,7 @@ public class OperatorStrings {
             OperatorStr producer = visit(optExpression.getInputs().get(0), step + 1);
             OperatorStr consumer = visit(optExpression.getInputs().get(1), step + 1);
             PhysicalCTEAnchorOperator op = (PhysicalCTEAnchorOperator) optExpression.getOp();
-            String sb = "CTEAnchor(cteid=" + op.getCteId() + ") ";
+            String sb = "CTEAnchor(cteid=" + op.getCteId() + ")";
             ArrayList<OperatorStr> children = new ArrayList<>();
             children.add(producer);
             children.add(consumer);
@@ -439,14 +438,14 @@ public class OperatorStrings {
         public OperatorStr visitPhysicalCTEProduce(OptExpression optExpression, Integer step) {
             OperatorStr children = visit(optExpression.getInputs().get(0), step + 1);
             PhysicalCTEProduceOperator op = (PhysicalCTEProduceOperator) optExpression.getOp();
-            String sb = "CTEProducer(cteid=" + op.getCteId() + ") ";
+            String sb = "CTEProducer(cteid=" + op.getCteId() + ")";
             return new OperatorStr(sb, step, Collections.singletonList(children));
         }
 
         @Override
         public OperatorStr visitPhysicalCTEConsume(OptExpression optExpression, Integer step) {
             PhysicalCTEConsumeOperator op = (PhysicalCTEConsumeOperator) optExpression.getOp();
-            String sb = "CTEConsumer(cteid=" + op.getCteId() + ") ";
+            String sb = "CTEConsumer(cteid=" + op.getCteId() + ")";
             return new OperatorStr(sb, step, Collections.emptyList());
         }
     }

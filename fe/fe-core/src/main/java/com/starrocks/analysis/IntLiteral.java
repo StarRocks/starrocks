@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TIntLiteral;
@@ -62,7 +63,7 @@ public class IntLiteral extends LiteralExpr {
         analysisDone();
     }
 
-    public IntLiteral(long longValue, Type type) throws AnalysisException {
+    public IntLiteral(long longValue, Type type) {
         super();
         boolean valid = true;
         switch (type.getPrimitiveType()) {
@@ -90,7 +91,7 @@ public class IntLiteral extends LiteralExpr {
         }
 
         if (!valid) {
-            throw new AnalysisException("Number out of range[" + value + "]. type: " + type);
+            throw new ArithmeticException("Number out of range[" + value + "]. type: " + type);
         }
 
         this.value = longValue;

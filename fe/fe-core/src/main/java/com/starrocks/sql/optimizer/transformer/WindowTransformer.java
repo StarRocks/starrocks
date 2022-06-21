@@ -436,7 +436,7 @@ public class WindowTransformer {
     }
 
     public static class PartitionGroup {
-        private List<SortGroup> sortGroups;
+        private final List<SortGroup> sortGroups;
         private List<ScalarOperator> partitionExpressions;
 
         public PartitionGroup() {

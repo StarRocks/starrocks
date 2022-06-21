@@ -72,7 +72,6 @@ import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
-import com.starrocks.analysis.RefreshExternalTableStmt;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.RevokeStmt;
@@ -90,7 +89,10 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 
@@ -164,9 +166,15 @@ public class DdlExecutor {
         } else if (ddlStmt instanceof GrantStmt) {
             GrantStmt stmt = (GrantStmt) ddlStmt;
             globalStateMgr.getAuth().grant(stmt);
+        } else if (ddlStmt instanceof GrantImpersonateStmt) {
+            GrantImpersonateStmt stmt = (GrantImpersonateStmt) ddlStmt;
+            globalStateMgr.getAuth().grantImpersonate(stmt);
         } else if (ddlStmt instanceof RevokeStmt) {
             RevokeStmt stmt = (RevokeStmt) ddlStmt;
             globalStateMgr.getAuth().revoke(stmt);
+        } else if (ddlStmt instanceof RevokeImpersonateStmt) {
+            RevokeImpersonateStmt stmt = (RevokeImpersonateStmt) ddlStmt;
+            globalStateMgr.getAuth().revokeImpersonate(stmt);
         } else if (ddlStmt instanceof CreateRoleStmt) {
             globalStateMgr.getAuth().createRole((CreateRoleStmt) ddlStmt);
         } else if (ddlStmt instanceof DropRoleStmt) {
@@ -175,7 +183,7 @@ public class DdlExecutor {
             globalStateMgr.getAuth().updateUserProperty((SetUserPropertyStmt) ddlStmt);
         } else if (ddlStmt instanceof AlterSystemStmt) {
             AlterSystemStmt stmt = (AlterSystemStmt) ddlStmt;
-            globalStateMgr.alterCluster(stmt);
+            return globalStateMgr.alterCluster(stmt);
         } else if (ddlStmt instanceof CancelAlterSystemStmt) {
             CancelAlterSystemStmt stmt = (CancelAlterSystemStmt) ddlStmt;
             globalStateMgr.cancelAlterCluster(stmt);
@@ -235,8 +243,8 @@ public class DdlExecutor {
             globalStateMgr.getAnalyzeManager().addAnalyzeJob(((CreateAnalyzeJobStmt) ddlStmt).toAnalyzeJob());
         } else if (ddlStmt instanceof DropAnalyzeJobStmt) {
             globalStateMgr.getAnalyzeManager().removeAnalyzeJob(((DropAnalyzeJobStmt) ddlStmt).getId());
-        } else if (ddlStmt instanceof RefreshExternalTableStmt) {
-            globalStateMgr.refreshExternalTable((RefreshExternalTableStmt) ddlStmt);
+        } else if (ddlStmt instanceof RefreshTableStmt) {
+            globalStateMgr.refreshExternalTable((RefreshTableStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateWorkGroupStmt) {
             globalStateMgr.getWorkGroupMgr().createWorkGroup((CreateWorkGroupStmt) ddlStmt);
         } else if (ddlStmt instanceof DropWorkGroupStmt) {
@@ -246,7 +254,7 @@ public class DdlExecutor {
         } else if (ddlStmt instanceof CreateCatalogStmt) {
             globalStateMgr.getCatalogMgr().createCatalog((CreateCatalogStmt) ddlStmt);
         } else if (ddlStmt instanceof DropCatalogStmt) {
-            globalStateMgr.getCatalogMgr().dropCatalog(((DropCatalogStmt) ddlStmt).getName());
+            globalStateMgr.getCatalogMgr().dropCatalog((DropCatalogStmt) ddlStmt);
         } else if (ddlStmt instanceof SubmitTaskStmt) {
             return globalStateMgr.getTaskManager().handleSubmitTaskStmt((SubmitTaskStmt) ddlStmt);
         } else {

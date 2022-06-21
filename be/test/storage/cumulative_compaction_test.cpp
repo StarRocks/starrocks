@@ -5,7 +5,11 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include "column/chunk.h"
+#include "column/schema.h"
+#include "fs/fs_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction.h"
 #include "storage/compaction_utils.h"
@@ -15,7 +19,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 
 namespace starrocks::vectorized {
 
@@ -176,8 +179,8 @@ public:
         Compaction::init(config::max_compaction_concurrency);
 
         config::storage_root_path = std::filesystem::current_path().string() + "/data_test_cumulative_compaction";
-        FileUtils::remove_all(config::storage_root_path);
-        ASSERT_TRUE(FileUtils::create_dir(config::storage_root_path).ok());
+        fs::remove_all(config::storage_root_path);
+        ASSERT_TRUE(fs::create_directories(config::storage_root_path).ok());
         std::vector<StorePath> paths;
         paths.emplace_back(config::storage_root_path);
 
@@ -194,7 +197,7 @@ public:
         exec_env->set_storage_engine(k_engine);
 
         _schema_hash_path = fmt::format("{}/data/0/12345/1111", config::storage_root_path);
-        ASSERT_OK(FileUtils::create_dir(_schema_hash_path));
+        ASSERT_OK(fs::create_directories(_schema_hash_path));
 
         _tablet_meta_mem_tracker.reset(new MemTracker(-1));
         _mem_pool.reset(new MemPool());
@@ -203,8 +206,8 @@ public:
     }
 
     void TearDown() override {
-        if (FileUtils::check_exist(config::storage_root_path)) {
-            ASSERT_TRUE(FileUtils::remove_all(config::storage_root_path).ok());
+        if (fs::path_exist(config::storage_root_path)) {
+            ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
     }
 

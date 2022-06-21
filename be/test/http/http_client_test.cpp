@@ -1,7 +1,3 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/test/http/http_client_test.cpp
-
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -94,7 +90,10 @@ public:
         hostname = "http://127.0.0.1:" + std::to_string(real_port);
     }
 
-    static void TearDownTestCase() { delete s_server; }
+    static void TearDownTestCase() {
+        s_server->stop();
+        delete s_server;
+    }
 };
 
 TEST_F(HttpClientTest, get_normal) {

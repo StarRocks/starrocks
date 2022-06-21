@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <deque>
+
 #include "column/chunk.h"
 #include "column/datum.h"
 #include "exec/vectorized/sorting/sorting.h"
@@ -90,6 +92,7 @@ struct SortedRuns {
         }
         return res;
     }
+    void clear();
 
     bool is_sorted(const SortDescs& sort_desc) const;
     ChunkPtr assemble() const;

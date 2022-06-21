@@ -187,6 +187,10 @@ std::string TabletColumn::get_string_by_aggregation_type(FieldAggregationMethod 
     return "";
 }
 
+size_t TabletColumn::estimate_field_size(size_t variable_length) const {
+    return TypeUtils::estimate_field_size(_type, variable_length);
+}
+
 uint32_t TabletColumn::get_field_length_by_type(FieldType type, uint32_t string_length) {
     switch (type) {
     case OLAP_FIELD_TYPE_UNKNOWN:
@@ -512,6 +516,14 @@ std::unique_ptr<TabletSchema> TabletSchema::convert_to_format(DataFormatVersion 
     }
     auto schema = std::make_unique<TabletSchema>(schema_pb);
     return schema;
+}
+
+size_t TabletSchema::estimate_row_size(size_t variable_len) const {
+    size_t size = 0;
+    for (const auto& col : _cols) {
+        size += col.estimate_field_size(variable_len);
+    }
+    return size;
 }
 
 size_t TabletSchema::row_size() const {

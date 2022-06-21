@@ -24,6 +24,7 @@
 #include <signal.h>
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "exec/vectorized/sorting/sorting.h"
@@ -33,17 +34,19 @@
 #include "storage/chunk_aggregator.h"
 #include "storage/convert_helper.h"
 #include "storage/memtable.h"
+#include "storage/memtable_rowset_writer_sink.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/wrapper_field.h"
 #include "util/defer_op.h"
+#include "util/percentile_value.h"
 #include "util/unaligned_access.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 using ChunkRow = std::pair<size_t, Chunk*>;
 
@@ -63,8 +66,7 @@ public:
     explicit ChunkSorter(ChunkAllocator* allocator);
     virtual ~ChunkSorter();
 
-    bool sort(ChunkPtr& chunk, TabletSharedPtr new_tablet);
-    size_t allocated_rows() { return _max_allocated_rows; }
+    bool sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet);
 
 private:
     ChunkAllocator* _chunk_allocator = nullptr;
@@ -79,7 +81,7 @@ public:
     virtual ~ChunkMerger();
 
     bool merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_writer);
-    void aggregate_chunk(ChunkAggregator& aggregator, ChunkPtr& chunk, RowsetWriter* rowset_writer);
+    static void aggregate_chunk(ChunkAggregator& aggregator, ChunkPtr& chunk, RowsetWriter* rowset_writer);
 
 private:
     struct MergeElement {
@@ -105,7 +107,7 @@ ChunkChanger::ChunkChanger(const TabletSchema& tablet_schema) {
 }
 
 ChunkChanger::~ChunkChanger() {
-    for (SchemaMapping::iterator it = _schema_mapping.begin(); it != _schema_mapping.end(); ++it) {
+    for (auto it = _schema_mapping.begin(); it != _schema_mapping.end(); ++it) {
         SAFE_DELETE(it->default_value);
     }
     _schema_mapping.clear();
@@ -268,18 +270,18 @@ ConvertTypeResolver::ConvertTypeResolver() {
     add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL128>();
 }
 
-ConvertTypeResolver::~ConvertTypeResolver() {}
+ConvertTypeResolver::~ConvertTypeResolver() = default;
 
 const MaterializeTypeConverter* ChunkChanger::_get_materialize_type_converter(std::string materialized_function,
                                                                               FieldType type) {
     if (materialized_function == "to_bitmap") {
-        return vectorized::get_materialized_converter(type, OLAP_MATERIALIZE_TYPE_BITMAP);
+        return get_materialized_converter(type, OLAP_MATERIALIZE_TYPE_BITMAP);
     } else if (materialized_function == "hll_hash") {
-        return vectorized::get_materialized_converter(type, OLAP_MATERIALIZE_TYPE_HLL);
+        return get_materialized_converter(type, OLAP_MATERIALIZE_TYPE_HLL);
     } else if (materialized_function == "count_field") {
-        return vectorized::get_materialized_converter(type, OLAP_MATERIALIZE_TYPE_COUNT);
+        return get_materialized_converter(type, OLAP_MATERIALIZE_TYPE_COUNT);
     } else if (materialized_function == "percentile_hash") {
-        return vectorized::get_materialized_converter(type, OLAP_MATERIALIZE_TYPE_PERCENTILE);
+        return get_materialized_converter(type, OLAP_MATERIALIZE_TYPE_PERCENTILE);
     } else {
         return nullptr;
     }
@@ -359,26 +361,23 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                     new_col = base_col;
                 }
             } else if (ConvertTypeResolver::instance()->convert_type_exist(ref_type, new_type)) {
-                auto converter = vectorized::get_type_converter(ref_type, new_type);
+                auto converter = get_type_converter(ref_type, new_type);
                 if (converter == nullptr) {
                     LOG(WARNING) << "failed to get type converter, from_type=" << ref_type << ", to_type" << new_type;
                     return false;
                 }
-                for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
-                    Datum base_datum = base_col->get(row_index);
-                    Field ref_field = ChunkHelper::convert_field_to_format_v2(
-                            ref_column, base_tablet_meta->tablet_schema().column(ref_column));
-                    Field new_field =
-                            ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
-                    Datum new_datum;
-                    Status st = converter->convert_datum(ref_field.type().get(), base_datum, new_field.type().get(),
-                                                         &new_datum, mem_pool);
-                    if (!st.ok()) {
-                        LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
-                                     << field_type_to_string(new_type);
-                        return false;
-                    }
-                    new_col->append_datum(new_datum);
+
+                Field ref_field = ChunkHelper::convert_field_to_format_v2(
+                        ref_column, base_tablet_meta->tablet_schema().column(ref_column));
+                Field new_field =
+                        ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
+
+                Status st = converter->convert_column(ref_field.type().get(), *base_col, new_field.type().get(),
+                                                      new_col.get(), mem_pool);
+                if (!st.ok()) {
+                    LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
+                                 << field_type_to_string(new_type);
+                    return false;
                 }
             } else {
                 // copy and alter the field
@@ -510,22 +509,17 @@ bool ChunkChanger::change_chunkV2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, con
                     new_col = base_col;
                 }
             } else if (ConvertTypeResolver::instance()->convert_type_exist(ref_type, new_type)) {
-                auto converter = vectorized::get_type_converter(ref_type, new_type);
+                auto converter = get_type_converter(ref_type, new_type);
                 if (converter == nullptr) {
                     LOG(WARNING) << "failed to get type converter, from_type=" << ref_type << ", to_type" << new_type;
                     return false;
                 }
-                for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
-                    Datum base_datum = base_col->get(row_index);
-                    Datum new_datum;
-                    Status st = converter->convert_datum(ref_type_info.get(), base_datum, new_type_info.get(),
-                                                         &new_datum, mem_pool);
-                    if (!st.ok()) {
-                        LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
-                                     << field_type_to_string(new_type);
-                        return false;
-                    }
-                    new_col->append_datum(new_datum);
+                Status st = converter->convert_column(ref_type_info.get(), *base_col, new_type_info.get(),
+                                                      new_col.get(), mem_pool);
+                if (!st.ok()) {
+                    LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
+                                 << field_type_to_string(new_type);
+                    return false;
                 }
             } else {
                 // copy and alter the field
@@ -615,18 +609,12 @@ bool ChunkChanger::change_chunkV2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, con
 ChunkSorter::ChunkSorter(ChunkAllocator* chunk_allocator)
         : _chunk_allocator(chunk_allocator), _swap_chunk(nullptr), _max_allocated_rows(0) {}
 
-ChunkSorter::~ChunkSorter() {
-    if (_swap_chunk != nullptr) {
-        _chunk_allocator->release(_swap_chunk, _max_allocated_rows);
-        _swap_chunk = nullptr;
-    }
-}
+ChunkSorter::~ChunkSorter() = default;
 
-bool ChunkSorter::sort(ChunkPtr& chunk, TabletSharedPtr new_tablet) {
-    vectorized::Schema new_schema = ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema());
+bool ChunkSorter::sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet) {
+    Schema new_schema = ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema());
     if (_swap_chunk == nullptr || _max_allocated_rows < chunk->num_rows()) {
-        _chunk_allocator->release(_swap_chunk, _max_allocated_rows);
-        Status st = _chunk_allocator->allocate(_swap_chunk, chunk->num_rows(), new_schema);
+        Status st = ChunkAllocator::allocate(_swap_chunk, chunk->num_rows(), new_schema);
         if (_swap_chunk == nullptr || !st.ok()) {
             LOG(WARNING) << "allocate swap chunk for sort failed: " << st.to_string();
             return false;
@@ -658,56 +646,29 @@ bool ChunkSorter::sort(ChunkPtr& chunk, TabletSharedPtr new_tablet) {
 }
 
 ChunkAllocator::ChunkAllocator(const TabletSchema& tablet_schema, size_t memory_limitation)
-        : _tablet_schema(tablet_schema), _memory_allocated(0), _memory_limitation(memory_limitation) {
-    _row_len = 0;
-    _row_len = tablet_schema.row_size();
+        : _tablet_schema(tablet_schema), _memory_limitation(memory_limitation) {
+    // Before the first chunk is readed, for the Varchar type, we can't get the actual size,
+    // so we can only conservatively estimate a value for variable length type.
+    // Then later, row_len will be adjusted according to the Chunk that has been read.
+    _row_len = tablet_schema.estimate_row_size(8);
 }
 
-ChunkAllocator::~ChunkAllocator() {
-    if (_memory_allocated != 0) {
-        LOG(WARNING) << "memory leak in ChunkAllocator. memory_size=" << _memory_allocated;
-    }
-}
-
-bool ChunkAllocator::is_memory_enough_to_sort(size_t num_rows, size_t allocated_rows) {
-    if (num_rows <= allocated_rows) {
-        return true;
-    }
-    size_t chunk_size = _row_len * (num_rows - allocated_rows);
-    return _memory_allocated + chunk_size < _memory_limitation;
+bool ChunkAllocator::is_memory_enough_to_sort(size_t num_rows) const {
+    size_t chunk_size = _row_len * num_rows;
+    return static_cast<double>(_memory_allocated + chunk_size) < static_cast<double>(_memory_limitation) * 0.8;
 }
 
 Status ChunkAllocator::allocate(ChunkPtr& chunk, size_t num_rows, Schema& schema) {
-    size_t mem_size = _row_len * num_rows;
-
-    if (_memory_limitation > 0 && _memory_allocated + mem_size > _memory_limitation) {
-        std::string msg =
-                Substitute("ChunkAllocator::allocate() memory exceed, memory_limitation:$0, memory_allocate:$1 ",
-                           _memory_limitation, _memory_allocated + mem_size);
-        LOG(WARNING) << msg;
-        return Status::MemoryLimitExceeded(msg);
-    }
-
     chunk = ChunkHelper::new_chunk(schema, num_rows);
     if (chunk == nullptr) {
         LOG(WARNING) << "ChunkAllocator allocate chunk failed.";
         return Status::InternalError("allocate chunk failed");
     }
 
-    _memory_allocated += mem_size;
     return Status::OK();
 }
 
-void ChunkAllocator::release(ChunkPtr& chunk, size_t num_rows) {
-    if (chunk == nullptr) {
-        VLOG(3) << "null chunk released.";
-        return;
-    }
-    _memory_allocated -= std::max(chunk->num_rows(), num_rows) * _row_len;
-    return;
-}
-
-ChunkMerger::ChunkMerger(TabletSharedPtr tablet) : _tablet(tablet), _aggregator(nullptr) {}
+ChunkMerger::ChunkMerger(TabletSharedPtr tablet) : _tablet(std::move(tablet)), _aggregator(nullptr) {}
 
 ChunkMerger::~ChunkMerger() {
     if (_aggregator != nullptr) {
@@ -737,14 +698,14 @@ void ChunkMerger::aggregate_chunk(ChunkAggregator& aggregator, ChunkPtr& chunk, 
 bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_writer) {
     auto process_err = [this] {
         VLOG(3) << "merge chunk failed";
-        while (this->_heap.size() > 0) {
-            this->_heap.pop();
+        while (!_heap.empty()) {
+            _heap.pop();
         }
     };
 
     _make_heap(chunk_arr);
     size_t nread = 0;
-    vectorized::Schema new_schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    Schema new_schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     ChunkPtr tmp_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
     if (_tablet->keys_type() == KeysType::AGG_KEYS) {
         _aggregator = std::make_unique<ChunkAggregator>(&new_schema, config::vector_chunk_size, 0);
@@ -753,7 +714,7 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
     StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
     bool bg_worker_stopped = storage_engine->bg_worker_stopped();
     while (!_heap.empty() && !bg_worker_stopped) {
-        if (tmp_chunk->reach_capacity_limit() || nread >= config::vector_chunk_size) {
+        if (tmp_chunk->capacity_limit_reached() || nread >= config::vector_chunk_size) {
             if (_tablet->keys_type() == KeysType::AGG_KEYS) {
                 aggregate_chunk(*_aggregator, tmp_chunk, rowset_writer);
             } else {
@@ -797,7 +758,7 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
 }
 
 bool ChunkMerger::_make_heap(std::vector<ChunkPtr>& chunk_arr) {
-    for (auto chunk : chunk_arr) {
+    for (const auto& chunk : chunk_arr) {
         MergeElement element;
         element.chunk = chunk.get();
         element.row_index = 0;
@@ -820,10 +781,10 @@ bool ChunkMerger::_pop_heap() {
     return true;
 }
 
-bool LinkedSchemaChange::process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer,
-                                 TabletSharedPtr new_tablet, TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
+bool LinkedSchemaChange::process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                                 TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
 #ifndef BE_TEST
-    Status st = tls_thread_status.mem_tracker()->check_mem_limit("LinkedSchemaChange");
+    Status st = CurrentThread::mem_tracker()->check_mem_limit("LinkedSchemaChange");
     if (!st.ok()) {
         LOG(WARNING) << "fail to execute schema change: " << st.message() << std::endl;
         return false;
@@ -841,8 +802,8 @@ bool LinkedSchemaChange::process(vectorized::TabletReader* reader, RowsetWriter*
     return true;
 }
 
-Status LinkedSchemaChange::processV2(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer,
-                                     TabletSharedPtr new_tablet, TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
+Status LinkedSchemaChange::processV2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                                     TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
     if (process(reader, new_rowset_writer, new_tablet, base_tablet, rowset)) {
         return Status::OK();
     } else {
@@ -850,12 +811,12 @@ Status LinkedSchemaChange::processV2(vectorized::TabletReader* reader, RowsetWri
     }
 }
 
-bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer,
-                                   TabletSharedPtr new_tablet, TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
-    vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                                   TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
+    Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
 
-    vectorized::Schema new_schema = ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema());
+    Schema new_schema = ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema());
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
@@ -865,7 +826,7 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
             return false;
         }
 #ifndef BE_TEST
-        Status st = tls_thread_status.mem_tracker()->check_mem_limit("DirectSchemaChange");
+        Status st = CurrentThread::mem_tracker()->check_mem_limit("DirectSchemaChange");
         if (!st.ok()) {
             LOG(WARNING) << "fail to execute schema change: " << st.message() << std::endl;
             return false;
@@ -888,7 +849,7 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
             LOG(WARNING) << err_msg;
             return false;
         }
-        if (auto st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
+        if (auto tmp_st = new_rowset_writer->add_chunk(*new_chunk); !tmp_st.ok()) {
             std::string err_msg = Substitute(
                     "failed to execute schema change. base tablet:$0, new_tablet:$1. err msg: failed to add chunk to "
                     "rowset writer",
@@ -923,14 +884,14 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
     return true;
 }
 
-Status SchemaChangeDirectly::processV2(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer,
+Status SchemaChangeDirectly::processV2(TabletReader* reader, RowsetWriter* new_rowset_writer,
                                        TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
                                        RowsetSharedPtr rowset) {
-    vectorized::Schema base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
+    Schema base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
             base_tablet->tablet_schema(), *_chunk_changer->get_mutable_selected_column_indexs()));
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
-    vectorized::Schema new_schema = std::move(ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema()));
-    auto char_field_indexes = std::move(vectorized::ChunkHelper::get_char_field_indexes(new_schema));
+    Schema new_schema = std::move(ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema()));
+    auto char_field_indexes = std::move(ChunkHelper::get_char_field_indexes(new_schema));
 
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
@@ -941,7 +902,7 @@ Status SchemaChangeDirectly::processV2(vectorized::TabletReader* reader, RowsetW
             return Status::InternalError("bg_worker_stopped");
         }
 #ifndef BE_TEST
-        Status st = tls_thread_status.mem_tracker()->check_mem_limit("DirectSchemaChange");
+        Status st = CurrentThread::mem_tracker()->check_mem_limit("DirectSchemaChange");
         if (!st.ok()) {
             LOG(WARNING) << "fail to execute schema change: " << st.message() << std::endl;
             return st;
@@ -964,10 +925,9 @@ Status SchemaChangeDirectly::processV2(vectorized::TabletReader* reader, RowsetW
             return Status::InternalError(err_msg);
         }
 
-        vectorized::ChunkHelper::padding_char_columns(char_field_indexes, new_schema, new_tablet->tablet_schema(),
-                                                      new_chunk.get());
+        ChunkHelper::padding_char_columns(char_field_indexes, new_schema, new_tablet->tablet_schema(), new_chunk.get());
 
-        if (auto st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
+        if (auto tmp_st = new_rowset_writer->add_chunk(*new_chunk); !tmp_st.ok()) {
             std::string err_msg = Substitute(
                     "failed to execute schema change. base tablet:$0, new_tablet:$1. err msg: failed to add chunk to "
                     "rowset writer",
@@ -1008,8 +968,8 @@ SchemaChangeWithSorting::~SchemaChangeWithSorting() {
     SAFE_DELETE(_chunk_allocator);
 }
 
-bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer,
-                                      TabletSharedPtr new_tablet, TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
+bool SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                                      TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
     if (_chunk_allocator == nullptr) {
         _chunk_allocator = new (std::nothrow) ChunkAllocator(new_tablet->tablet_schema(), _memory_limitation);
         if (_chunk_allocator == nullptr) {
@@ -1018,27 +978,19 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
         }
     }
     std::vector<ChunkPtr> chunk_arr;
-    vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
-    vectorized::Schema new_schema = ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema());
+    Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    Schema new_schema = ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema());
 
     ChunkSorter chunk_sorter(_chunk_allocator);
     std::unique_ptr<MemPool> mem_pool(new MemPool());
 
-    DeferOp release_chunkarr([this, &chunk_arr] {
-        for (auto& it : chunk_arr) {
-            this->_chunk_allocator->release(it, it->num_rows());
-        }
-    });
     StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
     bool bg_worker_stopped = storage_engine->bg_worker_stopped();
+
+    double total_bytes = 0;
+    double row_count = 0;
+
     while (!bg_worker_stopped) {
-#ifndef BE_TEST
-        Status st = tls_thread_status.mem_tracker()->check_mem_limit("SortSchemaChange");
-        if (!st.ok()) {
-            LOG(WARNING) << "fail to execute schema change: " << st.message() << std::endl;
-            return false;
-        }
-#endif
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
         ChunkPtr new_chunk = nullptr;
         Status status = reader->do_get_next(base_chunk.get());
@@ -1056,10 +1008,10 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
         //   1. We need to allocate a new chunk to save the data after convert
         //   2. We maybe need to allocate a new swap_chunk to save the sort result
         // So we should check that both of the above conditions are met
-        if (!_chunk_allocator->is_memory_enough_to_sort(base_chunk->num_rows(), chunk_sorter.allocated_rows()) ||
-            !_chunk_allocator->is_memory_enough_to_sort(base_chunk->num_rows(), 0)) {
+        _chunk_allocator->set_cur_mem_usage(CurrentThread::mem_tracker()->consumption());
+        if (!_chunk_allocator->is_memory_enough_to_sort(base_chunk->num_rows() * 2)) {
             VLOG(3) << "do internal sorting because of memory limit";
-            if (chunk_arr.size() < 1) {
+            if (chunk_arr.empty()) {
                 LOG(WARNING) << "Memory limitation is too small for Schema Change."
                              << "memory_limitation=" << _memory_limitation;
                 return false;
@@ -1068,10 +1020,6 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
             if (!_internal_sorting(chunk_arr, new_rowset_writer, new_tablet)) {
                 LOG(WARNING) << "failed to sorting internally.";
                 return false;
-            }
-
-            for (std::vector<ChunkPtr>::iterator it = chunk_arr.begin(); it != chunk_arr.end(); ++it) {
-                _chunk_allocator->release(*it, (*it)->num_rows());
             }
 
             chunk_arr.clear();
@@ -1084,16 +1032,18 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
 
         if (!_chunk_changer->change_chunk(base_chunk, new_chunk, base_tablet->tablet_meta(), new_tablet->tablet_meta(),
                                           mem_pool.get())) {
-            _chunk_allocator->release(new_chunk, base_chunk->num_rows());
             std::string err_msg = Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
                                              base_tablet->tablet_id(), new_tablet->tablet_id());
             LOG(WARNING) << err_msg;
             return false;
         }
 
+        total_bytes += static_cast<double>(new_chunk->memory_usage());
+        row_count += static_cast<double>(new_chunk->num_rows());
+        _chunk_allocator->set_row_len(std::max(static_cast<size_t>(total_bytes / row_count), static_cast<size_t>(1)));
+
         if (new_chunk->num_rows() > 0) {
             if (!chunk_sorter.sort(new_chunk, new_tablet)) {
-                _chunk_allocator->release(new_chunk, base_chunk->num_rows());
                 LOG(WARNING) << "chunk data sort failed";
                 return false;
             }
@@ -1123,18 +1073,21 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
     return true;
 }
 
-Status SchemaChangeWithSorting::processV2(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer,
+Status SchemaChangeWithSorting::processV2(TabletReader* reader, RowsetWriter* new_rowset_writer,
                                           TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
                                           RowsetSharedPtr rowset) {
-    vectorized::Schema base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
+    MemTableRowsetWriterSink mem_table_sink(new_rowset_writer);
+    Schema base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
             base_tablet->tablet_schema(), *_chunk_changer->get_mutable_selected_column_indexs()));
-    vectorized::Schema new_schema = std::move(ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema()));
-    auto char_field_indexes = std::move(vectorized::ChunkHelper::get_char_field_indexes(new_schema));
+    Schema new_schema = std::move(ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema()));
+    auto char_field_indexes = std::move(ChunkHelper::get_char_field_indexes(new_schema));
 
-    // memtable max buffer size set 80% of memory limit so that it will do _merge() if reach 80%
-    // do finialize() and flush() if reach 90%
-    auto mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer,
-                                                _memory_limitation * 0.8, tls_thread_status.mem_tracker());
+    // memtable max buffer size set default 80% of memory limit so that it will do _merge() if reach limit
+    // set max memtable size to 4G since some column has limit size, it will make invalid data
+    size_t max_buffer_size = std::min<size_t>(
+            4294967296, static_cast<size_t>(_memory_limitation * config::memory_ratio_for_sorting_schema_change));
+    auto mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, &mem_table_sink, max_buffer_size,
+                                                CurrentThread::mem_tracker());
 
     auto selective = std::make_unique<std::vector<uint32_t>>();
     selective->resize(config::vector_chunk_size);
@@ -1148,16 +1101,16 @@ Status SchemaChangeWithSorting::processV2(vectorized::TabletReader* reader, Rows
     bool bg_worker_stopped = storage_engine->bg_worker_stopped();
     while (!bg_worker_stopped) {
 #ifndef BE_TEST
-        auto cur_usage = tls_thread_status.mem_tracker()->consumption();
+        auto cur_usage = CurrentThread::mem_tracker()->consumption();
         // we check memory usage exceeds 90% since tablet reader use some memory
         // it will return fail if memory is exhausted
-        if (cur_usage > tls_thread_status.mem_tracker()->limit() * 0.9) {
+        if (cur_usage > CurrentThread::mem_tracker()->limit() * 0.9) {
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), "failed to flush mem table");
-            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer,
-                                                   _memory_limitation * 0.9, tls_thread_status.mem_tracker());
+            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, &mem_table_sink,
+                                                   max_buffer_size, CurrentThread::mem_tracker());
             VLOG(1) << "SortSchemaChange memory usage: " << cur_usage << " after mem table flush "
-                    << tls_thread_status.mem_tracker()->consumption();
+                    << CurrentThread::mem_tracker()->consumption();
         }
 #endif
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
@@ -1180,15 +1133,14 @@ Status SchemaChangeWithSorting::processV2(vectorized::TabletReader* reader, Rows
             return Status::InternalError(err_msg);
         }
 
-        vectorized::ChunkHelper::padding_char_columns(char_field_indexes, new_schema, new_tablet->tablet_schema(),
-                                                      new_chunk.get());
+        ChunkHelper::padding_char_columns(char_field_indexes, new_schema, new_tablet->tablet_schema(), new_chunk.get());
 
         bool full = mem_table->insert(*new_chunk, selective->data(), 0, new_chunk->num_rows());
         if (full) {
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), "failed to flush mem table");
-            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, new_rowset_writer,
-                                                   _memory_limitation * 0.8, tls_thread_status.mem_tracker());
+            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), new_schema, &mem_table_sink,
+                                                   max_buffer_size, CurrentThread::mem_tracker());
         }
 
         mem_pool->clear();
@@ -1225,7 +1177,7 @@ bool SchemaChangeWithSorting::_internal_sorting(std::vector<ChunkPtr>& chunk_arr
         }
     }
 
-    ChunkMerger merger(tablet);
+    ChunkMerger merger(std::move(tablet));
     if (!merger.merge(chunk_arr, new_rowset_writer)) {
         LOG(WARNING) << "merge chunk arr failed";
         return false;
@@ -1254,7 +1206,8 @@ Status SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2& req
 
     Status status = _do_process_alter_tablet_v2(request);
     LOG(INFO) << "finished alter tablet process, status=" << status.to_string()
-              << " duration: " << timer.elapsed_time() / 1000000 << "ms";
+              << " duration: " << timer.elapsed_time() / 1000000
+              << "ms, peak_mem_usage: " << CurrentThread::mem_tracker()->peak_consumption() << " bytes";
     return status;
 }
 
@@ -1348,7 +1301,6 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     }
 
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
-        Status status;
         if (sc_params.sc_directly) {
             status = new_tablet->updates()->convert_from(base_tablet, request.alter_version,
                                                          sc_params.chunk_changer.get());
@@ -1378,7 +1330,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
     std::vector<RowsetSharedPtr> rowsets_to_change;
     int32_t end_version = -1;
     Status status;
-    std::vector<std::unique_ptr<vectorized::TabletReader>> readers;
+    std::vector<std::unique_ptr<TabletReader>> readers;
     {
         std::lock_guard l1(base_tablet->get_push_lock());
         std::lock_guard l2(new_tablet->get_push_lock());
@@ -1404,7 +1356,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         for (auto& version : versions_to_be_changed) {
             rowsets_to_change.push_back(base_tablet->get_rowset_by_version(version));
             // prepare tablet reader to prevent rowsets being compacted
-            std::unique_ptr<vectorized::TabletReader> tablet_reader =
+            std::unique_ptr<TabletReader> tablet_reader =
                     std::make_unique<TabletReader>(base_tablet, version, base_schema);
             RETURN_IF_ERROR(tablet_reader->prepare());
             readers.emplace_back(std::move(tablet_reader));
@@ -1589,6 +1541,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
                 return Status::InternalError("process failed");
             }
         }
+        sc_params.rowset_readers[i]->close();
         auto new_rowset = rowset_writer->build();
         if (!new_rowset.ok()) {
             LOG(WARNING) << "failed to build rowset: " << new_rowset.status() << ". exit alter process";
@@ -1802,16 +1755,14 @@ Status SchemaChangeHandler::_init_column_mapping(ColumnMapping* column_mapping, 
 }
 
 Status SchemaChangeHandler::_validate_alter_result(TabletSharedPtr new_tablet, const TAlterTabletReqV2& request) {
-    Version max_continuous_version = new_tablet->max_continuous_version_from_beginning();
+    int64_t max_continuous_version = new_tablet->max_continuous_version();
     LOG(INFO) << "find max continuous version of tablet=" << new_tablet->full_name()
-              << ", start_version=" << max_continuous_version.first
-              << ", end_version=" << max_continuous_version.second;
-    if (max_continuous_version.second >= request.alter_version) {
+              << ", version=" << max_continuous_version;
+    if (max_continuous_version >= request.alter_version) {
         return Status::OK();
     } else {
         return Status::InternalError("version missed");
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -58,7 +58,24 @@ public class SubqueryTest extends PlanTestBase {
                 + "FROM t0\n"
                 + "WHERE v1 = 1;";
         String plan = getFragmentPlan(sql);
-        Assert.assertNotNull(plan);
+        assertContains(plan, "  15:Project\n" +
+                "  |  <slot 19> : if(8: expr > 74219, 13: expr, 17: avg)\n" +
+                "  |  \n" +
+                "  14:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  \n" +
+                "  |----13:EXCHANGE\n" +
+                "  |    \n" +
+                "  1:AGGREGATE (update finalize)");
+        assertContains(plan, "  11:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  \n" +
+                "  |----10:EXCHANGE\n" +
+                "  |    \n" +
+                "  3:AGGREGATE (update finalize)\n" +
+                "  |  output: avg(9: v7)");
     }
 
     @Test
@@ -146,7 +163,7 @@ public class SubqueryTest extends PlanTestBase {
         String sql =
                 "select count(*) from t2 where (select v4 from t1 where (select v1 from t0 where t2.v7 = 1) = 1)  = 1";
         expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("Column '`default_cluster:test`.`t2`.`v7`' cannot be resolved");
+        expectedEx.expectMessage("Column '`test`.`t2`.`v7`' cannot be resolved");
         getFragmentPlan(sql);
     }
 
@@ -171,5 +188,87 @@ public class SubqueryTest extends PlanTestBase {
                 "          SELECT t2.v8 FROM t2 WHERE (t1.v5) = (t2.v9))\n" +
                 "    ) IS NULL\n";
         Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+    }
+
+    @Test
+    public void testInSubQueryWithAggAndPredicate() throws Exception {
+        FeConstants.runningUnitTest = true;
+        {
+            String sql = "SELECT DISTINCT 1\n" +
+                    "FROM test_all_type\n" +
+                    "WHERE (t1a IN \n" +
+                    "   (\n" +
+                    "      SELECT v1\n" +
+                    "      FROM t0\n" +
+                    "   )\n" +
+                    ")IS NULL";
+
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  18:Project\n" +
+                    "  |  <slot 15> : 1\n" +
+                    "  |  \n" +
+                    "  17:CROSS JOIN\n" +
+                    "  |  cross join:");
+        }
+        {
+            String sql = "SELECT DISTINCT 1\n" +
+                    "FROM test_all_type\n" +
+                    "WHERE t1a IN \n" +
+                    "   (\n" +
+                    "      SELECT v1\n" +
+                    "      FROM t0\n" +
+                    "   )\n" +
+                    "IS NULL";
+
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  18:Project\n" +
+                    "  |  <slot 15> : 1\n" +
+                    "  |  \n" +
+                    "  17:CROSS JOIN\n" +
+                    "  |  cross join:");
+        }
+        {
+            String sql = "SELECT DISTINCT(t1d)\n" +
+                    "FROM test_all_type\n" +
+                    "WHERE (t1a IN \n" +
+                    "   (\n" +
+                    "      SELECT v1\n" +
+                    "      FROM t0\n" +
+                    "   )\n" +
+                    ")IS NULL";
+
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  18:Project\n" +
+                    "  |  <slot 4> : 4: t1d\n" +
+                    "  |  \n" +
+                    "  17:CROSS JOIN\n" +
+                    "  |  cross join:");
+        }
+        FeConstants.runningUnitTest = false;
+    }
+
+
+    @Test
+    public void testCTEAnchorProperty() throws Exception {
+        String sql = "explain SELECT\n" +
+                "max (t0_2.v1 IN (SELECT t0_2.v1 FROM  t0 AS t0_2 where abs(2) < 1) )\n" +
+                "FROM\n" +
+                "  t0 AS t0_2\n" +
+                "GROUP BY\n" +
+                "  ( CAST(t0_2.v1 AS INT) - NULL ) IN (SELECT subt0.v1  FROM  t1 AS t1_3 RIGHT ANTI JOIN t0 subt0 ON t1_3.v5 = subt0.v1 ),\n" +
+                "  t0_2.v1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  30:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 16: v1 = 1: v1\n" +
+                "  |  \n" +
+                "  |----29:EXCHANGE\n" +
+                "  |    \n" +
+                "  5:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 16: v1\n" +
+                "  |  \n" +
+                "  4:EXCHANGE");
     }
 }

@@ -27,7 +27,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.proc.AuthProcDir;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -52,9 +51,8 @@ public class ShowGrantsStmt extends ShowStmt {
 
     static {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String col : AuthProcDir.TITLE_NAMES) {
-            builder.addColumn(new Column(col, ScalarType.createVarchar(100)));
-        }
+        builder.addColumn(new Column("UserIdentity", ScalarType.createVarchar(100)));
+        builder.addColumn(new Column("Grants", ScalarType.createVarchar(400)));
         META_DATA = builder.build();
     }
 

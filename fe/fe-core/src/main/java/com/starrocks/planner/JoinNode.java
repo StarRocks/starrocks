@@ -60,7 +60,7 @@ import java.util.stream.Collectors;
 // Our new cost based query optimizer is more powerful and stable than old query optimizer,
 // The old query optimizer related codes could be deleted safely.
 // TODO: Remove old query optimizer related codes before 2021-09-30
-public abstract class JoinNode extends PlanNode {
+public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNode {
     private static final Logger LOG = LogManager.getLogger(JoinNode.class);
 
     protected final TableRef innerRef;
@@ -157,10 +157,11 @@ public abstract class JoinNode extends PlanNode {
         }
     }
 
-    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator,
-                                    PlanNode inner, List<BinaryPredicate> eqJoinConjuncts,
-                                    JoinOperator joinOp) {
+    @Override
+    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator) {
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+        JoinOperator joinOp = getJoinOp();
+        PlanNode inner = getChild(1);
         if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin()) {
             return;
         }
@@ -198,17 +199,69 @@ public abstract class JoinNode extends PlanNode {
                 right = temp;
             }
 
-            // push down rf to child nodes, and build it only when it
-            // can be accepted by child nodes.
+            // push down rf to left child node, and build it only when it
+            // can be accepted by left child node.
             rf.setBuildExpr(left);
-            boolean accept = false;
-            for (PlanNode node : children) {
-                accept = accept || node.pushDownRuntimeFilters(rf, right);
-            }
+            boolean accept = getChild(0).pushDownRuntimeFilters(rf, right);
             if (accept) {
                 buildRuntimeFilters.add(rf);
             }
         }
+    }
+
+    @Override
+    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
+        if (!canPushDownRuntimeFilter()) {
+            return false;
+        }
+        if (probeExpr.isBoundByTupleIds(getTupleIds())) {
+            boolean hasPushedDown = false;
+            // If probeExpr is SlotRef(a), there exits an equalJoinConjunct SlotRef(a)=SlotRef(b) in SemiJoin
+            // or InnerJoin, then the rf also can pushed down to both sides of HashJoin because SlotRef(a) and
+            // SlotRef(b) are equivalent.
+            boolean isInnerOrSemiJoin = joinOp.isSemiJoin() || joinOp.isInnerJoin();
+            if ((probeExpr instanceof SlotRef) && isInnerOrSemiJoin) {
+                for (BinaryPredicate eqConjunct : eqJoinConjuncts) {
+                    Expr lhs = eqConjunct.getChild(0);
+                    Expr rhs = eqConjunct.getChild(1);
+                    SlotRef eqSlotRef = null;
+                    Expr otherExpr = null;
+                    if ((lhs instanceof SlotRef) && probeExpr.isBound(((SlotRef) lhs).getSlotId())) {
+                        eqSlotRef = (SlotRef) lhs;
+                        otherExpr = rhs;
+                    } else if ((rhs instanceof SlotRef) && probeExpr.isBound(((SlotRef) rhs).getSlotId())) {
+                        eqSlotRef = (SlotRef) rhs;
+                        otherExpr = lhs;
+                    }
+                    if (eqSlotRef == null) {
+                        continue;
+                    }
+                    hasPushedDown |= getChild(0).pushDownRuntimeFilters(description, eqSlotRef);
+                    hasPushedDown |= getChild(1).pushDownRuntimeFilters(description, eqSlotRef);
+                    if (otherExpr instanceof SlotRef) {
+                        hasPushedDown |= getChild(0).pushDownRuntimeFilters(description, otherExpr);
+                        hasPushedDown |= getChild(1).pushDownRuntimeFilters(description, otherExpr);
+                    }
+                    if (hasPushedDown) {
+                        break;
+                    }
+                }
+            }
+            // fall back to PlanNode.pushDownRuntimeFilters for HJ if rf cannot pushed down via equivalent
+            // equalJoinConjuncts
+            if (hasPushedDown || super.pushDownRuntimeFilters(description, probeExpr)) {
+                return true;
+            }
+
+            // can not push down to children.
+            // use runtime filter at this level.
+            if (description.canProbeUse(this)) {
+                description.addProbeExpr(id.asInt(), probeExpr);
+                probeRuntimeFilters.add(description);
+                return true;
+            }
+        }
+        return false;
     }
 
     public List<BinaryPredicate> getEqJoinConjuncts() {

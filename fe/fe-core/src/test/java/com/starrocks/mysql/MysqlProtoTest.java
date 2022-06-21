@@ -82,7 +82,7 @@ public class MysqlProtoTest {
                 minTimes = 0;
                 result = auth;
 
-                globalStateMgr.changeDb((ConnectContext) any, anyString);
+                globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
                 minTimes = 0;
             }
         };
@@ -204,7 +204,7 @@ public class MysqlProtoTest {
         mockPassword(true);
         mockAccess();
         ConnectContext context = new ConnectContext(null);
-        context.setCatalog(globalStateMgr);
+        context.setGlobalStateMgr(globalStateMgr);
         context.setThreadLocalInfo();
         Assert.assertTrue(MysqlProto.negotiate(context));
     }
@@ -215,7 +215,7 @@ public class MysqlProtoTest {
         mockPassword(true);
         mockAccess();
         ConnectContext context = new ConnectContext(null);
-        context.setCatalog(globalStateMgr);
+        context.setGlobalStateMgr(globalStateMgr);
         context.setThreadLocalInfo();
         Assert.assertTrue(MysqlProto.negotiate(context));
         ByteBuffer changeUserPacket = mockChangeUserPacket("change-user");

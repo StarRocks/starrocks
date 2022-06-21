@@ -2,21 +2,14 @@
 
 #pragma once
 
-#include <opentelemetry/exporters/jaeger/jaeger_exporter.h>
-#include <opentelemetry/sdk/trace/simple_processor.h>
-#include <opentelemetry/sdk/trace/tracer_provider.h>
-#include <opentelemetry/trace/provider.h>
+#include <opentelemetry/trace/scope.h>
+#include <opentelemetry/trace/span.h>
+#include <opentelemetry/trace/span_context.h>
 
 namespace starrocks {
-
-using Span = opentelemetry::nostd::shared_ptr<opentelemetry::trace::Span>;
-using SpanContext = opentelemetry::trace::SpanContext;
-
-// The tracer options.
-struct TracerOptions {
-    std::string jaeger_endpoint;
-    int jaeger_server_port;
-};
+namespace trace = opentelemetry::trace;
+using Span = opentelemetry::nostd::shared_ptr<trace::Span>;
+using SpanContext = trace::SpanContext;
 
 /**
  * Handles span creation and provides a compatible interface to `opentelemetry::trace::Tracer`.
@@ -27,13 +20,13 @@ struct TracerOptions {
  *
  * Here is an example on how to create spans and retrieve traces:
  * ```
- * std::shared_ptr<Tracer> tracer;
+ * const Tracer& tracer = Tracer::Instance();
  *
- * void f1(std::shared_ptr<Tracer> tracer) {
- *     auto root = tracer->start_trace("root");
+ * void f1(const Tracer& tracer) {
+ *     auto root = tracer.start_trace("root");
  *     sleepFor(Milliseconds(1));
  *     {
- *         auto child = tracer->add_span("child");
+ *         auto child = tracer.add_span("child", root);
  *         sleepFor(Milliseconds(2));
  *     }
  * }
@@ -42,14 +35,23 @@ struct TracerOptions {
  */
 class Tracer {
 public:
-    Tracer(const std::string& service_name, const TracerOptions& tracer_opts = {"localhost", 6381});
+    ~Tracer();
 
-    // Shutdown the tracer.
-    void shutdown();
+    // Get the global tracer instance.
+    static Tracer& Instance();
+
+    // Return true if trace is enabled.
+    bool is_enabled() const;
 
     // Creates and returns a new span with `trace_name`
     // this span represents a trace, since it has no parent.
     Span start_trace(const std::string& trace_name);
+
+    Span start_trace_txn(const std::string& trace_name, int64_t txn_id);
+
+    Span start_trace_tablet(const std::string& trace_name, int64_t tablet_id);
+
+    Span start_trace_txn_tablet(const std::string& trace_name, int64_t txn_id, int64_t tablet_id);
 
     // Creates and returns a new span with `span_name` which parent span is `parent_span'.
     Span add_span(const std::string& span_name, const Span& parent_span);
@@ -59,12 +61,23 @@ public:
     // parent_ctx contains the required information of the trace.
     Span add_span(const std::string& span_name, const SpanContext& parent_ctx);
 
+    // If trace_parent is empty, create a new trace, else add a span
+    Span start_trace_or_add_span(const std::string& name, const std::string& trace_parent);
+
+    // Construct a SpanContext from Traceparent header
+    static SpanContext from_trace_parent(const std::string& trace_parent);
+
+    // Construct a Traceparent header from SpanContext
+    static std::string to_trace_parent(const SpanContext& context);
+
 private:
     // Init the tracer.
     void init(const std::string& service_name);
+    // Shutdown the tracer.
+    void shutdown();
 
+    // The global tracer.
     opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> _tracer;
-    TracerOptions _tracer_options;
 };
 
 } // namespace starrocks

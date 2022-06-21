@@ -27,6 +27,7 @@ import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -146,15 +147,11 @@ public class AccessTestUtil {
                     minTimes = 0;
                     result = new Load();
 
-                    globalStateMgr.getClusterDbNames("testCluster");
-                    minTimes = 0;
-                    result = Lists.newArrayList("testCluster:testDb");
-
-                    globalStateMgr.changeDb((ConnectContext) any, "blockDb");
+                    globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
                     minTimes = 0;
                     result = new DdlException("failed");
 
-                    globalStateMgr.changeDb((ConnectContext) any, anyString);
+                    globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
                     minTimes = 0;
 
                     globalStateMgr.getBrokerMgr();
@@ -164,8 +161,6 @@ public class AccessTestUtil {
             };
             return globalStateMgr;
         } catch (DdlException e) {
-            return null;
-        } catch (AnalysisException e) {
             return null;
         }
     }
@@ -280,7 +275,7 @@ public class AccessTestUtil {
                     minTimes = 0;
                     result = auth;
 
-                    globalStateMgr.changeDb((ConnectContext) any, anyString);
+                    globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
                     minTimes = 0;
                     result = new DdlException("failed");
 
@@ -300,10 +295,6 @@ public class AccessTestUtil {
                     minTimes = 0;
                     result = Lists.newArrayList("testCluster:testDb");
 
-                    globalStateMgr.getClusterDbNames("testCluster");
-                    minTimes = 0;
-                    result = Lists.newArrayList("testCluster:testDb");
-
                     globalStateMgr.getDb("emptyCluster");
                     minTimes = 0;
                     result = null;
@@ -311,8 +302,6 @@ public class AccessTestUtil {
             };
             return globalStateMgr;
         } catch (DdlException e) {
-            return null;
-        } catch (AnalysisException e) {
             return null;
         }
     }
@@ -323,6 +312,10 @@ public class AccessTestUtil {
         Analyzer analyzer = new Analyzer(fetchAdminCatalog(), new ConnectContext(null));
         new Expectations(analyzer) {
             {
+                analyzer.getDefaultCatalog();
+                minTimes = 0;
+                result = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+
                 analyzer.getDefaultDb();
                 minTimes = 0;
                 result = withCluster ? prefix + "testDb" : "testDb";

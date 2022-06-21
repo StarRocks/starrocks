@@ -4,10 +4,12 @@ package com.starrocks.scheduler;
 
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -79,7 +81,7 @@ public class TaskRun {
         // copy a ConnectContext to avoid concurrency leading to abnormal results.
         ConnectContext newCtx = new ConnectContext();
         newCtx.setCluster(ctx.getClusterName());
-        newCtx.setCatalog(ctx.getGlobalStateMgr());
+        newCtx.setGlobalStateMgr(ctx.getGlobalStateMgr());
         newCtx.setDatabase(ctx.getDatabase());
         newCtx.setQualifiedUser(ctx.getQualifiedUser());
         newCtx.setCurrentUserIdentity(ctx.getCurrentUserIdentity());
@@ -94,6 +96,7 @@ public class TaskRun {
         }
         newCtx.setSessionVariable(sessionVariable);
         taskRunContext.setCtx(newCtx);
+        taskRunContext.setRemoteIp(ctx.getMysqlChannel().getRemoteHostPortString());
         processor.processTaskRun(taskRunContext);
         QueryState queryState = newCtx.getState();
         if (newCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
@@ -120,13 +123,18 @@ public class TaskRun {
         return status;
     }
 
-    public TaskRunStatus initStatus(String queryId) {
+    public TaskRunStatus initStatus(String queryId, Long createTime) {
         TaskRunStatus status = new TaskRunStatus();
         status.setQueryId(queryId);
         status.setTaskName(task.getName());
-        status.setCreateTime(System.currentTimeMillis());
+        if (createTime == null) {
+            status.setCreateTime(System.currentTimeMillis());
+        } else {
+            status.setCreateTime(createTime);
+        }
         status.setDbName(task.getDbName());
         status.setDefinition(task.getDefinition());
+        status.setExpireTime(System.currentTimeMillis() + Config.task_runs_ttl_second * 1000L);
         this.status = status;
         return status;
     }

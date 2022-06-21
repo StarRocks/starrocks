@@ -6,7 +6,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class BackendCoreStat {
-    private static final int DEFAULT_CORES_OF_BE = 1;
+    private static int DEFAULT_CORES_OF_BE = 1;
 
     private static ConcurrentHashMap<Long, Integer> numOfHardwareCoresPerBe = new ConcurrentHashMap<>();
     private static AtomicInteger cachedAvgNumOfHardwareCores = new AtomicInteger(-1);
@@ -15,6 +15,10 @@ public class BackendCoreStat {
         if (numOfHardwareCoresPerBe.putIfAbsent(be, numOfCores) == null) {
             cachedAvgNumOfHardwareCores.set(-1);
         }
+    }
+
+    public static void setDefaultCoresOfBe(int cores) {
+        DEFAULT_CORES_OF_BE = cores;
     }
 
     public static int getCoresOfBe(long beId) {
@@ -42,5 +46,10 @@ public class BackendCoreStat {
         // Update the cached value if numOfHardwareCoresPerBe is changed(cachedAvgNumOfHardwareCores = -1)
         cachedAvgNumOfHardwareCores.compareAndSet(snapshotAvg, newAvg);
         return newAvg;
+    }
+
+    public static int getDefaultDOP() {
+        int avgNumOfCores = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
+        return Math.max(1, avgNumOfCores / 2);
     }
 }

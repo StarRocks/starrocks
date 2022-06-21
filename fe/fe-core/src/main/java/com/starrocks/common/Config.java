@@ -186,6 +186,25 @@ public class Config extends ConfigBase {
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
 
     /**
+     * For Task framework do some background operation like cleanup Task/TaskRun.
+     * It will run every *task_check_interval_second* to do background job.
+     */
+    @ConfField
+    public static int task_check_interval_second = 4 * 3600; // 4 hours
+
+    /**
+     * for task set expire time
+     */
+    @ConfField(mutable = true)
+    public static int task_ttl_second = 3 * 24 * 3600;         // 3 day
+
+    /**
+     * for task run set expire time
+     */
+    @ConfField(mutable = true)
+    public static int task_runs_ttl_second = 3 * 24 * 3600;     // 3 day
+
+    /**
      * The max keep time of some kind of jobs.
      * like schema change job and rollup job.
      */
@@ -687,6 +706,19 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int alter_table_timeout_second = 86400; // 1day
+
+    /**
+     * The alter handler max worker threads
+     */
+    @ConfField
+    public static int alter_max_worker_threads = 4;
+
+    /**
+     * The alter handler max queue size for worker threads
+     */
+    @ConfField
+    public static int alter_max_worker_queue_size = 4096;
+
     /**
      * When create a table(or partition), you can specify its storage medium(HDD or SSD).
      * If not set, this specifies the default medium when creat.
@@ -725,6 +757,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int export_running_job_num_limit = 5;
+    /**
+     * Limitation of the pending TaskRun queue length.
+     * Default is 500.
+     */
+    @ConfField(mutable = true)
+    public static int task_runs_queue_length = 500;
+    /**
+     * Limitation of the running TaskRun.
+     * Default is 20.
+     */
+    @ConfField(mutable = true)
+    public static int task_runs_concurrency = 20;
     /**
      * Default timeout of export jobs.
      */
@@ -792,13 +836,6 @@ public class Config extends ConfigBase {
     public static int max_allowed_in_element_num_of_delete = 10000;
 
     /**
-     * only limit for Row-based storage.
-     * set to Integer.MAX_VALUE, cause starrocks is already Column-based storage
-     */
-    @ConfField(mutable = true)
-    public static int max_layout_length_per_row = Integer.MAX_VALUE;
-
-    /**
      * The multi cluster feature will be deprecated in version 0.12
      * set this config to true will disable all operations related to cluster feature, include:
      * create/drop cluster
@@ -848,7 +885,7 @@ public class Config extends ConfigBase {
      * In order not to wait too long for create table(index), set a max timeout.
      */
     @ConfField(mutable = true)
-    public static int max_create_table_timeout_second = 60;
+    public static int max_create_table_timeout_second = 600;
 
     // Configurations for backup and restore
     /**
@@ -983,17 +1020,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_balancing_tablets = 100;
 
-    // This threshold is to avoid piling up too many report task in FE, which may cause OOM exception.
-    // In some large StarRocks cluster, eg: 100 Backends with ten million replicas, a tablet report may cost
-    // several seconds after some modification of metadata(drop partition, etc..).
-    // And one Backend will report tablets info every 1 min, so unlimited receiving reports is unacceptable.
-    // TODO(cmy): we will optimize the processing speed of tablet report in future, but now, just discard
-    // the report if queue size exceeding limit.
-    // Some online time cost:
-    // 1. disk report: 0-1 ms
-    // 2. task report: 0-1 ms
-    // 3. tablet report
-    //      10000 replicas: 200ms
+    @Deprecated
     @ConfField(mutable = true)
     public static int report_queue_size = 100;
 
@@ -1028,13 +1055,13 @@ public class Config extends ConfigBase {
      * max load size for each routine load task
      */
     @ConfField(mutable = true)
-    public static long max_routine_load_batch_size = 500 * 1024 * 1024; // 500M
+    public static long max_routine_load_batch_size = 4294967296L; // 4GB
 
     /**
      * consume data time for each routine load task
      */
     @ConfField(mutable = true)
-    public static long routine_load_task_consume_second = 3;
+    public static long routine_load_task_consume_second = 15;
 
     /**
      * routine load task timeout
@@ -1042,7 +1069,13 @@ public class Config extends ConfigBase {
      * but can not be less than 10s because when one be down the load time will be at least 10s
      */
     @ConfField(mutable = true)
-    public static long routine_load_task_timeout_second = 15;
+    public static long routine_load_task_timeout_second = 60;
+
+    /**
+     * kafka util request timeout
+     */
+    @ConfField(mutable = true)
+    public static long routine_load_kafka_timeout_second = 12;
 
     /**
      * it can't auto-resume routine load job as long as one of the backends is down
@@ -1246,6 +1279,18 @@ public class Config extends ConfigBase {
     public static boolean enable_statistic_collect = true;
 
     /**
+     * default bucket size of histogram statistics
+     */
+    @ConfField(mutable = true)
+    public static long histogram_buckets_size = 256;
+
+    /**
+     * default most common value size of histogram statistics
+     */
+    @ConfField(mutable = true)
+    public static long histogram_topn_size = 256;
+
+    /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
      * This may reduce network transmission in following case:
      * 1. N hosts with N Backends and N Frontends deployed.
@@ -1423,10 +1468,15 @@ public class Config extends ConfigBase {
 
     /**
      * Temporary use, it will be removed later.
-     * Set true if using StarOS to manage tablets, such as storage medium is S3.
+     * Set true if using StarOS to manage tablets for StarRocks lake table.
      */
     @ConfField
     public static boolean use_staros = false;
+    @ConfField
+    public static String starmgr_address = "127.0.0.1:6090";
+    @ConfField
+    public static boolean integrate_starmgr = false;
+
     /**
      * default bucket number when create OLAP table without buckets info
      */
@@ -1435,7 +1485,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = false;
-  
+
     @ConfField
     public static boolean enable_dict_optimize_routine_load = false;
 
@@ -1464,7 +1514,44 @@ public class Config extends ConfigBase {
 
     /**
      * after wait quorom_publish_wait_time_ms, will do quorum publish
+     * In order to avoid unnecessary CLONE, we increase the timeout as much as possible
      */
     @ConfField(mutable = true)
-    public static int quorom_publish_wait_time_ms = 500;
+    public static int quorom_publish_wait_time_ms = 5000;
+
+    /**
+     * FE journal queue size
+     * Write log will fail if queue is full
+     **/
+    @ConfField(mutable = true)
+    public static int metadata_journal_queue_size = 1000;
+
+    /**
+     * The maxium size(key+value) of journal entity to write as a batch
+     * Increase this configuration if journal queue is always full
+     * TODO: set default value
+     **/
+    @ConfField(mutable = true)
+    public static int metadata_journal_max_batch_size_mb = 10;
+
+    /**
+     * The maxium number of journal entity to write as a batch
+     * Increase this configuration if journal queue is always full
+     * TODO: set default value
+     **/
+    @ConfField(mutable = true)
+    public static int metadata_journal_max_batch_cnt = 100;
+
+    /**
+     * Fqdn function switch, 
+     * this switch will be deleted after release the fqdn func
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_fqdn_func = false;
+
+    /**
+     * jaeger tracing endpoint, empty thing disables tracing
+     */
+    @ConfField
+    public static String jaeger_grpc_endpoint = "";
 }

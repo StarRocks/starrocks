@@ -33,12 +33,12 @@
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
+#include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_worker.h"
-#include "util/load_error_hub.h"
 #include "util/pretty_printer.h"
 #include "util/timezone_utils.h"
 #include "util/uid_util.h"
@@ -104,10 +104,6 @@ RuntimeState::~RuntimeState() {
         _error_log_file->close();
         delete _error_log_file;
         _error_log_file = nullptr;
-    }
-
-    if (_error_hub != nullptr) {
-        _error_hub->close();
     }
 
     if (_exec_env != nullptr && _exec_env->thread_mgr() != nullptr) {
@@ -181,14 +177,16 @@ void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* pare
     _instance_mem_pool = std::make_unique<MemPool>();
 }
 
-void RuntimeState::init_mem_trackers(int64_t instance_mem_limit, const std::shared_ptr<MemTracker>& query_mem_tracker) {
+void RuntimeState::init_mem_trackers(const std::shared_ptr<MemTracker>& query_mem_tracker) {
     DCHECK(query_mem_tracker != nullptr);
+
     auto* mem_tracker_counter = ADD_COUNTER(_profile.get(), "MemoryLimit", TUnit::BYTES);
-    mem_tracker_counter->set(instance_mem_limit);
+    mem_tracker_counter->set(query_mem_tracker->limit());
+
     // all fragment instances in a BE shared a common query_mem_tracker.
     _query_mem_tracker = query_mem_tracker;
-    _instance_mem_tracker = std::make_shared<MemTracker>(_profile.get(), instance_mem_limit, runtime_profile()->name(),
-                                                         _query_mem_tracker.get());
+    _instance_mem_tracker =
+            std::make_shared<MemTracker>(_profile.get(), -1L, runtime_profile()->name(), _query_mem_tracker.get());
     _instance_mem_pool = std::make_unique<MemPool>();
 }
 
@@ -341,24 +339,10 @@ void RuntimeState::append_error_msg_to_file(const std::string& line, const std::
 
     if (!out.str().empty()) {
         (*_error_log_file) << out.str() << std::endl;
-        export_load_error(out.str());
     }
 }
 
 const int64_t HUB_MAX_ERROR_NUM = 10;
-
-void RuntimeState::export_load_error(const std::string& err_msg) {
-    if (_error_hub == nullptr) {
-        if (_load_error_hub_info == nullptr) {
-            return;
-        }
-        LoadErrorHub::create_hub(_exec_env, _load_error_hub_info.get(), _error_log_file_path, &_error_hub);
-    }
-
-    LoadErrorHub::ErrorMsg err(_load_job_id, err_msg);
-    // TODO(lingbin): think if should check return value?
-    _error_hub->export_error(err);
-}
 
 int64_t RuntimeState::get_load_mem_limit() const {
     if (_query_options.__isset.load_mem_limit && _query_options.load_mem_limit > 0) {

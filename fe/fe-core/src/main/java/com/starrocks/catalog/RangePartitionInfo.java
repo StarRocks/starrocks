@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.common.AnalysisException;
@@ -36,9 +37,14 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -48,11 +54,24 @@ import java.util.Set;
 public class RangePartitionInfo extends PartitionInfo {
     private static final Logger LOG = LogManager.getLogger(RangePartitionInfo.class);
 
+    @SerializedName(value = "partitionColumns")
     private List<Column> partitionColumns = Lists.newArrayList();
     // formal partition id -> partition range
     private Map<Long, Range<PartitionKey>> idToRange = Maps.newHashMap();
     // temp partition id -> partition range
     private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newHashMap();
+
+    // partitionId -> serialized Range<PartitionKey>
+    // because Range<PartitionKey> and PartitionKey can not be serialized by gson
+    // ATTN: call preSerialize before serialization and postDeserialized after deserialization
+    @SerializedName(value = "serializedIdToRange")
+    private Map<Long, byte[]> serializedIdToRange;
+
+    // partitionId -> serialized Range<PartitionKey>
+    // because Range<PartitionKey> and PartitionKey can not be serialized by gson
+    // ATTN: call preSerialize before serialization and postDeserialized after deserialization
+    @SerializedName(value = "serializedIdToTempRange")
+    private Map<Long, byte[]> serializedIdToTempRange;
 
     public RangePartitionInfo() {
         // for persist
@@ -317,6 +336,51 @@ public class RangePartitionInfo extends PartitionInfo {
         PartitionInfo partitionInfo = new RangePartitionInfo();
         partitionInfo.readFields(in);
         return partitionInfo;
+    }
+
+    byte[] serializeRange(Range<PartitionKey> range) throws IOException {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(stream);
+        RangeUtils.writeRange(dos, range);
+        return stream.toByteArray();
+    }
+
+    Range<PartitionKey> deserializeRange(byte[] serializedRange) throws IOException {
+        InputStream inputStream = new ByteArrayInputStream(serializedRange);
+        DataInput dataInput = new DataInputStream(inputStream);
+        Range<PartitionKey> range = RangeUtils.readRange(dataInput);
+        return range;
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        serializedIdToRange = Maps.newHashMap();
+        for (Map.Entry<Long, Range<PartitionKey>> entry : idToRange.entrySet()) {
+            byte[] serializedRange = serializeRange(entry.getValue());
+            serializedIdToRange.put(entry.getKey(), serializedRange);
+        }
+
+        serializedIdToTempRange = Maps.newHashMap();
+        for (Map.Entry<Long, Range<PartitionKey>> entry : idToTempRange.entrySet()) {
+            byte[] serializedRange = serializeRange(entry.getValue());
+            serializedIdToTempRange.put(entry.getKey(), serializedRange);
+        }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (serializedIdToRange != null && !serializedIdToRange.isEmpty()) {
+            for (Map.Entry<Long, byte[]> entry : serializedIdToRange.entrySet()) {
+                idToRange.put(entry.getKey(), deserializeRange(entry.getValue()));
+            }
+            serializedIdToRange = null;
+        }
+        if (serializedIdToTempRange != null && !serializedIdToTempRange.isEmpty()) {
+            for (Map.Entry<Long, byte[]> entry : serializedIdToTempRange.entrySet()) {
+                idToTempRange.put(entry.getKey(), deserializeRange(entry.getValue()));
+            }
+            serializedIdToTempRange = null;
+        }
     }
 
     @Override

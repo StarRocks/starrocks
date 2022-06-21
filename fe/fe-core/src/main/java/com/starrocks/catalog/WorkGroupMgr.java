@@ -8,7 +8,10 @@ import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.WorkGroupOpEntry;
@@ -19,9 +22,13 @@ import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOp;
 import com.starrocks.thrift.TWorkGroupOpType;
 import com.starrocks.thrift.TWorkGroupType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -37,6 +44,8 @@ import java.util.stream.Collectors;
 
 // WorkGroupMgr is employed by GlobalStateMgr to manage WorkGroup in FE.
 public class WorkGroupMgr implements Writable {
+    private static final Logger LOG = LogManager.getLogger(WorkGroupMgr.class);
+
     private GlobalStateMgr globalStateMgr;
     private Map<String, WorkGroup> workGroupMap = new HashMap<>();
     private Map<Long, WorkGroup> id2WorkGroupMap = new HashMap<>();
@@ -97,7 +106,11 @@ public class WorkGroupMgr implements Writable {
         }
     }
 
-    public List<List<String>> showWorkGroup(ShowWorkGroupStmt stmt) {
+    public List<List<String>> showWorkGroup(ShowWorkGroupStmt stmt) throws AnalysisException {
+        if (stmt.getName() != null && !workGroupMap.containsKey(stmt.getName())) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERROR_NO_WG_ERROR, stmt.getName());
+        }
+
         List<List<String>> rows;
         if (stmt.getName() != null) {
             rows = GlobalStateMgr.getCurrentState().getWorkGroupMgr().showOneWorkGroup(stmt.getName());
@@ -181,6 +194,21 @@ public class WorkGroupMgr implements Writable {
                 replayAddWorkGroup(workgroup);
             }
         }
+    }
+
+    public long loadWorkGroups(DataInputStream dis, long checksum) throws IOException {
+        try {
+            readFields(dis);
+            LOG.info("finished replaying WorkGroups from image");
+        } catch (EOFException e) {
+            LOG.info("no WorkGroups to replay.");
+        }
+        return checksum;
+    }
+
+    public long saveWorkGroups(DataOutputStream dos, long checksum) throws IOException {
+        write(dos);
+        return checksum;
     }
 
     private void replayAddWorkGroup(WorkGroup workgroup) {

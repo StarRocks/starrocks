@@ -12,4 +12,10 @@ class ScanExecutor;
 
 using WorkGroupPtr = std::shared_ptr<WorkGroup>;
 
+// Two types of scan executor: OlapScan and HdfsScan
+enum ScanExecutorType {
+    TypeOlapScanExecutor,
+    TypeHdfsScanExecutor,
+};
+
 } // namespace starrocks::workgroup

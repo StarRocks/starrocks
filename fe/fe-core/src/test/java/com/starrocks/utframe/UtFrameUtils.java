@@ -34,6 +34,7 @@ import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.AnalysisException;
@@ -50,6 +51,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -76,7 +78,6 @@ import com.starrocks.utframe.MockedFrontend.EnvVarNotSetException;
 import com.starrocks.utframe.MockedFrontend.FeStartException;
 import com.starrocks.utframe.MockedFrontend.NotInitException;
 import org.apache.commons.codec.binary.Hex;
-import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -93,6 +94,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -100,6 +102,7 @@ import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
 
 public class UtFrameUtils {
     private final static AtomicInteger INDEX = new AtomicInteger(0);
+    private final static AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
 
     public static final String createStatisticsTableStmt = "CREATE TABLE `table_statistic_v1` (\n" +
             "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
@@ -130,20 +133,9 @@ public class UtFrameUtils {
         ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setQualifiedUser(Auth.ROOT_USER);
-        ctx.setCatalog(GlobalStateMgr.getCurrentState());
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setThreadLocalInfo();
         ctx.setDumpInfo(new MockDumpInfo());
-        return ctx;
-    }
-
-    // Help to create a mocked test ConnectContext.
-    public static ConnectContext createTestUserCtx(UserIdentity testUser) throws IOException {
-        ConnectContext ctx = new ConnectContext(null);
-        ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
-        ctx.setCurrentUserIdentity(testUser);
-        ctx.setQualifiedUser(testUser.getQualifiedUser());
-        ctx.setCatalog(GlobalStateMgr.getCurrentState());
-        ctx.setThreadLocalInfo();
         return ctx;
     }
 
@@ -235,7 +227,11 @@ public class UtFrameUtils {
         frontend.start(startBDB, new String[0]);
     }
 
-    public static void createMinStarRocksCluster(boolean startBDB) {
+    public synchronized static void createMinStarRocksCluster(boolean startBDB) {
+        // to avoid call createMinStarRocksCluster multiple times
+        if (CREATED_MIN_CLUSTER.get()) {
+            return;
+        }
         try {
             ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
@@ -249,13 +245,10 @@ public class UtFrameUtils {
                     retry++ < 600) {
                 Thread.sleep(100);
             }
+            CREATED_MIN_CLUSTER.set(true);
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-
-    public static void createMinStarRocksClusterWithBDB() {
-        createMinStarRocksCluster(true);
     }
 
     public static void createMinStarRocksCluster() {
@@ -285,13 +278,6 @@ public class UtFrameUtils {
 
     public static void dropMockBackend(int backendId) throws DdlException {
         GlobalStateMgr.getCurrentSystemInfo().dropBackend(backendId);
-    }
-
-    public static void cleanStarRocksFeDir(String baseDir) {
-        try {
-            FileUtils.deleteDirectory(new File(baseDir));
-        } catch (IOException e) {
-        }
     }
 
     public static int findValidPort() {
@@ -511,10 +497,15 @@ public class UtFrameUtils {
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
                                                                        QueryDumpInfo replayDumpInfo) throws Exception {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
+        Map<String, Database> dbs = null;
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
                     connectContext.getSessionVariable().getSqlMode()).get(0);
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
+
+            dbs = AnalyzerUtils.collectAllDatabase(connectContext, statementBase);
+            lock(dbs);
+
             if (statementBase instanceof QueryStatement) {
                 return getQueryExecPlan((QueryStatement) statementBase, connectContext);
             } else if (statementBase instanceof InsertStmt) {
@@ -524,6 +515,7 @@ public class UtFrameUtils {
                 return null;
             }
         } finally {
+            unLock(dbs);
             tearMockEnv();
         }
     }
@@ -550,5 +542,25 @@ public class UtFrameUtils {
 
     public static String getPlanThriftString(ConnectContext ctx, String queryStr) throws Exception {
         return UtFrameUtils.getThriftString(UtFrameUtils.getPlanAndFragment(ctx, queryStr).second.getFragments());
+    }
+
+    // Lock all database before analyze
+    private static void lock(Map<String, Database> dbs) {
+        if (dbs == null) {
+            return;
+        }
+        for (Database db : dbs.values()) {
+            db.readLock();
+        }
+    }
+
+    // unLock all database after analyze
+    private static void unLock(Map<String, Database> dbs) {
+        if (dbs == null) {
+            return;
+        }
+        for (Database db : dbs.values()) {
+            db.readUnlock();
+        }
     }
 }

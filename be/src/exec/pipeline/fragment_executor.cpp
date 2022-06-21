@@ -17,6 +17,7 @@
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/scan_node.h"
+#include "exec/vectorized/cross_join_node.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gutil/casts.h"
@@ -59,7 +60,6 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const TExecPlanFr
     const auto& params = request.params;
     const auto& query_id = params.query_id;
     const auto& fragment_instance_id = params.fragment_instance_id;
-    const auto& query_options = request.query_options;
 
     auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
     if (existing_query_ctx) {
@@ -74,14 +74,12 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const TExecPlanFr
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
     }
-    if (query_options.__isset.query_timeout) {
-        _query_ctx->set_expire_seconds(std::max<int>(query_options.query_timeout, 1));
-    } else {
-        _query_ctx->set_expire_seconds(300);
-    }
 
+    _query_ctx->set_delivery_expire_seconds(_calc_delivery_expired_seconds(request));
+    _query_ctx->set_query_expire_seconds(_calc_query_expired_seconds(request));
     // initialize query's deadline
-    _query_ctx->extend_lifetime();
+    _query_ctx->extend_delivery_lifetime();
+    _query_ctx->extend_query_lifetime();
 
     return Status::OK();
 }
@@ -151,8 +149,9 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPl
     } else {
         auto* parent_mem_tracker = wg != nullptr ? wg->mem_tracker() : exec_env->query_pool_mem_tracker();
         auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
-        int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(parent_mem_tracker->limit(),
-                                                                      per_instance_mem_limit, degree_of_parallelism);
+        auto option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
+        int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(
+                parent_mem_tracker->limit(), per_instance_mem_limit, degree_of_parallelism, option_query_mem_limit);
         _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker);
     }
 
@@ -163,11 +162,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPl
     runtime_state->set_enable_pipeline_engine(true);
     int func_version = request.__isset.func_version ? request.func_version : 2;
     runtime_state->set_func_version(func_version);
-    // instance_mem_limit is user-designated mem_limit scaled by degree_of_parallelism times.
-    auto instance_mem_limit = query_options.__isset.mem_limit && query_options.mem_limit > 0
-                                      ? query_options.mem_limit * degree_of_parallelism
-                                      : -1L;
-    runtime_state->init_mem_trackers(instance_mem_limit, _query_ctx->mem_tracker());
+    runtime_state->init_mem_trackers(query_mem_tracker);
     runtime_state->set_be_number(request.backend_num);
     runtime_state->set_query_ctx(_query_ctx);
 
@@ -202,14 +197,35 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPl
 }
 
 int32_t FragmentExecutor::_calc_dop(ExecEnv* exec_env, const TExecPlanFragmentParams& request) const {
-    int32_t degree_of_parallelism = 1;
-    if (request.__isset.pipeline_dop && request.pipeline_dop > 0) {
-        degree_of_parallelism = request.pipeline_dop;
-    } else {
-        // default dop is a half of the number of hardware threads.
-        degree_of_parallelism = std::max<int32_t>(1, exec_env->max_executor_threads() / 2);
+    int32_t degree_of_parallelism = request.__isset.pipeline_dop ? request.pipeline_dop : 0;
+    return exec_env->calc_pipeline_dop(degree_of_parallelism);
+}
+
+int FragmentExecutor::_calc_delivery_expired_seconds(const TExecPlanFragmentParams& request) const {
+    const auto& query_options = request.query_options;
+
+    int expired_seconds = QueryContext::DEFAULT_EXPIRE_SECONDS;
+    if (query_options.__isset.query_delivery_timeout) {
+        if (query_options.__isset.query_timeout) {
+            expired_seconds = std::min(query_options.query_timeout, query_options.query_delivery_timeout);
+        } else {
+            expired_seconds = query_options.query_delivery_timeout;
+        }
+    } else if (query_options.__isset.query_timeout) {
+        expired_seconds = query_options.query_timeout;
     }
-    return degree_of_parallelism;
+
+    return std::max<int>(1, expired_seconds);
+}
+
+int FragmentExecutor::_calc_query_expired_seconds(const TExecPlanFragmentParams& request) const {
+    const auto& query_options = request.query_options;
+
+    if (query_options.__isset.query_timeout) {
+        return std::max<int>(1, query_options.query_timeout);
+    }
+
+    return QueryContext::DEFAULT_EXPIRE_SECONDS;
 }
 
 Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
@@ -306,15 +322,16 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
                 DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx,
                                                                     _fragment_ctx.get(), driver_id++);
                 driver->set_morsel_queue(morsel_queue.get());
-                auto* source_operator = driver->source_operator();
-                if (_wg != nullptr) {
-                    // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
-                    source_operator->set_workgroup(_wg);
-                } else {
-                    if (dynamic_cast<ConnectorScanOperator*>(source_operator) != nullptr) {
-                        source_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());
+                if (auto* scan_operator = driver->source_scan_operator()) {
+                    if (_wg != nullptr) {
+                        // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
+                        scan_operator->set_workgroup(_wg);
                     } else {
-                        source_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
+                        if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
+                            scan_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());
+                        } else {
+                            scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
+                        }
                     }
                 }
 
@@ -418,6 +435,8 @@ void FragmentExecutor::_fail_cleanup() {
     if (_query_ctx) {
         if (_fragment_ctx) {
             _query_ctx->fragment_mgr()->unregister(_fragment_ctx->fragment_instance_id());
+            _fragment_ctx->destroy_pass_through_chunk_buffer();
+            _fragment_ctx.reset();
         }
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();

@@ -4,11 +4,13 @@
 
 #include <algorithm>
 
+#include "column/chunk.h"
 #include "common/status.h"
 #include "exprs/anyval_util.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/primitive_type.h"
 #include "udf/java/utils.h"
 
 namespace starrocks {
@@ -273,6 +275,10 @@ void Aggregator::close(RuntimeState* state) {
     }
 
     _is_closed = true;
+    // Clear the buffer
+    while (!_buffer.empty()) {
+        _buffer.pop();
+    }
 
     auto agg_close = [this, state]() {
         // _mem_pool is nullptr means prepare phase failed
@@ -688,43 +694,6 @@ Status Aggregator::_evaluate_exprs(vectorized::Chunk* chunk) {
     return Status::OK();
 }
 
-// note(yan): in types.h and primitive_type.h there are similiar functions,
-// but they are for vectorized and non-vectorized version both
-// but here we just need to consider vectorized version.
-#define RETURN_PTYPE_BYTE_SIZE(TYPE, SIZE)                                           \
-    case TYPE:                                                                       \
-        static_assert(sizeof(vectorized::RunTimeTypeTraits<TYPE>::CppType) == SIZE); \
-        return SIZE;
-
-inline static int get_byte_size_of_primitive_type(PrimitiveType type) {
-    switch (type) {
-        RETURN_PTYPE_BYTE_SIZE(TYPE_NULL, 1);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_BOOLEAN, 1);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_TINYINT, 1);
-
-        RETURN_PTYPE_BYTE_SIZE(TYPE_SMALLINT, 2);
-
-        RETURN_PTYPE_BYTE_SIZE(TYPE_DECIMAL32, 4);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_DATE, 4);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_INT, 4);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_FLOAT, 4);
-
-        RETURN_PTYPE_BYTE_SIZE(TYPE_DECIMAL64, 8);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_BIGINT, 8);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_TIME, 8);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_DATETIME, 8);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_DOUBLE, 8);
-
-        RETURN_PTYPE_BYTE_SIZE(TYPE_DECIMAL128, 16);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_LARGEINT, 16);
-        RETURN_PTYPE_BYTE_SIZE(TYPE_DECIMALV2, 16);
-    default:
-        return 0;
-    }
-}
-
-#undef RETURN_PTYPE_BYTE_SIZE
-
 bool is_group_columns_fixed_size(std::vector<ExprContext*>& group_by_expr_ctxs,
                                  std::vector<GroupByColumnTypes>& group_by_types, size_t* max_size, bool* has_null) {
     size_t size = 0;
@@ -737,7 +706,7 @@ bool is_group_columns_fixed_size(std::vector<ExprContext*>& group_by_expr_ctxs,
             size += 1; // 1 bytes for  null flag.
         }
         PrimitiveType ptype = ctx->root()->type().type;
-        size_t byte_size = get_byte_size_of_primitive_type(ptype);
+        size_t byte_size = get_size_of_fixed_length_type(ptype);
         if (byte_size == 0) return false;
         size += byte_size;
     }

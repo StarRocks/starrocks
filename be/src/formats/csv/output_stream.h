@@ -4,9 +4,9 @@
 
 #include <ryu/ryu.h>
 
-#include "runtime/date_value.hpp"
 #include "runtime/decimalv2_value.h"
-#include "runtime/timestamp_value.h"
+#include "types/date_value.hpp"
+#include "types/timestamp_value.h"
 
 namespace starrocks::vectorized::csv {
 

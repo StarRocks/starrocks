@@ -30,7 +30,6 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
 #include "gutil/strings/substitute.h"
-#include "storage/chunk_iterator.h"
 #include "storage/rowset/rowset_meta.h"
 
 namespace starrocks {
@@ -47,6 +46,9 @@ class TabletSchema;
 namespace vectorized {
 class RowsetReadOptions;
 class Schema;
+
+class ChunkIterator;
+using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 } // namespace vectorized
 
 // the rowset state transfer graph:
@@ -135,6 +137,8 @@ public:
     // instead of multiple `ChunkIterator`s, will be created and appended into |segment_iterators|.
     virtual Status get_segment_iterators(const vectorized::Schema& schema, const vectorized::RowsetReadOptions& options,
                                          std::vector<vectorized::ChunkIteratorPtr>* seg_iterators) = 0;
+
+    virtual StatusOr<int64_t> estimate_compaction_segment_iterator_num() = 0;
 
     const RowsetMetaSharedPtr& rowset_meta() const { return _rowset_meta; }
 
@@ -248,10 +252,15 @@ public:
         }
     }
 
-    static size_t get_segment_num(const std::vector<RowsetSharedPtr>& rowsets) {
+    static StatusOr<size_t> get_segment_num(const std::vector<RowsetSharedPtr>& rowsets) {
         size_t num_segments = 0;
-        std::for_each(rowsets.begin(), rowsets.end(),
-                      [&num_segments](const RowsetSharedPtr& rowset) { num_segments += rowset->num_segments(); });
+        for (int i = 0; i < rowsets.size(); i++) {
+            auto iterator_num_res = rowsets[i]->estimate_compaction_segment_iterator_num();
+            if (!iterator_num_res.ok()) {
+                return iterator_num_res.status();
+            }
+            num_segments += iterator_num_res.value();
+        }
         return num_segments;
     }
 

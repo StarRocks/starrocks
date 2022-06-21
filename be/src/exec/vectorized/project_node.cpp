@@ -9,6 +9,7 @@
 
 #include "column/binary_column.h"
 #include "column/chunk.h"
+#include "column/column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -203,8 +204,8 @@ Status ProjectNode::close(RuntimeState* state) {
     Expr::close(_expr_ctxs, state);
     Expr::close(_common_sub_expr_ctxs, state);
     _dict_optimize_parser.close(state);
-    RETURN_IF_ERROR(ExecNode::close(state));
-    return Status::OK();
+
+    return ExecNode::close(state);
 }
 
 void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) {
@@ -217,15 +218,14 @@ void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext
             continue;
         }
 
-        DCHECK(nullptr != dynamic_cast<vectorized::ColumnRef*>(ctx->root()->get_child(0)));
-        auto column = ((vectorized::ColumnRef*)ctx->root()->get_child(0));
+        auto column = down_cast<vectorized::ColumnRef*>(ctx->root()->get_child(0));
 
         for (int i = 0; i < _slot_ids.size(); ++i) {
             if (_slot_ids[i] == column->slot_id() && _expr_ctxs[i]->root()->is_slotref()) {
-                DCHECK(nullptr != dynamic_cast<vectorized::ColumnRef*>(_expr_ctxs[i]->root()));
-                auto ref = ((vectorized::ColumnRef*)_expr_ctxs[i]->root());
+                auto ref = down_cast<vectorized::ColumnRef*>(_expr_ctxs[i]->root());
                 column->set_slot_id(ref->slot_id());
                 column->set_tuple_id(ref->tuple_id());
+                break;
             }
         }
     }

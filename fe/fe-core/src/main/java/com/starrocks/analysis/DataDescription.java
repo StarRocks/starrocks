@@ -31,6 +31,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -39,6 +41,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -78,15 +81,15 @@ public class DataDescription {
     private static final Logger LOG = LogManager.getLogger(DataDescription.class);
     // function isn't built-in function, hll_hash is not built-in function in hadoop load.
     private static final List<String> HADOOP_SUPPORT_FUNCTION_NAMES = Arrays.asList(
-            "strftime",
-            "time_format",
-            "alignment_timestamp",
-            "default_value",
-            "md5sum",
-            "replace_value",
-            "now",
+            FunctionSet.STRFTIME,
+            FunctionSet.TIME_FORMAT,
+            FunctionSet.ALIGNMENT_TIMESTAMP,
+            FunctionSet.DEFAULT_VALUE,
+            FunctionSet.MD5_SUM,
+            FunctionSet.REPLACE_VALUE,
+            FunctionSet.NOW,
             FunctionSet.HLL_HASH,
-            "substitute");
+            FunctionSet.SUBSTITUTE);
 
     private final String tableName;
     private final PartitionNames partitionNames;
@@ -394,23 +397,23 @@ public class DataDescription {
     public static void validateMappingFunction(String functionName, List<String> args,
                                                Map<String, String> columnNameMap,
                                                Column mappingColumn, boolean isHadoopLoad) throws AnalysisException {
-        if (functionName.equalsIgnoreCase("alignment_timestamp")) {
+        if (functionName.equalsIgnoreCase(FunctionSet.ALIGNMENT_TIMESTAMP)) {
             validateAlignmentTimestamp(args, columnNameMap);
-        } else if (functionName.equalsIgnoreCase("strftime")) {
+        } else if (functionName.equalsIgnoreCase(FunctionSet.STRFTIME)) {
             validateStrftime(args, columnNameMap);
-        } else if (functionName.equalsIgnoreCase("time_format")) {
+        } else if (functionName.equalsIgnoreCase(FunctionSet.TIME_FORMAT)) {
             validateTimeFormat(args, columnNameMap);
-        } else if (functionName.equalsIgnoreCase("default_value")) {
+        } else if (functionName.equalsIgnoreCase(FunctionSet.DEFAULT_VALUE)) {
             validateDefaultValue(args, mappingColumn);
-        } else if (functionName.equalsIgnoreCase("md5sum")) {
+        } else if (functionName.equalsIgnoreCase(FunctionSet.MD5_SUM)) {
             validateMd5sum(args, columnNameMap);
-        } else if (functionName.equalsIgnoreCase("replace_value")) {
+        } else if (functionName.equalsIgnoreCase(FunctionSet.REPLACE_VALUE)) {
             validateReplaceValue(args, mappingColumn);
         } else if (functionName.equalsIgnoreCase(FunctionSet.HLL_HASH)) {
             validateHllHash(args, columnNameMap);
-        } else if (functionName.equalsIgnoreCase("now")) {
+        } else if (functionName.equalsIgnoreCase(FunctionSet.NOW)) {
             validateNowFunction(mappingColumn);
-        } else if (functionName.equalsIgnoreCase("substitute")) {
+        } else if (functionName.equalsIgnoreCase(FunctionSet.SUBSTITUTE)) {
             validateSubstituteFunction(args, columnNameMap);
         } else {
             if (isHadoopLoad) {
@@ -595,7 +598,18 @@ public class DataDescription {
 
     public void analyze(String fullDbName) throws AnalysisException {
         checkLoadPriv(fullDbName);
+        analyzeTable(fullDbName);
         analyzeWithoutCheckPriv();
+    }
+
+    public void analyzeTable(String fullDbName) throws AnalysisException {
+        Table table = MetaUtils.getTable(ConnectContext.get(), new TableName(fullDbName, tableName));
+        if (table instanceof MaterializedView) {
+            throw new AnalysisException(String.format(
+                    "The data of '%s' cannot be inserted because '%s' is a materialized view," +
+                            "and the data of materialized view must be consistent with the base table.",
+                    tableName, tableName));
+        }
     }
 
     public void analyzeWithoutCheckPriv() throws AnalysisException {

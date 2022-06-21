@@ -5,16 +5,14 @@
 #include <memory>
 
 #include "column/json_column.h"
-#include "column/type_traits.h"
 #include "common/logging.h"
 #include "exec/vectorized/sorting/sorting.h"
 #include "runtime/current_thread.h"
 #include "runtime/primitive_type_infra.h"
 #include "storage/chunk_helper.h"
+#include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
-#include "storage/rowset/rowset_writer.h"
 #include "storage/schema.h"
-#include "util/orlp/pdqsort.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 
@@ -24,13 +22,21 @@ namespace starrocks::vectorized {
 static const string LOAD_OP_COLUMN = "__op";
 static const size_t kPrimaryKeyLimitSize = 128;
 
+void MemTable::_init_aggregator_if_needed() {
+    if (_keys_type != KeysType::DUP_KEYS) {
+        // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
+        // which is not suitable for obtaining Chunk from ColumnPool,
+        // otherwise it will take up a lot of memory and may not be released.
+        _aggregator = std::make_unique<ChunkAggregator>(&_vectorized_schema, 0, INT_MAX, 0);
+    }
+}
+
 MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs,
-                   RowsetWriter* rowset_writer, MemTracker* mem_tracker)
+                   MemTableSink* sink, MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
-          _tablet_schema(tablet_schema),
           _slot_descs(slot_descs),
           _keys_type(tablet_schema->keys_type()),
-          _rowset_writer(rowset_writer),
+          _sink(sink),
           _aggregator(nullptr),
           _mem_tracker(mem_tracker) {
     _vectorized_schema = std::move(ChunkHelper::convert_schema_to_format_v2(*tablet_schema));
@@ -42,33 +48,20 @@ MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const s
         _vectorized_schema.append(op_column);
         _has_op_slot = true;
     }
-
-    if (_keys_type != KeysType::DUP_KEYS) {
-        // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
-        // which is not suitable for obtaining Chunk from ColumnPool,
-        // otherwise it will take up a lot of memory and may not be released.
-        _aggregator = std::make_unique<ChunkAggregator>(&_vectorized_schema, 0, INT_MAX, 0);
-    }
+    _init_aggregator_if_needed();
 }
 
-MemTable::MemTable(int64_t tablet_id, const Schema& schema, RowsetWriter* rowset_writer, int64_t max_buffer_size,
+MemTable::MemTable(int64_t tablet_id, const Schema& schema, MemTableSink* sink, int64_t max_buffer_size,
                    MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
-          _vectorized_schema(std::move(schema)),
-          _tablet_schema(nullptr),
+          _vectorized_schema(schema),
           _slot_descs(nullptr),
           _keys_type(schema.keys_type()),
-          _rowset_writer(rowset_writer),
+          _sink(sink),
           _aggregator(nullptr),
-          _use_slot_desc(false),
           _max_buffer_size(max_buffer_size),
           _mem_tracker(mem_tracker) {
-    if (_keys_type != KeysType::DUP_KEYS) {
-        // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
-        // which is not suitable for obtaining Chunk from ColumnPool,
-        // otherwise it will take up a lot of memory and may not be released.
-        _aggregator = std::make_unique<ChunkAggregator>(&_vectorized_schema, 0, INT_MAX, 0);
-    }
+    _init_aggregator_if_needed();
 }
 
 MemTable::~MemTable() = default;
@@ -107,7 +100,8 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
         _chunk = ChunkHelper::new_chunk(_vectorized_schema, 0);
     }
 
-    if (_use_slot_desc) {
+    size_t cur_row_count = _chunk->num_rows();
+    if (_slot_descs != nullptr) {
         // For schema change, FE will construct a shadow column.
         // The shadow column is not exist in _vectorized_schema
         // So the chunk can only be accessed by the subscript
@@ -127,7 +121,7 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
 
     if (chunk.has_rows()) {
         _chunk_memory_usage += chunk.memory_usage() * size / chunk.num_rows();
-        _chunk_bytes_usage += chunk.bytes_usage() * size / chunk.num_rows();
+        _chunk_bytes_usage += _chunk->bytes_usage(cur_row_count, size);
     }
 
     // if memtable is full, push it to the flush executor,
@@ -161,7 +155,7 @@ Status MemTable::finalize() {
     {
         SCOPED_RAW_TIMER(&duration_ns);
 
-        if (_keys_type != DUP_KEYS) {
+        if (_keys_type != KeysType::DUP_KEYS) {
             if (_chunk->num_rows() > 0) {
                 // merge last undo merge
                 _merge();
@@ -219,13 +213,18 @@ Status MemTable::flush() {
     if (UNLIKELY(_result_chunk == nullptr)) {
         return Status::OK();
     }
+    std::string msg;
+    if (_result_chunk->capacity_limit_reached(&msg)) {
+        return Status::InternalError(
+                fmt::format("memtable of tablet {} reache the capacity limit, detail msg: {}", _tablet_id, msg));
+    }
     int64_t duration_ns = 0;
     {
         SCOPED_RAW_TIMER(&duration_ns);
         if (_deletes) {
-            RETURN_IF_ERROR(_rowset_writer->flush_chunk_with_deletes(*_result_chunk, *_deletes));
+            RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes));
         } else {
-            RETURN_IF_ERROR(_rowset_writer->flush_chunk(*_result_chunk));
+            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk));
         }
     }
     StarRocksMetrics::instance()->memtable_flush_total.increment(1);
@@ -276,7 +275,7 @@ void MemTable::_aggregate(bool is_final) {
 }
 
 void MemTable::_sort(bool is_final) {
-    SmallPermutation perm = create_small_permutation(_chunk->num_rows());
+    SmallPermutation perm = create_small_permutation(static_cast<uint32_t>(_chunk->num_rows()));
     std::swap(perm, _permutations);
     _sort_column_inc();
 

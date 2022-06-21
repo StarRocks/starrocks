@@ -8,6 +8,7 @@
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
+#include "fs/fs_util.h"
 #include "gtest/gtest.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptor_helper.h"
@@ -24,12 +25,10 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
-#include "storage/task/engine_publish_version_task.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
 #include "util/cpu_info.h"
 #include "util/disk_info.h"
-#include "util/file_utils.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
 #include "util/timezone_utils.h"
@@ -291,15 +290,13 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
     ASSERT_EQ(1, tablet_related_rs.size());
     TVersion version = 3;
     // publish version for txn
+    auto tablet = tablet_manager->get_tablet(12345);
     for (auto& tablet_rs : tablet_related_rs) {
-        const TabletInfo& tablet_info = tablet_rs.first;
         const RowsetSharedPtr& rowset = tablet_rs.second;
-        EnginePublishVersionTask publish_task(2222, 10, version, tablet_info, rowset);
-        auto st = publish_task.finish();
+        auto st = StorageEngine::instance()->txn_manager()->publish_txn(10, tablet, 2222, version, rowset);
         // success because the related transaction is GCed
         ASSERT_TRUE(st.ok());
     }
-    auto tablet = tablet_manager->get_tablet(12345);
     Version max_version = tablet->max_version();
     ASSERT_EQ(3, max_version.first);
 }
@@ -324,10 +321,10 @@ int main(int argc, char** argv) {
     CHECK(butil::CreateNewTempDirectory("tmp_ut_", &storage_root));
     std::string root_path_1 = storage_root.value() + "/migration_test_path_1";
     std::string root_path_2 = storage_root.value() + "/migration_test_path_2";
-    starrocks::FileUtils::remove_all(root_path_1);
-    starrocks::FileUtils::create_dir(root_path_1);
-    starrocks::FileUtils::remove_all(root_path_2);
-    starrocks::FileUtils::create_dir(root_path_2);
+    starrocks::fs::remove_all(root_path_1);
+    starrocks::fs::create_directories(root_path_1);
+    starrocks::fs::remove_all(root_path_2);
+    starrocks::fs::create_directories(root_path_2);
 
     starrocks::config::storage_root_path = root_path_1 + ";" + root_path_2;
 
@@ -360,8 +357,8 @@ int main(int argc, char** argv) {
     options.update_mem_tracker = update_mem_tracker.get();
     starrocks::Status s = starrocks::StorageEngine::open(options, &engine);
     if (!s.ok()) {
-        starrocks::FileUtils::remove_all(root_path_1);
-        starrocks::FileUtils::remove_all(root_path_2);
+        starrocks::fs::remove_all(root_path_1);
+        starrocks::fs::remove_all(root_path_2);
         fprintf(stderr, "storage engine open failed, path=%s, msg=%s\n", starrocks::config::storage_root_path.c_str(),
                 s.to_string().c_str());
         return -1;
@@ -374,7 +371,7 @@ int main(int argc, char** argv) {
 
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep();
-    starrocks::FileUtils::remove_all(storage_root.value());
+    starrocks::fs::remove_all(storage_root.value());
     starrocks::vectorized::TEST_clear_all_columns_this_thread();
     // delete engine
     engine->stop();

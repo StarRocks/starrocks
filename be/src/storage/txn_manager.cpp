@@ -21,15 +21,19 @@
 
 #include "txn_manager.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <new>
 #include <queue>
 #include <set>
 
+#include "common/tracer.h"
 #include "storage/data_dir.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta.h"
+#include "util/runtime_profile.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
@@ -45,30 +49,29 @@ TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size)
     _txn_map_locks = std::unique_ptr<std::shared_mutex[]>(new std::shared_mutex[_txn_map_shard_size]);
     _txn_tablet_maps = std::unique_ptr<txn_tablet_map_t[]>(new txn_tablet_map_t[_txn_map_shard_size]);
     _txn_partition_maps = std::unique_ptr<txn_partition_map_t[]>(new txn_partition_map_t[_txn_map_shard_size]);
-    _txn_mutex = std::unique_ptr<std::mutex[]>(new std::mutex[_txn_shard_size]);
 }
 
 Status TxnManager::prepare_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                                const PUniqueId& load_id) {
+    auto scoped =
+            trace::Scope(Tracer::Instance().start_trace_txn_tablet("txn_prepare", transaction_id, tablet->tablet_id()));
     return prepare_txn(partition_id, transaction_id, tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid(),
                        load_id);
 }
 
 Status TxnManager::commit_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                               const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
+    auto scoped =
+            trace::Scope(Tracer::Instance().start_trace_txn_tablet("txn_commit", transaction_id, tablet->tablet_id()));
     return commit_txn(tablet->data_dir()->get_meta(), partition_id, transaction_id, tablet->tablet_id(),
                       tablet->schema_hash(), tablet->tablet_uid(), load_id, rowset_ptr, is_recovery);
-}
-
-Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
-                               const Version& version) {
-    return publish_txn(tablet->data_dir()->get_meta(), partition_id, transaction_id, tablet->tablet_id(),
-                       tablet->schema_hash(), tablet->tablet_uid(), version);
 }
 
 // delete the txn from manager if it is not committed(not have a valid rowset)
 Status TxnManager::rollback_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                                 bool with_log) {
+    auto scoped = trace::Scope(
+            Tracer::Instance().start_trace_txn_tablet("txn_rollback", transaction_id, tablet->tablet_id()));
     return rollback_txn(partition_id, transaction_id, tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid(),
                         with_log);
 }
@@ -97,7 +100,7 @@ Status TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transac
             // check if load id is equal
             if (load_info.load_id.hi() == load_id.hi() && load_info.load_id.lo() == load_id.lo() &&
                 load_info.rowset != nullptr) {
-                LOG(WARNING) << "Transaction altready exists. tablet: " << tablet_info.tablet_id
+                LOG(WARNING) << "Transaction already exists. tablet: " << tablet_info.tablet_id
                              << ", partition_id: " << key.first << ", txn_id: " << key.second;
                 return Status::OK();
             }
@@ -122,8 +125,7 @@ Status TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transac
     _insert_txn_partition_map_unlocked(transaction_id, partition_id);
 
     VLOG(3) << "add transaction to engine successfully."
-            << "partition_id: " << key.first << ", transaction_id: " << key.second
-            << ", tablet: " << tablet_info.to_string();
+            << "partition_id: " << key.first << ", txn_id: " << key.second << ", tablet: " << tablet_info.to_string();
     return Status::OK();
 }
 
@@ -132,8 +134,7 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
                               const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
     if (partition_id < 1 || transaction_id < 1 || tablet_id < 1) {
         LOG(FATAL) << "Invalid commit req "
-                   << " partition_id=" << partition_id << " transaction_id=" << transaction_id
-                   << " tablet_id=" << tablet_id;
+                   << " partition_id=" << partition_id << " txn_id: " << transaction_id << " tablet_id=" << tablet_id;
     }
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
@@ -144,7 +145,6 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
         return Status::InternalError(msg);
     }
 
-    std::lock_guard txn_lock(_get_txn_lock(transaction_id));
     {
         // get tx
         std::shared_lock rdlock(_get_txn_map_lock(transaction_id));
@@ -207,116 +207,37 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
     return Status::OK();
 }
 
-// remove a txn from txn manager
-Status TxnManager::publish_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
-                               TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
-                               const Version& version) {
-    pair<int64_t, int64_t> key(partition_id, transaction_id);
-    TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
-    RowsetSharedPtr rowset_ptr = nullptr;
-    std::lock_guard txn_lock(_get_txn_lock(transaction_id));
-    {
-        std::shared_lock rlock(_get_txn_map_lock(transaction_id));
-        txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
-        auto it = txn_tablet_map.find(key);
-        if (it != txn_tablet_map.end()) {
-            auto load_itr = it->second.find(tablet_info);
-            if (load_itr != it->second.end()) {
-                // found load for txn,tablet
-                // case 1: user commit rowset, then the load id must be equal
-                TabletTxnInfo& load_info = load_itr->second;
-                rowset_ptr = load_info.rowset;
-            }
-        }
-    }
-    // save meta need access disk, it maybe very slow, so that it is not in global txn lock
-    // it is under a single txn lock
-    if (rowset_ptr != nullptr) {
-        // TODO(ygl): rowset is already set version here, memory is changed, if save failed
-        // it maybe a fatal error
-        rowset_ptr->make_visible(version);
-        auto& rowset_meta_pb = rowset_ptr->rowset_meta()->get_meta_pb();
-        Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb);
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to save committed rowset. "
-                         << "tablet_id: " << tablet_id << ", txn_id: " << transaction_id
-                         << ", rowset_id: " << rowset_ptr->rowset_id();
-            return Status::InternalError(
-                    fmt::format("Fail to save committed rowset. tablet_id: {}, txn_id: {}", tablet_id, key.second));
-        }
-    } else {
-        return Status::NotFound(fmt::format("Not found txn. tablet_id: {}, txn_id:{} ", tablet_id, transaction_id));
-    }
-    {
-        std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
-        txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
-        auto it = txn_tablet_map.find(key);
-        if (it != txn_tablet_map.end()) {
-            it->second.erase(tablet_info);
-            VLOG(1) << "publish txn successfully."
-                    << " partition_id: " << key.first << ", txn_id: " << key.second
-                    << ", tablet: " << tablet_info.to_string() << ", rowsetid: " << rowset_ptr->rowset_id()
-                    << ", version: " << version.first << "," << version.second;
-            if (it->second.empty()) {
-                txn_tablet_map.erase(it);
-                _clear_txn_partition_map_unlocked(transaction_id, partition_id);
-            }
-        }
-        return Status::OK();
-    }
-}
-
-Status TxnManager::publish_txn2(TTransactionId transaction_id, TPartitionId partition_id, const TabletSharedPtr& tablet,
-                                int64_t version) {
-    pair<int64_t, int64_t> key(partition_id, transaction_id);
-    TabletUid tablet_uid = tablet->tablet_uid();
-    TabletInfo tablet_info(tablet->tablet_id(), tablet->schema_hash(), tablet_uid);
-    RowsetSharedPtr rowset_ptr = nullptr;
-    std::lock_guard txn_lock(_get_txn_lock(transaction_id));
-    {
-        std::shared_lock rlock(_get_txn_map_lock(transaction_id));
-        txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
-        auto it = txn_tablet_map.find(key);
-        if (it != txn_tablet_map.end()) {
-            auto load_itr = it->second.find(tablet_info);
-            if (load_itr != it->second.end()) {
-                // found load for txn,tablet
-                // case 1: user commit rowset, then the load id must be equal
-                TabletTxnInfo& load_info = load_itr->second;
-                rowset_ptr = load_info.rowset;
-            }
-        }
-    }
-    // save meta need access disk, it maybe very slow, so that it is not in global txn lock
-    // it is under a single txn lock
-    if (rowset_ptr != nullptr) {
+Status TxnManager::publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
+                               int64_t version, const RowsetSharedPtr& rowset) {
+    if (tablet->updates() != nullptr) {
         StarRocksMetrics::instance()->update_rowset_commit_request_total.increment(1);
-        auto st = tablet->rowset_commit(version, rowset_ptr);
+        auto st = tablet->rowset_commit(version, rowset);
         if (!st.ok()) {
             StarRocksMetrics::instance()->update_rowset_commit_request_failed.increment(1);
             return st;
         }
     } else {
-        return Status::NotFound(
-                fmt::format("Not found txn. tablet_id: {}, txn_id:{} ", tablet->tablet_id(), transaction_id));
-    }
-    {
-        std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
-        txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
-        auto it = txn_tablet_map.find(key);
-        if (it != txn_tablet_map.end()) {
-            it->second.erase(tablet_info);
-            LOG(INFO) << "publish txn successfully."
-                      << " partition_id: " << key.first << ", txn_id: " << key.second
-                      << ", tablet: " << tablet->tablet_id() << ", rowsetid: " << rowset_ptr->rowset_id()
-                      << ", version: " << version << " (primary key)";
-            if (it->second.empty()) {
-                txn_tablet_map.erase(it);
-                _clear_txn_partition_map_unlocked(transaction_id, partition_id);
-            }
+        auto st = tablet->add_inc_rowset(rowset, version);
+        if (!st.ok() && !st.is_already_exist()) {
+            // TODO: rollback saved rowset if error?
+            LOG(WARNING) << "fail to add visible rowset to tablet. rowset_id=" << rowset->rowset_id()
+                         << ", tablet_id=" << tablet->tablet_id() << ", txn_id=" << transaction_id << ", res=" << st;
+            return st;
         }
-        return Status::OK();
     }
+    std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
+    txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
+    pair<int64_t, int64_t> key(partition_id, transaction_id);
+    TabletInfo tablet_info(tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid());
+    auto it = txn_tablet_map.find(key);
+    if (it != txn_tablet_map.end()) {
+        it->second.erase(tablet_info);
+        if (it->second.empty()) {
+            txn_tablet_map.erase(it);
+            _clear_txn_partition_map_unlocked(transaction_id, partition_id);
+        }
+    }
+    return Status::OK();
 }
 
 Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr>& tablets) {
@@ -343,6 +264,19 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
     StarRocksMetrics::instance()->txn_persist_total.increment(1);
     StarRocksMetrics::instance()->txn_persist_duration_us.increment(duration_ns / 1000);
     return Status::OK();
+}
+
+void TxnManager::flush_dirs(std::unordered_set<DataDir*>& affected_dirs) {
+    int64_t duration_ns = 0;
+    SCOPED_RAW_TIMER(&duration_ns);
+    for (auto dir : affected_dirs) {
+        auto st = dir->get_meta()->flush();
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to flush tablet meta, dir:" << dir->path() << " res:" << st;
+        }
+    }
+    StarRocksMetrics::instance()->txn_persist_total.increment(1);
+    StarRocksMetrics::instance()->txn_persist_duration_us.increment(duration_ns / 1000);
 }
 
 // txn could be rollbacked if it does not have related rowset
@@ -372,7 +306,7 @@ Status TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId transa
         it->second.erase(tablet_info);
         if (with_log) {
             LOG(INFO) << "rollback transaction from engine successfully."
-                      << " partition_id: " << key.first << ", transaction_id: " << key.second
+                      << " partition_id: " << key.first << ", txn_id: " << key.second
                       << ", tablet: " << tablet_info.to_string();
         }
         if (it->second.empty()) {
@@ -393,7 +327,7 @@ Status TxnManager::delete_txn(KVStore* meta, TPartitionId partition_id, TTransac
     txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
     auto it = txn_tablet_map.find(key);
     if (it == txn_tablet_map.end()) {
-        return Status::NotFound(fmt::format("Not found txn. tablet_id: {}, txn_id:{}", tablet_id, transaction_id));
+        return Status::NotFound(fmt::format("Not found txn. tablet_id: {}, txn_id: {}", tablet_id, transaction_id));
     }
     auto load_itr = it->second.find(tablet_info);
     if (load_itr != it->second.end()) {
@@ -415,7 +349,7 @@ Status TxnManager::delete_txn(KVStore* meta, TPartitionId partition_id, TTransac
                 StorageEngine::instance()->add_unused_rowset(load_info.rowset);
 #endif
                 VLOG(3) << "delete transaction from engine successfully."
-                        << " partition_id: " << key.first << ", transaction_id: " << key.second
+                        << " partition_id: " << key.first << ", txn_id: " << key.second
                         << ", tablet: " << tablet_info.to_string() << ", rowset: "
                         << (load_info.rowset != nullptr ? load_info.rowset->rowset_id().to_string() : "0");
             }
@@ -445,7 +379,7 @@ void TxnManager::get_tablet_related_txns(TTabletId tablet_id, SchemaHash schema_
                 *partition_id = it.first.first;
                 transaction_ids->insert(it.first.second);
                 VLOG(3) << "find transaction on tablet."
-                        << "partition_id: " << it.first.first << ", transaction_id: " << it.first.second
+                        << "partition_id: " << it.first.first << ", txn_id: " << it.first.second
                         << ", tablet: " << tablet_info.to_string();
             }
         }
@@ -471,7 +405,7 @@ void TxnManager::force_rollback_tablet_related_txns(KVStore* meta, TTabletId tab
                     (void)RowsetMetaManager::remove(meta, tablet_uid, load_info.rowset->rowset_id());
                 }
                 LOG(INFO) << "remove tablet related txn."
-                          << " partition_id: " << it->first.first << ", transaction_id: " << it->first.second
+                          << " partition_id: " << it->first.first << ", txn_id: " << it->first.second
                           << ", tablet: " << tablet_info.to_string() << ", rowset: "
                           << (load_info.rowset != nullptr ? load_info.rowset->rowset_id().to_string() : "0");
                 it->second.erase(tablet_info);
@@ -495,7 +429,7 @@ void TxnManager::get_txn_related_tablets(const TTransactionId transaction_id, TP
     auto it = txn_tablet_map.find(key);
     if (it == txn_tablet_map.end()) {
         VLOG(3) << "could not find tablet for"
-                << " partition_id=" << partition_id << ", transaction_id=" << transaction_id;
+                << " partition_id=" << partition_id << ", txn_id: " << transaction_id;
         return;
     }
     std::map<TabletInfo, TabletTxnInfo>& load_info_map = it->second;
@@ -545,7 +479,7 @@ void TxnManager::build_expire_txn_map(std::map<TabletInfo, std::vector<int64_t>>
                     (*expire_txn_map)[t_map.first].push_back(txn_id);
                     if (VLOG_IS_ON(3)) {
                         VLOG(3) << "find expired txn."
-                                << " tablet=" << t_map.first.to_string() << " transaction_id=" << txn_id
+                                << " tablet=" << t_map.first.to_string() << " txn_id: " << txn_id
                                 << " exist_sec=" << diff;
                     }
                 }

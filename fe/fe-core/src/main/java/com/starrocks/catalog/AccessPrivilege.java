@@ -1,7 +1,3 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/AccessPrivilege.java
-
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -39,7 +35,8 @@ public enum AccessPrivilege {
     CREATE_PRIV(9, "Privilege for createing database or table"),
     DROP_PRIV(10, "Privilege for dropping database or table"),
     ADMIN_PRIV(11, "All privileges except NODE_PRIV"),
-    USAGE_PRIV(12, "Privileage for use resource");
+    USAGE_PRIV(12, "Privileage for use resource"),
+    IMPERSONATE_PRIV(13, "Privilege for impersonate as other user");
 
     private int flag;
     private String desc;
@@ -77,6 +74,8 @@ public enum AccessPrivilege {
                 return PrivBitSet.of(Privilege.ADMIN_PRIV);
             case 12:
                 return PrivBitSet.of(Privilege.USAGE_PRIV);
+            case 13:
+                return PrivBitSet.of(Privilege.IMPERSONATE_PRIV);
             default:
                 return null;
         }

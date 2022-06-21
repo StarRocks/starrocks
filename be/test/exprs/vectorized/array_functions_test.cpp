@@ -673,6 +673,78 @@ TEST_F(ArrayFunctionsTest, array_contains_nullable_array) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_contains_all) {
+    // array_contains_all(["a", "b", "c"], ["c"])         -> 1
+    // array_contains_all(NULL, ["c"])                    -> NULL
+    // array_contains_all(["a", "b", "c"], NULL)          -> NULL
+    // array_contains_all(["a", "b", NULL], NULL)         -> NULL
+    // array_contains_all(["a", "b", NULL], ["a", NULL])  -> 1
+    // array_contains_all(NULL, ["a", NULL])              -> NULL
+    // array_contains_all(["a", "b", NULL], [NULL])       -> 1
+    // array_contains_all(["a", "b", "c"], ["d"])         -> 0
+    // array_contains_all(["a", "b", "c"], ["a", "d"])    -> 0
+    // array_contains_all(["a", "b", "c"], ["a", "c"])    -> 1
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        array->append_datum(DatumArray{"a", "b", "c"});
+        array->append_datum(Datum());
+        array->append_datum(DatumArray{"a", "b", "c"});
+        array->append_datum(DatumArray{"a", "b", Datum()});
+        array->append_datum(DatumArray{"a", "b", Datum()});
+        array->append_datum(Datum());
+        array->append_datum(DatumArray{"a", "b", Datum()});
+        array->append_datum(DatumArray{"a", "b", "c"});
+        array->append_datum(DatumArray{"a", "b", "c"});
+        array->append_datum(DatumArray{"a", "b", "c"});
+
+        auto target = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        target->append_datum(DatumArray{"c"});
+        target->append_datum(DatumArray{"c"});
+        target->append_datum(Datum());
+        target->append_datum(Datum());
+        target->append_datum(DatumArray{"a", Datum()});
+        target->append_datum(DatumArray{"a", Datum()});
+        target->append_datum(DatumArray{Datum()});
+        target->append_datum(DatumArray{"d"});
+        target->append_datum(DatumArray{"a", "d"});
+        target->append_datum(DatumArray{"a", "c"});
+
+        auto result = ArrayFunctions::array_contains_all(nullptr, {array, target});
+        EXPECT_EQ(10, result->size());
+        EXPECT_EQ(1, result->get(0).get_int8());
+        EXPECT_TRUE(result->get(1).is_null());
+        EXPECT_TRUE(result->get(2).is_null());
+        EXPECT_TRUE(result->get(3).is_null());
+        EXPECT_EQ(1, result->get(4).get_int8());
+        EXPECT_TRUE(result->get(5).is_null());
+        EXPECT_EQ(1, result->get(6).get_int8());
+        EXPECT_EQ(0, result->get(7).get_int8());
+        EXPECT_EQ(0, result->get(8).get_int8());
+        EXPECT_EQ(1, result->get(9).get_int8());
+    }
+    // array_contains_all([["a"], ["b"]], [["c"]])
+    // array_contains_all(NULL, [["c"]])
+    // array_contains_all([["a", "b"], ["c"], NULL], [["a", "b"], NULL])
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
+        array->append_datum(DatumArray{DatumArray{"a"}, DatumArray{"b"}});
+        array->append_datum(Datum());
+        array->append_datum(DatumArray{DatumArray{"a", "b"}, DatumArray{"c"}, Datum()});
+
+        auto target = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
+        target->append_datum(DatumArray{DatumArray{"c"}});
+        target->append_datum(DatumArray{DatumArray{"c"}});
+        target->append_datum(DatumArray{DatumArray{"a", "b"}, Datum()});
+
+        auto result = ArrayFunctions::array_contains_all(nullptr, {array, target});
+        EXPECT_EQ(3, result->size());
+        EXPECT_EQ(0, result->get(0).get_int8());
+        EXPECT_TRUE(result->get(1).is_null());
+        EXPECT_EQ(1, result->get(2).get_int8());
+    }
+}
+
+// NOLINTNEXTLINE
 TEST_F(ArrayFunctionsTest, array_position_empty_array) {
     // array_position([], 1) : 0
     {

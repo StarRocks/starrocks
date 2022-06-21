@@ -28,7 +28,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils.HiddenAnnotationExclusionStrategy;
-import com.starrocks.persist.gson.GsonUtils.PostProcessTypeAdapterFactory;
+import com.starrocks.persist.gson.GsonUtils.ProcessHookTypeAdapterFactory;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -179,7 +179,7 @@ public class GsonDerivedClassSerializationTest {
             .enableComplexMapKeySerialization()
             // register the RuntimeTypeAdapterFactory
             .registerTypeAdapterFactory(runtimeTypeAdapterFactory)
-            .registerTypeAdapterFactory(new PostProcessTypeAdapterFactory())
+            .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactory())
             .create();
 
     @Test

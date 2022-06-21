@@ -1,7 +1,3 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/test/java/org/apache/doris/analysis/LiteralExprCompareTest.java
-
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
@@ -146,7 +142,8 @@ public class LiteralExprCompareTest {
         Assert.assertTrue(0 == decimal1.compareLiteral(decimal1));
     }
 
-    public void floatAndDoubleExpr() {
+    @Test
+    public void floatAndDoubleExpr() throws AnalysisException {
         LiteralExpr float1 = new FloatLiteral(1.12345, ScalarType.FLOAT);
         LiteralExpr float2 = new FloatLiteral(1.12345, ScalarType.FLOAT);
         LiteralExpr float3 = new FloatLiteral(1.12346, ScalarType.FLOAT);

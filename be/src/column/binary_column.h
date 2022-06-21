@@ -5,6 +5,7 @@
 #include "column/bytes.h"
 #include "column/column.h"
 #include "column/datum.h"
+#include "common/statusor.h"
 #include "util/slice.h"
 
 namespace starrocks::vectorized {
@@ -181,6 +182,8 @@ public:
         _slices_cache = false;
     }
 
+    void fill_default(const Filter& filter) override;
+
     Status update_rows(const Column& src, const uint32_t* indexes) override;
 
     uint32_t max_one_element_serialize_size() const override;
@@ -242,6 +245,8 @@ public:
 
     const Bytes& get_bytes() const { return _bytes; }
 
+    const uint8_t* continuous_data() const override { return reinterpret_cast<const uint8_t*>(_bytes.data()); }
+
     Offsets& get_offset() { return _offsets; }
     const Offsets& get_offset() const { return _offsets; }
 
@@ -288,20 +293,7 @@ public:
         return ss.str();
     }
 
-    bool reach_capacity_limit() const override {
-        static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
-        if constexpr (std::is_same_v<T, uint32_t>) {
-            // The size limit of a single element is 2^32.
-            // The size limit of all elements is 2^32.
-            // The number limit of elements is 2^32.
-            return _bytes.size() >= Column::MAX_CAPACITY_LIMIT || _offsets.size() > Column::MAX_CAPACITY_LIMIT;
-        } else {
-            // The size limit of a single element is 2^32.
-            // The size limit of all elements is 2^64.
-            // The number limit of elements is 2^32.
-            return _bytes.size() >= Column::MAX_LARGE_CAPACITY_LIMIT || _offsets.size() > Column::MAX_CAPACITY_LIMIT;
-        }
-    }
+    bool capacity_limit_reached(std::string* msg = nullptr) const override;
 
 private:
     void _build_slices() const;

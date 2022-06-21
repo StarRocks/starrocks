@@ -21,6 +21,7 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
@@ -42,43 +43,49 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable {
     protected static final String ANY_USER = "%";
 
     // host is not case sensitive
-    protected PatternMatcher hostPattern;
+    protected transient PatternMatcher hostPattern;
+    @SerializedName("origHost")
     protected String origHost;
     protected boolean isAnyHost = false;
     // user name is case sensitive
-    protected PatternMatcher userPattern;
+    protected transient PatternMatcher userPattern;
+    @SerializedName("origUser")
     protected String origUser;
     protected boolean isAnyUser = false;
+    @SerializedName("privSet")
     protected PrivBitSet privSet;
     // true if this entry is set by domain resolver
+    @SerializedName("isSetByDomainResolver")
     protected boolean isSetByDomainResolver = false;
     // true if origHost is a domain name.
     // For global priv entry, if isDomain is true, it should only be used for priv checking, not password checking
+    @SerializedName("isDomain")
     protected boolean isDomain = false;
 
     // isClassNameWrote to guarantee the class name can only be written once when persisting.
     // see PrivEntry.read() for more details.
     protected boolean isClassNameWrote = false;
 
-    private UserIdentity userIdentity;
+    private transient UserIdentity userIdentity;
 
-    protected PrivEntry() {
+    protected PrivEntry() {}
+
+    protected PrivEntry(String origHost, String origUser, boolean isDomain, PrivBitSet privSet) {
+        this.origHost = origHost;
+        this.origUser = origUser;
+        this.isDomain = isDomain;
+        this.privSet = privSet;
     }
 
-    protected PrivEntry(PatternMatcher hostPattern, String origHost, PatternMatcher userPattern, String origUser,
-                        boolean isDomain, PrivBitSet privSet) {
-        this.hostPattern = hostPattern;
-        this.origHost = origHost;
+    protected void analyse() throws AnalysisException {
         if (origHost.equals(ANY_HOST)) {
             isAnyHost = true;
         }
-        this.userPattern = userPattern;
-        this.origUser = origUser;
+        this.hostPattern = PatternMatcher.createMysqlPattern(origHost, CaseSensibility.HOST.getCaseSensibility());;
         if (origUser.equals(ANY_USER)) {
             isAnyUser = true;
         }
-        this.isDomain = isDomain;
-        this.privSet = privSet;
+        this.userPattern = PatternMatcher.createMysqlPattern(origUser, CaseSensibility.USER.getCaseSensibility());
         if (isDomain) {
             userIdentity = UserIdentity.createAnalyzedUserIdentWithDomain(origUser, origHost);
         } else {
@@ -220,37 +227,23 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable {
 
     public void readFields(DataInput in) throws IOException {
         origHost = Text.readString(in);
-        try {
-            hostPattern = PatternMatcher.createMysqlPattern(origHost, CaseSensibility.HOST.getCaseSensibility());
-        } catch (AnalysisException e) {
-            throw new IOException(e);
-        }
-        isAnyHost = origHost.equals(ANY_HOST);
-
         origUser = Text.readString(in);
-        try {
-            userPattern = PatternMatcher.createMysqlPattern(origUser, CaseSensibility.USER.getCaseSensibility());
-        } catch (AnalysisException e) {
-            throw new IOException(e);
-        }
-        isAnyUser = origUser.equals(ANY_USER);
-
         privSet = PrivBitSet.read(in);
-
         isSetByDomainResolver = in.readBoolean();
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_69) {
             isDomain = in.readBoolean();
-        }
-
-        if (isDomain) {
-            userIdentity = UserIdentity.createAnalyzedUserIdentWithDomain(origUser, origHost);
-        } else {
-            userIdentity = UserIdentity.createAnalyzedUserIdentWithIp(origUser, origHost);
         }
     }
 
     @Override
     public int compareTo(PrivEntry o) {
+        throw new NotImplementedException();
+    }
+
+    /**
+     * used for `SHOW GRANTS FOR`
+     */
+    public String toGrantSQL() {
         throw new NotImplementedException();
     }
 }

@@ -10,6 +10,7 @@
 #include "column/datum_tuple.h"
 #include "common/logging.h"
 #include "fs/fs_memory.h"
+#include "fs/fs_util.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
@@ -25,7 +26,6 @@
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 
 namespace starrocks {
 
@@ -46,7 +46,7 @@ protected:
     }
 
     void TearDown() override {
-        ASSERT_TRUE(FileUtils::remove_all(kSegmentDir).ok());
+        ASSERT_TRUE(fs::remove_all(kSegmentDir).ok());
         StoragePageCache::release_global_cache();
     }
 
@@ -91,10 +91,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     for (auto i = 0; i < num_rows % chunk_size; ++i) {
         partial_chunk->reset();
         auto& cols = partial_chunk->columns();
-        for (auto j = 0; j < chunk_size; ++j) {
-            if (i * chunk_size + j >= num_rows) {
-                break;
-            }
+        for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
             cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
             cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
             cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 3)));

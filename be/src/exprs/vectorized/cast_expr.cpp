@@ -19,9 +19,11 @@
 #include "exprs/vectorized/unary_function.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/datetime_value.h"
+#include "runtime/large_int_value.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
-#include "storage/hll.h"
+#include "types/hll.h"
 #include "util/date_func.h"
 #include "util/json.h"
 
@@ -141,8 +143,8 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
 
         JsonValue* json = viewer.value(row);
         if constexpr (pt_is_arithmetic<ToType>) {
-            constexpr auto min = RunTimeTypeLimits<ToType>::min_value();
-            constexpr auto max = RunTimeTypeLimits<ToType>::max_value();
+            [[maybe_unused]] constexpr auto min = RunTimeTypeLimits<ToType>::min_value();
+            [[maybe_unused]] constexpr auto max = RunTimeTypeLimits<ToType>::max_value();
             RunTimeCppType<ToType> cpp_value{};
             bool ok = true;
             if constexpr (pt_is_integer<ToType>) {

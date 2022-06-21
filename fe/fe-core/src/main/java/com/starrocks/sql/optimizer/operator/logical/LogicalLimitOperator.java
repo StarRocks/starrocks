@@ -9,7 +9,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
 import java.util.ArrayList;
-import java.util.Objects;
 
 public class LogicalLimitOperator extends LogicalOperator {
     public enum Phase {
@@ -38,11 +37,19 @@ public class LogicalLimitOperator extends LogicalOperator {
     }
 
     public static LogicalLimitOperator global(long limit) {
-        return new LogicalLimitOperator(limit, DEFAULT_OFFSET, Phase.GLOBAL);
+        return global(limit, DEFAULT_OFFSET);
+    }
+
+    public static LogicalLimitOperator global(long limit, long offset) {
+        return new LogicalLimitOperator(limit, offset, Phase.GLOBAL);
     }
 
     public static LogicalLimitOperator local(long limit) {
-        return new LogicalLimitOperator(limit, DEFAULT_OFFSET, Phase.LOCAL);
+        return local(limit, DEFAULT_OFFSET);
+    }
+
+    public static LogicalLimitOperator local(long limit, long offset) {
+        return new LogicalLimitOperator(limit, offset, Phase.LOCAL);
     }
 
     private LogicalLimitOperator(Builder builder) {
@@ -101,7 +108,7 @@ public class LogicalLimitOperator extends LogicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), offset, phase);
+        return System.identityHashCode(this);
     }
 
     public static class Builder extends LogicalOperator.Builder<LogicalLimitOperator, LogicalLimitOperator.Builder> {

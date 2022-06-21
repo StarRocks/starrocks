@@ -48,6 +48,8 @@ vectorized_functions = [
     [10120, "floor", "BIGINT", ["DOUBLE"], "MathFunctions::floor"],
     [10121, "dfloor", "BIGINT", ["DOUBLE"], "MathFunctions::floor"],
 
+    [10125, "dround", "DECIMAL128", ["DECIMAL128"], "MathFunctions::round_decimal128"],
+    [10126, "dround", "DECIMAL128", ["DECIMAL128", "INT"], "MathFunctions::round_up_to_decimal128"],
     [10127, "round", "DECIMAL128", ["DECIMAL128"], "MathFunctions::round_decimal128"],
     [10128, "round", "DECIMAL128", ["DECIMAL128", "INT"], "MathFunctions::round_up_to_decimal128"],
     [10129, "truncate", "DECIMAL128", ["DECIMAL128", "INT"], "MathFunctions::truncate_decimal128"],
@@ -277,6 +279,8 @@ vectorized_functions = [
     [50061, 'day', 'INT', ['DATETIME'], 'TimeFunctions::day'],
     [50062, 'dayofyear', 'INT', ['DATETIME'], 'TimeFunctions::day_of_year'],
     [50063, 'weekofyear', 'INT', ['DATETIME'], 'TimeFunctions::week_of_year'],
+    [50064, 'week', 'INT', ['DATETIME'], 'TimeFunctions::week_of_year_with_default_mode'],
+    [50067, 'week', 'INT', ['DATETIME', 'INT'], 'TimeFunctions::week_of_year_with_mode'],
 
     [50069, 'hour', 'TINYINT', ['DATETIME'], 'TimeFunctions::hourV2'],
     [50070, 'hour', 'INT', ['DATETIME'], 'TimeFunctions::hour'],
@@ -351,7 +355,7 @@ vectorized_functions = [
     [50340, 'date_trunc', 'DATETIME', ['VARCHAR', 'DATETIME'], 'TimeFunctions::datetime_trunc', 'TimeFunctions::datetime_trunc_prepare', 'TimeFunctions::datetime_trunc_close'],
     [50350, 'date_trunc', 'DATE', ['VARCHAR', 'DATE'], 'TimeFunctions::date_trunc', 'TimeFunctions::date_trunc_prepare', 'TimeFunctions::date_trunc_close'],
     [50360, 'timestamp', 'DATETIME', ['DATETIME'], 'TimeFunctions::timestamp'],
-    [50370, 'date_floor', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR'], 'TimeFunctions::datetime_floor', 'TimeFunctions::datetime_floor_prepare', 'TimeFunctions::datetime_floor_close'],
+    [50370, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
@@ -470,9 +474,10 @@ vectorized_functions = [
     [90300, 'bitmap_xor', 'BITMAP', ['BITMAP', 'BITMAP'], 'BitmapFunctions::bitmap_xor', False],
     [90400, 'bitmap_remove', 'BITMAP', ['BITMAP', 'BIGINT'], 'BitmapFunctions::bitmap_remove', False],
     [90500, 'bitmap_to_array', 'ARRAY_BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_to_array', False],
-    [90600, 'bitmap_max', 'BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_max', False],
-    [90700, 'bitmap_min', 'BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_min', False],
+    [90600, 'bitmap_max', 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_max', False],
+    [90700, 'bitmap_min', 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_min', False],
     [90800, 'base64_to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::base64_to_bitmap', False],
+    [90900, 'array_to_bitmap', 'BITMAP', ['ARRAY_BIGINT'], 'BitmapFunctions::array_to_bitmap', False],
 
     # hash function
     [100010, 'murmur_hash3_32', 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
@@ -487,11 +492,11 @@ vectorized_functions = [
 
     # json string function
     [110000, "get_json_int", "INT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_int",
-     "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close", False],
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110001, "get_json_double", "DOUBLE", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_double",
-     "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close", False],
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110002, "get_json_string", "VARCHAR", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_string",
-     "JsonFunctions::json_path_prepare", "JsonFunctions::json_path_close", False],
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
 
     # json type function
     [110003, "parse_json", "JSON", ["VARCHAR"], "JsonFunctions::parse_json", False],
@@ -730,4 +735,7 @@ vectorized_functions = [
 
     [150270, 'array_cum_sum', 'ARRAY_BIGINT', ['ARRAY_BIGINT'], 'ArrayFunctions::array_cum_sum_bigint'],
     [150271, 'array_cum_sum', 'ARRAY_DOUBLE', ['ARRAY_DOUBLE'], 'ArrayFunctions::array_cum_sum_double'],
+
+    # reserve 150281
+    [150282, 'array_contains_all', 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'], 'ArrayFunctions::array_contains_all'],
 ]

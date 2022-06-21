@@ -33,6 +33,11 @@ public abstract class Operator {
         this.projection = projection;
     }
 
+    @SuppressWarnings("unchecked")
+    public <T extends Operator> T cast() {
+        return (T) this;
+    }
+
     public boolean isLogical() {
         return false;
     }

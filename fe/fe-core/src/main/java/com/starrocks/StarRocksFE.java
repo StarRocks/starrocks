@@ -30,6 +30,9 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.JdkUtils;
 import com.starrocks.http.HttpServer;
+import com.starrocks.journal.Journal;
+import com.starrocks.journal.bdbje.BDBEnvironment;
+import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.BDBTool;
 import com.starrocks.journal.bdbje.BDBToolOptions;
 import com.starrocks.qe.QeService;
@@ -97,14 +100,19 @@ public class StarRocksFE {
             // check command line options
             checkCommandLineOptions(cmdLineOpts);
 
+            // check meta dir
+            checkMetaDir();
+
             LOG.info("StarRocks FE starting...");
 
-            FrontendOptions.init();
+            FrontendOptions.init(args);
             ExecuteEnv.setup();
 
             // init globalStateMgr and wait it be ready
             GlobalStateMgr.getCurrentState().initialize(args);
             GlobalStateMgr.getCurrentState().waitForReady();
+
+            FrontendOptions.saveStartType();
 
             // init and start:
             // 1. QeService for MySQL Server
@@ -122,12 +130,55 @@ public class StarRocksFE {
 
             ThreadPoolManager.registerAllThreadPoolMetric();
 
+            addShutdownHook();
+
             while (true) {
                 Thread.sleep(2000);
             }
         } catch (Throwable e) {
             LOG.error("StarRocksFE start failed", e);
             e.printStackTrace();
+        }
+    }
+
+    private static void checkMetaDir() {
+
+        // check meta dir
+        //   if metaDir is the default config: StarRocksFE.STARROCKS_HOME_DIR + "/meta",
+        //   we should check whether both the new default dir (STARROCKS_HOME_DIR + "/meta")
+        //   and the old default dir (DORIS_HOME_DIR + "/doris-meta") are present. If both are present,
+        //   we need to let users keep only one to avoid starting from outdated metadata.
+        String oldDefaultMetaDir = System.getenv("DORIS_HOME") + "/doris-meta";
+        String newDefaultMetaDir = StarRocksFE.STARROCKS_HOME_DIR + "/meta";
+        String metaDir = Config.meta_dir;
+        if (metaDir.equals(newDefaultMetaDir)) {
+            File oldMeta = new File(oldDefaultMetaDir);
+            File newMeta = new File(newDefaultMetaDir);
+            if (oldMeta.exists() && newMeta.exists()) {
+                LOG.error("New default meta dir: {} and Old default meta dir: {} are both present. " +
+                                "Please make sure {} has the latest data, and remove the another one.",
+                        newDefaultMetaDir, oldDefaultMetaDir, newDefaultMetaDir);
+                System.exit(-1);
+            }
+        }
+
+        File meta = new File(metaDir);
+        if (!meta.exists()) {
+            // If metaDir is not the default config, it means the user has specified the other directory
+            // We should not use the oldDefaultMetaDir.
+            // Just exit in this case
+            if (!metaDir.equals(newDefaultMetaDir)) {
+                LOG.error("meta dir {} dose not exist, will exit", metaDir);
+                System.exit(-1);
+            }
+            File oldMeta = new File(oldDefaultMetaDir);
+            if (oldMeta.exists()) {
+                // For backward compatible
+                Config.meta_dir = oldDefaultMetaDir;
+            } else {
+                LOG.error("meta dir {} does not exist, will exit", meta.getAbsolutePath());
+                System.exit(-1);
+            }
         }
     }
 
@@ -158,6 +209,7 @@ public class StarRocksFE {
     private static CommandLineOptions parseArgs(String[] args) {
         CommandLineParser commandLineParser = new BasicParser();
         Options options = new Options();
+        options.addOption("ht", "host_type", false, "Specify fe start use ip or fqdn");
         options.addOption("v", "version", false, "Print the version of StarRocks Frontend");
         options.addOption("h", "helper", true, "Specify the helper node when joining a bdb je replication group");
         options.addOption("b", "bdb", false, "Run bdbje debug tools");
@@ -301,5 +353,39 @@ public class StarRocksFE {
         }
 
         return false;
+    }
+
+    // NOTE: To avoid dead lock
+    //      1. never call System.exit in shutdownHook
+    //      2. shutdownHook cannot have lock conflict with the function calling System.exit
+    private static void addShutdownHook() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            LOG.info("start to execute shutdown hook");
+            try {
+                Thread t = new Thread(() -> {
+                    try {
+                        Journal journal = GlobalStateMgr.getCurrentState().getEditLog().getJournal();
+                        if (journal instanceof BDBJEJournal) {
+                            BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
+                            if (bdbEnvironment != null) {
+                                bdbEnvironment.flushVLSNMapping();
+                            }
+                        }
+                    } catch (Throwable e) {
+                        LOG.warn("flush vlsn mapping failed", e);
+                    }
+                });
+
+                t.start();
+
+                // it is necessary to set shutdown timeout,
+                // because in addition to kill by user, System.exit(-1) will trigger the shutdown hook too,
+                // if no timeout and shutdown hook blocked indefinitely, Fe will fall into a catastrophic state.
+                t.join(30000);
+            } catch (Throwable e) {
+                LOG.warn("shut down hook failed", e);
+            }
+            LOG.info("shutdown hook end");
+        }));
     }
 }

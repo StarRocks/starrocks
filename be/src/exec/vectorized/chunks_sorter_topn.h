@@ -40,15 +40,17 @@ public:
     /**
      * Constructor.
      * @param sort_exprs     The order-by columns or columns with expression. This sorter will use but not own the object.
-     * @param is_asc         Orders on each column.
+     * @param is_asc_order         Orders on each column.
      * @param is_null_first  NULL values should at the head or tail.
      * @param offset         Number of top rows to skip.
      * @param limit          Number of top rows after those skipped to extract. Zero means no limit.
      * @param max_buffered_chunks  In the case of a positive limit, this parameter limits the size of the batch in Chunk unit.
      */
-    ChunksSorterTopn(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
-                     const std::vector<bool>* is_null_first, const std::string& sort_keys, size_t offset = 0,
-                     size_t limit = 0, size_t max_buffered_chunks = kDefaultBufferedChunks);
+    ChunksSorterTopn(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
+                     const std::vector<bool>* is_asc_order, const std::vector<bool>* is_null_first,
+                     const std::string& sort_keys, size_t offset = 0, size_t limit = 0,
+                     const TTopNType::type topn_type = TTopNType::ROW_NUMBER,
+                     size_t max_buffered_chunks = kDefaultBufferedChunks);
     ~ChunksSorterTopn() override;
 
     // Append a Chunk for sort.
@@ -56,13 +58,10 @@ public:
     // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
     Status done(RuntimeState* state) override;
     // get_next only works after done().
-    void get_next(ChunkPtr* chunk, bool* eos) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
 
     SortedRuns get_sorted_runs() override;
     size_t get_output_rows() const override;
-
-    // pull_chunk for pipeline.
-    bool pull_chunk(ChunkPtr* chunk) override;
 
     int64_t mem_usage() const override { return _raw_chunks.mem_usage() + _merged_segment.mem_usage(); }
 
@@ -74,31 +73,29 @@ private:
     // build data for top-n
     Status _build_sorting_data(RuntimeState* state, Permutation& permutation_second, DataSegments& segments);
 
-    Status _hybrid_sort_first_time(RuntimeState* state, Permutation& new_permutation, DataSegments& segments,
-                                   size_t sort_row_number);
+    Status _hybrid_sort_first_time(RuntimeState* state, Permutation& new_permutation, DataSegments& segments);
 
     Status _hybrid_sort_common(RuntimeState* state, std::pair<Permutation, Permutation>& new_permutation,
-                               DataSegments& segments, size_t sort_row_number);
+                               DataSegments& segments);
 
-    Status _merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, size_t sort_row_number, size_t sorted_size,
-                              size_t permutation_size, Permutation& new_permutation);
+    Status _merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, const size_t rows_to_keep,
+                              size_t sorted_size, size_t permutation_size, Permutation& new_permutation);
 
     static void _set_permutation_before(Permutation&, size_t size, std::vector<std::vector<uint8_t>>& filter_array);
 
     static void _set_permutation_complete(std::pair<Permutation, Permutation>&, size_t size,
                                           std::vector<std::vector<uint8_t>>& filter_array);
 
-    Status _filter_and_sort_data(RuntimeState* state, std::pair<Permutation, Permutation>& permutation,
+    Status _filter_and_sort_data(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
                                  DataSegments& segments, size_t chunk_size);
 
     Status _merge_sort_data_as_merged_segment(RuntimeState* state, std::pair<Permutation, Permutation>& new_permutation,
                                               DataSegments& segments);
 
     Status _partial_sort_col_wise(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
-                                  DataSegments& segments, const size_t chunk_size, size_t number_of_rows_to_sort);
+                                  DataSegments& segments, const size_t chunk_size, const size_t rows_to_sort);
 
     // buffer
-
     struct RawChunks {
         std::vector<ChunkPtr> chunks;
         size_t size_of_rows = 0;
@@ -116,14 +113,15 @@ private:
             size_of_rows = 0;
         }
     };
-
-    const size_t _offset;
-    const size_t _limit;
     const size_t _max_buffered_chunks;
-
     RawChunks _raw_chunks;
     bool _init_merged_segment;
     DataSegment _merged_segment;
+
+    const size_t _limit;
+    const TTopNType::type _topn_type;
+
+    const size_t _offset;
 };
 
 } // namespace starrocks::vectorized

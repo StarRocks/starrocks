@@ -8,6 +8,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
@@ -53,6 +54,8 @@ public class PlanTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        // disable checking tablets
+        Config.max_scheduling_tablets = -1;
         FeConstants.default_scheduler_interval_millisecond = 1;
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
@@ -63,7 +66,7 @@ public class PlanTestBase {
 
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(1));
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000000000L);
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
 
         starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
@@ -451,6 +454,66 @@ public class PlanTestBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE `lineorder_flat_for_mv` (\n" +
+                "  `LO_ORDERDATE` date NOT NULL COMMENT \"\",\n" +
+                "  `LO_ORDERKEY` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "  `LO_LINENUMBER` tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "  `LO_CUSTKEY` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `LO_PARTKEY` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `LO_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `LO_ORDERPRIORITY` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `LO_SHIPPRIORITY` tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "  `LO_QUANTITY` tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "  `LO_EXTENDEDPRICE` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `LO_ORDTOTALPRICE` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `LO_DISCOUNT` tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "  `LO_REVENUE` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `LO_SUPPLYCOST` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `LO_TAX` tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "  `LO_COMMITDATE` date NOT NULL COMMENT \"\",\n" +
+                "  `LO_SHIPMODE` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `C_NAME` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `C_ADDRESS` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `C_CITY` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `C_NATION` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `C_REGION` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `C_PHONE` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `C_MKTSEGMENT` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `S_NAME` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `S_ADDRESS` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `S_CITY` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `S_NATION` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `S_REGION` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `S_PHONE` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `P_NAME` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `P_MFGR` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `P_CATEGORY` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `P_BRAND` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `P_COLOR` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `P_TYPE` varchar(100) NOT NULL COMMENT \"\",\n" +
+                "  `P_SIZE` tinyint(4) NOT NULL COMMENT \"\",\n" +
+                "  `P_CONTAINER` varchar(100) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`LO_ORDERDATE`, `LO_ORDERKEY`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`LO_ORDERDATE`)\n" +
+                "(PARTITION p1 VALUES [('0000-01-01'), ('1993-01-01')),\n" +
+                "PARTITION p2 VALUES [('1993-01-01'), ('1994-01-01')),\n" +
+                "PARTITION p3 VALUES [('1994-01-01'), ('1995-01-01')),\n" +
+                "PARTITION p4 VALUES [('1995-01-01'), ('1996-01-01')),\n" +
+                "PARTITION p5 VALUES [('1996-01-01'), ('1997-01-01')),\n" +
+                "PARTITION p6 VALUES [('1997-01-01'), ('1998-01-01')),\n" +
+                "PARTITION p7 VALUES [('1998-01-01'), ('1999-01-01')))\n" +
+                "DISTRIBUTED BY HASH(`LO_ORDERKEY`) BUCKETS 150 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ")");
+
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lo_count_mv as " +
+                "select LO_ORDERDATE,count(LO_LINENUMBER) from lineorder_flat_for_mv group by LO_ORDERDATE;");
 
         starRocksAssert.withTable("CREATE TABLE `lineitem_partition` (\n" +
                 "  `L_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n" +

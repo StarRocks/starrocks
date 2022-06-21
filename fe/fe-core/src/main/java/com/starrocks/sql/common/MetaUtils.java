@@ -7,10 +7,31 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
 public class MetaUtils {
-    public static Database getStarRocks(ConnectContext session, TableName tableName) {
+    public static Database getDatabase(ConnectContext session, long dbId) {
+        Database db = session.getGlobalStateMgr().getDb(dbId);
+        if (db == null) {
+            throw new SemanticException("Database %s is not find", dbId);
+        }
+        return db;
+    }
+
+    public static Table getTable(ConnectContext session, long dbId, long tableId) {
+        Database db = session.getGlobalStateMgr().getDb(dbId);
+        if (db == null) {
+            throw new SemanticException("Database %s is not find", dbId);
+        }
+        Table table = db.getTable(tableId);
+        if (table == null) {
+            throw new SemanticException("Unknown table: %s", tableId);
+        }
+        return table;
+    }
+
+    public static Database getDatabase(ConnectContext session, TableName tableName) {
         Database db = session.getGlobalStateMgr().getDb(tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not find", tableName.getDb());
@@ -18,7 +39,7 @@ public class MetaUtils {
         return db;
     }
 
-    public static Table getStarRocksTable(ConnectContext session, TableName tableName) {
+    public static Table getTable(ConnectContext session, TableName tableName) {
         Database db = session.getGlobalStateMgr().getDb(tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not find", tableName.getDb());
@@ -31,6 +52,12 @@ public class MetaUtils {
     }
 
     public static void normalizationTableName(ConnectContext connectContext, TableName tableName) {
+        if (Strings.isNullOrEmpty(tableName.getCatalog())) {
+            if (Strings.isNullOrEmpty(connectContext.getCurrentCatalog())) {
+                throw new SemanticException("No catalog selected");
+            }
+            tableName.setCatalog(connectContext.getCurrentCatalog());
+        }
         if (Strings.isNullOrEmpty(tableName.getDb())) {
             if (Strings.isNullOrEmpty(connectContext.getDatabase())) {
                 throw new SemanticException("No database selected");
@@ -40,7 +67,9 @@ public class MetaUtils {
             if (Strings.isNullOrEmpty(connectContext.getClusterName())) {
                 throw new SemanticException("No cluster name");
             }
-            tableName.setDb(ClusterNamespace.getFullName(connectContext.getClusterName(), tableName.getDb()));
+            if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+                tableName.setDb(ClusterNamespace.getFullName(connectContext.getClusterName(), tableName.getDb()));
+            }
         }
 
         if (Strings.isNullOrEmpty(tableName.getTbl())) {

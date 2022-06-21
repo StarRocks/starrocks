@@ -16,14 +16,17 @@ statement
     : queryStatement                                                                        #query
 
     // Table Statement
+    | createTableStatement                                                                  #createTable
     | createTableAsSelectStatement                                                          #createTableAsSelect
     | alterTableStatement                                                                   #alterTable
     | dropTableStatement                                                                    #dropTable
     | showTableStatement                                                                    #showTables
+    | showCreateTableStatement                                                              #showCreateTable
     | showColumnStatement                                                                   #showColumn
     | showTableStatusStatement                                                              #showTableStatus
     | createIndexStatement                                                                  #createIndex
     | dropIndexStatement                                                                    #dropIndex
+    | refreshTableStatement                                                                 #refreshTable
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -48,9 +51,13 @@ statement
     | updateStatement                                                                       #update
     | deleteStatement                                                                       #delete
 
-    // Admin Set Statement
+    // Admin Statement
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
+    | ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?                                     #adminShowConfig
+    | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
+    | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
+            (WHERE where=expression)?                                                       #adminShowReplicaStatus
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
@@ -59,6 +66,8 @@ statement
     | analyzeStatement                                                                      #analyze
     | createAnalyzeStatement                                                                #createAnalyze
     | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
+    | analyzeHistogramStatement                                                             #analyzeHistogram
+    | dropAnalyzeHistogramStatement                                                         #dropHistogram
     | showAnalyzeStatement                                                                  #showAnalyze
 
     // Work Group Statement
@@ -71,11 +80,89 @@ statement
     | USE schema=identifier                                                                 #use
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
+
+    // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
+    | GRANT IMPERSONATE ON user TO user                                                     #grantImpersonate
     | REVOKE identifierOrString FROM user                                                   #revokeRole
+    | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
+    | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
     ;
 
+
+
 // ------------------------------------------- Table Statement ---------------------------------------------------------
+
+createTableStatement
+    : CREATE EXTERNAL? TABLE (IF NOT EXISTS)? qualifiedName
+          '(' columnDesc (',' columnDesc)* (',' indexDesc)* ')'
+          engineDesc?
+          charsetDesc?
+          keyDesc?
+          comment?
+          partitionDesc?
+          distributionDesc?
+          rollupDesc?
+          properties?
+          extProperties?
+     ;
+
+columnDesc
+    : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)? defaultDesc? comment?
+    ;
+
+charsetName
+    : CHAR SET identifier
+    | CHARSET identifier
+    ;
+
+defaultDesc
+    : DEFAULT (string| NULL | CURRENT_TIMESTAMP)
+    ;
+
+indexDesc
+    : INDEX indexName=identifier identifierList indexType? comment?
+    ;
+
+engineDesc
+    : ENGINE EQ identifier
+    ;
+
+charsetDesc
+    : DEFAULT? CHARSET EQ? identifierOrString
+    ;
+
+
+keyDesc
+    : (AGGREGATE | UNIQUE | PRIMARY | DUPLICATE) KEY identifierList
+    ;
+
+aggDesc
+    : SUM
+    | MAX
+    | MIN
+    | REPLACE
+    | HLL_UNION
+    | BITMAP_UNION
+    | PERCENTILE_UNION
+    | REPLACE_IF_NOT_NULL
+    ;
+
+rollupDesc
+    : ROLLUP '(' addRollupClause (',' addRollupClause)* ')'
+    ;
+
+addRollupClause
+    : rollupName=identifier identifierList (dupKeys)? (fromRollup)? properties?
+    ;
+
+dupKeys
+    : DUPLICATE KEY identifierList
+    ;
+
+fromRollup
+    : FROM identifier
+    ;
 
 createTableAsSelectStatement
     : CREATE TABLE (IF NOT EXISTS)? qualifiedName
@@ -112,6 +199,10 @@ showTableStatement
     : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
+showCreateTableStatement
+    : SHOW CREATE (TABLE | VIEW | MATERIALIZED VIEW) table=qualifiedName
+    ;
+
 showColumnStatement
     : SHOW FULL? COLUMNS ((FROM | IN) table=qualifiedName) ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?
@@ -119,6 +210,10 @@ showColumnStatement
 
 showTableStatusStatement
     : SHOW TABLE STATUS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+refreshTableStatement
+    : REFRESH EXTERNAL TABLE qualifiedName (PARTITION '(' string (',' string)* ')')?
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------
@@ -196,8 +291,10 @@ alterClause
 
     | addBackendClause
     | dropBackendClause
+    | modifyBackendHostClause
     | addFrontendClause
     | dropFrontendClause
+    | modifyFrontendHostClause
     ;
 
 createIndexClause
@@ -220,6 +317,10 @@ dropBackendClause
    : DROP BACKEND string (',' string)* FORCE?
    ;
 
+modifyBackendHostClause
+   : MODIFY BACKEND HOST string TO string
+   ;
+
 addFrontendClause
    : ADD (FOLLOWER | OBSERVER) string
    ;
@@ -228,10 +329,14 @@ dropFrontendClause
    : DROP (FOLLOWER | OBSERVER) string
    ;
 
+modifyFrontendHostClause
+   : MODIFY FRONTEND HOST string TO string
+   ;
+
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT INTO qualifiedName partitionNames?
+    : explainDesc? INSERT (INTO | OVERWRITE) qualifiedName partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
@@ -248,6 +353,15 @@ deleteStatement
 
 analyzeStatement
     : ANALYZE FULL? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    ;
+
+analyzeHistogramStatement
+    : ANALYZE TABLE qualifiedName UPDATE HISTOGRAM ON identifier (',' identifier)*
+        (WITH bucket=INTEGER_VALUE BUCKETS)? properties?
+    ;
+
+dropAnalyzeHistogramStatement
+    : ANALYZE TABLE qualifiedName DROP HISTOGRAM ON identifier (',' identifier)*
     ;
 
 createAnalyzeStatement
@@ -294,7 +408,8 @@ classifier
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showDatabasesStatement
-    : SHOW DATABASES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showVariablesStatement
@@ -397,7 +512,8 @@ relation
             LATERAL? rightRelation=relation joinCriteria?                                #joinRelation
     | left=relation outerAndSemiJoinType hint?
             LATERAL? rightRelation=relation joinCriteria                                 #joinRelation
-    | aliasedRelation                                                                    #relationDefault
+    | relationPrimary (AS? identifier columnAliases?)?                                   #aliasedRelation
+    | '(' relation (','relation)* ')'                                                    #parenthesizedRelation
     ;
 
 crossOrInnerJoinType
@@ -427,10 +543,6 @@ joinCriteria
     | USING '(' identifier (',' identifier)* ')'
     ;
 
-aliasedRelation
-    : relationPrimary (AS? identifier columnAliases?)?
-    ;
-
 columnAliases
     : '(' identifier (',' identifier)* ')'
     ;
@@ -440,7 +552,6 @@ relationPrimary
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'                                 #inlineTable
     | subquery                                                                            #subqueryRelation
     | qualifiedName '(' expression (',' expression)* ')'                                  #tableFunction
-    | '(' relation ')'                                                                    #parenthesizedRelation
     ;
 
 partitionNames
@@ -655,7 +766,25 @@ explainDesc
     ;
 
 partitionDesc
-    : PARTITION BY RANGE identifierList '(' rangePartitionDesc (',' rangePartitionDesc)* ')'
+    : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
+    | PARTITION BY LIST identifierList '(' (listPartitionDesc (',' listPartitionDesc)*)? ')'
+    ;
+
+listPartitionDesc
+    : singleItemListPartitionDesc
+    | multiItemListPartitionDesc
+    ;
+
+singleItemListPartitionDesc
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN stringList propertyList?
+    ;
+
+multiItemListPartitionDesc
+    : PARTITION (IF NOT EXISTS)? identifier VALUES IN '(' stringList (',' stringList)* ')' propertyList?
+    ;
+
+stringList
+    : '(' string (',' string)* ')'
     ;
 
 rangePartitionDesc
@@ -664,7 +793,7 @@ rangePartitionDesc
     ;
 
 singleRangePartition
-    : PARTITION identifier VALUES partitionKeyDesc
+    : PARTITION (IF NOT EXISTS)? identifier VALUES partitionKeyDesc propertyList?
     ;
 
 multiRangePartition
@@ -674,7 +803,7 @@ multiRangePartition
 
 partitionKeyDesc
     : LESS THAN (MAXVALUE | partitionValueList)
-    | '[' partitionValueList ',' partitionValueList ']'
+    | '[' partitionValueList ',' partitionValueList ')'
     ;
 
 partitionValueList
@@ -697,6 +826,14 @@ refreshSchemeDesc
 
 properties
     : PROPERTIES '(' property (',' property)* ')'
+    ;
+
+extProperties
+    : BROKER properties
+    ;
+
+propertyList
+    : '(' property (',' property)* ')'
     ;
 
 property
@@ -742,7 +879,7 @@ unitIdentifier
 
 type
     : baseType
-    | decimalType ('(' precision=INTEGER_VALUE (',' scale=INTEGER_VALUE)? ')')?
+    | decimalType
     | arrayType
     ;
 
@@ -756,12 +893,13 @@ typeParameter
 
 baseType
     : BOOLEAN
-    | TINYINT
-    | SMALLINT
-    | INT
-    | INTEGER
-    | BIGINT
-    | LARGEINT
+    | TINYINT typeParameter?
+    | SMALLINT typeParameter?
+    | SIGNED INT?
+    | INT typeParameter?
+    | INTEGER typeParameter?
+    | BIGINT typeParameter?
+    | LARGEINT typeParameter?
     | FLOAT
     | DOUBLE
     | DATE
@@ -777,7 +915,7 @@ baseType
     ;
 
 decimalType
-    : DECIMAL | DECIMALV2 | DECIMAL32 | DECIMAL64 | DECIMAL128
+    : (DECIMAL | DECIMALV2 | DECIMAL32 | DECIMAL64 | DECIMAL128) ('(' precision=INTEGER_VALUE (',' scale=INTEGER_VALUE)? ')')?
     ;
 
 qualifiedName
@@ -826,20 +964,20 @@ nonReserved
     | CAST | CATALOG | CATALOGS | CHAIN | CHARSET | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
     | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
     | DATA | DATE | DATETIME | DAY | DISTRIBUTION | DUPLICATE | DYNAMIC
-    | END | ENGINE | ENGINES | ERRORS | EVENTS | EXTERNAL | EXTRACT | EVERY
+    | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FILE | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
     | GLOBAL | GRANTS
-    | HASH | HELP | HLL_UNION | HOUR
-    | IDENTIFIED | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
+    | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR
+    | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
     | MANUAL | MATERIALIZED | MAX | MIN | MINUTE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NULLS
-    | OBSERVER | OFFSET | ONLY | OPEN
+    | OBSERVER | OFFSET | ONLY | OPEN | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
-    | RESOURCE | RESTORE | RESUME | RETURNS | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
+    | RESOURCE | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
     | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE | STRING
     | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION

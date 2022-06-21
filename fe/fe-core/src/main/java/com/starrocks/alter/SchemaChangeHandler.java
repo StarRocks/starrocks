@@ -83,6 +83,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.Util;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -357,10 +358,6 @@ public class SchemaChangeHandler extends AlterHandler {
             if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.NONE, true);
             }
-        }
-        // TODO(mofei) support it
-        if (modColumn.getType().isJsonType() && olapTable.getKeysType() != KeysType.DUP_KEYS) {
-            throw new DdlException(modColumn.getType() + " must be used in duplicate key");
         }
 
         ColumnPosition columnPos = alterClause.getColPos();
@@ -654,10 +651,6 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException(newColumn.getType() + "must be used in DUP_KEYS");
         }
 
-        if (newColumn.getType().isJsonType() && KeysType.DUP_KEYS != olapTable.getKeysType()) {
-            throw new DdlException(newColumn.getType() + " must be used in duplicate key");
-        }
-
         // check if the new column already exist in base schema.
         // do not support adding new column which already exist in base schema.
         List<Column> baseSchema = olapTable.getBaseSchema();
@@ -821,21 +814,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 // value
                 modIndexSchema.add(newColumn);
             }
-        }
-
-        checkRowLength(modIndexSchema);
-    }
-
-    // row length can not large than limit
-    private void checkRowLength(List<Column> modIndexSchema) throws DdlException {
-        int rowLengthBytes = 0;
-        for (Column column : modIndexSchema) {
-            rowLengthBytes += column.getType().getStorageLayoutBytes();
-        }
-
-        if (rowLengthBytes > Config.max_layout_length_per_row) {
-            throw new DdlException("The size of a row (" + rowLengthBytes + ") exceed the maximal row size: "
-                    + Config.max_layout_length_per_row);
         }
     }
 
@@ -1088,60 +1066,63 @@ public class SchemaChangeHandler extends AlterHandler {
             } // end for alter
 
             // 3. check partition key
-            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-            if (partitionInfo.getType() == PartitionType.RANGE) {
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-                for (Column partitionCol : partitionColumns) {
-                    boolean found = false;
-                    for (Column alterColumn : alterSchema) {
-                        if (alterColumn.nameEquals(partitionCol.getName(), true)) {
-                            // 2.1 partition column cannot be modified
-                            if (!alterColumn.equals(partitionCol)) {
-                                throw new DdlException("Can not modify partition column["
-                                        + partitionCol.getName() + "]. index["
-                                        + olapTable.getIndexNameById(alterIndexId) + "]");
+            if (hasColumnChange) {
+                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+                if (partitionInfo.getType() == PartitionType.RANGE) {
+                    RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                    List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+                    for (Column partitionCol : partitionColumns) {
+                        boolean found = false;
+                        for (Column alterColumn : alterSchema) {
+                            if (alterColumn.nameEquals(partitionCol.getName(), true)) {
+                                // 2.1 partition column cannot be modified
+                                if (!alterColumn.equals(partitionCol)) {
+                                    throw new DdlException("Can not modify partition column["
+                                            + partitionCol.getName() + "]. index["
+                                            + olapTable.getIndexNameById(alterIndexId) + "]");
+                                }
+                                found = true;
+                                break;
                             }
-                            found = true;
-                            break;
+                        } // end for alterColumns
+
+                        if (!found && alterIndexId == olapTable.getBaseIndexId()) {
+                            // 2.1 partition column cannot be deleted.
+                            throw new DdlException("Partition column[" + partitionCol.getName()
+                                    + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
+                            // ATTN. partition columns' order also need remaining unchanged.
+                            // for now, we only allow one partition column, so no need to check order.
                         }
-                    } // end for alterColumns
+                    } // end for partitionColumns
+                }
 
-                    if (!found && alterIndexId == olapTable.getBaseIndexId()) {
-                        // 2.1 partition column cannot be deleted.
-                        throw new DdlException("Partition column[" + partitionCol.getName()
-                                + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
-                        // ATTN. partition columns' order also need remaining unchanged.
-                        // for now, we only allow one partition column, so no need to check order.
-                    }
-                } // end for partitionColumns
-            }
-
-            // 4. check distribution key:
-            DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-            if (distributionInfo.getType() == DistributionInfoType.HASH) {
-                List<Column> distributionColumns = ((HashDistributionInfo) distributionInfo).getDistributionColumns();
-                for (Column distributionCol : distributionColumns) {
-                    boolean found = false;
-                    for (Column alterColumn : alterSchema) {
-                        if (alterColumn.nameEquals(distributionCol.getName(), true)) {
-                            // 3.1 distribution column cannot be modified
-                            if (!alterColumn.equals(distributionCol)) {
-                                throw new DdlException("Can not modify distribution column["
-                                        + distributionCol.getName() + "]. index["
-                                        + olapTable.getIndexNameById(alterIndexId) + "]");
+                // 4. check distribution key:
+                DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
+                if (distributionInfo.getType() == DistributionInfoType.HASH) {
+                    List<Column> distributionColumns =
+                            ((HashDistributionInfo) distributionInfo).getDistributionColumns();
+                    for (Column distributionCol : distributionColumns) {
+                        boolean found = false;
+                        for (Column alterColumn : alterSchema) {
+                            if (alterColumn.nameEquals(distributionCol.getName(), true)) {
+                                // 3.1 distribution column cannot be modified
+                                if (!alterColumn.equals(distributionCol)) {
+                                    throw new DdlException("Can not modify distribution column["
+                                            + distributionCol.getName() + "]. index["
+                                            + olapTable.getIndexNameById(alterIndexId) + "]");
+                                }
+                                found = true;
+                                break;
                             }
-                            found = true;
-                            break;
-                        }
-                    } // end for alterColumns
+                        } // end for alterColumns
 
-                    if (!found && alterIndexId == olapTable.getBaseIndexId()) {
-                        // 2.2 distribution column cannot be deleted.
-                        throw new DdlException("Distribution column[" + distributionCol.getName()
-                                + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
-                    }
-                } // end for distributionCols
+                        if (!found && alterIndexId == olapTable.getBaseIndexId()) {
+                            // 2.2 distribution column cannot be deleted.
+                            throw new DdlException("Distribution column[" + distributionCol.getName()
+                                    + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
+                        }
+                    } // end for distributionCols
+                }
             }
 
             // 5. calc short key
@@ -1385,7 +1366,6 @@ public class SchemaChangeHandler extends AlterHandler {
             alterJob.setState(JobState.FINISHED);
             // has to remove here, because check is running every interval, it maybe finished but also in job list
             // some check will failed
-            ((SchemaChangeJob) alterJob).deleteAllTableHistorySchema();
             ((SchemaChangeJob) alterJob).finishJob();
             jobDone(alterJob);
             GlobalStateMgr.getCurrentState().getEditLog().logFinishSchemaChange((SchemaChangeJob) alterJob);
@@ -1464,9 +1444,8 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     @Override
-    public void process(List<AlterClause> alterClauses, String clusterName, Database db, OlapTable olapTable)
+    public ShowResultSet process(List<AlterClause> alterClauses, String clusterName, Database db, OlapTable olapTable)
             throws UserException {
-
         // index id -> index schema
         Map<Long, LinkedList<Column>> indexSchemaMap = new HashMap<>();
         for (Map.Entry<Long, List<Column>> entry : olapTable.getIndexIdToSchema().entrySet()) {
@@ -1489,16 +1468,16 @@ public class SchemaChangeHandler extends AlterHandler {
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
                     String colocateGroup = properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
                     GlobalStateMgr.getCurrentState().modifyTableColocate(db, olapTable, colocateGroup, false, null);
-                    return;
+                    return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE)) {
                     GlobalStateMgr.getCurrentState().convertDistributionType(db, olapTable);
-                    return;
+                    return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_SEND_CLEAR_ALTER_TASK)) {
                     /*
                      * This is only for fixing bug when upgrading StarRocks from 0.9.x to 0.10.x.
                      */
                     sendClearAlterTask(db, olapTable);
-                    return;
+                    return null;
                 } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
                     if (!olapTable.dynamicPartitionExists()) {
                         try {
@@ -1513,17 +1492,22 @@ public class SchemaChangeHandler extends AlterHandler {
                         }
                     }
                     GlobalStateMgr.getCurrentState().modifyTableDynamicPartition(db, olapTable, properties);
-                    return;
+                    return null;
                 } else if (properties.containsKey("default." + PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
                     Preconditions.checkNotNull(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
                     GlobalStateMgr.getCurrentState().modifyTableDefaultReplicationNum(db, olapTable, properties);
-                    return;
+                    return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
                     GlobalStateMgr.getCurrentState().modifyTableReplicationNum(db, olapTable, properties);
-                    return;
+                    return null;
                 }
             }
 
+            if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager().hasRunningOverwriteJob(olapTable.getId())) {
+                // because insert overwrite will create tmp partitions
+                throw new DdlException("Table[" + olapTable.getName() + "] is doing insert overwrite job, " +
+                        "please start schema change after insert overwrite");
+            }
             // the following operations can not be done when there are temp partitions exist.
             if (olapTable.existTempPartitions()) {
                 throw new DdlException("Can not alter table when there are temp partitions in table");
@@ -1560,6 +1544,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } // end for alter clauses
 
         createJob(db.getId(), olapTable, indexSchemaMap, propertyMap, newIndexes);
+        return null;
     }
 
     private void sendClearAlterTask(Database db, OlapTable olapTable) {

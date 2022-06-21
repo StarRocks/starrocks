@@ -10,14 +10,18 @@
 #include "column/nullable_column.h"
 #include "column/schema.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
-#include "runtime/timestamp_value.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_vector.h"
 #include "storage/olap_type_infra.h"
 #include "storage/schema.h"
 #include "storage/tablet_schema.h"
+#include "types/bitmap_value.h"
+#include "types/hll.h"
+#include "types/timestamp_value.h"
 #include "util/json.h"
+#include "util/percentile_value.h"
 #include "util/pred_guard.h"
 #include "util/stack_util.h"
 #include "util/unaligned_access.h"
@@ -82,6 +86,17 @@ Status to_decimal(const SrcType* src, DstType* dst, int src_precision, int src_s
     }
     return Status::OK();
 };
+
+Status TypeConverter::convert_column(TypeInfo* src_type, const Column& src, TypeInfo* dst_type, Column* dst,
+                                     MemPool* mem_pool) const {
+    for (size_t i = 0; i < src.size(); i++) {
+        Datum old_datum = src.get(i);
+        Datum new_datum;
+        RETURN_IF_ERROR(convert_datum(src_type, old_datum, dst_type, &new_datum, mem_pool));
+        dst->append_datum(new_datum);
+    }
+    return Status::OK();
+}
 
 // Used for schema change
 class DatetimeToDateTypeConverter : public TypeConverter {
@@ -607,19 +622,27 @@ public:
         return Status::InternalError("not supported");
     }
 
+    Status convert_column(TypeInfo* src_type, const Column& src, TypeInfo* dst_type, Column* dst,
+                          MemPool* mem_pool) const override {
+        for (size_t i = 0; i < src.size(); i++) {
+            Datum src_datum = src.get(i);
+            Slice source;
+            if (src_datum.is_null()) {
+                source = "null";
+            } else {
+                source = src_datum.get_slice();
+            }
+            JsonValue json;
+            RETURN_IF_ERROR(JsonValue::parse(source, &json));
+            dst->append_datum(&json);
+        }
+        return Status::OK();
+    }
+
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
-        Slice source;
-        if (src.is_null()) {
-            source = "null";
-        } else {
-            source = src.get_slice();
-        }
-        JsonValue json;
-        RETURN_IF_ERROR(JsonValue::parse(source, &json));
-        dst->move_in(std::move(json));
-
-        return Status::OK();
+        CHECK(false) << "unreachable";
+        return Status::NotSupported("");
     }
 };
 
@@ -673,20 +696,28 @@ public:
         return Status::InternalError("not supported");
     }
 
-    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
-                         MemPool* mem_pool) const override {
-        if (src.is_null()) {
-            dst->set_null();
-            return Status::OK();
+    Status convert_column(TypeInfo* src_type, const Column& src, TypeInfo* dst_type, Column* dst,
+                          MemPool* mem_pool) const override {
+        for (size_t i = 0; i < src.size(); i++) {
+            Datum src_datum = src.get(i);
+            if (src_datum.is_null()) {
+                dst->append_nulls(1);
+            } else {
+                const JsonValue* json = src_datum.get_json();
+                std::string json_str = json->to_string_uncheck();
+                Slice dst_slice = json_str;
+                dst_slice.data = reinterpret_cast<char*>(mem_pool->allocate(dst_slice.size));
+                RETURN_IF_UNLIKELY_NULL(dst_slice.data, Status::MemoryAllocFailed("mempool exceeded"));
+                memcpy(dst_slice.data, json_str.data(), dst_slice.size);
+                dst->append_datum(Datum(dst_slice));
+            }
         }
-        const JsonValue* json = src.get_json();
-        std::string json_str = json->to_string_uncheck();
-        Slice dst_slice = json_str;
-        dst_slice.data = reinterpret_cast<char*>(mem_pool->allocate(dst_slice.size));
-        RETURN_IF_UNLIKELY_NULL(dst_slice.data, Status::MemoryAllocFailed("mempool exceeded"));
-        memcpy(dst_slice.data, json_str.data(), dst_slice.size);
-        dst->set_slice(dst_slice);
         return Status::OK();
+    }
+
+    Status convert_datum(TypeInfo* src_typeinfo, const Datum& src_datum, TypeInfo* dst_typeinfo, Datum* dst,
+                         MemPool* mem_pool) const override {
+        CHECK(false) << "unreachable";
     }
 };
 

@@ -2,6 +2,8 @@
 
 #include "exprs/vectorized/string_functions.h"
 
+#include <re2/re2.h>
+
 #include <algorithm>
 #include <memory>
 #include <stdexcept>
@@ -11,12 +13,14 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
+#include "common/compiler_util.h"
 #include "common/status.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/math_functions.h"
 #include "exprs/vectorized/unary_function.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/large_int_value.h"
 #include "storage/olap_define.h"
 #include "util/raw_container.h"
 #include "util/sm3.h"
@@ -24,15 +28,15 @@
 
 namespace starrocks::vectorized {
 
-#define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func)                          \
-    if (col->reach_capacity_limit()) {                                          \
-        col->reset_column();                                                    \
-        throw std::runtime_error("binary column exceed 4G in function " #func); \
+#define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                          \
+    if (UNLIKELY(col->capacity_limit_reached())) {                                   \
+        col->reset_column();                                                         \
+        throw std::runtime_error("binary column exceed 4G in function " #func_name); \
     }
 
-#define RETURN_COLUMN(col, func_name)                    \
-    auto VARNAME_LINENUM(res) = col;                     \
-    THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name); \
+#define RETURN_COLUMN(stmt, func_name)                                    \
+    auto VARNAME_LINENUM(res) = stmt;                                     \
+    THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(VARNAME_LINENUM(res), func_name); \
     return VARNAME_LINENUM(res);
 
 constexpr size_t CONCAT_SMALL_OPTIMIZE_THRESHOLD = 16 << 20;
@@ -1395,7 +1399,7 @@ ColumnPtr pad_not_const_check_ascii(const Columns& columns, [[maybe_unused]] con
 }
 // pad
 template <PadType pad_type>
-static inline ColumnPtr pad(FunctionContext* context, const Columns& columns) {
+static ColumnPtr pad(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     auto state = (PadState*)context->get_function_state(FunctionContext::FRAGMENT_LOCAL);
     if (state != nullptr) {
@@ -2512,6 +2516,14 @@ int StringFunctions::index_of(const char* source, int source_count, const char* 
     return -1;
 }
 
+struct StringFunctionsState {
+    std::unique_ptr<re2::RE2> regex;
+    std::unique_ptr<re2::RE2::Options> options;
+    bool const_pattern{false};
+
+    StringFunctionsState() : regex(), options() {}
+};
+
 Status StringFunctions::regexp_prepare(starrocks_udf::FunctionContext* context,
                                        starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
@@ -2556,8 +2568,7 @@ Status StringFunctions::regexp_close(FunctionContext* context, FunctionContext::
     return Status::OK();
 }
 
-ColumnPtr StringFunctions::regexp_extract_general(FunctionContext* context, re2::RE2::Options* options,
-                                                  const Columns& columns) {
+static ColumnPtr regexp_extract_general(FunctionContext* context, re2::RE2::Options* options, const Columns& columns) {
     auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     auto field_viewer = ColumnViewer<TYPE_BIGINT>(columns[2]);
@@ -2606,7 +2617,7 @@ ColumnPtr StringFunctions::regexp_extract_general(FunctionContext* context, re2:
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr StringFunctions::regexp_extract_const(re2::RE2* const_re, const Columns& columns) {
+static ColumnPtr regexp_extract_const(re2::RE2* const_re, const Columns& columns) {
     auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto field_viewer = ColumnViewer<TYPE_BIGINT>(columns[2]);
 
@@ -2658,8 +2669,7 @@ ColumnPtr StringFunctions::regexp_extract(FunctionContext* context, const Column
     return regexp_extract_general(context, options, columns);
 }
 
-ColumnPtr StringFunctions::regexp_replace_general(FunctionContext* context, re2::RE2::Options* options,
-                                                  const Columns& columns) {
+static ColumnPtr regexp_replace_general(FunctionContext* context, re2::RE2::Options* options, const Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
@@ -2691,7 +2701,7 @@ ColumnPtr StringFunctions::regexp_replace_general(FunctionContext* context, re2:
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr StringFunctions::regexp_replace_const(re2::RE2* const_re, const Columns& columns) {
+static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
