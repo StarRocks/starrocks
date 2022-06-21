@@ -17,7 +17,6 @@
 #include "storage/conjunctive_predicates.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
-#include "util/json.h"
 
 namespace starrocks {
 

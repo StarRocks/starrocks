@@ -71,15 +71,14 @@ private:
     ObjectPool _obj_pool;
 
     // For shared_scan mechanism
-    BalancedChunkBuffer _chunk_buffer; // Shared Chunk buffer for all scan operator
-
     using ActiveInputKey = std::pair<int32_t, int32_t>;
     using ActiveInputSet = phmap::parallel_flat_hash_set<
             ActiveInputKey, typename phmap::Hash<ActiveInputKey>, typename phmap::EqualTo<ActiveInputKey>,
             typename std::allocator<ActiveInputKey>, NUM_LOCK_SHARD_LOG, std::mutex, true>;
-    ActiveInputSet _active_inputs;
-    bool _shared_scan; // Enable shared_scan
-    int32_t _scan_dop; // DOP of scan operator
+    BalancedChunkBuffer _chunk_buffer; // Shared Chunk buffer for all scan operator
+    ActiveInputSet _active_inputs;     // Maintain the active chunksource
+    bool _shared_scan;                 // Enable shared_scan
+    int32_t _scan_dop;                 // DOP of scan operator
 
     std::atomic<bool> _is_prepare_finished{false};
 

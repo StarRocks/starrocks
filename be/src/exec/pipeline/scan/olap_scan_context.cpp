@@ -44,6 +44,7 @@ Status OlapScanContext::prepare(RuntimeState* state) {
 void OlapScanContext::close(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
     Expr::close(conjunct_ctxs, state);
+    _chunk_buffer.close();
 }
 
 Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<ExprContext*>& runtime_in_filters,

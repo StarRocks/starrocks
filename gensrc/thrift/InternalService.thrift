@@ -297,7 +297,7 @@ struct TExecPlanFragmentParams {
   54: optional bool enable_resource_group
   55: optional i32 func_version
   
-  // Some strategy of scan
+  // Sharing data between drivers of same scan operator
   56: optional bool enable_shared_scan
 }
 

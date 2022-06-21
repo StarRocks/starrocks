@@ -51,7 +51,7 @@ public:
     virtual void attach_chunk_source(int32_t source_index) {}
     virtual void detach_chunk_source(int32_t source_index) {}
     virtual bool has_shared_chunk_source() const { return false; }
-    virtual bool has_shared_output() const { return false; }
+    virtual bool has_buffer_output() const { return false; }
     virtual ChunkPtr get_chunk_from_buffer() { return nullptr; }
 
     virtual int64_t get_last_scan_rows_num() {

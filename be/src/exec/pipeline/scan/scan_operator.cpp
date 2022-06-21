@@ -91,18 +91,11 @@ bool ScanOperator::has_output() const {
     if (!_get_scan_status().ok()) {
         return true;
     }
-
     if (has_shared_chunk_source()) {
         return true;
     }
-    if (has_shared_output()) {
+    if (has_buffer_output()) {
         return true;
-    }
-
-    for (const auto& chunk_source : _chunk_sources) {
-        if (chunk_source != nullptr && (chunk_source->has_output())) {
-            return true;
-        }
     }
 
     if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP ||
@@ -120,8 +113,7 @@ bool ScanOperator::has_output() const {
 
     // Can trigger_next_scan for the picked-up morsel.
     for (int i = 0; i < MAX_IO_TASKS_PER_OP; ++i) {
-        if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk() &&
-            _chunk_sources[i]->has_shared_output()) {
+        if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
             return true;
         }
     }
@@ -152,16 +144,10 @@ bool ScanOperator::is_finished() const {
     if (has_shared_chunk_source()) {
         return false;
     }
-    if (has_shared_output()) {
-        return false;
-    }
 
-    // Remain some data in the chunksource
-    for (const auto& chunk_source : _chunk_sources) {
-        if (chunk_source != nullptr &&
-            (chunk_source->has_output() || chunk_source->has_next_chunk() || chunk_source->has_shared_output())) {
-            return false;
-        }
+    // Remain some data in the buffer
+    if (has_buffer_output()) {
+        return false;
     }
 
     // This scan operator is finished, if no more io tasks are running

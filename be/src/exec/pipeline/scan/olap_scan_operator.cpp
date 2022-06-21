@@ -105,7 +105,7 @@ bool OlapScanOperator::has_shared_chunk_source() const {
     return _ctx->has_active_input();
 }
 
-bool OlapScanOperator::has_shared_output() const {
+bool OlapScanOperator::has_buffer_output() const {
     return !_ctx->get_chunk_buffer().empty(_driver_sequence);
 }
 
