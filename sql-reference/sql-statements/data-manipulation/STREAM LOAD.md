@@ -32,6 +32,8 @@ http://fe_host:http_port/api/{db}/{table}/_stream_load
 用于指定导入文件中的列分隔符，默认为\t。如果是不可见字符，则需要加\x 作为前缀，使用十六进制来表示分隔符。
 如 hive 文件的分隔符\x01，需要指定为 `-H "column_separator:\x01"`
 
+StarRocks 2.1 及以上版本支持多字符分隔符，避免因字段值含有分隔符引起的导入解析错误。可见字符可直接指定，如 -H "column_separator:abc" 。不可见字符支持如 -H "column_separator:\x01\x02" 的格式。
+
 **columns：**
 
 用于指定导入文件中的列和 table 中的列的对应关系。如果源文件中的列正好对应表中的内容，那么是不需要指定这个字段的内容的。
