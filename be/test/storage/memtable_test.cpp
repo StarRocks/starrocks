@@ -205,7 +205,8 @@ public:
         writer_context.version.second = 10;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &_writer).ok());
         _mem_table_sink.reset(new MemTableRowsetWriterSink(_writer.get()));
-        _mem_table.reset(new MemTable(1, _schema.get(), _slots, _mem_table_sink.get(), _mem_tracker.get()));
+        _vectorized_schema = std::move(MemTable::convert_schema(_schema.get(), _slots));
+        _mem_table.reset(new MemTable(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get()));
     }
 
     void TearDown() override {
@@ -221,6 +222,7 @@ public:
     const std::vector<SlotDescriptor*>* _slots = nullptr;
     unique_ptr<RowsetWriter> _writer;
     unique_ptr<MemTable> _mem_table;
+    Schema _vectorized_schema;
     unique_ptr<MemTableRowsetWriterSink> _mem_table_sink;
 };
 

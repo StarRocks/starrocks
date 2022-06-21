@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/macros.h"
@@ -123,6 +124,8 @@ private:
     TabletSharedPtr _tablet;
     RowsetSharedPtr _cur_rowset;
     std::unique_ptr<RowsetWriter> _rowset_writer;
+    bool _schema_initialized;
+    Schema _vectorized_schema;
     std::unique_ptr<MemTable> _mem_table;
     std::unique_ptr<MemTableSink> _mem_table_sink;
     const TabletSchema* _tablet_schema;
