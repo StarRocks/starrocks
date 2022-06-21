@@ -13,6 +13,8 @@ import org.antlr.v4.runtime.CommonTokenStream;
 
 import java.io.StringReader;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class SqlParser {
     public static List<StatementBase> parse(String originSql, long sqlMode) {
@@ -69,7 +71,28 @@ public class SqlParser {
         }
     }
 
+
+    /*
+     * The new version of parser can handle comments (discarded directly in lexical analysis).
+     * But there are some special cases when the old and new parsers are compatible.
+     * Because the parser does not support all statements, we split the sql according to ";".
+     * For example, sql: --xxx;\nselect 1; According to the old version, it will be parsed into one statement,
+     * but after splitting according to the statement,
+     * two statements will appear. This leads to incompatibility.
+     * Because originSql is stored in the old version of the materialized view, it is the index stored in the old version.
+     * */
+    static String regexSimpleComment = "--.*\n";
+    static Pattern psm = Pattern.compile(regexSimpleComment);
+
+    static String regexBracketComment = "/\\* .*? \\*/";
+    static Pattern pbc = Pattern.compile(regexBracketComment);
+
     private static List<String> splitSQL(String sql) {
+        Matcher m = psm.matcher(sql);
+        sql = m.replaceAll("");
+        m = pbc.matcher(sql);
+        sql = m.replaceAll("");
+
         List<String> sqlLists = Lists.newArrayList();
         boolean inString = false;
         int sqlStartOffset = 0;
