@@ -27,7 +27,12 @@ jobs:
          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
          restore-keys: |
            ${{ runner.os }}-maven-
-
+           
+     - name: Download Jar artifact
+       uses: actions/download-artifact@v3
+       with:
+         name: java-code-coverage-related
+    
      - name: bash script
        run: | 
          ./starrocks_fe_unittest.sh ${GITHUB_RUN_NUMBER} ${GITHUB_REF_NAME}
