@@ -2,8 +2,11 @@
 
 #pragma once
 
+#include "exec/pipeline/pipeline_column_pool.h"
+#include "exec/pipeline/scan/chunk_pool_manager.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "storage/chunk_iterator.h"
 #include "util/spinlock.h"
 
 namespace starrocks {
@@ -12,7 +15,6 @@ class PriorityThreadPool;
 class ScanNode;
 
 namespace pipeline {
-
 class ScanOperator : public SourceOperator {
 public:
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
@@ -47,7 +49,7 @@ public:
     /// interface for different scan node
     virtual Status do_prepare(RuntimeState* state) = 0;
     virtual void do_close(RuntimeState* state) = 0;
-    virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
+    virtual Status create_chunk_source(RuntimeState* state, MorselPtr morsel, int32_t chunk_source_index) = 0;
 
     virtual int64_t get_last_scan_rows_num() {
         int64_t scan_rows_num = _last_scan_rows_num;
@@ -65,11 +67,21 @@ public:
         // It takes effect, only when it is positive.
         return 0;
     }
+    void set_pipeline_driver(PipelineDriver* driver) { _driver = driver; }
+
+    PipelineDriver* get_pipeline_driver() { return _driver; }
+
+    void _fill_pipeline_chunk_pool(PipelineColumnPool* column_pool, int count, int chunk_source_index,
+                                   bool force_column_pool);
 
 private:
+    std::vector<ChunkPoolManager> _chunk_pool_manager;
+    PipelineDriver* _driver;
+
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
     Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
+    void _re_enable_io_task(int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
     void _merge_chunk_source_profiles();
@@ -113,7 +125,12 @@ private:
     PriorityThreadPool* _io_threads = nullptr;
     std::atomic<int> _num_running_io_tasks = 0;
     std::vector<std::atomic<bool>> _is_io_task_running;
+
+protected:
     std::vector<ChunkSourcePtr> _chunk_sources;
+    std::vector<vectorized::ChunkIterator*> _chunk_sources_prj_iter;
+
+private:
     mutable SpinLock _scan_status_mutex;
     Status _scan_status;
     // we should hold a weak ptr because query context may be released before running io task

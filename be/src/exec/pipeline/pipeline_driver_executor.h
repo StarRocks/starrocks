@@ -6,6 +6,7 @@
 #include <unordered_map>
 
 #include "exec/pipeline/exec_state_reporter.h"
+#include "exec/pipeline/pipeline_column_pool.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_driver_poller.h"
 #include "exec/pipeline/pipeline_driver_queue.h"
@@ -54,8 +55,9 @@ public:
 
 private:
     using Base = FactoryMethod<DriverExecutor, GlobalDriverExecutor>;
-    void _worker_thread();
-    void _finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
+    void _worker_thread(int thread_id);
+    void _finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state,
+                          PipelineColumnPool* pipeline_column_pool);
     void _update_profile_by_level(FragmentContext* fragment_ctx, bool done);
     void _remove_non_core_metrics(FragmentContext* fragment_ctx, std::vector<RuntimeProfile*>& driver_profiles);
     void _simplify_common_metrics(RuntimeProfile* driver_profile);
@@ -74,6 +76,9 @@ private:
     // metrics
     std::unique_ptr<UIntGauge> _driver_queue_len;
     std::unique_ptr<UIntGauge> _driver_poller_block_queue_len;
+
+    // dispatch to different column pool.
+    std::unique_ptr<PipelineColumnPoolManager> _pipeline_column_pool_mgr;
 };
 
 } // namespace pipeline

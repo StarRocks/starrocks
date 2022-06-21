@@ -44,10 +44,11 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
 
 void ConnectorScanOperator::do_close(RuntimeState* state) {}
 
-ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
-    auto* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
-    return std::make_shared<ConnectorChunkSource>(_chunk_source_profiles[chunk_source_index].get(), std::move(morsel),
-                                                  this, scan_node);
+Status ConnectorScanOperator::create_chunk_source(RuntimeState* state, MorselPtr morsel, int32_t chunk_source_index) {
+    vectorized::ConnectorScanNode* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
+    _chunk_sources[chunk_source_index] = std::make_shared<ConnectorChunkSource>(
+            _chunk_source_profiles[chunk_source_index].get(), std::move(morsel), this, scan_node);
+    return _chunk_sources[chunk_source_index]->prepare(state);
 }
 
 // ==================== ConnectorChunkSource ====================
@@ -110,7 +111,8 @@ StatusOr<vectorized::ChunkPtr> ConnectorChunkSource::get_next_chunk_from_buffer(
     return chunk;
 }
 
-Status ConnectorChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state) {
+Status ConnectorChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state,
+                                                               ChunkPoolManager* chunk_pool_manager) {
     if (!_status.ok()) {
         return _status;
     }

@@ -6,6 +6,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "exec/pipeline/scan/chunk_pool_manager.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/exclusive_ptr.h"
@@ -38,7 +39,8 @@ public:
 
     virtual StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer() = 0;
 
-    virtual Status buffer_next_batch_chunks_blocking(size_t chunk_size, RuntimeState* state) = 0;
+    virtual Status buffer_next_batch_chunks_blocking(size_t chunk_size, RuntimeState* state,
+                                                     ChunkPoolManager* chunk_pool_manager) = 0;
     virtual Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, RuntimeState* state,
                                                                    size_t* num_read_chunks, int worker_id,
                                                                    workgroup::WorkGroupPtr running_wg) = 0;
@@ -57,6 +59,8 @@ public:
         _last_scan_bytes = 0;
         return res;
     }
+
+    virtual size_t get_curr_buffer_size() { return 0; }
 
 protected:
     RuntimeProfile* _runtime_profile;

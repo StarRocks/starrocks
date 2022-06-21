@@ -85,10 +85,14 @@ void OlapScanOperator::do_close(RuntimeState* state) {
     COUNTER_SET(max_scan_concurrency_counter, static_cast<int64_t>(_avg_max_scan_concurrency()));
 }
 
-ChunkSourcePtr OlapScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
+Status OlapScanOperator::create_chunk_source(RuntimeState* state, MorselPtr morsel, int32_t chunk_source_index) {
     auto* olap_scan_node = down_cast<vectorized::OlapScanNode*>(_scan_node);
-    return std::make_shared<OlapChunkSource>(_chunk_source_profiles[chunk_source_index].get(), std::move(morsel),
-                                             olap_scan_node, _ctx.get());
+    auto olap_chunk_source = std::make_shared<OlapChunkSource>(_chunk_source_profiles[chunk_source_index].get(),
+                                                               std::move(morsel), olap_scan_node, _ctx.get());
+    _chunk_sources[chunk_source_index] = olap_chunk_source;
+    auto status = _chunk_sources[chunk_source_index]->prepare(state);
+    _chunk_sources_prj_iter[chunk_source_index] = olap_chunk_source->get_prj_iter();
+    return status;
 }
 
 size_t OlapScanOperator::max_scan_concurrency() const {

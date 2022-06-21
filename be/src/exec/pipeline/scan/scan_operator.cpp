@@ -19,11 +19,13 @@ namespace starrocks::pipeline {
 ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
                            std::atomic<int>& num_committed_scan_tasks)
         : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence),
+          _chunk_pool_manager(MAX_IO_TASKS_PER_OP),
           _scan_node(scan_node),
           _chunk_source_profiles(MAX_IO_TASKS_PER_OP),
           _num_committed_scan_tasks(num_committed_scan_tasks),
           _is_io_task_running(MAX_IO_TASKS_PER_OP),
-          _chunk_sources(MAX_IO_TASKS_PER_OP) {
+          _chunk_sources(MAX_IO_TASKS_PER_OP),
+          _chunk_sources_prj_iter(MAX_IO_TASKS_PER_OP) {
     for (auto i = 0; i < MAX_IO_TASKS_PER_OP; i++) {
         _chunk_source_profiles[i] = std::make_shared<RuntimeProfile>(strings::Substitute("ChunkSource$0", i));
     }
@@ -161,11 +163,11 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         _workgroup->incr_period_ask_chunk_num(1);
     }
 
-    for (auto& chunk_source : _chunk_sources) {
+    for (int i = 0; i < MAX_IO_TASKS_PER_OP; ++i) {
+        const auto& chunk_source = _chunk_sources[i];
         if (chunk_source != nullptr && chunk_source->has_output()) {
             auto&& chunk = chunk_source->get_next_chunk_from_buffer();
             eval_runtime_bloom_filters(chunk.value().get());
-
             return std::move(chunk);
         }
     }
@@ -213,6 +215,12 @@ inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
     return !ptr.owner_before(wp{}) && !wp{}.owner_before(ptr);
 }
 
+void ScanOperator::_re_enable_io_task(int chunk_source_index) {
+    _decrease_committed_scan_tasks();
+    _num_running_io_tasks--;
+    _is_io_task_running[chunk_source_index] = false;
+}
+
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
     if (!_try_to_increase_committed_scan_tasks()) {
         return Status::OK();
@@ -221,11 +229,13 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     _num_running_io_tasks++;
     _is_io_task_running[chunk_source_index] = true;
 
+    auto io_task_commit = false;
     bool offer_task_success = false;
     // to avoid holding mutex in bthread, we choose to initialize lazily here instead of in prepare
     if (is_uninitialized(_query_ctx)) {
         _query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
     }
+
     if (_workgroup != nullptr) {
         workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [wp = _query_ctx, this, state,
                                                                     chunk_source_index](int worker_id) {
@@ -247,9 +257,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                     _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
                 }
 
-                _decrease_committed_scan_tasks();
-                _num_running_io_tasks--;
-                _is_io_task_running[chunk_source_index] = false;
+                _re_enable_io_task(chunk_source_index);
             }
         });
 
@@ -259,46 +267,71 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             offer_task_success = ExecEnv::GetInstance()->scan_executor()->submit(std::move(task));
         }
     } else {
-        PriorityThreadPool::Task task;
-        task.work_function = [wp = _query_ctx, this, state, chunk_source_index]() {
-            if (auto sp = wp.lock()) {
-                {
-                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-                    Status status =
-                            _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);
-                    if (!status.ok() && !status.is_end_of_file()) {
-                        _set_scan_status(status);
+        // half_buffer as a upper limit to re enable IO tasks.
+        auto half_buffer = _buffer_size / 2;
+        auto curr_buffer_size = _chunk_sources[chunk_source_index]->get_curr_buffer_size();
+
+        // When Usable chunks is less than half of buffer_size, we commit io task.
+        io_task_commit = (curr_buffer_size < half_buffer);
+        if (io_task_commit) {
+            PriorityThreadPool::Task task;
+            auto buffer_needed = _buffer_size - curr_buffer_size;
+            auto column_pool = get_pipeline_driver()->get_column_pool();
+            _fill_pipeline_chunk_pool(column_pool, buffer_needed, chunk_source_index, true);
+
+            task.work_function = [wp = _query_ctx, this, state, chunk_source_index, buffer_needed]() {
+                if (auto sp = wp.lock()) {
+                    {
+                        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+                        Status status = _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(
+                                buffer_needed, state, &_chunk_pool_manager[chunk_source_index]);
+                        if (!status.ok() && !status.is_end_of_file()) {
+                            _set_scan_status(status);
+                        }
+                        _last_growth_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
+                        _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
+                        _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
                     }
-                    _last_growth_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
-                    _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
-                    _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
+
+                    _re_enable_io_task(chunk_source_index);
                 }
+            };
+            // TODO(by satanson): set a proper priority
+            task.priority = 20;
 
-                _decrease_committed_scan_tasks();
-                _num_running_io_tasks--;
-                _is_io_task_running[chunk_source_index] = false;
-            }
-        };
-        // TODO(by satanson): set a proper priority
-        task.priority = 20;
-
-        offer_task_success = _io_threads->try_offer(task);
+            offer_task_success = _io_threads->try_offer(task);
+        }
     }
 
     if (offer_task_success) {
         _io_task_retry_cnt = 0;
     } else {
-        _num_running_io_tasks--;
-        _is_io_task_running[chunk_source_index] = false;
-        // TODO(hcf) set a proper retry times
-        LOG(WARNING) << "ScanOperator failed to offer io task due to thread pool overload, retryCnt="
-                     << _io_task_retry_cnt;
-        if (++_io_task_retry_cnt > 100) {
-            return Status::RuntimeError("ScanOperator failed to offer io task due to thread pool overload");
+        _re_enable_io_task(chunk_source_index);
+        if (io_task_commit) {
+            // TODO(hcf) set a proper retry times
+            LOG(WARNING) << "ScanOperator failed to offer io task due to thread pool overload, retryCnt="
+                         << _io_task_retry_cnt;
+            if (++_io_task_retry_cnt > 100) {
+                return Status::RuntimeError("ScanOperator failed to offer io task due to thread pool overload");
+            }
         }
     }
 
     return Status::OK();
+}
+
+// we get chunk from pipeline's column pool, and saved in local chunk_pool, then used by io thread.
+void ScanOperator::_fill_pipeline_chunk_pool(PipelineColumnPool* column_pool, int count, int chunk_source_index,
+                                             bool force_column_pool) {
+    const size_t capacity = runtime_state()->chunk_size();
+    for (int i = 0; i < count; i++) {
+        ChunkPtr chunk(column_pool->new_chunk_pooled(_chunk_sources_prj_iter[chunk_source_index]->output_schema(),
+                                                     capacity, force_column_pool));
+        {
+            std::lock_guard<std::mutex> l(_chunk_pool_manager[chunk_source_index].mtx);
+            _chunk_pool_manager[chunk_source_index].chunk_pool.push(std::move(chunk));
+        }
+    }
 }
 
 Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index) {
@@ -310,8 +343,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
     if (morsel != nullptr) {
-        _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
-        auto status = _chunk_sources[chunk_source_index]->prepare(state);
+        auto status = create_chunk_source(state, std::move(morsel), chunk_source_index);
         if (!status.ok()) {
             _chunk_sources[chunk_source_index] = nullptr;
             _is_finished = true;

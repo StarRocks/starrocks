@@ -20,7 +20,8 @@ GlobalDriverExecutor::GlobalDriverExecutor(std::string name, std::unique_ptr<Thr
                                 : std::make_unique<QuerySharedDriverQueue>()),
           _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
-          _exec_state_reporter(new ExecStateReporter()) {}
+          _exec_state_reporter(new ExecStateReporter()),
+          _pipeline_column_pool_mgr(new PipelineColumnPoolManager()) {}
 
 GlobalDriverExecutor::~GlobalDriverExecutor() {
     {
@@ -53,7 +54,7 @@ void GlobalDriverExecutor::initialize(int num_threads) {
     _blocked_driver_poller->start();
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
-        _thread_pool->submit_func([this]() { this->_worker_thread(); });
+        _thread_pool->submit_func([this, i]() { this->_worker_thread(i); });
     }
 }
 
@@ -63,16 +64,18 @@ void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
-        _thread_pool->submit_func([this]() { this->_worker_thread(); });
+        _thread_pool->submit_func([this, i]() { this->_worker_thread(i); });
     }
 }
 
-void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
+void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state,
+                                            PipelineColumnPool* pipeline_column_pool) {
     DCHECK(driver);
     driver->finalize(runtime_state, state);
+    pipeline_column_pool->release_large_columns<vectorized::BinaryColumn>(runtime_state->chunk_size() * 512);
 }
 
-void GlobalDriverExecutor::_worker_thread() {
+void GlobalDriverExecutor::_worker_thread(int thread_id) {
     const int worker_id = _next_id++;
     while (true) {
         if (_num_threads_setter.should_shrink()) {
@@ -99,22 +102,28 @@ void GlobalDriverExecutor::_worker_thread() {
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
 
+            TUniqueId query_id;
+            query_id.hi = thread_id;
+            query_id.lo = 0;
+            auto column_pool_ptr = _pipeline_column_pool_mgr->get_or_register(query_id);
+
             if (fragment_ctx->is_canceled()) {
                 driver->cancel_operators(runtime_state);
                 if (driver->is_still_pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     _blocked_driver_poller->add_blocked_driver(driver);
                 } else {
-                    _finalize_driver(driver, runtime_state, DriverState::CANCELED);
+                    _finalize_driver(driver, runtime_state, DriverState::CANCELED, column_pool_ptr);
                 }
                 continue;
             }
             // a blocked driver is canceled because of fragment cancellation or query expiration.
             if (driver->is_finished()) {
-                _finalize_driver(driver, runtime_state, driver->driver_state());
+                _finalize_driver(driver, runtime_state, driver->driver_state(), column_pool_ptr);
                 continue;
             }
 
+            driver->set_column_pool(column_pool_ptr);
             auto maybe_state = driver->process(runtime_state, worker_id);
             Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);
@@ -134,7 +143,7 @@ void GlobalDriverExecutor::_worker_thread() {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     _blocked_driver_poller->add_blocked_driver(driver);
                 } else {
-                    _finalize_driver(driver, runtime_state, DriverState::INTERNAL_ERROR);
+                    _finalize_driver(driver, runtime_state, DriverState::INTERNAL_ERROR, column_pool_ptr);
                 }
                 continue;
             }
@@ -148,7 +157,7 @@ void GlobalDriverExecutor::_worker_thread() {
             case FINISH:
             case CANCELED:
             case INTERNAL_ERROR: {
-                _finalize_driver(driver, runtime_state, driver_state);
+                _finalize_driver(driver, runtime_state, driver_state, column_pool_ptr);
                 break;
             }
             case INPUT_EMPTY:

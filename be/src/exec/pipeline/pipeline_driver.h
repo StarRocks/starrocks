@@ -10,6 +10,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
+#include "exec/pipeline/pipeline_column_pool.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/runtime_filter_types.h"
@@ -354,6 +355,10 @@ public:
     inline bool is_in_ready_queue() const { return _in_ready_queue.load(std::memory_order_acquire); }
     void set_in_ready_queue(bool v) { _in_ready_queue.store(v, std::memory_order_release); }
 
+    void set_column_pool(PipelineColumnPool* column_pool) { _column_pool = column_pool; }
+
+    PipelineColumnPool* get_column_pool() { return _column_pool; }
+
 private:
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
@@ -405,6 +410,9 @@ private:
     // The index of QuerySharedDriverQueue{WithoutLock}._queues which this driver belongs to.
     size_t _driver_queue_level = 0;
     std::atomic<bool> _in_ready_queue{false};
+
+    // Column Pool used by this driver, It choosed by runtime.
+    PipelineColumnPool* _column_pool;
 
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;

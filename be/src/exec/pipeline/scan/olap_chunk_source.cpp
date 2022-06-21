@@ -310,15 +310,27 @@ void OlapChunkSource::_update_avg_row_bytes(vectorized::Chunk* chunk, size_t chu
     }
 }
 
-Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state) {
+size_t OlapChunkSource::get_curr_buffer_size() {
+    return _chunk_buffer.get_size();
+}
+
+Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state,
+                                                          ChunkPoolManager* chunk_pool_manager) {
     if (!_status.ok()) {
         return _status;
     }
     using namespace vectorized;
-
     for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
-        ChunkUniquePtr chunk(
-                ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(), true));
+        // chunk from chunk_pool.
+        ChunkPtr chunk;
+        {
+            auto& chunk_pool = chunk_pool_manager->chunk_pool;
+            std::lock_guard<std::mutex> l(chunk_pool_manager->mtx);
+            if (chunk_pool.empty()) {
+                break;
+            }
+            chunk = chunk_pool.pop();
+        }
         _status = _read_chunk_from_storage(_runtime_state, chunk.get());
         if (!_status.ok()) {
             // end of file is normal case, need process chunk
