@@ -28,7 +28,7 @@ DIAGNOSTIC_POP
 #include "storage/lake/async_delta_writer.h"
 #include "storage/memtable.h"
 #include "storage/storage_engine.h"
-#include "util/block_compression.h"
+#include "util/compression/block_compression.h"
 #include "util/countdown_latch.h"
 #include "util/faststring.h"
 

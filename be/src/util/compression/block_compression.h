@@ -44,24 +44,24 @@ public:
     // output should be preallocated, and its capacity must be large enough
     // for compressed input, which can be get through max_compressed_len
     // function. Size of compressed data will be set in output's size.
-    // If uncompressed_size is not -1, then we will first save the compressed result in
+    // If use_compression_buffer is true, then we will first save the compressed result in
     // compression_buffer(compression_context.h), and copy the value in
     // compression_buffer to the compressed_body. In this way, we can avoid
     // allocating a very large block of memory at the beginning and then shrink it lator.
     // This optimization is only used in LZ4F and ZSTD.
-    virtual Status compress(const Slice& input, Slice* output, size_t uncompressed_size = -1,
-                            faststring* compressed_body = nullptr) const = 0;
+    virtual Status compress(const Slice& input, Slice* output, bool use_compression_buffer = false,
+                            size_t uncompressed_size = -1, faststring* compressed_body = nullptr) const = 0;
 
     // Default implementation will merge input list into a big buffer and call
     // compress(Slice) to finish compression. If compression type support
     // digesting slice one by one, it should reimplement this function.
-    // If uncompressed_size is not -1, then we will first save the compressed result in
+    // If use_compression_buffer is true, then we will first save the compressed result in
     // compression_buffer(compression_context.h), and copy the value in
     // compression_buffer to the compressed_body. In this way, we can avoid
     // allocating a very large block of memory at the beginning and then shrink it later.
     // This optimization is only used in LZ4F and ZSTD.
-    virtual Status compress(const std::vector<Slice>& input, Slice* output, size_t uncompressed_size = -1,
-                            faststring* compressed_body = nullptr) const;
+    virtual Status compress(const std::vector<Slice>& input, Slice* output, bool use_compression_buffer = false,
+                            size_t uncompressed_size = -1, faststring* compressed_body = nullptr) const;
 
     // Decompress input data into output, output's capacity should be large
     // enough for decompressed data. Size of decompressed data will be set in

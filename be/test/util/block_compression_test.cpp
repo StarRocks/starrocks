@@ -284,7 +284,7 @@ void benchmark_compression_buffer(starrocks::CompressionTypePB type, std::string
     for (int i = 0; i < kBenchmarkCompressionTimes; i++) {
         faststring compressed;
         Slice compressed_slice;
-        st = codec->compress(orig_slices, &compressed_slice, total_size, &compressed);
+        st = codec->compress(orig_slices, &compressed_slice, true, total_size, &compressed);
         compressed.shrink_to_fit();
         ASSERT_TRUE(st.ok());
     }
@@ -329,8 +329,34 @@ void benchmark_decompression(starrocks::CompressionTypePB type, std::string& str
     }
 }
 
-// #define LZ4F_BENCHMARK
-// #define ZSTD_BENCHMARK
+TEST_F(BlockCompressionTest, LZ4F_compression_LARGE_PAGE_TEST) {
+    std::string str = random_string(1024 * 1024 * 20);
+    CompressionTypePB type = starrocks::CompressionTypePB::LZ4_FRAME;
+
+    const BlockCompressionCodec* codec = nullptr;
+    auto st = get_block_compression_codec(type, &codec);
+    ASSERT_TRUE(st.ok());
+
+    std::vector<std::string> orig_strs;
+    for (int i = 0; i < kBenchmarkCompressionMultiSliceNum; i++) {
+        orig_strs.emplace_back(str);
+    }
+    std::vector<Slice> orig_slices;
+    std::string orig;
+    for (auto& str : orig_strs) {
+        orig_slices.emplace_back(str);
+        orig.append(str);
+    }
+
+    size_t total_size = orig.size();
+    faststring compressed;
+    Slice compressed_slice;
+    st = codec->compress(orig_slices, &compressed_slice, true, total_size, &compressed);
+    ASSERT_TRUE(st.ok());
+}
+
+//#define LZ4F_BENCHMARK
+//#define ZSTD_BENCHMARK
 
 #ifdef LZ4F_BENCHMARK
 TEST_F(BlockCompressionTest, LZ4F_benchmark_single_slice_compression) {

@@ -52,7 +52,7 @@ Status PageIO::compress_page_body(const BlockCompressionCodec* codec, double min
     if (codec != nullptr && uncompressed_size > 0) {
         if (codec->type() == CompressionTypePB::LZ4_FRAME || codec->type() == CompressionTypePB::ZSTD) {
             Slice compressed_slice;
-            RETURN_IF_ERROR(codec->compress(body, &compressed_slice, uncompressed_size, compressed_body));
+            RETURN_IF_ERROR(codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body));
         } else {
             compressed_body->resize(codec->max_compressed_len(uncompressed_size));
             Slice compressed_slice(*compressed_body);

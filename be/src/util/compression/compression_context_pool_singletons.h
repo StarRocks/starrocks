@@ -22,7 +22,7 @@
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
 #include "util/compression/compression_context.h"
-#include "util/compression/compression_core_local_context_pool.h"
+#include "util/compression/compression_context_pool.h"
 #include "util/faststring.h"
 
 namespace starrocks::compression {
@@ -66,11 +66,11 @@ struct ZSTD_DCtx_Resetter {
     Status operator()(ZSTDDecompressContext* ctx) const noexcept;
 };
 
-using ZSTD_CCtx_Pool = CompressionCoreLocalContextPool<ZSTDCompressionContext, ZSTD_CCtx_Creator, ZSTD_CCtx_Deleter,
-                                                       ZSTD_CCtx_Resetter, 32>;
+using ZSTD_CCtx_Pool =
+        CompressionContextPool<ZSTDCompressionContext, ZSTD_CCtx_Creator, ZSTD_CCtx_Deleter, ZSTD_CCtx_Resetter>;
 
-using ZSTD_DCtx_Pool = CompressionCoreLocalContextPool<ZSTDDecompressContext, ZSTD_DCtx_Creator, ZSTD_DCtx_Deleter,
-                                                       ZSTD_DCtx_Resetter, 32>;
+using ZSTD_DCtx_Pool =
+        CompressionContextPool<ZSTDDecompressContext, ZSTD_DCtx_Creator, ZSTD_DCtx_Deleter, ZSTD_DCtx_Resetter>;
 
 StatusOr<ZSTD_CCtx_Pool::Ref> getZSTD_CCtx();
 
@@ -108,11 +108,11 @@ struct LZ4F_DCtx_Resetter {
     Status operator()(LZ4FDecompressContext* ctx) const noexcept;
 };
 
-using LZ4F_CCtx_Pool = CompressionCoreLocalContextPool<LZ4FCompressContext, LZ4F_CCtx_Creator, LZ4F_CCtx_Deleter,
-                                                       LZ4F_CCtx_Resetter, 32>;
+using LZ4F_CCtx_Pool =
+        CompressionContextPool<LZ4FCompressContext, LZ4F_CCtx_Creator, LZ4F_CCtx_Deleter, LZ4F_CCtx_Resetter>;
 
-using LZ4F_DCtx_Pool = CompressionCoreLocalContextPool<LZ4FDecompressContext, LZ4F_DCtx_Creator, LZ4F_DCtx_Deleter,
-                                                       LZ4F_DCtx_Resetter, 32>;
+using LZ4F_DCtx_Pool =
+        CompressionContextPool<LZ4FDecompressContext, LZ4F_DCtx_Creator, LZ4F_DCtx_Deleter, LZ4F_DCtx_Resetter>;
 
 StatusOr<LZ4F_CCtx_Pool::Ref> getLZ4F_CCtx();
 

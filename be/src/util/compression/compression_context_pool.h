@@ -111,7 +111,7 @@ public:
 private:
     void add(InternalRef ptr) {
         DCHECK(ptr);
-        // _resetter(ptr.get());
+        _resetter(ptr.get());
         std::unique_lock wrlock(_stack_lock);
         _stack.push_back(std::move(ptr));
     }

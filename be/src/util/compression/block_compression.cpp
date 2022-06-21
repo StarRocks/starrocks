@@ -36,10 +36,14 @@
 
 namespace starrocks {
 
+// For LZ4F and ZSTD, if page's max compression len >= 10MB, then we will not
+// use the compression_buffer.
+const static int COMPRESSION_BUFFER_THRESHOLD = 1024 * 1024 * 10;
+
 using strings::Substitute;
 
-Status BlockCompressionCodec::compress(const std::vector<Slice>& inputs, Slice* output, size_t uncompressed_size,
-                                       faststring* compressed_body) const {
+Status BlockCompressionCodec::compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,
+                                       size_t uncompressed_size, faststring* compressed_body) const {
     if (inputs.size() == 1) {
         return compress(inputs[0], output);
     }
@@ -66,7 +70,7 @@ public:
 
     ~Lz4BlockCompression() override = default;
 
-    Status compress(const Slice& input, Slice* output, size_t uncompressed_size,
+    Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
                     faststring* compressed_body) const override {
         auto compressed_len = LZ4_compress_default(input.data, output->data, input.size, output->size);
         if (compressed_len == 0) {
@@ -126,16 +130,16 @@ public:
 
     ~Lz4HadoopBlockCompression() override = default;
 
-    Status compress(const Slice& input, Slice* output, size_t uncompressed_size,
+    Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
                     faststring* compressed_body) const override {
         std::vector<Slice> orig_slices;
         orig_slices.emplace_back(input);
-        RETURN_IF_ERROR(compress(orig_slices, output, uncompressed_size, compressed_body));
+        RETURN_IF_ERROR(compress(orig_slices, output, use_compression_buffer, uncompressed_size, compressed_body));
         return Status::OK();
     }
 
-    Status compress(const std::vector<Slice>& inputs, Slice* output, size_t uncompressed_size,
-                    faststring* compressed_body) const override {
+    Status compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,
+                    size_t uncompressed_size, faststring* compressed_body) const override {
         if (output->size < kHadoopLz4PrefixLength + kHadoopLz4InnerBlockPrefixLength) {
             return Status::InvalidArgument(
                     "Output buffer too small for "
@@ -154,7 +158,8 @@ public:
             }
             Slice raw_output(output_ptr + kHadoopLz4InnerBlockPrefixLength,
                              remaining_output_size - kHadoopLz4InnerBlockPrefixLength);
-            RETURN_IF_ERROR(Lz4BlockCompression::compress(input, &raw_output, uncompressed_size, compressed_body));
+            RETURN_IF_ERROR(Lz4BlockCompression::compress(input, &raw_output, use_compression_buffer, uncompressed_size,
+                                                          compressed_body));
 
             // Prepend compressed size in bytes to be compatible with Hadoop
             // Lz4Codec
@@ -283,14 +288,14 @@ public:
 
     ~Lz4fBlockCompression() override = default;
 
-    Status compress(const Slice& input, Slice* output, size_t uncompressed_size,
+    Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
                     faststring* compressed_body) const override {
-        return _compress({input}, output, uncompressed_size, compressed_body);
+        return _compress({input}, output, use_compression_buffer, uncompressed_size, compressed_body);
     }
 
-    Status compress(const std::vector<Slice>& inputs, Slice* output, size_t uncompressed_size,
-                    faststring* compressed_body) const override {
-        return _compress(inputs, output, uncompressed_size, compressed_body);
+    Status compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,
+                    size_t uncompressed_size, faststring* compressed_body) const override {
+        return _compress(inputs, output, use_compression_buffer, uncompressed_size, compressed_body);
     }
 
     Status decompress(const Slice& input, Slice* output) const override { return _decompress(input, output); }
@@ -300,8 +305,8 @@ public:
     }
 
 private:
-    Status _compress(const std::vector<Slice>& inputs, Slice* output, size_t uncompressed_size,
-                     faststring* compressed_body) const {
+    Status _compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,
+                     size_t uncompressed_size, faststring* compressed_body) const {
         StatusOr<compression::LZ4F_CCtx_Pool::Ref> ref = compression::getLZ4F_CCtx();
         Status status = ref.status();
         if (!status.ok()) {
@@ -311,14 +316,21 @@ private:
         LZ4F_compressionContext_t ctx = context->ctx;
 
         [[maybe_unused]] faststring* compression_buffer = nullptr;
-        if (uncompressed_size != -1) {
-            DCHECK_GE(uncompressed_size, 0);
-            compression_buffer = &context->compression_buffer;
-            size_t max_len = max_compressed_len(uncompressed_size);
-            compression_buffer->resize(max_len);
-
-            output->data = reinterpret_cast<char*>(compression_buffer->data());
-            output->size = max_len;
+        [[maybe_unused]] size_t max_len = 0;
+        if (use_compression_buffer) {
+            max_len = max_compressed_len(uncompressed_size);
+            if (max_len <= COMPRESSION_BUFFER_THRESHOLD) {
+                DCHECK_GE(uncompressed_size, 0);
+                compression_buffer = &context->compression_buffer;
+                compression_buffer->resize(max_len);
+                output->data = reinterpret_cast<char*>(compression_buffer->data());
+                output->size = max_len;
+            } else {
+                DCHECK_GE(uncompressed_size, 0);
+                compressed_body->resize(max_len);
+                output->data = reinterpret_cast<char*>(compressed_body->data());
+                output->size = max_len;
+            }
         }
 
         auto wbytes = LZ4F_compressBegin(ctx, output->data, output->size, &_s_preferences);
@@ -346,11 +358,16 @@ private:
         }
         offset += wbytes;
         output->size = offset;
-        if (uncompressed_size != -1) {
-            DCHECK(compressed_body);
-            compression_buffer->resize(output->size);
-            compressed_body->assign_copy(compression_buffer->data(), compression_buffer->size());
-            compression_buffer->resize(0);
+        if (use_compression_buffer) {
+            if (max_len <= COMPRESSION_BUFFER_THRESHOLD) {
+                DCHECK(compressed_body);
+                compression_buffer->resize(output->size);
+                compressed_body->assign_copy(compression_buffer->data(), compression_buffer->size());
+                compression_buffer->resize(0);
+            } else {
+                DCHECK(compressed_body);
+                compressed_body->resize(output->size);
+            }
         }
         return Status::OK();
     }
@@ -480,7 +497,7 @@ public:
 
     ~SnappyBlockCompression() override = default;
 
-    Status compress(const Slice& input, Slice* output, size_t uncompressed_size,
+    Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
                     faststring* compressed_body) const override {
         snappy::RawCompress(input.data, input.size, output->data, &output->size);
         return Status::OK();
@@ -495,8 +512,8 @@ public:
         return Status::OK();
     }
 
-    Status compress(const std::vector<Slice>& inputs, Slice* output, size_t uncompressed_size,
-                    faststring* compressed_body) const override {
+    Status compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,
+                    size_t uncompressed_size, faststring* compressed_body) const override {
         SnappySlicesSource source(inputs);
         snappy::UncheckedByteArraySink sink(output->data);
         output->size = snappy::Compress(&source, &sink);
@@ -531,7 +548,7 @@ public:
         return Status::OK();
     }
 
-    Status compress(const Slice& input, Slice* output, size_t uncompressed_size,
+    Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
                     faststring* compressed_body) const override {
         auto zres = ::compress((Bytef*)output->data, &output->size, (Bytef*)input.data, input.size);
         if (zres != Z_OK) {
@@ -540,8 +557,8 @@ public:
         return Status::OK();
     }
 
-    Status compress(const std::vector<Slice>& inputs, Slice* output, size_t uncompressed_size,
-                    faststring* compressed_body) const override {
+    Status compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,
+                    size_t uncompressed_size, faststring* compressed_body) const override {
         z_stream zstrm;
         RETURN_IF_ERROR(init_compress_stream(zstrm));
         // we assume that output is e
@@ -599,7 +616,7 @@ public:
 
     ~ZstdBlockCompression() override = default;
 
-    Status compress(const Slice& input, Slice* output, size_t uncompressed_size,
+    Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
                     faststring* compressed_body) const override {
         // For ZSTD_compress, default ZSTD_COMPRESS_HEAPMODE is off, and
         // allocate ZSTD_CCtx on stack. So here we didn't integrate it into the
@@ -613,9 +630,9 @@ public:
         return Status::OK();
     }
 
-    Status compress(const std::vector<Slice>& inputs, Slice* output, size_t uncompressed_size,
-                    faststring* compressed_body) const override {
-        return _compress(inputs, output, uncompressed_size, compressed_body);
+    Status compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,
+                    size_t uncompressed_size, faststring* compressed_body) const override {
+        return _compress(inputs, output, use_compression_buffer, uncompressed_size, compressed_body);
     }
 
     Status decompress(const Slice& input, Slice* output) const override { return _decompress(input, output); }
@@ -623,8 +640,8 @@ public:
     size_t max_compressed_len(size_t len) const override { return ZSTD_compressBound(len); }
 
 private:
-    Status _compress(const std::vector<Slice>& inputs, Slice* output, size_t uncompressed_size,
-                     faststring* compressed_body) const {
+    Status _compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,
+                     size_t uncompressed_size, faststring* compressed_body) const {
         StatusOr<compression::ZSTD_CCtx_Pool::Ref> ref = compression::getZSTD_CCtx();
         Status status = ref.status();
         if (!status.ok()) {
@@ -634,14 +651,21 @@ private:
         ZSTD_CCtx* ctx = context->ctx;
 
         [[maybe_unused]] faststring* compression_buffer = nullptr;
-        if (uncompressed_size != -1) {
-            DCHECK_GE(uncompressed_size, 0);
-            compression_buffer = &context->compression_buffer;
-            size_t max_len = max_compressed_len(uncompressed_size);
-            compression_buffer->resize(max_len);
-
-            output->data = reinterpret_cast<char*>(compression_buffer->data());
-            output->size = max_len;
+        [[maybe_unused]] size_t max_len;
+        if (use_compression_buffer) {
+            max_len = max_compressed_len(uncompressed_size);
+            if (max_len <= COMPRESSION_BUFFER_THRESHOLD) {
+                DCHECK_GE(uncompressed_size, 0);
+                compression_buffer = &context->compression_buffer;
+                compression_buffer->resize(max_len);
+                output->data = reinterpret_cast<char*>(compression_buffer->data());
+                output->size = max_len;
+            } else {
+                DCHECK_GE(uncompressed_size, 0);
+                compressed_body->resize(max_len);
+                output->data = reinterpret_cast<char*>(compressed_body->data());
+                output->size = max_len;
+            }
         }
 
         ZSTD_outBuffer out_buf;
@@ -678,11 +702,16 @@ private:
         }
         output->size = out_buf.pos;
 
-        if (uncompressed_size != -1) {
-            DCHECK(compressed_body);
-            compression_buffer->resize(output->size);
-            compressed_body->assign_copy(compression_buffer->data(), compression_buffer->size());
-            compression_buffer->resize(0);
+        if (use_compression_buffer) {
+            if (max_len <= COMPRESSION_BUFFER_THRESHOLD) {
+                DCHECK(compressed_body);
+                compression_buffer->resize(output->size);
+                compressed_body->assign_copy(compression_buffer->data(), compression_buffer->size());
+                compression_buffer->resize(0);
+            } else {
+                DCHECK(compressed_body);
+                compressed_body->resize(output->size);
+            }
         }
 
         return Status::OK();
@@ -741,11 +770,12 @@ public:
         return Status::OK();
     }
 
-    Status compress(const Slice& input, Slice* output, size_t uncompressed_size,
+    Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
                     faststring* compressed_body) const override {
         std::vector<Slice> orig_slices;
         orig_slices.emplace_back(input);
-        RETURN_IF_ERROR(ZlibBlockCompression::compress(orig_slices, output, uncompressed_size, compressed_body));
+        RETURN_IF_ERROR(ZlibBlockCompression::compress(orig_slices, output, use_compression_buffer, uncompressed_size,
+                                                       compressed_body));
         return Status::OK();
     }
 
