@@ -888,7 +888,7 @@ public class GlobalStateMgr {
 
         // setup for journal
         try {
-            initJournal();
+            journal.open();
             if (!haProtocol.fencing()) {
                 throw new Exception("fencing failed. will exit");
             }
