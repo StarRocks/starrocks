@@ -321,7 +321,7 @@ public class RollupJobV2Test {
     }
 
     @Test
-    public void testSerializeOfRollupJob(@Mocked CreateMaterializedViewStmt stmt) throws IOException,
+    public void testSerializeOfRollupJob() throws IOException,
             AnalysisException {
         Config.enable_materialized_view = true;
         // prepare file
@@ -331,7 +331,7 @@ public class RollupJobV2Test {
 
         short keysCount = 1;
         List<Column> columns = Lists.newArrayList();
-        String mvColumnName = CreateMaterializedViewStmt.MATERIALIZED_VIEW_NAME_PREFIX + "to_bitmap_" + "c1";
+        String mvColumnName = CreateMaterializedViewStmt.MATERIALIZED_VIEW_NAME_PREFIX + "bitmap_union_" + "c1";
         Column column = new Column(mvColumnName, Type.BITMAP, false, AggregateType.BITMAP_UNION, false,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("1")), "");
         columns.add(column);
@@ -345,20 +345,6 @@ public class RollupJobV2Test {
         rollupJobV2.write(out);
         out.flush();
         out.close();
-
-        List<Expr> params = Lists.newArrayList();
-        SlotRef param1 = new SlotRef(new TableName(null, "test"), "c1");
-        params.add(param1);
-        MVColumnItem mvColumnItem = new MVColumnItem(mvColumnName, Type.BITMAP);
-        mvColumnItem.setDefineExpr(new FunctionCallExpr(new FunctionName("to_bitmap"), params));
-        List<MVColumnItem> mvColumnItemList = Lists.newArrayList();
-        mvColumnItemList.add(mvColumnItem);
-        new Expectations() {
-            {
-                stmt.getMVColumnItemList();
-                result = mvColumnItemList;
-            }
-        };
 
         // read objects from file
         MetaContext metaContext = new MetaContext();
