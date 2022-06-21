@@ -531,7 +531,9 @@ public class HiveMetaCache {
             partitionRefreshExecutor.submit(() -> {
                 try {
                     List<String> partValues = client.partitionNameToVals(partName);
-                    HivePartitionKey key = new HivePartitionKey(hmsTable.getDb(), hmsTable.getTable(), hmsTable.getTableType(), partValues);
+                    HivePartitionKey key =
+                            new HivePartitionKey(hmsTable.getDb(), hmsTable.getTable(), hmsTable.getTableType(),
+                                    partValues);
                     partitionsCache.put(key, loadPartition(key));
                     partitionStatsCache.put(key, loadPartitionStats(key));
                 } catch (Exception e) {
