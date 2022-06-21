@@ -417,12 +417,8 @@ public class DatabaseTransactionMgr {
             tableListString.append(table.getName());
             stateMachineList.add(stateMachine);
         }
-        int numPartitions = 0;
-        for (Map.Entry<Long, TableCommitInfo> entry : transactionState.getIdToTableCommitInfos().entrySet()) {
-            numPartitions += entry.getValue().getIdToPartitionCommitInfo().size();
-        }
+
         txnSpan.setAttribute("tables", tableListString.toString());
-        txnSpan.setAttribute("num_partition", numPartitions);
 
         // before state transform
         TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.COMMITTED);
@@ -435,6 +431,11 @@ public class DatabaseTransactionMgr {
         try {
             unprotectedCommitTransaction(transactionState, stateMachineList);
             txnOperated = true;
+            int numPartitions = 0;
+            for (Map.Entry<Long, TableCommitInfo> entry : transactionState.getIdToTableCommitInfos().entrySet()) {
+                numPartitions += entry.getValue().getIdToPartitionCommitInfo().size();
+            }
+            txnSpan.setAttribute("num_partition", numPartitions);
         } finally {
             writeUnlock();
             unprotectedCommitSpan.end();

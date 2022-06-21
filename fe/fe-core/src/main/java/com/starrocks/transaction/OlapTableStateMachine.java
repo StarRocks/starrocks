@@ -28,7 +28,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class OlapTableStateMachine extends StateMachine {
+public class OlapTableStateMachine implements StateMachine {
     private static final Logger LOG = LogManager.getLogger(OlapTableStateMachine.class);
 
     private final DatabaseTransactionMgr dbTxnMgr;
