@@ -33,7 +33,8 @@ jobs:
        with:
          path: ~/*.jar
          key: ${{ runner.os }}-testing-${{ hashFiles('*.jar') }}
-         restore-key: ${{ runner.os }}-testing-
+         restore-keys: |
+           ${{ runner.os }}-testing-
     
      - name: bash script
        run: | 
