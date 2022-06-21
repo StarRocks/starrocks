@@ -294,6 +294,11 @@ public class Memo {
         }
     }
 
+    /*
+     * remove unreachable group, and rebuild all group expression.
+     * only used in logical rewrite phase, logical expression must only one in a group,
+     * and remove groupExpression one by one is too slow, so rebuild directly
+     */
     public void rebuildGroupExpressions() {
         LinkedList<Integer> touch = new LinkedList<>();
         touch.add(rootGroup.getId());
