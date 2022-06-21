@@ -1742,7 +1742,7 @@ static inline const char* skip_leading_spaces(const char* begin, const char* end
         }
     }
 #endif
-    for (; p < end && * p == ' '; ++p) {
+    for (; p < end && *p == ' '; ++p) {
     }
     return p;
 }
