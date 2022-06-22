@@ -30,10 +30,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Range;
 import com.sleepycat.je.rep.InsufficientLogException;
-import com.staros.journal.JournalSystem;
 import com.staros.manager.StarManager;
-import com.staros.manager.StarManagerServer;
-import com.staros.util.GlobalIdGenerator;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJob.JobType;
@@ -217,14 +214,12 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
-import com.starrocks.staros.BDBJEJournalWriter;
-import com.starrocks.staros.StarMgrIdGenerator;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
@@ -419,7 +414,7 @@ public class GlobalStateMgr {
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
 
-    private StarManagerServer starMgrServer;
+    private StarMgrServer starMgrServer;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
@@ -582,7 +577,7 @@ public class GlobalStateMgr {
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
 
         if (Config.integrate_starmgr) {
-            this.starMgrServer = new StarManagerServer();
+            this.starMgrServer = new StarMgrServer();
         }
     }
 
@@ -3215,7 +3210,7 @@ public class GlobalStateMgr {
             LOG.fatal("FE not integrated with starmgr!");
             System.exit(-1);
         }
-        return starMgrServer.getStarManager();
+        return starMgrServer.getStarMgr();
     }
 
     private void startStarMgrServer() {
@@ -3223,30 +3218,7 @@ public class GlobalStateMgr {
             return;
         }
         try {
-            String[] starMgrAddr = Config.starmgr_address.split(":");
-            if (starMgrAddr.length != 2) {
-                LOG.fatal("Config.starmgr_address {} bad format.", Config.starmgr_address);
-                System.exit(-1);
-            }
-            int port = Integer.parseInt(starMgrAddr[1]);
-
-            if (Config.starmgr_s3_bucket.isEmpty()) {
-                LOG.fatal("Config.starmgr_s3_bucket is not set.");
-                System.exit(-1);
-            }
-
-            // necessary starMgr config setting
-            com.staros.util.Config.STARMGR_IP = FrontendOptions.getLocalHostAddress();
-            com.staros.util.Config.STARMGR_RPC_PORT = port;
-            com.staros.util.Config.S3_BUCKET = Config.starmgr_s3_bucket;
-
-            BDBJEJournalWriter journalWriter = new BDBJEJournalWriter(editLog);
-            JournalSystem.overrideJournalWriter(journalWriter);
-
-            StarMgrIdGenerator generator = new StarMgrIdGenerator(idGenerator);
-            GlobalIdGenerator.overrideIdGenerator(generator);
-
-            this.starMgrServer.start(com.staros.util.Config.STARMGR_RPC_PORT);
+            starMgrServer.start(editLog, idGenerator);
         } catch (Exception e) {
             LOG.fatal("start star manager failed, {}.", e.getMessage());
             System.exit(-1);
