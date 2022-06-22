@@ -347,8 +347,7 @@ ColumnPtr JsonFunctions::_json_string_unescaped(FunctionContext* context, const 
 
             // Since the string extract from json may be escaped, unescaping is needed.
             // The src and dest of strings::CUnescape could be the same.
-            std::string err;
-            if (!strings::CUnescape(StringPiece{str}, &str, &err)) {
+            if (!strings::CUnescape(StringPiece{str}, &str, nullptr)) {
                 result.append_null();
                 continue;
             }
