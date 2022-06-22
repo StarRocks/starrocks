@@ -26,7 +26,7 @@ public class IntervalLiteral extends LiteralExpr {
 
     @Override
     protected String toSqlImpl() {
-        return String.format("interval %s %s", value.toSql(), unitIdentifier.getDescription());
+        return "interval " + value.toSql() + unitIdentifier;
     }
 
     @Override
