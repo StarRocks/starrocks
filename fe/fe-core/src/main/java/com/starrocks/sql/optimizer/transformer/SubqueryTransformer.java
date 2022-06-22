@@ -277,9 +277,9 @@ public class SubqueryTransformer {
                     ((SelectRelation) queryRelation).getAggregate().get(0).getFnName().getFunction()
                             .equalsIgnoreCase(FunctionSet.COUNT)) {
 
-                subqueryOutput = new CallOperator(FunctionSet.IF_NULL, Type.BIGINT,
+                subqueryOutput = new CallOperator(FunctionSet.IFNULL, Type.BIGINT,
                         Lists.newArrayList(subqueryOutput, ConstantOperator.createBigint(0)),
-                        Expr.getBuiltinFunction(FunctionSet.IF_NULL, new Type[] {Type.BIGINT, Type.BIGINT},
+                        Expr.getBuiltinFunction(FunctionSet.IFNULL, new Type[] {Type.BIGINT, Type.BIGINT},
                                 Function.CompareMode.IS_IDENTICAL));
             }
 

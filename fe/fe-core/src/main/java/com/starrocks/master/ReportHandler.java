@@ -208,7 +208,8 @@ public class ReportHandler extends Daemon {
                 GlobalStateMgr.getCurrentState().getWorkGroupMgr().getWorkGroupsNeedToDeliver(beId);
         result.setWorkgroup_ops(workGroupOps);
 
-        ReportTask reportTask = new ReportTask(beId, reportType, tasks, disks, tablets, reportVersion, activeWorkGroups);
+        ReportTask reportTask =
+                new ReportTask(beId, reportType, tasks, disks, tablets, reportVersion, activeWorkGroups);
         try {
             putToQueue(reportTask);
         } catch (Exception e) {
@@ -590,7 +591,7 @@ public class ReportHandler extends Daemon {
                                         replica.getId(), tabletId, backendId, dbId, backendReportVersion);
                             } else {
                                 LOG.debug("replica {} of tablet {} in backend {} version is changed"
-                                        + " between check and real sync. meta[{}]. backend[{}]",
+                                                + " between check and real sync. meta[{}]. backend[{}]",
                                         replica.getId(), tabletId, backendId, metaVersion,
                                         backendVersion);
                             }
@@ -876,8 +877,9 @@ public class ReportHandler extends Daemon {
             ListMultimap<Long, TPartitionVersionInfo> map = transactionsToPublish.get(dbId);
             for (long txnId : map.keySet()) {
                 long commitTime = transactionsToCommitTime.get(txnId);
-                PublishVersionTask task = new PublishVersionTask(backendId, txnId, dbId, commitTime, map.get(txnId),
-                        createPublishVersionTaskTime);
+                PublishVersionTask task =
+                        new PublishVersionTask(backendId, txnId, dbId, commitTime, map.get(txnId), null,
+                                createPublishVersionTaskTime);
                 batchTask.addTask(task);
                 // add to AgentTaskQueue for handling finish report.
                 AgentTaskQueue.addTask(task);

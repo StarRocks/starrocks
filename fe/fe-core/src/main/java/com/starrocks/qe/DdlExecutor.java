@@ -41,7 +41,6 @@ import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.CancelExportStmt;
 import com.starrocks.analysis.CancelLoadStmt;
-import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateFileStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
@@ -98,9 +97,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 
 public class DdlExecutor {
     public static ShowResultSet execute(GlobalStateMgr globalStateMgr, DdlStmt ddlStmt) throws Exception {
-        if (ddlStmt instanceof CreateDbStmt) {
-            globalStateMgr.createDb((CreateDbStmt) ddlStmt);
-        } else if (ddlStmt instanceof DropDbStmt) {
+        if (ddlStmt instanceof DropDbStmt) {
             globalStateMgr.dropDb((DropDbStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateFunctionStmt) {
             globalStateMgr.createFunction((CreateFunctionStmt) ddlStmt);

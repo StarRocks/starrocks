@@ -188,7 +188,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 List<SlotRef> slots = new ArrayList<>();
                 functionCallExpr.collect(SlotRef.class, slots);
                 Preconditions.checkArgument(slots.size() == 1);
-                String baseColumnName = slots.get(0).getColumnName();
+                String baseColumnName = slots.get(0).getColumnName().toLowerCase();
                 String functionName = functionCallExpr.getFnName().getFunction();
                 SlotRef baseSlotRef = slots.get(0);
                 switch (functionName.toLowerCase()) {

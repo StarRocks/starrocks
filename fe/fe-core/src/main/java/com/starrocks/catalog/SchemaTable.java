@@ -427,6 +427,7 @@ public class SchemaTable extends Table {
                                             .column("SCHEDULE", ScalarType.createVarchar(64))
                                             .column("DATABASE", ScalarType.createVarchar(64))
                                             .column("DEFINITION", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
+                                            .column("EXPIRE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                                             .build()))
                     .put("task_runs",
                             new SchemaTable(
@@ -441,6 +442,7 @@ public class SchemaTable extends Table {
                                             .column("STATE", ScalarType.createVarchar(16))
                                             .column("DATABASE", ScalarType.createVarchar(64))
                                             .column("DEFINITION", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
+                                            .column("EXPIRE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                                             .column("ERROR_CODE", ScalarType.createType(PrimitiveType.BIGINT))
                                             .column("ERROR_MESSAGE", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .build()))

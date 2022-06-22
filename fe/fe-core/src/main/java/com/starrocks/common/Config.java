@@ -186,6 +186,13 @@ public class Config extends ConfigBase {
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
 
     /**
+     * For Task framework do some background operation like cleanup Task/TaskRun.
+     * It will run every *task_check_interval_second* to do background job.
+     */
+    @ConfField
+    public static int task_check_interval_second = 4 * 3600; // 4 hours
+
+    /**
      * for task set expire time
      */
     @ConfField(mutable = true)
@@ -754,13 +761,13 @@ public class Config extends ConfigBase {
      * Limitation of the pending TaskRun queue length.
      * Default is 500.
      */
-    @ConfField(mutable = false)
+    @ConfField(mutable = true)
     public static int task_runs_queue_length = 500;
     /**
      * Limitation of the running TaskRun.
      * Default is 20.
      */
-    @ConfField(mutable = false)
+    @ConfField(mutable = true)
     public static int task_runs_concurrency = 20;
     /**
      * Default timeout of export jobs.

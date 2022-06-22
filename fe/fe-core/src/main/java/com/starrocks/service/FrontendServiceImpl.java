@@ -348,8 +348,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         for (Task task : taskList) {
 
-            Database db = globalStateMgr.getDb(task.getDbName());
-            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, task.getDbName(), PrivPredicate.SHOW)) {
                 continue;
             }
 
@@ -358,8 +357,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setCreate_time(task.getCreateTime() / 1000);
             // Now there are only MANUAL types of Tasks
             info.setSchedule("MANUAL");
-            info.setDatabase(task.getDbName());
+            info.setDatabase(ClusterNamespace.getNameFromFullName(task.getDbName()));
             info.setDefinition(task.getDefinition());
+            info.setExpire_time(task.getExpireTime() / 1000);
             tasksResult.add(info);
         }
 
@@ -384,8 +384,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         for (TaskRunStatus status : taskRunList) {
 
-            Database db = globalStateMgr.getDb(status.getDbName());
-            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, status.getDbName(), PrivPredicate.SHOW)) {
                 continue;
             }
 
@@ -395,9 +394,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setCreate_time(status.getCreateTime() / 1000);
             info.setFinish_time(status.getFinishTime() / 1000);
             info.setState(status.getState().toString());
+            info.setDatabase(ClusterNamespace.getNameFromFullName(status.getDbName()));
             info.setDefinition(status.getDefinition());
             info.setError_code(status.getErrorCode());
             info.setError_message(status.getErrorMessage());
+            info.setExpire_time(status.getExpireTime() / 1000);
             tasksResult.add(info);
         }
         return result;
@@ -765,6 +766,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn begin request: {}", request);
 
         TLoadTxnBeginResult result = new TLoadTxnBeginResult();
+        // if current node is not master, reject the request
+        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+            result.setStatus(status);
+            return result;
+        }
+
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
         try {
@@ -833,6 +842,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn commit request: {}", request);
 
         TLoadTxnCommitResult result = new TLoadTxnCommitResult();
+        // if current node is not master, reject the request
+        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+            result.setStatus(status);
+            return result;
+        }
+
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
         try {
@@ -935,6 +952,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("txn rollback request: {}", request);
 
         TLoadTxnRollbackResult result = new TLoadTxnRollbackResult();
+        // if current node is not master, reject the request
+        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+            result.setStatus(status);
+            return result;
+        }
+
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
         try {

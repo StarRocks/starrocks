@@ -342,6 +342,7 @@ struct TTaskInfo {
     3: optional string schedule
     4: optional string database
     5: optional string definition
+    6: optional i64 expire_time
 }
 
 struct TGetTaskInfoResult {
@@ -356,8 +357,9 @@ struct TTaskRunInfo {
     5: optional string state
     6: optional string database
     7: optional string definition
-    8: optional i32 error_code
-    9: optional string error_message
+    8: optional i64 expire_time
+    9: optional i32 error_code
+    10: optional string error_message
 }
 
 struct TGetTaskRunInfoResult {
