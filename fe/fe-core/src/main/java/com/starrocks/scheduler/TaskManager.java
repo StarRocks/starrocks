@@ -180,8 +180,8 @@ public class TaskManager {
             if (!isReplay) {
                 // TaskId should be assigned by the framework
                 Preconditions.checkArgument(task.getId() == 0);
+                task.setId(GlobalStateMgr.getCurrentState().getNextId());
             }
-            task.setId(GlobalStateMgr.getCurrentState().getNextId());
             switch (task.getType()) {
                 case NORMAL:
                     nameToTaskMap.put(task.getName(), task);
