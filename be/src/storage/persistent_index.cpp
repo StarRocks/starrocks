@@ -185,6 +185,49 @@ struct MoveDest {
     bool operator<(const MoveDest& rhs) const { return npack < rhs.npack; }
 };
 
+static Status get_move_buckets(size_t min_pack_to_move, int32_t move_bucket_num, const uint8_t* bucket_packs_in_page,
+                               size_t s_begin, size_t s_end, std::vector<uint32_t>* idxes,
+                               std::vector<std::vector<uint32_t>>* res, std::vector<int>& bucketid_ordered_by_packs) {
+    if (move_bucket_num == 1) {
+        for (int oi = s_begin; oi < s_end; oi++) {
+            int i = bucketid_ordered_by_packs[oi];
+            auto bucket_packs = bucket_packs_in_page[i];
+            if (bucket_packs >= min_pack_to_move) {
+                idxes->emplace_back(i);
+                res->emplace_back(*idxes);
+                return Status::OK();
+            }
+        }
+        return Status::InternalError("failed to get buckets");
+    }
+
+    bool find = false;
+    for (int oi = s_begin; oi < s_end; oi++) {
+        auto bucket_packs = bucket_packs_in_page[bucketid_ordered_by_packs[oi]];
+        idxes->emplace_back(bucketid_ordered_by_packs[oi]);
+        Status st = get_move_buckets(min_pack_to_move - bucket_packs, move_bucket_num - 1, bucket_packs_in_page, oi + 1,
+                                     s_end, idxes, res, bucketid_ordered_by_packs);
+        if (st.ok()) {
+            find = true;
+            size_t move_pack_num = 0;
+            auto& idx = res->at(res->size() - 1);
+            size_t size = idx.size();
+            DCHECK(size >= move_bucket_num);
+            for (int j = 1; j <= move_bucket_num; j++) {
+                auto bucket_packs = bucket_packs_in_page[idx[size - j]];
+                move_pack_num += bucket_packs;
+            }
+            // if we find a solution which move pack num is equal to target pack, we don't need
+            // to do further seek, just return directly
+            if (move_pack_num == min_pack_to_move) {
+                return Status::OK();
+            }
+        }
+        idxes->pop_back();
+    }
+    return find ? Status::OK() : Status::InternalError("can not find bucket solution");
+}
+
 static Status find_buckets_to_move(uint32_t pageid, size_t min_pack_to_move, const uint8_t* bucket_packs_in_page,
                                    std::vector<BucketToMove>* buckets_to_move) {
     std::vector<int> bucketid_ordered_by_packs(bucket_per_page);
@@ -193,74 +236,58 @@ static Status find_buckets_to_move(uint32_t pageid, size_t min_pack_to_move, con
     }
     std::sort(bucketid_ordered_by_packs.begin(), bucketid_ordered_by_packs.end(),
               [&](const int& l, const int& r) -> bool { return bucket_packs_in_page[l] < bucket_packs_in_page[r]; });
-    // try find solution of moving 1 bucket
-    for (int oi = 0; oi < bucket_per_page; oi++) {
-        int i = bucketid_ordered_by_packs[oi];
-        auto bucket_packs = bucket_packs_in_page[i];
-        if (bucket_packs >= min_pack_to_move) {
-            buckets_to_move->emplace_back(bucket_packs, pageid, i);
-            return Status::OK();
+
+    std::vector<std::vector<uint32_t>> res;
+    std::vector<uint32_t> idxes;
+    //std::vector<bool> used(bucket_per_page, false);
+    size_t move_min = UINT64_MAX;
+    int32_t idx = -1;
+    for (int32_t move_bucket_num = 1; move_bucket_num < bucket_per_page; ++move_bucket_num) {
+        // Check if there is a solution that only requires moving `move_bucket_num` buckets to satisfy the condition
+        // If not, increase the number of moved buckets to continue the search
+        size_t max_move_pack = 0;
+        for (int oi = 1; oi <= move_bucket_num; oi++) {
+            int i = bucketid_ordered_by_packs[bucket_per_page - oi];
+            auto bucket_packs = bucket_packs_in_page[i];
+            max_move_pack += bucket_packs;
         }
-    }
-    // try find solution of moving 2 bucket
-    std::array<int, 3> move2_min = {INT_MAX, -1, -1};
-    for (int oi = 0; oi < bucket_per_page; oi++) {
-        int i = bucketid_ordered_by_packs[oi];
-        if (bucket_packs_in_page[i] == 0) {
+
+        if (max_move_pack < min_pack_to_move) {
+            VLOG(1) << "no solution for move buckets:" << move_bucket_num << ", pack_num: " << min_pack_to_move;
             continue;
         }
-        for (int oj = oi + 1; oj < bucket_per_page; oj++) {
-            int j = bucketid_ordered_by_packs[oj];
-            auto bucket_packs = bucket_packs_in_page[i] + bucket_packs_in_page[j];
-            if (bucket_packs == min_pack_to_move) {
-                buckets_to_move->emplace_back(bucket_packs_in_page[i], pageid, i);
-                buckets_to_move->emplace_back(bucket_packs_in_page[j], pageid, j);
-                return Status::OK();
-            } else if (bucket_packs > min_pack_to_move && bucket_packs < move2_min[0]) {
-                move2_min = {bucket_packs, i, j};
-                break;
-            }
-        }
-    }
-    if (move2_min[2] >= 0) {
-        for (int i = 1; i < 3; i++) {
-            auto bucketid = move2_min[i];
-            buckets_to_move->emplace_back(bucket_packs_in_page[bucketid], pageid, bucketid);
-        }
-        return Status::OK();
-    }
-    // try find solution of moving 3 bucket
-    std::array<int, 4> move3_min = {INT_MAX, -1, -1, -1};
-    for (int oi = 0; oi < bucket_per_page; oi++) {
-        int i = bucketid_ordered_by_packs[oi];
-        if (bucket_packs_in_page[i] == 0) {
-            continue;
-        }
-        for (int oj = oi + 1; oj < bucket_per_page; oj++) {
-            int j = bucketid_ordered_by_packs[oj];
-            for (int ok = oj + 1; ok < bucket_per_page; ok++) {
-                int k = bucketid_ordered_by_packs[ok];
-                auto bucket_packs = bucket_packs_in_page[i] + bucket_packs_in_page[j] + bucket_packs_in_page[k];
-                if (bucket_packs == min_pack_to_move) {
-                    buckets_to_move->emplace_back(bucket_packs_in_page[i], pageid, i);
-                    buckets_to_move->emplace_back(bucket_packs_in_page[j], pageid, j);
-                    buckets_to_move->emplace_back(bucket_packs_in_page[k], pageid, k);
-                    return Status::OK();
-                } else if (bucket_packs > min_pack_to_move && bucket_packs < move3_min[0]) {
-                    move3_min = {bucket_packs, i, j, k};
+
+        VLOG(1) << "There is at least one solution that only needs to move {" << move_bucket_num << "} to move {"
+                << min_pack_to_move << "} packs";
+
+        Status st = get_move_buckets(min_pack_to_move, move_bucket_num, bucket_packs_in_page, 0, bucket_per_page,
+                                     &idxes, &res, bucketid_ordered_by_packs);
+        if (st.ok()) {
+            for (int i = res.size() - 1; i >= 0; --i) {
+                size_t move_pack = 0;
+                for (int j = 0; j < res[i].size(); ++j) {
+                    move_pack += bucket_packs_in_page[res[i][j]];
+                }
+                if (move_pack == min_pack_to_move) {
+                    idx = i;
                     break;
                 }
+                if (move_pack < move_min) {
+                    idx = i;
+                    move_min = move_pack;
+                }
             }
+            for (int j = 0; j < res[idx].size(); ++j) {
+                buckets_to_move->emplace_back(bucket_packs_in_page[res[idx][j]], pageid, res[idx][j]);
+            }
+            return st;
+        } else {
+            LOG(ERROR) << "Unknown error, can not find a solution that move " << move_bucket_num
+                       << " buckets: " << st.to_stirng();
+            return st;
         }
     }
-    if (move3_min[2] >= 0) {
-        for (int i = 1; i < 4; i++) {
-            auto bucketid = move3_min[i];
-            buckets_to_move->emplace_back(bucket_packs_in_page[bucketid], pageid, bucketid);
-        }
-        return Status::OK();
-    }
-    // TODO: current algorithm is sub-optimal, find buckets to move using DP
+
     return Status::InternalError("find_buckets_to_move");
 }
 
