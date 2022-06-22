@@ -736,4 +736,10 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1204);
 }
 
+TEST_F(SchemaChangeTest, convert_json_to_varchar) {
+    std::string json_str = "{\"a\": 1}";
+    JsonValue json = JsonValue::parse(json_str).value();
+    test_convert_to_varchar(OLAP_FIELD_TYPE_JSON, 16, &json, json_str);
+}
+
 } // namespace starrocks::vectorized
