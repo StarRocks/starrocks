@@ -286,7 +286,7 @@ public class LowCardinalityTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
         Assert.assertTrue(plan.contains("7:AGGREGATE (merge finalize)\n" +
-                "  |  output: multi_distinct_count(13: count), multi_distinct_count(12: count)"));
+                "  |  output: multi_distinct_count(12: count), multi_distinct_count(13: count)"));
 
         sql = "select count(distinct S_ADDRESS), count(distinct S_COMMENT) from supplier;";
         plan = getFragmentPlan(sql);
@@ -872,7 +872,7 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select min(distinct S_ADDRESS), max(S_ADDRESS) from supplier_nullable";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update serialize)\n" +
-                "  |  output: max(11: S_ADDRESS), min(11: S_ADDRESS)"));
+                "  |  output: min(11: S_ADDRESS), max(11: S_ADDRESS)"));
         Assert.assertTrue(plan.contains("  3:AGGREGATE (merge finalize)\n" +
                 "  |  output: min(12: S_ADDRESS), max(13: S_ADDRESS)"));
         Assert.assertTrue(plan.contains("  4:Decode\n" +
@@ -914,7 +914,6 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testHavingAggFunctionOnConstant() throws Exception {
         String sql = "select S_ADDRESS from supplier GROUP BY S_ADDRESS HAVING (cast(count(null) as string)) IN (\"\")";
         String plan = getCostExplain(sql);
-        System.out.println("plan = " + plan);
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: count[(NULL); args: BOOLEAN; result: BIGINT; args nullable: true; result nullable: false]\n" +
                 "  |  group by: [10: S_ADDRESS, INT, false]\n" +
