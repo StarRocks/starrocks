@@ -699,7 +699,7 @@ public class DatabaseTransactionMgr {
                         return;
                     }
 
-                    if (partition.isUseStarOS()) {
+                    if (table.isLakeTable()) {
                         continue;
                     }
 
@@ -1086,44 +1086,6 @@ public class DatabaseTransactionMgr {
 
     public int getTransactionNum() {
         return idToRunningTransactionState.size() + finalStatusTransactionStateDeque.size();
-    }
-
-    public TransactionState getTransactionStateByCallbackIdAndStatus(long callbackId, Set<TransactionStatus> status) {
-        readLock();
-        try {
-            for (TransactionState txn : idToRunningTransactionState.values()) {
-                if (txn.getCallbackId() == callbackId && status.contains(txn.getTransactionStatus())) {
-                    return txn;
-                }
-            }
-            for (TransactionState txn : finalStatusTransactionStateDeque) {
-                if (txn.getCallbackId() == callbackId && status.contains(txn.getTransactionStatus())) {
-                    return txn;
-                }
-            }
-        } finally {
-            readUnlock();
-        }
-        return null;
-    }
-
-    public TransactionState getTransactionStateByCallbackId(long callbackId) {
-        readLock();
-        try {
-            for (TransactionState txn : idToRunningTransactionState.values()) {
-                if (txn.getCallbackId() == callbackId) {
-                    return txn;
-                }
-            }
-            for (TransactionState txn : finalStatusTransactionStateDeque) {
-                if (txn.getCallbackId() == callbackId) {
-                    return txn;
-                }
-            }
-        } finally {
-            readUnlock();
-        }
-        return null;
     }
 
     public List<Pair<Long, Long>> getTransactionIdByCoordinateBe(String coordinateHost, int limit) {

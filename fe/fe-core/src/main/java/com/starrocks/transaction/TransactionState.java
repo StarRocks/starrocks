@@ -38,10 +38,8 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.PublishVersionTask;
-import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.StatusCode;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -49,7 +47,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -206,7 +203,7 @@ public class TransactionState implements Writable {
     private CountDownLatch latch;
 
     // this state need not to be serialized
-    private Map<Long, PublishVersionTask> publishVersionTasks;
+    private Map<Long, PublishVersionTask> publishVersionTasks; // Only for OlapTable
     private boolean hasSendTask;
     private long publishVersionTime = -1;
     private TransactionStatus preStatus = null;
@@ -292,6 +289,7 @@ public class TransactionState implements Writable {
                 || transactionStatus == TransactionStatus.COMMITTED;
     }
 
+    // Only for OlapTable
     public void addPublishVersionTask(Long backendId, PublishVersionTask task) {
         this.publishVersionTasks.put(backendId, task);
     }
@@ -391,7 +389,6 @@ public class TransactionState implements Writable {
                 MetricRepo.COUNTER_TXN_FAILED.increase(1L);
             }
             txnSpan.setAttribute("state", "aborted");
-            txnSpan.setStatus(StatusCode.ERROR, reason);
             txnSpan.end();
         } else if (transactionStatus == TransactionStatus.COMMITTED) {
             txnSpan.addEvent("set_committed");
@@ -416,7 +413,7 @@ public class TransactionState implements Writable {
                 default:
                     break;
             }
-        } else if (callback == null && callbackId > 0) {
+        } else if (callbackId > 0) {
             switch (transactionStatus) {
                 case COMMITTED:
                     // Maybe listener has been deleted. The txn need to be aborted later.
@@ -715,57 +712,6 @@ public class TransactionState implements Writable {
 
     public long getLastErrTimeMs() {
         return lastErrTimeMs;
-    }
-
-    // create publish version task for transaction
-    public List<PublishVersionTask> createPublishVersionTask() {
-        List<PublishVersionTask> tasks = new ArrayList<>();
-        if (this.hasSendTask()) {
-            return tasks;
-        }
-
-        Set<Long> publishBackends = this.getPublishVersionTasks().keySet();
-        // public version tasks are not persisted in globalStateMgr, so publishBackends may be empty.
-        // We have to send publish version task to all backends
-        if (publishBackends.isEmpty()) {
-            // note: tasks are sended to all backends including dead ones, or else
-            // transaction manager will treat it as success
-            List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
-            if (!allBackends.isEmpty()) {
-                publishBackends = Sets.newHashSet();
-                publishBackends.addAll(allBackends);
-            } else {
-                // all backends may be dropped, no need to create task
-                LOG.warn("transaction {} want to publish, but no backend exists", this.getTransactionId());
-                return tasks;
-            }
-        }
-
-        List<PartitionCommitInfo> partitionCommitInfos = new ArrayList<>();
-        for (TableCommitInfo tableCommitInfo : this.getIdToTableCommitInfos().values()) {
-            partitionCommitInfos.addAll(tableCommitInfo.getIdToPartitionCommitInfo().values());
-        }
-
-        List<TPartitionVersionInfo> partitionVersions = new ArrayList<>(partitionCommitInfos.size());
-        for (PartitionCommitInfo commitInfo : partitionCommitInfos) {
-            TPartitionVersionInfo version = new TPartitionVersionInfo(commitInfo.getPartitionId(),
-                    commitInfo.getVersion(), 0);
-            partitionVersions.add(version);
-        }
-
-        long createTime = System.currentTimeMillis();
-        for (long backendId : publishBackends) {
-            PublishVersionTask task = new PublishVersionTask(backendId,
-                    this.getTransactionId(),
-                    this.getDbId(),
-                    commitTime,
-                    partitionVersions,
-                    traceParent,
-                    createTime);
-            this.addPublishVersionTask(backendId, task);
-            tasks.add(task);
-        }
-        return tasks;
     }
 
     public Span getTxnSpan() {
