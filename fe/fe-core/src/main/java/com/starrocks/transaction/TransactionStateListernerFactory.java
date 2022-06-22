@@ -6,14 +6,15 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.lake.LakeTable;
 
-public class StateMachineFactory {
-    public StateMachine create(DatabaseTransactionMgr dbTxnMgr, Table table) {
+public class TransactionStateListernerFactory {
+    public TransactionStateListener create(DatabaseTransactionMgr dbTxnMgr, Table table) {
         if (table.isLakeTable()) {
-            return new LakeTableStateMachine(dbTxnMgr, (LakeTable) table);
+            return new LakeTableTxnStateListener(dbTxnMgr, (LakeTable) table);
         }
         if (table.isOlapTable()) {
-            return new OlapTableStateMachine(dbTxnMgr, (OlapTable) table);
+            return new OlapTableTxnStateListener(dbTxnMgr, (OlapTable) table);
         }
+
         return null;
     }
 }

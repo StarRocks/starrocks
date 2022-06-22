@@ -17,14 +17,13 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class LakeTableStateMachine implements StateMachine {
+public class LakeTableTxnStateListener implements TransactionStateListener {
     private final DatabaseTransactionMgr dbTxnMgr;
     private final LakeTable table;
 
-    // Following variables only used by FE master, lazy initialize in preCommit.
     private Set<Long> dirtyPartitionSet;
 
-    public LakeTableStateMachine(DatabaseTransactionMgr dbTxnMgr, LakeTable table) {
+    public LakeTableTxnStateListener(DatabaseTransactionMgr dbTxnMgr, LakeTable table) {
         this.dbTxnMgr = dbTxnMgr;
         this.table = table;
     }
@@ -94,22 +93,4 @@ public class LakeTableStateMachine implements StateMachine {
         // nothing to do
     }
 
-    @Override
-    public void applyCommitLog(TransactionState txnState, TableCommitInfo commitInfo) {
-        for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
-            long partitionId = partitionCommitInfo.getPartitionId();
-            Partition partition = table.getPartition(partitionId);
-            partition.setNextVersion(partition.getNextVersion() + 1);
-        }
-    }
-
-    @Override
-    public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo) {
-        for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
-            Partition partition = table.getPartition(partitionCommitInfo.getPartitionId());
-            long version = partitionCommitInfo.getVersion();
-            long versionTime = partitionCommitInfo.getVersionTime();
-            partition.updateVisibleVersion(version, versionTime);
-        }
-    }
 }
