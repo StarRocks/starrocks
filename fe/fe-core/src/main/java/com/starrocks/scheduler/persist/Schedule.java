@@ -1,0 +1,50 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
+package com.starrocks.scheduler.persist;
+
+import com.google.gson.annotations.SerializedName;
+
+import java.util.concurrent.TimeUnit;
+
+public class Schedule {
+
+    // Measured in milliseconds, between the start time and midnight, January 1, 1970 UTC.
+    @SerializedName("startTime")
+    private long startTime;
+
+    @SerializedName("period")
+    private long period;
+
+    @SerializedName("timeUnit")
+    private TimeUnit timeUnit;
+
+    public Schedule(long startTime, long period, TimeUnit timeUnit) {
+        this.startTime = startTime;
+        this.period = period;
+        this.timeUnit = timeUnit;
+    }
+
+    public long getStartTime() {
+        return startTime;
+    }
+
+    public void setStartTime(long startTime) {
+        this.startTime = startTime;
+    }
+
+    public long getPeriod() {
+        return period;
+    }
+
+    public void setPeriod(long period) {
+        this.period = period;
+    }
+
+    public TimeUnit getTimeUnit() {
+        return timeUnit;
+    }
+
+    public void setTimeUnit(TimeUnit timeUnit) {
+        this.timeUnit = timeUnit;
+    }
+}
