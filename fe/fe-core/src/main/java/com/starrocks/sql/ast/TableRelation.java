@@ -16,7 +16,7 @@ public class TableRelation extends Relation {
     private Table table;
     private Map<Field, Column> columns;
     // Support temporary partition
-    private final PartitionNames partitionNames;
+    private PartitionNames partitionNames;
     private final List<Long> tabletIds;
     private boolean isMetaQuery;
 
@@ -46,6 +46,10 @@ public class TableRelation extends Relation {
 
     public PartitionNames getPartitionNames() {
         return partitionNames;
+    }
+
+    public void setPartitionNames(PartitionNames partitionNames) {
+        this.partitionNames = partitionNames;
     }
 
     public List<Long> getTabletIds() {

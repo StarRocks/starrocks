@@ -153,6 +153,9 @@ import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -2242,7 +2245,6 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
             } // end for partitions
-            // todo add async task after task framework is completed
         }
     }
 
@@ -2806,8 +2808,9 @@ public class LocalMetastore implements ConnectorMetadata {
         PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
         PartitionInfo partitionInfo;
         if (partitionDesc != null) {
-            Map<String, Long> partitionNameToId = Maps.newHashMap();
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+            partitionInfo = partitionDesc.toPartitionInfo(
+                    Arrays.asList(stmt.getBasePartitionColumn()),
+                    Maps.newHashMap(), false);
         } else {
             partitionInfo = new SinglePartitionInfo();
         }
@@ -2824,6 +2827,9 @@ public class LocalMetastore implements ConnectorMetadata {
         } else if (refreshSchemeDesc.getType() == RefreshType.SYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             mvRefreshScheme.setType(MaterializedView.RefreshType.SYNC);
+        } else {
+            mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+            mvRefreshScheme.setType(MaterializedView.RefreshType.MANUAL);
         }
         // create mv
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
@@ -2861,12 +2867,13 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException(e.getMessage());
         }
         // set storage medium
+        DataProperty dataProperty;
         try {
             boolean hasMedium = false;
             if (properties != null) {
                 hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
             }
-            DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+            dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
                     DataProperty.DEFAULT_DATA_PROPERTY);
             if (hasMedium) {
                 materializedView.setStorageMedium(dataProperty.getStorageMedium());
@@ -2884,6 +2891,20 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException(e.getMessage());
         }
         boolean createMvSuccess;
+        Set<Long> tabletIdSet = new HashSet<>();
+        // process single partition info
+        if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+            long partitionId = GlobalStateMgr.getCurrentState().getNextId();
+            Preconditions.checkNotNull(dataProperty);
+            partitionInfo.setDataProperty(partitionId, dataProperty);
+            partitionInfo.setReplicationNum(partitionId, replicationNum);
+            partitionInfo.setIsInMemory(partitionId, false);
+            partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
+            Long version = Partition.PARTITION_INIT_VERSION;
+            Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet);
+            buildPartitions(db, materializedView, Collections.singletonList(partition));
+            materializedView.addPartition(partition);
+        }
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -2894,6 +2915,9 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             createMvSuccess = db.createMaterializedWithLock(materializedView, false);
             if (!createMvSuccess) {
+                for (Long tabletId : tabletIdSet) {
+                    GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+                }
                 if (!stmt.isIfNotExists()) {
                     ErrorReport
                             .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, materializedView,
@@ -2909,7 +2933,16 @@ public class LocalMetastore implements ConnectorMetadata {
         LOG.info("Successfully create materialized view[{};{}]", mvName, mvId);
 
         // NOTE: The materialized view  has been added to the database, and the following procedure cannot throw exception.
-        // todo add async task after task framework is completed
+        if (createMvSuccess) {
+            if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC) {
+                // create task
+                Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+                taskManager.createTask(task, true);
+                // run task
+                taskManager.executeTask(task.getName());
+            }
+        }
     }
 
     @Override

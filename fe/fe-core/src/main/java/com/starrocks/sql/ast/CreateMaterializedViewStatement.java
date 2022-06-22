@@ -18,7 +18,7 @@ import java.util.Set;
  * This clause is used to create a new materialized view for specified tables
  * through a specified query stmt.
  * The differences with CreateMaterializedViewStmt:
- * 1. Supports querying materiazlied view directly and try best to keep the result consistent with querying base tables
+ * 1. Supports querying materialized view directly and try best to keep the result consistent with querying base tables
  * 2. Supports creating mvs on multi tables
  * 3. partition and distribution desc can be specified for each mv independently.
  * 4. Supports complex computation on columns
@@ -40,6 +40,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     // for create column in mv
     private List<Column> mvColumnItems = Lists.newArrayList();
     private Set<Long> baseTableIds;
+    private Column basePartitionColumn;
 
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, String comment,
                                            RefreshSchemeDesc refreshSchemeDesc, ExpressionPartitionDesc expressionPartitionDesc,
@@ -149,6 +150,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setBaseTableIds(Set<Long> baseTableIds) {
         this.baseTableIds = baseTableIds;
+    }
+
+    public Column getBasePartitionColumn() {
+        return basePartitionColumn;
+    }
+
+    public void setBasePartitionColumn(Column basePartitionColumn) {
+        this.basePartitionColumn = basePartitionColumn;
     }
 
     @Override

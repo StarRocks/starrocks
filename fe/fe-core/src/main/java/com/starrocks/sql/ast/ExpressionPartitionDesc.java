@@ -56,7 +56,7 @@ public class ExpressionPartitionDesc extends PartitionDesc {
     public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp)
             throws DdlException {
         // we will support other PartitionInto in the future
-        return new ExpressionRangePartitionInfo(Arrays.asList(expr));
+        return new ExpressionRangePartitionInfo(Arrays.asList(expr), columns);
     }
 
 }
