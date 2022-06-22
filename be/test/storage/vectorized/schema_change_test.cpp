@@ -484,7 +484,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     CreateSrcTablet(1003);
     StorageEngine* engine = StorageEngine::instance();
     TCreateTabletReq create_tablet_req;
-    SetCreateTabletReq(&create_tablet_req, 1004, TKeysType::DUP_KEYS);
+    SetCreateTabletReq(&create_tablet_req, 1004, TKeysType::UNIQUE_KEYS);
     AddColumn(&create_tablet_req, "k1", TPrimitiveType::INT, true);
     AddColumn(&create_tablet_req, "k2", TPrimitiveType::INT, true);
     AddColumn(&create_tablet_req, "v1", TPrimitiveType::BIGINT, false);
@@ -497,8 +497,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1003);
 
     ChunkChanger chunk_changer(new_tablet->tablet_schema());
-    auto indexs = chunk_changer.get_mutable_selected_column_indexs();
-
+    
     ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(0);
     column_mapping->ref_column = 1;
     column_mapping = chunk_changer.get_mutable_column_mapping(1);
