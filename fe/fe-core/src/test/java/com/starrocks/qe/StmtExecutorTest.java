@@ -31,7 +31,6 @@ import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowAuthorStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.UseStmt;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
@@ -581,70 +580,6 @@ public class StmtExecutorTest {
                 DdlExecutor.execute((GlobalStateMgr) any, (DdlStmt) any);
                 minTimes = 0;
                 result = new Exception("bug");
-            }
-        };
-
-        StmtExecutor executor = new StmtExecutor(ctx, "");
-        executor.execute();
-
-        Assert.assertEquals(QueryState.MysqlStateType.ERR, state.getStateType());
-    }
-
-    @Test
-    public void testUse(@Mocked UseStmt useStmt, @Mocked SqlParser parser) throws Exception {
-        new Expectations() {
-            {
-                useStmt.analyze((Analyzer) any);
-                minTimes = 0;
-
-                useStmt.getDatabase();
-                minTimes = 0;
-                result = "testCluster:testDb";
-
-                useStmt.getRedirectStatus();
-                minTimes = 0;
-                result = RedirectStatus.NO_FORWARD;
-
-                useStmt.getClusterName();
-                minTimes = 0;
-                result = "testCluster";
-
-                Symbol symbol = new Symbol(0, Lists.newArrayList(useStmt));
-                parser.parse();
-                minTimes = 0;
-                result = symbol;
-            }
-        };
-
-        StmtExecutor executor = new StmtExecutor(ctx, "");
-        executor.execute();
-
-        Assert.assertEquals(QueryState.MysqlStateType.OK, state.getStateType());
-    }
-
-    @Test
-    public void testUseFail(@Mocked UseStmt useStmt, @Mocked SqlParser parser) throws Exception {
-        new Expectations() {
-            {
-                useStmt.analyze((Analyzer) any);
-                minTimes = 0;
-
-                useStmt.getDatabase();
-                minTimes = 0;
-                result = "blockDb";
-
-                useStmt.getRedirectStatus();
-                minTimes = 0;
-                result = RedirectStatus.NO_FORWARD;
-
-                useStmt.getClusterName();
-                minTimes = 0;
-                result = "testCluster";
-
-                Symbol symbol = new Symbol(0, Lists.newArrayList(useStmt));
-                parser.parse();
-                minTimes = 0;
-                result = symbol;
             }
         };
 
