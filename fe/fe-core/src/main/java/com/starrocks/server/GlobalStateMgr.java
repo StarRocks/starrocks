@@ -827,11 +827,11 @@ public class GlobalStateMgr {
         // 5. create txn timeout checker thread
         createTxnTimeoutChecker();
 
-        // 6. start state listener thread
-        createStateListener();
-
-        // 7. start task cleaner thread
+        // 6. start task cleaner thread
         createTaskCleaner();
+
+        // 7. start state listener thread
+        createStateListener();
         listener.start();
     }
 

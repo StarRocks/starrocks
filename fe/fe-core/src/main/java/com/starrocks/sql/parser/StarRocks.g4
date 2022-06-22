@@ -237,7 +237,7 @@ dropViewStatement
 // ------------------------------------------- Task Statement ----------------------------------------------------------
 
 submitTaskStatement
-    : SUBMIT hint* TASK qualifiedName?
+    : SUBMIT setVarHint* TASK qualifiedName?
     AS createTableAsSelectStatement
     ;
 
@@ -254,7 +254,7 @@ createMaterializedViewStatement
     ;
 
 showMaterializedViewStatement
-    : SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?
+    : SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 dropMaterializedViewStatement
@@ -469,7 +469,7 @@ limitElement
     ;
 
 querySpecification
-    : SELECT hint* setQuantifier? selectItem (',' selectItem)*
+    : SELECT setVarHint* setQuantifier? selectItem (',' selectItem)*
       fromClause
       (WHERE where=expression)?
       (GROUP BY groupingElement)?
@@ -508,9 +508,9 @@ selectItem
     ;
 
 relation
-    : left=relation crossOrInnerJoinType hint?
+    : left=relation crossOrInnerJoinType bracketHint?
             LATERAL? rightRelation=relation joinCriteria?                                #joinRelation
-    | left=relation outerAndSemiJoinType hint?
+    | left=relation outerAndSemiJoinType bracketHint?
             LATERAL? rightRelation=relation joinCriteria                                 #joinRelation
     | relationPrimary (AS? identifier columnAliases?)?                                   #aliasedRelation
     | '(' relation (','relation)* ')'                                                    #parenthesizedRelation
@@ -529,13 +529,16 @@ outerAndSemiJoinType
     | LEFT ANTI JOIN | RIGHT ANTI JOIN
     ;
 
-hint
+bracketHint
     : '[' IDENTIFIER (',' IDENTIFIER)* ']'
-    | '/*+' SET_VAR '(' hintMap (',' hintMap)* ')' '*/'
+    ;
+
+setVarHint
+    : '/*+' SET_VAR '(' hintMap (',' hintMap)* ')' '*/'
     ;
 
 hintMap
-    : k=IDENTIFIER '=' v=primaryExpression
+    : k=IDENTIFIER '=' v=literalExpression
     ;
 
 joinCriteria
@@ -548,7 +551,7 @@ columnAliases
     ;
 
 relationPrimary
-    : qualifiedName partitionNames? tabletList? hint?                                     #tableName
+    : qualifiedName partitionNames? tabletList? bracketHint?                                     #tableName
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'                                 #inlineTable
     | subquery                                                                            #subqueryRelation
     | qualifiedName '(' expression (',' expression)* ')'                                  #tableFunction
@@ -639,13 +642,7 @@ primaryExpression
     | functionCall                                                                        #functionCallExpression
     | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
     | primaryExpression COLLATE (identifier | string)                                     #collate
-    | NULL                                                                                #nullLiteral
-    | interval                                                                            #intervalLiteral
-    | DATE string                                                                         #typeConstructor
-    | DATETIME string                                                                     #typeConstructor
-    | number                                                                              #numericLiteral
-    | booleanValue                                                                        #booleanLiteral
-    | string                                                                              #stringLiteral
+    | literalExpression                                                                   #literal
     | left = primaryExpression CONCAT right = primaryExpression                           #concat
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
@@ -659,6 +656,15 @@ primaryExpression
     | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
     | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
     | primaryExpression ARROW string                                                      #arrowExpression
+    ;
+
+literalExpression
+    : NULL                                                                                #nullLiteral
+    | booleanValue                                                                        #booleanLiteral
+    | number                                                                              #numericLiteral
+    | (DATE | DATETIME) string                                                            #dateLiteral
+    | string                                                                              #stringLiteral
+    | interval                                                                            #intervalLiteral
     ;
 
 functionCall

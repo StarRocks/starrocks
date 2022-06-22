@@ -261,6 +261,11 @@ public class EsTable extends Table {
                 sslEnabled = false;
             }
         }
+        Column idColumn = getColumn("_id");
+        if (idColumn != null && !(idColumn.getPrimitiveType() == PrimitiveType.VARCHAR
+                || idColumn.getPrimitiveType() == PrimitiveType.CHAR)) {
+            throw new DdlException("Type of _id (ES Primary-Key) Column must be Char/Varchar");
+        }
         tableContext.put("hosts", hosts);
         tableContext.put("userName", userName);
         tableContext.put("passwd", passwd);

@@ -411,8 +411,8 @@ Status FileReader::get_next(vectorized::ChunkPtr* chunk) {
         Status status = _row_group_readers[_cur_row_group_idx]->get_next(chunk, &row_count);
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
-                _scanner_ctx->append_not_exised_columns_to_chunk(chunk, row_count);
-                _scanner_ctx->append_partition_column_to_chunk(chunk, row_count);
+                _scanner_ctx->update_not_existed_columns_of_chunk(chunk, row_count);
+                _scanner_ctx->update_partition_column_of_chunk(chunk, row_count);
                 _scan_row_count += (*chunk)->num_rows();
             }
             if (status.is_end_of_file()) {
@@ -430,8 +430,8 @@ Status FileReader::get_next(vectorized::ChunkPtr* chunk) {
 Status FileReader::_exec_only_partition_scan(vectorized::ChunkPtr* chunk) {
     if (_scan_row_count < _total_row_count) {
         size_t read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
-        _scanner_ctx->append_not_exised_columns_to_chunk(chunk, read_size);
-        _scanner_ctx->append_partition_column_to_chunk(chunk, read_size);
+        _scanner_ctx->update_not_existed_columns_of_chunk(chunk, read_size);
+        _scanner_ctx->update_partition_column_of_chunk(chunk, read_size);
         _scan_row_count += read_size;
         return Status::OK();
     }

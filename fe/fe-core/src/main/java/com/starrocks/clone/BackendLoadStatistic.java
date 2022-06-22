@@ -32,6 +32,7 @@ import com.starrocks.clone.BalanceStatus.ErrCode;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -486,7 +487,8 @@ public class BackendLoadStatistic {
         for (TStorageMedium medium : TStorageMedium.values()) {
             sb.append("{medium: ").append(medium).append(", replica: ").append(totalReplicaNumMap.get(medium));
             sb.append(", used: ").append(totalUsedCapacityMap.getOrDefault(medium, 0L));
-            sb.append(", total: ").append(totalCapacityMap.getOrDefault(medium, 0L));
+            final Long totalCapacity = totalCapacityMap.getOrDefault(medium, 0L);
+            sb.append(", total: ").append(new ByteSizeValue(totalCapacity));
             sb.append(", score: ").append(loadScoreMap.getOrDefault(medium, LoadScore.DUMMY).score).append("},");
         }
         sb.append("], paths: [");
