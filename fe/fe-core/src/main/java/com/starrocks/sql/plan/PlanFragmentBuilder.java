@@ -109,7 +109,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -2111,10 +2110,10 @@ public class PlanFragmentBuilder {
             }
 
             SetOperationNode setOperationNode;
-            boolean isUnionAll = false;
+            boolean isUnion = false;
             if (operatorType.equals(OperatorType.PHYSICAL_UNION)) {
+                isUnion = true;
                 setOperationNode = new UnionNode(context.getNextNodeId(), setOperationTuple.getId());
-                isUnionAll = ((PhysicalUnionOperator) setOperation).isUnionAll();
                 setOperationNode.setFirstMaterializedChildIdx_(optExpr.arity());
             } else if (operatorType.equals(OperatorType.PHYSICAL_EXCEPT)) {
                 setOperationNode = new ExceptNode(context.getNextNodeId(), setOperationTuple.getId());
@@ -2158,7 +2157,7 @@ public class PlanFragmentBuilder {
 
                 materializedResultExprLists.add(materializedExpressions);
 
-                if (isUnionAll) {
+                if (isUnion) {
                     fragment.setOutputPartition(DataPartition.RANDOM);
                 } else {
                     fragment.setOutputPartition(DataPartition.hashPartitioned(materializedExpressions));

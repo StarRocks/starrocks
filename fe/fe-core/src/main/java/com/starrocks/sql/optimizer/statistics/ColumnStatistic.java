@@ -19,6 +19,8 @@ public class ColumnStatistic {
     private static final ColumnStatistic
             UNKNOWN = new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 1, 1, StatisticType.UNKNOWN);
 
+    // For time types, including Date, DateTime, Timestamp. They all represented as timestamp in ColumnStatistic,
+    // regardless of their different storage format
     private final double minValue;
     private final double maxValue;
     private final double nullsFraction;

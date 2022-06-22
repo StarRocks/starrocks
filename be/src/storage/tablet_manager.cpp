@@ -466,7 +466,7 @@ TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, const TabletUid& 
 
 bool TabletManager::get_tablet_id_and_schema_hash_from_path(const std::string& path, TTabletId* tablet_id,
                                                             TSchemaHash* schema_hash) {
-    static re2::RE2 normal_re(R"(/data/\d+/(\d+)/(\d+)($|/))");
+    static re2::RE2 normal_re(R"(/data/\d+/(\d+)/(\d+)($|/))", re2::RE2::Quiet);
     // match tablet schema hash data path, for example, the path is /data/1/16791/29998
     // 1 is shard id , 16791 is tablet id, 29998 is schema hash
     if (RE2::PartialMatch(path, normal_re, tablet_id, schema_hash)) {
@@ -476,7 +476,7 @@ bool TabletManager::get_tablet_id_and_schema_hash_from_path(const std::string& p
     // If we can't match normal path pattern, this may be a path which is a empty tablet
     // directory. Use this pattern to match empty tablet directory. In this case schema_hash
     // will be set to zero.
-    static re2::RE2 empty_tablet_re("/data/\\d+/(\\d+)($|/$)");
+    static re2::RE2 empty_tablet_re("/data/\\d+/(\\d+)($|/$)", re2::RE2::Quiet);
     if (!RE2::PartialMatch(path, empty_tablet_re, tablet_id)) {
         return false;
     }
@@ -485,7 +485,7 @@ bool TabletManager::get_tablet_id_and_schema_hash_from_path(const std::string& p
 }
 
 bool TabletManager::get_rowset_id_from_path(const std::string& path, RowsetId* rowset_id) {
-    static re2::RE2 re(R"(/data/\d+/\d+/\d+/([A-Fa-f0-9]+)_.*)");
+    static re2::RE2 re(R"(/data/\d+/\d+/\d+/([A-Fa-f0-9]+)_.*)", re2::RE2::Quiet);
     std::string id_str;
     bool ret = RE2::PartialMatch(path, re, &id_str);
     if (ret) {
@@ -1134,9 +1134,10 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
                 LOG(WARNING) << "failed to flush rowset writer for tablet " << tablet->full_name() << ": " << st;
                 break;
             }
-            auto new_rowset = rowset_writer->build();
-            if (!new_rowset.ok()) return new_rowset.status();
-            st = tablet->add_rowset(*new_rowset, false);
+            auto ret = rowset_writer->build();
+            if (!ret.ok()) return ret.status();
+            new_rowset = std::move(ret.value());
+            st = tablet->add_rowset(new_rowset, false);
             if (!st.ok()) {
                 LOG(WARNING) << "failed to add rowset for tablet " << tablet->full_name() << ": " << st;
                 break;

@@ -41,7 +41,9 @@ void run_publish_version_task(ThreadPool& threadpool, const TAgentTaskRequest& p
     auto& publish_version_req = publish_version_task.publish_version_req;
     int64_t transaction_id = publish_version_req.transaction_id;
 
-    auto span = Tracer::Instance().start_trace_txn("publish_version_task", transaction_id);
+    Span span = Tracer::Instance().start_trace_or_add_span("run_publish_version_task",
+                                                           publish_version_req.txn_trace_parent);
+    span->SetAttribute("txn_id", transaction_id);
     auto scoped = trace::Scope(span);
 
     size_t num_partition = publish_version_req.partition_version_infos.size();
@@ -102,6 +104,7 @@ void run_publish_version_task(ThreadPool& threadpool, const TAgentTaskRequest& p
                     LOG(WARNING) << "Publish txn failed tablet:" << tablet->tablet_id() << " version:" << task.version
                                  << " partition:" << task.partition_id << " txn_id: " << task.txn_id
                                  << " rowset:" << task.rowset->rowset_id();
+                    tablet_span->SetStatus(trace::StatusCode::kError, task.st.get_error_msg());
                 } else {
                     LOG(INFO) << "Publish txn success tablet:" << tablet->tablet_id() << " version:" << task.version
                               << " partition:" << task.partition_id << " txn_id: " << task.txn_id

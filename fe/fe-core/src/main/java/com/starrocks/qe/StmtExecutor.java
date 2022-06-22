@@ -68,6 +68,7 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.execution.DataDefinitionExecutorFactory;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobManager;
@@ -928,7 +929,7 @@ public class StmtExecutor {
 
     private void handleDdlStmt() {
         try {
-            ShowResultSet resultSet = DdlExecutor.execute(context.getGlobalStateMgr(), (DdlStmt) parsedStmt);
+            ShowResultSet resultSet = DataDefinitionExecutorFactory.execute(parsedStmt, context);
             if (resultSet == null) {
                 context.getState().setOk();
             } else {
@@ -1187,7 +1188,8 @@ public class StmtExecutor {
                 }
             }
 
-            if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt)) {
+            if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
+                    || stmt instanceof UpdateStmt)) {
                 if (targetTable instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(

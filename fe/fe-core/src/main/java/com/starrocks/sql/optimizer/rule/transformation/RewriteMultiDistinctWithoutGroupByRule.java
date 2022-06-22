@@ -3,8 +3,11 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -15,11 +18,14 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.LinkedList;
@@ -27,17 +33,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
+
 /*
  *
  * Optimize multi count distinct aggregate node without group by.
  * multi_count_distinct will gather to one instance work, doesn't take advantage of the MPP architecture.
  *
  * e.g:
- * Mark multi_count_distinct(v1) as mcd(v1)
- * Mark count(distinct v1) as cd(v1)
+ * Mark count(distinct v1) as cd(v1), avg(distinct v1) as ad(v1), sum(distinct v1) as sd(v1).
  *
  * Before:
- *          Agg[mcd(v1), mcd(v2), sum(v4), max(v5)]
+ *          Agg[cd(v1), cd(v2), sum(v4), max(v5)]
  *                      |
  *                  Child Plan
  *
@@ -51,8 +58,31 @@ import java.util.stream.Collectors;
  *                 Agg[cd(v1)]     Agg[cd(v2)]   CTEConsume
  *                     /               \
  *                CTEConsume        CTEConsume
+ *
+ *
+ * Before:
+ *          Agg[ad(v1), sum(v4), max(v5)]
+ *                      |
+ *                  Child Plan
+ *
+ * After:
+ *                     CTEAnchor
+ *                   /           \
+ *           CTEProduce          project[ad(v1) = sd(v1) / cd(v1)]
+ *                /                  \
+ *           Child Plan           Cross join
+ *                               /          \
+ *                       Cross join       Agg[sum(v4), max(v5)]
+ *                        /          \            \
+ *                 Agg[cd(v1)]     Agg[sd(v1)]   CTEConsume
+ *                     /               \
+ *                CTEConsume        CTEConsume
+ *
+ *
  */
 public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
+    private final ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+
     public RewriteMultiDistinctWithoutGroupByRule() {
         super(RuleType.TF_REWRITE_MULTI_DISTINCT_WITHOUT_GROUP_BY,
                 Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(Pattern.create(
@@ -89,20 +119,18 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
         // generate all aggregation operator, split count distinct function and other function
         LogicalAggregationOperator aggregate = (LogicalAggregationOperator) input.getOp();
 
-        List<ColumnRefOperator> countDistinctList = aggregate.getAggregations().entrySet().stream()
+        List<ColumnRefOperator> distinctAggList = aggregate.getAggregations().entrySet().stream()
                 .filter(kv -> kv.getValue().isDistinct()).map(Map.Entry::getKey).collect(Collectors.toList());
         List<ColumnRefOperator> otherAggregate = aggregate.getAggregations().entrySet().stream()
                 .filter(kv -> !kv.getValue().isDistinct()).map(Map.Entry::getKey).collect(Collectors.toList());
 
-        LinkedList<OptExpression> allCteConsumes = Lists.newLinkedList();
-
-        for (ColumnRefOperator countDistinct : countDistinctList) {
-            allCteConsumes.offer(buildCountDistinctCTEConsume(countDistinct, aggregate, cteProduce, columnRefFactory));
-        }
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
+        LinkedList<OptExpression> allCteConsumes = buildDistinctAggCTEConsume(aggregate, distinctAggList, cteProduce,
+                columnRefFactory, columnRefMap);
 
         if (otherAggregate.size() > 0) {
             allCteConsumes.offer(
-                    buildOtherAggregateCTEConsume(otherAggregate, aggregate, cteProduce, columnRefFactory));
+                    buildOtherAggregateCTEConsume(otherAggregate, aggregate, cteProduce, columnRefFactory, columnRefMap));
         }
 
         // left deep join tree
@@ -114,11 +142,77 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
                     OptExpression.create(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null), left, right);
             allCteConsumes.offerFirst(join);
         }
+        // Add project node
+        LogicalProjectOperator.Builder builder = new LogicalProjectOperator.Builder();
+        builder.setColumnRefMap(columnRefMap);
 
         context.getCteContext().addForceCTE(cteId);
 
         LogicalCTEAnchorOperator cteAnchor = new LogicalCTEAnchorOperator(cteId);
-        return Lists.newArrayList(OptExpression.create(cteAnchor, cteProduce, allCteConsumes.get(0)));
+        return Lists.newArrayList(OptExpression.create(cteAnchor, cteProduce,
+                OptExpression.create(builder.build(), allCteConsumes.get(0))));
+    }
+
+    private LinkedList<OptExpression> buildDistinctAggCTEConsume(LogicalAggregationOperator aggregate,
+                                                                 List<ColumnRefOperator> distinctAggList,
+                                                                 OptExpression cteProduce,
+                                                                 ColumnRefFactory factory,
+                                                                 Map<ColumnRefOperator, ScalarOperator> projectionMap) {
+        LinkedList<OptExpression> allCteConsumes = Lists.newLinkedList();
+        Map<CallOperator, ColumnRefOperator> consumeAggCallMap = Maps.newHashMap();
+        for (ColumnRefOperator distinctAggRef : distinctAggList) {
+            CallOperator aggCallOperator = aggregate.getAggregations().get(distinctAggRef);
+            if (aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.COUNT) ||
+                    aggCallOperator.getFnName().equalsIgnoreCase(FunctionSet.SUM)) {
+                allCteConsumes.offer(buildCountSumDistinctCTEConsume(distinctAggRef, aggCallOperator,
+                        aggregate, cteProduce, factory));
+                consumeAggCallMap.put(aggCallOperator, distinctAggRef);
+                projectionMap.put(distinctAggRef, distinctAggRef);
+            }
+        }
+
+        // Deal with avg(distinct xx) function, because avg needs to compute count and sum, there can use the aggregate
+        // node with sum/count function directly if these aggregate node has generated before.
+        Map<ColumnRefOperator, CallOperator> distinctAvgAggregate =  aggregate.getAggregations().entrySet().stream().
+                filter(kv -> kv.getValue().getFnName().equalsIgnoreCase(FunctionSet.AVG)).collect(Collectors.toMap(
+                Map.Entry::getKey, Map.Entry::getValue));
+        if (!distinctAvgAggregate.isEmpty()) {
+            for (Map.Entry<ColumnRefOperator, CallOperator> aggregation : distinctAvgAggregate.entrySet()) {
+                CallOperator avgCallOperator = aggregation.getValue();
+                // compute the sum and count operator needed by avg operator
+                CallOperator sumOperator = buildDistinctAggCall(avgCallOperator, FunctionSet.SUM);
+                CallOperator countOperator = buildDistinctAggCall(avgCallOperator, FunctionSet.COUNT);
+
+                ColumnRefOperator sumColumnRef = consumeAggCallMap.get(sumOperator);
+                ColumnRefOperator countColumnRef = consumeAggCallMap.get(countOperator);
+                // If distinct sum and count not computed, there need to build one
+                if (sumColumnRef == null) {
+                    sumColumnRef = factory.create(sumOperator, sumOperator.getType(), sumOperator.isNullable());
+                    allCteConsumes.offer(buildCountSumDistinctCTEConsume(sumColumnRef, sumOperator, aggregate,
+                            cteProduce, factory));
+                }
+                if (countColumnRef == null) {
+                    countColumnRef = factory.create(countOperator, countOperator.getType(), countOperator.isNullable());
+                    allCteConsumes.offer(buildCountSumDistinctCTEConsume(countColumnRef, countOperator, aggregate,
+                            cteProduce, factory));
+                }
+
+                CallOperator distinctAvgCallOperator = (CallOperator) scalarRewriter.rewrite(
+                        new CallOperator("divide", avgCallOperator.getType(),
+                        Lists.newArrayList(sumColumnRef, countColumnRef)), Lists.newArrayList(new ImplicitCastRule()));
+                projectionMap.put(aggregation.getKey(), distinctAvgCallOperator);
+            }
+        }
+        return allCteConsumes;
+    }
+
+    private CallOperator buildDistinctAggCall(CallOperator avgCallOperator, String functionName) {
+        Function searchDesc = new Function(new FunctionName(functionName),
+                avgCallOperator.getFunction().getArgs(), avgCallOperator.getType(), false);
+        Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
+
+        return new CallOperator(functionName, fn.getReturnType(), avgCallOperator.getChildren(), fn,
+                avgCallOperator.isDistinct());
     }
 
     /*
@@ -130,8 +224,10 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
      *      CTEConsume
      */
     private OptExpression buildOtherAggregateCTEConsume(List<ColumnRefOperator> otherAggregateRef,
-                                                        LogicalAggregationOperator aggregate, OptExpression cteProduce,
-                                                        ColumnRefFactory factory) {
+                                                        LogicalAggregationOperator aggregate,
+                                                        OptExpression cteProduce,
+                                                        ColumnRefFactory factory,
+                                                        Map<ColumnRefOperator, ScalarOperator> projectionMap) {
         ColumnRefSet allCteConsumeRequiredColumns = new ColumnRefSet();
         otherAggregateRef.stream().map(k -> aggregate.getAggregations().get(k).getUsedColumns())
                 .forEach(allCteConsumeRequiredColumns::union);
@@ -146,36 +242,39 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
         for (ColumnRefOperator otherRef : otherAggregateRef) {
             CallOperator otherAggFn = (CallOperator) rewriter.rewrite(aggregate.getAggregations().get(otherRef));
             aggregateFn.put(otherRef, otherAggFn);
+            projectionMap.put(otherRef, otherRef);
         }
         LogicalAggregationOperator newAggregate =
                 new LogicalAggregationOperator.Builder().withOperator(aggregate).setAggregations(aggregateFn).build();
+
 
         return OptExpression.create(newAggregate, OptExpression.create(cteConsume));
     }
 
     /*
-     * create single count distinct aggregate node with cte consume:
+     * create single count/sum distinct aggregate node with cte consume:
      *
      * Output:
      *      Agg[cd(v1)]
      *          |
      *      CTEConsume
      */
-    private OptExpression buildCountDistinctCTEConsume(ColumnRefOperator countDistinctRef,
-                                                       LogicalAggregationOperator aggregate,
-                                                       OptExpression cteProduce, ColumnRefFactory factory) {
-        ColumnRefSet cteConsumeRequiredColumns = aggregate.getAggregations().get(countDistinctRef).getUsedColumns();
+    private OptExpression buildCountSumDistinctCTEConsume(ColumnRefOperator aggDistinctRef,
+                                                          CallOperator aggDistinctCall,
+                                                          LogicalAggregationOperator aggregate,
+                                                          OptExpression cteProduce, ColumnRefFactory factory) {
+        ColumnRefSet cteConsumeRequiredColumns = aggDistinctCall.getUsedColumns();
         LogicalCTEConsumeOperator cteConsume = buildCteConsume(cteProduce, cteConsumeRequiredColumns, factory);
 
         // rewrite aggregate count distinct
         Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMap();
         cteConsume.getCteOutputColumnRefMap().forEach((k, v) -> rewriteMap.put(v, k));
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
-        CallOperator countDistinctFn =
-                (CallOperator) rewriter.rewrite(aggregate.getAggregations().get(countDistinctRef));
+        CallOperator aggDistinctFn =
+                (CallOperator) rewriter.rewrite(aggDistinctCall);
 
         Map<ColumnRefOperator, CallOperator> aggregateFn = Maps.newHashMap();
-        aggregateFn.put(countDistinctRef, countDistinctFn);
+        aggregateFn.put(aggDistinctRef, aggDistinctFn);
 
         LogicalAggregationOperator newAggregate =
                 new LogicalAggregationOperator.Builder().withOperator(aggregate).setAggregations(aggregateFn).build();

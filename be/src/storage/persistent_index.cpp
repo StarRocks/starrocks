@@ -662,7 +662,12 @@ public:
         return Status::OK();
     }
 
-    size_t dump_bound() { return _map.dump_bound(); }
+    // return the dump file size if dump _map into a new file
+    // If _map is empty, _map.dump_bound() will  set empty hash set serialize_size larger
+    // than sizeof(uint64_t) in order to improve count distinct streaming aggregate performance.
+    // Howevevr, the real snapshot file will only wite a size_(type is size_t) into file. So we
+    // will use `sizeof(size_t)` as return value.
+    size_t dump_bound() { return _map.empty() ? sizeof(size_t) : _map.dump_bound(); }
 
     bool dump(phmap::BinaryOutputArchive& ar_out) { return _map.dump(ar_out); }
 
@@ -1193,7 +1198,7 @@ Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetShared
                     for (uint32_t i = 0; i < pkc->size(); i++) {
                         values.emplace_back(base + rowids[i]);
                     }
-                    auto st = insert(pkc->size(), pkc->raw_data(), values.data(), false);
+                    auto st = insert(pkc->size(), pkc->continuous_data(), values.data(), false);
 
                     if (!st.ok()) {
                         LOG(ERROR) << "load index failed: tablet=" << tablet->tablet_id()

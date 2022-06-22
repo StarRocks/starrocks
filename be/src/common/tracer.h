@@ -61,6 +61,15 @@ public:
     // parent_ctx contains the required information of the trace.
     Span add_span(const std::string& span_name, const SpanContext& parent_ctx);
 
+    // If trace_parent is empty, create a new trace, else add a span
+    Span start_trace_or_add_span(const std::string& name, const std::string& trace_parent);
+
+    // Construct a SpanContext from Traceparent header
+    static SpanContext from_trace_parent(const std::string& trace_parent);
+
+    // Construct a Traceparent header from SpanContext
+    static std::string to_trace_parent(const SpanContext& context);
+
 private:
     // Init the tracer.
     void init(const std::string& service_name);
