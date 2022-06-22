@@ -16,7 +16,7 @@ import io.opentelemetry.sdk.trace.SpanProcessor;
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
 
 public class TraceManager {
-    private static final String SERVICE_NAME = "starrocks";
+    private static final String SERVICE_NAME = "starrocks-fe";
     private static Tracer instance = null;
 
     public static Tracer getTracer() {

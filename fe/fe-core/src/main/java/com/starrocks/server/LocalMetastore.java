@@ -154,6 +154,9 @@ import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -353,7 +356,15 @@ public class LocalMetastore implements ConnectorMetadata {
     public void unprotectCreateDb(Database db) {
         idToDb.put(db.getId(), db);
         fullNameToDb.put(db.getFullName(), db);
+        final Cluster cluster = nameToCluster.get(db.getClusterName());
+        cluster.addDb(db.getFullName(), db.getId());
         stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
+    }
+
+    // for test
+    public void addCluster(Cluster cluster) {
+        nameToCluster.put(cluster.getName(), cluster);
+        idToCluster.put(cluster.getId(), cluster);
     }
 
     public ConcurrentHashMap<Long, Database> getIdToDb() {
@@ -420,6 +431,8 @@ public class LocalMetastore implements ConnectorMetadata {
             // 3. remove db from globalStateMgr
             idToDb.remove(db.getId());
             fullNameToDb.remove(db.getFullName());
+            final Cluster cluster = nameToCluster.get(db.getClusterName());
+            cluster.removeDb(dbName, db.getId());
             DropDbInfo info = new DropDbInfo(dbName, stmt.isForceDrop());
             editLog.logDropDb(info);
 
@@ -468,6 +481,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
             fullNameToDb.remove(dbName);
             idToDb.remove(db.getId());
+            final Cluster cluster = nameToCluster.get(db.getClusterName());
+            cluster.removeDb(dbName, db.getId());
 
             LOG.info("finish replay drop db, name: {}, id: {}", dbName, db.getId());
         } finally {
@@ -496,6 +511,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
             fullNameToDb.put(db.getFullName(), db);
             idToDb.put(db.getId(), db);
+            final Cluster cluster = nameToCluster.get(db.getClusterName());
+            cluster.addDb(db.getFullName(), db.getId());
 
             // log
             RecoverInfo recoverInfo = new RecoverInfo(db.getId(), -1L, -1L);
@@ -635,6 +652,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("Database name[" + newFullDbName + "] is already used");
             }
 
+            cluster.removeDb(db.getFullName(), db.getId());
+            cluster.addDb(newFullDbName, db.getId());
             // 1. rename db
             db.setNameWithLock(newFullDbName);
 
@@ -656,7 +675,10 @@ public class LocalMetastore implements ConnectorMetadata {
         tryLock(true);
         try {
             Database db = fullNameToDb.get(dbName);
+            Cluster cluster = nameToCluster.get(db.getClusterName());
+            cluster.removeDb(db.getFullName(), db.getId());
             db.setName(newDbName);
+            cluster.addDb(newDbName, db.getId());
             fullNameToDb.remove(dbName);
             fullNameToDb.put(newDbName, db);
 
@@ -2243,7 +2265,6 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
             } // end for partitions
-            // todo add async task after task framework is completed
         }
     }
 
@@ -2626,6 +2647,14 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+    public List<String> getClusterDbNames(String clusterName) throws AnalysisException {
+        final Cluster cluster = nameToCluster.get(clusterName);
+        if (cluster == null) {
+            throw new AnalysisException("No cluster selected");
+        }
+        return Lists.newArrayList(cluster.getDbNames());
+    }
+
     @Override
     public List<Long> getDbIds() {
         return Lists.newArrayList(idToDb.keySet());
@@ -2807,8 +2836,9 @@ public class LocalMetastore implements ConnectorMetadata {
         PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
         PartitionInfo partitionInfo;
         if (partitionDesc != null) {
-            Map<String, Long> partitionNameToId = Maps.newHashMap();
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+            partitionInfo = partitionDesc.toPartitionInfo(
+                    Arrays.asList(stmt.getBasePartitionColumn()),
+                    Maps.newHashMap(), false);
         } else {
             partitionInfo = new SinglePartitionInfo();
         }
@@ -2825,6 +2855,9 @@ public class LocalMetastore implements ConnectorMetadata {
         } else if (refreshSchemeDesc.getType() == RefreshType.SYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             mvRefreshScheme.setType(RefreshType.SYNC);
+        } else {
+            mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+            mvRefreshScheme.setType(MaterializedView.RefreshType.MANUAL);
         }
         // create mv
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
@@ -2862,12 +2895,13 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException(e.getMessage());
         }
         // set storage medium
+        DataProperty dataProperty;
         try {
             boolean hasMedium = false;
             if (properties != null) {
                 hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
             }
-            DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+            dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
                     DataProperty.DEFAULT_DATA_PROPERTY);
             if (hasMedium) {
                 materializedView.setStorageMedium(dataProperty.getStorageMedium());
@@ -2885,6 +2919,20 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException(e.getMessage());
         }
         boolean createMvSuccess;
+        Set<Long> tabletIdSet = new HashSet<>();
+        // process single partition info
+        if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+            long partitionId = GlobalStateMgr.getCurrentState().getNextId();
+            Preconditions.checkNotNull(dataProperty);
+            partitionInfo.setDataProperty(partitionId, dataProperty);
+            partitionInfo.setReplicationNum(partitionId, replicationNum);
+            partitionInfo.setIsInMemory(partitionId, false);
+            partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
+            Long version = Partition.PARTITION_INIT_VERSION;
+            Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet);
+            buildPartitions(db, materializedView, Collections.singletonList(partition));
+            materializedView.addPartition(partition);
+        }
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -2895,6 +2943,9 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             createMvSuccess = db.createMaterializedWithLock(materializedView, false);
             if (!createMvSuccess) {
+                for (Long tabletId : tabletIdSet) {
+                    GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+                }
                 if (!stmt.isIfNotExists()) {
                     ErrorReport
                             .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, materializedView,
@@ -2910,7 +2961,16 @@ public class LocalMetastore implements ConnectorMetadata {
         LOG.info("Successfully create materialized view[{};{}]", mvName, mvId);
 
         // NOTE: The materialized view  has been added to the database, and the following procedure cannot throw exception.
-        // todo add async task after task framework is completed
+        if (createMvSuccess) {
+            if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC) {
+                // create task
+                Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+                taskManager.createTask(task, true);
+                // run task
+                taskManager.executeTask(task.getName());
+            }
+        }
     }
 
     @Override
@@ -3538,6 +3598,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 Preconditions.checkState(db.getId() < NEXT_ID_INIT_VALUE, errMsg);
                 idToDb.put(db.getId(), db);
                 fullNameToDb.put(db.getFullName(), db);
+                cluster.addDb(dbName, db.getId());
                 idToCluster.put(cluster.getId(), cluster);
                 nameToCluster.put(cluster.getName(), cluster);
             }
@@ -3575,6 +3636,7 @@ public class LocalMetastore implements ConnectorMetadata {
         unprotectCreateCluster(cluster);
         for (Database db : idToDb.values()) {
             db.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
+            cluster.addDb(db.getFullName(), db.getId());
         }
 
         // no matter default_cluster is created or not,

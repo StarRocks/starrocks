@@ -1252,7 +1252,11 @@ public class OlapTable extends Table implements GsonPostProcessable {
             LOG.warn("failed to copy olap table: " + getName());
             return null;
         }
+        return selectiveCopyInternal(copied, reservedPartitions, resetState, extState);
+    }
 
+    protected OlapTable selectiveCopyInternal(OlapTable copied, Collection<String> reservedPartitions, boolean resetState,
+                                              IndexExtState extState) {
         if (resetState) {
             // remove shadow index from copied table
             List<MaterializedIndex> shadowIndex =

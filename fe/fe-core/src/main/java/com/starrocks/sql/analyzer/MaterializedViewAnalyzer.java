@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,6 +57,23 @@ public class MaterializedViewAnalyzer {
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
+    }
+
+    public static void analyzeExp(Expr expr, QueryStatement queryStatement, ConnectContext context) {
+        Map<String, TableRelation> tableRelations =
+                AnalyzerUtils.collectAllTableRelation(queryStatement);
+        List<Field> fields = Lists.newArrayList();
+        for (TableRelation value : tableRelations.values()) {
+            fields.addAll(value.getRelationFields().getAllFields());
+        }
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(fields));
+        if (expr instanceof FunctionCallExpr) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+            if (functionCallExpr.getFn() == null) {
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(),
+                        scope, context);
+            }
+        }
     }
 
     static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
@@ -123,6 +141,8 @@ public class MaterializedViewAnalyzer {
                 checkPartitionExpParams(statement);
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, tableNameTableMap);
+                // analyze expression
+                analyzeExp(statement.getPartitionExpDesc().getExpr(), statement.getQueryStatement(), context);
             }
             // check and analyze distribution
             checkDistribution(statement);
@@ -271,9 +291,10 @@ public class MaterializedViewAnalyzer {
                             "only supports single column");
                 }
                 boolean isInPartitionColumns = false;
-                for (Column partitionColumn : partitionColumns) {
-                    if (partitionColumn.getName().equals(slotRef.getColumnName())) {
+                for (Column basePartitionColumn : partitionColumns) {
+                    if (basePartitionColumn.getName().equals(slotRef.getColumnName())) {
                         isInPartitionColumns = true;
+                        statement.setBasePartitionColumn(basePartitionColumn);
                         break;
                     }
                 }
@@ -286,6 +307,7 @@ public class MaterializedViewAnalyzer {
                         partitionInfo.getType().name() + "not supports");
             }
         }
+
 
         private void checkDistribution(CreateMaterializedViewStatement statement) {
             DistributionDesc distributionDesc = statement.getDistributionDesc();

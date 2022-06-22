@@ -1198,7 +1198,7 @@ Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetShared
                     for (uint32_t i = 0; i < pkc->size(); i++) {
                         values.emplace_back(base + rowids[i]);
                     }
-                    auto st = insert(pkc->size(), pkc->raw_data(), values.data(), false);
+                    auto st = insert(pkc->size(), pkc->continuous_data(), values.data(), false);
 
                     if (!st.ok()) {
                         LOG(ERROR) << "load index failed: tablet=" << tablet->tablet_id()

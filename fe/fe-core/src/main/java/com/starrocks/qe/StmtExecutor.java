@@ -46,7 +46,6 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UnsupportedStmt;
 import com.starrocks.analysis.UpdateStmt;
-import com.starrocks.analysis.UseStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
@@ -68,6 +67,7 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.execution.DataDefinitionExecutorFactory;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobManager;
@@ -99,6 +99,7 @@ import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.UseStmt;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -823,11 +824,7 @@ public class StmtExecutor {
     private void handleUseStmt() throws AnalysisException {
         UseStmt useStmt = (UseStmt) parsedStmt;
         try {
-            if (Strings.isNullOrEmpty(useStmt.getClusterName())) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER);
-            }
-            // TODO: refactor useStmt and rename getDatabase
-            context.getGlobalStateMgr().changeCatalogDb(context, useStmt.getDatabase());
+            context.getGlobalStateMgr().changeCatalogDb(context, useStmt.getIdentifier());
         } catch (DdlException e) {
             context.getState().setError(e.getMessage());
             return;
@@ -928,7 +925,7 @@ public class StmtExecutor {
 
     private void handleDdlStmt() {
         try {
-            ShowResultSet resultSet = DdlExecutor.execute(context.getGlobalStateMgr(), (DdlStmt) parsedStmt);
+            ShowResultSet resultSet = DataDefinitionExecutorFactory.execute(parsedStmt, context);
             if (resultSet == null) {
                 context.getState().setOk();
             } else {

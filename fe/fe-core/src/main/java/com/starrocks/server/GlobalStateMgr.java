@@ -830,11 +830,11 @@ public class GlobalStateMgr {
         // 5. create txn timeout checker thread
         createTxnTimeoutChecker();
 
-        // 6. start state listener thread
-        createStateListener();
-
-        // 7. start task cleaner thread
+        // 6. start task cleaner thread
         createTaskCleaner();
+
+        // 7. start state listener thread
+        createStateListener();
         listener.start();
     }
 
@@ -1763,6 +1763,11 @@ public class GlobalStateMgr {
         localMetastore.unprotectCreateDb(db);
     }
 
+    // for test
+    public void addCluster(Cluster cluster) {
+        localMetastore.addCluster(cluster);
+    }
+
     public void replayCreateDb(Database db) {
         localMetastore.replayCreateDb(db);
     }
@@ -2331,6 +2336,10 @@ public class GlobalStateMgr {
         return localMetastore.listDbNames();
     }
 
+    public List<String> getClusterDbNames(String clusterName) throws AnalysisException {
+        return localMetastore.getClusterDbNames(clusterName);
+    }
+
     public List<Long> getDbIds() {
         return localMetastore.getDbIds();
     }
@@ -2756,7 +2765,9 @@ public class GlobalStateMgr {
             ctx.setCurrentCatalog(newCatalogName);
         }
 
-        // check auth for internal catalog
+        // Check auth for internal catalog.
+        // Here we check the request permission that sent by the mysql client or jdbc.
+        // So we didn't check UseStmt permission in PrivilegeChecker.
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog()) &&
                 !auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
