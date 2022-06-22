@@ -14,6 +14,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "udf/java/utils.h"
 #include "udf/udf.h"
@@ -34,16 +35,10 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
     }
 
     TAnalyticWindow window = tnode.analytic_node.window;
-    FrameType frame_type = FrameType::Unbounded;
     if (!tnode.analytic_node.__isset.window) {
     } else if (tnode.analytic_node.window.type == TAnalyticWindowType::RANGE) {
         // RANGE windows must have UNBOUNDED PRECEDING
         // RANGE window end bound must be CURRENT ROW or UNBOUNDED FOLLOWING
-        if (!window.__isset.window_end) {
-            frame_type = FrameType::Unbounded;
-        } else {
-            frame_type = FrameType::UnboundedPrecedingRange;
-        }
     } else {
         if (window.__isset.window_start) {
             TAnalyticWindowBoundary b = window.window_start;
@@ -71,18 +66,8 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
             }
         }
 
-        if (!window.__isset.window_start && !window.__isset.window_end) {
-            frame_type = FrameType::Unbounded;
-        } else if (!window.__isset.window_start && window.window_end.type == TAnalyticWindowBoundaryType::CURRENT_ROW) {
-            frame_type = FrameType::UnboundedPrecedingRows;
-        } else {
-            frame_type = FrameType::Sliding;
-            _is_range_with_start = window.__isset.window_start;
-        }
+        _is_range_with_start = window.__isset.window_start;
     }
-
-    VLOG_ROW << "frame_type " << frame_type << " _rows_start_offset " << _rows_start_offset << " "
-             << " _rows_end_offset " << _rows_end_offset;
 }
 
 Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
@@ -237,6 +222,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
     _compute_timer = ADD_TIMER(_runtime_profile, "ComputeTime");
+    _column_append_timer = ADD_TIMER(_runtime_profile, "ColumnAppendTime");
+    _binary_search_timer = ADD_TIMER(_runtime_profile, "BinarySearchTime");
+
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());
 
     SCOPED_TIMER(_compute_timer);
@@ -345,6 +333,10 @@ void Analytor::close(RuntimeState* state) {
     }
 }
 
+size_t Analytor::current_chunk_size() const {
+    return _input_chunks[_output_chunk_index]->num_rows();
+}
+
 bool Analytor::is_chunk_buffer_empty() {
     std::lock_guard<std::mutex> l(_buffer_mutex);
     return _buffer.empty();
@@ -375,6 +367,7 @@ FrameRange Analytor::get_sliding_frame_range() {
 
 void Analytor::update_window_batch(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                    int64_t frame_end) {
+    SCOPED_TIMER(_compute_timer);
     if (_has_lead_lag_function) {
         _update_window_batch_lead_lag(peer_group_start, peer_group_end, frame_start, frame_end);
     } else {
@@ -383,18 +376,20 @@ void Analytor::update_window_batch(int64_t peer_group_start, int64_t peer_group_
 }
 
 void Analytor::reset_window_state() {
+    SCOPED_TIMER(_compute_timer);
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->reset(_agg_fn_ctxs[i], _agg_intput_columns[i],
                                  _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i]);
     }
 }
 
-void Analytor::get_window_function_result(size_t start, size_t end) {
-    DCHECK_GT(end, start);
+void Analytor::get_window_function_result(size_t frame_start, size_t frame_end) {
+    DCHECK_GT(frame_end, frame_start);
+    SCOPED_TIMER(_compute_timer);
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         vectorized::Column* agg_column = _result_window_columns[i].get();
         _agg_functions[i]->get_values(_agg_fn_ctxs[i], _managed_fn_states[0]->data() + _agg_states_offsets[i],
-                                      agg_column, start, end);
+                                      agg_column, frame_start, frame_end);
     }
 }
 
@@ -455,9 +450,46 @@ void Analytor::create_agg_result_columns(int64_t chunk_size) {
     }
 }
 
-void Analytor::append_column(size_t chunk_size, vectorized::Column* dst_column, vectorized::ColumnPtr& src_column) {
+Status Analytor::add_chunk(const vectorized::ChunkPtr& chunk) {
+    const size_t chunk_size = chunk->num_rows();
+
+    {
+        SCOPED_TIMER(_column_append_timer);
+        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+            for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
+                ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
+                // Currently, only lead and lag window function have multi args.
+                // For performance, we do this special handle.
+                // In future, if need, we could remove this if else easily.
+                if (j == 0) {
+                    TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
+                } else {
+                    TRY_CATCH_BAD_ALLOC(_agg_intput_columns[i][j]->append(*column, 0, column->size()));
+                }
+            }
+        }
+
+        for (size_t i = 0; i < _partition_ctxs.size(); i++) {
+            ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
+            TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
+        }
+
+        for (size_t i = 0; i < _order_ctxs.size(); i++) {
+            ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
+            TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
+        }
+    }
+
+    _input_chunk_first_row_positions.emplace_back(_input_rows);
+    update_input_rows(chunk_size);
+    _input_chunks.emplace_back(chunk);
+
+    return Status::OK();
+}
+
+void Analytor::_append_column(size_t chunk_size, vectorized::Column* dst_column, vectorized::ColumnPtr& src_column) {
     if (src_column->only_null()) {
-        dst_column->append_nulls(chunk_size);
+        static_cast<void>(dst_column->append_nulls(chunk_size));
     } else if (src_column->is_constant()) {
         vectorized::ConstColumn* const_column = static_cast<vectorized::ConstColumn*>(src_column.get());
         const_column->data_column()->assign(chunk_size, 0);
@@ -564,16 +596,20 @@ void Analytor::remove_unused_buffer_values(RuntimeState* state) {
     }
 
     int64_t remove_count = remove_end_position - _removed_from_buffer_rows;
-    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
-            _agg_intput_columns[i][j]->remove_first_n_values(remove_count);
+
+    {
+        SCOPED_TIMER(_column_append_timer);
+        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+            for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
+                _agg_intput_columns[i][j]->remove_first_n_values(remove_count);
+            }
         }
-    }
-    for (size_t i = 0; i < _partition_ctxs.size(); i++) {
-        _partition_columns[i]->remove_first_n_values(remove_count);
-    }
-    for (size_t i = 0; i < _order_ctxs.size(); i++) {
-        _order_columns[i]->remove_first_n_values(remove_count);
+        for (size_t i = 0; i < _partition_ctxs.size(); i++) {
+            _partition_columns[i]->remove_first_n_values(remove_count);
+        }
+        for (size_t i = 0; i < _order_ctxs.size(); i++) {
+            _order_columns[i]->remove_first_n_values(remove_count);
+        }
     }
 
     _removed_from_buffer_rows += remove_count;
@@ -615,6 +651,7 @@ void Analytor::_update_window_batch_normal(int64_t peer_group_start, int64_t pee
 }
 
 int64_t Analytor::_find_first_not_equal(vectorized::Column* column, int64_t target, int64_t start, int64_t end) {
+    SCOPED_TIMER(_binary_search_timer);
     while (start + 1 < end) {
         int64_t mid = start + (end - start) / 2;
         if (column->compare_at(target, mid, *column, 1) == 0) {

@@ -81,8 +81,7 @@ Status AnalyticNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
     RETURN_IF_CANCELLED(state);
 
-    if (_analytor->reached_limit() ||
-        (_analytor->input_eos() && _analytor->output_chunk_index() == _analytor->input_chunks().size())) {
+    if (_analytor->reached_limit() || (_analytor->input_eos() && !_analytor->has_output())) {
         *eos = true;
         return Status::OK();
     }
@@ -113,9 +112,9 @@ Status AnalyticNode::close(RuntimeState* state) {
 }
 
 Status AnalyticNode::_get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    while (!_analytor->input_eos() || _analytor->output_chunk_index() < _analytor->input_chunks().size()) {
+    while (!_analytor->input_eos() || _analytor->has_output()) {
         RETURN_IF_ERROR(_try_fetch_next_partition_data(state));
-        if (_analytor->input_eos() && _analytor->input_rows() == 0) {
+        if (_analytor->input_eos() && !_analytor->has_output()) {
             *eos = true;
             return Status::OK();
         }
@@ -126,7 +125,7 @@ Status AnalyticNode::_get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr
             _analytor->reset_state_for_cur_partition();
         }
 
-        size_t chunk_size = _analytor->input_chunks()[_analytor->output_chunk_index()]->num_rows();
+        size_t chunk_size = _analytor->current_chunk_size();
         _analytor->create_agg_result_columns(chunk_size);
 
         if (is_new_partition) {
@@ -134,20 +133,18 @@ Status AnalyticNode::_get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr
                                            _analytor->partition_start(), _analytor->partition_end());
         }
 
-        int64_t chunk_first_row_position =
-                _analytor->input_chunk_first_row_positions()[_analytor->output_chunk_index()];
-        int64_t get_value_start =
+        int64_t chunk_first_row_position = _analytor->first_total_position_of_current_chunk();
+        int64_t frame_start =
                 _analytor->get_total_position(_analytor->current_row_position()) - chunk_first_row_position;
-        int64_t get_value_end =
+        int64_t frame_end =
                 std::min<int64_t>(_analytor->current_row_position() + chunk_size, _analytor->partition_end());
-        _analytor->set_window_result_position(std::min<int64_t>(
-                (_analytor->get_total_position(get_value_end) - chunk_first_row_position), chunk_size));
+        _analytor->set_window_result_position(
+                std::min<int64_t>((_analytor->get_total_position(frame_end) - chunk_first_row_position), chunk_size));
 
-        _analytor->get_window_function_result(get_value_start, _analytor->window_result_position());
-        _analytor->update_current_row_position(_analytor->window_result_position() - get_value_start);
+        _analytor->get_window_function_result(frame_start, _analytor->window_result_position());
+        _analytor->update_current_row_position(_analytor->window_result_position() - frame_start);
 
-        if (_analytor->window_result_position() ==
-            _analytor->input_chunks()[_analytor->output_chunk_index()]->num_rows()) {
+        if (_analytor->is_current_chunk_finished_eval()) {
             return _analytor->output_result_chunk(chunk);
         }
     }
@@ -155,9 +152,9 @@ Status AnalyticNode::_get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr
 }
 
 Status AnalyticNode::_get_next_for_unbounded_preceding_range_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    while (!_analytor->input_eos() || _analytor->output_chunk_index() < _analytor->input_chunks().size()) {
+    while (!_analytor->input_eos() || _analytor->has_output()) {
         RETURN_IF_ERROR(_try_fetch_next_partition_data(state));
-        if (_analytor->input_eos() && _analytor->input_rows() == 0) {
+        if (_analytor->input_eos() && !_analytor->has_output()) {
             *eos = true;
             return Status::OK();
         }
@@ -169,11 +166,11 @@ Status AnalyticNode::_get_next_for_unbounded_preceding_range_frame(RuntimeState*
             _analytor->reset_state_for_cur_partition();
         }
 
-        size_t chunk_size = _analytor->input_chunks()[_analytor->output_chunk_index()]->num_rows();
+        size_t chunk_size = _analytor->current_chunk_size();
         _analytor->create_agg_result_columns(chunk_size);
 
         while (_analytor->current_row_position() < _analytor->partition_end() &&
-               _analytor->window_result_position() < chunk_size) {
+               !_analytor->is_current_chunk_finished_eval()) {
             if (_analytor->current_row_position() >= _analytor->peer_group_end()) {
                 // The condition `partition_start <= current_row_position < partition_end` is satisfied
                 // so `partition_end` must point at the genuine partition boundary, and found_partition_end must equals
@@ -186,23 +183,21 @@ Status AnalyticNode::_get_next_for_unbounded_preceding_range_frame(RuntimeState*
                                                _analytor->peer_group_start(), _analytor->peer_group_end());
             }
 
-            int64_t chunk_first_row_position =
-                    _analytor->input_chunk_first_row_positions()[_analytor->output_chunk_index()];
-            int64_t get_value_start =
+            int64_t chunk_first_row_position = _analytor->first_total_position_of_current_chunk();
+            int64_t frame_start =
                     _analytor->get_total_position(_analytor->current_row_position()) - chunk_first_row_position;
             _analytor->set_window_result_position(std::min<int64_t>(
                     (_analytor->get_total_position(_analytor->peer_group_end()) - chunk_first_row_position),
                     chunk_size));
 
-            DCHECK_GE(get_value_start, 0);
-            DCHECK_GT(_analytor->window_result_position(), get_value_start);
+            DCHECK_GE(frame_start, 0);
+            DCHECK_GT(_analytor->window_result_position(), frame_start);
 
-            _analytor->get_window_function_result(get_value_start, _analytor->window_result_position());
-            _analytor->update_current_row_position(_analytor->window_result_position() - get_value_start);
+            _analytor->get_window_function_result(frame_start, _analytor->window_result_position());
+            _analytor->update_current_row_position(_analytor->window_result_position() - frame_start);
         }
 
-        if (_analytor->window_result_position() ==
-            _analytor->input_chunks()[_analytor->output_chunk_index()]->num_rows()) {
+        if (_analytor->is_current_chunk_finished_eval()) {
             return _analytor->output_result_chunk(chunk);
         }
     }
@@ -210,9 +205,9 @@ Status AnalyticNode::_get_next_for_unbounded_preceding_range_frame(RuntimeState*
 }
 
 Status AnalyticNode::_get_next_for_sliding_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    while (!_analytor->input_eos() || _analytor->output_chunk_index() < _analytor->input_chunks().size()) {
+    while (!_analytor->input_eos() || _analytor->has_output()) {
         RETURN_IF_ERROR(_try_fetch_next_partition_data(state));
-        if (_analytor->input_eos() && _analytor->input_rows() == 0) {
+        if (_analytor->input_eos() && !_analytor->has_output()) {
             *eos = true;
             return Status::OK();
         }
@@ -223,25 +218,24 @@ Status AnalyticNode::_get_next_for_sliding_frame(RuntimeState* state, ChunkPtr* 
             _analytor->reset_state_for_cur_partition();
         }
 
-        size_t chunk_size = _analytor->input_chunks()[_analytor->output_chunk_index()]->num_rows();
+        size_t chunk_size = _analytor->current_chunk_size();
         _analytor->create_agg_result_columns(chunk_size);
 
         while (_analytor->current_row_position() < _analytor->partition_end() &&
-               _analytor->window_result_position() < chunk_size) {
+               !_analytor->is_current_chunk_finished_eval()) {
             _analytor->reset_window_state();
             FrameRange range = _analytor->get_sliding_frame_range();
             _analytor->update_window_batch(_analytor->partition_start(), _analytor->partition_end(), range.start,
                                            range.end);
             _analytor->update_window_result_position(1);
-            int64_t result_start = _analytor->get_total_position(_analytor->current_row_position()) -
-                                   _analytor->input_chunk_first_row_positions()[_analytor->output_chunk_index()];
-            DCHECK_GE(result_start, 0);
-            _analytor->get_window_function_result(result_start, _analytor->window_result_position());
+            int64_t frame_start = _analytor->get_total_position(_analytor->current_row_position()) -
+                                  _analytor->first_total_position_of_current_chunk();
+            DCHECK_GE(frame_start, 0);
+            _analytor->get_window_function_result(frame_start, _analytor->window_result_position());
             _analytor->update_current_row_position(1);
         }
 
-        if (_analytor->window_result_position() ==
-            _analytor->input_chunks()[_analytor->output_chunk_index()]->num_rows()) {
+        if (_analytor->is_current_chunk_finished_eval()) {
             return _analytor->output_result_chunk(chunk);
         }
     }
@@ -263,7 +257,7 @@ Status AnalyticNode::_get_next_for_rows_between_unbounded_preceding_and_current_
         _analytor->reset_window_state();
     }
 
-    auto chunk_size = static_cast<int64_t>(_analytor->input_chunks()[_analytor->output_chunk_index()]->num_rows());
+    auto chunk_size = static_cast<int64_t>(_analytor->current_chunk_size());
     _analytor->create_agg_result_columns(chunk_size);
 
     do {
@@ -275,7 +269,7 @@ Status AnalyticNode::_get_next_for_rows_between_unbounded_preceding_and_current_
 
             _analytor->update_window_result_position(1);
             int64_t frame_start = _analytor->get_total_position(_analytor->current_row_position()) -
-                                  _analytor->input_chunk_first_row_positions()[_analytor->output_chunk_index()];
+                                  _analytor->first_total_position_of_current_chunk();
 
             DCHECK_GE(frame_start, 0);
             _analytor->get_window_function_result(frame_start, _analytor->window_result_position());
@@ -285,7 +279,7 @@ Status AnalyticNode::_get_next_for_rows_between_unbounded_preceding_and_current_
         if (end) {
             _analytor->reset_state_for_next_partition();
         }
-    } while (_analytor->window_result_position() < chunk_size);
+    } while (!_analytor->is_current_chunk_finished_eval());
 
     return _analytor->output_result_chunk(chunk);
 }
@@ -311,37 +305,7 @@ Status AnalyticNode::_fetch_next_chunk(RuntimeState* state) {
         return Status::OK();
     }
 
-    _analytor->input_chunk_first_row_positions().emplace_back(_analytor->input_rows());
-    size_t chunk_size = child_chunk->num_rows();
-    _analytor->update_input_rows(chunk_size);
-
-    for (size_t i = 0; i < _analytor->agg_fn_ctxs().size(); i++) {
-        for (size_t j = 0; j < _analytor->agg_expr_ctxs()[i].size(); j++) {
-            ASSIGN_OR_RETURN(ColumnPtr column, _analytor->agg_expr_ctxs()[i][j]->evaluate(child_chunk.get()));
-            // Currently, only lead and lag window function have multi args.
-            // For performance, we do this special handle.
-            // In future, if need, we could remove this if else easily.
-            if (j == 0) {
-                TRY_CATCH_BAD_ALLOC(
-                        _analytor->append_column(chunk_size, _analytor->agg_intput_columns()[i][j].get(), column));
-            } else {
-                TRY_CATCH_BAD_ALLOC(_analytor->agg_intput_columns()[i][j]->append(*column, 0, column->size()));
-            }
-        }
-    }
-
-    for (size_t i = 0; i < _analytor->partition_ctxs().size(); i++) {
-        ASSIGN_OR_RETURN(ColumnPtr column, _analytor->partition_ctxs()[i]->evaluate(child_chunk.get()));
-        TRY_CATCH_BAD_ALLOC(_analytor->append_column(chunk_size, _analytor->partition_columns()[i].get(), column));
-    }
-
-    for (size_t i = 0; i < _analytor->order_ctxs().size(); i++) {
-        ASSIGN_OR_RETURN(ColumnPtr column, _analytor->order_ctxs()[i]->evaluate(child_chunk.get()));
-        TRY_CATCH_BAD_ALLOC(_analytor->append_column(chunk_size, _analytor->order_columns()[i].get(), column));
-    }
-
-    _analytor->input_chunks().emplace_back(std::move(child_chunk));
-    return Status::OK();
+    return _analytor->add_chunk(child_chunk);
 }
 
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > AnalyticNode::decompose_to_pipeline(
