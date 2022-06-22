@@ -40,8 +40,10 @@ jobs:
      - name: Install testing dependencies
        if: steps.cache-testing.outputs.cache-hit != 'true'
        run: |
-         curl https://github.com/StarRocks/FeCoverageTool/raw/main/cover-checker-console-1.4.0-jar-with-dependencies.jar -o $STARROCKS_HOME/cover-checker-console-1.4.0-jar-with-dependencies.jar
-         curl https://github.com/StarRocks/FeCoverageTool/raw/main/jacococli.jar -o $STARROCKS_HOME/jacococli.jar
+         wget -P $STARROCKS_HOME https://github.com/StarRocks/FeCoverageTool/archive/refs/heads/main.zip
+         unzip main.zip
+         rm FeCoverageTool-main/README.md
+         cp FeCoverageTool-main/* $STARROCKS_HOME
       
      - name: bash script
        run: | 
