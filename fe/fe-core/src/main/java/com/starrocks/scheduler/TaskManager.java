@@ -177,8 +177,10 @@ public class TaskManager {
             if (nameToTaskMap.containsKey(task.getName())) {
                 throw new DdlException("Task [" + task.getName() + "] already exists");
             }
-            // TaskId should be assigned by the framework
-            Preconditions.checkArgument(task.getId() == 0);
+            if (!isReplay) {
+                // TaskId should be assigned by the framework
+                Preconditions.checkArgument(task.getId() == 0);
+            }
             task.setId(GlobalStateMgr.getCurrentState().getNextId());
             switch (task.getType()) {
                 case NORMAL:
