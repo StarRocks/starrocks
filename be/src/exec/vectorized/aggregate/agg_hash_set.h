@@ -114,7 +114,8 @@ struct AggHashSetOfOneNullableNumberKey {
     void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
         if (key_columns[0]->only_null()) {
             has_null_key = true;
-        } else if (key_columns[0]->is_nullable()) {
+        } else {
+            DCHECK(key_columns[0]->is_nullable());
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
             auto* data_column = down_cast<ColumnType*>(nullable_column->data_column().get());
 
@@ -239,7 +240,8 @@ struct AggHashSetOfOneNullableStringKey {
     void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
         if (key_columns[0]->only_null()) {
             has_null_key = true;
-        } else if (key_columns[0]->is_nullable()) {
+        } else {
+            DCHECK(key_columns[0]->is_nullable());
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
             auto* data_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
 
