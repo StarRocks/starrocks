@@ -23,7 +23,6 @@ public class LakeTableStateMachine implements StateMachine {
 
     // Following variables only used by FE master, lazy initialize in preCommit.
     private Set<Long> dirtyPartitionSet;
-    private Set<Long> totalInvolvedBackends;
 
     public LakeTableStateMachine(DatabaseTransactionMgr dbTxnMgr, LakeTable table) {
         this.dbTxnMgr = dbTxnMgr;
@@ -37,7 +36,6 @@ public class LakeTableStateMachine implements StateMachine {
             throw new TransactionCommitFailedException("Cannot write RESTORE state table \"" + table.getName() + "\"");
         }
         dirtyPartitionSet = Sets.newHashSet();
-        totalInvolvedBackends = Sets.newHashSet();
 
         Set<Long> finishedTabletsOfThisTable = Sets.newHashSet();
 
@@ -59,7 +57,6 @@ public class LakeTableStateMachine implements StateMachine {
                 continue;
             }
             dirtyPartitionSet.add(tabletMeta.getPartitionId());
-            totalInvolvedBackends.add(finishedTablets.get(i).getBackendId());
             finishedTabletsOfThisTable.add(finishedTablets.get(i).getTabletId());
         }
 
