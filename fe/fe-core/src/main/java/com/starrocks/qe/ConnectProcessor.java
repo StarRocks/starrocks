@@ -27,13 +27,10 @@ import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -51,12 +48,10 @@ import com.starrocks.mysql.MysqlPacket;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.MysqlServerStatusFlag;
-import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -75,7 +70,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Process one mysql connection, receive one pakcet, process, send one packet.
@@ -143,8 +137,7 @@ public class ConnectProcessor {
         ctx.resetSessionVariable();
     }
 
-    public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
-                               AuditEvent.EventSource source) {
+    public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics) {
         // slow query
         long endTime = System.currentTimeMillis();
         long elapseMs = endTime - ctx.getStartTime();
@@ -179,7 +172,7 @@ public class ConnectProcessor {
         } else {
             ctx.getAuditEventBuilder().setIsQuery(false);
         }
-        ctx.getAuditEventBuilder().setEventSource(source);
+
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
 
         // We put origin query stmt at the end of audit log, for parsing the log more convenient.
@@ -327,34 +320,10 @@ public class ConnectProcessor {
         // TODO(cmy): when user send multi-statement, the executor is the last statement's executor.
         // We may need to find some way to resolve this.
         if (executor != null) {
-            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTable(executor.getParsedStmt());
-            AuditEvent.EventSource source;
-            int mvCounter = 0;
-            int viewCounter = 0;
-            int tableCounter = 0;
-            for (Table table : tableNameTableMap.values()) {
-                if (table instanceof MaterializedView) {
-                    mvCounter++;
-                } else if (table instanceof View) {
-                    viewCounter++;
-                } else {
-                    tableCounter++;
-                }
-            }
-            if (mvCounter == tableNameTableMap.size()) {
-                source = AuditEvent.EventSource.MV;
-            } else if (viewCounter == tableNameTableMap.size()) {
-                source = AuditEvent.EventSource.VIEW;
-            } else if (tableCounter == tableNameTableMap.size()) {
-                source = AuditEvent.EventSource.TABLE;
-            } else {
-                source = AuditEvent.EventSource.HYBRID;
-            }
-            auditAfterExec(originStmt, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog(),
-                    source);
+            auditAfterExec(originStmt, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
         } else {
             // executor can be null if we encounter analysis error.
-            auditAfterExec(originStmt, null, null, AuditEvent.EventSource.NONE);
+            auditAfterExec(originStmt, null, null);
         }
 
         addFinishedQueryDetail();

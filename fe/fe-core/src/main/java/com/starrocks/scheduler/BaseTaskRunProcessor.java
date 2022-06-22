@@ -4,7 +4,6 @@ package com.starrocks.scheduler;
 
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.plugin.AuditEvent;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
@@ -15,11 +14,10 @@ public abstract class BaseTaskRunProcessor implements TaskRunProcessor {
         throw new NotImplementedException("Method processTaskRun need to implement");
     }
 
-    protected void auditAfterExec(TaskRunContext context, StatementBase parsedStmt, PQueryStatistics statistics,
-                                  AuditEvent.EventSource source) {
+    protected void auditAfterExec(TaskRunContext context, StatementBase parsedStmt, PQueryStatistics statistics) {
         String origStmt = context.getDefinition();
         ConnectContext ctx = context.getCtx();
         ConnectProcessor processor = new ConnectProcessor(ctx);
-        processor.auditAfterExec(origStmt, parsedStmt, statistics, source);
+        processor.auditAfterExec(origStmt, parsedStmt, statistics);
     }
 }

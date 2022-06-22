@@ -2,7 +2,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
@@ -207,49 +206,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             LOG.warn("failed to copy materialized view: " + getName());
             return null;
         }
-        if (resetState) {
-            // remove shadow index from copied table
-            List<MaterializedIndex> shadowIndex =
-                    copied.getPartitions().stream().findFirst().get().getMaterializedIndices(
-                            MaterializedIndex.IndexExtState.SHADOW);
-            for (MaterializedIndex deleteIndex : shadowIndex) {
-                LOG.debug("copied table delete shadow index : {}", deleteIndex.getId());
-                copied.deleteIndexInfo(copied.getIndexNameById(deleteIndex.getId()));
-            }
-            copied.setState(OlapTableState.NORMAL);
-            for (Partition partition : copied.getPartitions()) {
-                boolean useStarOS = partition.isUseStarOS();
-                // remove shadow index from partition
-                for (MaterializedIndex deleteIndex : shadowIndex) {
-                    partition.deleteRollupIndex(deleteIndex.getId());
-                }
-                partition.setState(Partition.PartitionState.NORMAL);
-                for (MaterializedIndex idx : partition.getMaterializedIndices(extState)) {
-                    idx.setState(MaterializedIndex.IndexState.NORMAL);
-                    if (useStarOS) {
-                        continue;
-                    }
-                    for (Tablet tablet : idx.getTablets()) {
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                            replica.setState(Replica.ReplicaState.NORMAL);
-                        }
-                    }
-                }
-            }
-        }
-        if (reservedPartitions == null || reservedPartitions.isEmpty()) {
-            // reserve all
-            return copied;
-        }
-        Set<String> reservedPartitionSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        reservedPartitionSet.addAll(reservedPartitions);
-
-        for (String partName : copied.getPartitionNames()) {
-            if (!reservedPartitionSet.contains(partName)) {
-                copied.dropPartitionAndReserveTablet(partName);
-            }
-        }
-        return copied;
+        return ((MaterializedView) selectiveCopyInternal(copied, reservedPartitions, resetState, extState));
     }
 
     @Override

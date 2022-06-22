@@ -3,7 +3,6 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.StmtExecutor;
@@ -33,11 +32,10 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
             executor.execute();
         } finally {
             if (executor != null) {
-                auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog(),
-                        AuditEvent.EventSource.TABLE);
+                auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
             } else {
                 // executor can be null if we encounter analysis error.
-                auditAfterExec(context, null, null, AuditEvent.EventSource.TABLE);
+                auditAfterExec(context, null, null);
             }
         }
     }

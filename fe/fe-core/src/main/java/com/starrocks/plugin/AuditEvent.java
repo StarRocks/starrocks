@@ -42,14 +42,6 @@ public class AuditEvent {
         AFTER_QUERY
     }
 
-    public enum EventSource {
-        NONE,
-        HYBRID,
-        TABLE,
-        MV,
-        VIEW
-    }
-
     @Retention(RetentionPolicy.RUNTIME)
     public static @interface AuditField {
         String value() default "";
@@ -101,8 +93,6 @@ public class AuditEvent {
     public double planCpuCosts = 0.0;
     @AuditField(value = "PlanMemCost")
     public double planMemCosts = 0.0;
-    @AuditField(value = "source")
-    public EventSource source;
 
     public static class AuditEventBuilder {
 
@@ -225,11 +215,6 @@ public class AuditEvent {
 
         public AuditEventBuilder setPlanMemCosts(double memCosts) {
             auditEvent.planMemCosts = memCosts;
-            return this;
-        }
-
-        public AuditEventBuilder setEventSource(EventSource source) {
-            auditEvent.source = source;
             return this;
         }
 

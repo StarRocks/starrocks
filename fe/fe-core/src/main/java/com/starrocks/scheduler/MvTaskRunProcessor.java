@@ -30,7 +30,6 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.StmtExecutor;
@@ -377,11 +376,10 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             throw new SemanticException("Refresh materialized view failed:" + insertSql, e);
         } finally {
             if (executor != null) {
-                auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog(),
-                        AuditEvent.EventSource.MV);
+                auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
             } else {
                 // executor can be null if we encounter analysis error.
-                auditAfterExec(context, null, null, AuditEvent.EventSource.MV);
+                auditAfterExec(context, null, null);
             }
         }
     }

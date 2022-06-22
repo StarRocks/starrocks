@@ -2,7 +2,6 @@
 
 package com.starrocks.scheduler;
 
-import com.google.common.collect.Maps;
 import com.starrocks.analysis.DmlStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -29,7 +28,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
-import java.util.Map;
 
 public class TaskManagerTest {
 
