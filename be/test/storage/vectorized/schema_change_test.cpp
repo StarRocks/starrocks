@@ -501,20 +501,12 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
 
     ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(0);
     column_mapping->ref_column = 1;
-    column_mapping->ref_base_reader_column_index = 0;
-    indexs->emplace_back(0);
     column_mapping = chunk_changer.get_mutable_column_mapping(1);
     column_mapping->ref_column = 0;
-    column_mapping->ref_base_reader_column_index = 1;
-    indexs->emplace_back(1);
     column_mapping = chunk_changer.get_mutable_column_mapping(2);
     column_mapping->ref_column = 2;
-    column_mapping->ref_base_reader_column_index = 2;
-    indexs->emplace_back(2);
     column_mapping = chunk_changer.get_mutable_column_mapping(3);
     column_mapping->ref_column = 3;
-    column_mapping->ref_base_reader_column_index = 3;
-    indexs->emplace_back(3);
     column_mapping = chunk_changer.get_mutable_column_mapping(4);
     column_mapping->ref_column = -1;
     const TabletColumn& hll_column_schema = new_tablet->tablet_schema().column(4);
