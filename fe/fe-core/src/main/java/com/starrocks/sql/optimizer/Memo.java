@@ -295,20 +295,24 @@ public class Memo {
     }
 
     /*
-     * remove unreachable group, and rebuild all group expression.
-     * only used in logical rewrite phase, logical expression must only one in a group,
-     * and remove groupExpression one by one is too slow, so rebuild directly
+     * @Note: The function only work in logical rewrite phase !!!
+     *
+     * When performing replaceRewriteExpression, some groups may not be reachable by rootGroup.
+     * These groups should be replaced.
+     * In order to reduce the number of groups entering Memo,
+     * we will delete inaccessible groups in this function.
      */
-    public void rebuildGroupExpressions() {
+    public void removeUnreachableGroup() {
         LinkedList<Integer> touch = new LinkedList<>();
         touch.add(rootGroup.getId());
         deepSearchGroup(rootGroup, touch);
         groups.removeIf(g -> !touch.contains(g.getId()));
         groupExpressions.clear();
 
+        // only used in logical rewrite phase, logical expression must only one in a group,
+        // and remove groupExpression one by one is too slow, so rebuild directly
         for (Group group : groups) {
             group.getLogicalExpressions().forEach(l -> groupExpressions.put(l, l));
-            group.getPhysicalExpressions().forEach(p -> groupExpressions.put(p, p));
         }
     }
 

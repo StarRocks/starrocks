@@ -280,7 +280,7 @@ public class Optimizer {
     private void cleanUpMemoGroup(Memo memo) {
         // Rewrite maybe produce empty groups, we need to remove them.
         memo.removeAllEmptyGroup();
-        memo.rebuildGroupExpressions();
+        memo.removeUnreachableGroup();
     }
 
     /**
