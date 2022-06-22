@@ -79,7 +79,9 @@ void FragmentContext::prepare_pass_through_chunk_buffer() {
     _runtime_state->exec_env()->stream_mgr()->prepare_pass_through_chunk_buffer(_query_id);
 }
 void FragmentContext::destroy_pass_through_chunk_buffer() {
-    _runtime_state->exec_env()->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
+    if (_runtime_state) {
+        _runtime_state->exec_env()->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
+    }
 }
 
 } // namespace starrocks::pipeline
