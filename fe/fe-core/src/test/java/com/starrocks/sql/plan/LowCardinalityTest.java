@@ -279,11 +279,13 @@ public class LowCardinalityTest extends PlanTestBase {
 
     @Test
     public void testDecodeNodeRewriteMultiCountDistinct() throws Exception {
+        String sql;
+        String plan;
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
-        String sql = "select count(distinct a),count(distinct b) from (" +
+        sql = "select count(distinct a),count(distinct b) from (" +
                 "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, " +
                 "count(*) from supplier group by a,b) as t ";
-        String plan = getFragmentPlan(sql);
+        plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
         Assert.assertTrue(plan.contains("7:AGGREGATE (merge finalize)\n" +
                 "  |  output: multi_distinct_count(12: count), multi_distinct_count(13: count)"));
@@ -292,6 +294,11 @@ public class LowCardinalityTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(" multi_distinct_count(11: S_ADDRESS), " +
                 "multi_distinct_count(12: S_COMMENT)"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(3);
+        sql = "select max(S_ADDRESS), count(distinct S_ADDRESS) from supplier group by S_ADDRESS;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  4:AGGREGATE (update finalize)\n" +
+                "  |  output: max(13: S_ADDRESS), count(11: S_ADDRESS)"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -928,9 +935,10 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testDecodeWithLimit() throws Exception {
         String sql = "select count(*), S_ADDRESS from supplier group by S_ADDRESS limit 10";
         String plan = getFragmentPlan(sql);
-        assertContains(plan,"  3:Decode\n" +
+        assertContains(plan, "  3:Decode\n" +
                 "  |  <dict id 10> : <string id 3>\n" +
-                "  |  limit: 10");;
+                "  |  limit: 10");
+        ;
     }
 
     @Test
