@@ -46,7 +46,12 @@ jobs:
          unzip main.zip
          rm -v FeCoverageTool-main/README.md
          cp -v FeCoverageTool-main/* $STARROCKS_HOME
-      
+         
+     - name: Set Swap Space
+       uses: pierotofy/set-swap-space@master
+       with:
+         swap-size-gb: 10
+         
      - name: bash script
        run: | 
          ./starrocks_fe_unittest.sh $GITHUB_RUN_NUMBER $GITHUB_REF_NAME
