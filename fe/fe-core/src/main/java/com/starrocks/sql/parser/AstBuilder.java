@@ -101,7 +101,6 @@ import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UpdateStmt;
-import com.starrocks.analysis.UseStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.analysis.ValueList;
 import com.starrocks.catalog.ArrayType;
@@ -156,6 +155,7 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
+import com.starrocks.sql.ast.UseStmt;
 import com.starrocks.sql.ast.UserIdentifier;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
@@ -1398,8 +1398,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitUse(StarRocksParser.UseContext context) {
-        Identifier identifier = (Identifier) visit(context.identifier());
-        return new UseStmt(identifier.getValue());
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        List<String> parts = qualifiedName.getParts();
+        if (parts.size() == 1) {
+            return new UseStmt(null, parts.get(0));
+        } else if (parts.size() == 2) {
+            return new UseStmt(parts.get(0), parts.get(1));
+        } else {
+            throw new ParsingException("error catalog.database");
+        }
     }
 
     @Override

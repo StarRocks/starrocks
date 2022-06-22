@@ -2770,8 +2770,10 @@ public class GlobalStateMgr {
             ctx.setCurrentCatalog(newCatalogName);
         }
 
-        // check auth for internal catalog
-        if (catalogMgr.isInternalCatalog(ctx.getCurrentCatalog()) &&
+        // Check auth for internal catalog.
+        // Here we check the request permission that sent by the mysql client or jdbc.
+        // So we didn't check UseStmt permission in PrivilegeChecker.
+        if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog()) &&
                 !auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     ctx.getQualifiedUser(), dbName);
