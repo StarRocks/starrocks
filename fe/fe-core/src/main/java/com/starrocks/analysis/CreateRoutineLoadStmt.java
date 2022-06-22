@@ -25,14 +25,11 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.RoutineLoadDesc;
@@ -47,7 +44,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.io.StringReader;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -306,9 +302,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
 
         // parse the origin stmt to get routine load desc
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(origStmt.originStmt), sqlMode));
         try {
-            StatementBase stmt = SqlParserUtils.getStmt(parser, origStmt.idx);
+            List <StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(
+                    origStmt.originStmt, sqlMode);
+            StatementBase stmt = stmts.get(origStmt.idx);
             if (stmt instanceof CreateRoutineLoadStmt) {
                 return CreateRoutineLoadStmt.
                         buildLoadDesc(((CreateRoutineLoadStmt) stmt).getLoadPropertyList());
