@@ -106,13 +106,13 @@ public class VariableMgr {
 
     // Map variable name to variable context which have enough information to change variable value.
     // This map contains info of all session and global variables.
-    private static final ImmutableMap<String, VarContext> ctxByVarName;
+    private static ImmutableMap<String, VarContext> ctxByVarName;
 
-    private static final ImmutableMap<String, String> aliases;
+    private static ImmutableMap<String, String> aliases;
 
     // This variable is equivalent to the default value of session variables.
     // Whenever a new session is established, the value in this object is copied to the session-level variable.
-    private static final SessionVariable defaultSessionVariable;
+    private static SessionVariable defaultSessionVariable;
 
     // Global read/write lock to protect access of globalSessionVariable.
     private static final ReadWriteLock rwlock = new ReentrantReadWriteLock();

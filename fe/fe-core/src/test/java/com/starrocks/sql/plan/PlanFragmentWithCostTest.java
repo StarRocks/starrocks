@@ -78,6 +78,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Before
     public void before() {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        connectContext.getSessionVariable().setCboCteReuse(false);
     }
 
     private static final String V1 = "v1";
