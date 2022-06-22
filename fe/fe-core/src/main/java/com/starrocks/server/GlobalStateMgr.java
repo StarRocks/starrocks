@@ -1687,7 +1687,7 @@ public class GlobalStateMgr {
             try {
                 entity = cursor.next();
             } catch (InterruptedException | JournalException | JournalInconsistentException e) {
-                LOG.warn("got exception will get next, will quit, ", e);
+                LOG.warn("got exception when get next, will exit, ", e);
                 // TODO exit gracefully
                 Util.stdoutWithTime(e.getMessage());
                 System.exit(-1);

@@ -27,7 +27,7 @@ import com.sleepycat.je.DatabaseException;
 import com.sleepycat.je.LockMode;
 import com.sleepycat.je.OperationStatus;
 import com.sleepycat.je.rep.InsufficientLogException;
-import com.sleepycat.je.rep.RollbackException;
+import com.sleepycat.je.rep.RestartRequiredException;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
@@ -112,13 +112,13 @@ public class BDBJournalCursor implements JournalCursor {
                 database = environment.openDatabase(dbName);
                 nextDbPositionIndex++;
                 return;
-            } catch (InsufficientLogException | RollbackException e) {
-                // for InsufficientLogException we should refresh the log and
-                // then exit the process because we may have read dirty data.
-                // for RollbackException we should exit the process because we may have read dirty data.
-                String errMsg = String.format("failed to open because of dirty data, will exit. db[%s]", dbName);
+            } catch (RestartRequiredException e) {
+                String errMsg = String.format(
+                        "failed to open database because of RestartRequiredException, will exit. db[%s]", database);
                 LOG.warn(errMsg, e);
                 if (e instanceof InsufficientLogException) {
+                    // for InsufficientLogException we should refresh the log and
+                    // then exit the process because we may have read dirty data.
                     environment.refreshLog((InsufficientLogException) e);
                 }
                 JournalInconsistentException journalInconsistentException = new JournalInconsistentException(errMsg);
@@ -206,14 +206,14 @@ public class BDBJournalCursor implements JournalCursor {
                     LOG.warn(errMsg);
                     exception = new JournalException(errMsg);
                 }
-            } catch (InsufficientLogException | RollbackException e) {
-                // for InsufficientLogException we should refresh the log and
-                // then exit the process because we may have read dirty data.
-                // for RollbackException we should exit the process because we may have read dirty data.
-                String errMsg = String.format("failed to read next because of dirty data, will exit. db[%s], current key[%s]",
+            } catch (RestartRequiredException e) {
+                String errMsg = String.format(
+                        "failed to read next because of RestartRequiredException, will exit. db[%s], current key[%s]",
                         database, theKey);
                 LOG.warn(errMsg, e);
                 if (e instanceof InsufficientLogException) {
+                    // for InsufficientLogException we should refresh the log and
+                    // then exit the process because we may have read dirty data.
                     environment.refreshLog((InsufficientLogException) e);
                 }
                 JournalInconsistentException journalInconsistentException = new JournalInconsistentException(errMsg);
