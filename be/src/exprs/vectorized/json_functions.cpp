@@ -345,24 +345,24 @@ ColumnPtr JsonFunctions::_json_string_unescaped(FunctionContext* context, const 
             }
             auto str = json_str.value();
 
-            if (str.length() <= 2) {
+            // Since the string extract from json may be escaped, unescaping is needed.
+            // The src and dest of strings::CUnescape could be the same.
+            std::string err;
+            if (!strings::CUnescape(StringPiece{str}, &str, &err)) {
+                result.append_null();
+                continue;
+            }
+
+            if (str.length() < 2) {
                 result.append(std::move(str));
                 continue;
-            } else {
-                // Since the string extract from json may be escaped, unescaping is needed.
-                // The src and dest of strings::CUnescape could be the same.
-                std::string err;
-                if (!strings::CUnescape(StringPiece{str}, &str, &err)) {
-                    result.append_null();
-                    continue;
-                }
-
-                // Try to trim the first/last quote.
-                if (str[0] == '"') str = str.substr(1, str.size() - 1);
-                if (str[str.size() - 1] == '"') str = str.substr(0, str.size() - 1);
-
-                result.append(std::move(str));
             }
+
+            // Try to trim the first/last quote.
+            if (str[0] == '"') str = str.substr(1, str.size() - 1);
+            if (str[str.size() - 1] == '"') str = str.substr(0, str.size() - 1);
+
+            result.append(std::move(str));
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
