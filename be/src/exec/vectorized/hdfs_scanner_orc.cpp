@@ -491,8 +491,8 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
             // important to add columns before evaluation
             // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
-            _file_read_param.append_not_exised_columns_to_chunk(chunk, ck->num_rows());
-            _file_read_param.append_partition_column_to_chunk(chunk, ck->num_rows());
+            _file_read_param.append_not_exised_columns_to_chunk(&ck, ck->num_rows());
+            _file_read_param.append_partition_column_to_chunk(&ck, ck->num_rows());
             chunk_size = ck->num_rows();
             // do stats before we filter rows which does not match.
             _stats.raw_rows_read += chunk_size;
