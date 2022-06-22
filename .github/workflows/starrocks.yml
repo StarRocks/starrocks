@@ -27,18 +27,22 @@ jobs:
          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
          restore-keys: |
            ${{ runner.os }}-maven-
-           
-     - name: test
-       run: echo $STARROCKS_HOME/
       
      - name: Cache local testing file
+       id: cache-testing
        uses: actions/cache@v3
        with:
          path: $STARROCKS_HOME/*.jar
          key: ${{ runner.os }}-testing-${{ hashFiles('*.jar') }}
          restore-keys: |
            ${{ runner.os }}-testing-
-    
+        
+     - name: Install testing dependencies
+       if: steps.cache-testing.outputs.cache-hit != 'true'
+       run: |
+         curl https://github.com/StarRocks/FeCoverageTool/raw/main/cover-checker-console-1.4.0-jar-with-dependencies.jar
+         curl https://github.com/StarRocks/FeCoverageTool/raw/main/jacococli.jar
+      
      - name: bash script
        run: | 
          ./starrocks_fe_unittest.sh ${GITHUB_RUN_NUMBER} ${GITHUB_REF_NAME}
