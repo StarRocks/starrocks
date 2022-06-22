@@ -508,41 +508,45 @@ public class BDBJEJournal implements Journal {
         }
 
         JournalException exception = null;
-        for (int i = 0; i < RETRY_TIME; i++) {
-            // retry cleanups
-            if (i != 0) {
-                Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+        try {
+            for (int i = 0; i < RETRY_TIME; i++) {
+                // retry cleanups
+                if (i != 0) {
+                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
 
-                if (currentTrasaction == null || !currentTrasaction.isValid()) {
-                    try {
-                        rebuildCurrentTransaction();
-                    } catch (JournalException e) {
-                        // failed to rebuild txn, will continune to next attempt
-                        LOG.warn("failed to commit journal after retried {} times! failed to rebuild txn",
-                                i + 1, e);
-                        currentTrasaction = null;
-                        exception = e;
-                        continue;
+                    if (currentTrasaction == null || !currentTrasaction.isValid()) {
+                        try {
+                            rebuildCurrentTransaction();
+                        } catch (JournalException e) {
+                            // failed to rebuild txn, will continune to next attempt
+                            LOG.warn("failed to commit journal after retried {} times! failed to rebuild txn",
+                                    i + 1, e);
+                            currentTrasaction = null;
+                            exception = e;
+                            continue;
+                        }
                     }
+                } // if i != 0
+
+                // commit
+                try {
+                    currentTrasaction.commit();
+                    return;
+                } catch (DatabaseException e) {
+                    String errMsg = String.format("failed to commit journal after retried %d times! txn[%s] db[%s]",
+                            i + 1, currentTrasaction, currentJournalDB);
+                    LOG.error(errMsg, e);
+                    exception = new JournalException(errMsg);
+                    exception.initCause(e);
                 }
             }
-
-            // commit
-            try {
-                currentTrasaction.commit();
-                currentTrasaction = null;
-                uncommitedDatas.clear();
-                return;
-            } catch (DatabaseException e) {
-                String errMsg = String.format("failed to commit journal after retried %d times! txn[%s] db[%s]",
-                        i + 1, currentTrasaction, currentJournalDB);
-                LOG.error(errMsg, e);
-                exception = new JournalException(errMsg);
-                exception.initCause(e);
-            }
+            // failed after retried
+            throw exception;
+        } finally {
+            // always reset current txn
+            currentTrasaction = null;
+            uncommitedDatas.clear();
         }
-        // failed after retried
-        throw exception;
     }
 
     /**
