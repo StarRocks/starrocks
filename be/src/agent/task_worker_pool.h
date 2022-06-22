@@ -95,6 +95,7 @@ private:
     static void* _create_tablet_worker_thread_callback(void* arg_this);
     static void* _drop_tablet_worker_thread_callback(void* arg_this);
     static void* _push_worker_thread_callback(void* arg_this);
+    static void* _delete_worker_thread_callback(void* arg_this);
     static void* _publish_version_worker_thread_callback(void* arg_this);
     static void* _clear_transaction_task_worker_thread_callback(void* arg_this);
     static void* _alter_tablet_worker_thread_callback(void* arg_this);
