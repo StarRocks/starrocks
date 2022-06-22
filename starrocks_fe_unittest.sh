@@ -69,7 +69,7 @@ docker exec --privileged $container_name /bin/bash -c "$cmd"
 echo "script run over-----"
 
 ls -al $PROJECT/fe/fe-core/target
-if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
+if [ "$GITHUB_PR_TARGET_BRANCH" == "testing" ];then
     cd $PROJECT/fe/fe-core/target
     jacoco_result="jacoco_${GITHUB_PR_NUMBER}.exec"
     mv jacoco.exec $jacoco_result || true
