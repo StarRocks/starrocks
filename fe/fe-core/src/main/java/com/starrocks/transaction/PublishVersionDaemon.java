@@ -46,7 +46,6 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -114,7 +113,7 @@ public class PublishVersionDaemon extends MasterDaemon {
         AgentBatchTask batchTask = new AgentBatchTask();
         // traverse all ready transactions and dispatch the publish version task to all backends
         for (TransactionState transactionState : readyTransactionStates) {
-            List<PublishVersionTask> tasks = createPublishVersionTaskForOlapTable(transactionState);
+            List<PublishVersionTask> tasks = transactionState.createPublishVersionTask();
             for (PublishVersionTask task : tasks) {
                 AgentTaskQueue.addTask(task);
                 batchTask.addTask(task);
@@ -182,56 +181,6 @@ public class PublishVersionDaemon extends MasterDaemon {
         // TODO: support mix OlapTable with LakeTable
         Table table = db.getTable(transactionState.getTableIdList().get(0));
         return table.isLakeTable();
-    }
-
-    public List<PublishVersionTask> createPublishVersionTaskForOlapTable(TransactionState transactionState) {
-        List<PublishVersionTask> tasks = new ArrayList<>();
-        if (transactionState.hasSendTask()) {
-            return tasks;
-        }
-
-        Set<Long> publishBackends = transactionState.getPublishVersionTasks().keySet();
-        // public version tasks are not persisted in globalStateMgr, so publishBackends may be empty.
-        // We have to send publish version task to all backends
-        if (publishBackends.isEmpty()) {
-            // note: tasks are sended to all backends including dead ones, or else
-            // transaction manager will treat it as success
-            List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
-            if (!allBackends.isEmpty()) {
-                publishBackends = Sets.newHashSet();
-                publishBackends.addAll(allBackends);
-            } else {
-                // all backends may be dropped, no need to create task
-                LOG.warn("transaction {} want to publish, but no backend exists", transactionState.getTransactionId());
-                return tasks;
-            }
-        }
-
-        List<PartitionCommitInfo> partitionCommitInfos = new ArrayList<>();
-        for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
-            partitionCommitInfos.addAll(tableCommitInfo.getIdToPartitionCommitInfo().values());
-        }
-
-        List<TPartitionVersionInfo> partitionVersions = new ArrayList<>(partitionCommitInfos.size());
-        for (PartitionCommitInfo commitInfo : partitionCommitInfos) {
-            TPartitionVersionInfo version = new TPartitionVersionInfo(commitInfo.getPartitionId(),
-                    commitInfo.getVersion(), 0);
-            partitionVersions.add(version);
-        }
-
-        long createTime = System.currentTimeMillis();
-        for (long backendId : publishBackends) {
-            PublishVersionTask task = new PublishVersionTask(backendId,
-                    transactionState.getTransactionId(),
-                    transactionState.getDbId(),
-                    transactionState.getCommitTime(),
-                    partitionVersions,
-                    transactionState.getTraceParent(),
-                    createTime);
-            transactionState.addPublishVersionTask(backendId, task);
-            tasks.add(task);
-        }
-        return tasks;
     }
 
     // todo: refine performance
