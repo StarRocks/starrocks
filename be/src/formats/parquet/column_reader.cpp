@@ -15,7 +15,8 @@ namespace starrocks::parquet {
 
 template <typename TOffset, typename TIsNull>
 static void def_rep_to_offset(const LevelInfo& level_info, const level_t* def_levels, const level_t* rep_levels,
-                              size_t num_levels, TOffset* offsets, TIsNull* is_nulls, size_t* num_offsets) {
+                              size_t num_levels, TOffset* offsets, TIsNull* is_nulls, size_t* num_offsets,
+                              bool* has_null) {
     size_t offset_pos = 0;
     for (int i = 0; i < num_levels; ++i) {
         // when def_level is less than immediate_repeated_ancestor_def_level, it means that level
@@ -45,6 +46,7 @@ static void def_rep_to_offset(const LevelInfo& level_info, const level_t* def_le
             is_nulls[offset_pos - 1] = 0;
         } else {
             is_nulls[offset_pos - 1] = 1;
+            *has_null = true;
         }
     }
     *num_offsets = offset_pos;
@@ -141,8 +143,9 @@ public:
         vectorized::NullColumn null_column(num_levels);
         auto& is_nulls = null_column.get_data();
         size_t num_offsets = 0;
+        bool has_null = false;
         def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
-                          &num_offsets);
+                          &num_offsets, &has_null);
         offsets.resize(num_offsets + 1);
         is_nulls.resize(num_offsets);
 
@@ -150,6 +153,7 @@ public:
             DCHECK(dst->is_nullable());
             DCHECK(nullable_column != nullptr);
             nullable_column->mutable_null_column()->swap_column(null_column);
+            nullable_column->set_has_null(has_null);
         }
 
         return st;
