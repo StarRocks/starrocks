@@ -455,12 +455,11 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     }
 
     std::vector<vectorized::ChunkIteratorPtr> seg_iterators;
-    seg_iterators.reserve(_num_segment);
+    seg_iterators.reserve(segments.size());
 
-    if (CompactionUtils::choose_compaction_algorithm(
-                _context.tablet_schema->num_columns(), config::vertical_compaction_max_columns_per_group,
-                _num_segment - std::count(_num_rows_of_tmp_segment_files.begin(), _num_rows_of_tmp_segment_files.end(),
-                                          0)) == VERTICAL_COMPACTION) {
+    if (CompactionUtils::choose_compaction_algorithm(_context.tablet_schema->num_columns(),
+                                                     config::vertical_compaction_max_columns_per_group,
+                                                     segments.size()) == VERTICAL_COMPACTION) {
         std::vector<std::vector<uint32_t>> column_groups;
         CompactionUtils::split_column_into_groups(_context.tablet_schema->num_columns(),
                                                   _context.tablet_schema->num_key_columns(),
@@ -472,11 +471,8 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
             auto res = segment->new_iterator(schema, seg_options);
             if (!res.ok()) {
                 return res.status();
-            } else if (res.value() == nullptr) {
-                continue;
-            } else {
-                seg_iterators.emplace_back(res.value());
             }
+            seg_iterators.emplace_back(res.value());
         }
 
         TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
@@ -580,11 +576,8 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                 auto res = segment->new_iterator(schema, seg_options);
                 if (!res.ok()) {
                     return res.status();
-                } else if (res.value() == nullptr) {
-                    continue;
-                } else {
-                    seg_iterators.emplace_back(res.value());
                 }
+                seg_iterators.emplace_back(res.value());
             }
 
             ChunkIteratorPtr itr;
@@ -655,11 +648,8 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
             auto res = segment->new_iterator(schema, seg_options);
             if (!res.ok()) {
                 return res.status();
-            } else if (res.value() == nullptr) {
-                continue;
-            } else {
-                seg_iterators.emplace_back(res.value());
             }
+            seg_iterators.emplace_back(res.value());
         }
 
         ChunkIteratorPtr itr;
