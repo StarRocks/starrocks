@@ -32,6 +32,8 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -283,6 +285,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
+        if (params.isSetType() && TTableType.MATERIALIZED_VIEW.equals(params.getType())) {
+            listMaterializedViewStatus(tablesResult, limit, matcher, currentUser, params.db);
+            return result;
+        }
         if (db != null) {
             db.readLock();
             try {
@@ -331,6 +337,96 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
+    // list MaterializedView table match pattern
+    public void listMaterializedViewStatus(List<TTableStatus> tablesResult, long limit, PatternMatcher matcher,
+                                           UserIdentity currentUser, String dbName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        if (db == null) {
+            LOG.warn("database not exists: {}", dbName);
+            return;
+        }
+        db.readLock();
+        try {
+            for (Table materializedView : db.getMaterializedViews()) {
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
+                        materializedView.getName(), PrivPredicate.SHOW)) {
+                    continue;
+                }
+                if (matcher != null && !matcher.match(materializedView.getName())) {
+                    continue;
+                }
+                MaterializedView mvTable = (MaterializedView) materializedView;
+                TTableStatus status = new TTableStatus();
+                status.setId(String.valueOf(mvTable.getId()));
+                status.setName(mvTable.getName());
+                status.setDdl_sql(mvTable.getViewDefineSql());
+                status.setRows(String.valueOf(mvTable.getRowCount()));
+                status.setType(mvTable.getMysqlType());
+                status.setComment(mvTable.getComment());
+                tablesResult.add(status);
+                if (limit > 0 && tablesResult.size() >= limit) {
+                    return;
+                }
+            }
+            for (Table table : db.getTables()) {
+                if (table.getType() == Table.TableType.OLAP) {
+                    OlapTable olapTable = (OlapTable) table;
+                    List<MaterializedIndex> visibleMaterializedViews = olapTable.getVisibleIndex();
+                    long baseIdx = olapTable.getBaseIndexId();
+
+                    for (MaterializedIndex mvIdx : visibleMaterializedViews) {
+                        if (baseIdx == mvIdx.getId()) {
+                            continue;
+                        }
+                        if (matcher != null && !matcher.match(olapTable.getIndexNameById(mvIdx.getId()))) {
+                            continue;
+                        }
+                        MaterializedIndexMeta mvMeta = olapTable.getVisibleIndexIdToMeta().get(mvIdx.getId());
+                        TTableStatus status = new TTableStatus();
+                        status.setId(String.valueOf(mvIdx.getId()));
+                        status.setName(olapTable.getIndexNameById(mvIdx.getId()));
+                        if (mvMeta.getOriginStmt() == null) {
+                            StringBuilder originStmtBuilder = new StringBuilder(
+                                    "create materialized view " + olapTable.getIndexNameById(mvIdx.getId()) +
+                                            " as select ");
+                            String groupByString = "";
+                            for (Column column : mvMeta.getSchema()) {
+                                if (column.isKey()) {
+                                    groupByString += column.getName() + ",";
+                                }
+                            }
+                            originStmtBuilder.append(groupByString);
+                            for (Column column : mvMeta.getSchema()) {
+                                if (!column.isKey()) {
+                                    originStmtBuilder.append(column.getAggregationType().toString()).append("(")
+                                            .append(column.getName()).append(")").append(",");
+                                }
+                            }
+                            originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
+                            originStmtBuilder.append(" from ").append(olapTable.getName()).append(" group by ")
+                                    .append(groupByString);
+                            originStmtBuilder.delete(originStmtBuilder.length() - 1, originStmtBuilder.length());
+                            status.setDdl_sql(originStmtBuilder.toString());
+                        } else {
+                            status.setDdl_sql(mvMeta.getOriginStmt().replace("\n", "").replace("\t", "")
+                                    .replaceAll("[ ]+", " "));
+                        }
+                        status.setRows(String.valueOf(mvIdx.getRowCount()));
+                        // for materialized view used old logic
+                        status.setType("");
+                        status.setComment("");
+                        tablesResult.add(status);
+                        if (limit > 0 && tablesResult.size() >= limit) {
+                            return;
+                        }
+                    }
+                }
+            }
+        } finally {
+            db.readUnlock();
+        }
+    }
+
     @Override
     public TGetTaskInfoResult getTasks(TGetTasksParams params) throws TException {
         LOG.debug("get show task request: {}", params);
@@ -348,8 +444,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         for (Task task : taskList) {
 
-            Database db = globalStateMgr.getDb(task.getDbName());
-            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, task.getDbName(), PrivPredicate.SHOW)) {
                 continue;
             }
 
@@ -358,7 +453,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setCreate_time(task.getCreateTime() / 1000);
             // Now there are only MANUAL types of Tasks
             info.setSchedule("MANUAL");
-            info.setDatabase(task.getDbName());
+            info.setDatabase(ClusterNamespace.getNameFromFullName(task.getDbName()));
             info.setDefinition(task.getDefinition());
             info.setExpire_time(task.getExpireTime() / 1000);
             tasksResult.add(info);
@@ -385,8 +480,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         for (TaskRunStatus status : taskRunList) {
 
-            Database db = globalStateMgr.getDb(status.getDbName());
-            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, db.getFullName(), PrivPredicate.SHOW)) {
+            if (!globalStateMgr.getAuth().checkDbPriv(currentUser, status.getDbName(), PrivPredicate.SHOW)) {
                 continue;
             }
 
@@ -396,6 +490,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setCreate_time(status.getCreateTime() / 1000);
             info.setFinish_time(status.getFinishTime() / 1000);
             info.setState(status.getState().toString());
+            info.setDatabase(ClusterNamespace.getNameFromFullName(status.getDbName()));
             info.setDefinition(status.getDefinition());
             info.setError_code(status.getErrorCode());
             info.setError_message(status.getErrorMessage());

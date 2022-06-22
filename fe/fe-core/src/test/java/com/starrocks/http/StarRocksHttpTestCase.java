@@ -240,6 +240,10 @@ abstract public class StarRocksHttpTestCase {
                     minTimes = 0;
                     result = editLog;
 
+                    globalStateMgr.getClusterDbNames("default_cluster");
+                    minTimes = 0;
+                    result = Lists.newArrayList("default_cluster:testDb");
+
                     globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
                     minTimes = 0;
 
@@ -253,6 +257,8 @@ abstract public class StarRocksHttpTestCase {
 
             return globalStateMgr;
         } catch (DdlException e) {
+            return null;
+        } catch (AnalysisException e) {
             return null;
         }
     }
@@ -307,6 +313,10 @@ abstract public class StarRocksHttpTestCase {
                     minTimes = 0;
                     result = editLog;
 
+                    globalStateMgr.getClusterDbNames("default_cluster");
+                    minTimes = 0;
+                    result = Lists.newArrayList("default_cluster:testDb");
+
                     globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
                     minTimes = 0;
 
@@ -328,6 +338,8 @@ abstract public class StarRocksHttpTestCase {
 
             return globalStateMgr;
         } catch (DdlException e) {
+            return null;
+        } catch (AnalysisException e) {
             return null;
         }
     }

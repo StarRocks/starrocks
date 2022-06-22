@@ -13,4 +13,8 @@ public class Constants {
         SUCCESS,
     }
 
+    public enum TaskSource {
+        CTAS,
+        MV
+    }
 }

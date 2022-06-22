@@ -250,6 +250,10 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    public R visitUseStatement(UseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ----------------- Catalog Clause -------------
 
     public R visitCreateCatalogStatement(CreateCatalogStmt statement, C context) {
@@ -476,4 +480,5 @@ public abstract class AstVisitor<R, C> {
     public R visitGroupByClause(GroupByClause node, C context) {
         return null;
     }
+
 }
