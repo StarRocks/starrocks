@@ -6,6 +6,7 @@
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
+#include "storage/tablet_schema.h"
 #include "util/lru_cache.h"
 
 namespace starrocks {
@@ -21,6 +22,7 @@ template <typename T>
 class MetadataIterator;
 using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 using TxnLogIter = MetadataIterator<TxnLogPtr>;
+using TabletSchemaPtr = std::shared_ptr<const starrocks::TabletSchema>;
 
 class TabletManager {
     friend class Tablet;
@@ -54,6 +56,8 @@ public:
     StatusOr<TxnLogIter> list_txn_log(const std::string& group, int64_t tablet_id);
     Status delete_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id);
 
+    void prune_metacache();
+
     GroupAssigner* TEST_set_group_assigner(GroupAssigner* value) {
         auto ret = _group_assigner;
         _group_assigner = value;
@@ -75,6 +79,9 @@ private:
     TabletMetadataPtr lookup_tablet_metadata(const std::string& key);
     TxnLogPtr lookup_txn_log(const std::string& key);
     void erase_metacache(const std::string& key);
+
+    std::string tablet_schema_cache_key(int64_t tablet_id);
+    TabletSchemaPtr lookup_tablet_schema(const std::string& key);
 
     GroupAssigner* _group_assigner;
     std::unique_ptr<Cache> _metacache;
