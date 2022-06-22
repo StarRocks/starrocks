@@ -446,6 +446,19 @@ public class SchemaTable extends Table {
                                             .column("ERROR_CODE", ScalarType.createType(PrimitiveType.BIGINT))
                                             .column("ERROR_MESSAGE", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .build()))
+                    .put("materialized_views",
+                            new SchemaTable(
+                                    SystemIdGenerator.getNextId(),
+                                    "materialized_views",
+                                    TableType.SCHEMA,
+                                    builder()
+                                            .column("MATERIALIZED_VIEW_ID", ScalarType.createVarchar(50))
+                                            .column("TABLE_SCHEMA", ScalarType.createVarchar(20))
+                                            .column("TABLE_NAME", ScalarType.createVarchar(50))
+                                            .column("MATERIALIZED_VIEW_DEFINITION",
+                                                    ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
+                                            .column("TABLE_ROWS", ScalarType.createVarchar(50))
+                                            .build()))
                     .build();
 
     public static class Builder {
