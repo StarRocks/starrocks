@@ -27,9 +27,11 @@ import com.sleepycat.je.DatabaseException;
 import com.sleepycat.je.LockMode;
 import com.sleepycat.je.OperationStatus;
 import com.sleepycat.je.rep.InsufficientLogException;
+import com.sleepycat.je.rep.RollbackException;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
+import com.starrocks.journal.JournalInconsistentException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -94,7 +96,7 @@ public class BDBJournalCursor implements JournalCursor {
         return nextDbPositionIndex < dbNames.size() && currentKey == dbNames.get(nextDbPositionIndex);
     }
 
-    protected void openDatabaseIfNecessary() throws InterruptedException, JournalException {
+    protected void openDatabaseIfNecessary() throws InterruptedException, JournalException, JournalInconsistentException {
         if (!shouldOpenDatabase()) {
             return;
         }
@@ -110,15 +112,18 @@ public class BDBJournalCursor implements JournalCursor {
                 database = environment.openDatabase(dbName);
                 nextDbPositionIndex++;
                 return;
-            } catch (InsufficientLogException insufficientLogEx) {
-                String errMsg = String.format("catch insufficient log exception while open db %s!", dbName);
-                LOG.error(errMsg);
+            } catch (InsufficientLogException | RollbackException e) {
                 // for InsufficientLogException we should refresh the log and
                 // then exit the process because we may have read dirty data.
-                environment.refreshLog(insufficientLogEx);
-                exception = new JournalException(errMsg);
-                exception.initCause(insufficientLogEx);
-                throw exception;
+                // for RollbackException we should exit the process because we may have read dirty data.
+                String errMsg = String.format("failed to open because of dirty data, will exit. db[%s]", dbName);
+                LOG.warn(errMsg, e);
+                if (e instanceof InsufficientLogException) {
+                    environment.refreshLog((InsufficientLogException) e);
+                }
+                JournalInconsistentException journalInconsistentException = new JournalInconsistentException(errMsg);
+                journalInconsistentException.initCause(e);
+                throw journalInconsistentException;
             } catch (DatabaseException e) {
                 String errMsg = String.format("failed to open %s for %s times!", dbName, i + 1);
                 LOG.warn(errMsg);
@@ -149,7 +154,7 @@ public class BDBJournalCursor implements JournalCursor {
     }
 
     @Override
-    public JournalEntity next() throws InterruptedException, JournalException {
+    public JournalEntity next() throws InterruptedException, JournalException, JournalInconsistentException {
         // EOF
         if (currentKey > toKey) {
             return null;
@@ -201,6 +206,19 @@ public class BDBJournalCursor implements JournalCursor {
                     LOG.warn(errMsg);
                     exception = new JournalException(errMsg);
                 }
+            } catch (InsufficientLogException | RollbackException e) {
+                // for InsufficientLogException we should refresh the log and
+                // then exit the process because we may have read dirty data.
+                // for RollbackException we should exit the process because we may have read dirty data.
+                String errMsg = String.format("failed to read next because of dirty data, will exit. db[%s], current key[%s]",
+                        database, theKey);
+                LOG.warn(errMsg, e);
+                if (e instanceof InsufficientLogException) {
+                    environment.refreshLog((InsufficientLogException) e);
+                }
+                JournalInconsistentException journalInconsistentException = new JournalInconsistentException(errMsg);
+                journalInconsistentException.initCause(e);
+                throw journalInconsistentException;
             } catch (DatabaseException e) {
                 String errMsg = String.format("failed to read after retried %d times! key = %d, db = %s",
                         i + 1, key, database);

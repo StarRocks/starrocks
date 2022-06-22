@@ -13,6 +13,7 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
+import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.persist.OperationType;
 import mockit.Delegate;
 import mockit.Expectations;
@@ -258,7 +259,7 @@ public class BDBJournalCursorTest {
         Assert.fail();
     }
 
-    @Test(expected = JournalException.class)
+    @Test(expected = JournalInconsistentException.class)
     public void testOpenDBFailedOnInsufficientLogException() throws Exception {
         // db = [10, 12]
         // from 12->13
@@ -315,6 +316,38 @@ public class BDBJournalCursorTest {
         bdbJournalCursor.next();
         Assert.fail();
     }
+
+    @Test(expected = JournalInconsistentException.class)
+    public void testNextFailedOnInsufficientLogException() throws Exception {
+        // db = [10, 12]
+        // from 12->13
+        new Expectations(environment) {
+            {
+                environment.getDatabaseNames();
+                minTimes = 0;
+                result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
+
+                environment.openDatabase("10");
+                times = 1;
+                result = database;
+
+                environment.refreshLog((InsufficientLogException)any);
+                times = 1;
+            }
+        };
+
+        new Expectations(database) {
+            {
+                database.get(null, makeKey(11), (DatabaseEntry) any, (LockMode) any);
+                times = 1;
+                result = new InsufficientLogException("mock mock");
+            }
+        };
+        BDBJournalCursor bdbJournalCursor = new BDBJournalCursor(environment, 11, 13);
+        bdbJournalCursor.next();
+        Assert.fail();
+    }
+
 
     @Test(expected = JournalException.class)
     public void testDatabaseNamesFails() throws Exception {
