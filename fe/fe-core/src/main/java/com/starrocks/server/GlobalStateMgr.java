@@ -1033,8 +1033,7 @@ public class GlobalStateMgr {
         taskManager.start();
         taskCleaner.start();
         if (Config.integrate_starmgr) {
-            // start starMgr background threads
-            getStarMgr().start();
+            starMgrServer.startBackgroundThreads();
 
             // register service to starMgr
             int clusterId = getCurrentState().getClusterId();
@@ -1096,8 +1095,7 @@ public class GlobalStateMgr {
         }
 
         if (Config.integrate_starmgr) {
-            // stop starMgr background threads
-            getStarMgr().stop();
+            starMgrServer.stopBackgroundThreads();
         }
 
         startNonMasterDaemonThreads();
@@ -1349,7 +1347,7 @@ public class GlobalStateMgr {
 
     public long saveStarMgrMeta(DataOutputStream dos, long checksum) throws IOException {
         if (Config.integrate_starmgr) {
-            getStarMgr().dumpMeta(dos);
+            starMgrServer.dumpMeta(dos);
         }
         return checksum;
     }
@@ -1357,7 +1355,7 @@ public class GlobalStateMgr {
     public long loadStarMgrMeta(DataInputStream dis, long checksum) throws IOException {
         try {
             if (Config.integrate_starmgr) {
-                getStarMgr().loadMeta(dis);
+                starMgrServer.loadMeta(dis);
             }
         } catch (EOFException e) {
             LOG.warn("no starMgr meta to replay.", e);

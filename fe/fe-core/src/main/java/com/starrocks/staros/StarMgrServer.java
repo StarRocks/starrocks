@@ -13,6 +13,8 @@ import com.starrocks.service.FrontendOptions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 
 public class StarMgrServer {
@@ -58,5 +60,21 @@ public class StarMgrServer {
         GlobalIdGenerator.overrideIdGenerator(generator);
 
         starMgrServer.start(com.staros.util.Config.STARMGR_RPC_PORT);
+    }
+
+    public void startBackgroundThreads() {
+        getStarMgr().start();
+    }
+
+    public void stopBackgroundThreads() {
+        getStarMgr().stop();
+    }
+
+    public void dumpMeta(DataOutputStream out) throws IOException {
+        getStarMgr().dumpMeta(out);
+    }
+
+    public void loadMeta(DataInputStream in) throws IOException {
+        getStarMgr().loadMeta(in);
     }
 }
