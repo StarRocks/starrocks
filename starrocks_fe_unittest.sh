@@ -15,6 +15,8 @@ echo "the branch="$GITHUB_PR_TARGET_BRANCH
 echo "the root path="$ROOT
 echo "the env="$GITHUB_REF_NAME
 
+cd $PROJECT
+rm -rf fe/fe-core/target
 #git config  user.email "wanpengfei91@163.com"
 #git config  user.name "wanpengfei-git"
 #git stash
@@ -34,7 +36,7 @@ echo "the env="$GITHUB_REF_NAME
 
 #FE_FILE_CHANGE_STATUS=0
 #git --no-pager diff --name-only FETCH_HEAD $(git merge-base FETCH_HEAD main) > files_change_list.txt
-#while read line; do if [[ $line =~ ^fe/fe-core/* || $line =~ ^fe/spark-dpp/* || $line =~ ^fe/pom.xml || $line =~ ^run-fe-ut.sh || $line =~ ^build.sh || $line =~ ^gensrc/* ]];then FE_FILE_CHANGE_STATUS=1;break;fi;done < files_change_list.txt
+while read line; do if [[ $line =~ ^fe/fe-core/* || $line =~ ^fe/spark-dpp/* || $line =~ ^fe/pom.xml || $line =~ ^run-fe-ut.sh || $line =~ ^build.sh || $line =~ ^gensrc/* ]];then FE_FILE_CHANGE_STATUS=1;break;fi;done < files_change_list.txt
 #
 #if (( $FE_FILE_CHANGE_STATUS == 0 ));then
 #    exit 0
