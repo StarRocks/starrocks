@@ -8,6 +8,8 @@
 #include "column/column.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "gutil/strings/escaping.h"
+#include "gutil/strings/substitute.h"
 #include "simdjson.h"
 #include "util/json_converter.h"
 #include "velocypack/ValueType.h"
@@ -99,6 +101,29 @@ StatusOr<std::string> JsonValue::to_string() const {
         std::string result;
         return slice.toJson(result, &options);
     });
+}
+
+StatusOr<std::string> JsonValue::to_string_unescape() const {
+    auto maybe_str = to_string();
+    RETURN_IF_ERROR(maybe_str);
+    JsonType type = get_type();
+    if (type == JsonType::JSON_STRING) {
+        return maybe_str.value();
+    }
+
+    std::string unescaped;
+    unescaped.reserve(maybe_str.value().length());
+    if (!strings::CUnescape(maybe_str.value(), &unescaped)) {
+        return Status::DataQualityError("cannot unescape string" + maybe_str.value());
+    }
+    if (unescaped.length() < 2) {
+        return unescaped;
+    }
+    // Try to trim the first/last quote.
+    if (unescaped.front() == '"') unescaped = unescaped.substr(1, unescaped.size() - 1);
+    if (unescaped.back() == '"') unescaped = unescaped.substr(0, unescaped.size() - 1);
+
+    return unescaped;
 }
 
 std::string JsonValue::to_string_uncheck() const {

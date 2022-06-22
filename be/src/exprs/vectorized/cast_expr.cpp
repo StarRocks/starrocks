@@ -179,7 +179,7 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
                     builder.append_null();
                 }
             } else {
-                auto res = json->to_string();
+                auto res = json->to_string_unescape();
                 if (res.ok()) {
                     builder.append(res.value());
                 } else {
