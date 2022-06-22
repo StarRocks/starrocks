@@ -33,6 +33,7 @@ import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowEnginesStmt;
+import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcedureStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -44,6 +45,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfoTest;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.RandomDistributionInfo;
@@ -74,6 +76,7 @@ import org.junit.rules.ExpectedException;
 
 import java.io.IOException;
 import java.net.URL;
+import java.util.LinkedList;
 import java.util.List;
 
 public class ShowExecutorTest {
@@ -154,6 +157,32 @@ public class ShowExecutorTest {
             }
         };
 
+        // mock materialized view
+        MaterializedView mv = new MaterializedView();
+        new Expectations(mv) {
+            {
+                mv.getName();
+                minTimes = 0;
+                result = "testMv";
+
+                mv.getType();
+                minTimes = 0;
+                result = TableType.MATERIALIZED_VIEW;
+
+                mv.getId();
+                minTimes = 0;
+                result = 1000L;
+
+                mv.getViewDefineSql();
+                minTimes = 0;
+                result = "create materialized view testMv select col1, col2 from table1";
+
+                mv.getRowCount();
+                minTimes = 0;
+                result = 10L;
+            }
+        };
+
         // mock database
         Database db = new Database();
         new Expectations(db) {
@@ -171,6 +200,10 @@ public class ShowExecutorTest {
                 db.getTables();
                 minTimes = 0;
                 result = Lists.newArrayList(table);
+
+                db.getMaterializedViews();
+                minTimes = 0;
+                result = Lists.newArrayList(mv);
             }
         };
 
@@ -669,6 +702,49 @@ public class ShowExecutorTest {
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
 
+        Assert.assertFalse(resultSet.next());
+    }
+
+    @Test
+    public void testShowMaterializedView() throws AnalysisException, DdlException {
+        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("testCluster:testDb", (String) null);
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("1000", resultSet.getString(0));
+        Assert.assertEquals("testMv", resultSet.getString(1));
+        Assert.assertEquals("testCluster:testDb", resultSet.getString(2));
+        Assert.assertEquals("create materialized view testMv select col1, col2 from table1", resultSet.getString(3));
+        Assert.assertEquals("10", resultSet.getString(4));
+        Assert.assertFalse(resultSet.next());
+    }
+
+    @Test
+    public void testShowMaterializedViewFromUnknownDatabase() throws DdlException, AnalysisException {
+        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("testCluster:emptyDb", (String) null);
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        expectedEx.expect(AnalysisException.class);
+        expectedEx.expectMessage("Unknown database 'testCluster:emptyDb'");
+        executor.execute();
+    }
+
+    @Test
+    public void testShowMaterializedViewPattern() throws AnalysisException, DdlException {
+        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("testCluster:testDb", "bcd%");
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertFalse(resultSet.next());
+
+        stmt = new ShowMaterializedViewStmt("testCluster:testDb", "%test%");
+        executor = new ShowExecutor(ctx, stmt);
+        resultSet = executor.execute();
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("1000", resultSet.getString(0));
+        Assert.assertEquals("testMv", resultSet.getString(1));
+        Assert.assertEquals("testCluster:testDb", resultSet.getString(2));
+        Assert.assertEquals("create materialized view testMv select col1, col2 from table1", resultSet.getString(3));
+        Assert.assertEquals("10", resultSet.getString(4));
         Assert.assertFalse(resultSet.next());
     }
 }

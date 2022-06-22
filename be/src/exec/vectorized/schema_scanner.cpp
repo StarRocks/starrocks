@@ -7,6 +7,7 @@
 #include "exec/vectorized/schema_scanner/schema_collations_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_columns_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_dummy_scanner.h"
+#include "exec/vectorized/schema_scanner/schema_materialized_views_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_schema_privileges_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_schemata_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_table_privileges_scanner.h"
@@ -93,6 +94,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<vectorized::SchemaTasksScanner>();
     case TSchemaTableType::SCH_TASK_RUNS:
         return std::make_unique<vectorized::SchemaTaskRunsScanner>();
+    case TSchemaTableType::SCH_MATERIALIZED_VIEWS:
+        return std::make_unique<vectorized::SchemaMaterializedViewsScanner>();
     default:
         return std::make_unique<vectorized::SchemaDummyScanner>();
     }
