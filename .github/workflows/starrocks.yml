@@ -42,8 +42,8 @@ jobs:
        run: |
          wget -P $STARROCKS_HOME https://github.com/StarRocks/FeCoverageTool/archive/refs/heads/main.zip
          unzip main.zip
-         rm FeCoverageTool-main/README.md
-         cp FeCoverageTool-main/* $STARROCKS_HOME
+         rm -v FeCoverageTool-main/README.md
+         cp -v FeCoverageTool-main/* $STARROCKS_HOME
       
      - name: bash script
        run: | 
