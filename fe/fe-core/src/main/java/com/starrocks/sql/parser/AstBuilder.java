@@ -1640,7 +1640,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (parts.size() == 2) {
             return new UseStmt(parts.get(0), parts.get(1));
         } else {
-            throw new StarRocksPlannerException("error qualifiedName in UseStmt", ErrorType.INTERNAL_ERROR);
+            throw new ParsingException("error catalog.database");
         }
     }
 
