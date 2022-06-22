@@ -645,9 +645,7 @@ Status JsonReader::_build_slot_descs() {
 
     // get the first row of json.
     simdjson::ondemand::object obj;
-    if (!_parser->get_current(&obj).ok()) {
-        return Status::DataQualityError("can not get first row of json");
-    }
+    RETURN_IF_ERROR(_parser->get_current(&obj));
     std::ostringstream oss;
     simdjson::ondemand::raw_json_string json_str;
 
@@ -657,7 +655,7 @@ Status JsonReader::_build_slot_descs() {
             json_str = field.key();
         } catch (simdjson::simdjson_error& e) {
             // Nothing would be done if got any error.
-            return Status::DataQualityError("parse invalid field key");
+            return Status::DataQualityError(Slice{simdjson::error_message(e.error())});
         }
 
         oss << json_str;

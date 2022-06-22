@@ -89,7 +89,9 @@ CONF_Int32(transaction_publish_version_worker_count, "8");
 // The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
 // The count of thread to delete.
-CONF_Int32(delete_worker_count, "3");
+CONF_Int32(delete_worker_count_normal_priority, "2");
+// The count of thread to high priority delete.
+CONF_Int32(delete_worker_count_high_priority, "1");
 // The count of thread to alter table.
 CONF_Int32(alter_tablet_worker_count, "3");
 // The count of thread to clone.

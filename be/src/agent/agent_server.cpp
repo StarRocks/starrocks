@@ -78,7 +78,8 @@ AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
     CREATE_AND_START_POOL(PUBLISH_VERSION, _publish_version_workers, 1);
     CREATE_AND_START_POOL(CLEAR_TRANSACTION_TASK, _clear_transaction_task_workers,
                           config::clear_transaction_task_worker_count);
-    CREATE_AND_START_POOL(DELETE, _delete_workers, config::delete_worker_count);
+    CREATE_AND_START_POOL(DELETE, _delete_workers,
+                          config::delete_worker_count_normal_priority + config::delete_worker_count_high_priority);
     CREATE_AND_START_POOL(ALTER_TABLE, _alter_tablet_workers, config::alter_tablet_worker_count);
     CREATE_AND_START_POOL(CLONE, _clone_workers, config::clone_worker_count);
     CREATE_AND_START_POOL(STORAGE_MEDIUM_MIGRATE, _storage_medium_migrate_workers,
