@@ -67,7 +67,7 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         DataInputStream in = new DataInputStream(Files.newInputStream(file.toPath()));
         ChangeMaterializedViewRefreshSchemeLog readChangeLog = ChangeMaterializedViewRefreshSchemeLog.read(in);
         final MaterializedView.AsyncRefreshContext readChangeLogAsyncRefreshContext = readChangeLog.getAsyncRefreshContext();
-        Assert.assertEquals(readChangeLog.getRefreshType().typeString, "ASYNC");
+        Assert.assertEquals(readChangeLog.getRefreshType().name(), "ASYNC");
         Assert.assertEquals(readChangeLogAsyncRefreshContext.getStartTime(), 1655732457);
         Assert.assertEquals(readChangeLogAsyncRefreshContext.getTimeUnit(), "DAY");
         Assert.assertEquals(readChangeLogAsyncRefreshContext.getStep(), 1);

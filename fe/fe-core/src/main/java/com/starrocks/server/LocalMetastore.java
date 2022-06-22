@@ -153,10 +153,10 @@ import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -2854,7 +2854,7 @@ public class LocalMetastore implements ConnectorMetadata {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
         } else if (refreshSchemeDesc.getType() == RefreshType.SYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
-            mvRefreshScheme.setType(RefreshType.SYNC);
+            mvRefreshScheme.setType(MaterializedView.RefreshType.SYNC);
         } else {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             mvRefreshScheme.setType(MaterializedView.RefreshType.MANUAL);

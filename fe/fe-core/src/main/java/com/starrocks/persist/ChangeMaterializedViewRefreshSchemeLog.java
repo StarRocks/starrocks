@@ -3,7 +3,6 @@ package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.RefreshType;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -20,7 +19,7 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
     private long dbId;
 
     @SerializedName(value = "refreshType")
-    private RefreshType refreshType;
+    private MaterializedView.RefreshType refreshType;
 
     @SerializedName(value = "asyncRefreshContext")
     private MaterializedView.AsyncRefreshContext asyncRefreshContext;
@@ -40,7 +39,7 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
         return dbId;
     }
 
-    public RefreshType getRefreshType() {
+    public MaterializedView.RefreshType getRefreshType() {
         return refreshType;
     }
 

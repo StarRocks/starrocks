@@ -17,10 +17,10 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
@@ -195,10 +195,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public long getDbId() {
         return dbId;
-    }
-
-    public MvRefreshScheme getRefreshScheme() {
-        return refreshScheme;
     }
 
     public boolean isActive() {

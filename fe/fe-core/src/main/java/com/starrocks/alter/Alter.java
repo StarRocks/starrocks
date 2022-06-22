@@ -53,7 +53,6 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.RefreshType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.View;
@@ -258,15 +257,15 @@ public class Alter {
             asyncRefreshContext.setTimeUnit(
                     asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
         }
-        RefreshType oldRefreshType = refreshScheme.getType();
+        MaterializedView.RefreshType oldRefreshType = refreshScheme.getType();
         final String refreshType = refreshSchemeDesc.getType().name();
-        final RefreshType newRefreshType = RefreshType.valueOf(refreshType);
+        final MaterializedView.RefreshType newRefreshType = MaterializedView.RefreshType.valueOf(refreshType);
         refreshScheme.setType(newRefreshType);
 
         final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
         GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);
-        LOG.info("change materialized view refresh type [{}] to {}, id: {}", oldRefreshType.typeString,
-                newRefreshType.typeString, materializedView.getId());
+        LOG.info("change materialized view refresh type [{}] to {}, id: {}", oldRefreshType,
+                newRefreshType, materializedView.getId());
     }
 
     private void processRenameMaterializedView(String oldMvName, String newMvName, Database db,
@@ -307,7 +306,7 @@ public class Alter {
         final MaterializedView.MvRefreshScheme oldRefreshScheme = oldMaterializedView.getRefreshScheme();
         newMvRefreshScheme.setAsyncRefreshContext(oldRefreshScheme.getAsyncRefreshContext());
         newMvRefreshScheme.setLastRefreshTime(oldRefreshScheme.getLastRefreshTime());
-        final RefreshType refreshType = log.getRefreshType();
+        final MaterializedView.RefreshType refreshType = log.getRefreshType();
         final MaterializedView.AsyncRefreshContext asyncRefreshContext = log.getAsyncRefreshContext();
         newMvRefreshScheme.setType(refreshType);
         newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
