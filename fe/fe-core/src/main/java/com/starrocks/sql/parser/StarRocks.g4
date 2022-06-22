@@ -203,7 +203,7 @@ hint
     ;
 
 hintMap
-    : k=IDENTIFIER '=' v=primaryExpression
+    : k=IDENTIFIER '=' v=literalExpression
     ;
 
 joinCriteria
@@ -310,13 +310,7 @@ primaryExpression
     | functionCall                                                                        #functionCallExpression
     | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
     | primaryExpression COLLATE (identifier | string)                                     #collate
-    | NULL                                                                                #nullLiteral
-    | interval                                                                            #intervalLiteral
-    | DATE string                                                                         #typeConstructor
-    | DATETIME string                                                                     #typeConstructor
-    | number                                                                              #numericLiteral
-    | booleanValue                                                                        #booleanLiteral
-    | string                                                                              #stringLiteral
+    | literalExpression                                                                   #literal
     | left = primaryExpression CONCAT right = primaryExpression                           #concat
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
@@ -330,6 +324,15 @@ primaryExpression
     | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
     | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
     | primaryExpression ARROW string                                                      #arrowExpression
+    ;
+
+literalExpression
+    : NULL                                                                                #nullLiteral
+    | booleanValue                                                                        #booleanLiteral
+    | number                                                                              #numericLiteral
+    | (DATE | DATETIME) string                                                            #dateLiteral
+    | string                                                                              #stringLiteral
+    | interval                                                                            #intervalLiteral
     ;
 
 functionCall

@@ -584,9 +584,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Map<String, String> selectHints = new HashMap<>();
             for (StarRocksParser.HintContext hintContext : context.hint()) {
                 for (StarRocksParser.HintMapContext hintMapContext : hintContext.hintMap()) {
-                    String key = hintMapContext.k.getText();
-                    String value = hintMapContext.v.getText();
-                    selectHints.put(key, value);
+                    selectHints.put(hintMapContext.k.getText(),
+                            ((LiteralExpr) visit(hintMapContext.v)).getStringValue());
                 }
             }
             selectList.setOptHints(selectHints);
@@ -1416,6 +1415,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitDateLiteral(StarRocksParser.DateLiteralContext context) {
+        String value = ((StringLiteral) visit(context.string())).getValue();
+        try {
+            if (context.DATE() != null) {
+                return new DateLiteral(value, Type.DATE);
+            }
+            if (context.DATETIME() != null) {
+                return new DateLiteral(value, Type.DATETIME);
+            }
+        } catch (AnalysisException e) {
+            throw new ParsingException(e.getMessage());
+        }
+        throw new ParsingException("Parse Error : unknown type " + context.getText());
+    }
+
+    @Override
     public ParseNode visitString(StarRocksParser.StringContext context) {
         String quotedString;
         if (context.SINGLE_QUOTED_TEXT() != null) {
@@ -1522,22 +1537,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitUnitIdentifier(StarRocksParser.UnitIdentifierContext context) {
         return new UnitIdentifier(context.getText());
-    }
-
-    @Override
-    public ParseNode visitTypeConstructor(StarRocksParser.TypeConstructorContext context) {
-        String value = ((StringLiteral) visit(context.string())).getValue();
-        try {
-            if (context.DATE() != null) {
-                return new DateLiteral(value, Type.DATE);
-            }
-            if (context.DATETIME() != null) {
-                return new DateLiteral(value, Type.DATETIME);
-            }
-        } catch (AnalysisException e) {
-            throw new ParsingException(e.getMessage());
-        }
-        throw new ParsingException("Parse Error : unknown type " + context.getText());
     }
 
     // ------------------------------------------- Primary Expression -------------------------------------------
