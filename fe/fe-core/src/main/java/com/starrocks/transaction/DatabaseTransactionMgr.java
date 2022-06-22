@@ -135,7 +135,7 @@ public class DatabaseTransactionMgr {
 
     private long commitTsInc = 0;
 
-    private final TransactionStateListernerFactory stateListenerFactory = new TransactionStateListernerFactory();
+    private final TransactionStateListenerFactory stateListenerFactory = new TransactionStateListenerFactory();
 
     private final TransactionLogApplierFactory txnLogApplierFactory = new TransactionLogApplierFactory();
 
@@ -400,7 +400,7 @@ public class DatabaseTransactionMgr {
         StringBuilder tableListString = new StringBuilder();
         txnSpan.addEvent("commit_start");
 
-        List<TransactionStateListener> stateMachineList = Lists.newArrayList();
+        List<TransactionStateListener> stateListeners = Lists.newArrayList();
         for (Long tableId : transactionState.getTableIdList()) {
             Table table = db.getTable(tableId);
             if (table == null) {
@@ -417,7 +417,7 @@ public class DatabaseTransactionMgr {
                 tableListString.append(',');
             }
             tableListString.append(table.getName());
-            stateMachineList.add(listener);
+            stateListeners.add(listener);
         }
 
         txnSpan.setAttribute("tables", tableListString.toString());
@@ -431,7 +431,7 @@ public class DatabaseTransactionMgr {
 
         writeLock();
         try {
-            unprotectedCommitTransaction(transactionState, stateMachineList);
+            unprotectedCommitTransaction(transactionState, stateListeners);
             txnOperated = true;
         } finally {
             writeUnlock();
@@ -837,8 +837,8 @@ public class DatabaseTransactionMgr {
         // persist transactionState
         unprotectUpsertTransactionState(transactionState, false);
 
-        for (TransactionStateListener stateMachine : stateListeners) {
-            stateMachine.postWriteCommitLog(transactionState);
+        for (TransactionStateListener listener : stateListeners) {
+            listener.postWriteCommitLog(transactionState);
         }
     }
 

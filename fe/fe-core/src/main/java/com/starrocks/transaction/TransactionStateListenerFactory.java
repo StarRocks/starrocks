@@ -6,7 +6,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.lake.LakeTable;
 
-public class TransactionStateListernerFactory {
+public class TransactionStateListenerFactory {
     public TransactionStateListener create(DatabaseTransactionMgr dbTxnMgr, Table table) {
         if (table.isLakeTable()) {
             return new LakeTableTxnStateListener(dbTxnMgr, (LakeTable) table);
@@ -14,7 +14,6 @@ public class TransactionStateListernerFactory {
         if (table.isOlapTable()) {
             return new OlapTableTxnStateListener(dbTxnMgr, (OlapTable) table);
         }
-
         return null;
     }
 }
