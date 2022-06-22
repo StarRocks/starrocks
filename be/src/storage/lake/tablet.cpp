@@ -62,4 +62,12 @@ StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
     return GlobalTabletSchemaMap::Instance()->emplace(metadata->schema()).first;
 }
 
+std::string Tablet::metadata_path(int64_t version) const {
+    return _mgr->tablet_metadata_path(_group, _id, version);
+}
+
+std::string Tablet::txn_log_path(int64_t txn_id) const {
+    return _mgr->txn_log_path(_group, _id, txn_id);
+}
+
 } // namespace starrocks::lake

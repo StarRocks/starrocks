@@ -70,6 +70,7 @@ public class EsTable extends Table {
     public static final String MAX_DOCVALUE_FIELDS = "max_docvalue_fields";
 
     public static final String WAN_ONLY = "es.nodes.wan.only";
+    public static final String ES_NET_SSL = "es.net.ssl";
 
     private String hosts;
     private String[] seeds;
@@ -105,6 +106,7 @@ public class EsTable extends Table {
     private static final int DEFAULT_MAX_DOCVALUE_FIELDS = 20;
 
     private boolean wanOnly = false;
+    private boolean sslEnabled = false;
 
     // version would be used to be compatible with different ES Cluster
     public EsMajorVersion majorVersion = null;
@@ -148,6 +150,10 @@ public class EsTable extends Table {
 
     public boolean wanOnly() {
         return wanOnly;
+    }
+
+    public boolean sslEnabled() {
+        return sslEnabled;
     }
 
     private void validate(Map<String, String> properties) throws DdlException {
@@ -248,6 +254,18 @@ public class EsTable extends Table {
                 wanOnly = false;
             }
         }
+        if (properties.containsKey(ES_NET_SSL)) {
+            try {
+                sslEnabled = Boolean.parseBoolean(properties.get(ES_NET_SSL).trim());
+            } catch (Exception e) {
+                sslEnabled = false;
+            }
+        }
+        Column idColumn = getColumn("_id");
+        if (idColumn != null && !(idColumn.getPrimitiveType() == PrimitiveType.VARCHAR
+                || idColumn.getPrimitiveType() == PrimitiveType.CHAR)) {
+            throw new DdlException("Type of _id (ES Primary-Key) Column must be Char/Varchar");
+        }
         tableContext.put("hosts", hosts);
         tableContext.put("userName", userName);
         tableContext.put("passwd", passwd);
@@ -261,6 +279,7 @@ public class EsTable extends Table {
         tableContext.put("enableKeywordSniff", String.valueOf(enableKeywordSniff));
         tableContext.put("maxDocValueFields", String.valueOf(maxDocValueFields));
         tableContext.put("es.nodes.wan.only", String.valueOf(wanOnly));
+        tableContext.put(ES_NET_SSL, String.valueOf(sslEnabled));
     }
 
     @Override
@@ -363,6 +382,11 @@ public class EsTable extends Table {
             } else {
                 wanOnly = false;
             }
+            if (tableContext.containsKey(ES_NET_SSL)) {
+                sslEnabled = Boolean.parseBoolean(tableContext.get(ES_NET_SSL));
+            } else {
+                sslEnabled = false;
+            }
 
             PartitionType partType = PartitionType.valueOf(Text.readString(in));
             if (partType == PartitionType.UNPARTITIONED) {
@@ -398,6 +422,7 @@ public class EsTable extends Table {
             tableContext.put("enableDocValueScan", "false");
             tableContext.put(KEYWORD_SNIFF, "true");
             tableContext.put(WAN_ONLY, "false");
+            tableContext.put(ES_NET_SSL, "false");
         }
     }
 

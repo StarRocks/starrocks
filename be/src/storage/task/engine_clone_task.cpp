@@ -465,7 +465,7 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
             StringParser::ParseResult result;
             std::string& file_size_str = list[1];
             int64_t file_size =
-                    StringParser::string_to_int<int64_t>(file_size_str.data(), file_size_str.size() - 1, &result);
+                    StringParser::string_to_int<int64_t>(file_size_str.data(), file_size_str.size(), &result);
             if (result != StringParser::PARSE_SUCCESS || file_size < 0) {
                 return Status::InternalError("wrong file size.");
             }

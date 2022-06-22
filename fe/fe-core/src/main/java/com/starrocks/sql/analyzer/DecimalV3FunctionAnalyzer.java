@@ -26,8 +26,8 @@ public class DecimalV3FunctionAnalyzer {
 
     public static final Set<String> DECIMAL_IDENTICAL_TYPE_FUNCTION_SET =
             new ImmutableSortedSet.Builder<>(String::compareTo)
-                    .add(FunctionSet.LEAST).add(FunctionSet.GREATEST).add(FunctionSet.NULL_IF)
-                    .add(FunctionSet.IF_NULL).add(FunctionSet.COALESCE).add(FunctionSet.MOD).build();
+                    .add(FunctionSet.LEAST).add(FunctionSet.GREATEST).add(FunctionSet.NULLIF)
+                    .add(FunctionSet.IFNULL).add(FunctionSet.COALESCE).add(FunctionSet.MOD).build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION_SAME_TYPE =
             new ImmutableSortedSet.Builder<>(String::compareTo)

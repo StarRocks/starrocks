@@ -90,7 +90,8 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
             int64_t job_timeout_s = calc_job_timeout_s(timeout_in_req_s);
             auto job_mem_tracker = std::make_unique<MemTracker>(job_max_memory, load_id.to_string(), _mem_tracker);
 
-            channel.reset(new LoadChannel(this, load_id, job_timeout_s, std::move(job_mem_tracker)));
+            channel.reset(new LoadChannel(this, load_id, request.txn_trace_parent(), job_timeout_s,
+                                          std::move(job_mem_tracker)));
             _load_channels.insert({load_id, channel});
         } else {
             response->mutable_status()->set_status_code(TStatusCode::MEM_LIMIT_EXCEEDED);
