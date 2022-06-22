@@ -53,7 +53,7 @@ public class RestrictOpMaterializedViewTest {
         String createMvStmtStr = "create materialized view if not exists mv1 " +
                 "partition by ss " +
                 "distributed by hash(k2) " +
-                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "refresh manual\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
