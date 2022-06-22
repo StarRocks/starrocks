@@ -66,6 +66,7 @@ import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropCatalogLog;
+import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.DropPartitionInfo;
@@ -326,6 +327,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_ADD_COMPUTE_NODE: {
                 data = ComputeNode.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DROP_COMPUTE_NODE: {
+                data = DropComputeNodeLog.read(in);
                 isRead = true;
                 break;
             }

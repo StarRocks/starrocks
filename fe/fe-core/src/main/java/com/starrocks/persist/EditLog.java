@@ -445,6 +445,11 @@ public class EditLog {
                     GlobalStateMgr.getCurrentSystemInfo().replayAddComputeNode(computeNode);
                     break;
                 }
+                case OperationType.OP_DROP_COMPUTE_NODE: {
+                    DropComputeNodeLog dropComputeNodeLog = (DropComputeNodeLog) journal.getData();
+                    GlobalStateMgr.getCurrentSystemInfo().replayDropComputeNode(dropComputeNodeLog.getComputeNodeId());
+                    break;
+                }
                 case OperationType.OP_ADD_BACKEND: {
                     Backend be = (Backend) journal.getData();
                     GlobalStateMgr.getCurrentSystemInfo().replayAddBackend(be);
@@ -1158,6 +1163,10 @@ public class EditLog {
 
     public void logAddBackend(Backend be) {
         logEdit(OperationType.OP_ADD_BACKEND, be);
+    }
+
+    public void logDropComputeNode(DropComputeNodeLog log) {
+        logEdit(OperationType.OP_DROP_COMPUTE_NODE, log);
     }
 
     public void logDropBackend(Backend be) {

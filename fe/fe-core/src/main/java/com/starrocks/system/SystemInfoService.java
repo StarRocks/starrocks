@@ -49,6 +49,7 @@ import com.starrocks.common.Status;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -241,7 +242,7 @@ public class SystemInfoService {
         if (null == candidateBackends || candidateBackends.size() == 0) {
             throw new DdlException(String.format("backend [%s] not found", willBeModifiedHost));
         }
-        
+
         // update idToBackend
         Backend preUpdateBackend = candidateBackends.get(0);
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
@@ -263,7 +264,7 @@ public class SystemInfoService {
                 formatSb.append(be.getHost() + ":" + be.getHeartbeatPort() + "\n");
             }
             opMessage = String.format(
-                formatSb.toString(), willBeModifiedHost, 
+                formatSb.toString(), willBeModifiedHost,
                 updateBackend.getHeartbeatPort(), fqdn, candidateBackends.size() - 1);
         } else {
             opMessage = String.format(formatSb.toString(), willBeModifiedHost, updateBackend.getHeartbeatPort(), fqdn);
@@ -273,6 +274,44 @@ public class SystemInfoService {
         List<List<String>> messageResult = new ArrayList<>();
         messageResult.add(Arrays.asList(opMessage));
         return new ShowResultSet(builder.build(), messageResult);
+    }
+
+    public void dropComputeNodes(List<Pair<String, Integer>> hostPortPairs) throws DdlException {
+        for (Pair<String, Integer> pair : hostPortPairs) {
+            // check is already exist
+            if (getComputeNodeWithHeartbeatPort(pair.first, pair.second) == null) {
+                throw new DdlException("compute node does not exists[" + pair.first + ":" + pair.second + "]");
+            }
+        }
+
+        for (Pair<String, Integer> pair : hostPortPairs) {
+            dropComputeNode(pair.first, pair.second);
+        }
+    }
+
+    public void dropComputeNode(String host, int heartbeatPort)
+            throws DdlException {
+        ComputeNode dropComputeNode = getComputeNodeWithHeartbeatPort(host, heartbeatPort);
+        if (dropComputeNode == null) {
+            throw new DdlException("compute node does not exists[" + host + ":" + heartbeatPort + "]");
+        }
+
+        // update idToComputeNode
+        Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
+        copiedComputeNodes.remove(dropComputeNode.getId());
+        idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
+
+        // update cluster
+        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(dropComputeNode.getOwnerClusterName());
+        if (null != cluster) {
+            cluster.removeComputeNode(dropComputeNode.getId());
+        } else {
+            LOG.error("Cluster " + dropComputeNode.getOwnerClusterName() + " no exist.");
+        }
+        // log
+        GlobalStateMgr.getCurrentState().getEditLog()
+                .logDropComputeNode(new DropComputeNodeLog(dropComputeNode.getId()));
+        LOG.info("finished to drop {}", dropComputeNode);
     }
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
@@ -414,6 +453,16 @@ public class SystemInfoService {
     public boolean checkBackendAlive(long backendId) {
         Backend backend = idToBackendRef.get(backendId);
         return backend != null && backend.isAlive();
+    }
+
+    public ComputeNode getComputeNodeWithHeartbeatPort(String host, int heartPort) {
+        ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
+        for (ComputeNode computeNode : idToComputeNode.values()) {
+            if (computeNode.getHost().equals(host) && computeNode.getHeartbeatPort() == heartPort) {
+                return computeNode;
+            }
+        }
+        return null;
     }
 
     public Backend getBackendWithHeartbeatPort(String host, int heartPort) {
@@ -833,6 +882,22 @@ public class SystemInfoService {
                 // This happens in loading image when fe is restarted, because loadCluster is after loadBackend,
                 // cluster is not created. Be in cluster will be updated in loadCluster.
             }
+        }
+    }
+
+    public void replayDropComputeNode(long computeNodeId) {
+        LOG.debug("replayDropComputeNode: {}", computeNodeId);
+        // update idToComputeNode
+        Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
+        copiedComputeNodes.remove(computeNodeId);
+        idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
+
+        // update cluster
+        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(DEFAULT_CLUSTER);
+        if (null != cluster) {
+            cluster.removeComputeNode(computeNodeId);
+        } else {
+            LOG.error("Cluster DEFAULT_CLUSTER " + DEFAULT_CLUSTER + " no exist.");
         }
     }
 

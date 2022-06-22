@@ -49,7 +49,8 @@ public class AlterSystemStmt extends DdlStmt {
                     "NODE");
         }
 
-        Preconditions.checkState( (alterClause instanceof AddComputeNodeClause)
+        Preconditions.checkState( (alterClause instanceof DropBackendClause)
+                || (alterClause instanceof AddComputeNodeClause)
                 || (alterClause instanceof AddBackendClause)
                 || (alterClause instanceof DropBackendClause)
                 || (alterClause instanceof ModifyBackendAddressClause)
@@ -88,7 +89,8 @@ public class AlterSystemStmt extends DdlStmt {
     }
 
     private static boolean isNewAlterSystemClause(AlterClause clause) {
-        return clause instanceof AddComputeNodeClause
+        return clause instanceof DropComputeNodeClause
+                || clause instanceof AddComputeNodeClause
                 || clause instanceof AddBackendClause
                 || clause instanceof DropBackendClause
                 || clause instanceof ModifyBackendAddressClause

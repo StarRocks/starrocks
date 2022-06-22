@@ -35,6 +35,7 @@ import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelStmt;
 import com.starrocks.analysis.DecommissionBackendClause;
 import com.starrocks.analysis.DropBackendClause;
+import com.starrocks.analysis.DropComputeNodeClause;
 import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.ModifyBackendAddressClause;
@@ -201,6 +202,9 @@ public class SystemHandler extends AlterHandler {
         } else if (alterClause instanceof AddComputeNodeClause) {
             AddComputeNodeClause addComputeNodeClause = (AddComputeNodeClause) alterClause;
             GlobalStateMgr.getCurrentSystemInfo().addComputeNodes(addComputeNodeClause.getHostPortPairs());
+        } else if (alterClause instanceof DropComputeNodeClause) {
+            DropComputeNodeClause dropComputeNodeClause = (DropComputeNodeClause) alterClause;
+            GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(dropComputeNodeClause.getHostPortPairs());
         } else {
             Preconditions.checkState(false, alterClause.getClass());
         }
