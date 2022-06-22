@@ -51,3 +51,12 @@ jobs:
        shell: bash
        env:
          GITHUB_REF_NAME: ${GITHUB_ACTION_PATH}
+         
+     - name: Upload test report
+       uses: actions/upload-artifact@v2
+       if: ${{ always() }}
+       env:
+         REPORTS_PATH: $STARROCKS_HOME/fe/fe-core/target/surefire-reports
+       with:
+         name: test report
+         path: ${{ env.REPORTS_PATH }}
