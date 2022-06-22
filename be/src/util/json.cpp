@@ -101,23 +101,6 @@ StatusOr<std::string> JsonValue::to_string() const {
     });
 }
 
-// NOTE: JsonValue must be a valid JSON, which means to_string should not fail
-StatusOr<std::string> JsonValue::dump() const {
-    if (binary_.empty() || to_vslice().type() == vpack::ValueType::None) {
-        return "";
-    }
-    return callVPack<std::string>([this]() {
-        VSlice slice = to_vslice();
-        vpack::Options options = vpack::Options::Defaults;
-        options.singleLinePrettyPrint = true;
-        std::string out;
-        vpack::StringSink sink(&out);
-
-        vpack::Dumper::dump(slice, &sink, &options);
-        return out;
-    });
-}
-
 std::string JsonValue::to_string_uncheck() const {
     auto res = to_string();
     if (res.ok()) {

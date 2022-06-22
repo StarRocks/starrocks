@@ -135,13 +135,15 @@ TEST_F(JsonFunctionsTest, get_json_stringTest) {
     auto strings = BinaryColumn::create();
     auto strings2 = BinaryColumn::create();
 
-    std::string values[] = {"{\"k1\":\"v1\", \"k2\":\"v2\"}", "{\"k1\":\"v1\", \"my.key\":[\"e1\", \"e2\", \"e3\"]}",
+    std::string values[] = {"{\"k1\":\"v1\", \"k2\":\"v2\"}",
+                            "{\"k1\":\"v1\", \"my.key\":[\"e1\", \"e2\", \"e3\"]}",
                             "{\"k1.key\":{\"k2\":[\"v1\", \"v2\"]}}",
                             "[{\"k1\":\"v1\"}, {\"k2\":\"v2\"}, {\"k1\":\"v3\"}, {\"k1\":\"v4\"}]",
-                            R"({"key":  "qu\"ote"})"};
+                            R"({"key":  "qu\"ote"})",
+                            R"({"key":  "esca\\ped"})"};
 
-    std::string strs[] = {"$.k1", "$.\"my.key\"[1]", "$.\"k1.key\".k2[0]", "$[*].k1", "$.key"};
-    std::string length_strings[] = {"v1", "e2", "v1", "[\"v1\", \"v3\", \"v4\"]", "qu\"ote"};
+    std::string strs[] = {"$.k1", "$.\"my.key\"[1]", "$.\"k1.key\".k2[0]", "$[*].k1", "$.key", "$.key"};
+    std::string length_strings[] = {"v1", "e2", "v1", "[\"v1\", \"v3\", \"v4\"]", "qu\"ote", "esca\\ped"};
 
     for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
         strings->append(values[j]);

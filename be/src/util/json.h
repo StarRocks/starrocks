@@ -107,8 +107,6 @@ public:
     static int compare(const Slice& lhs, const Slice& rhs);
     int64_t hash() const;
 
-    StatusOr<std::string> dump() const;
-
 private:
     template <class Ret, class Fn>
     StatusOr<Ret> callVPack(Fn fn);
