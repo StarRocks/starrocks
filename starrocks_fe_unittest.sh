@@ -67,7 +67,7 @@ timeout 3600 sh run-fe-ut.sh --run com.starrocks.utframe.Demo#testCreateDbAndTab
 docker exec --privileged $container_name /bin/bash -c "$cmd"
 
 echo "script run over-----"
-
+ls -al $PROJECT
 ls -al $PROJECT/fe/fe-core/target
 if [ "$GITHUB_PR_TARGET_BRANCH" == "testing" ];then
     cd $PROJECT/fe/fe-core/target
