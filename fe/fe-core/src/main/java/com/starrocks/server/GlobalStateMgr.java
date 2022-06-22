@@ -1353,12 +1353,8 @@ public class GlobalStateMgr {
     }
 
     public long loadStarMgrMeta(DataInputStream dis, long checksum) throws IOException {
-        try {
-            if (Config.integrate_starmgr) {
-                starMgrServer.loadMeta(dis);
-            }
-        } catch (EOFException e) {
-            LOG.warn("no starMgr meta to replay.", e);
+        if (Config.integrate_starmgr) {
+            starMgrServer.loadMeta(dis);
         }
         return checksum;
     }
