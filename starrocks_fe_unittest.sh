@@ -61,7 +61,7 @@ sleep 10
 echo "run docker for script"
 
 cmd="cd /root/starrocks;
-export FE_UT_PARALLEL=16;
+export FE_UT_PARALLEL=2;
 timeout 3600 sh run-fe-ut.sh --run"
 
 docker exec --privileged $container_name /bin/bash -c "$cmd"
