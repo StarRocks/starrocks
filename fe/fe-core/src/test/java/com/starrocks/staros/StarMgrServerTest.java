@@ -94,6 +94,8 @@ public class StarMgrServerTest {
             }
         };
 
+        Assert.assertEquals(manager, starMgrServer.getStarMgr());
+
         try {
             globalStateMgr.saveStarMgrMeta(null, 0);
             globalStateMgr.loadStarMgrMeta(null, 0);
