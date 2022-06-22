@@ -330,8 +330,9 @@ public class BDBJEJournalTest {
         journal.batchWriteAppend(1, buffer);
     }
 
+
     @Test
-    public void testBatchWriteCommitRetry(
+    public void testBatchWriteCommitRetrySuccess(
             @Mocked CloseSafeDatabase database,
             @Mocked BDBEnvironment environment,
             @Mocked Database rawDatabase,
@@ -394,6 +395,77 @@ public class BDBJEJournalTest {
 
         journal.batchWriteBegin();
         journal.batchWriteAppend(1, buffer);
+        journal.batchWriteCommit();
+    }
+
+    // retry 1: commit fails
+    // retry 2: begin txn with exception
+    // retry 3: put return error
+    @Test(expected = JournalException.class)
+    public void commitFailsRebuildFails(
+            @Mocked CloseSafeDatabase database,
+            @Mocked BDBEnvironment environment,
+            @Mocked Database rawDatabase,
+            @Mocked Environment rawEnvironment,
+            @Mocked Transaction txn) throws Exception {
+        BDBJEJournal journal = new BDBJEJournal(environment, database);
+        String data = "petals on a wet black bough";
+        DataOutputBuffer buffer = new DataOutputBuffer();
+        Text.writeString(buffer, data);
+
+        // write failed and retry, success
+        new Expectations(database) {
+            {
+                database.getDb();
+                minTimes = 0;
+                result = rawDatabase;
+
+                database.put((Transaction) any, (DatabaseEntry) any, (DatabaseEntry) any);
+                times = 4;  // append & rebuild txn
+                result = OperationStatus.SUCCESS;
+                result = OperationStatus.SUCCESS;
+                result = OperationStatus.SUCCESS;
+                result = OperationStatus.KEYEMPTY;
+            }
+        };
+
+        new Expectations(rawDatabase) {
+            {
+                rawDatabase.getEnvironment();
+                minTimes = 0;
+                result = rawEnvironment;
+
+                rawDatabase.getDatabaseName();
+                minTimes = 0;
+                result = "fakeDb";
+            }
+        };
+
+        new Expectations(rawEnvironment) {
+            {
+                rawEnvironment.beginTransaction(null, (TransactionConfig)any);
+                times = 3;  // append & rebuild txn
+                result = txn;
+                result = new DatabaseNotFoundException("mock mock: begin txn");
+                result = txn;
+            }
+        };
+
+        new Expectations(txn) {
+            {
+                txn.commit();
+                times = 1;
+                result = new DatabaseNotFoundException("mock mock: commit");
+
+                txn.isValid();
+                times = 1;
+                result = false;
+            }
+        };
+
+        journal.batchWriteBegin();
+        journal.batchWriteAppend(1, buffer);
+        journal.batchWriteAppend(2, buffer);
         journal.batchWriteCommit();
     }
 

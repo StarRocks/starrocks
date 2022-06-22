@@ -539,7 +539,6 @@ public class BDBJEJournal implements Journal {
                 LOG.error(errMsg, e);
                 exception = new JournalException(errMsg);
                 exception.initCause(e);
-
             }
         }
         // failed after retried
