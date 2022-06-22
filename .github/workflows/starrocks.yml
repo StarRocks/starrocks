@@ -6,7 +6,7 @@ name: Java unit test with run-fe-ut
 on: [push]
 
 env:
-   STARROCKS_HOME: ${{ github.workspace }}
+   STARROCKS_HOME: ${{github.workspace}}
    GITHUB_PR_NUMBER: ${{github.event.pull_request.number}}
    GITHUB_REF_NAME: ${{github.event.pull_request.head.ref}}
 
@@ -49,7 +49,5 @@ jobs:
       
      - name: bash script
        run: | 
-         ./starrocks_fe_unittest.sh ${GITHUB_RUN_NUMBER} ${GITHUB_REF_NAME}
+         ./starrocks_fe_unittest.sh $GITHUB_RUN_NUMBER $GITHUB_REF_NAME
        shell: bash
-       env:
-         GITHUB_REF_NAME: ${GITHUB_ACTION_PATH}
