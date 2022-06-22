@@ -137,7 +137,7 @@ public class ConnectProcessor {
         ctx.resetSessionVariable();
     }
 
-    private void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics) {
+    public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics) {
         // slow query
         long endTime = System.currentTimeMillis();
         long elapseMs = endTime - ctx.getStartTime();

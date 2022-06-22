@@ -22,8 +22,11 @@ public class TaskRunBuilder {
         taskRun.setProperties(task.getProperties());
         taskRun.setCtx(ConnectContext.get());
         taskRun.setTask(task);
-        taskRun.setProcessor(new SqlTaskRunProcessor());
-
+        if (task.getSource().equals(Constants.TaskSource.MV)) {
+            taskRun.setProcessor(new MvTaskRunProcessor());
+        } else {
+            taskRun.setProcessor(new SqlTaskRunProcessor());
+        }
         return taskRun;
     }
 

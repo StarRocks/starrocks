@@ -10,11 +10,13 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -180,6 +182,7 @@ public class ColumnFilterConverterTest {
     private OlapTable buildOlapTable(String timeKey) {
         List<Expr> exprList = new ArrayList<>();
         List<Expr> params = new ArrayList<>();
+        List<Column> columns = new ArrayList<>();
         StringLiteral stringLiteral = new StringLiteral(timeKey);
         params.add(stringLiteral);
         TableName tableName = new TableName("testdb", "testtbl");
@@ -189,7 +192,8 @@ public class ColumnFilterConverterTest {
         FunctionCallExpr zdtestCallExpr = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
                 params);
         exprList.add(zdtestCallExpr);
-        ExpressionRangePartitionInfo expressionRangePartitionInfo = new ExpressionRangePartitionInfo(exprList);
+        columns.add(new Column("date_col", ScalarType.DATE));
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = new ExpressionRangePartitionInfo(exprList,columns);
 
         return new OlapTable(1L, "table1", new ArrayList<>(), KeysType.AGG_KEYS, expressionRangePartitionInfo,
                 new RandomDistributionInfo(10));

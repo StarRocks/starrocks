@@ -77,7 +77,7 @@ statement
     | showWorkGroupStatement                                                                #showWorkGroup
 
     // Other statement
-    | USE schema=identifier                                                                 #use
+    | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
 
