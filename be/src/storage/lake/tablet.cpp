@@ -5,6 +5,7 @@
 #include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_schema_cache.h"
 #include "storage/lake/txn_log.h"
 #include "storage/tablet_schema_map.h"
 
@@ -58,8 +59,20 @@ StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer() {
 }
 
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
-    ASSIGN_OR_RETURN(auto metadata, get_metadata(1));
-    return GlobalTabletSchemaMap::Instance()->emplace(metadata->schema()).first;
+    auto ptr = GlobalTabletSchemaCache::Instance()->lookup_schema_cache(_id);
+    RETURN_IF(ptr != nullptr, ptr);
+
+    ASSIGN_OR_RETURN(TabletMetadataIter metadata_iter, _mgr->list_tablet_metadata(_group, _id));
+    if (!metadata_iter.has_next()) {
+        return Status::NotFound(fmt::format("tablet {} metadata not found", _id));
+    }
+    ASSIGN_OR_RETURN(auto metadata, metadata_iter.next());
+    ptr = GlobalTabletSchemaMap::Instance()->emplace(metadata->schema()).first;
+    if (ptr == nullptr) {
+        return Status::InternalError(fmt::format("tablet schema {} failed to emplace in TabletSchemaMap", _id));
+    }
+    (void)GlobalTabletSchemaCache::Instance()->fill_schema_cache(_id, ptr, metadata->schema().SpaceUsedLong());
+    return ptr;
 }
 
 std::string Tablet::metadata_path(int64_t version) const {

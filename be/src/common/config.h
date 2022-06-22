@@ -741,6 +741,9 @@ CONF_Int32(max_batch_publish_latency_ms, "100");
 // Config for opentelemetry tracing.
 CONF_String(jaeger_endpoint, "");
 
+// mem size for tablet schema cache, default 256m
+CONF_Int32(tablet_schema_cache_size, "268435456");
+
 #ifdef USE_STAROS
 CONF_String(starmgr_addr, "");
 CONF_Int32(starlet_port, "9070");

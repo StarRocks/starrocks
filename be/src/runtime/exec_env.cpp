@@ -62,6 +62,7 @@
 #ifdef USE_STAROS
 #include "storage/lake/starlet_group_assigner.h"
 #endif
+#include "storage/lake/tablet_schema_cache.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
@@ -503,6 +504,9 @@ void ExecEnv::_destroy() {
         delete _compaction_mem_tracker;
         _compaction_mem_tracker = nullptr;
     }
+
+    lake::GlobalTabletSchemaCache::Instance()->prune_schema_cache();
+
     if (_tablet_meta_mem_tracker) {
         delete _tablet_meta_mem_tracker;
         _tablet_meta_mem_tracker = nullptr;
