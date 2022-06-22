@@ -6,9 +6,9 @@ name: Java unit test with run-fe-ut
 on: [push]
 
 env:
-   STARROCKS_HOME: ${{github.workspace}}
-   GITHUB_PR_NUMBER: ${{github.event.pull_request.number}}
-   GITHUB_REF_NAME: ${{github.event.pull_request.head.ref}}
+   STARROCKS_HOME: ${{ github.workspace }}
+   GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
+   GITHUB_REF_NAME: ${{ github.event.pull_request.head.ref }}
 
 jobs:
    build:
@@ -34,7 +34,7 @@ jobs:
        id: cache-testing
        uses: actions/cache@v3
        with:
-         path: $STARROCKS_HOME/*.jar
+         path: ${{ github.workspace }}/*.jar
          key: ${{ runner.os }}-testing-${{ hashFiles('*.jar') }}
          restore-keys: |
            ${{ runner.os }}-testing-
