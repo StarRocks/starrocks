@@ -431,9 +431,10 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     MonotonicStopWatch timer;
     timer.start();
 
-    if (CompactionUtils::choose_compaction_algorithm(_context.tablet_schema->num_columns(),
-                                                     config::vertical_compaction_max_columns_per_group,
-                                                     _num_segment) == VERTICAL_COMPACTION) {
+    if (CompactionUtils::choose_compaction_algorithm(
+                _context.tablet_schema->num_columns(), config::vertical_compaction_max_columns_per_group,
+                _num_segment - std::count(_num_rows_of_tmp_segment_files.begin(), _num_rows_of_tmp_segment_files.end(),
+                                          0)) == VERTICAL_COMPACTION) {
         std::vector<std::vector<uint32_t>> column_groups;
         CompactionUtils::split_column_into_groups(_context.tablet_schema->num_columns(),
                                                   _context.tablet_schema->num_key_columns(),
@@ -484,10 +485,10 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         // create temporary segment files at first, then merge them and create final segment files if schema change with sorting
         if (_context.write_tmp) {
             if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS) {
-                itr = new_mask_merge_iterator(seg_iterators, mask_buffer.get());
+                itr = new_heap_merge_iterator(seg_iterators);
             } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
                        _context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
-                itr = new_aggregate_iterator(new_mask_merge_iterator(seg_iterators, mask_buffer.get()), true);
+                itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), true);
             } else {
                 return Status::NotSupported(
                         fmt::format("final merge: schema change with sorting do not support {} type",
@@ -523,7 +524,12 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         _context.segments_overlap = NONOVERLAPPING;
 
         _vertical_beta_rowset_writer = std::make_unique<VerticalBetaRowsetWriter>(_context);
-        _vertical_beta_rowset_writer->init();
+        if (auto st = _vertical_beta_rowset_writer->init(); !st.ok()) {
+            std::stringstream ss;
+            ss << "Fail to create rowset writer. tablet_id=" << _context.tablet_id << " err=" << st;
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
 
         auto char_field_indexes = vectorized::ChunkHelper::get_char_field_indexes(schema);
 
@@ -539,7 +545,10 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                                                               chunk);
                 total_rows += chunk->num_rows();
                 total_chunk++;
-                _vertical_beta_rowset_writer->add_columns(*chunk, column_groups[0], true);
+                if (auto st = _vertical_beta_rowset_writer->add_columns(*chunk, column_groups[0], true); !st.ok()) {
+                    LOG(WARNING) << "writer add_columns error. tablet=" << _context.tablet_id << ", err=" << st;
+                    return st;
+                }
             } else {
                 return st;
             }
@@ -549,7 +558,10 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
             }
         }
         itr->close();
-        _vertical_beta_rowset_writer->flush_columns();
+        if (auto st = _vertical_beta_rowset_writer->flush_columns(); !st.ok()) {
+            LOG(WARNING) << "failed to flush_columns group, tablet=" << _context.tablet_id << ", err=" << st;
+            return st;
+        }
         RETURN_IF_ERROR(mask_buffer->flush());
 
         for (size_t i = 1; i < column_groups.size(); ++i) {
@@ -620,7 +632,11 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                 } else if (st.ok()) {
                     vectorized::ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema,
                                                                   chunk);
-                    _vertical_beta_rowset_writer->add_columns(*chunk, column_groups[i], false);
+                    if (auto st = _vertical_beta_rowset_writer->add_columns(*chunk, column_groups[i], false);
+                        !st.ok()) {
+                        LOG(WARNING) << "writer add_columns error. tablet=" << _context.tablet_id << ", err=" << st;
+                        return st;
+                    }
                 } else {
                     return st;
                 }
@@ -629,7 +645,10 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                 }
             }
             itr->close();
-            _vertical_beta_rowset_writer->flush_columns();
+            if (auto st = _vertical_beta_rowset_writer->flush_columns(); !st.ok()) {
+                LOG(WARNING) << "failed to flush_columns group, tablet=" << _context.tablet_id << ", err=" << st;
+                return st;
+            }
         }
 
         if (auto st = _vertical_beta_rowset_writer->final_flush(); !st.ok()) {
@@ -731,13 +750,19 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                                                               chunk);
                 total_rows += chunk->num_rows();
                 total_chunk++;
-                add_chunk(*chunk);
+                if (auto st = add_chunk(*chunk); !st.ok()) {
+                    LOG(WARNING) << "writer add_chunk error: " << st;
+                    return st;
+                }
             } else {
                 return st;
             }
         }
         itr->close();
-        flush();
+        if (auto st = flush(); !st.ok()) {
+            LOG(WARNING) << "failed to flush, tablet=" << _tablet->tablet_id() << ", err=" << st;
+            return st;
+        }
 
         timer.stop();
         LOG(INFO) << "rowset writer horizontal final merge finished. tablet:" << _context.tablet_id
