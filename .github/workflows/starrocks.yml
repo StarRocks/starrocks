@@ -34,7 +34,7 @@ jobs:
        id: cache-testing
        uses: actions/cache@v3
        with:
-         path: ${{ github.workspace }}/*.jar
+         path: ${STARROCKS_HOME}/*.jar
          key: ${{ runner.os }}-testing-${{ hashFiles('*.jar') }}
          restore-keys: |
            ${{ runner.os }}-testing-
