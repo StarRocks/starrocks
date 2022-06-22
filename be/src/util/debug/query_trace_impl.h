@@ -20,14 +20,13 @@ namespace debug {
 
 class QueryTraceContext;
 
-// QueryTraceEvent
 struct QueryTraceEvent {
     std::string name;
     std::string category;
     int64_t id; // used for async event
     char phase;
     int64_t timestamp;
-    int64_t duration = -1; // for compelete event
+    int64_t duration = -1; // for compelete event, not used now
     // TUniqueId::hi is all the same in one query, so we use TUniqueId::lo to specific one fragment instance
     int64_t instance_id;
     // driver pointer address
@@ -62,7 +61,6 @@ private:
     std::deque<QueryTraceEvent> _buffer;
 };
 
-// QueryTrace
 class QueryTrace {
 public:
     QueryTrace(const TUniqueId& query_id, bool is_enable);

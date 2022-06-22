@@ -102,6 +102,10 @@ Status QueryTrace::dump() {
     if (!_is_enable) {
         return Status::OK();
     }
+    static const char* kProcessNameMetaEventFormat =
+            "{\"name\":\"process_name\",\"ph\":\"M\",\"pid\":\"%ld\",\"args\":{\"name\":\"%s\"}}";
+    static const char* kThreadNameMetaEventFormat =
+            "{\"name\":\"thread_name\",\"ph\":\"M\",\"pid\":\"%ld\",\"tid\":\"%ld\",\"args\":{\"name\":\"%s\"}}";
     try {
         std::filesystem::create_directory(starrocks::config::query_debug_trace_dir);
         std::string file_name =
@@ -160,7 +164,7 @@ void QueryTrace::set_tls_trace_context(QueryTrace* query_trace, TUniqueId fragme
 ScopedTracer::ScopedTracer(const std::string& category, const std::string& name) : _category(category), _name(name) {
     QUERY_TRACE_BEGIN(_category, _name);
 }
-
+// @TODO: just generate a compelete event to reduce the number of events
 ScopedTracer::~ScopedTracer() {
     QUERY_TRACE_END(_category, _name);
 }
