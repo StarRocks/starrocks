@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+
 /**
  * StarOSAgent is responsible for
  * 1. Encapsulation of StarClient api.
@@ -82,11 +83,18 @@ public class StarOSAgent {
     private class StarClient {
         // private Map<Long, List<Replica>> shardIdToWorkerIds;
         private Map<Long, Worker> idToWorker;
+        private Map<Integer, Worker> serviceIdToWorker;
+
+        private Set<String> serviceTemplates;
+        private Set<String> services;
 
         private long id = System.currentTimeMillis();
 
         public StarClient() {
             idToWorker = Maps.newHashMap();
+            serviceIdToWorker = Maps.newHashMap();
+            serviceTemplates = Sets.newHashSet();
+            services = Sets.newHashSet();
         }
 
         public synchronized List<Long> createShards(int numShards) {

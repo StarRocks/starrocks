@@ -134,6 +134,8 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(clusterName);
         Preconditions.checkState(cluster != null);
         cluster.addBackend(backend.getId());
+        int serviceId = Catalog.getCurrentCatalog().getClusterId();
+        Catalog.getCurrentCatalog().getStarOSAgent().addWorker(serviceId, backend.getId(), backend.getHost());
         backend.setOwnerClusterName(clusterName);
         backend.setBackendState(BackendState.using);
     }
