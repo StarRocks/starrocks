@@ -292,8 +292,13 @@ nonterminal StatementBase stmt, add_stmt, add_param, show_stmt, show_param, help
     create_routine_load_stmt, pause_routine_load_stmt, resume_routine_load_stmt, stop_routine_load_stmt,
     show_routine_load_stmt, show_routine_load_task_stmt,
     describe_stmt, alter_stmt,
+<<<<<<< HEAD
     use_stmt, kill_stmt, drop_stmt, recover_stmt, grant_stmt, revoke_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt, delete_param, 
     enter_stmt, unsupported_stmt, export_stmt, admin_stmt, truncate_stmt,
+=======
+    kill_stmt, drop_stmt, recover_stmt, grant_stmt, revoke_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt,
+    unsupported_stmt, export_stmt, admin_stmt, truncate_stmt,
+>>>>>>> f97ee7b47 ([Feature] UseStmt support catalog.database (#7585))
     import_columns_stmt, import_where_stmt, install_plugin_stmt, uninstall_plugin_stmt, analyze_stmt, create_analyze_stmt,
     alter_resource_group_stmt;
 
@@ -606,8 +611,6 @@ stmt ::=
     {: RESULT = stmt; :}
     | recover_stmt:stmt
     {: RESULT = stmt; :}
-    | use_stmt:use
-    {: RESULT = use; :}
     | set_stmt:set
     {: RESULT = set; :}
     | kill_stmt:kill
@@ -3154,6 +3157,7 @@ opt_set_qualifier ::=
   {: RESULT = Qualifier.ALL; :}
   ;
 
+<<<<<<< HEAD
 // Change cluster
 enter_stmt ::=
     KW_ENTER ident:cluster
@@ -3169,6 +3173,8 @@ use_stmt ::=
     :}
     ;
 
+=======
+>>>>>>> f97ee7b47 ([Feature] UseStmt support catalog.database (#7585))
 // Insert statement
 insert_stmt ::=
     KW_INSERT insert_ignore KW_INTO insert_target:target opt_with_label:label opt_col_list:cols opt_plan_hints:hints insert_source:source
