@@ -114,7 +114,6 @@ import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UpdateStmt;
-import com.starrocks.sql.ast.UseStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.analysis.ValueList;
 import com.starrocks.catalog.AggregateType;
@@ -174,6 +173,7 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
+import com.starrocks.sql.ast.UseStmt;
 import com.starrocks.sql.ast.UserIdentifier;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
@@ -1640,7 +1640,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (parts.size() == 2) {
             return new UseStmt(parts.get(0), parts.get(1));
         } else {
-            throw new ParsingException("error catalog.database");
+            throw new StarRocksPlannerException("error qualifiedName in UseStmt", ErrorType.INTERNAL_ERROR);
         }
     }
 
