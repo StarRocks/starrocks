@@ -819,9 +819,11 @@ PrimaryIndex::PrimaryIndex() = default;
 PrimaryIndex::~PrimaryIndex() {
     if (_tablet_id != 0) {
         if (!_status.ok()) {
-            LOG(WARNING) << "bad primary index released tablet:" << _tablet_id << " memory: " << memory_usage();
+            LOG(WARNING) << "bad primary index released table:" << _table_id << " tablet:" << _tablet_id
+                         << " memory: " << memory_usage();
         } else {
-            LOG(INFO) << "primary index released tablet:" << _tablet_id << " memory: " << memory_usage();
+            LOG(INFO) << "primary index released table:" << _table_id << " tablet:" << _tablet_id
+                      << " memory: " << memory_usage();
         }
     }
 }
@@ -1025,15 +1027,17 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
             itr->close();
         }
     }
+    _table_id = tablet->table_id();
     _tablet_id = tablet->tablet_id();
     if (size() != total_rows - total_dels) {
         LOG(WARNING) << Substitute("load primary index row count not match tablet:$0 index:$1 != stats:$2", _tablet_id,
                                    size(), total_rows - total_dels);
     }
-    LOG(INFO) << "load primary index finish tablet:" << tablet->tablet_id() << " version:" << apply_version
-              << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " data_size:" << total_data_size
-              << " rowsets:" << int_list_to_string(rowset_ids) << " size:" << size() << " capacity:" << capacity()
-              << " memory:" << memory_usage() << " duration: " << timer.elapsed_time() / 1000000 << "ms";
+    LOG(INFO) << "load primary index finish table:" << tablet->table_id() << " tablet:" << tablet->tablet_id()
+              << " version:" << apply_version << " #rowset:" << rowsets.size() << " #segment:" << total_segments
+              << " data_size:" << total_data_size << " rowsets:" << int_list_to_string(rowset_ids) << " size:" << size()
+              << " capacity:" << capacity() << " memory:" << memory_usage()
+              << " duration: " << timer.elapsed_time() / 1000000 << "ms";
     span->SetAttribute("memory", memory_usage());
     span->SetAttribute("size", size());
     return Status::OK();
