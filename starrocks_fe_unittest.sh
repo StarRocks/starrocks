@@ -36,7 +36,7 @@ rm -rf fe/fe-core/target
 
 #FE_FILE_CHANGE_STATUS=0
 #git --no-pager diff --name-only FETCH_HEAD $(git merge-base FETCH_HEAD main) > files_change_list.txt
-while read line; do if [[ $line =~ ^fe/fe-core/* || $line =~ ^fe/spark-dpp/* || $line =~ ^fe/pom.xml || $line =~ ^run-fe-ut.sh || $line =~ ^build.sh || $line =~ ^gensrc/* ]];then FE_FILE_CHANGE_STATUS=1;break;fi;done < files_change_list.txt
+#while read line; do if [[ $line =~ ^fe/fe-core/* || $line =~ ^fe/spark-dpp/* || $line =~ ^fe/pom.xml || $line =~ ^run-fe-ut.sh || $line =~ ^build.sh || $line =~ ^gensrc/* ]];then FE_FILE_CHANGE_STATUS=1;break;fi;done < files_change_list.txt
 #
 #if (( $FE_FILE_CHANGE_STATUS == 0 ));then
 #    exit 0
@@ -63,7 +63,7 @@ sleep 10
 echo "run docker for script"
 
 cmd="cd /root/starrocks;
-export FE_UT_PARALLEL=16;
+export FE_UT_PARALLEL=4;
 timeout 3600 sh run-fe-ut.sh --run;"
 
 docker exec --privileged $container_name /bin/bash -c "$cmd"
