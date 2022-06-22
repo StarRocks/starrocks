@@ -7,6 +7,8 @@ on: [push]
 
 env:
    STARROCKS_HOME: ${{ github.workspace }}
+   GITHUB_PR_NUMBER: ${{github.event.pull_request.number}}
+   GITHUB_REF_NAME: ${{github.event.pull_request.head.ref}}
 
 jobs:
    build:
