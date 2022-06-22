@@ -107,8 +107,7 @@ void TaskWorkerPool::start() {
         _callback_function = _clear_transaction_task_worker_thread_callback;
         break;
     case TaskWorkerType::DELETE:
-        _worker_count = config::delete_worker_count;
-        _callback_function = _push_worker_thread_callback;
+        _callback_function = _delete_worker_thread_callback;
         break;
     case TaskWorkerType::ALTER_TABLE:
         _callback_function = _alter_tablet_worker_thread_callback;
@@ -566,8 +565,8 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
 
     TPriority::type priority = TPriority::NORMAL;
 
-    if (worker_pool_this->_task_worker_type != DELETE) {
-        int32_t push_worker_count_high_priority = config::push_worker_count_high_priority;
+    int32_t push_worker_count_high_priority = config::push_worker_count_high_priority;
+    {
         std::lock_guard worker_thread_lock(worker_pool_this->_worker_thread_lock);
         if (s_worker_count < push_worker_count_high_priority) {
             ++s_worker_count;
@@ -579,37 +578,11 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
         AgentStatus status = STARROCKS_SUCCESS;
         TAgentTaskRequestPtr agent_task_req;
         do {
-            agent_task_req = worker_pool_this->_pop_task(TPriority::HIGH);
+            agent_task_req = worker_pool_this->_pop_task(priority);
             if (agent_task_req == nullptr) {
                 // there is no high priority task. notify other thread to handle normal task
                 worker_pool_this->_worker_thread_condition_variable->notify_one();
                 break;
-            }
-            const auto& push_req = agent_task_req->push_req;
-
-            int num_of_remove_task = 0;
-            if (push_req.push_type == TPushType::CANCEL_DELETE) {
-                LOG(INFO) << "get push task. remove delete task txn_id: " << push_req.transaction_id
-                          << " priority: " << priority << " push_type: " << push_req.push_type;
-
-                std::lock_guard l(worker_pool_this->_worker_thread_lock);
-                auto& tasks = worker_pool_this->_tasks;
-                for (auto it = tasks.begin(); it != tasks.end();) {
-                    TAgentTaskRequestPtr& task_req = *it;
-                    if (task_req->task_type == TTaskType::REALTIME_PUSH) {
-                        const TPushReq& push_task_in_queue = task_req->push_req;
-                        if (push_task_in_queue.push_type == TPushType::DELETE &&
-                            push_task_in_queue.transaction_id == push_req.transaction_id) {
-                            it = worker_pool_this->_tasks.erase(it);
-                            ++num_of_remove_task;
-                        } else {
-                            ++it;
-                        }
-                    }
-                }
-                LOG(INFO) << "finish remove delete task txn_id: " << push_req.transaction_id
-                          << " num_of_remove_task: " << num_of_remove_task << " priority: " << priority
-                          << " push_type: " << push_req.push_type;
             }
         } while (false);
 
@@ -644,9 +617,6 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_backend(BackendOptions::get_localBackend());
         finish_task_request.__set_task_type(agent_task_req->task_type);
         finish_task_request.__set_signature(agent_task_req->signature);
-        if (push_req.push_type == TPushType::DELETE) {
-            finish_task_request.__set_request_version(push_req.version);
-        }
 
         if (status == STARROCKS_SUCCESS) {
             VLOG(3) << "push ok. signature: " << agent_task_req->signature << ", push_type: " << push_req.push_type;
@@ -664,6 +634,126 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
         } else {
             LOG(WARNING) << "push failed, error_code: " << status << ", signature: " << agent_task_req->signature;
             error_msgs.emplace_back("push failed");
+            task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
+        }
+        task_status.__set_error_msgs(error_msgs);
+        finish_task_request.__set_task_status(task_status);
+        finish_task_request.__set_report_version(_s_report_version.load(std::memory_order_relaxed));
+
+        worker_pool_this->_finish_task(finish_task_request);
+        worker_pool_this->_remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+    }
+
+    return (void*)nullptr;
+}
+
+void* TaskWorkerPool::_delete_worker_thread_callback(void* arg_this) {
+    static uint32_t s_worker_count = 0;
+
+    auto* worker_pool_this = (TaskWorkerPool*)arg_this;
+
+    TPriority::type priority = TPriority::NORMAL;
+
+    int32_t delete_worker_count_high_priority = config::delete_worker_count_high_priority;
+    {
+        std::lock_guard worker_thread_lock(worker_pool_this->_worker_thread_lock);
+        if (s_worker_count < delete_worker_count_high_priority) {
+            ++s_worker_count;
+            priority = TPriority::HIGH;
+        }
+    }
+
+    while (true) {
+        AgentStatus status = STARROCKS_SUCCESS;
+        TAgentTaskRequestPtr agent_task_req;
+        do {
+            agent_task_req = worker_pool_this->_pop_task(priority);
+            if (agent_task_req == nullptr) {
+                // there is no high priority task. notify other thread to handle normal task
+                worker_pool_this->_worker_thread_condition_variable->notify_one();
+                break;
+            }
+            const auto& push_req = agent_task_req->push_req;
+
+            int num_of_remove_task = 0;
+            if (push_req.push_type == TPushType::CANCEL_DELETE) {
+                LOG(INFO) << "get delete push task. remove delete task txn_id: " << push_req.transaction_id
+                          << " priority: " << priority << " push_type: " << push_req.push_type;
+
+                std::lock_guard l(worker_pool_this->_worker_thread_lock);
+                auto& tasks = worker_pool_this->_tasks;
+                for (auto it = tasks.begin(); it != tasks.end();) {
+                    TAgentTaskRequestPtr& task_req = *it;
+                    if (task_req->task_type == TTaskType::REALTIME_PUSH) {
+                        const TPushReq& push_task_in_queue = task_req->push_req;
+                        if (push_task_in_queue.push_type == TPushType::DELETE &&
+                            push_task_in_queue.transaction_id == push_req.transaction_id) {
+                            it = worker_pool_this->_tasks.erase(it);
+                            ++num_of_remove_task;
+                        } else {
+                            ++it;
+                        }
+                    }
+                }
+                LOG(INFO) << "finish remove delete task txn_id: " << push_req.transaction_id
+                          << " num_of_remove_task: " << num_of_remove_task << " priority: " << priority
+                          << " push_type: " << push_req.push_type;
+            }
+        } while (false);
+
+        if (worker_pool_this->_stopped) {
+            break;
+        }
+        if (agent_task_req == nullptr) {
+            // there is no high priority task in queue
+            sleep(1);
+            continue;
+        }
+        auto& push_req = agent_task_req->push_req;
+
+        LOG(INFO) << "get delete push task. signature: " << agent_task_req->signature << " priority: " << priority
+                  << " push_type: " << push_req.push_type;
+        std::vector<TTabletInfo> tablet_infos;
+
+        EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
+                                        ExecEnv::GetInstance()->load_mem_tracker());
+        worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+
+        if (status == STARROCKS_PUSH_HAD_LOADED) {
+            // remove the task and not return to fe
+            worker_pool_this->_remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+            continue;
+        }
+        // Return result to fe
+        std::vector<string> error_msgs;
+        TStatus task_status;
+
+        TFinishTaskRequest finish_task_request;
+        finish_task_request.__set_backend(BackendOptions::get_localBackend());
+        finish_task_request.__set_task_type(agent_task_req->task_type);
+        finish_task_request.__set_signature(agent_task_req->signature);
+        if (push_req.push_type == TPushType::DELETE) {
+            finish_task_request.__set_request_version(push_req.version);
+        }
+
+        if (status == STARROCKS_SUCCESS) {
+            VLOG(3) << "delete push ok. signature: " << agent_task_req->signature
+                    << ", push_type: " << push_req.push_type;
+            error_msgs.emplace_back("push success");
+
+            _s_report_version.fetch_add(1, std::memory_order_relaxed);
+
+            task_status.__set_status_code(TStatusCode::OK);
+            finish_task_request.__set_finish_tablet_infos(tablet_infos);
+        } else if (status == STARROCKS_TASK_REQUEST_ERROR) {
+            LOG(WARNING) << "delete push request push_type invalid. type: " << push_req.push_type
+                         << ", signature: " << agent_task_req->signature;
+            error_msgs.emplace_back("push request push_type invalid.");
+            task_status.__set_status_code(TStatusCode::ANALYSIS_ERROR);
+        } else {
+            LOG(WARNING) << "delete push failed, error_code: " << status
+                         << ", signature: " << agent_task_req->signature;
+            error_msgs.emplace_back("delete push failed");
             task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
         }
         task_status.__set_error_msgs(error_msgs);

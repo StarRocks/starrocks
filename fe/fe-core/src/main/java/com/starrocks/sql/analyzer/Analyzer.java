@@ -252,5 +252,6 @@ public class Analyzer {
             RefreshTableStatementAnalyzer.analyze(statement, context);
             return null;
         }
+
     }
 }

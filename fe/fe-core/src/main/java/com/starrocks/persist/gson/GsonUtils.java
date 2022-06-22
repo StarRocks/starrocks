@@ -56,6 +56,7 @@ import com.starrocks.catalog.AnyArrayType;
 import com.starrocks.catalog.AnyElementType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HudiResource;
@@ -138,7 +139,8 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory
                     .of(PartitionInfo.class, "clazz")
                     .registerSubtype(RangePartitionInfo.class, RangePartitionInfo.class.getSimpleName())
-                    .registerSubtype(SinglePartitionInfo.class, SinglePartitionInfo.class.getSimpleName());
+                    .registerSubtype(SinglePartitionInfo.class, SinglePartitionInfo.class.getSimpleName())
+                    .registerSubtype(ExpressionRangePartitionInfo.class, ExpressionRangePartitionInfo.class.getSimpleName());
 
     // runtime adapter for class "Resource"
     private static final RuntimeTypeAdapterFactory<Resource> resourceTypeAdapterFactory = RuntimeTypeAdapterFactory
@@ -190,7 +192,7 @@ public class GsonUtils {
 
     private static final JsonDeserializer<Expr> expressionDeserializer = new ExpressionDeserializer();
 
-    private static final JsonDeserializer<PrimitiveType> primitiveTypeDeserializer = new PrimitiveTypeSerializer();
+    private static final JsonDeserializer<PrimitiveType> primitiveTypeDeserializer = new PrimitiveTypeDeserializer();
 
     // the builder of GSON instance.
     // Add any other adapters if necessary.
@@ -444,7 +446,7 @@ public class GsonUtils {
         }
     }
 
-    private static class PrimitiveTypeSerializer implements JsonDeserializer<PrimitiveType> {
+    private static class PrimitiveTypeDeserializer implements JsonDeserializer<PrimitiveType> {
         @Override
         public PrimitiveType deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
                 throws JsonParseException {

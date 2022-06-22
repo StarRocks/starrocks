@@ -299,6 +299,12 @@ public class AnalyzerUtils {
         return tables;
     }
 
+    public static Map<String, TableRelation> collectAllTableRelation(StatementBase statementBase) {
+        Map<String, TableRelation> tableRelations = Maps.newHashMap();
+        new AnalyzerUtils.TableRelationCollector(tableRelations).visit(statementBase);
+        return tableRelations;
+    }
+
     private static class TableCollectorWithAlias extends TableCollector {
         public TableCollectorWithAlias(Map<TableName, Table> dbs) {
             super(dbs);
@@ -320,6 +326,22 @@ public class AnalyzerUtils {
         public Void visitView(ViewRelation node, Void context) {
             Table table = node.getView();
             tables.put(node.getResolveTableName(), table);
+            return null;
+        }
+    }
+
+    private static class TableRelationCollector extends TableCollector {
+
+        private final Map<String, TableRelation> tableRelations;
+
+        public TableRelationCollector(Map<String, TableRelation> tableRelations) {
+            super(null);
+            this.tableRelations = tableRelations;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            tableRelations.put(node.getName().getTbl(), node);
             return null;
         }
     }

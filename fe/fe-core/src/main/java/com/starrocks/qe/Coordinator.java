@@ -64,6 +64,7 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.UnionNode;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.StatusPB;
@@ -1216,8 +1217,17 @@ public class Coordinator {
                 // delivered. when pipeline parallelization is adopted, the number of instances should be the size
                 // of hostSet, that it to say, each backend has exactly one fragment.
                 Set<TNetworkAddress> hostSet = Sets.newHashSet();
-                for (FInstanceExecParam execParams : maxParallelismFragmentExecParams.instanceExecParams) {
-                    hostSet.add(execParams.host);
+
+                if (isUnionFragment(fragment)) {
+                    // union fragment use all children's host
+                    for (PlanFragment child : fragment.getChildren()) {
+                        FragmentExecParams childParams = fragmentExecParamsMap.get(child.getFragmentId());
+                        childParams.instanceExecParams.stream().map(e -> e.host).forEach(hostSet::add);
+                    }
+                } else {
+                    for (FInstanceExecParam execParams : maxParallelismFragmentExecParams.instanceExecParams) {
+                        hostSet.add(execParams.host);
+                    }
                 }
 
                 if (dopAdaptionEnabled) {
@@ -1324,6 +1334,12 @@ public class Coordinator {
                 params.instanceExecParams.add(instanceParam);
             }
         }
+    }
+
+    private boolean isUnionFragment(PlanFragment fragment) {
+        List<UnionNode> l = Lists.newArrayList();
+        fragment.getPlanRoot().collect(UnionNode.class, l);
+        return !l.isEmpty();
     }
 
     static final int BUCKET_ABSENT = 2147483647;

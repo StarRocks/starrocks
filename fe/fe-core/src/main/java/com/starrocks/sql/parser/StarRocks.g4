@@ -77,7 +77,7 @@ statement
     | showWorkGroupStatement                                                                #showWorkGroup
 
     // Other statement
-    | USE schema=identifier                                                                 #use
+    | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
 
@@ -254,7 +254,7 @@ createMaterializedViewStatement
     ;
 
 showMaterializedViewStatement
-    : SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?
+    : SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 dropMaterializedViewStatement
