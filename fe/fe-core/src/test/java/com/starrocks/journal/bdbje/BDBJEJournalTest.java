@@ -47,6 +47,8 @@ public class BDBJEJournalTest {
 
     @Before
     public void init() throws Exception{
+        BDBJEJournal.RETRY_TIME = 3;
+        BDBJEJournal.SLEEP_INTERVAL_SEC = 0;
         // avoid checkpoint
         restoredCheckpointIntervalSecond = FeConstants.checkpoint_interval_second;
         FeConstants.checkpoint_interval_second = 24 * 60 * 60;
@@ -260,13 +262,6 @@ public class BDBJEJournalTest {
         DataOutputBuffer buffer = new DataOutputBuffer();
         Text.writeString(buffer, data);
 
-        new Expectations() {
-            {
-                Thread.sleep(anyLong);
-                times = 1;
-            }
-        };
-
         new Expectations(rawDatabase) {
             {
                 rawDatabase.getEnvironment();
@@ -297,12 +292,6 @@ public class BDBJEJournalTest {
         DataOutputBuffer buffer = new DataOutputBuffer();
         Text.writeString(buffer, data);
 
-        new Expectations() {
-            {
-                Thread.sleep(anyLong);
-                times = 2;
-            }
-        };
         new Expectations(database) {
             {
                 database.getDb();
@@ -354,13 +343,6 @@ public class BDBJEJournalTest {
         Text.writeString(buffer, data);
 
         // write failed and retry, success
-        new Expectations() {
-            {
-                Thread.sleep(anyLong);
-                times = 1;
-            }
-        };
-
         new Expectations(database) {
             {
                 database.getDb();
@@ -368,7 +350,7 @@ public class BDBJEJournalTest {
                 result = rawDatabase;
 
                 database.put((Transaction) any, (DatabaseEntry) any, (DatabaseEntry) any);
-                times = 1;
+                times = 2;  // append & rebuild txn
                 result = OperationStatus.SUCCESS;
             }
         };
@@ -388,16 +370,25 @@ public class BDBJEJournalTest {
         new Expectations(rawEnvironment) {
             {
                 rawEnvironment.beginTransaction(null, (TransactionConfig)any);
-                times = 1;
+                times = 2;  // append & rebuild txn
             }
         };
 
+        // commit fails 2 times
+        // the first txn is valid, can continue commit
+        // the second time txn is invalid, we have to rebuild txn
         new Expectations(txn) {
             {
                 txn.commit();
-                times = 2;
+                times = 3;
+                result = new DatabaseNotFoundException("mock mock");
                 result = new DatabaseNotFoundException("mock mock");
                 result = null;
+
+                txn.isValid();
+                times = 2;
+                result = true;
+                result = false;
             }
         };
 
