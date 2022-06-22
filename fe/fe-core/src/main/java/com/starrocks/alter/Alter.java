@@ -76,7 +76,6 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
-import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TTabletMetaType;
@@ -254,7 +253,10 @@ public class Alter {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
             asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
-            asyncRefreshContext.setIntervalLiteral(asyncRefreshSchemeDesc.getIntervalLiteral());
+            final IntLiteral step = (IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue();
+            asyncRefreshContext.setStep(step.getLongValue());
+            asyncRefreshContext.setTimeUnit(
+                    asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
         }
         RefreshType oldRefreshType = refreshScheme.getType();
         final String refreshType = refreshSchemeDesc.getType().name();
@@ -310,13 +312,12 @@ public class Alter {
         newMvRefreshScheme.setType(refreshType);
         newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
         oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
-        final IntervalLiteral intervalLiteral = asyncRefreshContext.getIntervalLiteral();
         LOG.info(
                 "Replay materialized view [{}]'s refresh type to {}, start time to {}, " +
                         "interval step to {}, timeunit to {}, id: {}",
                 oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
-                ((IntLiteral) (intervalLiteral.getValue())).getLongValue(),
-                intervalLiteral.getUnitIdentifier().getDescription(), oldMaterializedView.getId());
+                asyncRefreshContext.getStep(),
+                asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId());
     }
 
     public void processAlterTable(AlterTableStmt stmt) throws UserException {

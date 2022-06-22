@@ -63,7 +63,6 @@ public class MaterializedViewAnalyzer {
         public enum RefreshTimeUnit {
             YEAR,
             MONTH,
-            WEEK,
             DAY,
             HOUR,
             MINUTE

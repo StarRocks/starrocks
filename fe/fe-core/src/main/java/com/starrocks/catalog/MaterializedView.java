@@ -8,7 +8,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -37,13 +36,17 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         @SerializedName(value = "starTime")
         private long startTime;
 
-        @SerializedName(value = "intervalLiteral")
-        private IntervalLiteral intervalLiteral;
+        @SerializedName(value = "step")
+        private long step;
+
+        @SerializedName(value = "timeUnit")
+        private String timeUnit;
 
         public AsyncRefreshContext() {
             this.baseTableVisibleVersionMap = Maps.newHashMap();
             this.startTime = Utils.getLongFromDateTime(LocalDateTime.now());
-            this.intervalLiteral = null;
+            this.step = 0;
+            this.timeUnit = null;
         }
 
         public AsyncRefreshContext(Map<Long, Map<Long, Long>> baseTableVisibleVersionMap) {
@@ -62,12 +65,20 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             this.startTime = startTime;
         }
 
-        public IntervalLiteral getIntervalLiteral() {
-            return intervalLiteral;
+        public long getStep() {
+            return step;
         }
 
-        public void setIntervalLiteral(IntervalLiteral intervalLiteral) {
-            this.intervalLiteral = intervalLiteral;
+        public void setStep(long step) {
+            this.step = step;
+        }
+
+        public String getTimeUnit() {
+            return timeUnit;
+        }
+
+        public void setTimeUnit(String timeUnit) {
+            this.timeUnit = timeUnit;
         }
     }
 

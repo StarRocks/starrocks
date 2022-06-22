@@ -1,6 +1,5 @@
 package com.starrocks.persist;
 
-import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -11,8 +10,6 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.sql.ast.IntervalLiteral;
-import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.thrift.TTabletType;
 import org.junit.After;
 import org.junit.Assert;
@@ -29,7 +26,6 @@ import java.util.List;
 public class ChangeMaterializedViewRefreshSchemeLogTest {
 
     private String fileName = "./ChangeMaterializedViewRefreshSchemeLogTest";
-
 
     @After
     public void tearDownDrop() {
@@ -57,10 +53,8 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
         final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
         asyncRefreshContext.setStartTime(1655732457);
-        final IntLiteral minValue = new IntLiteral(1);
-        final IntervalLiteral interval = new IntervalLiteral(minValue, new UnitIdentifier("DAY"));
-        asyncRefreshContext.setIntervalLiteral(interval);
-
+        asyncRefreshContext.setStep(1);
+        asyncRefreshContext.setTimeUnit("DAY");
         MaterializedView materializedView = new MaterializedView(1000, 100, "mv_name", columns, KeysType.AGG_KEYS,
                 partitionInfo, distributionInfo, refreshScheme);
         ChangeMaterializedViewRefreshSchemeLog changeLog =
@@ -73,12 +67,10 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         DataInputStream in = new DataInputStream(Files.newInputStream(file.toPath()));
         ChangeMaterializedViewRefreshSchemeLog readChangeLog = ChangeMaterializedViewRefreshSchemeLog.read(in);
         final MaterializedView.AsyncRefreshContext readChangeLogAsyncRefreshContext = readChangeLog.getAsyncRefreshContext();
-        final IntervalLiteral readInterval = readChangeLogAsyncRefreshContext.getIntervalLiteral();
-        final IntLiteral value = (IntLiteral)readInterval.getValue();
         Assert.assertEquals(readChangeLog.getRefreshType().typeString, "ASYNC");
         Assert.assertEquals(readChangeLogAsyncRefreshContext.getStartTime(), 1655732457);
-        Assert.assertEquals(readInterval.getUnitIdentifier().getDescription(), "DAY");
-        Assert.assertEquals(value.getLongValue(), 1);
+        Assert.assertEquals(readChangeLogAsyncRefreshContext.getTimeUnit(), "DAY");
+        Assert.assertEquals(readChangeLogAsyncRefreshContext.getStep(), 1);
         in.close();
     }
 
