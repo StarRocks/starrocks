@@ -301,9 +301,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = AUTO_COMMIT)
     private boolean autoCommit = true;
 
-    // ==================  this is used to make c3p0 library happy start ==================
+    // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = TX_ISOLATION)
     private String txIsolation = "REPEATABLE-READ";
+
+    // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = CHARACTER_SET_CLIENT)
     private String charsetClient = "utf8";
     @VariableMgr.VarAttr(name = CHARACTER_SET_CONNNECTION)
@@ -318,19 +320,24 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private String collationDatabase = "utf8_general_ci";
     @VariableMgr.VarAttr(name = COLLATION_SERVER)
     private String collationServer = "utf8_general_ci";
+
+    // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = SQL_AUTO_IS_NULL)
     private boolean sqlAutoIsNull = false;
-    @VariableMgr.VarAttr(name = MAX_ALLOWED_PACKET)
-    private int maxAllowedPacket = 1048576;
-    @VariableMgr.VarAttr(name = AUTO_INCREMENT_INCREMENT)
-    private int autoIncrementIncrement = 1;
-    @VariableMgr.VarAttr(name = QUERY_CACHE_TYPE)
-    private int queryCacheType = 0;
-    // ==================  this is used to make c3p0 library happy end ==================
 
     public static final long DEFAULT_SELECT_LIMIT = 9223372036854775807L;
     @VariableMgr.VarAttr(name = SQL_SELECT_LIMIT)
     private long sqlSelectLimit = DEFAULT_SELECT_LIMIT;
+
+    // this is used to make c3p0 library happy
+    @VariableMgr.VarAttr(name = MAX_ALLOWED_PACKET)
+    private int maxAllowedPacket = 1048576;
+    @VariableMgr.VarAttr(name = AUTO_INCREMENT_INCREMENT)
+    private int autoIncrementIncrement = 1;
+
+    // this is used to make c3p0 library happy
+    @VariableMgr.VarAttr(name = QUERY_CACHE_TYPE)
+    private int queryCacheType = 0;
 
     // The number of seconds the server waits for activity on an interactive connection before closing it
     @VariableMgr.VarAttr(name = INTERACTIVE_TIMTOUT)
@@ -413,14 +420,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = FORWARD_TO_MASTER)
     private boolean forwardToMaster = false;
 
-    // ================= compatible with some mysql client connect, say DataGrip of JetBrains start ================
+    // compatible with some mysql client connect, say DataGrip of JetBrains
     @VariableMgr.VarAttr(name = EVENT_SCHEDULER)
     private String eventScheduler = "OFF";
     @VariableMgr.VarAttr(name = STORAGE_ENGINE)
     private String storageEngine = "olap";
     @VariableMgr.VarAttr(name = DIV_PRECISION_INCREMENT)
     private int divPrecisionIncrement = 4;
-    // ================= compatible with some mysql client connect, say DataGrip of JetBrains end ================
 
     // -1 means unset, BE will use its config value
     @VariableMgr.VarAttr(name = MAX_SCAN_KEY_NUM)
