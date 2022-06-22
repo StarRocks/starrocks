@@ -118,7 +118,19 @@ public class TaskManagerTest {
         ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
 
         List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
-        Assert.assertEquals(Constants.TaskRunState.SUCCESS, taskRuns.get(0).getState());
+
+        Constants.TaskRunState state = taskRuns.get(0).getState();
+
+        int retryCount = 0, maxRetry = 5;
+        while (retryCount < maxRetry) {
+            retryCount ++;
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+            if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
+                break;
+            }
+        }
+
+        Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
 
     }
 
@@ -140,7 +152,19 @@ public class TaskManagerTest {
         ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
 
         List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
-        Assert.assertEquals(Constants.TaskRunState.SUCCESS, taskRuns.get(0).getState());
+
+        Constants.TaskRunState state = taskRuns.get(0).getState();
+
+        int retryCount = 0, maxRetry = 5;
+        while (retryCount < maxRetry) {
+            retryCount ++;
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+            if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
+                break;
+            }
+        }
+
+        Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
     }
 
 }
