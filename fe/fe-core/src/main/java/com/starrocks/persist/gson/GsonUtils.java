@@ -192,7 +192,7 @@ public class GsonUtils {
 
     private static final JsonDeserializer<Expr> expressionDeserializer = new ExpressionDeserializer();
 
-    private static final JsonDeserializer<PrimitiveType> primitiveTypeDeserializer = new PrimitiveTypeSerializer();
+    private static final JsonDeserializer<PrimitiveType> primitiveTypeDeserializer = new PrimitiveTypeDeserializer();
 
     // the builder of GSON instance.
     // Add any other adapters if necessary.
@@ -446,7 +446,7 @@ public class GsonUtils {
         }
     }
 
-    private static class PrimitiveTypeSerializer implements JsonDeserializer<PrimitiveType> {
+    private static class PrimitiveTypeDeserializer implements JsonDeserializer<PrimitiveType> {
         @Override
         public PrimitiveType deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
                 throws JsonParseException {
