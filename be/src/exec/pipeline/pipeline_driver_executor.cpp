@@ -7,6 +7,7 @@
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "util/debug/query_trace.h"
 #include "util/defer_op.h"
 
 namespace starrocks::pipeline {
@@ -92,6 +93,8 @@ void GlobalDriverExecutor::_worker_thread() {
         tls_thread_status.set_fragment_instance_id(fragment_ctx->fragment_instance_id());
         tls_thread_status.set_pipeline_driver_id(driver->driver_id());
 
+        SET_THREAD_LOCAL_QUERY_TRACE_CONTEXT(query_ctx->query_trace(), fragment_ctx->fragment_instance_id(), driver);
+
         // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
         //  This writing method is a bit tricky, and when there is a better way, replace it
         auto runtime_state_ptr = fragment_ctx->runtime_state_ptr();
@@ -114,7 +117,6 @@ void GlobalDriverExecutor::_worker_thread() {
                 _finalize_driver(driver, runtime_state, driver->driver_state());
                 continue;
             }
-
             auto maybe_state = driver->process(runtime_state, worker_id);
             Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);

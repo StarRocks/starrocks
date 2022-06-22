@@ -13,6 +13,7 @@
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "util/debug/query_trace.h"
 #include "util/defer_op.h"
 
 namespace starrocks::pipeline {
@@ -108,6 +109,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int worker_id) {
     COUNTER_UPDATE(_schedule_counter, 1);
     SCOPED_TIMER(_active_timer);
+    QUERY_TRACE_SCOPED("process", "");
     set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
     size_t total_rows_moved = 0;
@@ -156,6 +158,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 StatusOr<vectorized::ChunkPtr> maybe_chunk;
                 {
                     SCOPED_TIMER(curr_op->_pull_timer);
+                    QUERY_TRACE_SCOPED(curr_op->get_name(), "pull_chunk");
                     maybe_chunk = curr_op->pull_chunk(runtime_state);
                 }
                 return_status = maybe_chunk.status();
@@ -175,6 +178,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         total_rows_moved += row_num;
                         {
                             SCOPED_TIMER(next_op->_push_timer);
+                            QUERY_TRACE_SCOPED(next_op->get_name(), "push_chunk");
                             return_status = next_op->push_chunk(runtime_state, maybe_chunk.value());
                         }
 
@@ -316,7 +320,7 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     VLOG_ROW << "[Driver] finalize, driver=" << this;
     DCHECK(state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR);
-
+    QUERY_TRACE_BEGIN("finalize", "");
     _close_operators(runtime_state);
 
     set_driver_state(state);
@@ -340,7 +344,9 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
             auto frag_id = _fragment_ctx->fragment_instance_id();
             int active_fragments = _query_ctx->num_active_fragments();
             int active_drivers = _fragment_ctx->num_drivers();
+
             // Acquire the pointer to avoid be released when removing query
+            auto query_trace = _query_ctx->shared_query_trace();
             auto wg = _workgroup;
             if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
                 if (wg) {
@@ -351,8 +357,12 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
                     wg->decr_num_queries();
                 }
             }
+            QUERY_TRACE_END("finalize", "");
+            query_trace->dump();
+            return;
         }
     }
+    QUERY_TRACE_END("finalize", "");
 }
 
 void PipelineDriver::_update_overhead_timer() {
@@ -421,6 +431,7 @@ Status PipelineDriver::_mark_operator_finishing(OperatorPtr& op, RuntimeState* s
     {
         SCOPED_TIMER(op->_finishing_timer);
         op_state = OperatorStage::FINISHING;
+        QUERY_TRACE_SCOPED(op->get_name(), "set_finishing");
         return op->set_finishing(state);
     }
 }
@@ -437,6 +448,7 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
     {
         SCOPED_TIMER(op->_finished_timer);
         op_state = OperatorStage::FINISHED;
+        QUERY_TRACE_SCOPED(op->get_name(), "set_finished");
         return op->set_finished(state);
     }
 }
@@ -471,6 +483,7 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
     {
         SCOPED_TIMER(op->_close_timer);
         op_state = OperatorStage::CLOSED;
+        QUERY_TRACE_SCOPED(op->get_name(), "close");
         op->close(state);
     }
     COUNTER_UPDATE(op->_total_timer, op->_pull_timer->value() + op->_push_timer->value() +

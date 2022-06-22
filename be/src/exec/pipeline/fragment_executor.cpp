@@ -31,6 +31,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/result_sink.h"
+#include "util/debug/query_trace.h"
 #include "util/pretty_printer.h"
 #include "util/uid_util.h"
 
@@ -89,7 +90,8 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     // duplicate invocations of rpc exec_plan_fragment.
     const auto& params = request.common().params;
     const auto& query_id = params.query_id;
-    const auto& fragment_instance_id = request.fragment_instance_id();
+    const auto& fragment_instance_id = params.fragment_instance_id;
+    const auto& query_options = request.common().query_options;
 
     auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
     if (existing_query_ctx) {
@@ -110,6 +112,12 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     // initialize query's deadline
     _query_ctx->extend_delivery_lifetime();
     _query_ctx->extend_query_lifetime();
+
+    bool enable_query_trace = false;
+    if (query_options.__isset.enable_query_debug_trace && query_options.enable_query_debug_trace) {
+        enable_query_trace = true;
+    }
+    _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, enable_query_trace));
 
     return Status::OK();
 }
@@ -419,6 +427,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     // The pipeline created later should be placed in the front
     runtime_state->runtime_profile()->reverse_childs();
     _fragment_ctx->set_drivers(std::move(drivers));
+    runtime_state->query_ctx()->query_trace()->register_drivers(fragment_instance_id, _fragment_ctx->drivers());
 
     // Acquire driver token to avoid overload
     auto maybe_driver_token = exec_env->driver_limiter()->try_acquire(_fragment_ctx->drivers().size());

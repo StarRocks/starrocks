@@ -12,6 +12,7 @@
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "runtime/runtime_state.h"
+#include "util/debug/query_trace.h"
 #include "util/hash_util.hpp"
 #include "util/time.h"
 
@@ -115,6 +116,11 @@ public:
 
     void set_scan_limit(int64_t scan_limit) { _scan_limit = scan_limit; }
     int64_t get_scan_limit() const { return _scan_limit; }
+    void set_query_trace(std::shared_ptr<starrocks::debug::QueryTrace> query_trace);
+
+    starrocks::debug::QueryTrace* query_trace() { return _query_trace.get(); }
+
+    std::shared_ptr<starrocks::debug::QueryTrace> shared_query_trace() { return _query_trace; }
 
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
@@ -136,6 +142,8 @@ private:
     std::shared_ptr<MemTracker> _mem_tracker;
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
+    std::atomic<bool> _is_query_trace_inited{false};
+    std::shared_ptr<starrocks::debug::QueryTrace> _query_trace;
 
     std::once_flag _init_query_once;
     int64_t _query_begin_time = 0;

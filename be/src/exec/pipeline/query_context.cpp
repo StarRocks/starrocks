@@ -96,6 +96,14 @@ Status QueryContext::init_query(workgroup::WorkGroup* wg) {
     return st;
 }
 
+void QueryContext::set_query_trace(std::shared_ptr<starrocks::debug::QueryTrace> query_trace) {
+    bool expected = false;
+    // make sure _query_trace is initilized only once
+    if (_is_query_trace_inited.compare_exchange_strong(expected, true)) {
+        _query_trace = std::move(query_trace);
+    }
+}
+
 QueryContextManager::QueryContextManager(size_t log2_num_slots)
         : _num_slots(1 << log2_num_slots),
           _slot_mask(_num_slots - 1),
