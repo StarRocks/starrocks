@@ -1293,7 +1293,7 @@ public class ShowExecutor {
 
     private void handleShowBackends() {
         final ShowBackendsStmt showStmt = (ShowBackendsStmt) stmt;
-        List<List<String>> backendInfos = BackendsProcDir.getClusterBackendInfos(showStmt.getClusterName());
+        List<List<String>> backendInfos = BackendsProcDir.getClusterBackendInfos();
         resultSet = new ShowResultSet(showStmt.getMetaData(), backendInfos);
     }
 

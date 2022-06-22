@@ -338,7 +338,7 @@ public class GlobalTransactionMgrTest {
         Map<Integer, Long> partitionIdToOffset = Maps.newHashMap();
         partitionIdToOffset.put(1, 0L);
         KafkaTaskInfo routineLoadTaskInfo =
-                new KafkaTaskInfo(UUID.randomUUID(), 1L, "defualt_cluster", 20000, System.currentTimeMillis(),
+                new KafkaTaskInfo(UUID.randomUUID(), 1L, 20000, System.currentTimeMillis(),
                         partitionIdToOffset);
         Deencapsulation.setField(routineLoadTaskInfo, "txnId", 1L);
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
@@ -411,7 +411,7 @@ public class GlobalTransactionMgrTest {
         Map<Integer, Long> partitionIdToOffset = Maps.newHashMap();
         partitionIdToOffset.put(1, 0L);
         KafkaTaskInfo routineLoadTaskInfo =
-                new KafkaTaskInfo(UUID.randomUUID(), 1L, "defualt_cluster", 20000, System.currentTimeMillis(),
+                new KafkaTaskInfo(UUID.randomUUID(), 1L, 20000, System.currentTimeMillis(),
                         partitionIdToOffset);
         Deencapsulation.setField(routineLoadTaskInfo, "txnId", 1L);
         routineLoadTaskInfoList.add(routineLoadTaskInfo);

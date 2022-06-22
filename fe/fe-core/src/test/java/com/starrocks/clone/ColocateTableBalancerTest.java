@@ -389,7 +389,7 @@ public class ColocateTableBalancerTest {
         List<Long> clusterBackendIds = Lists.newArrayList(1L, 2L, 3L, 4L, 5L);
         new Expectations() {
             {
-                infoService.getClusterBackendIds("cluster1", false);
+                infoService.getBackendIds(false);
                 result = clusterBackendIds;
                 minTimes = 0;
 

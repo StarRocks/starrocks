@@ -100,7 +100,7 @@ public class DiskAndTabletLoadReBalancerTest {
                 30006L, beId2,
                 tabletDataSize, pathHash2);
 
-        ClusterLoadStatistic clusterLoadStatistic = new ClusterLoadStatistic(cluster, infoService, invertedIndex);
+        ClusterLoadStatistic clusterLoadStatistic = new ClusterLoadStatistic(infoService, invertedIndex);
         clusterLoadStatistic.init();
 
         PartitionInfo partitionInfo = new PartitionInfo();
@@ -252,7 +252,7 @@ public class DiskAndTabletLoadReBalancerTest {
                 30009L, beId3,
                 tabletDataSize, pathHash3);
 
-        ClusterLoadStatistic clusterLoadStatistic = new ClusterLoadStatistic(cluster, infoService, invertedIndex);
+        ClusterLoadStatistic clusterLoadStatistic = new ClusterLoadStatistic(infoService, invertedIndex);
         clusterLoadStatistic.init();
 
         PartitionInfo partitionInfo = new PartitionInfo();
@@ -424,7 +424,7 @@ public class DiskAndTabletLoadReBalancerTest {
         addTablet(invertedIndex, materializedIndex, TStorageMedium.SSD, dbId, tableId, partitionId2, indexId,
                 20010L, 30010L, beId2, tabletDataSize, pathHash21);
 
-        ClusterLoadStatistic clusterLoadStatistic = new ClusterLoadStatistic(cluster, infoService, invertedIndex);
+        ClusterLoadStatistic clusterLoadStatistic = new ClusterLoadStatistic(infoService, invertedIndex);
         clusterLoadStatistic.init();
 
         PartitionInfo partitionInfo = new PartitionInfo();

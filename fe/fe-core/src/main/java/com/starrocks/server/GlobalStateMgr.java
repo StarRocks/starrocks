@@ -1760,11 +1760,6 @@ public class GlobalStateMgr {
         localMetastore.unprotectCreateDb(db);
     }
 
-    // for test
-    public void addCluster(Cluster cluster) {
-        localMetastore.addCluster(cluster);
-    }
-
     public void replayCreateDb(Database db) {
         localMetastore.replayCreateDb(db);
     }
@@ -2331,10 +2326,6 @@ public class GlobalStateMgr {
 
     public List<String> getDbNames() {
         return localMetastore.listDbNames();
-    }
-
-    public List<String> getClusterDbNames(String clusterName) throws AnalysisException {
-        return localMetastore.getClusterDbNames(clusterName);
     }
 
     public List<Long> getDbIds() {
