@@ -221,9 +221,7 @@ ColumnPtr JsonFunctions::get_json_string(FunctionContext* context, const Columns
     auto paths = columns[1];
 
     jsons = json_query(context, Columns{jsons, paths});
-    auto strs = json_string(context, Columns{jsons});
-
-    return _unescape_and_unquote_string(context, Columns{strs});
+    return _json_string_unescaped(context, Columns{jsons});
 }
 
 ColumnPtr JsonFunctions::parse_json(FunctionContext* context, const Columns& columns) {
@@ -331,20 +329,33 @@ ColumnPtr JsonFunctions::_string_json(FunctionContext* context, const Columns& c
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr JsonFunctions::_unescape_and_unquote_string(FunctionContext* context, const Columns& columns) {
-    ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
+ColumnPtr JsonFunctions::_json_string_unescaped(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_JSON> viewer(columns[0]);
     ColumnBuilder<TYPE_VARCHAR> result(columns[0]->size());
 
     for (int row = 0; row < columns[0]->size(); row++) {
         if (viewer.is_null(row)) {
             result.append_null();
         } else {
-            auto str = viewer.value(row).to_string();
+            JsonValue* json = viewer.value(row);
+            auto json_str = json->to_string();
+            if (!json_str.ok()) {
+                result.append_null();
+                continue;
+            }
+            auto str = json_str.value();
+
             if (str.length() <= 2) {
                 result.append(std::move(str));
+                continue;
             } else {
                 // Since the string extract from json may be escaped, unescaping is needed.
-                str = UnescapeCEscapeString(str);
+                // The src and dest of strings::CUnescape could be the same.
+                std::string err;
+                if (!strings::CUnescape(StringPiece{str}, &str, &err)) {
+                    result.append_null();
+                    continue;
+                }
 
                 // Try to trim the first/last quote.
                 if (str[0] == '"') str = str.substr(1, str.size() - 1);
