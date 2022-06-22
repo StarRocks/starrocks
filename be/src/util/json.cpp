@@ -104,17 +104,16 @@ StatusOr<std::string> JsonValue::to_string() const {
 }
 
 StatusOr<std::string> JsonValue::to_string_unescape() const {
-    auto maybe_str = to_string();
-    RETURN_IF_ERROR(maybe_str);
+    ASSIGN_OR_RETURN(auto str, to_string());
     JsonType type = get_type();
     if (type == JsonType::JSON_STRING) {
-        return maybe_str.value();
+        return str;
     }
 
     std::string unescaped;
-    unescaped.reserve(maybe_str.value().length());
-    if (!strings::CUnescape(maybe_str.value(), &unescaped)) {
-        return Status::DataQualityError("cannot unescape string" + maybe_str.value());
+    unescaped.reserve(str.length());
+    if (!strings::CUnescape(str, &unescaped)) {
+        return Status::DataQualityError("cannot unescape string: " + str);
     }
     if (unescaped.length() < 2) {
         return unescaped;
