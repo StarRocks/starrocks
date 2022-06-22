@@ -56,6 +56,7 @@ import com.starrocks.catalog.AnyArrayType;
 import com.starrocks.catalog.AnyElementType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HudiResource;
@@ -138,7 +139,8 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory
                     .of(PartitionInfo.class, "clazz")
                     .registerSubtype(RangePartitionInfo.class, RangePartitionInfo.class.getSimpleName())
-                    .registerSubtype(SinglePartitionInfo.class, SinglePartitionInfo.class.getSimpleName());
+                    .registerSubtype(SinglePartitionInfo.class, SinglePartitionInfo.class.getSimpleName())
+                    .registerSubtype(ExpressionRangePartitionInfo.class, ExpressionRangePartitionInfo.class.getSimpleName());
 
     // runtime adapter for class "Resource"
     private static final RuntimeTypeAdapterFactory<Resource> resourceTypeAdapterFactory = RuntimeTypeAdapterFactory

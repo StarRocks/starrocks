@@ -23,6 +23,7 @@ package com.starrocks.common.io;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -75,5 +76,28 @@ public class DeepCopy {
             }
         }
         return true;
+    }
+
+    public static <T> T copyWithGson(Object orig, Class<T> c) {
+        // Backup the current MetaContext before assigning a new one.
+        MetaContext oldContext = MetaContext.get();
+        MetaContext metaContext = new MetaContext();
+        metaContext.setMetaVersion(FeConstants.meta_version);
+        metaContext.setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
+        metaContext.setThreadLocalInfo();
+        try {
+            String origJsonStr = GsonUtils.GSON.toJson(orig);
+            return GsonUtils.GSON.fromJson(origJsonStr, c);
+        } catch (Exception e) {
+            LOG.warn("failed to copy object.", e);
+            return null;
+        } finally {
+            // Restore the old MetaContext.
+            if (oldContext != null) {
+                oldContext.setThreadLocalInfo();
+            } else {
+                MetaContext.remove();
+            }
+        }
     }
 }
