@@ -431,6 +431,32 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     MonotonicStopWatch timer;
     timer.start();
 
+    std::vector<std::shared_ptr<Segment>> segments;
+
+    vectorized::SegmentReadOptions seg_options;
+    seg_options.fs = _fs;
+
+    OlapReaderStatistics stats;
+    seg_options.stats = &stats;
+
+    for (int seg_id = 0; seg_id < _num_segment; ++seg_id) {
+        if (_num_rows_of_tmp_segment_files[seg_id] == 0) {
+            continue;
+        }
+        std::string tmp_segment_file =
+                BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
+        auto segment_ptr = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), _fs, tmp_segment_file,
+                                         seg_id, _context.tablet_schema);
+        if (!segment_ptr.ok()) {
+            LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
+            return segment_ptr.status();
+        }
+        segments.emplace_back(segment_ptr.value());
+    }
+
+    std::vector<vectorized::ChunkIteratorPtr> seg_iterators;
+    seg_iterators.reserve(_num_segment);
+
     if (CompactionUtils::choose_compaction_algorithm(
                 _context.tablet_schema->num_columns(), config::vertical_compaction_max_columns_per_group,
                 _num_segment - std::count(_num_rows_of_tmp_segment_files.begin(), _num_rows_of_tmp_segment_files.end(),
@@ -442,28 +468,8 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
 
         auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[0]);
 
-        std::vector<vectorized::ChunkIteratorPtr> seg_iterators;
-        seg_iterators.reserve(_num_segment);
-
-        vectorized::SegmentReadOptions seg_options;
-        seg_options.fs = _fs;
-
-        OlapReaderStatistics stats;
-        seg_options.stats = &stats;
-
-        for (int seg_id = 0; seg_id < _num_segment; ++seg_id) {
-            if (_num_rows_of_tmp_segment_files[seg_id] == 0) {
-                continue;
-            }
-            std::string tmp_segment_file =
-                    BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
-            auto segment_ptr = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), _fs, tmp_segment_file,
-                                             seg_id, _context.tablet_schema);
-            if (!segment_ptr.ok()) {
-                LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
-                return segment_ptr.status();
-            }
-            auto res = (*segment_ptr)->new_iterator(schema, seg_options);
+        for (const auto& segment : segments) {
+            auto res = segment->new_iterator(schema, seg_options);
             if (!res.ok()) {
                 return res.status();
             } else if (res.value() == nullptr) {
@@ -472,8 +478,6 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                 seg_iterators.emplace_back(res.value());
             }
         }
-
-        auto num_tmp_segment = _num_segment;
 
         TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
         RETURN_IF(tablet == nullptr, Status::InvalidArgument(fmt::format("Not Found tablet:{}", _context.tablet_id)));
@@ -567,31 +571,13 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         for (size_t i = 1; i < column_groups.size(); ++i) {
             mask_buffer->flip_to_read();
 
+            seg_iterators.clear();
+
             auto schema =
                     vectorized::ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[i]);
 
-            std::vector<vectorized::ChunkIteratorPtr> seg_iterators;
-            seg_iterators.reserve(num_tmp_segment);
-
-            vectorized::SegmentReadOptions seg_options;
-            seg_options.fs = _fs;
-
-            OlapReaderStatistics stats;
-            seg_options.stats = &stats;
-
-            for (int seg_id = 0; seg_id < num_tmp_segment; ++seg_id) {
-                if (_num_rows_of_tmp_segment_files[seg_id] == 0) {
-                    continue;
-                }
-                std::string tmp_segment_file =
-                        BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
-                auto segment_ptr = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), _fs,
-                                                 tmp_segment_file, seg_id, _context.tablet_schema);
-                if (!segment_ptr.ok()) {
-                    LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
-                    return segment_ptr.status();
-                }
-                auto res = (*segment_ptr)->new_iterator(schema, seg_options);
+            for (const auto& segment : segments) {
+                auto res = segment->new_iterator(schema, seg_options);
                 if (!res.ok()) {
                     return res.status();
                 } else if (res.value() == nullptr) {
@@ -665,28 +651,8 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     } else {
         auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema);
 
-        std::vector<vectorized::ChunkIteratorPtr> seg_iterators;
-        seg_iterators.reserve(_num_segment);
-
-        vectorized::SegmentReadOptions seg_options;
-        seg_options.fs = _fs;
-
-        OlapReaderStatistics stats;
-        seg_options.stats = &stats;
-
-        for (int seg_id = 0; seg_id < _num_segment; ++seg_id) {
-            if (_num_rows_of_tmp_segment_files[seg_id] == 0) {
-                continue;
-            }
-            std::string tmp_segment_file =
-                    BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
-            auto segment_ptr = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), _fs, tmp_segment_file,
-                                             seg_id, _context.tablet_schema);
-            if (!segment_ptr.ok()) {
-                LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
-                return segment_ptr.status();
-            }
-            auto res = (*segment_ptr)->new_iterator(schema, seg_options);
+        for (const auto& segment : segments) {
+            auto res = segment->new_iterator(schema, seg_options);
             if (!res.ok()) {
                 return res.status();
             } else if (res.value() == nullptr) {
@@ -760,7 +726,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         }
         itr->close();
         if (auto st = flush(); !st.ok()) {
-            LOG(WARNING) << "failed to flush, tablet=" << _tablet->tablet_id() << ", err=" << st;
+            LOG(WARNING) << "failed to flush, tablet=" << _context.tablet_id << ", err=" << st;
             return st;
         }
 
