@@ -35,6 +35,7 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.HeartbeatFlags;
+import org.apache.commons.lang3.StringUtils;
 
 // change one variable.
 public class SetVar {
@@ -164,9 +165,11 @@ public class SetVar {
 
         if (getVariable().equalsIgnoreCase(SessionVariable.RESOURCE_GROUP)) {
             String wgName = getValue().getStringValue();
-            WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(wgName);
-            if (wg == null) {
-                throw new AnalysisException("resource group not exists: " + wgName);
+            if (!StringUtils.isEmpty(wgName)) {
+                WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(wgName);
+                if (wg == null) {
+                    throw new AnalysisException("resource group not exists: " + wgName);
+                }
             }
         }
     }

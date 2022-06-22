@@ -121,7 +121,10 @@ public class SetStmtTest {
     }
 
     @Test
-    public void setResourceGroup() {
+    public void setResourceGroup() throws UserException {
+        SetVar setEmpty = new SetVar(SetType.DEFAULT, SessionVariable.RESOURCE_GROUP, new StringLiteral(""));
+        setEmpty.analyze(analyzer);
+
         SetVar setVar = new SetVar(SetType.DEFAULT, SessionVariable.RESOURCE_GROUP, new StringLiteral("not_exists"));
         try {
             setVar.analyze(analyzer);
