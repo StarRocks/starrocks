@@ -32,6 +32,7 @@
 
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "common/tracer.h"
 #include "exec/data_sink.h"
 #include "exec/tablet_info.h"
 #include "exec/vectorized/tablet_info.h"
@@ -83,7 +84,7 @@ template <typename T>
 class ReusableClosure : public google::protobuf::Closure {
 public:
     ReusableClosure() : cid(INVALID_BTHREAD_ID), _refs(0) {}
-    ~ReusableClosure() { join(); }
+    ~ReusableClosure() {}
 
     int count() { return _refs.load(); }
 
@@ -105,6 +106,12 @@ public:
             return true;
         } else {
             return false;
+        }
+    }
+
+    void cancel() {
+        if (cid != INVALID_BTHREAD_ID) {
+            brpc::StartCancel(cid);
         }
     }
 
@@ -305,6 +312,8 @@ private:
     // unique load id
     PUniqueId _load_id;
     int64_t _txn_id = -1;
+    std::string _txn_trace_parent;
+    Span _span;
     int _num_repicas = -1;
     bool _need_gen_rollup = false;
     int _tuple_desc_id = -1;
@@ -318,6 +327,7 @@ private:
     // To support multiple senders, we maintain a channel for each sender.
     int _sender_id = -1;
     int _num_senders = -1;
+    bool _is_lake_table = false;
 
     // TODO(zc): think about cache this data
     std::shared_ptr<OlapTableSchemaParam> _schema;

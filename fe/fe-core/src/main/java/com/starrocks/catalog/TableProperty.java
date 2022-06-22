@@ -49,7 +49,7 @@ public class TableProperty implements Writable {
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
-    private DynamicPartitionProperty dynamicPartitionProperty = new DynamicPartitionProperty(Maps.newHashMap());
+    private transient DynamicPartitionProperty dynamicPartitionProperty = new DynamicPartitionProperty(Maps.newHashMap());
     // table's default replication num
     private Short replicationNum = FeConstants.default_replication_num;
 
@@ -98,6 +98,9 @@ public class TableProperty implements Writable {
                 break;
             case OperationType.OP_MODIFY_IN_MEMORY:
                 buildInMemory();
+                break;
+            case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
+                buildEnablePersistentIndex();
                 break;
             default:
                 break;

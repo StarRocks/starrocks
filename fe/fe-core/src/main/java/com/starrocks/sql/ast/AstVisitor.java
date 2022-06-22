@@ -27,6 +27,7 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
@@ -151,6 +152,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+
+    public R visitCreateTableStatement(CreateTableStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     public R visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, C context) {

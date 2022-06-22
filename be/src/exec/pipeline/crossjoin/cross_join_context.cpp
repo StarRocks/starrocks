@@ -12,6 +12,11 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
+
+void CrossJoinContext::close(RuntimeState* state) {
+    _build_chunks.clear();
+}
+
 Status CrossJoinContext::_init_runtime_filter(RuntimeState* state) {
     vectorized::ChunkPtr one_row_chunk = nullptr;
     size_t num_rows = 0;

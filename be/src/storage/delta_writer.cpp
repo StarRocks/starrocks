@@ -2,6 +2,7 @@
 
 #include "storage/delta_writer.h"
 
+#include "common/tracer.h"
 #include "runtime/current_thread.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
@@ -31,6 +32,7 @@ DeltaWriter::DeltaWriter(const DeltaWriterOptions& opt, MemTracker* mem_tracker,
           _tablet(nullptr),
           _cur_rowset(nullptr),
           _rowset_writer(nullptr),
+          _schema_initialized(false),
           _mem_table(nullptr),
           _mem_table_sink(nullptr),
           _tablet_schema(nullptr),
@@ -264,11 +266,17 @@ Status DeltaWriter::_flush_memtable() {
 }
 
 void DeltaWriter::_reset_mem_table() {
-    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), _tablet_schema, _opt.slots, _mem_table_sink.get(),
-                                            _mem_tracker);
+    if (!_schema_initialized) {
+        _vectorized_schema = std::move(MemTable::convert_schema(_tablet_schema, _opt.slots));
+        _schema_initialized = true;
+    }
+    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
+                                            _mem_table_sink.get(), _mem_tracker);
 }
 
 Status DeltaWriter::commit() {
+    auto scoped =
+            trace::Scope(Tracer::Instance().start_trace_txn_tablet("delta_writer_commit", _opt.txn_id, _opt.tablet_id));
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     auto state = _get_state();
     switch (state) {

@@ -126,7 +126,6 @@ import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
-import com.starrocks.cluster.BaseParam;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -160,11 +159,13 @@ import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.MasterInfo;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
+import com.starrocks.load.InsertOverwriteJobManager;
 import com.starrocks.load.Load;
 import com.starrocks.load.loadv2.LoadEtlChecker;
 import com.starrocks.load.loadv2.LoadJobScheduler;
@@ -181,8 +182,6 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
-import com.starrocks.persist.DatabaseInfo;
-import com.starrocks.persist.DropLinkDbAndUpdateDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
@@ -247,7 +246,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -295,6 +293,8 @@ public class GlobalStateMgr {
 
     private MasterDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
     private MasterDaemon txnTimeoutChecker; // To abort timeout txns
+    private MasterDaemon taskCleaner;   // To clean expire Task/TaskRun
+    private JournalWriter journalWriter; // master only: write journal log
     private Daemon replayer;
     private Daemon timePrinter;
     private Daemon listener;
@@ -399,8 +399,8 @@ public class GlobalStateMgr {
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
     private ConnectorMgr connectorMgr;
-
     private TaskManager taskManager;
+    private InsertOverwriteJobManager insertOverwriteJobManager;
 
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
@@ -559,6 +559,7 @@ public class GlobalStateMgr {
         this.connectorMgr = new ConnectorMgr(metadataMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
+        this.insertOverwriteJobManager = new InsertOverwriteJobManager();
     }
 
     public static void destroyCheckpoint() {
@@ -721,6 +722,10 @@ public class GlobalStateMgr {
         return taskManager;
     }
 
+    public InsertOverwriteJobManager getInsertOverwriteJobManager() {
+        return insertOverwriteJobManager;
+    }
+
     // Use tryLock to avoid potential dead lock
     public boolean tryLock(boolean mustLock) {
         while (true) {
@@ -813,6 +818,8 @@ public class GlobalStateMgr {
         this.globalTransactionMgr.setEditLog(editLog);
         this.idGenerator.setEditLog(editLog);
         this.localMetastore.setEditLog(editLog);
+        // init journal writer
+        journalWriter = new JournalWriter(this.editLog.getJournal(), this.editLog.getJournalQueue());
 
         // 4. create load and export job label cleaner thread
         createLabelCleaner();
@@ -820,7 +827,10 @@ public class GlobalStateMgr {
         // 5. create txn timeout checker thread
         createTxnTimeoutChecker();
 
-        // 6. start state listener thread
+        // 6. start task cleaner thread
+        createTaskCleaner();
+
+        // 7. start state listener thread
         createStateListener();
         listener.start();
     }
@@ -883,7 +893,8 @@ public class GlobalStateMgr {
 
         nodeMgr.checkCurrentNodeExist();
 
-        editLog.rollEditLog();
+        journalWriter.init(editLog.getMaxJournalId());
+        journalWriter.startDaemon();
 
         // Set the feType to MASTER before writing edit log, because the feType must be Master when writing edit log.
         // It will be set to the old type if any error happens in the following procedure
@@ -920,6 +931,7 @@ public class GlobalStateMgr {
             startMasterOnlyDaemonThreads();
             // start other daemon threads that should running on all FE
             startNonMasterDaemonThreads();
+            insertOverwriteJobManager.cancelRunningJobs();
 
             MetricRepo.init();
 
@@ -993,7 +1005,7 @@ public class GlobalStateMgr {
         statisticsMetaManager.start();
         statisticAutoCollector.start();
         taskManager.start();
-
+        taskCleaner.start();
         // register service to starMgr
         if (Config.integrate_starmgr) {
             int clusterId = getCurrentState().getClusterId();
@@ -1116,6 +1128,7 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = catalogMgr.loadCatalogs(dis, checksum);
             remoteChecksum = dis.readLong();
+            checksum = loadInsertOverwriteJobs(dis, checksum);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1282,6 +1295,20 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long loadInsertOverwriteJobs(DataInputStream dis, long checksum) throws IOException {
+        try {
+            this.insertOverwriteJobManager = InsertOverwriteJobManager.read(dis);
+        } catch (EOFException e) {
+            LOG.warn("no InsertOverwriteJobManager to replay.", e);
+        }
+        return checksum;
+    }
+
+    public long saveInsertOverwriteJobs(DataOutputStream dos, long checksum) throws IOException {
+        getInsertOverwriteJobManager().write(dos);
+        return checksum;
+    }
+
     public long loadResources(DataInputStream in, long checksum) throws IOException {
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_87) {
             resourceMgr = ResourceMgr.read(in);
@@ -1349,6 +1376,7 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = catalogMgr.saveCatalogs(dos, checksum);
             dos.writeLong(checksum);
+            checksum = saveInsertOverwriteJobs(dos, checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -1388,43 +1416,20 @@ public class GlobalStateMgr {
     }
 
     public long saveAlterJob(DataOutputStream dos, long checksum, JobType type) throws IOException {
-        Map<Long, AlterJob> alterJobs = null;
-        ConcurrentLinkedQueue<AlterJob> finishedOrCancelledAlterJobs = null;
         Map<Long, AlterJobV2> alterJobsV2 = Maps.newHashMap();
         if (type == JobType.ROLLUP) {
-            alterJobs = this.getRollupHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getRollupHandler().unprotectedGetFinishedOrCancelledAlterJobs();
             alterJobsV2 = this.getRollupHandler().getAlterJobsV2();
         } else if (type == JobType.SCHEMA_CHANGE) {
-            alterJobs = this.getSchemaChangeHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getSchemaChangeHandler().unprotectedGetFinishedOrCancelledAlterJobs();
             alterJobsV2 = this.getSchemaChangeHandler().getAlterJobsV2();
-        } else if (type == JobType.DECOMMISSION_BACKEND) {
-            alterJobs = this.getClusterHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getClusterHandler().unprotectedGetFinishedOrCancelledAlterJobs();
         }
 
-        // alter jobs
-        int size = alterJobs.size();
+        // alter jobs just for compatibility
+        int size = 0;
         checksum ^= size;
         dos.writeInt(size);
-        for (Entry<Long, AlterJob> entry : alterJobs.entrySet()) {
-            long tableId = entry.getKey();
-            checksum ^= tableId;
-            dos.writeLong(tableId);
-            entry.getValue().write(dos);
-        }
-
-        // finished or cancelled jobs
-        size = finishedOrCancelledAlterJobs.size();
+        // finished or cancelled jobs just for compatibility
         checksum ^= size;
         dos.writeInt(size);
-        for (AlterJob alterJob : finishedOrCancelledAlterJobs) {
-            long tableId = alterJob.getTableId();
-            checksum ^= tableId;
-            dos.writeLong(tableId);
-            alterJob.write(dos);
-        }
 
         // alter job v2
         size = alterJobsV2.size();
@@ -1450,6 +1455,15 @@ public class GlobalStateMgr {
             @Override
             protected void runAfterCatalogReady() {
                 clearExpiredJobs();
+            }
+        };
+    }
+
+    public void createTaskCleaner() {
+        taskCleaner = new MasterDaemon("TaskCleaner", Config.task_check_interval_second * 1000L) {
+            @Override
+            protected void runAfterCatalogReady() {
+                doTaskBackgroundJob();
             }
         };
     }
@@ -1746,21 +1760,12 @@ public class GlobalStateMgr {
         localMetastore.unprotectCreateDb(db);
     }
 
-    // for test
-    public void addCluster(Cluster cluster) {
-        localMetastore.addCluster(cluster);
-    }
-
     public void replayCreateDb(Database db) {
         localMetastore.replayCreateDb(db);
     }
 
     public void dropDb(DropDbStmt stmt) throws DdlException {
         localMetastore.dropDb(stmt);
-    }
-
-    public void replayDropLinkDb(DropLinkDbAndUpdateDbInfo info) {
-        localMetastore.replayDropLinkDb(info);
     }
 
     public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {
@@ -2323,10 +2328,6 @@ public class GlobalStateMgr {
         return localMetastore.listDbNames();
     }
 
-    public List<String> getClusterDbNames(String clusterName) throws AnalysisException {
-        return localMetastore.getClusterDbNames(clusterName);
-    }
-
     public List<Long> getDbIds() {
         return localMetastore.getDbIds();
     }
@@ -2672,10 +2673,6 @@ public class GlobalStateMgr {
         throw new DdlException("not implmented");
     }
 
-    public void replayRenameColumn(TableInfo tableInfo) throws DdlException {
-        throw new DdlException("not implmented");
-    }
-
     public void modifyTableDynamicPartition(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         localMetastore.modifyTableDynamicPartition(db, table, properties);
@@ -2799,20 +2796,8 @@ public class GlobalStateMgr {
         this.isDefaultClusterCreated = isDefaultClusterCreated;
     }
 
-    public void changeCluster(ConnectContext ctx, String clusterName) throws DdlException {
-        localMetastore.changeCluster(ctx, clusterName);
-    }
-
     public Cluster getCluster(String clusterName) {
         return localMetastore.getCluster(clusterName);
-    }
-
-    public List<String> getClusterNames() {
-        return localMetastore.getClusterNames();
-    }
-
-    public Set<BaseParam> getMigrations() {
-        return localMetastore.getMigrations();
     }
 
     public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {
@@ -2909,10 +2894,6 @@ public class GlobalStateMgr {
         localMetastore.initDefaultCluster();
     }
 
-    public void replayUpdateDb(DatabaseInfo info) {
-        localMetastore.replayUpdateDb(info);
-    }
-
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
         localMetastore.replayUpdateClusterAndBackends(info);
     }
@@ -2955,6 +2936,12 @@ public class GlobalStateMgr {
 
         LOG.info("finished dumpping image to {}", dumpFilePath);
         return dumpFilePath;
+    }
+
+    public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
+                                                              String namePostfix, List<Long> sourcePartitionIds,
+                                                              List<Long> tmpPartitionIds) {
+        return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds, tmpPartitionIds);
     }
 
     public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
@@ -3117,15 +3104,18 @@ public class GlobalStateMgr {
         } catch (Throwable t) {
             LOG.warn("routine load manager clean old routine load jobs failed", t);
         }
+    }
+
+    public void doTaskBackgroundJob() {
         try {
-            taskManager.removeOldTaskInfo();
+            taskManager.removeExpiredTasks();
         } catch (Throwable t) {
-            LOG.warn("task manager clean old task failed", t);
+            LOG.warn("task manager clean expire tasks failed", t);
         }
         try {
-            taskManager.removeOldTaskRunHistory();
+            taskManager.removeExpiredTaskRuns();
         } catch (Throwable t) {
-            LOG.warn("task manager clean old run history failed", t);
+            LOG.warn("task manager clean expire task runs history failed", t);
         }
     }
 }

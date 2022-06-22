@@ -51,6 +51,11 @@ public:
 
     void set_has_null(bool has_null) { _has_null = _has_null | has_null; }
 
+    // Update null element to default value
+    void fill_null_with_default();
+
+    void fill_default(const Filter& filter) override {}
+
     void update_has_null() {
         const NullColumn::Container& v = _null_column->get_data();
         const auto* p = v.data();
@@ -279,8 +284,8 @@ public:
         return ss.str();
     }
 
-    bool reach_capacity_limit(std::string* msg = nullptr) const override {
-        return _data_column->reach_capacity_limit(msg) || _null_column->reach_capacity_limit(msg);
+    bool capacity_limit_reached(std::string* msg = nullptr) const override {
+        return _data_column->capacity_limit_reached(msg) || _null_column->capacity_limit_reached(msg);
     }
 
     void check_or_die() const override;

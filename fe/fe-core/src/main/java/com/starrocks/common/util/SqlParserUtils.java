@@ -21,18 +21,13 @@
 
 package com.starrocks.common.util;
 
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.EmptyStmt;
 import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
-import com.starrocks.qe.ConnectContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.StringReader;
 import java.util.List;
 
 // Utils about SQL parser
@@ -88,30 +83,5 @@ public class SqlParserUtils {
             stmts.remove(stmts.size() - 1);
         }
         return stmts;
-    }
-
-    public static StatementBase parseAndAnalyzeStmt(String originStmt, ConnectContext ctx) throws UserException {
-        LOG.info("begin to parse stmt: " + originStmt);
-        SqlScanner input = new SqlScanner(new StringReader(originStmt), ctx.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        Analyzer analyzer = new Analyzer(ctx.getGlobalStateMgr(), ctx);
-        StatementBase statementBase;
-        try {
-            statementBase = SqlParserUtils.getFirstStmt(parser);
-        } catch (AnalysisException e) {
-            String errorMessage = parser.getErrorMsg(originStmt);
-            LOG.error("parse failed: " + errorMessage);
-            if (errorMessage == null) {
-                throw e;
-            } else {
-                throw new AnalysisException(errorMessage, e);
-            }
-        } catch (Exception e) {
-            String errorMsg = String.format("get exception when parse stmt. Origin stmt is %s . Error msg is %s.",
-                    originStmt, e.getMessage());
-            throw new AnalysisException(errorMsg);
-        }
-        statementBase.analyze(analyzer);
-        return statementBase;
     }
 }

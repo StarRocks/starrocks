@@ -506,7 +506,7 @@ static inline Status receive_total_runtime_filter_pipeline(
         return Status::OK();
     }
     // the query is already finished, so it is needless to cache rf.
-    if (query_ctx->has_no_active_instances() || query_ctx->is_expired()) {
+    if (query_ctx->has_no_active_instances() || query_ctx->is_query_expired()) {
         return Status::OK();
     }
 

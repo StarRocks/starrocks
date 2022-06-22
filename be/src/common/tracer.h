@@ -2,10 +2,9 @@
 
 #pragma once
 
-#include <opentelemetry/exporters/jaeger/jaeger_exporter.h>
-#include <opentelemetry/sdk/trace/simple_processor.h>
-#include <opentelemetry/sdk/trace/tracer_provider.h>
-#include <opentelemetry/trace/provider.h>
+#include <opentelemetry/trace/scope.h>
+#include <opentelemetry/trace/span.h>
+#include <opentelemetry/trace/span_context.h>
 
 namespace starrocks {
 namespace trace = opentelemetry::trace;
@@ -48,6 +47,12 @@ public:
     // this span represents a trace, since it has no parent.
     Span start_trace(const std::string& trace_name);
 
+    Span start_trace_txn(const std::string& trace_name, int64_t txn_id);
+
+    Span start_trace_tablet(const std::string& trace_name, int64_t tablet_id);
+
+    Span start_trace_txn_tablet(const std::string& trace_name, int64_t txn_id, int64_t tablet_id);
+
     // Creates and returns a new span with `span_name` which parent span is `parent_span'.
     Span add_span(const std::string& span_name, const Span& parent_span);
 
@@ -55,6 +60,15 @@ public:
     // the span is added to the trace which it's context is `parent_ctx`.
     // parent_ctx contains the required information of the trace.
     Span add_span(const std::string& span_name, const SpanContext& parent_ctx);
+
+    // If trace_parent is empty, create a new trace, else add a span
+    Span start_trace_or_add_span(const std::string& name, const std::string& trace_parent);
+
+    // Construct a SpanContext from Traceparent header
+    static SpanContext from_trace_parent(const std::string& trace_parent);
+
+    // Construct a Traceparent header from SpanContext
+    static std::string to_trace_parent(const SpanContext& context);
 
 private:
     // Init the tracer.

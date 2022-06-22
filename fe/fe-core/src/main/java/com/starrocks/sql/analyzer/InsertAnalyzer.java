@@ -10,10 +10,10 @@ import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryRelation;
@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.OlapTable.OlapTableState.NORMAL;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class InsertAnalyzer {
@@ -36,10 +37,27 @@ public class InsertAnalyzer {
          *  Target table
          */
         MetaUtils.normalizationTableName(session, insertStmt.getTableName());
-        Database database = MetaUtils.getStarRocks(session, insertStmt.getTableName());
-        Table table = MetaUtils.getStarRocksTable(session, insertStmt.getTableName());
+        Database database = MetaUtils.getDatabase(session, insertStmt.getTableName());
+        Table table = MetaUtils.getTable(session, insertStmt.getTableName());
 
-        if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
+        if (table instanceof MaterializedView && !insertStmt.isSystem()) {
+            throw new SemanticException(
+                    "The data of '%s' cannot be inserted because '%s' is a materialized view," +
+                            "and the data of materialized view must be consistent with the base table.",
+                    insertStmt.getTableName().getTbl(), insertStmt.getTableName().getTbl());
+        }
+
+        if (insertStmt.isOverwrite()) {
+            if (!(table instanceof OlapTable)) {
+                throw unsupportedException("Only support insert overwrite olap table");
+            }
+            if (((OlapTable) table).getState() != NORMAL) {
+                String msg =
+                        String.format("table state is %s, please wait to insert overwrite util table state is normal",
+                                ((OlapTable) table).getState());
+                throw unsupportedException(msg);
+            }
+        } else if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
             throw unsupportedException("Only support insert into olap table or mysql table");
         }
 
@@ -49,10 +67,6 @@ public class InsertAnalyzer {
             PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
 
             if (targetPartitionNames != null) {
-                if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
-                    throw new SemanticException("PARTITION clause is not valid for INSERT into unpartitioned table");
-                }
-
                 if (targetPartitionNames.getPartitionNames().isEmpty()) {
                     throw new SemanticException("No partition specified in partition lists");
                 }

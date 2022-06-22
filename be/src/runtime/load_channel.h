@@ -27,6 +27,7 @@
 #include <unordered_set>
 
 #include "common/status.h"
+#include "common/tracer.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -49,7 +50,7 @@ class LoadChannelMgr;
 // corresponding to a certain load job
 class LoadChannel : public RefCountedThreadSafe<LoadChannel> {
 public:
-    LoadChannel(LoadChannelMgr* mgr, const UniqueId& load_id, int64_t timeout_s,
+    LoadChannel(LoadChannelMgr* mgr, const UniqueId& load_id, const std::string& txn_trace_parent, int64_t timeout_s,
                 std::unique_ptr<MemTracker> mem_tracker);
 
     LoadChannel(const LoadChannel&) = delete;
@@ -77,9 +78,11 @@ public:
 
     void remove_tablets_channel(int64_t index_id);
 
+    MemTracker* mem_tracker() { return _mem_tracker.get(); }
+
 private:
     friend class RefCountedThreadSafe<LoadChannel>;
-    ~LoadChannel() = default;
+    ~LoadChannel();
 
     LoadChannelMgr* _load_mgr;
     UniqueId _load_id;
@@ -91,6 +94,9 @@ private:
     std::mutex _lock;
     // index id -> tablets channel
     std::unordered_map<int64_t, scoped_refptr<TabletsChannel>> _tablets_channels;
+
+    Span _span;
+    size_t _num_chunk{0};
 };
 
 inline std::ostream& operator<<(std::ostream& os, const LoadChannel& load_channel) {

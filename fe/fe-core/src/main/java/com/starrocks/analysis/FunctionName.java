@@ -68,6 +68,15 @@ public class FunctionName implements Writable {
         return name;
     }
 
+    public static FunctionName createFnName(String fn) {
+        final String[] dbWithFn = fn.split("\\.");
+        if (dbWithFn.length == 2) {
+            return new FunctionName(dbWithFn[0], dbWithFn[1]);
+        } else {
+            return new FunctionName(null, fn);
+        }
+    }
+
     public static FunctionName fromThrift(TFunctionName fnName) {
         return new FunctionName(fnName.getDb_name(), fnName.getFunction_name());
     }

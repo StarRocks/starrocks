@@ -29,16 +29,14 @@ void ConnectorScanOperatorFactory::do_close(RuntimeState* state) {
 }
 
 OperatorPtr ConnectorScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
-    return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, _scan_node, _max_scan_concurrency,
-                                                   _num_committed_scan_tasks);
+    return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, _scan_node, _num_committed_scan_tasks);
 }
 
 // ==================== ConnectorScanOperator ====================
 
 ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence,
-                                             ScanNode* scan_node, int max_scan_concurrency,
-                                             std::atomic<int>& num_committed_scan_tasks)
-        : ScanOperator(factory, id, driver_sequence, scan_node, max_scan_concurrency, num_committed_scan_tasks) {}
+                                             ScanNode* scan_node, std::atomic<int>& num_committed_scan_tasks)
+        : ScanOperator(factory, id, driver_sequence, scan_node, num_committed_scan_tasks) {}
 
 Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     return Status::OK();
@@ -47,7 +45,7 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
 void ConnectorScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
-    vectorized::ConnectorScanNode* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
+    auto* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
     return std::make_shared<ConnectorChunkSource>(_chunk_source_profiles[chunk_source_index].get(), std::move(morsel),
                                                   this, scan_node);
 }
@@ -88,6 +86,8 @@ void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
     _closed = true;
     _data_source->close(state);
+    _chunk_buffer.shutdown();
+    _chunk_buffer.clear();
 }
 
 bool ConnectorChunkSource::has_next_chunk() const {

@@ -91,7 +91,7 @@ public class IntLiteral extends LiteralExpr {
         }
 
         if (!valid) {
-            throw new SemanticException("Number out of range[" + value + "]. type: " + type);
+            throw new ArithmeticException("Number out of range[" + value + "]. type: " + type);
         }
 
         this.value = longValue;

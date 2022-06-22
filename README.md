@@ -1,7 +1,7 @@
 
  <p align="center">
  <a href="https://www.starrocks.com/en-US/index">
-    <img  height="200" src="https://github.com/kateshaowanjou/starrocks/blob/main/logo%2Bslogan.png">
+    <img  width="526" src="https://github.com/kateshaowanjou/starrocks/blob/main/logo%2Bslogan.png">
    </a>
 </p>
 <p align="center">
@@ -58,7 +58,7 @@ It delivers query speeds 5 to 10 times faster than other popular solutions. Star
 ## Architecture Overview
 
  <p align="center">
-    <img height="400"  src="https://github.com/kateshaowanjou/starrocks/blob/main/Arch.png">
+    <img width="526"  src="https://github.com/kateshaowanjou/starrocks/blob/main/Arch.png">
    </a>
 </p>
 
@@ -98,7 +98,7 @@ We welcome all kinds of contributions from the community, individuals and partne
 
 **📝 License:** Please note StaRocks is licensed under [Elastic License 2.0](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt), with small portions of code under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). See [FAQ](https://www.starrocks.com/en-US/product/license-FAQ) to learn more.  
 
-**👥 Community Membership:** Learn more about different [contributor roles](https://github.com/kateshaowanjou/starrocks/blob/main/Community-Membership.md) in StarRocks community.
+**👥 Community Membership:** Learn more about different [contributor roles](https://github.com/StarRocks/community/blob/main/Community-Membership.md) in StarRocks community.
   
 <br>
   
@@ -115,6 +115,6 @@ This project is used by the following companies. Learn more about their use case
 
 ## Acknowledgements
 
-StarRocks is built upon Apache Doris (incubating) 0.13 in early 2020. We have recreated many important parts of the database including a full vectorized execution engine, a brand new CBO optimizer, a novel real-time update engine, and query federation for data lakes. 
+StarRocks is built upon Apache® Doris™ 0.13 in early 2020. We have recreated many important parts of the database including a full vectorized execution engine, a brand new CBO optimizer, a novel real-time update engine, and query federation for data lakes. 
 
-Today, there are only about 30% of the code in StarRocks is identical to Apache Doris (incubating).
+Today, there are only about 30% of the code in StarRocks is identical to Apache® Doris™.

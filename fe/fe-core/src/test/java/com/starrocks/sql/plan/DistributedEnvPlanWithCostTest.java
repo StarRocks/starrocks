@@ -753,11 +753,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         // check cardinality is not 0
         String sql = "SELECT sum(L_DISCOUNT * L_TAX) AS revenue FROM lineitem WHERE weekofyear(L_RECEIPTDATE) = 6";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "cardinality=300000000");
+        assertContains(plan, "cardinality=11111111");
 
         sql = "SELECT sum(L_DISCOUNT * L_TAX) AS revenue FROM lineitem WHERE weekofyear(L_RECEIPTDATE) in (6)";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "cardinality=300000000");
+        assertContains(plan, "cardinality=11111111");
     }
 
     @Test

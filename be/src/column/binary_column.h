@@ -182,6 +182,8 @@ public:
         _slices_cache = false;
     }
 
+    void fill_default(const Filter& filter) override;
+
     Status update_rows(const Column& src, const uint32_t* indexes) override;
 
     uint32_t max_one_element_serialize_size() const override;
@@ -243,6 +245,8 @@ public:
 
     const Bytes& get_bytes() const { return _bytes; }
 
+    const uint8_t* continuous_data() const override { return reinterpret_cast<const uint8_t*>(_bytes.data()); }
+
     Offsets& get_offset() { return _offsets; }
     const Offsets& get_offset() const { return _offsets; }
 
@@ -289,7 +293,7 @@ public:
         return ss.str();
     }
 
-    bool reach_capacity_limit(std::string* msg = nullptr) const override;
+    bool capacity_limit_reached(std::string* msg = nullptr) const override;
 
 private:
     void _build_slices() const;

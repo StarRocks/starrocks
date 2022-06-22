@@ -74,11 +74,23 @@ public class MinimumCoverageRollupTreeBuilderTest {
         EtlJobConfig.EtlIndex roll3Index = new EtlJobConfig.EtlIndex(10003,
                 roll3Columns, 12348, "AGGREGATE", false);
 
+        List<EtlJobConfig.EtlColumn> roll4Columns = new ArrayList<>();
+        roll4Columns.add(column1);
+        EtlJobConfig.EtlColumn newColumn2 = new EtlJobConfig.EtlColumn(
+                "column2", "SMALLINT",
+                true, false,
+                "SUM", "0",
+                0, 0, 0);
+        roll4Columns.add(newColumn2);
+        EtlJobConfig.EtlIndex roll4Index = new EtlJobConfig.EtlIndex(10004,
+                roll4Columns, 12349, "AGGREGATE", false);
+
         List<EtlJobConfig.EtlIndex> indexes = new ArrayList<>();
         indexes.add(baseIndex);
         indexes.add(roll1Index);
         indexes.add(roll2Index);
         indexes.add(roll3Index);
+        indexes.add(roll4Index);
         EtlJobConfig.EtlTable table = new EtlJobConfig.EtlTable(indexes, null);
 
         MinimumCoverageRollupTreeBuilder builder = new MinimumCoverageRollupTreeBuilder();
@@ -92,7 +104,7 @@ public class MinimumCoverageRollupTreeBuilderTest {
         Assert.assertEquals(index1Node.parent.indexId, 10000);
         Assert.assertEquals(index1Node.indexId, 10001);
         Assert.assertEquals(index1Node.level, 1);
-        Assert.assertEquals(index1Node.children.size(), 1);
+        Assert.assertEquals(index1Node.children.size(), 2);
 
         RollupTreeNode index3Node = resultNode.children.get(1);
         Assert.assertEquals(index3Node.parent.indexId, 10000);
@@ -105,5 +117,11 @@ public class MinimumCoverageRollupTreeBuilderTest {
         Assert.assertEquals(index2Node.indexId, 10002);
         Assert.assertEquals(index2Node.level, 2);
         Assert.assertEquals(index2Node.children, null);
+
+        RollupTreeNode index4Node = index1Node.children.get(1);
+        Assert.assertEquals(index4Node.parent.indexId, 10001);
+        Assert.assertEquals(index4Node.indexId, 10004);
+        Assert.assertEquals(index4Node.level, 2);
+        Assert.assertEquals(index4Node.children, null);
     }
 }

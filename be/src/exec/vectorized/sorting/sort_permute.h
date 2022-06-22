@@ -60,9 +60,9 @@ static inline void restore_inline_permutation(const InlinePermutation<T>& inline
     }
 }
 
-inline SmallPermutation create_small_permutation(int rows) {
+inline SmallPermutation create_small_permutation(uint32_t rows) {
     SmallPermutation perm(rows);
-    for (int i = 0; i < rows; i++) {
+    for (uint32_t i = 0; i < rows; i++) {
         perm[i].index_in_chunk = i;
     }
     return perm;

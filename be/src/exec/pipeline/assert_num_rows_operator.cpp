@@ -27,6 +27,7 @@ Status AssertNumRowsOperator::prepare(RuntimeState* state) {
 }
 
 void AssertNumRowsOperator::close(RuntimeState* state) {
+    _cur_chunk.reset();
     Operator::close(state);
 }
 

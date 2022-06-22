@@ -130,6 +130,18 @@ void ArrayColumn::append_default(size_t count) {
     _offsets->append_value_multiple_times(&offset, count);
 }
 
+void ArrayColumn::fill_default(const Filter& filter) {
+    std::vector<uint32_t> indexes;
+    for (size_t i = 0; i < filter.size(); i++) {
+        if (filter[i] == 1 && get_element_size(i) > 0) {
+            indexes.push_back(i);
+        }
+    }
+    auto default_column = clone_empty();
+    default_column->append_default(indexes.size());
+    update_rows(*default_column, indexes.data());
+}
+
 Status ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& array_column = down_cast<const ArrayColumn&>(src);
 
@@ -425,6 +437,11 @@ Datum ArrayColumn::get(size_t idx) const {
         res[i] = _elements->get(offset + i);
     }
     return Datum(res);
+}
+
+size_t ArrayColumn::get_element_size(size_t idx) const {
+    DCHECK_LT(idx + 1, _offsets->size());
+    return _offsets->get_data()[idx + 1] - _offsets->get_data()[idx];
 }
 
 bool ArrayColumn::set_null(size_t idx) {

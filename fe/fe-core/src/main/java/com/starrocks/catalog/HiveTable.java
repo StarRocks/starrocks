@@ -215,7 +215,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                 refreshTableCache(nameToColumn);
             } else {
                 if (HiveMetaStoreTableUtils.isInternalCatalog(resourceName)) {
-                    refreshSchemaCache(table.getSd().getCols(), updatedTableSchemas);
+                    refreshSchemaCache(table.getSd().getCols(), HiveMetaStoreTableUtils.getAllColumns(table));
                     refreshTableCache(nameToColumn);
                     modifyTableSchema(dbName, tableName);
                 } else {
@@ -257,12 +257,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return needRefreshColumn;
     }
 
-    private void refreshSchemaCache(List<FieldSchema> unpartHiveCols, Map<String, FieldSchema> allHiveColumns)
+    private void refreshSchemaCache(List<FieldSchema> unpartHiveCols, List<FieldSchema> allHiveColumns)
             throws DdlException {
         fullSchema.clear();
         nameToColumn.clear();
-        for (Map.Entry<String, FieldSchema> entry : allHiveColumns.entrySet()) {
-            FieldSchema fieldSchema = entry.getValue();
+        for (FieldSchema fieldSchema : allHiveColumns) {
             Type srType = convertColumnType(fieldSchema.getType());
             Column column = new Column(fieldSchema.getName(), srType, true);
             fullSchema.add(column);
@@ -381,9 +380,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         List<FieldSchema> unPartHiveColumns = hiveTable.getSd().getCols();
         List<FieldSchema> partHiveColumns = hiveTable.getPartitionKeys();
         Map<String, FieldSchema> allHiveColumns = HiveMetaStoreTableUtils.getAllHiveColumns(hiveTable);
-        for (FieldSchema hiveColumn : partHiveColumns) {
-            allHiveColumns.put(hiveColumn.getName(), hiveColumn);
-        }
         for (Column column : this.fullSchema) {
             FieldSchema hiveColumn = allHiveColumns.get(column.getName());
             if (hiveColumn == null) {

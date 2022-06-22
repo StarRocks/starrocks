@@ -338,9 +338,10 @@ ColumnPtr BitmapFunctions::bitmap_to_array(FunctionContext* context, const starr
 }
 
 ColumnPtr BitmapFunctions::array_to_bitmap(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    const constexpr PrimitiveType TYPE = TYPE_BIGINT;
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
-    const constexpr PrimitiveType TYPE = TYPE_BIGINT;
 
     Column* data_column = ColumnHelper::get_data_column(columns[0].get());
     NullData::pointer null_data = columns[0]->is_nullable()
@@ -374,7 +375,9 @@ ColumnPtr BitmapFunctions::array_to_bitmap(FunctionContext* context, const starr
             if (element_null_data && element_null_data[j]) {
                 continue;
             }
-            bitmap.add(element_container[j]);
+            if (element_container[j] >= 0) {
+                bitmap.add(element_container[j]);
+            }
         }
         // append bitmap
         builder.append(std::move(bitmap));

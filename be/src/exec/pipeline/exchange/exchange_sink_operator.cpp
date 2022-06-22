@@ -84,6 +84,8 @@ public:
 
     bool use_pass_through() const { return _use_pass_through; }
 
+    bool is_local();
+
 private:
     Status _close_internal(RuntimeState* state, FragmentContext* fragment_ctx);
 
@@ -114,10 +116,7 @@ private:
     bool _use_pass_through = false;
 };
 
-bool ExchangeSinkOperator::Channel::_check_use_pass_through() {
-    if (!_enable_exchange_pass_through) {
-        return false;
-    }
+bool ExchangeSinkOperator::Channel::is_local() {
     if (BackendOptions::get_localhost() != _brpc_dest_addr.hostname) {
         return false;
     }
@@ -125,6 +124,13 @@ bool ExchangeSinkOperator::Channel::_check_use_pass_through() {
         return false;
     }
     return true;
+}
+
+bool ExchangeSinkOperator::Channel::_check_use_pass_through() {
+    if (!_enable_exchange_pass_through) {
+        return false;
+    }
+    return is_local();
 }
 
 void ExchangeSinkOperator::Channel::_prepare_pass_through() {
@@ -368,11 +374,11 @@ bool ExchangeSinkOperator::is_finished() const {
 }
 
 bool ExchangeSinkOperator::need_input() const {
-    return !is_finished() && !_buffer->is_full();
+    return !is_finished() && _buffer != nullptr && !_buffer->is_full();
 }
 
 bool ExchangeSinkOperator::pending_finish() const {
-    return !_buffer->is_finished();
+    return _buffer != nullptr && !_buffer->is_finished();
 }
 
 Status ExchangeSinkOperator::set_cancelled(RuntimeState* state) {
@@ -443,11 +449,22 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         // Round-robin batches among channels. Wait for the current channel to finish its
         // rpc before overwriting its batch.
         // 1. Get request of that channel
-        auto& channel = _channels[_curr_random_channel_idx];
+        std::vector<std::shared_ptr<Channel>> local_channels;
+        for (const auto& channel : _channels) {
+            if (channel->is_local()) {
+                local_channels.emplace_back(channel);
+            }
+        }
+
+        if (local_channels.empty()) {
+            local_channels = _channels;
+        }
+
+        auto& channel = local_channels[_curr_random_channel_idx];
         bool real_sent = false;
         RETURN_IF_ERROR(channel->send_one_chunk(send_chunk, DEFAULT_DRIVER_SEQUENCE, false, &real_sent));
         if (real_sent) {
-            _curr_random_channel_idx = (_curr_random_channel_idx + 1) % _channels.size();
+            _curr_random_channel_idx = (_curr_random_channel_idx + 1) % local_channels.size();
         }
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
@@ -654,6 +671,7 @@ Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
 }
 
 void ExchangeSinkOperatorFactory::close(RuntimeState* state) {
+    _buffer.reset();
     Expr::close(_partition_expr_ctxs, state);
     OperatorFactory::close(state);
 }

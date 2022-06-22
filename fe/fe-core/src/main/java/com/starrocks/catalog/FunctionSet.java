@@ -48,59 +48,308 @@ public class FunctionSet {
     // Functions in this set is defined in `gensrc/script/starrocks_builtins_functions.py`,
     // and will be built automatically.
 
-    // Aggregate Functions:
+    // Date functions:
+    public static final String CONVERT_TZ = "convert_tz";
+    public static final String CURDATE = "curdate";
+    public static final String CURRENT_TIMESTAMP = "current_timestamp";
+    public static final String CURTIME = "curtime";
+    public static final String CURRENT_TIME = "current_time";
+    public static final String DATEDIFF = "datediff";
+    public static final String DATE_ADD = "date_add";
+    public static final String DATE_FORMAT = "date_format";
+    public static final String DATE_SUB = "date_sub";
+    public static final String DATE_TRUNC = "date_trunc";
+    public static final String DAY = "day";
+    public static final String DAYNAME = "dayname";
+    public static final String DAYOFMONTH = "dayofmonth";
+    public static final String DAYOFWEEK = "dayofweek";
+    public static final String DAYOFYEAR = "dayofyear";
+    public static final String FROM_DAYS = "from_days";
+    public static final String FROM_UNIXTIME = "from_unixtime";
+    public static final String HOUR = "hour";
+    public static final String MINUTE = "minute";
+    public static final String MONTH = "month";
+    public static final String MONTHNAME = "monthname";
+    public static final String NOW = "now";
+    public static final String SECOND = "second";
+    public static final String STR_TO_DATE = "str_to_date";
+    public static final String TIMEDIFF = "timediff";
+    public static final String TIMESTAMPADD = "timestampadd";
+    public static final String TIMESTAMPDIFF = "timestampdiff";
+    public static final String TO_DATE = "to_date";
+    public static final String TO_DAYS = "to_days";
+    public static final String UNIX_TIMESTAMP = "unix_timestamp";
+    public static final String UTC_TIMESTAMP = "utc_timestamp";
+    public static final String WEEKOFYEAR = "weekofyear";
+    public static final String YEAR = "year";
+    public static final String MINUTES_DIFF = "minutes_diff";
+    public static final String HOURS_DIFF = "hours_diff";
+    public static final String DAYS_DIFF = "days_diff";
+    public static final String MONTHS_DIFF = "months_diff";
+    public static final String SECONDS_DIFF = "seconds_diff";
+    public static final String WEEKS_DIFF = "weeks_diff";
+    public static final String YEARS_DIFF = "years_diff";
+    public static final String QUARTER = "quarter";
+    public static final String TIMESTAMP = "timestamp";
+    public static final String TIME_TO_SEC = "time_to_sec";
+    public static final String STR2DATE = "str2date";
+    public static final String MICROSECONDS_ADD = "microseconds_add";
+    public static final String MICROSECONDS_SUB = "microseconds_sub";
+    public static final String YEARS_ADD = "years_add";
+    public static final String YEARS_SUB = "years_sub";
+    public static final String MONTHS_ADD = "months_add";
+    public static final String MONTHS_SUB = "months_sub";
+    public static final String DAYS_ADD = "days_add";
+    public static final String DAYS_SUB = "days_sub";
+    public static final String ADDDATE = "adddate";
+    public static final String SUBDATE = "subdate";
+    public static final String TIME_SLICE = "time_slice";
+    public static final String DATE_FLOOR = "date_floor";
+    public static final String STRFTIME = "strftime";
+    public static final String TIME_FORMAT = "time_format";
+    public static final String ALIGNMENT_TIMESTAMP = "alignment_timestamp";
+    public static final String SUBSTITUTE = "substitute";
+
+    // Encryption functions:
+    public static final String AES_DECRYPT = "aes_decrypt";
+    public static final String AES_ENCRYPT = "aes_encrypt";
+    public static final String FROM_BASE64 = "from_base64";
+    public static final String TO_BASE64 = "to_base64";
+    public static final String MD5 = "md5";
+    public static final String MD5_SUM = "md5sum";
+    public static final String SHA2 = "sha2";
+    public static final String SM3 = "sm3";
+
+    // Geo functions:
+    public static final String ST_ASTEXT = "st_astext";
+    public static final String ST_ASWKT = "st_aswkt";
+    public static final String ST_CIRCLE = "st_circle";
+    public static final String ST_CONTAINS = "st_contains";
+    public static final String ST_DISTANCE_SPHERE = "st_distance_sphere";
+    public static final String ST_GEOMETRYFROMTEXT = "st_geometryfromtext";
+    public static final String ST_GEOMFROMTEXT = "st_geomfromtext";
+    public static final String ST_LINEFROMTEXT = "st_linefromtext";
+    public static final String ST_LINESTRINGFROMTEXT = "st_linestringfromtext";
+    public static final String ST_POINT = "st_point";
+    public static final String ST_POLYGON = "st_polygon";
+    public static final String ST_POLYFROMTEXT = "st_polyfromtext";
+    public static final String ST_POLYGONFROMTEXT = "st_polygonfromtext";
+    public static final String ST_X = "st_x";
+    public static final String ST_Y = "st_y";
+
+    // String functions
+    public static final String APPEND_TRAILING_CHAR_IF_ABSENT = "append_trailing_char_if_absent";
+    public static final String ASCII = "ascii";
+    public static final String CHAR_LENGTH = "char_length";
+    public static final String CONCAT = "concat";
+    public static final String CONCAT_WS = "concat_ws";
+    public static final String ENDS_WITH = "ends_with";
+    public static final String FIND_IN_SET = "find_in_set";
+    public static final String GROUP_CONCAT = "group_concat";
+    public static final String INSTR = "instr";
+    public static final String LCASE = "lcase";
+    public static final String LEFT = "left";
+    public static final String LENGTH = "length";
+    public static final String LOCATE = "locate";
+    public static final String LOWER = "lower";
+    public static final String LPAD = "lpad";
+    public static final String LTRIM = "ltrim";
+    public static final String RTRIM = "rtrim";
+    public static final String MONEY_FORMAT = "money_format";
+    public static final String NULL_OR_EMPTY = "null_or_empty";
+    public static final String REGEXP_EXTRACT = "regexp_extract";
+    public static final String REGEXP_REPLACE = "regexp_replace";
+    public static final String REPEAT = "repeat";
+    public static final String REVERSE = "reverse";
+    public static final String RIGHT = "right";
+    public static final String RPAD = "rpad";
+    public static final String SPLIT = "split";
+    public static final String SPLIT_PART = "split_part";
+    public static final String STARTS_WITH = "starts_with";
+    public static final String STRLEFT = "strleft";
+    public static final String STRRIGHT = "strright";
+    public static final String HEX = "hex";
+    public static final String UNHEX = "unhex";
+    public static final String SUBSTR = "substr";
+    public static final String SUBSTRING = "substring";
+    public static final String SPACE = "space";
+    public static final String PARSE_URL = "parse_url";
+    public static final String TRIM = "trim";
+    public static final String UPPER = "upper";
+
+    // Json functions:
+    public static final String JSON_ARRAY = "json_array";
+    public static final String JSON_OBJECT = "json_object";
+    public static final String PARSE_JSON = "parse_json";
+    public static final String JSON_QUERY = "json_query";
+    public static final String JSON_EXIST = "json_exists";
+    public static final String JSON_EACH = "json_each";
+    public static final String GET_JSON_DOUBLE = "get_json_double";
+    public static final String GET_JSON_INT = "get_json_int";
+    public static final String GET_JSON_STRING = "get_json_string";
+
+    // Matching functions:
+    public static final String LIKE = "like";
+    public static final String REGEXP = "regexp";
+
+    // Utility functions:
+    public static final String CURRENT_VERSION = "current_version";
+    public static final String LAST_QUERY_ID = "last_query_id";
+    public static final String UUID = "uuid";
+    public static final String SLEEP = "sleep";
+    public static final String ISNULL = "isnull";
+
+    // Aggregate functions:
+    public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
+    public static final String AVG = "avg";
     public static final String COUNT = "count";
+    public static final String HLL_UNION_AGG = "hll_union_agg";
     public static final String MAX = "max";
     public static final String MIN = "min";
-    public static final String SUM = "sum";
-    public static final String SUM_DISTINCT = "sum_distinct";
-    public static final String AVG = "avg";
-    public static final String STD = "std";
+    public static final String PERCENTILE_APPROX = "percentile_approx";
+    public static final String RETENTION = "retention";
     public static final String STDDEV = "stddev";
-    public static final String STDDEV_SAMP = "stddev_samp";
     public static final String STDDEV_POP = "stddev_pop";
-    public static final String STDDEV_VAL = "stddev_val";
+    public static final String STDDEV_SAMP = "stddev_samp";
+    public static final String SUM = "sum";
     public static final String VARIANCE = "variance";
-    public static final String VARIANCE_SAMP = "variance_samp";
-    public static final String VAR_SAMP = "var_samp";
-    public static final String VARIANCE_POP = "variance_pop";
     public static final String VAR_POP = "var_pop";
-    public static final String MONEY_FORMAT = "money_format";
-    public static final String STR_TO_DATE = "str_to_date";
+    public static final String VARIANCE_POP = "variance_pop";
+    public static final String VAR_SAMP = "var_samp";
+    public static final String VARIANCE_SAMP = "variance_samp";
+    public static final String ANY_VALUE = "any_value";
+    public static final String SUM_DISTINCT = "sum_distinct";
+    public static final String STD = "std";
+    public static final String STDDEV_VAL = "stddev_val";
     public static final String HLL_UNION = "hll_union";
-    public static final String HLL_UNION_AGG = "hll_union_agg";
     public static final String HLL_RAW_AGG = "hll_raw_agg";
     public static final String NDV = "ndv";
     public static final String NDV_NO_FINALIZE = "ndv_no_finalize";
-    public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
-    public static final String PERCENTILE_APPROX = "percentile_approx";
-    public static final String PERCENTILE_APPROX_RAW = "percentile_approx_raw";
-    public static final String PERCENTILE_UNION = "percentile_union";
-    public static final String BITMAP_UNION = "bitmap_union";
-    public static final String BITMAP_UNION_COUNT = "bitmap_union_count";
-    public static final String BITMAP_UNION_INT = "bitmap_union_int";
-    public static final String INTERSECT_COUNT = "intersect_count";
-    public static final String BITMAP_INTERSECT = "bitmap_intersect";
     public static final String MULTI_DISTINCT_COUNT = "multi_distinct_count";
     public static final String MULTI_DISTINCT_SUM = "multi_distinct_sum";
     public static final String DICT_MERGE = "dict_merge";
-    public static final String ANY_VALUE = "any_value";
-    public static final String RETENTION = "retention";
-    public static final String GROUP_CONCAT = "group_concat";
-    public static final String ARRAY_AGG = "array_agg";
-    public static final String ARRAYS_OVERLAP = "arrays_overlap";
     public static final String WINDOW_FUNNEL = "window_funnel";
     public static final String DISTINCT_PC = "distinct_pc";
     public static final String DISTINCT_PCSA = "distinct_pcsa";
 
-    // Unary functions:
-    public static final String ABS = "abs";
-    public static final String POSITIVE = "positive";
-    public static final String NEGATIVE = "negative";
-
     // Bitmap functions:
+    public static final String BITMAP_AND = "bitmap_and";
+    public static final String BITMAP_ANDNOT = "bitmap_andnot";
+    public static final String BITMAP_CONTAINS = "bitmap_contains";
+    public static final String BITMAP_EMPTY = "bitmap_empty";
+    public static final String BITMAP_FROM_STRING = "bitmap_from_string";
     public static final String BITMAP_HASH = "bitmap_hash";
+    public static final String BITMAP_HAS_ANY = "bitmap_has_any";
+    public static final String BITMAP_INTERSECT = "bitmap_intersect";
+    public static final String BITMAP_MAX = "bitmap_max";
+    public static final String BITMAP_MIN = "bitmap_min";
+    public static final String BITMAP_OR = "bitmap_or";
+    public static final String BITMAP_REMOVE = "bitmap_remove";
+    public static final String BITMAP_TO_STRING = "bitmap_to_string";
+    public static final String BITMAP_TO_ARRAY = "bitmap_to_array";
+    public static final String BITMAP_UNION = "bitmap_union";
+    public static final String BITMAP_XOR = "bitmap_xor";
+    public static final String TO_BITMAP = "to_bitmap";
+    public static final String BITMAP_COUNT = "bitmap_count";
+    public static final String BITMAP_UNION_COUNT = "bitmap_union_count";
+    public static final String BITMAP_UNION_INT = "bitmap_union_int";
+    public static final String INTERSECT_COUNT = "intersect_count";
     public static final String BITMAP_DICT = "bitmap_dict";
+
+    // Array functions:
+    public static final String ARRAY_AGG = "array_agg";
+    public static final String ARRAY_CONCAT = "array_concat";
+    public static final String ARRAY_DIFFERENCE = "array_difference";
+    public static final String ARRAY_INTERSECT = "array_intersect";
+    public static final String ARRAY_SLICE = "array_slice";
+    public static final String ARRAYS_OVERLAP = "arrays_overlap";
+    public static final String ARRAY_APPEND = "array_append";
+    public static final String ARRAY_AVG = "array_avg";
+    public static final String ARRAY_CONTAINS = "array_contains";
+    public static final String ARRAY_JOIN = "array_join";
+    public static final String ARRAY_DISTINCT = "array_distinct";
+    public static final String ARRAY_LENGTH = "array_length";
+    public static final String ARRAY_MAX = "array_max";
+    public static final String ARRAY_MIN = "array_min";
+    public static final String ARRAY_POSITION = "array_position";
+    public static final String ARRAY_SORT = "array_sort";
+    public static final String ARRAY_SUM = "array_sum";
+    public static final String ARRAY_REMOVE = "array_remove";
+
+    // Bit functions:
+    public static final String BITAND = "bitand";
+    public static final String BITNOT = "bitnot";
+    public static final String BITOR = "bitor";
+    public static final String BITXOR = "bitxor";
+
+    // Hash functions:
+    public static final String MURMUR_HASH3_32 = "murmur_hash3_32";
+
+    // Percentile functions:
+    public static final String PERCENTILE_APPROX_RAW = "percentile_approx_raw";
+    public static final String PERCENTILE_EMPTY = "percentile_empty";
+    public static final String PERCENTILE_HASH = "percentile_hash";
+    public static final String PERCENTILE_UNION = "percentile_union";
+
+    // Condition functions:
+    public static final String COALESCE = "coalesce";
+    public static final String IF = "if";
+    public static final String IFNULL = "ifnull";
+    public static final String NULLIF = "nullif";
+
+    // Math functions:
+    public static final String ABS = "abs";
+    public static final String ACOS = "acos";
+    public static final String ADD = "add";
+    public static final String ASIN = "asin";
+    public static final String ATAN = "atan";
+    public static final String ATAN2 = "atan2";
+    public static final String BIN = "bin";
+    public static final String CEIL = "ceil";
+    public static final String DCEIL = "dceil";
+    public static final String CEILING = "ceiling";
+    public static final String CONV = "conv";
+    public static final String COS = "cos";
+    public static final String COT = "cot";
+    public static final String DEGRESS = "degress";
+    public static final String DIVIDE = "divide";
+    public static final String E = "e";
+    public static final String EXP = "exp";
+    public static final String DEXP = "dexp";
+    public static final String FLOOR = "floor";
+    public static final String DFLOOR = "dfloor";
+    public static final String FMOD = "fmod";
+    public static final String GREATEST = "greatest";
+    public static final String LEAST = "least";
+    public static final String LN = "ln";
+    public static final String DLOG1 = "dlog1";
+    public static final String LOG = "log";
+    public static final String LOG2 = "log2";
+    public static final String LOG10 = "log10";
+    public static final String DLOG10 = "dlog10";
+    public static final String MOD = "mod";
+    public static final String MULTIPLY = "multiply";
+    public static final String NEGATIVE = "negative";
+    public static final String PI = "pi";
+    public static final String PMOD = "pmod";
+    public static final String POSITIVE = "positive";
+    public static final String POW = "pow";
+    public static final String POWER = "power";
+    public static final String DPOW = "dpow";
+    public static final String FPOW = "fpow";
+    public static final String RADIANS = "radians";
+    public static final String RAND = "rand";
+    public static final String RANDOM = "random";
+    public static final String ROUND = "round";
+    public static final String DROUND = "dround";
+    public static final String SIGN = "sign";
+    public static final String SIN = "sin";
+    public static final String SQRT = "sqrt";
+    public static final String SUBTRACT = "subtract";
+    public static final String DSQRT = "dsqrt";
+    public static final String SQUARE = "square";
+    public static final String TAN = "tan";
+    public static final String TRUNCATE = "truncate";
 
     // Window functions:
     public static final String LEAD = "lead";
@@ -113,112 +362,17 @@ public class FunctionSet {
     public static final String NTILE = "ntile";
     public static final String ROW_NUMBER = "row_number";
 
-    // Scalar functions:
-    public static final String BITMAP_COUNT = "bitmap_count";
+    // Other functions:
     public static final String HLL_HASH = "hll_hash";
     public static final String HLL_CARDINALITY = "hll_cardinality";
-    public static final String PERCENTILE_HASH = "percentile_hash";
-    public static final String TO_BITMAP = "to_bitmap";
-    public static final String NULL_OR_EMPTY = "null_or_empty";
-    public static final String IF = "if";
-    public static final String IF_NULL = "ifnull";
-    public static final String NULL_IF = "nullif";
-    public static final String COALESCE = "coalesce";
-    public static final String MD5_SUM = "md5sum";
-    public static final String HEX = "hex";
-    public static final String TRUNCATE = "truncate";
-    public static final String ROUND = "round";
-    public static final String DROUND = "dround";
-    public static final String RAND = "rand";
-    public static final String RANDOM = "random";
-
-    // Arithmetic functions:
-    public static final String ADD = "add";
-    public static final String SUBTRACT = "subtract";
-    public static final String MULTIPLY = "multiply";
-    public static final String DIVIDE = "divide";
-    public static final String LEAST = "least";
-    public static final String GREATEST = "greatest";
-    public static final String MOD = "mod";
-
-    // date functions
-    public static final String YEAR = "year";
-    public static final String YEARS_ADD = "years_add";
-    public static final String YEARS_SUB = "years_sub";
-    public static final String MONTH = "month";
-    public static final String MONTHS_ADD = "months_add";
-    public static final String MONTHS_SUB = "months_sub";
-    public static final String DAY = "day";
-    public static final String DAYS_ADD = "days_add";
-    public static final String DAYS_SUB = "days_sub";
-    public static final String ADDDATE = "adddate";
-    public static final String SUBDATE = "subdate";
-    public static final String DATE_ADD = "date_add";
-    public static final String DATE_SUB = "date_sub";
-    public static final String HOUR = "hour";
-    public static final String MINUTE = "minute";
-    public static final String SECOND = "second";
-    public static final String CURDATE = "curdate";
-    public static final String CURRENT_TIMESTAMP = "current_timestamp";
-    public static final String CURRENT_TIME = "current_time";
-    public static final String NOW = "now";
-    public static final String UNIX_TIMESTAMP = "unix_timestamp";
-    public static final String UTC_TIMESTAMP = "utc_timestamp";
-    public static final String TIMESTAMPADD = "timestampadd";
-    public static final String DATE_TRUNC = "date_trunc";
-    public static final String TIME_SLICE = "time_slice";
-    public static final String STRFTIME = "strftime";
-    public static final String TIME_FORMAT = "time_format";
-    public static final String DATE_FORMAT = "date_format";
-    public static final String ALIGNMENT_TIMESTAMP = "alignment_timestamp";
     public static final String DEFAULT_VALUE = "default_value";
     public static final String REPLACE_VALUE = "replace_value";
-    public static final String SUBSTITUTE = "substitute";
-    public static final String FROM_UNIXTIME = "from_unixtime";
-
-    // string functions
-    public static final String APPEND_TRAILING_CHAR_IF_ABSENT = "append_trailing_char_if_absent";
-    public static final String CONCAT = "concat";
-    public static final String CONCAT_WS = "concat_ws";
-    public static final String LEFT = "left";
-    public static final String LIKE = "like";
-    public static final String LOWER = "lower";
-    public static final String LPAD = "lpad";
-    public static final String LTRIM = "ltrim";
-    public static final String REGEXP_EXTRACT = "regexp_extract";
-    public static final String REGEXP_REPLACE = "regexp_replace";
-    public static final String REPEAT = "repeat";
-    public static final String REVERSE = "reverse";
-    public static final String RIGHT = "right";
-    public static final String RPAD = "rpad";
-    public static final String RTRIM = "rtrim";
-    public static final String SPLIT_PART = "split_part";
-    public static final String SUBSTR = "substr";
-    public static final String SUBSTRING = "substring";
-    public static final String STARTS_WITH = "starts_with";
-    public static final String TRIM = "trim";
-    public static final String UPPER = "upper";
-
-    // geo functions
-    public static final String ST_ASTEXT = "st_astext";
 
     // JSON functions
-    public static final String JSON_QUERY = "json_query";
-    public static final String PARSE_JSON = "parse_json";
-    public static final String JSON_ARRAY = "json_array";
-    public static final String JSON_OBJECT = "json_object";
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
 
-    // Array functions
-    public static final String ARRAY_DIFFERENCE = "array_difference";
-
-    // Util functions
-    public static final String UUID = "uuid";
-    public static final String SLEEP = "sleep";
-    public static final String ISNULL = "isnull";
-
-    private static final Logger LOG = LogManager.getLogger(FunctionSet.class);
+    private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
     private static final Map<Type, Type> MULTI_DISTINCT_SUM_RETURN_TYPE =
             ImmutableMap.<Type, Type>builder()
@@ -260,7 +414,7 @@ public class FunctionSet {
     // This contains the nullable functions, which cannot return NULL result directly for the NULL parameter.
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
     private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
-            ImmutableSet.of(IF, CONCAT_WS, IF_NULL, NULL_IF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, PERCENTILE_HASH,
+            ImmutableSet.of(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, PERCENTILE_HASH,
                     HLL_HASH, JSON_ARRAY, JSON_OBJECT);
 
     // If low cardinality string column with global dict, for some string functions,
@@ -353,8 +507,8 @@ public class FunctionSet {
         // ifnull, nullif(DATE, DATETIME) should return datetime, not bigint
         // if(boolean, DATE, DATETIME) should return datetime
         int arg_index = 0;
-        if (functionName.equalsIgnoreCase(IF_NULL) ||
-                functionName.equalsIgnoreCase(NULL_IF) ||
+        if (functionName.equalsIgnoreCase(IFNULL) ||
+                functionName.equalsIgnoreCase(NULLIF) ||
                 functionName.equalsIgnoreCase(IF)) {
             if (functionName.equalsIgnoreCase(IF)) {
                 arg_index = 1;
@@ -918,7 +1072,7 @@ public class FunctionSet {
                 if (typeArray == null) {
                     typeArray = (ArrayType) realType;
                 } else if ((typeArray = (ArrayType) getSuperType(typeArray, realType)) == null) {
-                    LOG.warn("could not determine polymorphic type because input has non-match types");
+                    LOGGER.warn("could not determine polymorphic type because input has non-match types");
                     return null;
                 }
             } else if (declType instanceof AnyElementType) {
@@ -928,11 +1082,11 @@ public class FunctionSet {
                 if (typeElement == null) {
                     typeElement = realType;
                 } else if ((typeElement = getSuperType(typeElement, realType)) == null) {
-                    LOG.warn("could not determine polymorphic type because input has non-match types");
+                    LOGGER.warn("could not determine polymorphic type because input has non-match types");
                     return null;
                 }
             } else {
-                LOG.warn("has unhandled pseudo type '{}'", declType);
+                LOGGER.warn("has unhandled pseudo type '{}'", declType);
                 return null;
             }
         }
@@ -940,7 +1094,7 @@ public class FunctionSet {
         if (typeArray != null && typeElement != null) {
             typeArray = (ArrayType) getSuperType(typeArray, new ArrayType(typeElement));
             if (typeArray == null) {
-                LOG.warn("could not determine polymorphic type because has non-match types");
+                LOGGER.warn("could not determine polymorphic type because has non-match types");
                 return null;
             }
             typeElement = typeArray.getItemType();
@@ -954,7 +1108,7 @@ public class FunctionSet {
         }
 
         if (!typeArray.getItemType().matchesType(typeElement)) {
-            LOG.warn("could not determine polymorphic type because has non-match types");
+            LOGGER.warn("could not determine polymorphic type because has non-match types");
             return null;
         }
 
@@ -1016,7 +1170,7 @@ public class FunctionSet {
             return new TableFunction(fn.getFunctionName(), ((TableFunction) fn).getDefaultColumnNames(),
                     Arrays.asList(realTypes), realTableFnRetTypes);
         }
-        LOG.error("polymorphic function has unknown type: {}", fn);
+        LOGGER.error("polymorphic function has unknown type: {}", fn);
         return null;
     }
 

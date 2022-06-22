@@ -13,7 +13,8 @@ SchemaScanner::ColumnDesc SchemaTasksScanner::_s_tbls_columns[] = {
         {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"SCHEDULE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false}};
+        {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"EXPIRE_TIME", TYPE_DATETIME, sizeof(StringValue), true}};
 
 SchemaTasksScanner::SchemaTasksScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -99,6 +100,26 @@ Status SchemaTasksScanner::fill_chunk(ChunkPtr* chunk) {
                 const std::string* str = &task_info.definition;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 6: {
+            // EXPIRE_TIME
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+                auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                if (task_info.__isset.expire_time) {
+                    int64_t expire_time = task_info.expire_time;
+                    if (expire_time <= 0) {
+                        nullable_column->append_nulls(1);
+                    } else {
+                        DateTimeValue t;
+                        t.from_unixtime(expire_time, TimezoneUtils::default_time_zone);
+                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                    }
+                } else {
+                    nullable_column->append_nulls(1);
+                }
             }
             break;
         }

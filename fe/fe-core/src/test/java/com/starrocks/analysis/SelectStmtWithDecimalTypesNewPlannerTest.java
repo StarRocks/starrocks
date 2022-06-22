@@ -4,6 +4,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -46,7 +47,13 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         starRocksAssert.withTable("CREATE TABLE `test_decimal_type6` (\n" +
                 "  `dec_1_2` decimal32(2, 1) NOT NULL COMMENT \"\",\n" +
                 "  `dec_18_0` decimal64(18, 0) NOT NULL COMMENT \"\",\n" +
-                "  `dec_18_18` decimal64(18, 18) NOT NULL COMMENT \"\"\n" +
+                "  `dec_18_18` decimal64(18, 18) NOT NULL COMMENT \"\",\n" +
+                "  `dec_10_2` decimal64(10, 2) NOT NULL COMMENT \"\",\n" +
+                "  `dec_12_10` decimal64(12, 10) NOT NULL COMMENT \"\",\n" +
+                "   dec_20_3 decimal128(20, 3),\n" +
+                "   dec_20_19 decimal128(20, 19)," +
+                "   dec_4_2 decimal64(4, 2),\n" +
+                "   dec_5_1 decimal64(5, 1)\n" +
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`dec_1_2`)\n" +
                 "COMMENT \"OLAP\"\n" +
@@ -95,7 +102,6 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = " select  if(1, cast('3.14' AS decimal32(9, 2)), cast('1.9999' AS decimal32(5, 4))) " +
                 "AS res0 from db1.decimal_table;";
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
-        System.out.println(thrift);
         Assert.assertTrue(thrift.contains(
                 "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))"));
 
@@ -141,7 +147,6 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                         "integer_value:3A 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00), output_scale:-1, has_nullable_child:false, " +
                         "is_nullable:false, is_monotonic:true)])})";
         String plan = UtFrameUtils.getPlanThriftString(ctx, sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains(expectString));
     }
 
@@ -177,7 +182,6 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalInPredicates() throws Exception {
         String sql = "select * from db1.decimal_table where col_decimal64p13s0 in (0, 1, 9999, -9.223372E+18)";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        System.out.println(plan);
         String snippet = "CAST(3: col_decimal64p13s0 AS DECIMAL128(19,0))" +
                 " IN (0, 1, 9999, -9223372000000000000)";
         Assert.assertTrue(plan.contains(snippet));
@@ -187,7 +191,6 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalBetweenPredicates() throws Exception {
         String sql = "select * from db1.decimal_table where col_decimal64p13s0 between -9.223372E+18 and 9.223372E+18";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        System.out.println(plan);
         String snippet = "cast([3: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(19,0)) " +
                 ">= -9223372000000000000, " +
                 "cast([3: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(19,0)) " +
@@ -220,6 +223,10 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String snippet =
                 "sum[([5: col_decimal128p20s3, DECIMAL128(20,3), true]); args: DECIMAL128; result: DECIMAL128(38,3)";
         Assert.assertTrue(plan.contains(snippet));
+
+        sql = "select sum(dec_20_19) from test_decimal_type6";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("sum[(cast([7: dec_20_19, DECIMAL128(20,19), true] as DECIMAL128(38,18))); args: DECIMAL128; result: DECIMAL128(38,18); args nullable: true; result nullable: true]"));
     }
 
     @Test
@@ -304,7 +311,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalAddNULL() throws Exception {
         String sql = "select col_decimal32p9s2 + NULL from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2)) + NULL";
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(10,2)) + NULL";
         Assert.assertTrue(plan.contains(snippet));
     }
 
@@ -320,7 +327,6 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalMulNULL() throws Exception {
         String sql = "select col_decimal32p9s2 * NULL from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        System.out.println(plan);
         String snippet = "6 <-> [2: col_decimal32p9s2, DECIMAL32(9,2), false] * NULL";
         Assert.assertTrue(plan.contains(snippet));
     }
@@ -361,8 +367,36 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalAddZero() throws Exception {
         String sql = "select col_decimal32p9s2 + 0.0 from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2)) + 0";
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(10,2)) + 0";
         Assert.assertTrue(plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimalAddRule() throws Exception {
+        String sql;
+        String plan;
+
+        // decimal(10, 2) + decimal(10, 2) = decimal(11, 2)
+        sql = "select count(`dec_10_2` + dec_10_2) from `test_decimal_type6`;";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("[12: cast, DECIMAL64(11,2), true] + [12: cast, DECIMAL64(11,2), true]"));
+
+        sql = "select count(`dec_10_2` + dec_12_10) from `test_decimal_type6`;";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        // decimal64(10, 2) + decimal64(12, 10) = decimal128(21, 10);
+        Assert.assertTrue(plan.contains("cast([4: dec_10_2, DECIMAL64(10,2), false] as DECIMAL128(19,2)) + cast([5: dec_12_10, DECIMAL64(12,10), false] as DECIMAL128(19,10))"));
+        // decimal64(18, 0) + decimal64(18, 18) = decimal(37, 18)
+        sql = "select count(dec_18_0 + dec_18_18) from `test_decimal_type6`";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(37,0)) + cast([3: dec_18_18, DECIMAL64(18,18), false] as DECIMAL128(37,18))"));
+        // const decimal64(18, 0) + decimal64(18, 18) = decimal128(37, 18) literal
+        sql = "select cast(1000000000000000000 as decimal(18, 0)) + cast(0.000000000000000001 as decimal(18, 18))";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains(" 2 <-> 1000000000000000000.000000000000000001"));
+
+        sql = "select dec_1_2 + dec_1_2 from test_decimal_type6";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("[11: cast, DECIMAL32(3,1), true] + [11: cast, DECIMAL32(3,1), true]"));
     }
 
     @Test
@@ -377,7 +411,6 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalMulZero() throws Exception {
         String sql = "select col_decimal32p9s2 * 0.0 from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        System.out.println(plan);
         String snippet = "6 <-> [2: col_decimal32p9s2, DECIMAL32(9,2), false] * 0";
         Assert.assertTrue(plan.contains(snippet));
     }
@@ -422,18 +455,64 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         // test decimal count(no-nullable decimal)
         sql = "select count(`dec_18_0`) from `test_decimal_type6`;";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        System.out.println("plan = " + plan);
         Assert.assertTrue(plan.contains("aggregate: count[([2: dec_18_0, DECIMAL64(18,0), false]); args: DECIMAL64; result: BIGINT; args nullable: false; result nullable: true]"));
 
         // test decimal add return a nullable column
         sql = "select count(`dec_18_0` + `dec_18_18`) from `test_decimal_type6`;";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        Assert.assertTrue(plan.contains("aggregate: count[([4: expr, DECIMAL64(18,18), true]); args: DECIMAL64; result: BIGINT; args nullable: true; result nullable: true]"));
+        Assert.assertTrue(plan.contains("cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(37,0)) + cast([3: dec_18_18, DECIMAL64(18,18), false] as DECIMAL128(37,18))"));
 
         // test decimal input function input no-nullable, output is nullable
         sql = "select round(`dec_18_0`) from `test_decimal_type6`";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        Assert.assertTrue(plan.contains("  |  4 <-> round[(cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(18,0))); args: DECIMAL128; result: DECIMAL128(38,0); args nullable: true; result nullable: true]"));
+        System.out.println("plan = " + plan);
+        Assert.assertTrue(plan.contains("round[(cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(18,0))); args: DECIMAL128; result: DECIMAL128(38,0); args nullable: true; result nullable: true]"));
+    }
+
+    @Test
+    public void testDoubleLiteralMul() throws Exception {
+        String sql;
+        String plan;
+        sql = "select 123456789000000000000000000000000000.00 * 123456789.123456789 * 123456789.123456789;";
+        final long sqlMode = ctx.getSessionVariable().getSqlMode();
+        final long code = SqlModeHelper.encode("MODE_DOUBLE_LITERAL");
+        ctx.getSessionVariable().setSqlMode(code|sqlMode);
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("  |  2 <-> 1.8816763755525075E51"));
+        ctx.getSessionVariable().setSqlMode(sqlMode);
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("  |  2 <-> 123456789000000000000000000000000000 * 123456789.123456789 * 123456789.123456789"));
+    }
+
+    @Test
+    public void testTruncate() throws Exception {
+        String sql = "select TRUNCATE(0.6798916342905857, TIMEDIFF('1969-12-27 10:06:26', '1969-12-09 21:35:14'));";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("truncate[(0.6798916342905857, cast(1513872.0 as INT)); args: DOUBLE,INT; " +
+                "result: DOUBLE; args nullable: true; result nullable: true]"));
+
+        sql = "select TRUNCATE(0.6798916342905857, '10');";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("truncate[(0.6798916342905857, 10); args: DOUBLE,INT; result: DOUBLE; " +
+                "args nullable: false; result nullable: true]"));
+
+
+        sql = "select TRUNCATE(0.6798916342905857, to_base64('abc'));";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("truncate[(0.6798916342905857, cast(to_base64[('abc'); args: VARCHAR; " +
+                "result: VARCHAR; args nullable: false; result nullable: true] as INT)); " +
+                "args: DOUBLE,INT; result: DOUBLE; args nullable: true; result nullable: true]"));
+
+        sql = "select TRUNCATE(0.6798916342905857, 3.13);";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("truncate[(0.6798916342905857, cast(3.13 as INT)); args: DOUBLE,INT; " +
+                "result: DOUBLE; args nullable: true; result nullable: true]"));
+
+        sql = "select TRUNCATE(0.6798916342905857, cast('2000-01-31 12:00:00' as datetime));";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains("truncate[(0.6798916342905857, cast('2000-01-31 12:00:00' as INT)); " +
+                "args: DOUBLE,INT; result: DOUBLE; args nullable: true; result nullable: true]"));
     }
 }
 
