@@ -44,7 +44,7 @@ public class ShowVariablesStmt extends ShowStmt {
                     .build();
 
     private SetType type;
-    private String pattern;
+    private final String pattern;
     private Expr where;
 
     public ShowVariablesStmt(SetType type, String pattern) {
