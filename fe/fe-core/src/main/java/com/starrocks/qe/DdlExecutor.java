@@ -42,25 +42,20 @@ import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.CancelExportStmt;
 import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CreateFileStmt;
-import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
-import com.starrocks.analysis.CreateTableLikeStmt;
-import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DropFileStmt;
-import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.analysis.DropRoleStmt;
-import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.GrantStmt;
@@ -96,17 +91,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 
 public class DdlExecutor {
     public static ShowResultSet execute(GlobalStateMgr globalStateMgr, DdlStmt ddlStmt) throws Exception {
-        if (ddlStmt instanceof CreateFunctionStmt) {
-            globalStateMgr.createFunction((CreateFunctionStmt) ddlStmt);
-        } else if (ddlStmt instanceof DropFunctionStmt) {
-            globalStateMgr.dropFunction((DropFunctionStmt) ddlStmt);
-        } else if (ddlStmt instanceof CreateTableStmt) {
-            globalStateMgr.createTable((CreateTableStmt) ddlStmt);
-        } else if (ddlStmt instanceof CreateTableLikeStmt) {
-            globalStateMgr.createTableLike((CreateTableLikeStmt) ddlStmt);
-        } else if (ddlStmt instanceof DropTableStmt) {
-            globalStateMgr.dropTable((DropTableStmt) ddlStmt);
-        } else if (ddlStmt instanceof CreateMaterializedViewStmt) {
+        if (ddlStmt instanceof CreateMaterializedViewStmt) {
             globalStateMgr.createMaterializedView((CreateMaterializedViewStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateMaterializedViewStatement) {
             globalStateMgr.createMaterializedView((CreateMaterializedViewStatement) ddlStmt);
