@@ -3,6 +3,7 @@
 package com.starrocks.staros;
 
 import com.staros.journal.Journal;
+import com.starrocks.persist.EditLog;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -15,12 +16,19 @@ import java.io.IOException;
 public class StarMgrJournalTest {
     @Mocked
     private Journal journal;
+    @Mocked
+    private EditLog editLog;
 
     @Test
     public void testStarMgrJournal() {
         new MockUp<Journal>() {
             @Mock
             public void write(DataOutput out) throws IOException {
+            }
+        };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logStarMgrOperation(StarMgrJournal journal) {
             }
         };
 
@@ -32,5 +40,7 @@ public class StarMgrJournalTest {
         }
 
         Assert.assertEquals(journal, starMgrJournal.getJournal());
+
+        editLog.logStarMgrOperation(starMgrJournal);
     }
 }
