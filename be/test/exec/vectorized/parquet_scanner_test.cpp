@@ -200,6 +200,9 @@ class ParquetScannerTest : public ::testing::Test {
                 {"col_json_list_struct", TypeDescriptor::create_json_type()},
                 {"col_json_map_list", TypeDescriptor::create_json_type()},
                 {"col_json_struct_struct", TypeDescriptor::create_json_type()},
+
+                // Convert struct->JSON->string
+                {"col_json_struct_string", TypeDescriptor::from_primtive_type(TYPE_VARCHAR)},
         };
         SlotInfoArray slot_infos;
         slot_infos.reserve(column_names.size());
@@ -458,6 +461,12 @@ TEST_F(ParquetScannerTest, test_to_json) {
              {R"({"s0": 1, "s1": {"s2": 3}}                                                     )",
               R"({"s0": 2, "s1": {"s2": 4}}                                                     )",
               R"({ "s0": 3, "s1": {"s2": 5}}                                                    )"}},
+
+            {"col_json_struct_string",
+             {R"('{"s0": 1, "s1": "string1"}'                                                    )",
+              R"('{"s0": 2, "s1": "string2"}'                                                     )",
+              R"('{"s0": 3, "s1": "string3"}'                                                    )"}},
+
     };
     std::vector<std::string> columns_from_path;
     std::vector<std::string> path_values;
