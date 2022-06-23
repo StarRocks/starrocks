@@ -1,6 +1,6 @@
 # Broker Load
 
-StarRocks supports importing data from external storage systems such as Apache HDFS, Amazon S3, etc. The supported file formats are CSV, ORC File, Parquet, etc. The data volume is in the range of tens to hundreds of GB.
+StarRocks supports importing data from external storage systems such as HDFS, Amazon S3, etc. The supported file formats are CSV, ORC File, Parquet, etc. The data volume is in the range of tens to hundreds of GB.
 
 In broker load, StarRocks reads data from the corresponding data sources (e.g. HDFS, S3) through the deployed broker program, and uses its own computing resources to pre-process and import the data. This is an **asynchronous** import method that the user needs to create the import job via the MySQL protocol and view the import result by command.
 
@@ -22,7 +22,7 @@ The following diagram shows the main flow of broker load.
 
 ## Supported Remote File Systems
 
-* Apache HDFS
+* HDFS
 * Amazon S3
 * Alibaba Cloud OSS
 * Tencent COS
@@ -61,7 +61,7 @@ broker_properties:
     (key2=value2, ...)
 ~~~
 
-**Example 1 import from Apache HDFS:**
+#### Load data from HDFS
 
 ~~~sql
 LOAD LABEL db1.label1
@@ -93,7 +93,24 @@ PROPERTIES
 );
 ~~~
 
-**Example 2 import from Alibaba Cloud OSS:**
+#### Load data in CSV format from Amazon S3
+
+~~~sql
+LOAD LABEL example_db.label14
+(
+DATA INFILE("s3a://my_bucket/input/file.csv")
+INTO TABLE `my_table`
+(k1, k2, k3)
+)
+WITH BROKER my_broker
+(
+    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "fs.s3a.endpoint" = "s3-ap-northeast-1.amazonaws.com"
+)
+~~~
+
+#### Load data from Alibaba Cloud
 
 ~~~SQL
 LOAD LABEL example_db.label12
@@ -107,6 +124,23 @@ WITH BROKER my_broker
     "fs.oss.accessKeyId" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
     "fs.oss.accessKeySecret" = "yyyyyyyyyyyyyyyyyyyy",
     "fs.oss.endpoint" = "oss-cn-zhangjiakou-internal.aliyuncs.com"
+)
+~~~
+
+#### Load data in CSV format from Tencent Cloud COS
+
+~~~sql
+LOAD LABEL example_db.label13
+(
+DATA INFILE("cosn://my_bucket/input/file.csv")
+INTO TABLE `my_table`
+(k1, k2, k3)
+)
+WITH BROKER my_broker
+(
+    "fs.cosn.userinfo.secretId" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "fs.cosn.userinfo.secretKey" = "yyyyyyyyyyyyyyyyyyyy",
+    "fs.cosn.bucket.endpoint_suffix" = "cos.ap-beijing.myqcloud.com"
 )
 ~~~
 
