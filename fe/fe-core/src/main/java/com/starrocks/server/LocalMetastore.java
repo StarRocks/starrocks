@@ -156,6 +156,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -3000,6 +3001,12 @@ public class LocalMetastore implements ConnectorMetadata {
         } else {
             stateMgr.getAlterInstance().processDropMaterializedView(stmt);
         }
+        stateMgr.getAlterInstance().processDropMaterializedView(stmt);
+    }
+
+    @Override
+    public void alterMaterializedView(AlterMaterializedViewStatement stmt) throws DdlException, MetaNotFoundException {
+        stateMgr.getAlterInstance().processAlterMaterializedView(stmt);
     }
 
     /*

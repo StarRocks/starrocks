@@ -17,6 +17,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.SystemInfoService;
@@ -28,6 +29,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -51,8 +53,20 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         @SerializedName(value = "baseTableVisibleVersionMap")
         private Map<Long, Map<Long, Long>> baseTableVisibleVersionMap;
 
+        @SerializedName(value = "starTime")
+        private long startTime;
+
+        @SerializedName(value = "step")
+        private long step;
+
+        @SerializedName(value = "timeUnit")
+        private String timeUnit;
+
         public AsyncRefreshContext() {
             this.baseTableVisibleVersionMap = Maps.newHashMap();
+            this.startTime = Utils.getLongFromDateTime(LocalDateTime.now());
+            this.step = 0;
+            this.timeUnit = null;
         }
 
         public AsyncRefreshContext(Map<Long, Map<Long, Long>> baseTableVisibleVersionMap) {
@@ -65,6 +79,30 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         Map<Long, Long> getPartitionVisibleVersionMapForTable(long tableId) {
             return baseTableVisibleVersionMap.get(tableId);
+        }
+
+        public long getStartTime() {
+            return startTime;
+        }
+
+        public void setStartTime(long startTime) {
+            this.startTime = startTime;
+        }
+
+        public long getStep() {
+            return step;
+        }
+
+        public void setStep(long step) {
+            this.step = step;
+        }
+
+        public String getTimeUnit() {
+            return timeUnit;
+        }
+
+        public void setTimeUnit(String timeUnit) {
+            this.timeUnit = timeUnit;
         }
     }
 
@@ -159,10 +197,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return dbId;
     }
 
-    public MvRefreshScheme getRefreshScheme() {
-        return refreshScheme;
-    }
-
     public boolean isActive() {
         return active;
     }
@@ -189,6 +223,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public void setBaseTableIds(Set<Long> baseTableIds) {
         this.baseTableIds = baseTableIds;
+    }
+
+    public MvRefreshScheme getRefreshScheme() {
+        return refreshScheme;
+    }
+
+    public void setRefreshScheme(MvRefreshScheme refreshScheme) {
+        this.refreshScheme = refreshScheme;
     }
 
     @Override
