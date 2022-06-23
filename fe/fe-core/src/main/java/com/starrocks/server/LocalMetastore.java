@@ -2990,6 +2990,13 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         if (table != null && table instanceof MaterializedView) {
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
+            Set<Long> baseTableIds = ((MaterializedView) table).getBaseTableIds();
+            for (Long baseTableId : baseTableIds) {
+                OlapTable baseTable = ((OlapTable) db.getTable(baseTableId));
+                if (baseTable != null) {
+                    baseTable.removeRelatedMaterializedView(table.getId());
+                }
+            }
         } else {
             stateMgr.getAlterInstance().processDropMaterializedView(stmt);
         }
