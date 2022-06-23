@@ -77,8 +77,8 @@ cd $PROJECT/fe/fe-core/target
 if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
     #jacoco_result="jacoco_${GITHUB_PR_NUMBER}.exec"
     #mv jacoco.exec $jacoco_result || true
-    sudo java -jar $PROJECT/jacococli.jar report ./$jacoco_result --classfiles ./classes/ --html ./result --sourcefiles $PROJECT/fe/fe-core/src/main/java/ --encoding utf-8 --name fe-coverage
-
+    java -jar $PROJECT/jacococli.jar report ./$jacoco_result --classfiles ./classes/ --html ./result --sourcefiles $PROJECT/fe/fe-core/src/main/java/ --encoding utf-8 --name fe-coverage
+    ls -al $PROJECT/fe/fe-core/target
     time_count=0
     pull_status=1
     while (( $pull_status != 0 ));do
