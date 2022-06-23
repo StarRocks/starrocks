@@ -43,6 +43,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -56,7 +57,12 @@ import java.util.concurrent.atomic.AtomicLong;
 public class BDBJEJournal implements Journal {
     public static final Logger LOG = LogManager.getLogger(BDBJEJournal.class);
     private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
+<<<<<<< HEAD
     private static final int RETRY_TIME = 3;
+=======
+    static int RETRY_TIME = 3;
+    static int SLEEP_INTERVAL_SEC = 5;
+>>>>>>> f90bd4eb1 ([Bugfix] Rebuild txn if invalid after commit fails (#7605))
 
     private String environmentPath = null;
     private String selfNodeName;
@@ -64,7 +70,17 @@ public class BDBJEJournal implements Journal {
 
     private BDBEnvironment bdbEnvironment = null;
     private CloseSafeDatabase currentJournalDB;
+<<<<<<< HEAD
     // the next journal's id. start from 1.
+=======
+    protected Transaction currentTrasaction = null;
+
+    // store uncommitted kv, used for rebuilding txn on commit fails
+    private List<Pair<DatabaseEntry, DatabaseEntry>> uncommitedDatas = new ArrayList<>();
+
+    // only kept for profile test, will remove in the next PR
+    @VisibleForTesting
+>>>>>>> f90bd4eb1 ([Bugfix] Rebuild txn if invalid after commit fails (#7605))
     private AtomicLong nextJournalId = new AtomicLong(1);
 
     public BDBJEJournal(String nodeName) {
@@ -394,4 +410,201 @@ public class BDBJEJournal implements Journal {
         return bdbEnvironment;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * start batch write
+     * for BDB: start transaction.
+     */
+    @Override
+    public void batchWriteBegin() throws InterruptedException, JournalException {
+        if (currentTrasaction != null) {
+            throw new JournalException(String.format(
+                    "failed to begin batch write because has running txn = %s", currentTrasaction));
+        }
+
+        JournalException exception = null;
+        for (int i = 0; i < RETRY_TIME; i++) {
+            try {
+                // sleep before retry
+                if (i != 0) {
+                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+                }
+
+                currentTrasaction = currentJournalDB.getDb().getEnvironment().beginTransaction(
+                        null, bdbEnvironment.getTxnConfig());
+                return;
+            } catch (DatabaseException e) {
+                String errMsg = String.format("failed to begin txn after retried %d times! db = %s",
+                        i + 1, currentJournalDB);
+                LOG.error(errMsg, e);
+                exception = new JournalException(errMsg);
+                exception.initCause(e);
+            }
+        }
+        // failed after retried
+        throw exception;
+    }
+
+    /**
+     * append buffer to current batch
+     * for bdb: write to transaction, no commit
+     */
+    @Override
+    public void batchWriteAppend(long journalId, DataOutputBuffer buffer) throws InterruptedException, JournalException {
+        if (currentTrasaction == null) {
+            throw new JournalException("failed to append because no running txn!");
+        }
+        // id is the key
+        DatabaseEntry theKey = new DatabaseEntry();
+        TupleBinding<Long> idBinding = TupleBinding.getPrimitiveBinding(Long.class);
+        idBinding.objectToEntry(journalId, theKey);
+        // entity is the value
+        DatabaseEntry theData = new DatabaseEntry(buffer.getData(), 0, buffer.getLength());
+
+        JournalException exception = null;
+        for (int i = 0; i < RETRY_TIME; i++) {
+            try {
+                // sleep before retry
+                if (i != 0) {
+                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+                }
+
+                OperationStatus status = currentJournalDB.put(currentTrasaction, theKey, theData);
+                if (status != OperationStatus.SUCCESS) {
+                    throw new JournalException(String.format(
+                            "failed to append journal after retried %d times! status[%s] db[%s] key[%s] data[%s]",
+                            i + 1, status, currentJournalDB, theKey, theData));
+                }
+                // success
+                uncommitedDatas.add(Pair.create(theKey, theData));
+                return;
+            } catch (DatabaseException e) {
+                String errMsg = String.format(
+                        "failed to append journal after retried %d times! key[%s] value[%s] txn[%s] db[%s]",
+                        i + 1, theKey, theData, currentTrasaction, currentJournalDB);
+                LOG.error(errMsg, e);
+                exception = new JournalException(errMsg);
+                exception.initCause(e);
+            } catch (JournalException e) {
+                LOG.error("failed to write journal", e);
+                exception = e;
+            }
+        }
+        // failed after retried
+        throw exception;
+    }
+
+    /**
+     * persist current batch
+     * for bdb: commit current transaction
+     * notice that if commit fail, the transaction may not be valid.
+     * we should rebuild the transaction and retry.
+     */
+    @Override
+    public void batchWriteCommit() throws InterruptedException, JournalException {
+        if (currentTrasaction == null) {
+            throw new JournalException("failed to commit because no running txn!");
+        }
+
+        JournalException exception = null;
+        try {
+            for (int i = 0; i < RETRY_TIME; i++) {
+                // retry cleanups
+                if (i != 0) {
+                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+
+                    if (currentTrasaction == null || !currentTrasaction.isValid()) {
+                        try {
+                            rebuildCurrentTransaction();
+                        } catch (JournalException e) {
+                            // failed to rebuild txn, will continune to next attempt
+                            LOG.warn("failed to commit journal after retried {} times! failed to rebuild txn",
+                                    i + 1, e);
+                            currentTrasaction = null;
+                            exception = e;
+                            continue;
+                        }
+                    }
+                } // if i != 0
+
+                // commit
+                try {
+                    currentTrasaction.commit();
+                    return;
+                } catch (DatabaseException e) {
+                    String errMsg = String.format("failed to commit journal after retried %d times! txn[%s] db[%s]",
+                            i + 1, currentTrasaction, currentJournalDB);
+                    LOG.error(errMsg, e);
+                    exception = new JournalException(errMsg);
+                    exception.initCause(e);
+                }
+            }
+            // failed after retried
+            throw exception;
+        } finally {
+            // always reset current txn
+            currentTrasaction = null;
+            uncommitedDatas.clear();
+        }
+    }
+
+    /**
+     * txn can be invalid if commit fails on exception
+     * in this case, we rebuild the current transaction with `uncommitedDatas`
+     * there's no need to retry while we were rebuilding since we have retried outside this function
+     */
+    private void rebuildCurrentTransaction() throws JournalException {
+        LOG.warn("transaction is invalid, rebuild the txn with {} kvs", uncommitedDatas.size());
+
+        try {
+            //  begin transaction
+            currentTrasaction = currentJournalDB.getDb().getEnvironment().beginTransaction(
+                    null, bdbEnvironment.getTxnConfig());
+            // append
+            for (Pair<DatabaseEntry, DatabaseEntry> kvPair : uncommitedDatas) {
+                DatabaseEntry theKey = kvPair.first;
+                DatabaseEntry theData = kvPair.second;
+                OperationStatus status = currentJournalDB.put(currentTrasaction, theKey, theData);
+                if (status != OperationStatus.SUCCESS) {
+                    String msg = String.format(
+                            "failed to append journal! status[%s] db[%s] key[%s] data[%s]",
+                            status, currentJournalDB, theKey, theData);
+                    LOG.warn(msg);
+                    throw new JournalException(msg);
+                }
+            }
+            LOG.info("rebuild txn succeed. new txn {}", currentTrasaction);
+        } catch (DatabaseException e) {
+            String errMsg = String.format("failed to rebuild txn! txn[%s] db[%s]", currentTrasaction, currentJournalDB);
+            LOG.error(errMsg, e);
+            JournalException exception = new JournalException(errMsg);
+            exception.initCause(e);
+            throw exception;
+        }
+    }
+
+    /**
+     * abort current transaction
+     * for bdb: abort current transaction.
+     */
+    @Override
+    public void batchWriteAbort() throws InterruptedException, JournalException {
+        if (currentTrasaction == null) {
+            LOG.warn("failed to abort transaction because no running transaction, will just ignore and return.");
+            return;
+        }
+        try {
+            currentTrasaction.abort();
+        } catch (DatabaseException e) {
+            JournalException exception = new JournalException(String.format(
+                    "failed to abort batch write! txn[%s] db[%s]", currentTrasaction, currentJournalDB));
+            exception.initCause(e);
+            throw exception;
+        } finally {
+            currentTrasaction = null;
+        }
+    }
+
+>>>>>>> f90bd4eb1 ([Bugfix] Rebuild txn if invalid after commit fails (#7605))
 }
