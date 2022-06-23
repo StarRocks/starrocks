@@ -108,6 +108,27 @@ public:
     DEFINE_VECTORIZED_FN(get_json_string);
 
     /**
+     * @param: [json_string, tagged_value]
+     * @paramType: [JsonColumn, BinaryColumn]
+     * @return: Int32Column
+     */
+    DEFINE_VECTORIZED_FN(get_native_json_int);
+
+    /**
+     * @param: [json_string, tagged_value]
+     * @paramType: [JsonColumn, BinaryColumn]
+     * @return: DoubleColumn
+     */
+    DEFINE_VECTORIZED_FN(get_native_json_double);
+
+    /**
+     * @param: [json_string, tagged_value]
+     * @paramType: [JsonColumn, BinaryColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(get_native_json_string);
+
+    /**
      * @param: [json_string]
      * @paramType: [BinaryColumn]
      * @return: JsonColumn
