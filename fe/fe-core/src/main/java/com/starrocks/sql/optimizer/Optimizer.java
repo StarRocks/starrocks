@@ -229,6 +229,7 @@ public class Optimizer {
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_SET_OPERATOR);
 
+        CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
         if (cteContext.needOptimizeCTE()) {
             cteContext.reset();
             ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.COLLECT_CTE);
