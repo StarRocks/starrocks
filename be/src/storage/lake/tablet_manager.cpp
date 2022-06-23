@@ -64,6 +64,10 @@ std::string TabletManager::txn_log_cache_key(int64_t tablet_id, int64_t txn_id) 
     return fmt::format("txn_{:016X}_{:016X}", tablet_id, txn_id);
 }
 
+std::string TabletManager::tablet_schema_cache_key(int64_t tablet_id) {
+    return fmt::format("schema_{:016X}", tablet_id);
+}
+
 static void tablet_metadata_deleter(const CacheKey& key, void* value) {
     std::string_view name(key.data(), key.size());
     if (HasPrefixString(name, "tbl_")) {
@@ -71,6 +75,9 @@ static void tablet_metadata_deleter(const CacheKey& key, void* value) {
         delete ptr;
     } else if (HasPrefixString(name, "txn_")) {
         TxnLogPtr* ptr = static_cast<TxnLogPtr*>(value);
+        delete ptr;
+    } else if (HasPrefixString(name, "schema_")) {
+        TabletSchemaPtr* ptr = static_cast<TabletSchemaPtr*>(value);
         delete ptr;
     }
 }
@@ -96,6 +103,16 @@ TabletMetadataPtr TabletManager::lookup_tablet_metadata(const std::string& key) 
     return ptr;
 }
 
+TabletSchemaPtr TabletManager::lookup_tablet_schema(const std::string& key) {
+    auto handle = _metacache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        return nullptr;
+    }
+    auto ptr = *(static_cast<TabletSchemaPtr*>(_metacache->value(handle)));
+    _metacache->release(handle);
+    return ptr;
+}
+
 TxnLogPtr TabletManager::lookup_txn_log(const std::string& key) {
     auto handle = _metacache->lookup(CacheKey(key));
     if (handle == nullptr) {
@@ -108,6 +125,10 @@ TxnLogPtr TabletManager::lookup_txn_log(const std::string& key) {
 
 void TabletManager::erase_metacache(const std::string& key) {
     _metacache->erase(CacheKey(key));
+}
+
+void TabletManager::prune_metacache() {
+    _metacache->prune();
 }
 
 Status TabletManager::create_tablet(const TCreateTabletReq& req) {
@@ -154,6 +175,9 @@ Status TabletManager::drop_tablet(int64_t tablet_id) {
         }
         return true;
     };
+
+    //drop tablet schema from metacache;
+    erase_metacache(tablet_schema_cache_key(tablet_id));
 
     RETURN_IF_ERROR(fs->iterate_dir(group_path, scan_cb));
     for (const auto& obj : objects) {
