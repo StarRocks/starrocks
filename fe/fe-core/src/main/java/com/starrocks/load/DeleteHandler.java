@@ -224,7 +224,7 @@ public class DeleteHandler implements Writable {
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         // For version compatibility, keep this set to FRONTEND,
                         // and set it to DELETE in the next release
-                        TransactionState.LoadJobSourceType.FRONTEND, jobId, Config.stream_load_default_timeout_second);
+                        TransactionState.LoadJobSourceType.DELETE, jobId, Config.stream_load_default_timeout_second);
 
                 MultiDeleteInfo deleteInfo =
                         new MultiDeleteInfo(db.getId(), olapTable.getId(), tableName, deleteConditions);
