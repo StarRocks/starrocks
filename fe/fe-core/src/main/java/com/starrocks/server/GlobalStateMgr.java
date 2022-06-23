@@ -838,7 +838,6 @@ public class GlobalStateMgr {
     protected void initJournal() throws JournalException, InterruptedException {
         BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
         journal = JournalFactory.create(nodeMgr.getNodeName());
-        journal.open();
         journalWriter = new JournalWriter(journal, journalQueue);
 
         editLog = new EditLog(journalQueue);

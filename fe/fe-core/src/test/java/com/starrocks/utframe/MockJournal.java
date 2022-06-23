@@ -31,7 +31,6 @@ public class MockJournal implements Journal {
 
     @Override
     public void open() throws InterruptedException, JournalException {
-        GlobalStateMgr.getCurrentState().setHaProtocol(new MockProtocol());
     }
 
     @Override
@@ -138,7 +137,7 @@ public class MockJournal implements Journal {
         }
     }
 
-    private static class MockProtocol implements HAProtocol {
+    public static class MockProtocol implements HAProtocol {
 
         @Override
         public long getEpochNumber() {

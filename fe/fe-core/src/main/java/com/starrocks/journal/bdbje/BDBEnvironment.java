@@ -29,7 +29,6 @@ import com.sleepycat.je.Durability;
 import com.sleepycat.je.Durability.ReplicaAckPolicy;
 import com.sleepycat.je.Durability.SyncPolicy;
 import com.sleepycat.je.EnvironmentConfig;
-import com.sleepycat.je.EnvironmentFailureException;
 import com.sleepycat.je.TransactionConfig;
 import com.sleepycat.je.rep.InsufficientLogException;
 import com.sleepycat.je.rep.NetworkRestore;
@@ -39,8 +38,8 @@ import com.sleepycat.je.rep.NodeType;
 import com.sleepycat.je.rep.RepInternal;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.ReplicationConfig;
-import com.sleepycat.je.rep.RollbackException;
-import com.sleepycat.je.rep.StateChangeListener;
+import com.sleepycat.je.rep.RestartRequiredException;
+import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.DbResetRepGroup;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
 import com.starrocks.common.Config;
@@ -48,6 +47,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.BDBStateChangeListener;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.journal.JournalException;
 import com.starrocks.server.GlobalStateMgr;
@@ -72,9 +72,11 @@ import java.util.logging.Level;
  */
 public class BDBEnvironment {
     private static final Logger LOG = LogManager.getLogger(BDBEnvironment.class);
-    private static final int RETRY_TIME = 3;
-    private static final int SLEEP_INTERVAL_SEC = 5;
+    protected static int RETRY_TIME = 3;
+    protected static int SLEEP_INTERVAL_SEC = 5;
     private static final int MEMORY_CACHE_PERCENT = 20;
+    // wait at most 10 seconds after environment initialized for state change
+    private static final int INITAL_STATE_CHANGE_WAIT_SEC = 10;
 
     public static final String STARROCKS_JOURNAL_GROUP = "PALO_JOURNAL_GROUP";
 
@@ -106,10 +108,10 @@ public class BDBEnvironment {
      * @return
      * @throws JournalException
      */
-    public static BDBEnvironment initBDBEnvironment(String nodeName) throws JournalException {
+    public static BDBEnvironment initBDBEnvironment(String nodeName) throws JournalException, InterruptedException {
+        // check for port use
         Pair<String, Integer> selfNode = GlobalStateMgr.getCurrentState().getSelfNode();
         try {
-
             if (NetUtils.isPortUsing(selfNode.first, selfNode.second)) {
                 String errMsg = String.format("edit_log_port %d is already in use. will exit.", selfNode.second);
                 LOG.error(errMsg);
@@ -123,6 +125,7 @@ public class BDBEnvironment {
             throw journalException;
         }
 
+        // constructor
         String selfNodeHostPort = selfNode.first + ":" + selfNode.second;
 
         String environmentPath = GlobalStateMgr.getCurrentState().getBdbDir();
@@ -133,6 +136,8 @@ public class BDBEnvironment {
 
         BDBEnvironment bdbEnvironment = new BDBEnvironment(dbEnv, nodeName, selfNodeHostPort,
                 helperHostPort, GlobalStateMgr.getCurrentState().isElectable());
+
+        // setup
         bdbEnvironment.setup();
         return bdbEnvironment;
     }
@@ -149,10 +154,13 @@ public class BDBEnvironment {
     }
 
     // The setup() method opens the environment and database
-    protected void setup() throws JournalException {
-
+    protected void setup() throws JournalException, InterruptedException {
         this.closing = false;
+        initConfigs();
+        setupEnvironment();
+    }
 
+    protected void initConfigs() throws JournalException {
         // Almost never used, just in case the master can not restart
         if (Config.metadata_failure_recovery.equals("true")) {
             if (!isElectable) {
@@ -225,11 +233,17 @@ public class BDBEnvironment {
                     getSyncPolicy(Config.replica_sync_policy),
                     getAckPolicy(Config.replica_ack_policy)));
         }
+    }
 
+    protected void setupEnvironment() throws JournalException, InterruptedException {
         // open environment and epochDB
+        JournalException exception = null;
         for (int i = 0; i < RETRY_TIME; i++) {
+            if (i > 0) {
+                Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+            }
             try {
-                // open the environment
+                LOG.info("start to setup bdb environment for {} times", i + 1);
                 replicatedEnvironment = new ReplicatedEnvironment(envHome, replicationConfig, environmentConfig);
 
                 // get replicationGroupAdmin object.
@@ -241,7 +255,7 @@ public class BDBEnvironment {
                 adminNodes.add(helper);
                 LOG.info("add helper[{}] as ReplicationGroupAdmin", helperHostPort);
                 // 2. add self if is electable
-                if (!selfNodeHostPort.equals(helperHostPort) && GlobalStateMgr.getCurrentState().isElectable()) {
+                if (!selfNodeHostPort.equals(helperHostPort) && isElectable) {
                     HostAndPort selfNodeAddress = HostAndPort.fromString(selfNodeHostPort);
                     InetSocketAddress self = new InetSocketAddress(selfNodeAddress.getHost(),
                             selfNodeAddress.getPort());
@@ -256,36 +270,52 @@ public class BDBEnvironment {
                 GlobalStateMgr.getCurrentState().setHaProtocol(protocol);
 
                 // start state change listener
-                StateChangeListener listener = new BDBStateChangeListener();
+                BDBStateChangeListener listener = new BDBStateChangeListener(isElectable);
                 replicatedEnvironment.setStateChangeListener(listener);
+
+                LOG.info("replicated environment is all set, wait for state change...");
+                // wait for master change, otherwise a ReplicaWriteException exception will be thrown
+                for (int j = 0; j < INITAL_STATE_CHANGE_WAIT_SEC; j++) {
+                    if (FrontendNodeType.UNKNOWN != listener.getNewType()) {
+                        break;
+                    }
+                    Thread.sleep(1000);
+                }
+                LOG.info("state change done, current role {}", listener.getNewType());
 
                 // open epochDB. the first parameter null means auto-commit
                 epochDB = new CloseSafeDatabase(replicatedEnvironment.openDatabase(null, "epochDB", dbConfig));
-                break;
-            } catch (InsufficientLogException insufficientLogEx) {
-                LOG.warn("insufficient exception, refresh and setup again", insufficientLogEx);
-                refreshLog(insufficientLogEx);
-                close();
-            } catch (RollbackException exception) {
-                LOG.warn("rollback exception, setup again", exception);
+                LOG.info("end setup bdb environment after {} times", i + 1);
+                return;
+            } catch (RestartRequiredException e) {
+                String errMsg = String.format(
+                        "catch a RestartRequiredException when setup environment after retried %d times, refresh and setup again",
+                        i + 1);
+                LOG.warn(errMsg, e);
+                exception = new JournalException(errMsg);
+                exception.initCause(e);
+                if (e instanceof InsufficientLogException) {
+                    refreshLog((InsufficientLogException) e);
+                }
                 close();
             } catch (DatabaseException e) {
-                LOG.warn("database exception", e);
-                if (i < RETRY_TIME - 1) {
-                    try {
-                        Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
-                    } catch (InterruptedException e1) {
-                        e1.printStackTrace();
-                    }
+                if (i == 0 && e instanceof UnknownMasterException) {
+                    // The node may be unable to join the group because the Master could not be determined because a
+                    // master was present but lacked a {@link QuorumPolicy#SIMPLE_MAJORITY} needed to update the
+                    // environment with information about this node, if it's a new node and is joining the group for
+                    // the first time.
+                    LOG.warn("failed to setup environment because of UnknowMasterException for the first time, ignore it.");
                 } else {
-                    String errMsg = "error to open replicated environment. will exit.";
+                    String errMsg = String.format("failed to setup environment after retried %d times", i + 1);
                     LOG.error(errMsg, e);
-                    JournalException exception = new JournalException(errMsg);
+                    exception = new JournalException(errMsg);
                     exception.initCause(e);
-                    throw exception;
                 }
             }
         }
+
+        // failed after retry
+        throw exception;
     }
 
     public void refreshLog(InsufficientLogException insufficientLogEx) {
@@ -373,6 +403,7 @@ public class BDBEnvironment {
             try {
                 db = new CloseSafeDatabase(replicatedEnvironment.openDatabase(null, dbName, dbConfig));
                 openedDatabases.add(db);
+                LOG.info("successfully open new db {}", db);
             } catch (Exception e) {
                 LOG.warn("catch an exception when open database {}", dbName, e);
             }
@@ -418,56 +449,23 @@ public class BDBEnvironment {
     }
 
     // get journal db names and sort the names
+    // let the caller retry from outside.
+    // return null only if environment is closing
     public List<Long> getDatabaseNames() {
-        List<Long> ret = new ArrayList<Long>();
         if (closing) {
-            return ret;
+            return null;
         }
 
-        List<String> names = null;
-        int tried = 0;
-        while (true) {
-            try {
-                names = replicatedEnvironment.getDatabaseNames();
-                break;
-            } catch (InsufficientLogException e) {
-                // for InsufficientLogException we should refresh the log and
-                // then exit the process because we may have read dirty data.
-                LOG.warn("catch insufficient log exception. please restart.", e);
-                refreshLog(e);
-                System.exit(-1);
-            } catch (RollbackException exception) {
-                // for RollbackException we should exit the process because we may have read dirty data.
-                LOG.warn("catch rollback exception, please restart", exception);
-                System.exit(-1);
-            } catch (EnvironmentFailureException e) {
-                tried++;
-                if (tried == RETRY_TIME) {
-                    LOG.error("bdb environment failure exception.", e);
-                    System.exit(-1);
-                }
-                LOG.warn("bdb environment failure exception. will retry", e);
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e1) {
-                    e1.printStackTrace();
-                }
-            } catch (DatabaseException e) {
-                LOG.warn("catch an exception when calling getDatabaseNames", e);
-                return null;
+        List<Long> ret = new ArrayList<Long>();
+        List<String> names = replicatedEnvironment.getDatabaseNames();
+        for (String name : names) {
+            // We don't count epochDB
+            if (name.equals("epochDB")) {
+                continue;
             }
-        }
 
-        if (names != null) {
-            for (String name : names) {
-                // We don't count epochDB
-                if (name.equals("epochDB")) {
-                    continue;
-                }
-
-                long db = Long.parseLong(name);
-                ret.add(db);
-            }
+            long db = Long.parseLong(name);
+            ret.add(db);
         }
 
         Collections.sort(ret);

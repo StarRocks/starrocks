@@ -28,7 +28,6 @@ import com.sleepycat.je.DatabaseEntry;
 import com.sleepycat.je.DatabaseException;
 import com.sleepycat.je.OperationStatus;
 import com.sleepycat.je.Transaction;
-import com.sleepycat.je.rep.InsufficientLogException;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
@@ -105,10 +104,7 @@ public class BDBJEJournal implements Journal {
             return ret;
         }
         List<Long> dbNames = bdbEnvironment.getDatabaseNames();
-        if (dbNames == null) {
-            return ret;
-        }
-        if (dbNames.size() == 0) {
+        if (dbNames == null || dbNames.size() == 0) {
             return ret;
         }
 
@@ -128,10 +124,7 @@ public class BDBJEJournal implements Journal {
             return ret;
         }
         List<Long> dbNames = bdbEnvironment.getDatabaseNames();
-        if (dbNames == null) {
-            return ret;
-        }
-        if (dbNames.size() == 0) {
+        if (dbNames == null || dbNames.size() == 0) {
             return ret;
         }
 
@@ -151,8 +144,10 @@ public class BDBJEJournal implements Journal {
         bdbEnvironment = null;
     }
 
-    /*
+    /**
      * open the bdbje environment, and get the current journal database
+     * This function is only called if master is transfered, and is used for write journal
+     * So there's no need to catch RestartRequiredException
      */
     @Override
     public synchronized void open() throws InterruptedException, JournalException {
@@ -167,7 +162,7 @@ public class BDBJEJournal implements Journal {
                 }
 
                 dbNames = bdbEnvironment.getDatabaseNames();
-                if (dbNames == null) {
+                if (dbNames == null) {  // bdb environment is closing
                     throw new JournalException("fail to get dbNames while open bdbje journal. will exit");
                 }
 
@@ -192,15 +187,6 @@ public class BDBJEJournal implements Journal {
                     continue;
                 }
                 return;
-            } catch (InsufficientLogException insufficientLogEx) {
-                String errMsg = "catch insufficient log exception. please restart";
-                LOG.warn(errMsg, insufficientLogEx);
-                // for InsufficientLogException we should refresh the log and
-                // then exit the process because we may have read dirty data.
-                bdbEnvironment.refreshLog(insufficientLogEx);
-                exception = new JournalException(errMsg);
-                exception.initCause(insufficientLogEx);
-                throw exception;
             } catch (DatabaseException e) {
                 String errMsg = String.format("catch exception after retried %d times", i + 1);
                 LOG.warn(errMsg, e);
@@ -245,10 +231,7 @@ public class BDBJEJournal implements Journal {
     @Override
     public long getFinalizedJournalId() {
         List<Long> dbNames = bdbEnvironment.getDatabaseNames();
-        if (dbNames == null) {
-            LOG.error("database name is null.");
-            return 0;
-        }
+        assert (dbNames != null);
 
         String msg = "database names: ";
         for (long name : dbNames) {

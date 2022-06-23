@@ -230,6 +230,7 @@ public class MockedFrontend {
                     new MockUp<JournalFactory>() {
                         @Mock
                         public Journal create(String name) throws JournalException {
+                            GlobalStateMgr.getCurrentState().setHaProtocol(new MockJournal.MockProtocol());
                             return new MockJournal();
                         }
 
