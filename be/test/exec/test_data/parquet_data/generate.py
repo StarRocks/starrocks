@@ -79,6 +79,16 @@ data = [
         ],
         type=pa.struct([("s0", pa.int32()), ("s1", pa.struct([("s2", pa.int32())]))]),
     ),
+
+    pa.array(
+        [
+            {"s0": 1, "s1": "string1"},
+            {"s0": 2, "s1": "string2"},
+            {"s0": 3, "s1": "string3"},
+        ],
+        type=pa.struct([("s0", pa.int32()), ("s1", pa.string())]),
+    ),
+
 ]
 
 columns = [
@@ -104,6 +114,8 @@ columns = [
     "col_json_map_list",
     "col_json_list_struct",
     "col_json_struct_struct",
+    
+    "col_json_struct_string",
 ]
 table = pa.Table.from_arrays(data, columns)
 pq.write_table(table, output)
