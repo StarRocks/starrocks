@@ -565,7 +565,7 @@ public class ExpressionTest extends PlanTestBase {
     public void testEmptyProjectCountStar() throws Exception {
         String sql = "select count(*) from test_all_type a, test_all_type b where a.t1a is not null";
         String plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("  3:CROSS JOIN\n" +
+        Assert.assertTrue(plan.contains("  3:NESTLOOP JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.\n" +
                 "  |  cardinality: 1\n" +

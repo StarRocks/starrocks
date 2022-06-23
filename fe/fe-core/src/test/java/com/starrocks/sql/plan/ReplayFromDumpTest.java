@@ -298,7 +298,7 @@ public class ReplayFromDumpTest {
 
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/cross_reorder"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("  14:CROSS JOIN\n" +
+        Assert.assertTrue(replayPair.second.contains("  14:NESTLOOP JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates: (2: v2 = CAST(8: v2 AS VARCHAR(1048576))) OR (3: v3 = 8: v2), " +
                 "CASE WHEN CAST(6: v3 AS BOOLEAN) THEN CAST(11: v2 AS VARCHAR) WHEN CAST(3: v3 AS BOOLEAN) THEN '123' ELSE CAST(12: v3 AS VARCHAR) END > '1'\n"));
@@ -392,7 +392,7 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second.contains("18:Project\n" +
                 "  |  <slot 33> : bitmap_and(21: expr, 29: bitmap_union)\n" +
                 "  |  \n" +
-                "  17:CROSS JOIN\n" +
+                "  17:NESTLOOP JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.\n" +
                 "  |  \n" +

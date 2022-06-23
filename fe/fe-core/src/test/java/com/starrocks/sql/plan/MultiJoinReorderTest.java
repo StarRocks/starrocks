@@ -37,15 +37,15 @@ public class MultiJoinReorderTest extends PlanTestBase {
 
         String sql = "select * from t1, t2, t3, t0;";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("4:CROSS JOIN\n" +
+        Assert.assertTrue(planFragment.contains("4:NESTLOOP JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.\n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE"));
-        Assert.assertTrue(planFragment.contains("9:CROSS JOIN"));
+        Assert.assertTrue(planFragment.contains("9:NESTLOOP JOIN"));
         Assert.assertTrue(planFragment.contains("|----8:EXCHANGE\n" +
                 "  |    \n" +
-                "  6:CROSS JOIN"));
+                "  6:NESTLOOP JOIN"));
         Assert.assertTrue(planFragment.contains("|----5:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:OlapScanNode\n" +
@@ -207,7 +207,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "     numNodes=0\n"));
 
         // Right sub join tree (a)
-        Assert.assertTrue(planFragment.contains("  16:CROSS JOIN\n" +
+        Assert.assertTrue(planFragment.contains("  16:NESTLOOP JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.\n" +
                 "  |  \n" +
@@ -246,15 +246,15 @@ public class MultiJoinReorderTest extends PlanTestBase {
         connectContext.getSessionVariable().enableDPJoinReorder();
         String sql = "select * from t1, t2, t3, t0;";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("4:CROSS JOIN\n" +
+        Assert.assertTrue(planFragment.contains("4:NESTLOOP JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.\n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE"));
-        Assert.assertTrue(planFragment.contains("9:CROSS JOIN"));
+        Assert.assertTrue(planFragment.contains("9:NESTLOOP JOIN"));
         Assert.assertTrue(planFragment.contains("|----8:EXCHANGE\n" +
                 "  |    \n" +
-                "  6:CROSS JOIN"));
+                "  6:NESTLOOP JOIN"));
         Assert.assertTrue(planFragment.contains("|----5:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:OlapScanNode\n" +
@@ -409,7 +409,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  20:Project\n" +
                 "  |  <slot 10> : 10: count\n" +
                 "  |  \n" +
-                "  19:CROSS JOIN\n" +
+                "  19:NESTLOOP JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.\n" +
                 "  |  \n" +
@@ -434,7 +434,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  17:Project\n" +
                 "  |  <slot 10> : 10: count\n" +
                 "  |  \n" +
-                "  16:CROSS JOIN\n" +
+                "  16:NESTLOOP JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.\n" +
                 "  |  \n" +
@@ -475,7 +475,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
         Assert.assertTrue(planFragment.contains("8:Project\n" +
                 "  |  <slot 7> : 7: expr\n" +
                 "  |  \n" +
-                "  7:CROSS JOIN\n" +
+                "  7:NESTLOOP JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.\n"));
 
@@ -495,7 +495,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
         // check multi cross join reorder without exception
         String sql = "select count(*) from t0,t1,t2,t3,t0 as t4, t1 as t5 where true";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("17:CROSS JOIN"));
+        Assert.assertTrue(plan.contains("17:NESTLOOP JOIN"));
     }
 
     @Test
