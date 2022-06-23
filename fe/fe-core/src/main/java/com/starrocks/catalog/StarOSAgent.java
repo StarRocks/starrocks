@@ -36,6 +36,7 @@ public class StarOSAgent {
 
     private StarClient client;
     private long serviceId;
+    private boolean connected;
     private Map<String, Long> workerToId;
     private Map<Long, Long> workerToBackend;
     private ReentrantReadWriteLock rwLock;
@@ -57,6 +58,12 @@ public class StarOSAgent {
         workerToId = Maps.newHashMap();
         workerToBackend = Maps.newHashMap();
         rwLock = new ReentrantReadWriteLock();
+    }
+
+    private void prepare() {
+        if (serviceId == -1) {
+            getServiceId("starrocks");
+        }
     }
 
     // for ut only
@@ -121,6 +128,7 @@ public class StarOSAgent {
     }
 
     public void addWorker(long backendId, String workerIpPort) {
+        prepare();
         if (serviceId == -1) {
             LOG.warn("When addWorker serviceId is -1");
             return;
@@ -154,6 +162,7 @@ public class StarOSAgent {
     }
 
     public void removeWorker(String workerIpPort) throws DdlException {
+        prepare();
         long workerId = -1;
         if (workerToId.containsKey(workerIpPort)) {
             workerId = workerToId.get(workerIpPort);
@@ -206,6 +215,7 @@ public class StarOSAgent {
     }
 
     public List<Long> createShards(int numShards, Map<String, String> properties) throws DdlException {
+        prepare();
         List<ShardInfo> shardInfos = null;
         try {
             // TODO: support properties
@@ -219,6 +229,7 @@ public class StarOSAgent {
     }
 
     private List<ReplicaInfo> getShardReplicas(long shardId) throws UserException {
+        prepare();
         try {
             List<ShardInfo> shardInfos = client.getShardInfo(serviceId, Lists.newArrayList(shardId));
             Preconditions.checkState(shardInfos.size() == 1);
