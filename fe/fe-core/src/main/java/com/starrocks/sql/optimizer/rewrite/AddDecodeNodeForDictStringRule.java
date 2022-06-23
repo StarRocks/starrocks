@@ -476,7 +476,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                                                                  DecodeContext context) {
             Map<Integer, Integer> newStringToDicts = Maps.newHashMap();
 
-            Map<ColumnRefOperator, CallOperator> newAggMap = Maps.newHashMap(aggOperator.getAggregations());
+            final List<Map.Entry<ColumnRefOperator, CallOperator>> newAggMapEntry = Lists.newArrayList();
+
             for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggOperator.getAggregations().entrySet()) {
                 boolean canApplyDictDecodeOpt = (kv.getValue().getUsedColumns().cardinality() > 0) &&
                         (PhysicalHashAggregateOperator.couldApplyLowCardAggregateFunction.contains(
@@ -495,7 +496,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                                 Collections.singletonList(dictColumn), newFunction,
                                 oldCall.isDistinct());
                         ColumnRefOperator outputColumn = kv.getKey();
-                        newAggMap.put(outputColumn, newCall);
+                        newAggMapEntry.add(Maps.immutableEntry(outputColumn, newCall));
                     } else if (context.stringColumnIdToDictColumnIds.containsKey(columnId)) {
                         Integer dictColumnId = context.stringColumnIdToDictColumnIds.get(columnId);
                         ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(dictColumnId);
@@ -526,7 +527,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                             ColumnRefOperator outputStringColumn = kv.getKey();
                             final ColumnRefOperator newDictColumn = context.columnRefFactory.create(
                                     dictColumn.getName(), ID_TYPE, dictColumn.isNullable());
-                            newAggMap.remove(outputStringColumn);
                             newStringToDicts.put(outputStringColumn.getId(), newDictColumn.getId());
 
                             for (Pair<Integer, ColumnDict> globalDict : context.globalDicts) {
@@ -545,10 +545,15 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                                 newArguments, newFunction,
                                 oldCall.isDistinct());
 
-                        newAggMap.put(outputColumn, newCall);
+                        newAggMapEntry.add(Maps.immutableEntry(outputColumn, newCall));
+                    } else {
+                        newAggMapEntry.add(kv);
                     }
+                } else {
+                    newAggMapEntry.add(kv);
                 }
             }
+            Map<ColumnRefOperator, CallOperator> newAggMap = ImmutableMap.copyOf(newAggMapEntry);
 
             List<ColumnRefOperator> newGroupBys = Lists.newArrayList();
             for (ColumnRefOperator groupBy : aggOperator.getGroupBys()) {
