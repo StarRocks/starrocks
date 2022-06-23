@@ -395,6 +395,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     if (_should_skip_file) {
         return Status::EndOfFile("");
     }
+<<<<<<< HEAD
     {
         SCOPED_RAW_TIMER(&_stats.column_read_ns);
         RETURN_IF_ERROR(_orc_adapter->read_next());
@@ -424,12 +425,100 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         // do evaluation.
         SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
         if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
+=======
+
+    ChunkPtr ck = std::make_shared<vectorized::Chunk>();
+    // The column order of chunk is required to be invariable. When a table performs schema change,
+    // says we want to add a new column to table A, the reader of old files of table A will append new
+    // column to the tail of the chunk, while the reader of new files of table A will put the new column
+    // in the chunk according to the order it's stored. This will lead two chunk from different file to
+    // different column order, so we need to adjust the column order according to the input chunk to make
+    // sure every chunk has same column order
+    auto convert_to_output = [chunk, &ck]() {
+        const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
+        for (auto iter = slot_id_to_index_map.begin(); iter != slot_id_to_index_map.end(); iter++) {
+            (*chunk)->get_column_by_slot_id(iter->first)->swap_column(*ck->get_column_by_slot_id(iter->first));
+        }
+    };
+
+    // this infinite for loop is for retry.
+    for (;;) {
+        orc::RowReader::ReadPosition position;
+        size_t read_num_values = 0;
+        bool has_used_dict_filter = false;
+        {
+            SCOPED_RAW_TIMER(&_stats.column_read_ns);
+            RETURN_IF_ERROR(_orc_adapter->read_next(&position));
+            // read num values is how many rows actually read before doing dict filtering.
+            read_num_values = position.num_values;
+            RETURN_IF_ERROR(_orc_adapter->apply_dict_filter_eval_cache(_orc_row_reader_filter->_dict_filter_eval_cache,
+                                                                       &_dict_filter));
+            if (_orc_adapter->get_cvb_size() != read_num_values) {
+                has_used_dict_filter = true;
+            }
+        }
+
+        size_t chunk_size = 0;
+        if (_orc_adapter->get_cvb_size() != 0) {
+            {
+                StatusOr<ChunkPtr> ret;
+                SCOPED_RAW_TIMER(&_stats.column_convert_ns);
+                if (!_orc_adapter->has_lazy_load_context()) {
+                    ret = _orc_adapter->get_chunk();
+                } else {
+                    ret = _orc_adapter->get_active_chunk();
+                }
+                RETURN_IF_ERROR(ret);
+                ck = std::move(ret.value());
+            }
+
+            // important to add columns before evaluation
+            // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
+            _file_read_param.append_not_exised_columns_to_chunk(&ck, ck->num_rows());
+            _file_read_param.append_partition_column_to_chunk(&ck, ck->num_rows());
+            chunk_size = ck->num_rows();
+            // do stats before we filter rows which does not match.
+            _stats.raw_rows_read += chunk_size;
+            _chunk_filter.assign(chunk_size, 1);
+            {
+                SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
+                for (auto& it : _file_read_param.conjunct_ctxs_by_slot) {
+                    // do evaluation.
+                    if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
+                        continue;
+                    }
+                    ASSIGN_OR_RETURN(chunk_size,
+                                     ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &_chunk_filter));
+                    if (chunk_size == 0) {
+                        break;
+                    }
+                }
+            }
+            if (chunk_size != 0 && chunk_size != ck->num_rows()) {
+                ck->filter(_chunk_filter);
+            }
+        }
+        ck->set_num_rows(chunk_size);
+
+        if (!_orc_adapter->has_lazy_load_context()) {
+            convert_to_output();
+            return Status::OK();
+        }
+
+        // if has lazy load fields, skip it if chunk_size == 0
+        if (chunk_size == 0) {
+>>>>>>> fad74e57 ([BugFix] Fix wrong column order in hive table (#7624))
             continue;
         }
         ExecNode::eval_conjuncts(it.second, ck.get());
         if (ck->num_rows() == 0) {
             return Status::OK();
         }
+<<<<<<< HEAD
+=======
+        convert_to_output();
+        return Status::OK();
+>>>>>>> fad74e57 ([BugFix] Fix wrong column order in hive table (#7624))
     }
     return Status::OK();
 }
