@@ -74,12 +74,11 @@ echo "script run over-----"
 #sudo chown -R runner:docker $PROJECT/fe/fe-core/target
 #ls -al $PROJECT/fe/fe-core/target
 if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
-    CODEPATH=$PROJECT
-    cd $CODEPATH/fe/fe-core/target
+    java -jar $PROJECT/jacococli.jar
+    cd $PROJECT/fe/fe-core/target
     pwd
-    echo $CODEPATH
-    ls -al $CODEPATH/jacococli.jar;
-    java -jar $CODEPATH/jacococli.jar
+    echo $PROJECT
+    java -jar $PROJECT/jacococli.jar
     jacoco_result="jacoco_${GITHUB_PR_NUMBER}.exec"
     mv jacoco.exec $jacoco_result || true
 
