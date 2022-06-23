@@ -111,6 +111,6 @@ else
         ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test=$1
     else    
         echo "Run Frontend UT"
-        ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false
+        ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -Dmaven.test.failure.ignore=true
     fi 
 fi
