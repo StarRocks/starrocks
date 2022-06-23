@@ -705,7 +705,7 @@ public class DataDescription {
             sb.append(" COLUMNS TERMINATED BY ").append(columnSeparator.toSql());
         }
         if (rowDelimiter != null) {
-            sb.append(" COLUMNS TERMINATED BY ").append(rowDelimiter.toSql());
+            sb.append(" ROWS TERMINATED BY ").append(rowDelimiter.toSql());
         }
         if (columnsFromPath != null && !columnsFromPath.isEmpty()) {
             sb.append(" COLUMNS FROM PATH AS (");

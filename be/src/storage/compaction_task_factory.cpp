@@ -26,14 +26,14 @@ std::shared_ptr<CompactionTask> CompactionTaskFactory::create_compaction_task() 
         return nullptr;
     }
     size_t segment_iterator_num = iterator_num_res.value();
-    int64_t max_columns_per_group = config::vertical_compaction_max_columns_per_group;
     size_t num_columns = _tablet->num_columns();
-    CompactionAlgorithm algorithm =
-            CompactionUtils::choose_compaction_algorithm(num_columns, max_columns_per_group, segment_iterator_num);
+    CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
+            num_columns, config::vertical_compaction_max_columns_per_group, segment_iterator_num);
     std::shared_ptr<CompactionTask> compaction_task;
     VLOG(2) << "choose algorithm:" << CompactionUtils::compaction_algorithm_to_string(algorithm)
             << ", for tablet:" << _tablet->tablet_id() << ", segment_iterator_num:" << segment_iterator_num
-            << ", max_columns_per_group:" << max_columns_per_group << ", num_columns:" << num_columns;
+            << ", max_columns_per_group:" << config::vertical_compaction_max_columns_per_group
+            << ", num_columns:" << num_columns;
     if (algorithm == HORIZONTAL_COMPACTION) {
         compaction_task = std::make_shared<HorizontalCompactionTask>();
     } else if (algorithm == VERTICAL_COMPACTION) {

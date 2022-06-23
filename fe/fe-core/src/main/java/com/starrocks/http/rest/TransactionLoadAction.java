@@ -22,13 +22,11 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
@@ -64,18 +62,10 @@ public class TransactionLoadAction extends RestBaseAction {
 
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
-
-        final String clusterName = ConnectContext.get().getClusterName();
-        if (Strings.isNullOrEmpty(clusterName)) {
-            throw new DdlException("No cluster selected.");
-        }
-
         String dbName = request.getSingleParameter(DB_KEY);
         if (Strings.isNullOrEmpty(dbName)) {
             throw new DdlException("No database selected.");
         }
-
-        String fullDbName = ClusterNamespace.getFullName(clusterName, dbName);
 
         String label = request.getRequest().headers().get(LABEL_KEY);
         String op = request.getSingleParameter(TXN_OP_KEY);
@@ -84,7 +74,7 @@ public class TransactionLoadAction extends RestBaseAction {
         synchronized (this) {
             if (op.equalsIgnoreCase(TXN_BEGIN)) {
                 // Choose a backend sequentially.
-                List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false, clusterName);
+                List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
                 if (backendIds == null) {
                     throw new DdlException("No backend alive.");
                 }

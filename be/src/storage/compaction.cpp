@@ -46,7 +46,6 @@ Status Compaction::do_compaction() {
 Status Compaction::do_compaction_impl() {
     OlapStopWatch watch;
 
-    // 1. prepare input and output parameters
     int64_t segments_num = 0;
     int64_t total_row_size = 0;
     for (auto& rowset : _input_rowsets) {
@@ -70,16 +69,13 @@ Status Compaction::do_compaction_impl() {
         return iterator_num_res.status();
     }
     size_t segment_iterator_num = iterator_num_res.value();
-    int64_t max_columns_per_group = config::vertical_compaction_max_columns_per_group;
-    size_t num_columns = _tablet->num_columns();
-    CompactionAlgorithm algorithm =
-            CompactionUtils::choose_compaction_algorithm(num_columns, max_columns_per_group, segment_iterator_num);
+    CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
+            _tablet->num_columns(), config::vertical_compaction_max_columns_per_group, segment_iterator_num);
     if (algorithm == VERTICAL_COMPACTION) {
         CompactionUtils::split_column_into_groups(_tablet->num_columns(), _tablet->num_key_columns(),
-                                                  max_columns_per_group, &_column_groups);
+                                                  config::vertical_compaction_max_columns_per_group, &_column_groups);
     }
 
-    // max rows per segment
     int64_t max_rows_per_segment =
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _input_row_num, _input_rowsets_size);
 
@@ -87,14 +83,13 @@ Status Compaction::do_compaction_impl() {
               << ", output version is=" << _output_version.first << "-" << _output_version.second
               << ", max rows per segment=" << max_rows_per_segment << ", segment iterator num=" << segment_iterator_num
               << ", algorithm=" << CompactionUtils::compaction_algorithm_to_string(algorithm)
-              << ", column group size=" << _column_groups.size() << ", columns per group=" << max_columns_per_group;
+              << ", column group size=" << _column_groups.size()
+              << ", columns per group=" << config::vertical_compaction_max_columns_per_group;
 
-    // create rowset writer
     RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(_tablet.get(), max_rows_per_segment, algorithm,
                                                                     _output_version, &_output_rs_writer));
     TRACE("prepare finished");
 
-    // 2. write combined rows to output rowset
     Statistics stats;
     Status st;
     if (algorithm == VERTICAL_COMPACTION) {
@@ -120,15 +115,12 @@ Status Compaction::do_compaction_impl() {
     TRACE_COUNTER_INCREMENT("output_segments_num", _output_rowset->num_segments());
     TRACE("output rowset built");
 
-    // 3. check correctness, commented for this moment.
     RETURN_IF_ERROR(check_correctness(stats));
     TRACE("check correctness finished");
 
-    // 4. modify rowsets in memory
     RETURN_IF_ERROR(modify_rowsets());
     TRACE("modify rowsets finished");
 
-    // 5. update last success compaction time
     int64_t now = UnixMillis();
     if (compaction_type() == ReaderType::READER_CUMULATIVE_COMPACTION) {
         _tablet->set_last_cumu_compaction_success_time(now);
@@ -144,12 +136,9 @@ Status Compaction::do_compaction_impl() {
               << ", rows=" << _output_rowset->num_rows() << ", disk size=" << _output_rowset->data_disk_size() << "]"
               << ". elapsed time=" << watch.get_elapse_second() << "s.";
 
-    // warm-up this rowset
     st = _output_rowset->load();
-    // only log load failure
     LOG_IF(WARNING, !st.ok()) << "ignore load rowset error tablet:" << _tablet->tablet_id()
                               << " rowset:" << _output_rowset->rowset_id() << " " << st;
-
     return Status::OK();
 }
 
@@ -176,9 +165,7 @@ Status Compaction::_merge_rowsets_horizontally(size_t segment_iterator_num, Stat
     RETURN_IF_ERROR(reader.open(reader_params));
 
     int64_t output_rows = 0;
-
     auto chunk = ChunkHelper::new_chunk(schema, reader_params.chunk_size);
-
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
     Status status;
@@ -251,10 +238,6 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
         int64_t total_num_rows = 0;
         int64_t total_mem_footprint = 0;
         for (auto& rowset : _input_rowsets) {
-            if (rowset->rowset_meta()->rowset_type() != BETA_ROWSET) {
-                continue;
-            }
-
             total_num_rows += rowset->num_rows();
             auto* beta_rowset = down_cast<BetaRowset*>(rowset.get());
             for (auto& segment : beta_rowset->segments()) {
@@ -349,16 +332,12 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
 }
 
 Status Compaction::modify_rowsets() {
-    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-    if (bg_worker_stopped) {
+    if (ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped()) {
         return Status::InternalError("Process is going to quit. The compaction will stop.");
     }
 
-    std::vector<RowsetSharedPtr> output_rowsets;
-    output_rowsets.push_back(_output_rowset);
-
     std::unique_lock wrlock(_tablet->get_header_lock());
-    _tablet->modify_rowsets(output_rowsets, _input_rowsets);
+    _tablet->modify_rowsets({_output_rowset}, _input_rowsets);
     _tablet->save_meta();
     Rowset::close_rowsets(_input_rowsets);
 

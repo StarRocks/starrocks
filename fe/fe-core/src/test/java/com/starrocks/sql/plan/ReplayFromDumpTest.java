@@ -132,6 +132,7 @@ public class ReplayFromDumpTest {
             queryDumpInfo.setSessionVariable(sessionVariable);
         }
         queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000);
+        queryDumpInfo.getSessionVariable().setCboCteReuse(false);
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
                         getExplainString(level));
@@ -174,6 +175,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds02"));
         SessionVariable replaySessionVariable = replayPair.first.getSessionVariable();
         Assert.assertEquals(replaySessionVariable.getParallelExecInstanceNum(), 4);
+        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("  |----24:EXCHANGE\n" +
                 "  |       cardinality: 73049\n" +
                 "  |    \n" +

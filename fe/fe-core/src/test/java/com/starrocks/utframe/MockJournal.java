@@ -60,7 +60,7 @@ public class MockJournal implements Journal {
     }
 
     @Override
-    public JournalCursor read(long fromKey, long toKey) {
+    public JournalCursor read(long fromKey, long toKey) throws JournalException {
         if (toKey < fromKey || fromKey < 0) {
             return null;
         }

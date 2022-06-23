@@ -278,7 +278,7 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
     if (options.stats) {
         options.stats->segments_read_count += num_segments();
     }
-    for (auto& seg_ptr : segments()) {
+    for (auto& seg_ptr : _segments) {
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
@@ -371,7 +371,7 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> BetaRowset::get_segment_iter
     TabletSegmentId tsid;
     tsid.tablet_id = rowset_meta()->tablet_id();
     for (int64_t i = 0; i < num_segments(); i++) {
-        auto& seg_ptr = segments()[i];
+        auto& seg_ptr = _segments[i];
         if (seg_ptr->num_rows() == 0) {
             continue;
         }

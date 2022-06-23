@@ -86,10 +86,6 @@ public class Scope {
         return Optional.empty();
     }
 
-    public Map<String, CTERelation> getAllCteQueries() {
-        return cteQueries;
-    }
-
     public Scope getParent() {
         return parent;
     }
