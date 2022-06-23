@@ -70,7 +70,7 @@ docker exec --privileged $container_name /bin/bash -c "$cmd"
 
 echo "script run over-----"
 ls -al $PROJECT/fe/fe-core/target
-sudo chown -R $PROJECT/fe/fe-core/target
+sudo chown -R runner:docker $PROJECT/fe/fe-core/target
 ls -al $PROJECT/fe/fe-core/target
 if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
     cd $PROJECT/fe/fe-core/target
