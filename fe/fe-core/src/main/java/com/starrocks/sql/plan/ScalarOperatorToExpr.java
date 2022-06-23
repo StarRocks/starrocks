@@ -31,6 +31,8 @@ import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.PlaceHolderExpr;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Function;
@@ -66,7 +68,16 @@ import java.util.stream.Collectors;
 
 public class ScalarOperatorToExpr {
     public static Expr buildExecExpression(ScalarOperator expression, FormatterContext descTbl) {
-        return expression.accept(new Formatter(), descTbl);
+        return expression.accept(new Formatter(ScalarOperatorToExpr::buildExecExpression), descTbl);
+    }
+
+    public static Expr buildExprIgnoreSlot(ScalarOperator expression, FormatterContext descTbl) {
+        return expression.accept(new IgnoreSlotFormatter(ScalarOperatorToExpr::buildExprIgnoreSlot), descTbl);
+    }
+
+    @FunctionalInterface
+    interface BuildExpr {
+        Expr build(ScalarOperator expression, FormatterContext descTbl);
     }
 
     public static class FormatterContext {
@@ -91,6 +102,12 @@ public class ScalarOperatorToExpr {
     }
 
     public static class Formatter extends ScalarOperatorVisitor<Expr, FormatterContext> {
+        protected BuildExpr buildExpr;
+
+        Formatter(BuildExpr buildExpr) {
+            this.buildExpr = buildExpr;
+        }
+
         @Override
         public Expr visit(ScalarOperator scalarOperator, FormatterContext context) {
             throw new UnsupportedOperationException(
@@ -100,7 +117,7 @@ public class ScalarOperatorToExpr {
         @Override
         public Expr visitVariableReference(ColumnRefOperator node, FormatterContext context) {
             if (context.projectOperatorMap.containsKey(node) && context.colRefToExpr.get(node) == null) {
-                Expr expr = buildExecExpression(context.projectOperatorMap.get(node), context);
+                Expr expr = buildExpr.build(context.projectOperatorMap.get(node), context);
                 context.colRefToExpr.put(node, expr);
                 return expr;
             }
@@ -112,20 +129,20 @@ public class ScalarOperatorToExpr {
         @Override
         public Expr visitArray(ArrayOperator node, FormatterContext context) {
             return new ArrayExpr(node.getType(),
-                    node.getChildren().stream().map(e -> buildExecExpression(e, context)).collect(Collectors.toList()));
+                    node.getChildren().stream().map(e -> buildExpr.build(e, context)).collect(Collectors.toList()));
         }
 
         @Override
         public Expr visitArrayElement(ArrayElementOperator node, FormatterContext context) {
-            return new ArrayElementExpr(node.getType(), buildExecExpression(node.getChild(0), context),
-                    buildExecExpression(node.getChild(1), context));
+            return new ArrayElementExpr(node.getType(), buildExpr.build(node.getChild(0), context),
+                    buildExpr.build(node.getChild(1), context));
         }
 
         @Override
         public Expr visitArraySlice(ArraySliceOperator node, FormatterContext context) {
-            ArraySliceExpr arraySliceExpr = new ArraySliceExpr(buildExecExpression(node.getChild(0), context),
-                    buildExecExpression(node.getChild(1), context),
-                    buildExecExpression(node.getChild(2), context));
+            ArraySliceExpr arraySliceExpr = new ArraySliceExpr(buildExpr.build(node.getChild(0), context),
+                    buildExpr.build(node.getChild(1), context),
+                    buildExpr.build(node.getChild(2), context));
             arraySliceExpr.setType(node.getType());
             return arraySliceExpr;
         }
@@ -190,16 +207,16 @@ public class ScalarOperatorToExpr {
             Expr callExpr;
             if (CompoundPredicateOperator.CompoundType.AND.equals(predicate.getCompoundType())) {
                 callExpr = new CompoundPredicate(CompoundPredicate.Operator.AND,
-                        buildExecExpression(predicate.getChildren().get(0), context),
-                        buildExecExpression(predicate.getChildren().get(1), context));
+                        buildExpr.build(predicate.getChildren().get(0), context),
+                        buildExpr.build(predicate.getChildren().get(1), context));
             } else if (CompoundPredicateOperator.CompoundType.OR.equals(predicate.getCompoundType())) {
                 callExpr = new CompoundPredicate(CompoundPredicate.Operator.OR,
-                        buildExecExpression(predicate.getChild(0), context),
-                        buildExecExpression(predicate.getChild(1), context));
+                        buildExpr.build(predicate.getChild(0), context),
+                        buildExpr.build(predicate.getChild(1), context));
             } else {
                 // Not
                 callExpr = new CompoundPredicate(CompoundPredicate.Operator.NOT,
-                        buildExecExpression(predicate.getChild(0), context), null);
+                        buildExpr.build(predicate.getChild(0), context), null);
             }
             callExpr.setType(Type.BOOLEAN);
             return callExpr;
@@ -210,38 +227,38 @@ public class ScalarOperatorToExpr {
             switch (predicate.getBinaryType()) {
                 case EQ:
                     call = new BinaryPredicate(BinaryPredicate.Operator.EQ,
-                            buildExecExpression(predicate.getChildren().get(0), context),
-                            buildExecExpression(predicate.getChildren().get(1), context));
+                            buildExpr.build(predicate.getChildren().get(0), context),
+                            buildExpr.build(predicate.getChildren().get(1), context));
                     break;
                 case NE:
                     call = new BinaryPredicate(BinaryPredicate.Operator.NE,
-                            buildExecExpression(predicate.getChildren().get(0), context),
-                            buildExecExpression(predicate.getChildren().get(1), context));
+                            buildExpr.build(predicate.getChildren().get(0), context),
+                            buildExpr.build(predicate.getChildren().get(1), context));
                     break;
                 case GE:
                     call = new BinaryPredicate(BinaryPredicate.Operator.GE,
-                            buildExecExpression(predicate.getChildren().get(0), context),
-                            buildExecExpression(predicate.getChildren().get(1), context));
+                            buildExpr.build(predicate.getChildren().get(0), context),
+                            buildExpr.build(predicate.getChildren().get(1), context));
                     break;
                 case GT:
                     call = new BinaryPredicate(BinaryPredicate.Operator.GT,
-                            buildExecExpression(predicate.getChildren().get(0), context),
-                            buildExecExpression(predicate.getChildren().get(1), context));
+                            buildExpr.build(predicate.getChildren().get(0), context),
+                            buildExpr.build(predicate.getChildren().get(1), context));
                     break;
                 case LE:
                     call = new BinaryPredicate(BinaryPredicate.Operator.LE,
-                            buildExecExpression(predicate.getChildren().get(0), context),
-                            buildExecExpression(predicate.getChildren().get(1), context));
+                            buildExpr.build(predicate.getChildren().get(0), context),
+                            buildExpr.build(predicate.getChildren().get(1), context));
                     break;
                 case LT:
                     call = new BinaryPredicate(BinaryPredicate.Operator.LT,
-                            buildExecExpression(predicate.getChildren().get(0), context),
-                            buildExecExpression(predicate.getChildren().get(1), context));
+                            buildExpr.build(predicate.getChildren().get(0), context),
+                            buildExpr.build(predicate.getChildren().get(1), context));
                     break;
                 case EQ_FOR_NULL:
                     call = new BinaryPredicate(BinaryPredicate.Operator.EQ_FOR_NULL,
-                            buildExecExpression(predicate.getChildren().get(0), context),
-                            buildExecExpression(predicate.getChildren().get(1), context));
+                            buildExpr.build(predicate.getChildren().get(0), context),
+                            buildExpr.build(predicate.getChildren().get(1), context));
                     break;
                 default:
                     return null;
@@ -253,9 +270,9 @@ public class ScalarOperatorToExpr {
 
         @Override
         public Expr visitBetweenPredicate(BetweenPredicateOperator predicate, FormatterContext context) {
-            BetweenPredicate call = new BetweenPredicate(buildExecExpression(predicate.getChild(0), context),
-                    buildExecExpression(predicate.getChild(1), context),
-                    buildExecExpression(predicate.getChild(2), context), predicate.isNotBetween());
+            BetweenPredicate call = new BetweenPredicate(buildExpr.build(predicate.getChild(0), context),
+                    buildExpr.build(predicate.getChild(1), context),
+                    buildExpr.build(predicate.getChild(2), context), predicate.isNotBetween());
             call.setType(Type.BOOLEAN);
             return call;
         }
@@ -270,12 +287,12 @@ public class ScalarOperatorToExpr {
         public Expr visitInPredicate(InPredicateOperator predicate, FormatterContext context) {
             List<Expr> args = Lists.newArrayList();
             for (int i = 1; i < predicate.getChildren().size(); ++i) {
-                args.add(buildExecExpression(predicate.getChild(i), context));
+                args.add(buildExpr.build(predicate.getChild(i), context));
             }
 
             // @FIXME: support subquery
             InPredicate expr =
-                    new InPredicate(buildExecExpression(predicate.getChild(0), context), args, predicate.isNotIn());
+                    new InPredicate(buildExpr.build(predicate.getChild(0), context), args, predicate.isNotIn());
 
             expr.setOpcode(expr.isNotIn() ? TExprOpcode.FILTER_NOT_IN : TExprOpcode.FILTER_IN);
 
@@ -295,7 +312,7 @@ public class ScalarOperatorToExpr {
 
         @Override
         public Expr visitIsNullPredicate(IsNullPredicateOperator predicate, FormatterContext context) {
-            Expr expr = new IsNullPredicate(buildExecExpression(predicate.getChild(0), context), predicate.isNotNull());
+            Expr expr = new IsNullPredicate(buildExpr.build(predicate.getChild(0), context), predicate.isNotNull());
 
             // for set function name
             if (predicate.isNotNull()) {
@@ -310,8 +327,8 @@ public class ScalarOperatorToExpr {
 
         @Override
         public Expr visitLikePredicateOperator(LikePredicateOperator predicate, FormatterContext context) {
-            Expr child1 = buildExecExpression(predicate.getChild(0), context);
-            Expr child2 = buildExecExpression(predicate.getChild(1), context);
+            Expr child1 = buildExpr.build(predicate.getChild(0), context);
+            Expr child2 = buildExpr.build(predicate.getChild(1), context);
 
             LikePredicate expr;
             if (predicate.isRegexp()) {
@@ -338,61 +355,61 @@ public class ScalarOperatorToExpr {
                 case "add":
                     callExpr = new ArithmeticExpr(
                             ArithmeticExpr.Operator.ADD,
-                            buildExecExpression(call.getChildren().get(0), context),
-                            buildExecExpression(call.getChildren().get(1), context));
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
                     break;
                 case "subtract":
                     callExpr = new ArithmeticExpr(
                             ArithmeticExpr.Operator.SUBTRACT,
-                            buildExecExpression(call.getChildren().get(0), context),
-                            buildExecExpression(call.getChildren().get(1), context));
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
                     break;
                 case "multiply":
                     callExpr = new ArithmeticExpr(
                             ArithmeticExpr.Operator.MULTIPLY,
-                            buildExecExpression(call.getChildren().get(0), context),
-                            buildExecExpression(call.getChildren().get(1), context));
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
                     break;
                 case "divide":
                     callExpr = new ArithmeticExpr(
                             ArithmeticExpr.Operator.DIVIDE,
-                            buildExecExpression(call.getChildren().get(0), context),
-                            buildExecExpression(call.getChildren().get(1), context));
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
                     break;
                 case "int_divide":
                     callExpr = new ArithmeticExpr(
                             ArithmeticExpr.Operator.INT_DIVIDE,
-                            buildExecExpression(call.getChildren().get(0), context),
-                            buildExecExpression(call.getChildren().get(1), context));
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
                     break;
                 case "mod":
                     callExpr = new ArithmeticExpr(
                             ArithmeticExpr.Operator.MOD,
-                            buildExecExpression(call.getChildren().get(0), context),
-                            buildExecExpression(call.getChildren().get(1), context));
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
                     break;
                 case "bitand":
                     callExpr = new ArithmeticExpr(
                             ArithmeticExpr.Operator.BITAND,
-                            buildExecExpression(call.getChildren().get(0), context),
-                            buildExecExpression(call.getChildren().get(1), context));
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
                     break;
                 case "bitor":
                     callExpr = new ArithmeticExpr(
                             ArithmeticExpr.Operator.BITOR,
-                            buildExecExpression(call.getChildren().get(0), context),
-                            buildExecExpression(call.getChildren().get(1), context));
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
                     break;
                 case "bitxor":
                     callExpr = new ArithmeticExpr(
                             ArithmeticExpr.Operator.BITXOR,
-                            buildExecExpression(call.getChildren().get(0), context),
-                            buildExecExpression(call.getChildren().get(1), context));
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
                     break;
                 case "bitnot":
                     callExpr = new ArithmeticExpr(
                             ArithmeticExpr.Operator.BITNOT,
-                            buildExecExpression(call.getChildren().get(0), context), null);
+                            buildExpr.build(call.getChildren().get(0), context), null);
                     break;
                 // FixMe(kks): InformationFunction shouldn't be CallOperator
                 case "database":
@@ -410,7 +427,7 @@ public class ScalarOperatorToExpr {
                     break;
                 default:
                     List<Expr> arg = call.getChildren().stream()
-                            .map(expr -> buildExecExpression(expr, context))
+                            .map(expr -> buildExpr.build(expr, context))
                             .collect(Collectors.toList());
                     if (call.isCountStar()) {
                         callExpr = new FunctionCallExpr(call.getFnName(), FunctionParams.createStarParam());
@@ -427,7 +444,7 @@ public class ScalarOperatorToExpr {
 
         @Override
         public Expr visitCastOperator(CastOperator operator, FormatterContext context) {
-            CastExpr expr = new CastExpr(operator.getType(), buildExecExpression(operator.getChild(0), context));
+            CastExpr expr = new CastExpr(operator.getType(), buildExpr.build(operator.getChild(0), context));
             expr.setImplicit(context.implicitCast);
             return expr;
         }
@@ -438,18 +455,18 @@ public class ScalarOperatorToExpr {
             Expr elseExpr = null;
 
             if (operator.hasCase()) {
-                caseExpr = buildExecExpression(operator.getCaseClause(), context);
+                caseExpr = buildExpr.build(operator.getCaseClause(), context);
             }
 
             if (operator.hasElse()) {
-                elseExpr = buildExecExpression(operator.getElseClause(), context);
+                elseExpr = buildExpr.build(operator.getElseClause(), context);
             }
 
             List<CaseWhenClause> list = Lists.newArrayList();
             for (int i = 0; i < operator.getWhenClauseSize(); i++) {
                 list.add(new CaseWhenClause(
-                        buildExecExpression(operator.getWhenClause(i), context),
-                        buildExecExpression(operator.getThenClause(i), context)));
+                        buildExpr.build(operator.getWhenClause(i), context),
+                        buildExpr.build(operator.getThenClause(i), context)));
             }
 
             CaseExpr result = new CaseExpr(caseExpr, list, elseExpr);
@@ -475,7 +492,7 @@ public class ScalarOperatorToExpr {
             final Expr old = context.colRefToExpr.get(key);
             // 2. use a placeholder instead of string column to build DictMapping
             context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(), Type.VARCHAR));
-            final Expr callExpr = buildExecExpression(call, context);
+            final Expr callExpr = buildExpr.build(call, context);
             // 3. recover the previous column
             context.colRefToExpr.put(key, old);
             Expr result = new DictMappingExpr(dictExpr, callExpr);
@@ -485,7 +502,20 @@ public class ScalarOperatorToExpr {
 
         @Override
         public Expr visitCloneOperator(CloneOperator operator, FormatterContext context) {
-            return new CloneExpr(buildExecExpression(operator.getChild(0), context));
+            return new CloneExpr(buildExpr.build(operator.getChild(0), context));
+        }
+    }
+
+    static class IgnoreSlotFormatter extends Formatter {
+        IgnoreSlotFormatter(BuildExpr buildExpr) {
+            super(buildExpr);
+        }
+
+        @Override
+        public Expr visitVariableReference(ColumnRefOperator node, FormatterContext context) {
+            SlotDescriptor descriptor = new SlotDescriptor(new SlotId(node.getId()), node.getName(),
+                    node.getType(), node.isNullable());
+            return new SlotRef(descriptor);
         }
     }
 }
