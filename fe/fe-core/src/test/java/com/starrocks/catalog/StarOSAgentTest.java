@@ -241,7 +241,7 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "workerToId", mockWorkerToId);
         Assert.assertEquals(5L, starosAgent.getWorkerId(workerHost));
 
-        starosAgent.removeWorkerfromMap(5L, workerHost);
+        starosAgent.removeWorkerFromMap(5L, workerHost);
         ExceptionChecker.expectThrows(NullPointerException.class, () -> starosAgent.getWorkerId(workerHost));
     }
 }

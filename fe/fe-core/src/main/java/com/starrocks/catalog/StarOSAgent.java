@@ -190,10 +190,10 @@ public class StarOSAgent {
             }
         }
 
-        removeWorkerfromMap(workerId, workerIpPort);
+        removeWorkerFromMap(workerId, workerIpPort);
     }
 
-    public void removeWorkerfromMap(long workerId, String workerIpPort) {
+    public void removeWorkerFromMap(long workerId, String workerIpPort) {
         workerToBackend.remove(workerId);
         workerToId.remove(workerIpPort);
         LOG.info("remove worker {} success from StarMgr", workerIpPort);
