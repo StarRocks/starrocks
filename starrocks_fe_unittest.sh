@@ -69,7 +69,8 @@ timeout 3600 sh run-fe-ut.sh --run com.starrocks.utframe.Demo;"
 docker exec --privileged $container_name /bin/bash -c "$cmd"
 
 echo "script run over-----"
-ls -al $PROJECT/fe/fe-core/target
+ls -al $PROJECT
+java -jar $PROJECT/jacococli.jar
 sudo chown -R runner:docker $PROJECT/fe/fe-core/target
 ls -al $PROJECT/fe/fe-core/target
 if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
