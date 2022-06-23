@@ -29,7 +29,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Range;
-import com.sleepycat.je.rep.InsufficientLogException;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJob.JobType;
@@ -162,9 +161,9 @@ import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalFactory;
+import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
-import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
@@ -1505,12 +1504,6 @@ public class GlobalStateMgr {
                 try {
                     hasLog = replayJournal(-1);
                     metaReplayState.setOk();
-                } catch (InsufficientLogException insufficientLogEx) {
-                    // for InsufficientLogException we should refresh the log and
-                    // then exit the process because we may have read dirty data.
-                    LOG.error("catch insufficient log exception. please restart", insufficientLogEx);
-                    ((BDBJEJournal) journal).getBdbEnvironment().refreshLog(insufficientLogEx);
-                    System.exit(-1);
                 } catch (Throwable e) {
                     LOG.error("replayer thread catch an exception when replay journal.", e);
                     metaReplayState.setException(e);
@@ -1697,19 +1690,32 @@ public class GlobalStateMgr {
         }
 
         LOG.info("replayed journal id is {}, replay to journal id is {}", replayedJournalId, newToJournalId);
-        JournalCursor cursor = journal.read(replayedJournalId.get() + 1, newToJournalId);
-        if (cursor == null) {
-            LOG.warn("failed to get cursor from {} to {}", replayedJournalId.get() + 1, newToJournalId);
+        JournalCursor cursor = null;
+        try {
+            cursor = journal.read(replayedJournalId.get() + 1, newToJournalId);
+        } catch (JournalException e) {
+            LOG.warn("failed to get cursor from {} to {}", replayedJournalId.get() + 1, newToJournalId, e);
             return false;
         }
 
         long startTime = System.currentTimeMillis();
         boolean hasLog = false;
         while (true) {
-            JournalEntity entity = cursor.next();
+            JournalEntity entity = null;
+            try {
+                entity = cursor.next();
+            } catch (InterruptedException | JournalException | JournalInconsistentException e) {
+                LOG.warn("got exception when get next, will exit, ", e);
+                // TODO exit gracefully
+                Util.stdoutWithTime(e.getMessage());
+                System.exit(-1);
+            }
+
+            // EOF or aggressive retry
             if (entity == null) {
                 break;
             }
+
             hasLog = true;
             EditLog.loadJournal(this, entity);
             replayedJournalId.incrementAndGet();
@@ -1777,11 +1783,6 @@ public class GlobalStateMgr {
     // For replay edit log, needn't lock metadata
     public void unprotectCreateDb(Database db) {
         localMetastore.unprotectCreateDb(db);
-    }
-
-    // for test
-    public void addCluster(Cluster cluster) {
-        localMetastore.addCluster(cluster);
     }
 
     public void replayCreateDb(Database db) {
@@ -2354,10 +2355,6 @@ public class GlobalStateMgr {
 
     public List<String> getDbNames() {
         return localMetastore.listDbNames();
-    }
-
-    public List<String> getClusterDbNames(String clusterName) throws AnalysisException {
-        return localMetastore.getClusterDbNames(clusterName);
     }
 
     public List<Long> getDbIds() {

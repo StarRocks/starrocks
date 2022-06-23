@@ -40,7 +40,7 @@ public interface Journal {
 
     // Get all the journals whose id: fromKey <= id <= toKey
     // toKey = -1 means toKey = Long.Max_Value
-    public JournalCursor read(long fromKey, long toKey);
+    public JournalCursor read(long fromKey, long toKey) throws JournalException;
 
     // Delete journals whose max id is less than deleteToJournalId
     public void deleteJournals(long deleteJournalToId);

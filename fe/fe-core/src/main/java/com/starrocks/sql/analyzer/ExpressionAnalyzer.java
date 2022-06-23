@@ -860,7 +860,6 @@ public class ExpressionAnalyzer {
         }
     }
 
-
     static class IgnoreSlotVisitor extends Visitor {
         public IgnoreSlotVisitor(AnalyzeState analyzeState, ConnectContext session) {
             super(analyzeState, session);
