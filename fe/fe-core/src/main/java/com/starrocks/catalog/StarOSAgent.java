@@ -50,6 +50,7 @@ public class StarOSAgent {
                 System.exit(-1);
             }
         }
+
         client = new StarClient();
         client.connectServer(Config.starmgr_address);
 

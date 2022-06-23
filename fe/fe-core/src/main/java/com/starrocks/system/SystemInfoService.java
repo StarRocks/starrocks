@@ -268,7 +268,7 @@ public class SystemInfoService {
                                         droppedBackend.getHeartbeatPort(), db.getFullName(), table.getName());
 
                                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
-                                        .forEach(rollupIddx -> {
+                                        .forEach(rollupIdx -> {
                                             boolean existIntersection = rollupIdx.getTablets().stream()
                                                     .map(Tablet::getId).anyMatch(tabletIds::contains);
 
