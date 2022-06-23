@@ -36,6 +36,8 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
@@ -400,8 +402,20 @@ public class DatabaseTransactionMgr {
         StringBuilder tableListString = new StringBuilder();
         txnSpan.addEvent("commit_start");
 
+        // collect table id.
+        // NOTE: For some unknown reason, the `TransactionState.getTableIdList()` is empty in stream load transaction, have to
+        // collect the table id list by iterate the tabletCommitInfos.
+        Set<Long> tableSet = Sets.newHashSet();
+        List<Long> tabletIds = tabletCommitInfos.stream().map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
+        List<TabletMeta> tabletMetaList = globalStateMgr.getTabletInvertedIndex().getTabletMetaList(tabletIds);
+        for (TabletMeta meta : tabletMetaList) {
+            if (meta != TabletInvertedIndex.NOT_EXIST_TABLET_META) {
+                tableSet.add(meta.getTableId());
+            }
+        }
+
         List<TransactionStateListener> stateListeners = Lists.newArrayList();
-        for (Long tableId : transactionState.getTableIdList()) {
+        for (Long tableId : tableSet) {
             Table table = db.getTable(tableId);
             if (table == null) {
                 // this can happen when tableId == -1 (tablet being dropping)
