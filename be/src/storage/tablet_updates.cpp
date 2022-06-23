@@ -151,8 +151,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
                     _pending_commits.emplace(version, rowset);
                 } else {
                     LOG(WARNING) << "Fail to create rowset from pending rowset meta. rowset="
-                                 << rowset_meta->rowset_id() << " type=" << rowset_meta->rowset_type()
-                                 << " state=" << rowset_meta->rowset_state();
+                                 << rowset_meta->rowset_id() << " state=" << rowset_meta->rowset_state();
                 }
                 return true;
             }));
@@ -174,7 +173,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
                     _rowsets[rowset_meta->get_rowset_seg_id()] = std::move(rowset);
                 } else {
                     LOG(WARNING) << "Fail to create rowset from rowset meta. rowset=" << rowset_meta->rowset_id()
-                                 << " type=" << rowset_meta->rowset_type() << " state=" << rowset_meta->rowset_state();
+                                 << " state=" << rowset_meta->rowset_state();
                 }
                 all_rowsets.insert(rowset_meta->get_rowset_seg_id());
                 return true;
@@ -1098,7 +1097,6 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
     context.tablet_id = _tablet.tablet_id();
     context.partition_id = _tablet.partition_id();
     context.tablet_schema_hash = _tablet.schema_hash();
-    context.rowset_type = BETA_ROWSET;
     context.rowset_path_prefix = _tablet.schema_hash_path();
     context.tablet_schema = &(_tablet.tablet_schema());
     context.rowset_state = COMMITTED;
@@ -2260,7 +2258,6 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         writer_context.tablet_id = _tablet.tablet_id();
         writer_context.partition_id = _tablet.partition_id();
         writer_context.tablet_schema_hash = _tablet.schema_hash();
-        writer_context.rowset_type = _tablet.tablet_meta()->preferred_rowset_type();
         writer_context.rowset_path_prefix = _tablet.schema_hash_path();
         writer_context.tablet_schema = &_tablet.tablet_schema();
         writer_context.rowset_state = VISIBLE;

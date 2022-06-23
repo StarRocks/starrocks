@@ -113,7 +113,7 @@ public:
     static Status create(MemTracker* mem_tracker, const TCreateTabletReq& request, const TabletUid& tablet_uid,
                          uint64_t shard_id, uint32_t next_unique_id,
                          const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
-                         RowsetTypePB rowset_type, TabletMetaSharedPtr* tablet_meta);
+                         TabletMetaSharedPtr* tablet_meta);
 
     static TabletMetaSharedPtr create(MemTracker* mem_tracker);
 
@@ -121,7 +121,7 @@ public:
     TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash, uint64_t shard_id,
                const TTabletSchema& tablet_schema, uint32_t next_unique_id, bool enable_persistent_index,
                const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id, const TabletUid& tablet_uid,
-               TTabletType::type tabletType, RowsetTypePB roset_type);
+               TTabletType::type tabletType);
 
     virtual ~TabletMeta() {}
 
@@ -203,12 +203,6 @@ public:
 
     Status set_partition_id(int64_t partition_id);
 
-    RowsetTypePB preferred_rowset_type() const { return _preferred_rowset_type; }
-
-    void set_preferred_rowset_type(RowsetTypePB preferred_rowset_type) {
-        _preferred_rowset_type = preferred_rowset_type;
-    }
-
     // used when create new tablet
     void create_inital_updates_meta();
     // _updates will become empty after release
@@ -266,7 +260,6 @@ private:
     DelPredicateArray _del_pred_array;
     AlterTabletTaskSharedPtr _alter_task;
     bool _in_restore_mode = false;
-    RowsetTypePB _preferred_rowset_type = BETA_ROWSET;
 
     // This meta is used for TabletUpdates' load process,
     // to save memory it will be passed to TabletUpdates for usage

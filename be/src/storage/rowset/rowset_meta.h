@@ -107,10 +107,6 @@ public:
         _rowset_meta_pb.set_tablet_schema_hash(tablet_schema_hash);
     }
 
-    RowsetTypePB rowset_type() const { return _rowset_meta_pb.rowset_type(); }
-
-    void set_rowset_type(RowsetTypePB rowset_type) { _rowset_meta_pb.set_rowset_type(rowset_type); }
-
     RowsetStatePB rowset_state() const { return _rowset_meta_pb.rowset_state(); }
 
     void set_rowset_state(RowsetStatePB rowset_state) { _rowset_meta_pb.set_rowset_state(rowset_state); }

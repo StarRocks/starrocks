@@ -104,7 +104,6 @@ public:
         writer_context.tablet_id = tablet->tablet_id();
         writer_context.tablet_schema_hash = tablet->schema_hash();
         writer_context.partition_id = 0;
-        writer_context.rowset_type = BETA_ROWSET;
         writer_context.rowset_path_prefix = tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
         writer_context.tablet_schema = &tablet->tablet_schema();

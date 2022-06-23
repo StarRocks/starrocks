@@ -90,10 +90,6 @@ class BeTabletResolver:
             rowset['tablet_id'] = rs_meta['tablet_id']
             rowset['num_rows'] = rs_meta['num_rows']
             rowset['data_disk_size'] = rs_meta['data_disk_size']
-            if rs_meta['rowset_type'] == 'BETA_ROWSET':
-                rowset['is_beta'] = True
-            else:
-                rowset['is_beta'] = False
             rowsets.append(rowset);
 
         self.tablet_infos[rs_meta['tablet_id']] = rowsets
