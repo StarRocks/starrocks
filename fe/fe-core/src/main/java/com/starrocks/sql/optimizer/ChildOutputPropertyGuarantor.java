@@ -114,6 +114,16 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         return true;
     }
 
+    private void enforceChildGatherDistribution(GroupExpression child, PhysicalPropertySet childOutputProperty, int childIndex) {
+        DistributionSpec enforceDistributionSpec = DistributionSpec.createGatherDistributionSpec();
+
+        enforceChildDistribution(enforceDistributionSpec, child, childOutputProperty);
+
+        PhysicalPropertySet newChildInputProperty = createPropertySetByDistribution(enforceDistributionSpec);
+        requiredChildrenProperties.set(childIndex, newChildInputProperty);
+        childrenOutputProperties.set(childIndex, newChildInputProperty);
+    }
+
     // enforce child SHUFFLE type distribution
     private void enforceChildShuffleDistribution(List<Integer> shuffleColumns, GroupExpression child,
                                                  PhysicalPropertySet childOutputProperty, int childIndex) {
@@ -247,7 +257,14 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
 
     @Override
     public Void visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator node, ExpressionContext context) {
-        return visitPhysicalJoin(node, context);
+        GroupExpression leftChild = childrenBestExprList.get(0);
+        GroupExpression rightChild = childrenBestExprList.get(1);
+        PhysicalPropertySet leftChildOutputProperty = childrenOutputProperties.get(0);
+        PhysicalPropertySet rightChildOutputProperty = childrenOutputProperties.get(1);
+
+        enforceChildGatherDistribution(leftChild, leftChildOutputProperty, 0);
+        enforceChildGatherDistribution(rightChild, rightChildOutputProperty, 1);
+        return visitOperator(node, context);
     }
 
     public Void visitPhysicalJoin(PhysicalJoinOperator node, ExpressionContext context) {
