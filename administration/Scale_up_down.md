@@ -6,6 +6,7 @@ StarRocks 有两种 FE 节点：Follower 和 Observer。Follower参与选举投�
 
 FE扩缩容时要注意：
 
+* `http_port` 必须相同。
 * Follower FE(包括Master)的数量必须为奇数，建议部署3个，组成高可用(HA)模式即可。
 * 当 FE 处于高可用部署时（1个Master，2个Follower），建议通过增加 Observer FE 来扩展 FE 的读服务能力。当然也可以继续增加 Follower FE，但几乎是不必要的。
 * 通常一个 FE 节点可以应对 10-20 台 BE 节点。建议总的 FE 节点数量在 10 个以下。而3个即可满足绝大部分需求。
