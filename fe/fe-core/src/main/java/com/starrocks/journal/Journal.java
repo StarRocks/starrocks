@@ -45,7 +45,7 @@ public interface Journal {
 
     // Get all the journals whose id: fromKey <= id <= toKey
     // toKey = -1 means toKey = Long.Max_Value
-    public JournalCursor read(long fromKey, long toKey);
+    public JournalCursor read(long fromKey, long toKey) throws JournalException;
 
     // Write a journal and sync to disk
     // Only keep this method for test, will remove in next PR
