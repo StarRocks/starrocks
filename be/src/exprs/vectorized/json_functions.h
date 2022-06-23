@@ -193,6 +193,14 @@ private:
     DEFINE_VECTORIZED_FN(_string_json);
 
     /**
+     * Convert json column to unescaped binary column with the first/last quote trimmed.
+     * @param: 
+     * @paramType: 
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(_json_string_unescaped);
+
+    /**
      * Convert json column to int column
      * @param: [json_column]
      * @paramType: [JsonColumn]

@@ -291,6 +291,17 @@ public class EditLog {
                     globalStateMgr.replayRenameTable(info);
                     break;
                 }
+                case OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME: {
+                    ChangeMaterializedViewRefreshSchemeLog log =
+                            (ChangeMaterializedViewRefreshSchemeLog) journal.getData();
+                    globalStateMgr.replayChangeMaterializedViewRefreshScheme(log);
+                    break;
+                }
+                case OperationType.OP_RENAME_MATERIALIZED_VIEW: {
+                    RenameMaterializedViewLog log = (RenameMaterializedViewLog) journal.getData();
+                    globalStateMgr.replayRenameMaterializedView(log);
+                    break;
+                }
                 case OperationType.OP_MODIFY_VIEW_DEF: {
                     AlterViewInfo info = (AlterViewInfo) journal.getData();
                     globalStateMgr.getAlterInstance().replayModifyViewDef(info);
@@ -1473,5 +1484,13 @@ public class EditLog {
 
     public void logInsertOverwriteStateChange(InsertOverwriteStateChangeInfo info) {
         logEdit(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, info);
+    }
+
+    public void logMvRename(RenameMaterializedViewLog log) {
+        logEdit(OperationType.OP_RENAME_MATERIALIZED_VIEW, log);
+    }
+
+    public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
+        logEdit(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log);
     }
 }

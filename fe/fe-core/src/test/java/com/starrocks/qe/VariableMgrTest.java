@@ -226,5 +226,17 @@ public class VariableMgrTest {
         VariableMgr.setVar(null, setVar, false);
         Assert.fail("No exception throws.");
     }
+
+    @Test
+    public void testDumpInvisible() {
+        SessionVariable sv = new SessionVariable();
+        List<List<String>> vars = VariableMgr.dump(SetType.DEFAULT, sv, null);
+        Assert.assertFalse(vars.toString().contains("enable_show_all_variables"));
+        Assert.assertFalse(vars.toString().contains("cbo_use_correlated_join_estimate"));
+
+        sv.setEnableShowAllVariables(true);
+        vars = VariableMgr.dump(SetType.DEFAULT, sv, null);
+        Assert.assertTrue(vars.toString().contains("cbo_use_correlated_join_estimate"));
+    }
 }
 

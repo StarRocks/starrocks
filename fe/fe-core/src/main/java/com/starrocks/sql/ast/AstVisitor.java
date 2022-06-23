@@ -174,6 +174,10 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    public R visitAlterMaterializedViewStatement(AlterMaterializedViewStatement statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     public R visitCreateViewStatement(CreateViewStmt statement, C context) {
         return visitBaseViewStatement(statement, context);
     }
@@ -248,6 +252,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+
+    public R visitUseStatement(UseStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ----------------- Catalog Clause -------------
@@ -476,4 +484,5 @@ public abstract class AstVisitor<R, C> {
     public R visitGroupByClause(GroupByClause node, C context) {
         return null;
     }
+
 }

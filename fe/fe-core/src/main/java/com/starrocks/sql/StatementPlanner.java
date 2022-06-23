@@ -39,6 +39,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -57,6 +58,7 @@ import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.ast.UseStmt;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
@@ -189,6 +191,7 @@ public class StatementPlanner {
                 || statement instanceof AdminShowConfigStmt
                 || statement instanceof AdminShowReplicaDistributionStmt
                 || statement instanceof AdminShowReplicaStatusStmt
+                || statement instanceof AlterMaterializedViewStatement
                 || statement instanceof AlterViewStmt
                 || statement instanceof AlterWorkGroupStmt
                 || statement instanceof AnalyzeStmt
@@ -224,6 +227,7 @@ public class StatementPlanner {
                 || statement instanceof ShowTableStatusStmt
                 || statement instanceof ShowVariablesStmt
                 || statement instanceof ShowWorkGroupStmt
-                || statement instanceof SubmitTaskStmt;
+                || statement instanceof SubmitTaskStmt
+                || statement instanceof UseStmt;
     }
 }

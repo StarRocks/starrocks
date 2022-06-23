@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "gen_cpp/starlake.pb.h"
+#include "gen_cpp/lake_service.pb.h"
 
 namespace starrocks {
 class ExecEnv;

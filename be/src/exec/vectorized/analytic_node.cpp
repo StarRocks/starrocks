@@ -175,7 +175,12 @@ Status AnalyticNode::_get_next_for_unbounded_preceding_range_frame(RuntimeState*
         while (_analytor->current_row_position() < _analytor->partition_end() &&
                _analytor->window_result_position() < chunk_size) {
             if (_analytor->current_row_position() >= _analytor->peer_group_end()) {
-                _analytor->find_peer_group_end();
+                // The condition `partition_start <= current_row_position < partition_end` is satisfied
+                // so `partition_end` must point at the genuine partition boundary, and found_partition_end must equals
+                // to partition_end if current partition haven't finished processing
+                DCHECK_EQ(_analytor->partition_end(), _analytor->found_partition_end());
+                // So the found_partition_end also points at genuine partition boundary, then we pass true to the following function
+                _analytor->find_and_check_peer_group_end(true);
                 DCHECK_GE(_analytor->peer_group_end(), _analytor->peer_group_start());
                 _analytor->update_window_batch(_analytor->peer_group_start(), _analytor->peer_group_end(),
                                                _analytor->peer_group_start(), _analytor->peer_group_end());
@@ -286,11 +291,11 @@ Status AnalyticNode::_get_next_for_rows_between_unbounded_preceding_and_current_
 }
 
 Status AnalyticNode::_try_fetch_next_partition_data(RuntimeState* state) {
-    _analytor->find_partition_end();
-    while (!_analytor->is_partition_finished()) {
+    _analytor->find_and_check_partition_end();
+    while (!_analytor->is_partition_boundary_reached()) {
         RETURN_IF_ERROR(state->check_mem_limit("analytic node fetch next partition data"));
         RETURN_IF_ERROR(_fetch_next_chunk(state));
-        _analytor->find_partition_end();
+        _analytor->find_and_check_partition_end();
     }
     return Status::OK();
 }

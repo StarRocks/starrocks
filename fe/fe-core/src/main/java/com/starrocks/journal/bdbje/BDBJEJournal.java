@@ -46,6 +46,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -59,8 +60,8 @@ import java.util.concurrent.atomic.AtomicLong;
 public class BDBJEJournal implements Journal {
     public static final Logger LOG = LogManager.getLogger(BDBJEJournal.class);
     private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
-    static final int RETRY_TIME = 3;
-    static final int SLEEP_INTERVAL_SEC = 5;
+    static int RETRY_TIME = 3;
+    static int SLEEP_INTERVAL_SEC = 5;
 
     private String environmentPath = null;
     private String selfNodeName;
@@ -69,6 +70,10 @@ public class BDBJEJournal implements Journal {
     private BDBEnvironment bdbEnvironment = null;
     private CloseSafeDatabase currentJournalDB;
     protected Transaction currentTrasaction = null;
+
+    // store uncommitted kv, used for rebuilding txn on commit fails
+    private List<Pair<DatabaseEntry, DatabaseEntry>> uncommitedDatas = new ArrayList<>();
+
     // only kept for profile test, will remove in the next PR
     @VisibleForTesting
     private AtomicLong nextJournalId = new AtomicLong(1);
@@ -472,6 +477,7 @@ public class BDBJEJournal implements Journal {
                             i + 1, status, currentJournalDB, theKey, theData));
                 }
                 // success
+                uncommitedDatas.add(Pair.create(theKey, theData));
                 return;
             } catch (DatabaseException e) {
                 String errMsg = String.format(
@@ -492,6 +498,8 @@ public class BDBJEJournal implements Journal {
     /**
      * persist current batch
      * for bdb: commit current transaction
+     * notice that if commit fail, the transaction may not be valid.
+     * we should rebuild the transaction and retry.
      */
     @Override
     public void batchWriteCommit() throws InterruptedException, JournalException {
@@ -500,26 +508,80 @@ public class BDBJEJournal implements Journal {
         }
 
         JournalException exception = null;
-        for (int i = 0; i < RETRY_TIME; i++) {
-            try {
-                // sleep before retry
+        try {
+            for (int i = 0; i < RETRY_TIME; i++) {
+                // retry cleanups
                 if (i != 0) {
                     Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
-                }
 
-                currentTrasaction.commit();
-                currentTrasaction = null;
-                return;
-            } catch (DatabaseException e) {
-                String errMsg = String.format("failed to commit journal after retried %d times! txn[%s] db[%s]",
-                        i + 1, currentTrasaction, currentJournalDB);
-                LOG.error(errMsg, e);
-                exception = new JournalException(errMsg);
-                exception.initCause(e);
+                    if (currentTrasaction == null || !currentTrasaction.isValid()) {
+                        try {
+                            rebuildCurrentTransaction();
+                        } catch (JournalException e) {
+                            // failed to rebuild txn, will continune to next attempt
+                            LOG.warn("failed to commit journal after retried {} times! failed to rebuild txn",
+                                    i + 1, e);
+                            currentTrasaction = null;
+                            exception = e;
+                            continue;
+                        }
+                    }
+                } // if i != 0
+
+                // commit
+                try {
+                    currentTrasaction.commit();
+                    return;
+                } catch (DatabaseException e) {
+                    String errMsg = String.format("failed to commit journal after retried %d times! txn[%s] db[%s]",
+                            i + 1, currentTrasaction, currentJournalDB);
+                    LOG.error(errMsg, e);
+                    exception = new JournalException(errMsg);
+                    exception.initCause(e);
+                }
             }
+            // failed after retried
+            throw exception;
+        } finally {
+            // always reset current txn
+            currentTrasaction = null;
+            uncommitedDatas.clear();
         }
-        // failed after retried
-        throw exception;
+    }
+
+    /**
+     * txn can be invalid if commit fails on exception
+     * in this case, we rebuild the current transaction with `uncommitedDatas`
+     * there's no need to retry while we were rebuilding since we have retried outside this function
+     */
+    private void rebuildCurrentTransaction() throws JournalException {
+        LOG.warn("transaction is invalid, rebuild the txn with {} kvs", uncommitedDatas.size());
+
+        try {
+            //  begin transaction
+            currentTrasaction = currentJournalDB.getDb().getEnvironment().beginTransaction(
+                    null, bdbEnvironment.getTxnConfig());
+            // append
+            for (Pair<DatabaseEntry, DatabaseEntry> kvPair : uncommitedDatas) {
+                DatabaseEntry theKey = kvPair.first;
+                DatabaseEntry theData = kvPair.second;
+                OperationStatus status = currentJournalDB.put(currentTrasaction, theKey, theData);
+                if (status != OperationStatus.SUCCESS) {
+                    String msg = String.format(
+                            "failed to append journal! status[%s] db[%s] key[%s] data[%s]",
+                            status, currentJournalDB, theKey, theData);
+                    LOG.warn(msg);
+                    throw new JournalException(msg);
+                }
+            }
+            LOG.info("rebuild txn succeed. new txn {}", currentTrasaction);
+        } catch (DatabaseException e) {
+            String errMsg = String.format("failed to rebuild txn! txn[%s] db[%s]", currentTrasaction, currentJournalDB);
+            LOG.error(errMsg, e);
+            JournalException exception = new JournalException(errMsg);
+            exception.initCause(e);
+            throw exception;
+        }
     }
 
     /**

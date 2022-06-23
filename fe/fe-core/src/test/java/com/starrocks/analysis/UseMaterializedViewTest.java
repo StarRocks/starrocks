@@ -5,6 +5,7 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -113,11 +114,16 @@ public class UseMaterializedViewTest {
             Assert.assertTrue(database != null);
             Table table = database.getTable("mv_to_drop");
             Assert.assertTrue(table != null);
+            MaterializedView materializedView = (MaterializedView) table;
+            long baseTableId = materializedView.getBaseTableIds().iterator().next();
+            OlapTable baseTable = ((OlapTable) database.getTable(baseTableId));
+            Assert.assertEquals(baseTable.getRelatedMaterializedViews().size(), 2);
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
             stmtExecutor.execute();
             table = database.getTable("mv_to_drop");
             Assert.assertTrue(table == null);
+            Assert.assertEquals(baseTable.getRelatedMaterializedViews().size(), 1);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
