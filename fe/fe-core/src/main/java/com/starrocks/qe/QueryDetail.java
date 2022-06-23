@@ -78,7 +78,11 @@ public class QueryDetail implements Serializable {
             this.database = "";
         } else {
             String[] stringPieces = database.split(":", -1);
-            this.database = stringPieces[1]; // eliminate cluster name
+            if (stringPieces.length == 1) {
+                this.database = stringPieces[0];
+            } else {
+                this.database = stringPieces[1]; // eliminate cluster name
+            }
         }
         this.sql = sql;
         this.user = user;
