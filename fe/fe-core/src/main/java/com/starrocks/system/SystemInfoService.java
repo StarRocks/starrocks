@@ -268,7 +268,7 @@ public class SystemInfoService {
                                         droppedBackend.getHeartbeatPort(), db.getFullName(), table.getName());
 
                                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
-                                        .forEach(rollupIdx -> {
+                                        .forEach(rollupIddx -> {
                                             boolean existIntersection = rollupIdx.getTablets().stream()
                                                     .map(Tablet::getId).anyMatch(tabletIds::contains);
 
@@ -804,6 +804,12 @@ public class SystemInfoService {
             if (null != cluster) {
                 // replay log
                 cluster.addBackend(newBackend.getId());
+                // get serviceId from starMgr
+                if (Config.integrate_starmgr) {
+                    int clusterId = GlobalStateMgr.getCurrentState().getClusterId();
+                    GlobalStateMgr.getCurrentState().getStarOSAgent().getServiceId(Integer.toString(clusterId));
+                }
+
             } else {
                 // This happens in loading image when fe is restarted, because loadCluster is after loadBackend,
                 // cluster is not created. Be in cluster will be updated in loadCluster.
@@ -827,6 +833,16 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(backend.getOwnerClusterName());
         if (null != cluster) {
             cluster.removeBackend(backend.getId());
+            // clear map in starosAgent
+            if (Config.integrate_starmgr) {
+                long starletPort = backend.getStarletPort();
+                if (starletPort == 0) {
+                    return;
+                }
+                String workerAddr = backend.getHost() + ":" + starletPort;
+                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerId(workerAddr);
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerfromMap(workerId, workerAddr);
+            }
         } else {
             LOG.error("Cluster " + backend.getOwnerClusterName() + " no exist.");
         }

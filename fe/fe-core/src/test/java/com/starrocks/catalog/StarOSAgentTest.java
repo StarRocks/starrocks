@@ -232,4 +232,16 @@ public class StarOSAgentTest {
         Assert.assertEquals(10001L, starosAgent.getPrimaryBackendIdByShard(10L));
         Assert.assertEquals(Sets.newHashSet(10001L, 10002L, 10003L), starosAgent.getBackendIdsByShard(10L));
     }
+
+    @Test
+    public void testRemoveWorkerfromMap() {
+        String workerHost = "127.0.0.1:8090";
+        Map<String, Long> mockWorkerToId = Maps.newHashMap();
+        mockWorkerToId.put(workerHost, 5L);
+        Deencapsulation.setField(starosAgent, "workerToId", mockWorkerToId);
+        Assert.assertEquals(5L, starosAgent.getWorkerId(workerHost));
+
+        starosAgent.removeWorkerfromMap(5L, workerHost);
+        ExceptionChecker.expectThrows(NullPointerException.class, () -> starosAgent.getWorkerId(workerHost));
+    }
 }

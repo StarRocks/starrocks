@@ -952,6 +952,15 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startMasterOnlyDaemonThreads() {
+        if (Config.integrate_starmgr) {
+            // start starMgr background threads d
+            getStarMgr().start();
+            // register service to starMgr
+            int clusterId = getCurrentState().getClusterId();
+            getStarOSAgent().registerAndBootstrapService(Integer.toString(clusterId));
+
+        }
+
         // start checkpoint thread
         checkpointer = new Checkpoint(editLog);
         checkpointer.setMetaContext(metaContext);
@@ -1006,11 +1015,6 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
-        // register service to starMgr
-        if (Config.integrate_starmgr) {
-            int clusterId = getCurrentState().getClusterId();
-            getStarOSAgent().registerAndBootstrapService(Integer.toString(clusterId));
-        }
     }
 
     // start threads that should running on all FE

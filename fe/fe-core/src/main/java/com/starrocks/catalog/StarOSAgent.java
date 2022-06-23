@@ -184,6 +184,11 @@ public class StarOSAgent {
             }
         }
 
+        removeWorkerfromMap(workerId, workerIpPort);
+        LOG.info("remove worker {} success from StarMgr", workerIpPort);
+    }
+
+    public void removeWorkerfromMap(long workerId, String workerIpPort) {
         workerToBackend.remove(workerId);
         workerToId.remove(workerIpPort);
         LOG.info("remove worker {} success from StarMgr", workerIpPort);
