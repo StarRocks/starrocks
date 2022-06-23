@@ -16,6 +16,7 @@ echo "the root path="$ROOT
 echo "the env="$GITHUB_REF_NAME
 
 cd $ROOT/starrocks
+ls -al $ROOT/starrocks
 rm -rf fe/fe-core/target
 #git config  user.email "wanpengfei91@163.com"
 #git config  user.name "wanpengfei-git"
@@ -70,7 +71,7 @@ timeout 3600 sh run-fe-ut.sh --run com.starrocks.utframe.Demo#testCreateDbAndTab
 docker exec --privileged $container_name /bin/bash -c "$cmd"
 
 echo "script run over-----"
-
+ls -al $ROOT/starrocks
 sudo chown -R runner:docker $ROOT/starrocks/FeCoverageTool-main
 #ls -al $ROOT/starrocks/fe/fe-core/target
 if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
