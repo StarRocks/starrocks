@@ -292,7 +292,7 @@ nonterminal StatementBase stmt, show_stmt, show_param, help_stmt, load_stmt,
     create_routine_load_stmt, pause_routine_load_stmt, resume_routine_load_stmt, stop_routine_load_stmt,
     show_routine_load_stmt, show_routine_load_task_stmt,
     describe_stmt, alter_stmt,
-    use_stmt, kill_stmt, drop_stmt, recover_stmt, grant_stmt, revoke_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt,
+    kill_stmt, drop_stmt, recover_stmt, grant_stmt, revoke_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt,
     unsupported_stmt, export_stmt, admin_stmt, truncate_stmt,
     import_columns_stmt, import_where_stmt, install_plugin_stmt, uninstall_plugin_stmt, analyze_stmt, create_analyze_stmt,
     alter_resource_group_stmt;
@@ -603,8 +603,6 @@ stmt ::=
     {: RESULT = stmt; :}
     | recover_stmt:stmt
     {: RESULT = stmt; :}
-    | use_stmt:use
-    {: RESULT = use; :}
     | set_stmt:set
     {: RESULT = set; :}
     | kill_stmt:kill
@@ -3066,14 +3064,6 @@ opt_set_qualifier ::=
   | KW_ALL
   {: RESULT = Qualifier.ALL; :}
   ;
-
-// Change database
-use_stmt ::=
-    KW_USE ident:db
-    {:
-        RESULT = new UseStmt(db);
-    :}
-    ;
 
 // Insert statement
 insert_stmt ::=

@@ -531,8 +531,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                     // replicas
                     List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
                             .seqChooseBackendIds(partitionInfo.getReplicationNum(entry.getKey()),
-                                    true, true,
-                                    db.getClusterName());
+                                    true, true);
                     if (beIds == null) {
                         return new Status(ErrCode.COMMON_ERROR, "failed to find "
                                 + partitionInfo.getReplicationNum(entry.getKey())
@@ -1252,7 +1251,11 @@ public class OlapTable extends Table implements GsonPostProcessable {
             LOG.warn("failed to copy olap table: " + getName());
             return null;
         }
+        return selectiveCopyInternal(copied, reservedPartitions, resetState, extState);
+    }
 
+    protected OlapTable selectiveCopyInternal(OlapTable copied, Collection<String> reservedPartitions, boolean resetState,
+                                              IndexExtState extState) {
         if (resetState) {
             // remove shadow index from copied table
             List<MaterializedIndex> shadowIndex =
@@ -1366,7 +1369,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     public boolean isStable(SystemInfoService infoService, TabletScheduler tabletScheduler, String clusterName) {
-        List<Long> aliveBeIdsInCluster = infoService.getClusterBackendIds(clusterName, true);
+        List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
         for (Partition partition : idToPartition.values()) {
             long visibleVersion = partition.getVisibleVersion();
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());

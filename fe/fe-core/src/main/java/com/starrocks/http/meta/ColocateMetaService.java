@@ -219,7 +219,7 @@ public class ColocateMetaService {
             }
 
             List<Long> clusterBackendIds =
-                    GlobalStateMgr.getCurrentSystemInfo().getClusterBackendIds(clusterName, true);
+                    GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
             //check the Backend id
             for (List<Long> backendIds : backendsPerBucketSeq) {
                 if (backendIds.size() != groupSchema.getReplicationNum()) {

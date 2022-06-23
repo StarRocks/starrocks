@@ -21,26 +21,44 @@
 
 package com.starrocks.cluster;
 
-import com.google.common.collect.Lists;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
+import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.LinkDbInfo;
+import com.starrocks.system.SystemInfoService;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
-/**
- * cluster only save db and user's id and name
- */
+// Now Cluster don't have read interface, in order to be back compatible.
+// We will remove the persistent format later.
 public class Cluster implements Writable {
+    private static final Logger LOG = LogManager.getLogger(Cluster.class);
 
     private Long id;
     private String name;
     // backend which cluster own
     private Set<Long> backendIdSet = ConcurrentHashMap.newKeySet();
+
+    private ConcurrentHashMap<String, LinkDbInfo> linkDbNames = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<Long, LinkDbInfo> linkDbIds = new ConcurrentHashMap<>();
+
+    private Set<Long> dbIds = ConcurrentHashMap.newKeySet();
+    private Set<String> dbNames = ConcurrentHashMap.newKeySet();
+    private ConcurrentHashMap<String, Long> dbNameToIDs = new ConcurrentHashMap<>();
+
+    // lock to perform atomic operations
+    private ReentrantLock lock = new ReentrantLock(true);
 
     private Cluster() {
         // for persist
@@ -51,16 +69,48 @@ public class Cluster implements Writable {
         this.id = id;
     }
 
+    private void lock() {
+        this.lock.lock();
+    }
+
+    private void unlock() {
+        this.lock.unlock();
+    }
+
     public Long getId() {
         return id;
     }
 
-    public String getName() {
-        return name;
+    public void addDb(String name, long id) {
+        if (Strings.isNullOrEmpty(name)) {
+            return;
+        }
+        lock();
+        try {
+            dbNames.add(name);
+            dbIds.add(id);
+            dbNameToIDs.put(name, id);
+        } finally {
+            unlock();
+        }
     }
 
-    public List<Long> getBackendIdList() {
-        return Lists.newArrayList(backendIdSet);
+    public void removeDb(String name, long id) {
+        lock();
+        try {
+            dbNames.remove(name);
+            dbIds.remove(id);
+        } finally {
+            unlock();
+        }
+    }
+
+    // Just for check
+    public boolean isEmpty() {
+        return backendIdSet == null || backendIdSet.isEmpty();
+    }
+    public boolean isDefaultCluster() {
+        return SystemInfoService.DEFAULT_CLUSTER.equalsIgnoreCase(name);
     }
 
     public void setBackendIdList(List<Long> backendIdList) {
@@ -95,13 +145,42 @@ public class Cluster implements Writable {
             out.writeLong(id);
         }
 
-        // dbNames and dbIds are not used anymore, so we write two zeros here.
-        out.writeInt(0);
-        out.writeInt(0);
+        int dbCount = dbIds.size();
+        if (dbNames.contains(ClusterNamespace.getFullName(this.name, InfoSchemaDb.DATABASE_NAME))) {
+            dbCount--;
+        }
 
-        // For back compatible, write two zeros for linkDbNames and linkDbIds
-        out.writeInt(0);
-        out.writeInt(0);
+        out.writeInt(dbCount);
+        // don't persist InfoSchemaDb meta
+        for (String name : dbNames) {
+            if (!name.equals(ClusterNamespace.getFullName(this.name, InfoSchemaDb.DATABASE_NAME))) {
+                Text.writeString(out, name);
+            } else {
+                dbIds.remove(dbNameToIDs.get(name));
+            }
+        }
+
+        String errMsg = String.format("%d vs %d, fatal error, Write cluster meta failed!",
+                dbNames.size(), dbIds.size() + 1);
+        // ensure we have removed InfoSchemaDb id
+        Preconditions.checkState(dbNames.size() == dbIds.size() + 1, errMsg);
+
+        out.writeInt(dbCount);
+        for (long id : dbIds) {
+            out.writeLong(id);
+        }
+
+        out.writeInt(linkDbNames.size());
+        for (Map.Entry<String, LinkDbInfo> infoMap : linkDbNames.entrySet()) {
+            Text.writeString(out, infoMap.getKey());
+            infoMap.getValue().write(out);
+        }
+
+        out.writeInt(linkDbIds.size());
+        for (Map.Entry<Long, LinkDbInfo> infoMap : linkDbIds.entrySet()) {
+            out.writeLong(infoMap.getKey());
+            infoMap.getValue().write(out);
+        }
     }
 
     public void readFields(DataInput in) throws IOException {
@@ -112,26 +191,30 @@ public class Cluster implements Writable {
             Long id = in.readLong();
             backendIdSet.add(id);
         }
-
-        // compatible for dbNames, skip a string
         int count = in.readInt();
         while (count-- > 0) {
-            Text.readString(in);
-        }
-        // compatible for dbIds, skip a long
-        count = in.readInt();
-        while (count-- > 0) {
-            in.readLong();
+            dbNames.add(Text.readString(in));
         }
 
-        // For back compatible, write two zeros for linkDbNames and linkDbIds
         count = in.readInt();
-        if (count > 0) {
-            throw new IOException("linkDbNames in Cluster should be equal with 0, now is " + count);
+        while (count-- > 0) {
+            dbIds.add(in.readLong());
         }
+
         count = in.readInt();
-        if (count > 0) {
-            throw new IOException("linkDbIds in Cluster should be equal with 0, now is " + count);
+        while (count-- > 0) {
+            final String key = Text.readString(in);
+            final LinkDbInfo value = new LinkDbInfo();
+            value.readFields(in);
+            linkDbNames.put(key, value);
+        }
+
+        count = in.readInt();
+        while (count-- > 0) {
+            final long key = in.readLong();
+            final LinkDbInfo value = new LinkDbInfo();
+            value.readFields(in);
+            linkDbIds.put(key, value);
         }
     }
 }

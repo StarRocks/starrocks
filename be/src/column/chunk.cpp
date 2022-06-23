@@ -192,8 +192,7 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_slot(size_t size) const {
 }
 
 std::unique_ptr<Chunk> Chunk::clone_empty_with_schema() const {
-    int size = num_rows();
-    return clone_empty_with_schema(size);
+    return clone_empty_with_schema(num_rows());
 }
 
 std::unique_ptr<Chunk> Chunk::clone_empty_with_schema(size_t size) const {

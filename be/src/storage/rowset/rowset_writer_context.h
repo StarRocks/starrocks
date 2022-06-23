@@ -62,7 +62,6 @@ public:
     bool write_tmp = false;
 
     RowsetStatePB rowset_state = PREPARED;
-    RowsetTypePB rowset_type = BETA_ROWSET;
     SegmentsOverlapPB segments_overlap = OVERLAP_UNKNOWN;
 
     // segment file use uint32 to represent row number, therefore the maximum is UINT32_MAX.

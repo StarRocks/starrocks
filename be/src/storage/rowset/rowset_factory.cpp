@@ -35,20 +35,12 @@ namespace starrocks {
 
 Status RowsetFactory::create_rowset(const TabletSchema* schema, const std::string& rowset_path,
                                     const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset) {
-    if (rowset_meta->rowset_type() == BETA_ROWSET) {
-        *rowset =
-                BetaRowset::create(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), schema, rowset_path, rowset_meta);
-        RETURN_IF_ERROR((*rowset)->init());
-        return Status::OK();
-    }
-    return Status::NotSupported("unsupported rowset type");
+    *rowset = BetaRowset::create(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), schema, rowset_path, rowset_meta);
+    RETURN_IF_ERROR((*rowset)->init());
+    return Status::OK();
 }
 
 Status RowsetFactory::create_rowset_writer(const RowsetWriterContext& context, std::unique_ptr<RowsetWriter>* output) {
-    if (UNLIKELY(context.rowset_type != BETA_ROWSET)) {
-        return Status::NotSupported("unsupported rowset type");
-    }
-
     auto tablet_schema = context.tablet_schema;
     auto memory_format_version = context.memory_format_version;
     auto storage_format_version = context.storage_format_version;

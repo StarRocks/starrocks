@@ -63,7 +63,13 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.sql.plan.ScalarOperatorToExpr;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TOpType;
 import org.apache.logging.log4j.LogManager;
@@ -78,6 +84,8 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static java.util.Objects.requireNonNull;
 
 public class Load {
     private static final Logger LOG = LogManager.getLogger(Load.class);
@@ -565,15 +573,17 @@ public class Load {
                     throw new UserException("unknown reference column, column=" + entry.getKey()
                             + ", reference=" + slot.getColumnName());
                 }
-                // set slot desc IsMaterialized true
                 if (useVectorizedLoad) {
                     slotDesc.setIsMaterialized(true);
                 }
                 smap.getLhs().add(slot);
-                smap.getRhs().add(new SlotRef(slotDesc));
+                SlotRef slotRef = new SlotRef(slotDesc);
+                slotRef.setColumnName(slot.getColumnName());
+                smap.getRhs().add(slotRef);
             }
             Expr expr = entry.getValue().clone(smap);
-            expr.analyze(analyzer);
+
+            expr = analyzeAndCastExprForLoad(expr);
 
             // check if contain aggregation
             List<FunctionCallExpr> funcs = Lists.newArrayList();
@@ -593,13 +603,14 @@ public class Load {
             for (SlotRef slot : slots) {
                 SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
                 if (slotDesc != null) {
-                    // set slot desc IsMaterialized true
                     if (useVectorizedLoad) {
                         slotDesc.setIsMaterialized(true);
                     }
                     smap.getLhs().add(slot);
+                    SlotRef slotRef = new SlotRef(slotDesc);
+                    slotRef.setColumnName(slot.getColumnName());
                     smap.getRhs().add(new CastExpr(tbl.getColumn(slot.getColumnName()).getType(),
-                            new SlotRef(slotDesc)));
+                            slotRef));
                 } else if (exprsByName.get(slot.getColumnName()) != null) {
                     smap.getLhs().add(slot);
                     smap.getRhs().add(new CastExpr(tbl.getColumn(slot.getColumnName()).getType(),
@@ -610,12 +621,24 @@ public class Load {
                 }
             }
             Expr expr = entry.getValue().clone(smap);
-            expr.analyze(analyzer);
+            expr = analyzeAndCastExprForLoad(expr);
 
             exprsByName.put(entry.getKey(), expr);
         }
     }
 
+    public static Expr analyzeAndCastExprForLoad(Expr expr) {
+        ExpressionAnalyzer.analyzeExpressionIgnoreSlot(expr, ConnectContext.get());
+        // Translating expr to scalar in order to do some rewrites
+        ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expr);
+        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+        // Add cast and constant fold
+        scalarOperator = scalarRewriter.rewrite(scalarOperator, ScalarOperatorRewriter.LOAD_REWRITE_RULES);
+        requireNonNull(scalarOperator, "rewrite expression is null");
+        return ScalarOperatorToExpr.buildExprIgnoreSlot(scalarOperator,
+                new ScalarOperatorToExpr.FormatterContext(Maps.newHashMap()));
+
+    }
     /**
      * This method is used to transform hadoop function.
      * The hadoop function includes: replace_value, strftime, time_format, alignment_timestamp, default_value, now.

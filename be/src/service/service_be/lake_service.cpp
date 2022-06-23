@@ -5,6 +5,7 @@
 #include <brpc/controller.h>
 
 #include "common/status.h"
+#include "gen_cpp/lake_types.pb.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
@@ -94,31 +95,24 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                       ::starrocks::lake::PublishVersionResponse* response,
                                       ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
-    (void)controller;
+    auto cntl = static_cast<brpc::Controller*>(controller);
 
     if (!request->has_base_version()) {
-        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
-        response->mutable_status()->add_error_msgs("missing base version");
+        cntl->SetFailed("missing base version");
         return;
     }
     if (!request->has_new_version()) {
-        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
-        response->mutable_status()->add_error_msgs("missing new version");
+        cntl->SetFailed("missing new version");
         return;
     }
     if (request->txn_ids_size() == 0) {
-        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
-        response->mutable_status()->add_error_msgs("missing txn_ids");
+        cntl->SetFailed("missing txn_ids");
         return;
     }
     if (request->tablet_ids_size() == 0) {
-        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
-        response->mutable_status()->add_error_msgs("missing tablet_ids");
+        cntl->SetFailed("missing tablet_ids");
         return;
     }
-
-    // Will not update status code since here, only failed_tablets will be updated.
-    response->mutable_status()->set_status_code(TStatusCode::OK);
 
     // TODO move the execution to TaskWorkerPool
     for (const auto& tablet_id : request->tablet_ids()) {
@@ -144,7 +138,6 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
 
     // TODO: move the execution to TaskWorkerPool
     // This rpc never fail.
-    response->mutable_status()->set_status_code(TStatusCode::OK);
     for (const auto& tablet_id : request->tablet_ids()) {
         auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
         if (!tablet.ok()) {

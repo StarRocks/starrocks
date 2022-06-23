@@ -6,6 +6,7 @@
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
+#include "storage/tablet_schema.h"
 #include "util/lru_cache.h"
 
 namespace starrocks {
@@ -21,6 +22,7 @@ template <typename T>
 class MetadataIterator;
 using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 using TxnLogIter = MetadataIterator<TxnLogPtr>;
+using TabletSchemaPtr = std::shared_ptr<const starrocks::TabletSchema>;
 
 class TabletManager {
     friend class Tablet;
@@ -54,6 +56,8 @@ public:
     StatusOr<TxnLogIter> list_txn_log(const std::string& group, int64_t tablet_id);
     Status delete_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id);
 
+    void prune_metacache();
+
     GroupAssigner* TEST_set_group_assigner(GroupAssigner* value) {
         auto ret = _group_assigner;
         _group_assigner = value;
@@ -64,17 +68,20 @@ private:
     std::string tablet_metadata_path(const std::string& group, int64_t tablet_id, int64_t verson);
     std::string tablet_metadata_path(const std::string& group, const std::string& metadata_path);
     std::string tablet_metadata_cache_key(int64_t tablet_id, int64_t verson);
-    StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& metadata_path);
+    StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_path);
 
     std::string txn_log_path(const std::string& group, int64_t tablet_id, int64_t txn_id);
     std::string txn_log_path(const std::string& group, const std::string& txnlog_path);
     std::string txn_log_cache_key(int64_t tablet_id, int64_t txn_id);
-    StatusOr<TxnLogPtr> get_txn_log(const std::string& txnlog_path);
+    StatusOr<TxnLogPtr> load_txn_log(const std::string& txnlog_path);
 
     bool fill_metacache(const std::string& key, void* ptr, int size);
     TabletMetadataPtr lookup_tablet_metadata(const std::string& key);
     TxnLogPtr lookup_txn_log(const std::string& key);
     void erase_metacache(const std::string& key);
+
+    std::string tablet_schema_cache_key(int64_t tablet_id);
+    TabletSchemaPtr lookup_tablet_schema(const std::string& key);
 
     GroupAssigner* _group_assigner;
     std::unique_ptr<Cache> _metacache;

@@ -29,7 +29,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Range;
-import com.sleepycat.je.rep.InsufficientLogException;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJob.JobType;
@@ -159,8 +158,9 @@ import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.MasterInfo;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalException;
+import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalWriter;
-import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
@@ -182,6 +182,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
@@ -190,6 +191,7 @@ import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.RecoverInfo;
+import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
@@ -207,6 +209,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
@@ -827,11 +830,11 @@ public class GlobalStateMgr {
         // 5. create txn timeout checker thread
         createTxnTimeoutChecker();
 
-        // 6. start state listener thread
-        createStateListener();
-
-        // 7. start task cleaner thread
+        // 6. start task cleaner thread
         createTaskCleaner();
+
+        // 7. start state listener thread
+        createStateListener();
         listener.start();
     }
 
@@ -1486,12 +1489,6 @@ public class GlobalStateMgr {
                 try {
                     hasLog = replayJournal(-1);
                     metaReplayState.setOk();
-                } catch (InsufficientLogException insufficientLogEx) {
-                    // for InsufficientLogException we should refresh the log and
-                    // then exit the process because we may have read dirty data.
-                    LOG.error("catch insufficient log exception. please restart", insufficientLogEx);
-                    ((BDBJEJournal) editLog.getJournal()).getBdbEnvironment().refreshLog(insufficientLogEx);
-                    System.exit(-1);
                 } catch (Throwable e) {
                     LOG.error("replayer thread catch an exception when replay journal.", e);
                     metaReplayState.setException(e);
@@ -1678,19 +1675,32 @@ public class GlobalStateMgr {
         }
 
         LOG.info("replayed journal id is {}, replay to journal id is {}", replayedJournalId, newToJournalId);
-        JournalCursor cursor = editLog.read(replayedJournalId.get() + 1, newToJournalId);
-        if (cursor == null) {
-            LOG.warn("failed to get cursor from {} to {}", replayedJournalId.get() + 1, newToJournalId);
+        JournalCursor cursor = null;
+        try {
+            cursor = editLog.read(replayedJournalId.get() + 1, newToJournalId);
+        } catch (JournalException e) {
+            LOG.warn("failed to get cursor from {} to {}", replayedJournalId.get() + 1, newToJournalId, e);
             return false;
         }
 
         long startTime = System.currentTimeMillis();
         boolean hasLog = false;
         while (true) {
-            JournalEntity entity = cursor.next();
+            JournalEntity entity = null;
+            try {
+                entity = cursor.next();
+            } catch (InterruptedException | JournalException | JournalInconsistentException e) {
+                LOG.warn("got exception when get next, will exit, ", e);
+                // TODO exit gracefully
+                Util.stdoutWithTime(e.getMessage());
+                System.exit(-1);
+            }
+
+            // EOF or aggressive retry
             if (entity == null) {
                 break;
             }
+
             hasLog = true;
             EditLog.loadJournal(this, entity);
             replayedJournalId.incrementAndGet();
@@ -2610,6 +2620,18 @@ public class GlobalStateMgr {
         localMetastore.dropMaterializedView(stmt);
     }
 
+    public void alterMaterializedView(AlterMaterializedViewStatement stmt) throws DdlException, MetaNotFoundException {
+        localMetastore.alterMaterializedView(stmt);
+    }
+
+    public void replayRenameMaterializedView(RenameMaterializedViewLog log) {
+        this.alter.replayRenameMaterializedView(log);
+    }
+
+    public void replayChangeMaterializedViewRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
+        this.alter.replayChangeMaterializedViewRefreshScheme(log);
+    }
+
     /*
      * used for handling CacnelAlterStmt (for client is the CANCEL ALTER
      * command). including SchemaChangeHandler and RollupHandler
@@ -2741,7 +2763,9 @@ public class GlobalStateMgr {
             ctx.setCurrentCatalog(newCatalogName);
         }
 
-        // check auth for internal catalog
+        // Check auth for internal catalog.
+        // Here we check the request permission that sent by the mysql client or jdbc.
+        // So we didn't check UseStmt permission in PrivilegeChecker.
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog()) &&
                 !auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,

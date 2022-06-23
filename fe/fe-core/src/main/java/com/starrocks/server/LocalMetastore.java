@@ -153,6 +153,10 @@ import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -352,6 +356,8 @@ public class LocalMetastore implements ConnectorMetadata {
     public void unprotectCreateDb(Database db) {
         idToDb.put(db.getId(), db);
         fullNameToDb.put(db.getFullName(), db);
+        final Cluster cluster = nameToCluster.get(db.getClusterName());
+        cluster.addDb(db.getFullName(), db.getId());
         stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
     }
 
@@ -419,6 +425,8 @@ public class LocalMetastore implements ConnectorMetadata {
             // 3. remove db from globalStateMgr
             idToDb.remove(db.getId());
             fullNameToDb.remove(db.getFullName());
+            final Cluster cluster = nameToCluster.get(db.getClusterName());
+            cluster.removeDb(dbName, db.getId());
             DropDbInfo info = new DropDbInfo(dbName, stmt.isForceDrop());
             editLog.logDropDb(info);
 
@@ -467,6 +475,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
             fullNameToDb.remove(dbName);
             idToDb.remove(db.getId());
+            final Cluster cluster = nameToCluster.get(db.getClusterName());
+            cluster.removeDb(dbName, db.getId());
 
             LOG.info("finish replay drop db, name: {}, id: {}", dbName, db.getId());
         } finally {
@@ -495,6 +505,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
             fullNameToDb.put(db.getFullName(), db);
             idToDb.put(db.getId(), db);
+            final Cluster cluster = nameToCluster.get(db.getClusterName());
+            cluster.addDb(db.getFullName(), db.getId());
 
             // log
             RecoverInfo recoverInfo = new RecoverInfo(db.getId(), -1L, -1L);
@@ -634,6 +646,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("Database name[" + newFullDbName + "] is already used");
             }
 
+            cluster.removeDb(db.getFullName(), db.getId());
+            cluster.addDb(newFullDbName, db.getId());
             // 1. rename db
             db.setNameWithLock(newFullDbName);
 
@@ -655,7 +669,10 @@ public class LocalMetastore implements ConnectorMetadata {
         tryLock(true);
         try {
             Database db = fullNameToDb.get(dbName);
+            Cluster cluster = nameToCluster.get(db.getClusterName());
+            cluster.removeDb(db.getFullName(), db.getId());
             db.setName(newDbName);
+            cluster.addDb(newDbName, db.getId());
             fullNameToDb.remove(dbName);
             fullNameToDb.put(newDbName, db);
 
@@ -2242,7 +2259,6 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
             } // end for partitions
-            // todo add async task after task framework is completed
         }
     }
 
@@ -2349,7 +2365,7 @@ public class LocalMetastore implements ConnectorMetadata {
     private List<Long> chosenBackendIdBySeq(int replicationNum, String clusterName, TStorageMedium storageMedium)
             throws DdlException {
         List<Long> chosenBackendIds = systemInfoService.seqChooseBackendIdsByStorageMedium(replicationNum,
-                true, true, clusterName, storageMedium);
+                true, true, storageMedium);
         if (chosenBackendIds == null) {
             throw new DdlException(
                     "Failed to find enough host with storage medium is " + storageMedium + " in all backends. need: " +
@@ -2360,7 +2376,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private List<Long> chosenBackendIdBySeq(int replicationNum, String clusterName) throws DdlException {
         List<Long> chosenBackendIds =
-                systemInfoService.seqChooseBackendIds(replicationNum, true, true, clusterName);
+                systemInfoService.seqChooseBackendIds(replicationNum, true, true);
         if (chosenBackendIds == null) {
             List<Long> backendIds = systemInfoService.getBackendIds(true);
             throw new DdlException("Failed to find enough host in all backends. need: " + replicationNum +
@@ -2806,8 +2822,9 @@ public class LocalMetastore implements ConnectorMetadata {
         PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
         PartitionInfo partitionInfo;
         if (partitionDesc != null) {
-            Map<String, Long> partitionNameToId = Maps.newHashMap();
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+            partitionInfo = partitionDesc.toPartitionInfo(
+                    Arrays.asList(stmt.getBasePartitionColumn()),
+                    Maps.newHashMap(), false);
         } else {
             partitionInfo = new SinglePartitionInfo();
         }
@@ -2824,6 +2841,9 @@ public class LocalMetastore implements ConnectorMetadata {
         } else if (refreshSchemeDesc.getType() == RefreshType.SYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             mvRefreshScheme.setType(MaterializedView.RefreshType.SYNC);
+        } else {
+            mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+            mvRefreshScheme.setType(MaterializedView.RefreshType.MANUAL);
         }
         // create mv
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
@@ -2861,12 +2881,13 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException(e.getMessage());
         }
         // set storage medium
+        DataProperty dataProperty;
         try {
             boolean hasMedium = false;
             if (properties != null) {
                 hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
             }
-            DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+            dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
                     DataProperty.DEFAULT_DATA_PROPERTY);
             if (hasMedium) {
                 materializedView.setStorageMedium(dataProperty.getStorageMedium());
@@ -2884,6 +2905,20 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException(e.getMessage());
         }
         boolean createMvSuccess;
+        Set<Long> tabletIdSet = new HashSet<>();
+        // process single partition info
+        if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+            long partitionId = GlobalStateMgr.getCurrentState().getNextId();
+            Preconditions.checkNotNull(dataProperty);
+            partitionInfo.setDataProperty(partitionId, dataProperty);
+            partitionInfo.setReplicationNum(partitionId, replicationNum);
+            partitionInfo.setIsInMemory(partitionId, false);
+            partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
+            Long version = Partition.PARTITION_INIT_VERSION;
+            Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet);
+            buildPartitions(db, materializedView, Collections.singletonList(partition));
+            materializedView.addPartition(partition);
+        }
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -2894,6 +2929,9 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             createMvSuccess = db.createMaterializedWithLock(materializedView, false);
             if (!createMvSuccess) {
+                for (Long tabletId : tabletIdSet) {
+                    GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+                }
                 if (!stmt.isIfNotExists()) {
                     ErrorReport
                             .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, materializedView,
@@ -2909,7 +2947,16 @@ public class LocalMetastore implements ConnectorMetadata {
         LOG.info("Successfully create materialized view[{};{}]", mvName, mvId);
 
         // NOTE: The materialized view  has been added to the database, and the following procedure cannot throw exception.
-        // todo add async task after task framework is completed
+        if (createMvSuccess) {
+            if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC) {
+                // create task
+                Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+                taskManager.createTask(task, true);
+                // run task
+                taskManager.executeTask(task.getName());
+            }
+        }
     }
 
     @Override
@@ -2930,9 +2977,22 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         if (table != null && table instanceof MaterializedView) {
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
+            Set<Long> baseTableIds = ((MaterializedView) table).getBaseTableIds();
+            for (Long baseTableId : baseTableIds) {
+                OlapTable baseTable = ((OlapTable) db.getTable(baseTableId));
+                if (baseTable != null) {
+                    baseTable.removeRelatedMaterializedView(table.getId());
+                }
+            }
         } else {
             stateMgr.getAlterInstance().processDropMaterializedView(stmt);
         }
+        stateMgr.getAlterInstance().processDropMaterializedView(stmt);
+    }
+
+    @Override
+    public void alterMaterializedView(AlterMaterializedViewStatement stmt) throws DdlException, MetaNotFoundException {
+        stateMgr.getAlterInstance().processAlterMaterializedView(stmt);
     }
 
     /*
@@ -3470,24 +3530,21 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private void unprotectCreateCluster(Cluster cluster) {
-        for (Long id : cluster.getBackendIdList()) {
-            final Backend backend = stateMgr.getClusterInfo().getBackend(id);
-            backend.setOwnerClusterName(cluster.getName());
-            backend.setBackendState(Backend.BackendState.using);
-        }
+        // This is only used for initDefaultCluster and in that case the backendIdList is empty.
+        // So ASSERT the cluster's backend list size.
+        Preconditions.checkState(cluster.isDefaultCluster(), "Cluster must be default cluster");
+        Preconditions.checkState(cluster.isEmpty(), "Cluster backendIdList must be 0");
 
         idToCluster.put(cluster.getId(), cluster);
-        nameToCluster.put(cluster.getName(), cluster);
+        nameToCluster.put(SystemInfoService.DEFAULT_CLUSTER, cluster);
 
         // create info schema db
-        final InfoSchemaDb infoDb = new InfoSchemaDb(cluster.getName());
-        infoDb.setClusterName(cluster.getName());
+        final InfoSchemaDb infoDb = new InfoSchemaDb(SystemInfoService.DEFAULT_CLUSTER);
+        infoDb.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         unprotectCreateDb(infoDb);
 
         // only need to create default cluster once.
-        if (cluster.getName().equalsIgnoreCase(SystemInfoService.DEFAULT_CLUSTER)) {
-            stateMgr.setIsDefaultClusterCreated(true);
-        }
+        stateMgr.setIsDefaultClusterCreated(true);
     }
 
     public Cluster getCluster(String clusterName) {
@@ -3502,26 +3559,23 @@ public class LocalMetastore implements ConnectorMetadata {
                 final Cluster cluster = Cluster.read(dis);
                 checksum ^= cluster.getId();
 
-                List<Long> latestBackendIds = stateMgr.getClusterInfo().getClusterBackendIds(cluster.getName());
-                if (latestBackendIds.size() != cluster.getBackendIdList().size()) {
-                    LOG.warn("Cluster:" + cluster.getName() + ", backends in Cluster is "
-                            + cluster.getBackendIdList().size() + ", backends in SystemInfoService is "
-                            + cluster.getBackendIdList().size());
-                }
+                Preconditions.checkState(cluster.isDefaultCluster(), "Cluster must be default_cluster");
+                List<Long> latestBackendIds = stateMgr.getClusterInfo().getBackendIds();
+
                 // The number of BE in cluster is not same as in SystemInfoService, when perform 'ALTER
                 // SYSTEM ADD BACKEND TO ...' or 'ALTER SYSTEM ADD BACKEND ...', because both of them are
                 // for adding BE to some Cluster, but loadCluster is after loadBackend.
                 cluster.setBackendIdList(latestBackendIds);
 
-                String dbName = InfoSchemaDb.getFullInfoSchemaDbName(cluster.getName());
+                String dbName = InfoSchemaDb.getFullInfoSchemaDbName(SystemInfoService.DEFAULT_CLUSTER);
                 InfoSchemaDb db;
                 // Use real GlobalStateMgr instance to avoid InfoSchemaDb id continuously increment
                 // when checkpoint thread load image.
                 if (getFullNameToDb().containsKey(dbName)) {
                     db = (InfoSchemaDb) GlobalStateMgr.getCurrentState().getFullNameToDb().get(dbName);
                 } else {
-                    db = new InfoSchemaDb(cluster.getName());
-                    db.setClusterName(cluster.getName());
+                    db = new InfoSchemaDb(SystemInfoService.DEFAULT_CLUSTER);
+                    db.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
                 }
                 String errMsg = "InfoSchemaDb id shouldn't larger than 10000, please restart your FE server";
                 // Every time we construct the InfoSchemaDb, which id will increment.
@@ -3531,8 +3585,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 Preconditions.checkState(db.getId() < NEXT_ID_INIT_VALUE, errMsg);
                 idToDb.put(db.getId(), db);
                 fullNameToDb.put(db.getFullName(), db);
+                cluster.addDb(dbName, db.getId());
                 idToCluster.put(cluster.getId(), cluster);
-                nameToCluster.put(cluster.getName(), cluster);
+                nameToCluster.put(SystemInfoService.DEFAULT_CLUSTER, cluster);
             }
         }
         LOG.info("finished replay cluster from image");
@@ -3541,8 +3596,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void initDefaultCluster() {
         final List<Long> backendList = Lists.newArrayList();
-        final List<Backend> defaultClusterBackends =
-                systemInfoService.getClusterBackends(SystemInfoService.DEFAULT_CLUSTER);
+        final List<Backend> defaultClusterBackends = systemInfoService.getBackends();
         for (Backend backend : defaultClusterBackends) {
             backendList.add(backend.getId());
         }
@@ -3568,6 +3622,7 @@ public class LocalMetastore implements ConnectorMetadata {
         unprotectCreateCluster(cluster);
         for (Database db : idToDb.values()) {
             db.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
+            cluster.addDb(db.getFullName(), db.getId());
         }
 
         // no matter default_cluster is created or not,

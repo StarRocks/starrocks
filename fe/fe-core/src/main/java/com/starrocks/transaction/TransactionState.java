@@ -41,7 +41,6 @@ import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.StatusCode;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -206,7 +205,7 @@ public class TransactionState implements Writable {
     private CountDownLatch latch;
 
     // this state need not to be serialized
-    private Map<Long, PublishVersionTask> publishVersionTasks;
+    private Map<Long, PublishVersionTask> publishVersionTasks; // Only for OlapTable
     private boolean hasSendTask;
     private long publishVersionTime = -1;
     private TransactionStatus preStatus = null;
@@ -292,6 +291,7 @@ public class TransactionState implements Writable {
                 || transactionStatus == TransactionStatus.COMMITTED;
     }
 
+    // Only for OlapTable
     public void addPublishVersionTask(Long backendId, PublishVersionTask task) {
         this.publishVersionTasks.put(backendId, task);
     }
@@ -391,7 +391,6 @@ public class TransactionState implements Writable {
                 MetricRepo.COUNTER_TXN_FAILED.increase(1L);
             }
             txnSpan.setAttribute("state", "aborted");
-            txnSpan.setStatus(StatusCode.ERROR, reason);
             txnSpan.end();
         } else if (transactionStatus == TransactionStatus.COMMITTED) {
             txnSpan.addEvent("set_committed");
@@ -416,7 +415,7 @@ public class TransactionState implements Writable {
                 default:
                     break;
             }
-        } else if (callback == null && callbackId > 0) {
+        } else if (callbackId > 0) {
             switch (transactionStatus) {
                 case COMMITTED:
                     // Maybe listener has been deleted. The txn need to be aborted later.
@@ -717,7 +716,7 @@ public class TransactionState implements Writable {
         return lastErrTimeMs;
     }
 
-    // create publish version task for transaction
+    // create publish version task for OlapTable transaction
     public List<PublishVersionTask> createPublishVersionTask() {
         List<PublishVersionTask> tasks = new ArrayList<>();
         if (this.hasSendTask()) {

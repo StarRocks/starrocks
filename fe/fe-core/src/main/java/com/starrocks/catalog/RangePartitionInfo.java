@@ -369,12 +369,14 @@ public class RangePartitionInfo extends PartitionInfo {
 
     @Override
     public void gsonPostProcess() throws IOException {
+        idToRange = Maps.newHashMap();
         if (serializedIdToRange != null && !serializedIdToRange.isEmpty()) {
             for (Map.Entry<Long, byte[]> entry : serializedIdToRange.entrySet()) {
                 idToRange.put(entry.getKey(), deserializeRange(entry.getValue()));
             }
             serializedIdToRange = null;
         }
+        idToTempRange = Maps.newHashMap();
         if (serializedIdToTempRange != null && !serializedIdToTempRange.isEmpty()) {
             for (Map.Entry<Long, byte[]> entry : serializedIdToTempRange.entrySet()) {
                 idToTempRange.put(entry.getKey(), deserializeRange(entry.getValue()));

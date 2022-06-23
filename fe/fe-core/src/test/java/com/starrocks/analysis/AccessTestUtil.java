@@ -364,26 +364,6 @@ public class AccessTestUtil {
         return analyzer;
     }
 
-    public static Analyzer fetchEmptyDbAnalyzer() {
-        Analyzer analyzer = new Analyzer(fetchBlockCatalog(), new ConnectContext(null));
-        new Expectations(analyzer) {
-            {
-                analyzer.getDefaultDb();
-                minTimes = 0;
-                result = "";
-
-                analyzer.getQualifiedUser();
-                minTimes = 0;
-                result = "testCluster:testUser";
-
-                analyzer.getClusterName();
-                minTimes = 0;
-                result = "testCluster";
-            }
-        };
-        return analyzer;
-    }
-
     public static Analyzer fetchTableAnalyzer() {
         Column column1 = new Column("k1", Type.VARCHAR);
         Column column2 = new Column("k2", Type.VARCHAR);

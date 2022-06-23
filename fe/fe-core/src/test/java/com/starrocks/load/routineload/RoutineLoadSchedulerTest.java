@@ -98,7 +98,7 @@ public class RoutineLoadSchedulerTest {
                 database.getTable(1L);
                 minTimes = 0;
                 result = olapTable;
-                systemInfoService.getClusterBackendIds(clusterName, true);
+                systemInfoService.getBackendIds(true);
                 minTimes = 0;
                 result = beIds;
                 routineLoadManager.getSizeOfIdToRoutineLoadTask();

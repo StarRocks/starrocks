@@ -51,7 +51,6 @@ Status Rowset::load() {
             RETURN_IF_ERROR(_rowset_state_machine.on_load());
         }
     }
-    // load is done
     VLOG(1) << "rowset is loaded. rowset version:" << start_version() << "-" << end_version()
             << ", state from ROWSET_UNLOADED to ROWSET_LOADED. tabletid:" << _rowset_meta->tablet_id();
     return Status::OK();

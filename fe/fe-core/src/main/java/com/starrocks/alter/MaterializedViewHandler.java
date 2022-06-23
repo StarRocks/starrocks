@@ -468,7 +468,10 @@ public class MaterializedViewHandler extends AlterHandler {
                 if (mvColumnItem.isKey()) {
                     ++numOfKeys;
                 }
-                Preconditions.checkNotNull(baseColumn, "Column[" + mvColumnName + "] does not exist");
+                Preconditions.checkNotNull(baseColumn,
+                        "The materialized view column[" + mvColumnName + "] of aggregation or unique or primary table " +
+                                "cannot be transformed from original column[" +
+                                mvColumnItem.getBaseColumnName() + "]");
                 AggregateType baseAggregationType = baseColumn.getAggregationType();
                 AggregateType mvAggregationType = mvColumnItem.getAggregationType();
                 if (baseColumn.isKey() && !mvColumnItem.isKey()) {

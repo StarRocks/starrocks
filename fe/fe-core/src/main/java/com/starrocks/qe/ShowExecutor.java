@@ -285,7 +285,8 @@ public class ShowExecutor {
     }
 
     private void handleShowMaterializedView() throws AnalysisException {
-        String dbName = ((ShowMaterializedViewStmt) stmt).getDb();
+        ShowMaterializedViewStmt showMaterializedViewStmt = (ShowMaterializedViewStmt) stmt;
+        String dbName = showMaterializedViewStmt.getDb();
         List<List<String>> rowSets = Lists.newArrayList();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
@@ -294,6 +295,20 @@ public class ShowExecutor {
         }
         db.readLock();
         try {
+            PatternMatcher matcher = null;
+            if (showMaterializedViewStmt.getPattern() != null) {
+                matcher = PatternMatcher.createMysqlPattern(showMaterializedViewStmt.getPattern(),
+                        CaseSensibility.TABLE.getCaseSensibility());
+            }
+            for (Table materializedView : db.getMaterializedViews()) {
+                if (matcher != null && !matcher.match(materializedView.getName())) {
+                    continue;
+                }
+                MaterializedView mvTable = (MaterializedView) materializedView;
+                List<String> resultRow = Lists.newArrayList(String.valueOf(mvTable.getId()), mvTable.getName(), dbName,
+                        mvTable.getViewDefineSql(), String.valueOf(mvTable.getRowCount()));
+                rowSets.add(resultRow);
+            }
             for (Table table : db.getTables()) {
                 if (table.getType() == Table.TableType.OLAP) {
                     OlapTable olapTable = (OlapTable) table;
@@ -302,6 +317,9 @@ public class ShowExecutor {
 
                     for (MaterializedIndex mvIdx : visibleMaterializedViews) {
                         if (baseIdx == mvIdx.getId()) {
+                            continue;
+                        }
+                        if (matcher != null && !matcher.match(olapTable.getIndexNameById(mvIdx.getId()))) {
                             continue;
                         }
                         ArrayList<String> resultRow = new ArrayList<>();
@@ -1287,7 +1305,7 @@ public class ShowExecutor {
 
     private void handleShowBackends() {
         final ShowBackendsStmt showStmt = (ShowBackendsStmt) stmt;
-        List<List<String>> backendInfos = BackendsProcDir.getClusterBackendInfos(showStmt.getClusterName());
+        List<List<String>> backendInfos = BackendsProcDir.getClusterBackendInfos();
         resultSet = new ShowResultSet(showStmt.getMetaData(), backendInfos);
     }
 

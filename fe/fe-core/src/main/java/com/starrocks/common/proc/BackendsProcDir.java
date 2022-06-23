@@ -28,7 +28,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.starrocks.alter.DecommissionBackendJob.DecommissionType;
-import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -53,7 +52,7 @@ public class BackendsProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES;
     static {
         ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
-                .add("BackendId").add("Cluster").add("Host").add("HeartbeatPort")
+                .add("BackendId").add("Cluster").add("IP").add("HeartbeatPort")
                 .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat")
                 .add("Alive").add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
                 .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
@@ -78,7 +77,7 @@ public class BackendsProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        final List<List<String>> backendInfos = getClusterBackendInfos(null);
+        final List<List<String>> backendInfos = getClusterBackendInfos();
         for (List<String> backendInfo : backendInfos) {
             List<String> oneInfo = new ArrayList<>(backendInfo.size());
             oneInfo.addAll(backendInfo);
@@ -93,22 +92,12 @@ public class BackendsProcDir implements ProcDirInterface {
      * @param clusterName
      * @return
      */
-    public static List<List<String>> getClusterBackendInfos(String clusterName) {
+    public static List<List<String>> getClusterBackendInfos() {
         final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<List<String>> backendInfos = new LinkedList<>();
-        List<Long> backendIds;
-        if (!Strings.isNullOrEmpty(clusterName)) {
-            final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(clusterName);
-            // root not in any cluster
-            if (null == cluster) {
-                return backendInfos;
-            }
-            backendIds = cluster.getBackendIdList();
-        } else {
-            backendIds = clusterInfoService.getBackendIds(false);
-            if (backendIds == null) {
-                return backendInfos;
-            }
+        List<Long> backendIds = clusterInfoService.getBackendIds(false);
+        if (backendIds == null) {
+            return backendInfos;
         }
 
         long start = System.currentTimeMillis();
@@ -127,12 +116,10 @@ public class BackendsProcDir implements ProcDirInterface {
             backendInfo.add(String.valueOf(backendId));
             backendInfo.add(backend.getOwnerClusterName());
             backendInfo.add(backend.getHost());
-            if (Strings.isNullOrEmpty(clusterName)) {
-                backendInfo.add(String.valueOf(backend.getHeartbeatPort()));
-                backendInfo.add(String.valueOf(backend.getBePort()));
-                backendInfo.add(String.valueOf(backend.getHttpPort()));
-                backendInfo.add(String.valueOf(backend.getBrpcPort()));
-            }
+            backendInfo.add(String.valueOf(backend.getHeartbeatPort()));
+            backendInfo.add(String.valueOf(backend.getBePort()));
+            backendInfo.add(String.valueOf(backend.getHttpPort()));
+            backendInfo.add(String.valueOf(backend.getBrpcPort()));
             backendInfo.add(TimeUtils.longToTimeString(backend.getLastStartTime()));
             backendInfo.add(TimeUtils.longToTimeString(backend.getLastUpdateMs()));
             backendInfo.add(String.valueOf(backend.isAlive()));
