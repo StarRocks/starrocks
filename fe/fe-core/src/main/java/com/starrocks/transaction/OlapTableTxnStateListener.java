@@ -63,8 +63,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         // if index is dropped, it does not matter.
         // if table or partition is dropped during load, just ignore that tablet,
         // because we should allow dropping rollup or partition during load
-        List<Long> tabletIds = tabletCommitInfos.stream().map(
-                TabletCommitInfo::getTabletId).collect(Collectors.toList());
+        List<Long> tabletIds = tabletCommitInfos.stream().map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
         List<TabletMeta> tabletMetaList = tabletInvertedIndex.getTabletMetaList(tabletIds);
         for (int i = 0; i < tabletMetaList.size(); i++) {
             TabletMeta tabletMeta = tabletMetaList.get(i);
