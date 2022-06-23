@@ -70,11 +70,12 @@ docker exec --privileged $container_name /bin/bash -c "$cmd"
 
 echo "script run over-----"
 ls -al $PROJECT
-java -jar $PROJECT/jacococli.jar
-sudo chown -R runner:docker $PROJECT/fe/fe-core/target
-ls -al $PROJECT/fe/fe-core/target
+
+#sudo chown -R runner:docker $PROJECT/fe/fe-core/target
+#ls -al $PROJECT/fe/fe-core/target
 if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
     cd $PROJECT/fe/fe-core/target
+    java -jar $PROJECT/jacococli.jar
     jacoco_result="jacoco_${GITHUB_PR_NUMBER}.exec"
     mv jacoco.exec $jacoco_result || true
 
