@@ -159,10 +159,6 @@ public class BackendLoadStatistic {
         return beId;
     }
 
-    public String getClusterName() {
-        return clusterName;
-    }
-
     public boolean isAvailable() {
         return isAvailable;
     }

@@ -211,7 +211,7 @@ public class TabletChecker extends MasterDaemon {
 
             db.readLock();
             try {
-                List<Long> aliveBeIdsInCluster = infoService.getClusterBackendIds(db.getClusterName(), true);
+                List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
                 for (Table table : globalStateMgr.getTablesIncludeRecycleBin(db)) {
                     if (!table.needSchedule(false)) {
                         continue;
