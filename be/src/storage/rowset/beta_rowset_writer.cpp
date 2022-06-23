@@ -319,8 +319,8 @@ Status HorizontalBetaRowsetWriter::_flush_chunk(const vectorized::Chunk& chunk) 
 Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Chunk& upserts,
                                                             const vectorized::Column& deletes) {
     auto flush_del_file = [&](const vectorized::Column& deletes) {
-        auto path = BetaRowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_delfile);
-        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
+        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(BetaRowset::segment_del_file_path(
+                                             _context.rowset_path_prefix, _context.rowset_id, _num_delfile)));
         size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
         std::vector<uint8_t> content(sz);
         if (serde::ColumnArraySerde::serialize(deletes, content.data()) == nullptr) {
@@ -411,10 +411,10 @@ StatusOr<RowsetSharedPtr> HorizontalBetaRowsetWriter::build() {
 // how: for final merge scenario, temporary files created at first, merge them, create final segment files.
 Status HorizontalBetaRowsetWriter::_final_merge() {
     if (_num_segment == 1) {
-        auto old_path = BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, 0);
-        auto new_path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, 0);
-        auto st = _fs->rename_file(old_path, new_path);
-        RETURN_IF_ERROR_WITH_WARN(st, "Fail to rename file");
+        RETURN_IF_ERROR_WITH_WARN(
+                _fs->rename_file(BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, 0),
+                                 BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, 0)),
+                "Fail to rename file");
         return Status::OK();
     }
 
@@ -594,7 +594,7 @@ VerticalBetaRowsetWriter::~VerticalBetaRowsetWriter() {
 
 Status VerticalBetaRowsetWriter::add_columns(const vectorized::Chunk& chunk,
                                              const std::vector<uint32_t>& column_indexes, bool is_key) {
-    size_t chunk_num_rows = chunk.num_rows();
+    const size_t chunk_num_rows = chunk.num_rows();
     if (_segment_writers.empty()) {
         DCHECK(is_key);
         auto segment_writer = _create_segment_writer(column_indexes, is_key);
@@ -619,7 +619,6 @@ Status VerticalBetaRowsetWriter::add_columns(const vectorized::Chunk& chunk,
         uint32_t segment_num_rows = _segment_writers[_current_writer_index]->num_rows();
         DCHECK_LE(num_rows_written, segment_num_rows);
 
-        // init segment writer
         if (_current_writer_index == 0 && num_rows_written == 0) {
             RETURN_IF_ERROR(_segment_writers[_current_writer_index]->init(column_indexes, is_key));
         }
@@ -718,8 +717,8 @@ Status VerticalBetaRowsetWriter::final_flush() {
 StatusOr<std::unique_ptr<SegmentWriter>> VerticalBetaRowsetWriter::_create_segment_writer(
         const std::vector<uint32_t>& column_indexes, bool is_key) {
     std::lock_guard<std::mutex> l(_lock);
-    std::string path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
-    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
+    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(BetaRowset::segment_file_path(
+                                         _context.rowset_path_prefix, _context.rowset_id, _num_segment)));
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init(column_indexes, is_key));

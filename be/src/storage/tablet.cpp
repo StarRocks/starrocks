@@ -423,7 +423,7 @@ void Tablet::delete_expired_inc_rowsets() {
 
 void Tablet::delete_expired_stale_rowset() {
     int64_t now = UnixSeconds();
-    // Compute the end time to delete rowsets, when a expired rowset createtime less then this time, it will be deleted.
+    // Compute the end time to delete rowsets, when an expired rowset createtime older then this time, it will be deleted.
     int64_t expired_stale_sweep_endtime = now - config::tablet_rowset_stale_sweep_time_sec;
 
     if (_updates) {
