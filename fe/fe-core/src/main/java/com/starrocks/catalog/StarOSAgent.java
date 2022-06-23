@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.server.GlobalStateMgr;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.proto.ReplicaInfo;
@@ -60,7 +61,7 @@ public class StarOSAgent {
 
     private void prepare() {
         if (serviceId == -1) {
-            getServiceId("starrocks");
+            getServiceId("1");
         }
     }
 

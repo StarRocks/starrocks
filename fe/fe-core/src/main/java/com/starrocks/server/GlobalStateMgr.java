@@ -954,8 +954,7 @@ public class GlobalStateMgr {
     private void startMasterOnlyDaemonThreads() {
         if (Config.integrate_starmgr) {
             // register service to starMgr
-            int clusterId = getCurrentState().getClusterId();
-            getStarOSAgent().registerAndBootstrapService(Integer.toString(clusterId));
+            getStarOSAgent().registerAndBootstrapService("1");
         }
 
         // start checkpoint thread
