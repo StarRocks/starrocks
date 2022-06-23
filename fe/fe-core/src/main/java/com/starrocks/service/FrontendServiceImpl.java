@@ -469,7 +469,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TTaskRunInfo> tasksResult = Lists.newArrayList();
         result.setTask_runs(tasksResult);
 
-
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(params.current_user_ident);
@@ -499,7 +498,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         return result;
     }
-
 
     @Override
     public TGetDBPrivsResult getDBPrivs(TGetDBPrivsParams params) throws TException {
@@ -920,12 +918,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             throw new UserException("unknown database, database=" + dbName);
         }
+        Table table = db.getTable(request.getTbl());
+        if (table == null) {
+            throw new UserException("unknown table \"" + request.getDb() + "." + request.getTbl() + "\"");
+        }
 
         // begin
         long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
         return GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
-                db.getId(), Lists.newArrayList(), request.getLabel(), request.getRequest_id(),
+                db.getId(), Lists.newArrayList(table.getId()), request.getLabel(), request.getRequest_id(),
                 new TxnCoordinator(TxnSourceType.BE, clientIp),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, timeoutSecond);
     }
@@ -1195,7 +1197,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 request.setCatalog_name(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
             }
             GlobalStateMgr.getCurrentState().refreshExternalTable(new TableName(request.getCatalog_name(),
-                            request.getDb_name(), request.getTable_name()), request.getPartitions());
+                    request.getDb_name(), request.getTable_name()), request.getPartitions());
             return new TRefreshTableResponse(new TStatus(TStatusCode.OK));
         } catch (DdlException e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
