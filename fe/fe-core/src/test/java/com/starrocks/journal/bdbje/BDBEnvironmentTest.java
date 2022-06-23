@@ -47,7 +47,8 @@ public class BDBEnvironmentTest {
     private String findUnbindHostPort() throws Exception {
         // try to find a port that is not bind
         String selfNodeHostPort = null;
-        for (int port = 9000; port != 120000; port ++) {
+        int seed = new Random().nextInt() % 1000;
+        for (int port = 9000 + seed; port != 120000; port ++) {
             if(! NetUtils.isPortUsing("127.0.0.1", port)) {
                 selfNodeHostPort = "127.0.0.1:" + String.valueOf(port);
                 break;
