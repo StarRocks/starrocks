@@ -798,6 +798,13 @@ public class Load {
                 return newFunc;
             } else if (funcName.equalsIgnoreCase(FunctionSet.SUBSTITUTE)) {
                 return funcExpr.getChild(0);
+            } else if (funcName.equalsIgnoreCase(FunctionSet.GET_JSON_INT) ||
+                    funcName.equalsIgnoreCase(FunctionSet.GET_JSON_STRING) ||
+                    funcName.equalsIgnoreCase(FunctionSet.GET_JSON_DOUBLE)) {
+                FunctionName jsonFunctionName = new FunctionName(funcName.toLowerCase());
+                List<Expr> getJsonArgs = Lists.newArrayList(funcExpr.getChild(0), funcExpr.getChild(1));
+                return new FunctionCallExpr(
+                        jsonFunctionName, new FunctionParams(false, getJsonArgs));
             }
         }
         return originExpr;
