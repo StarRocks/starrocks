@@ -103,28 +103,6 @@ StatusOr<std::string> JsonValue::to_string() const {
     });
 }
 
-StatusOr<std::string> JsonValue::to_string_unescape() const {
-    ASSIGN_OR_RETURN(auto str, to_string());
-    JsonType type = get_type();
-    if (type == JsonType::JSON_STRING) {
-        return str;
-    }
-
-    std::string unescaped;
-    unescaped.reserve(str.length());
-    if (!strings::CUnescape(str, &unescaped)) {
-        return Status::DataQualityError("cannot unescape string: " + str);
-    }
-    if (unescaped.length() < 2) {
-        return unescaped;
-    }
-    // Try to trim the first/last quote.
-    if (unescaped.front() == '"') unescaped = unescaped.substr(1, unescaped.size() - 1);
-    if (unescaped.back() == '"') unescaped = unescaped.substr(0, unescaped.size() - 1);
-
-    return unescaped;
-}
-
 std::string JsonValue::to_string_uncheck() const {
     auto res = to_string();
     if (res.ok()) {

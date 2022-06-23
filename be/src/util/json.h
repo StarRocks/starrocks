@@ -102,7 +102,6 @@ public:
 
     ////////////////// util  //////////////////////
     StatusOr<std::string> to_string() const;
-    StatusOr<std::string> to_string_unescape() const;
     std::string to_string_uncheck() const;
     int compare(const JsonValue& rhs) const;
     static int compare(const Slice& lhs, const Slice& rhs);
