@@ -10,7 +10,7 @@ GITHUB_PR_NUMBER=${1:?"need GITHUB_PR_NUMBER parameter"}
 GITHUB_PR_TARGET_BRANCH=${2:?"need GITHUB_PR_TARGET_BRANCH parameter"}
 #GITHUB_PR_COMMENT_BODY=${3:-"default"}
 
-echo "the github number"$GITHUB_PR_NUMBE
+echo "the github number"$GITHUB_PR_NUMBER
 echo "the branch="$GITHUB_PR_TARGET_BRANCH
 echo "the root path="$ROOT
 echo "the env="$GITHUB_REF_NAME
