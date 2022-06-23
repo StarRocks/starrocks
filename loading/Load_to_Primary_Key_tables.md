@@ -38,55 +38,59 @@ If you perform only UPSERT operations on a file, you do not need to add the `__o
 
 - Run a stream load job.
 
-```Bash
-# Load the data without an operation type specified for the __op field column.
+    ```Bash
+    # Load the data without an operation type specified for the __op field column.
 
-curl --location-trusted -u root: -H "label:lineorder" \
+    curl --location-trusted -u root: -H "label:lineorder" \
 
-    -H "column_separator:," -T demo.csv \
+        -H "column_separator:," -T demo.csv \
 
-    http://localhost:8030/api/demo_db/demo_tbl1/_stream_load
+        http://localhost:8030/api/demo_db/demo_tbl1/_stream_load
 
-# Load the data with an operation type specified for the __op field column.
+    # Load the data with an operation type specified for the __op field column.
 
-curl --location-trusted -u root: -H "label:lineorder" \
+    curl --location-trusted -u root: -H "label:lineorder" \
 
-    -H "column_separator:," -H " columns:__op ='upsert'" -T demo.csv \
+        -H "column_separator:," -H " columns:__op ='upsert'" -T demo.csv \
 
-    http://localhost:8030/api/demo_db/demo_tbl1/_stream_load
-```
+        http://localhost:8030/api/demo_db/demo_tbl1/_stream_load
+    ```
 
 - Run a broker load job.
 
-```SQL
-# Load the data without an operation type specified for the __op field column.
+    ```SQL
+    # Load the data without an operation type specified for the __op field column.
 
-load label demo_db.label1 (
+    load label demo_db.label1 (
 
-    data infile("hdfs://localhost:9000/demo.csv")
+        data infile("hdfs://localhost:9000/demo.csv")
 
-    into table demo_tbl1
+        into table demo_tbl1
 
-    format as "csv"
+        columns terminated by ","
 
-) with broker "broker1";
+        format as "csv"
+
+    ) with broker "broker1";
 
 
 
-# Load the data with an operation type specified for the __op field column.
+    # Load the data with an operation type specified for the __op field column.
 
-load label demo_db.label2 (
+    load label demo_db.label2 (
 
-    data infile("hdfs://localhost:9000/demo.csv")
+        data infile("hdfs://localhost:9000/demo.csv")
 
-    into table demo_tbl1
+        into table demo_tbl1
 
-    format as "csv"
+        columns terminated by ","
 
-    set (__op ='upsert')
+        format as "csv"
 
-) with broker "broker1";
-```
+        set (__op ='upsert')
+
+    ) with broker "broker1";
+    ```
 
 ### Example 2
 
@@ -104,29 +108,31 @@ If you perform only DELETE operations on a file, you only need to specify the op
 
 - Run a stream load job.
 
-```Bash
-curl --location-trusted -u root: -H "label:lineorder" -H "column_separator:," \
+    ```Bash
+    curl --location-trusted -u root: -H "label:lineorder" -H "column_separator:," \
 
-    -H "columns:__op='delete'" -T demo.csv \
+        -H "columns:__op='delete'" -T demo.csv \
 
-    http://localhost:8030/api/demo_db/demo_tbl1/_stream_load
-```
+        http://localhost:8030/api/demo_db/demo_tbl1/_stream_load
+    ```
 
 - Run a broker load job.
 
-```SQL
-load label demo_db.label3 (
+    ```SQL
+    load label demo_db.label3 (
 
-    data infile("hdfs://localhost:9000/demo.csv")
+        data infile("hdfs://localhost:9000/demo.csv")
 
-    into table demo_tbl1
+        into table demo_tbl1
 
-    format as "csv"
+        columns terminated by ","
 
-    set (__op ='delete')
+        format as "csv"
 
-) with broker "broker1";  
-```
+        set (__op ='delete')
+
+    ) with broker "broker1";  
+    ```
 
 ### Example 3
 
@@ -142,39 +148,40 @@ If you perform both UPSERT and DELETE operations on a file, you must use the `__
 6,ffff,0
 ```
 
-> Note: DELETE operations are performed only on the column that is defined as the primary key of the table. However, you still need to provide all columns of the table. This is the same for UPSERT operations.
+> Note:
+> DELETE operations are performed only on the column that is defined as the primary key of the table. However, you still need to provide all columns of the table. This is the same for UPSERT operations.
 
 - Run a stream load job.
 
-```Bash
-curl --location-trusted -u root: -H "label:lineorder" -H "column_separator:," \
+    ```Bash
+    curl --location-trusted -u root: -H "label:lineorder" -H "column_separator:," \
 
-    -H " columns: c1,c2,c3,pk=c1,col0=c2,__op=c3 " -T demo.csv \
+        -H " columns: c1,c2,c3,pk=c1,col0=c2,__op=c3 " -T demo.csv \
 
-    http://localhost:8030/api/demo_db/demo_tbl1/_stream_load
-```
+        http://localhost:8030/api/demo_db/demo_tbl1/_stream_load
+    ```
 
-In the job, column 3 is specified as the `__op` column.
+    In the job, column `3` is specified as the `__op` column.
 
 - Run a broker load job.
 
-```Bash
-load label demo_db.label4 (
+    ```Bash
+    load label demo_db.label4 (
 
-    data infile("hdfs://localhost:9000/demo.csv")
+        data infile("hdfs://localhost:9000/demo.csv")
 
-    into table demo_tbl1
+        into table demo_tbl1
 
-    format as "csv"
+        format as "csv"
 
-    (c1,c2,c3)
+        (c1,c2,c3)
 
-    set (pk=c1,col0=c2,__op=c3)
+        set (pk=c1,col0=c2,__op=c3)
 
-) with broker "broker1";
-```
+    ) with broker "broker1";
+    ```
 
-In the job, column 3 is specified as the `__op` column.
+    In the job, column `3` is specified as the `__op` column.
 
 For more information about stream load and broker load, see [Stream Load](/loading/StreamLoad.md) and [Broker Load](/loading/BrokerLoad.md).
 
@@ -480,68 +487,68 @@ Execute the following statements to update the data:
 
 - If you want to run a stream load job, execute the following statement:
 
-```Bash
-curl --location-trusted -u root: \
+    ```Bash
+    curl --location-trusted -u root: \
 
-    -H "label:lineorder" -H "column_separator:," \
+        -H "label:lineorder" -H "column_separator:," \
 
-    -H "partial_update:true" -H "columns:id,name" \
+        -H "partial_update:true" -H "columns:id,name" \
 
-    -T demo.csv http://localhost:8030/api/demo/demo/_stream_load
-```
+        -T demo.csv http://localhost:8030/api/demo/demo/_stream_load
+    ```
 
-> Note: In the preceding statement, you must specify the `-H "partial_update:true"` setting, and specify the columns that you want to update in the `"columns:id,name"` format. For more information about the parameter settings for a stream load job, see [Stream Load](/loading/StreamLoad.md).
+    > Note: In the preceding statement, you must specify the `-H "partial_update:true"` setting, and specify the columns that you want to update in the `"columns:id,name"` format. For more information about the parameter settings for a stream load job, see [Stream Load](/loading/StreamLoad.md).
 
 - If you want to run a broker load job, execute the following statement:
 
-```SQL
-load label demo.demo (
+    ```SQL
+    load label demo.demo (
 
-    data infile("hdfs://localhost:9000/demo.csv")
+        data infile("hdfs://localhost:9000/demo.csv")
 
-    into table t
+        into table t
 
-    format as "csv"
+        format as "csv"
 
-    (c1, c2)
+        (c1, c2)
 
-    set (id=c1, name=c2)
+        set (id=c1, name=c2)
 
-) with broker "broker1"
+    ) with broker "broker1"
 
-properties (
+    properties (
 
-    "partial_update" = "true"
+        "partial_update" = "true"
 
-);
-```
+    );
+    ```
 
-> Note: In the preceding statement, you must specify the `-H "partial_update:true"` setting in the `properties` class. Additionally, you must specify the columns that you want to update. For example, if you want to update two columns, `c1` and `c2`, specify the `set (id=c1, name=c2)` setting in the preceding statement. For more information about the parameter settings for a stream load job, see [Broker Load](/loading/BrokerLoad.md).
+    > Note: In the preceding statement, you must specify the `-H "partial_update:true"` setting in the `properties` class. Additionally, you must specify the columns that you want to update. For example, if you want to update two columns, `c1` and `c2`, specify the `set (id=c1, name=c2)` setting in the preceding statement. For more information about the parameter settings for a stream load job, see [Broker Load](/loading/BrokerLoad.md).
 
 - If you want to run a routine load job, execute the following statement:
 
-```SQL
-CREATE ROUTINE LOAD routine_load_demo on demo 
+    ```SQL
+    CREATE ROUTINE LOAD routine_load_demo on demo 
 
-COLUMNS (id, name),
+    COLUMNS (id, name),
 
-COLUMNS TERMINATED BY ','
+    COLUMNS TERMINATED BY ','
 
-PROPERTIES (
+    PROPERTIES (
 
-    "partial_update" = "true"
+        "partial_update" = "true"
 
-) FROM KAFKA (
+    ) FROM KAFKA (
 
-    "kafka_broker_list" = "broker1:9092,broker2:9092,broker3:9092",
+        "kafka_broker_list" = "broker1:9092,broker2:9092,broker3:9092",
 
-    "kafka_topic" = "my_topic",
+        "kafka_topic" = "my_topic",
 
-    "kafka_partitions" = "0,1,2,3",
+        "kafka_partitions" = "0,1,2,3",
 
-    "kafka_offsets" = "101,0,0,200"
+        "kafka_offsets" = "101,0,0,200"
 
-);
-```
+    );
+    ```
 
-> Note: In the preceding statement, you must specify the `-H "partial_update:true"` setting, and specify the columns that you want to update in the `COLUMNS (id, name)` format. For more information about the parameter settings for a stream load job, see [Routine Load](/loading/RoutineLoad.md).
+    > Note: In the preceding statement, you must specify the `-H "partial_update:true"` setting, and specify the columns that you want to update in the `COLUMNS (id, name)` format. For more information about the parameter settings for a stream load job, see [Routine Load](/loading/RoutineLoad.md).
