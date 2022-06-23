@@ -395,6 +395,11 @@ Status TabletsChannel::reduce_mem_usage_async(const std::set<int64_t>& flush_tab
                 // barely not happend, just return OK
                 return Status::OK();
             }
+
+            if (!writer->memtable_inited()) {
+                // writer's memtable not inited, just return OK
+                return Status::OK();
+            }
             VLOG(3) << "pick the delta writer to flush, with mem consumption: " << max_consume
                     << ", channel key: " << _key;
             *tablet_mem_consumption = max_consume;

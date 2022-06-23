@@ -84,6 +84,8 @@ public:
 
     int64_t mem_consumption() const;
 
+    bool memtable_inited() const { return _mem_table != nullptr; }
+
 private:
     DeltaWriter(WriteRequest* req, MemTracker* parent, StorageEngine* storage_engine);
 

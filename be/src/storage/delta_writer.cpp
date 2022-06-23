@@ -46,6 +46,7 @@ DeltaWriter::DeltaWriter(WriteRequest* req, MemTracker* parent, StorageEngine* s
           _rowset_writer(nullptr),
           _tablet_schema(nullptr),
           _delta_written_success(false),
+          _mem_table(nullptr),
           _storage_engine(storage_engine) {
     _mem_tracker = std::make_unique<MemTracker>(-1, "delta writer", parent, true);
 }
