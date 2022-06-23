@@ -153,9 +153,6 @@ public class StreamLoadScanNode extends LoadScanNode {
         // analyze where statement
         initWhereExpr(streamLoadTask.getWhereExpr(), analyzer);
 
-        computeStats(analyzer);
-        createDefaultSmap(analyzer);
-
         if (streamLoadTask.getColumnSeparator() != null) {
             String sep = streamLoadTask.getColumnSeparator().getColumnSeparator();
             byte[] setBytes = sep.getBytes(StandardCharsets.UTF_8);
