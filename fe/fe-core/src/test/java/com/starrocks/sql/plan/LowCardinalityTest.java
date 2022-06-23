@@ -105,6 +105,7 @@ public class LowCardinalityTest extends PlanTestBase {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+        connectContext.getSessionVariable().setCboCteReuse(false);
     }
 
     @AfterClass
