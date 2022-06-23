@@ -79,6 +79,7 @@ public class BDBEnvironment {
     private static final int INITAL_STATE_CHANGE_WAIT_SEC = 10;
 
     public static final String STARROCKS_JOURNAL_GROUP = "PALO_JOURNAL_GROUP";
+    private static final String BDB_DIR = "/bdb";
 
     private ReplicatedEnvironment replicatedEnvironment;
     private EnvironmentConfig environmentConfig;
@@ -128,8 +129,10 @@ public class BDBEnvironment {
         // constructor
         String selfNodeHostPort = selfNode.first + ":" + selfNode.second;
 
-        String environmentPath = GlobalStateMgr.getCurrentState().getBdbDir();
-        File dbEnv = new File(environmentPath);
+        File dbEnv = new File(getBdbDir());
+        if (!dbEnv.exists()) {
+            dbEnv.mkdirs();
+        }
 
         Pair<String, Integer> helperNode = GlobalStateMgr.getCurrentState().getHelperNode();
         String helperHostPort = helperNode.first + ":" + helperNode.second;
@@ -140,6 +143,10 @@ public class BDBEnvironment {
         // setup
         bdbEnvironment.setup();
         return bdbEnvironment;
+    }
+
+    public static String getBdbDir() {
+        return Config.meta_dir + BDB_DIR;
     }
 
     protected BDBEnvironment(File envHome, String selfNodeName, String selfNodeHostPort,

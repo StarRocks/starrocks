@@ -269,11 +269,9 @@ public class GlobalStateMgr {
     public static final long NEXT_ID_INIT_VALUE = 10000;
     private static final int STATE_CHANGE_CHECK_INTERVAL_MS = 100;
     private static final int REPLAY_INTERVAL_MS = 1;
-    private static final String BDB_DIR = "/bdb";
     private static final String IMAGE_DIR = "/image";
 
     private String metaDir;
-    private String bdbDir;
     private String imageDir;
 
     private MetaContext metaContext;
@@ -769,17 +767,12 @@ public class GlobalStateMgr {
         }
     }
 
-    public String getBdbDir() {
-        return bdbDir;
-    }
-
     public String getImageDir() {
         return imageDir;
     }
 
     private void setMetaDir() {
         this.metaDir = Config.meta_dir;
-        this.bdbDir = this.metaDir + BDB_DIR;
         this.imageDir = this.metaDir + IMAGE_DIR;
         nodeMgr.setImageDir(imageDir);
     }
@@ -797,11 +790,6 @@ public class GlobalStateMgr {
 
         // 1. create dirs and files
         if (Config.edit_log_type.equalsIgnoreCase("bdb")) {
-            File bdbDir = new File(this.bdbDir);
-            if (!bdbDir.exists()) {
-                bdbDir.mkdirs();
-            }
-
             File imageDir = new File(this.imageDir);
             if (!imageDir.exists()) {
                 imageDir.mkdirs();
