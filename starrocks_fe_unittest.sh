@@ -74,7 +74,7 @@ echo "script run over-----"
 #sudo chown -R runner:docker $PROJECT/fe/fe-core/target
 #ls -al $PROJECT/fe/fe-core/target
 if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
-    CODEPATH = $PROJECT
+    CODEPATH=$PROJECT
     cd $CODEPATH/fe/fe-core/target
     pwd
     echo $CODEPATH
