@@ -126,7 +126,6 @@ public class StarOSAgent {
     }
 
     public void addWorker(long backendId, String workerIpPort) {
-        prepare();
         if (serviceId == -1) {
             LOG.warn("When addWorker serviceId is -1");
             return;
@@ -160,7 +159,6 @@ public class StarOSAgent {
     }
 
     public void removeWorker(String workerIpPort) throws DdlException {
-        prepare();
         long workerId = -1;
         if (workerToId.containsKey(workerIpPort)) {
             workerId = workerToId.get(workerIpPort);
