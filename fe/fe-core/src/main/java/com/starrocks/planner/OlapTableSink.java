@@ -323,11 +323,10 @@ public class OlapTableSink extends DataSink {
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
         for (Long partitionId : partitionIds) {
             Partition partition = table.getPartition(partitionId);
-            boolean useStarOS = partition.isUseStarOS();
             int quorum = table.getPartitionInfo().getQuorumNum(partition.getId());
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                 for (Tablet tablet : index.getTablets()) {
-                    if (useStarOS) {
+                    if (table.isLakeTable()) {
                         locationParam.addToTablets(new TTabletLocation(
                                 tablet.getId(), Lists.newArrayList(((LakeTablet) tablet).getPrimaryBackendId())));
                     } else {

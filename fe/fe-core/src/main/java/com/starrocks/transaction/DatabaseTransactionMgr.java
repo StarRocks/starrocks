@@ -135,7 +135,9 @@ public class DatabaseTransactionMgr {
 
     private long commitTsInc = 0;
 
-    private final StateMachineFactory stateMachineFactory = new StateMachineFactory();
+    private final TransactionStateListenerFactory stateListenerFactory = new TransactionStateListenerFactory();
+
+    private final TransactionLogApplierFactory txnLogApplierFactory = new TransactionLogApplierFactory();
 
     protected void readLock() {
         this.transactionLock.readLock().lock();
@@ -398,7 +400,7 @@ public class DatabaseTransactionMgr {
         StringBuilder tableListString = new StringBuilder();
         txnSpan.addEvent("commit_start");
 
-        List<StateMachine> stateMachineList = Lists.newArrayList();
+        List<TransactionStateListener> stateListeners = Lists.newArrayList();
         for (Long tableId : transactionState.getTableIdList()) {
             Table table = db.getTable(tableId);
             if (table == null) {
@@ -406,16 +408,16 @@ public class DatabaseTransactionMgr {
                 // or table really not exist.
                 continue;
             }
-            StateMachine stateMachine = stateMachineFactory.create(this, table);
-            if (stateMachine == null) {
+            TransactionStateListener listener = stateListenerFactory.create(this, table);
+            if (listener == null) {
                 throw new TransactionCommitFailedException(table.getName() + " does not support write");
             }
-            stateMachine.preCommit(transactionState, tabletCommitInfos);
+            listener.preCommit(transactionState, tabletCommitInfos);
             if (tableListString.length() != 0) {
                 tableListString.append(',');
             }
             tableListString.append(table.getName());
-            stateMachineList.add(stateMachine);
+            stateListeners.add(listener);
         }
 
         txnSpan.setAttribute("tables", tableListString.toString());
@@ -429,7 +431,7 @@ public class DatabaseTransactionMgr {
 
         writeLock();
         try {
-            unprotectedCommitTransaction(transactionState, stateMachineList);
+            unprotectedCommitTransaction(transactionState, stateListeners);
             txnOperated = true;
         } finally {
             writeUnlock();
@@ -699,7 +701,7 @@ public class DatabaseTransactionMgr {
                         return;
                     }
 
-                    if (partition.isUseStarOS()) {
+                    if (table.isLakeTable()) {
                         continue;
                     }
 
@@ -806,7 +808,8 @@ public class DatabaseTransactionMgr {
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
-    protected void unprotectedCommitTransaction(TransactionState transactionState, List<StateMachine> stateMachineList) {
+    protected void unprotectedCommitTransaction(TransactionState transactionState,
+                                                List<TransactionStateListener> stateListeners) {
         // transaction state is modified during check if the transaction could committed
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARE) {
             return;
@@ -827,15 +830,15 @@ public class DatabaseTransactionMgr {
         // update transaction state version
         transactionState.setTransactionStatus(TransactionStatus.COMMITTED);
 
-        for (StateMachine stateMachine : stateMachineList) {
-            stateMachine.preWriteCommitLog(transactionState);
+        for (TransactionStateListener listener : stateListeners) {
+            listener.preWriteCommitLog(transactionState);
         }
 
         // persist transactionState
         unprotectUpsertTransactionState(transactionState, false);
 
-        for (StateMachine stateMachine : stateMachineList) {
-            stateMachine.postWriteCommitLog(transactionState);
+        for (TransactionStateListener listener : stateListeners) {
+            listener.postWriteCommitLog(transactionState);
         }
     }
 
@@ -1088,44 +1091,6 @@ public class DatabaseTransactionMgr {
         return idToRunningTransactionState.size() + finalStatusTransactionStateDeque.size();
     }
 
-    public TransactionState getTransactionStateByCallbackIdAndStatus(long callbackId, Set<TransactionStatus> status) {
-        readLock();
-        try {
-            for (TransactionState txn : idToRunningTransactionState.values()) {
-                if (txn.getCallbackId() == callbackId && status.contains(txn.getTransactionStatus())) {
-                    return txn;
-                }
-            }
-            for (TransactionState txn : finalStatusTransactionStateDeque) {
-                if (txn.getCallbackId() == callbackId && status.contains(txn.getTransactionStatus())) {
-                    return txn;
-                }
-            }
-        } finally {
-            readUnlock();
-        }
-        return null;
-    }
-
-    public TransactionState getTransactionStateByCallbackId(long callbackId) {
-        readLock();
-        try {
-            for (TransactionState txn : idToRunningTransactionState.values()) {
-                if (txn.getCallbackId() == callbackId) {
-                    return txn;
-                }
-            }
-            for (TransactionState txn : finalStatusTransactionStateDeque) {
-                if (txn.getCallbackId() == callbackId) {
-                    return txn;
-                }
-            }
-        } finally {
-            readUnlock();
-        }
-        return null;
-    }
-
     public List<Pair<Long, Long>> getTransactionIdByCoordinateBe(String coordinateHost, int limit) {
         ArrayList<Pair<Long, Long>> txnInfos = new ArrayList<>();
         readLock();
@@ -1206,16 +1171,16 @@ public class DatabaseTransactionMgr {
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             long tableId = tableCommitInfo.getTableId();
             Table table = db.getTable(tableId);
-            StateMachine stateMachine = stateMachineFactory.create(this, table);
-            stateMachine.applyCommitLog(transactionState, tableCommitInfo);
+            TransactionLogApplier applier = txnLogApplierFactory.create(table);
+            applier.applyCommitLog(transactionState, tableCommitInfo);
         }
     }
 
     private boolean updateCatalogAfterVisible(TransactionState transactionState, Database db) {
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             Table table = db.getTable(tableCommitInfo.getTableId());
-            StateMachine stateMachine = stateMachineFactory.create(this, table);
-            stateMachine.applyVisibleLog(transactionState, tableCommitInfo);
+            TransactionLogApplier applier = txnLogApplierFactory.create(table);
+            applier.applyVisibleLog(transactionState, tableCommitInfo);
         }
         return true;
     }
