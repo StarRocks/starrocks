@@ -430,7 +430,7 @@ public class BDBJEJournalTest {
     // you can count on me. -- abort
     @Test
     public void testAbort() throws Exception {
-        BDBEnvironment environment = initBDBEnv("testWrieNormal");
+        BDBEnvironment environment = initBDBEnv("testAbort");
         CloseSafeDatabase database = environment.openDatabase("testWrieNormal");
         BDBJEJournal journal = new BDBJEJournal(environment, database);
         String data = "petals on a wet black bough";
@@ -722,5 +722,38 @@ public class BDBJEJournalTest {
         };
         journal.rollJournal(18);
         Assert.fail();
+     }
+
+    @Test
+    public void testVerifyId() throws Exception {
+        String data = "petals on a wet black bough";
+        Writable writable = new Writable() {
+            @Override
+            public void write(DataOutput out) throws IOException {
+                Text.writeString(out, data);
+            }
+        };
+        DataOutputBuffer buffer = new DataOutputBuffer();
+        writable.write(buffer);
+
+        BDBEnvironment environment = initBDBEnv("testVerifyId");
+        BDBJEJournal journal = new BDBJEJournal(environment);
+
+        journal.open();
+        journal.batchWriteBegin();
+        journal.batchWriteAppend(1, buffer);
+        journal.batchWriteAppend(2, buffer);
+        journal.batchWriteCommit();
+
+        journal.rollJournal(3);
+        journal.open();
+        journal.batchWriteBegin();
+        journal.batchWriteAppend(3, buffer);
+        journal.batchWriteAppend(4, buffer);
+        journal.batchWriteCommit();
+
+        Assert.assertEquals(2, journal.getFinalizedJournalId());
+        Assert.assertEquals(4, journal.getMaxJournalId());
+        Assert.assertEquals(1, journal.getMinJournalId());
      }
 }
