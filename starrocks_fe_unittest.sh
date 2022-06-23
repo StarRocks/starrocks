@@ -57,7 +57,7 @@ docker rm $container_name || echo 1
 echo "the docker map path="$ROOT
 echo "the root ls="`ls "$ROOT"`
 m2Path="/home/runner/"
-docker run --privileged -v $m2Path/.m2:/root/.m2 -v $ROOT/starrocks:/root/starrocks -v /etc/timezone:/etc/timezone:ro -v /etc/localtime:/etc/localtime:ro --name $container_name -d starrocks/dev-env:main /bin/bash -c "while true;do echo hello;sleep 1;done"
+docker run --privileged -v $m2Path/.m2:/root/.m2 -v $ROOT/starrocks:/root/starrocks -v /etc/timezone:/etc/timezone:ro -v /etc/localtime:/etc/localtime:ro --name $container_name -d starrocks/dev-env:$GITHUB_PR_TARGET_BRANCH /bin/bash -c "while true;do echo hello;sleep 1;done"
 sleep 10
 
 echo "run docker for script"
@@ -75,6 +75,7 @@ echo "script run over-----"
 #ls -al $PROJECT/fe/fe-core/target
 if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
     cd $PROJECT/fe/fe-core/target;
+    pwd
     echo "$PROJECT";
     ls -al "$PROJECT/jacococli.jar";
     java -jar "$PROJECT/jacococli.jar";
