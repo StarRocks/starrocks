@@ -62,7 +62,7 @@ StarRocks 通过良好的数据分布特性，灵活的索引索引以及物化�
 
 - SaaS 行业面向用户分析报表
 
-- Dashbroad 多页面分析
+- Dashboard 多页面分析
 
 ### 统一分析
 

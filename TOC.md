@@ -8,9 +8,9 @@
   + [系统架构](/introduction/system_architecture.md)
   + [产品特性](/introduction/features.md)
 + 快速开始
-  + [StarRocks 部署](/quick_start/Deploy.md)
-  + [表创建](/quick_start/Create_table.md)
-  + [数据导入和查询](/quick_start/Import_and_query.md)
+  + [手动部署 StarRocks](/quick_start/Deploy.md)
+  + [创建表](/quick_start/Create_table.md)
+  + [导入和查询数据](/quick_start/Import_and_query.md)
 + 表设计
   + [理解 StarRocks 表设计](/table_design/StarRocks_table_design.md)
   + [数据模型介绍](/table_design/Data_model.md)
@@ -41,7 +41,7 @@
   + [Lateral Join](/using_starrocks/Lateral_join.md)
   + [数组](/using_starrocks/Array.md)
   + [窗口函数](/using_starrocks/Window_function.md)
-  + [JAVA UDF](/using_starrocks/JAVA_UDF.md)
+  + [Java UDF](/using_starrocks/JAVA_UDF.md)
   + [Bitmap 索引](/table_design/Bitmap_index.md)
   + [Bloomfilter 索引](/table_design/Bloomfilter_index.md)
   + [基于 Bitmap 实现精确去重](/using_starrocks/Using_bitmap.md)
@@ -54,8 +54,8 @@
     + [容器编译](/administration/Build_in_docker.md)
     + [集群部署](/administration/Deployment.md)
     + [集群管理](/administration/Cluster_administration.md)
-    + [DorisDB升级StarRocks手册](/administration/update_from_dorisdb.md)
-    + [ApacheDoris升级StarRocks手册](/administration/update_from_doris.md)
+    + [DorisDB升级到StarRocks](/administration/update_from_dorisdb.md)
+    + [Apache Doris升级到StarRocks](/administration/update_from_doris.md)
   + 运维操作
     + [扩容缩容](/administration/Scale_up_down.md)
     + [备份恢复](/administration/Backup_and_restore.md)
@@ -69,7 +69,7 @@
       + [副本管理](/administration/Replica.md)
       + [黑名单管理](/administration/Blacklist.md)
   + 数据恢复
-    + [数据删除恢复](/administration/Data_recovery.md)
+    + [数据恢复](/administration/Data_recovery.md)
     + [元数据恢复](/administration/Metadata_recovery.md)
   + 用户权限及认证
     + [用户权限](/administration/User_privilege.md)

@@ -10,7 +10,7 @@ StarRocks采用MPP（Massively Parallel Processing）分布式执行框架。在
 
 ![MPP1](../assets/1.2-4.png)
 
-与很多数据分析系统采用的Scatter-Gather分布式执行框架不同，MPP分布式执行框架可以利用更多的资源处理查询请求**。**在Scatter- Gather框架中，只有Gather节点能处理最后一级的汇总计算。**而在MPP框架中，数据会被Shuffle到多个节点，并且由多个节点来完成最后的汇总计算**。这导致了在复杂的计算（比如高基数Group By，大表Join等操作）时，StarRocks相对于Scatter-Gather模式的产品有明显的性能优势。
+与很多数据分析系统采用的Scatter-Gather分布式执行框架不同，MPP分布式执行框架可以利用更多的资源处理查询请求**。**在Scatter- Gather框架中，只有Gather节点能处理最后一级的汇总计算。**而在MPP框架中，数据会被Shuffle到多个节点，并且由多个节点来完成最后的汇总计算**。在复杂计算时（比如高基数Group By，大表Join等操作），StarRocks的MPP框架相对于Scatter-Gather模式的产品有明显的性能优势。
 
 ## 全面向量化执行引擎
 
@@ -52,6 +52,6 @@ StarRocks的物化视图可以按需灵活创建和删除。用户不需要在�
 
 ![datalake_analytics](../assets/1.2-8.png)
 
-StarRocks不仅能高效的分析本地存储的的数据，也可以作为计算引擎直接分析数据湖中的数据，支持包括Apache Hive、Apache Iceberg、Apache Hudi等数据组织结构，支持 Parquet、ORC、CSV 等文件格式，也支持 HDFS、S3、OSS 等存储方式。
+StarRocks不仅能高效的分析本地存储的数据，也可以作为计算引擎直接分析数据湖中的数据，支持包括Apache Hive、Apache Iceberg、Apache Hudi等数据组织结构，支持 Parquet、ORC、CSV 等文件格式，也支持 HDFS、S3、OSS 等存储方式。
 
-如上图所示，在数据湖分析的场景中，StarRocks 主要负责数据的计算分析，而数据湖则主要负责数据的存储、组织和维护。使用数据湖的优势在于可以使用开放的存储格式和灵活多变的schema定义方式，可以让BI/AI/Adhoc/报表等业务在统一的single source of turth的，而StarRocks作为数据湖的计算引擎，可以充分发挥向量化引擎和CBO的优势，大大提升了数据湖分析的性能。
+如上图所示，在数据湖分析的场景中，StarRocks 主要负责数据的计算分析，而数据湖则主要负责数据的存储、组织和维护。使用数据湖的优势在于可以使用开放的存储格式和灵活多变的schema定义方式，可以让BI/AI/Adhoc/报表等业务在统一的single source of truth的，而StarRocks作为数据湖的计算引擎，可以充分发挥向量化引擎和CBO的优势，大大提升了数据湖分析的性能。

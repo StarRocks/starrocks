@@ -1,6 +1,6 @@
 # 手动部署 StarRocks
 
-本文档介绍如何手动部署 StarRocks。StarRocks 支持以 Docker 镜像和二进制安装包形式手动部署于集群中。
+本文介绍如何手动部署 StarRocks。StarRocks 支持以 Docker 镜像和二进制安装包形式手动部署于集群中。
 
 如需从 [源码](https://github.com/StarRocks/starrocks) 编译安装 StarRocks，参考 [Docker 编译](../administration/Build_in_docker.md)。
 

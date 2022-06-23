@@ -202,7 +202,7 @@ StarRocks可使用[Prometheus](https://prometheus.io/)作为监控数据存储�
 
 ### 组件
 
->本文档仅提供基于Prometheus和Grafana实现的一种StarRocks可视化监控方案，原则上不维护和开发这些组件。更多详细的介绍和使用，请参考对应的官网文档。
+>本文仅提供基于Prometheus和Grafana实现的一种StarRocks可视化监控方案，原则上不维护和开发这些组件。更多详细的介绍和使用，请参考对应的官网文档。
 
 #### Prometheus
 

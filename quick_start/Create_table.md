@@ -1,6 +1,6 @@
 # 创建表
 
-本文档介绍如何在 StarRocks 中建表以及进行其他相关操作。
+本文介绍如何在 StarRocks 中创建表以及进行相关操作。
 
 ## 连接 StarRocks
 
@@ -12,7 +12,7 @@ mysql -h < fe_host > -P9030 -u root
 
 ## 创建数据库
 
-通过 `root` 用户建立 `example_db` 数据库。
+使用 `root` 用户创建 `example_db` 数据库。
 
 ```sql
 CREATE DATABASE example_db;
@@ -35,9 +35,9 @@ MySQL [(none)]> SHOW DATABASES;
 
 > 说明：与 MySQL 的表结构类似，`Information_schema` 包含当前 StarRocks 集群的元数据信息，但是部分统计信息还不完善。推荐您通过 `DESC table_name` 等命令来获取数据库元数据信息。
 
-## 建表
+## 创建表
 
-在新建的数据库中建表。
+在新建的数据库中创建表。
 
 StarRocks 支持 [多种数据模型](../table_design/Data_model.md)，以适用不同的应用场景。以下示例基于 [明细表模型](../table_design/Data_model.md#明细模型) 编写建表语句。
 
