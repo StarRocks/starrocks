@@ -188,4 +188,8 @@ public class BackendsProcDirTest {
         Assert.assertTrue(result instanceof BaseProcResult);
     }
 
+    @Test    
+    public void testIPTitle() {
+        Assert.assertTrue(BackendsProcDir.TITLE_NAMES.get(2).equals("IP"));
+    }
 }
