@@ -421,7 +421,7 @@ BE 配置项暂不支持在线修改，生效需在 be.conf 中修改并重启 b
 
 |参数名称|描述|建议值|修改方式|
 |---|---|---|---|
-|Overcommit|不建议使用 Overcommit|1|echo 1 \| sudo tee /proc/sys/vm/overcommit_memory|
+|Overcommit|建议使用 Overcommit|1|echo 1 \| sudo tee /proc/sys/vm/overcommit_memory|
 |Huge Pages|禁止 transparent huge pages，这个会干扰内存分配器，导致性能下降|madvise|echo 'madvise' \| sudo tee /sys/kernel/mm/transparent_hugepage/enabled|
 |Swappiness|关闭交换区，消除交换内存到虚拟内存时对性能的扰动|0|echo 0 \| sudo tee /proc/sys/vm/swappiness|
 
