@@ -499,7 +499,6 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         return tabletStatus == TabletStatus.REPLICA_MISSING ||
                 tabletStatus == TabletStatus.VERSION_INCOMPLETE ||
                 tabletStatus == TabletStatus.REPLICA_RELOCATING ||
-                tabletStatus == TabletStatus.FORCE_REDUNDANT ||
                 tabletStatus == TabletStatus.COLOCATE_MISMATCH ||
                 tabletStatus == TabletStatus.NEED_FURTHER_REPAIR;
     }
