@@ -186,6 +186,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
@@ -194,6 +195,7 @@ import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.RecoverInfo;
+import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
@@ -211,6 +213,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
@@ -1776,6 +1779,11 @@ public class GlobalStateMgr {
         localMetastore.unprotectCreateDb(db);
     }
 
+    // for test
+    public void addCluster(Cluster cluster) {
+        localMetastore.addCluster(cluster);
+    }
+
     public void replayCreateDb(Database db) {
         localMetastore.replayCreateDb(db);
     }
@@ -2348,6 +2356,10 @@ public class GlobalStateMgr {
         return localMetastore.listDbNames();
     }
 
+    public List<String> getClusterDbNames(String clusterName) throws AnalysisException {
+        return localMetastore.getClusterDbNames(clusterName);
+    }
+
     public List<Long> getDbIds() {
         return localMetastore.getDbIds();
     }
@@ -2634,6 +2646,18 @@ public class GlobalStateMgr {
         localMetastore.dropMaterializedView(stmt);
     }
 
+    public void alterMaterializedView(AlterMaterializedViewStatement stmt) throws DdlException, MetaNotFoundException {
+        localMetastore.alterMaterializedView(stmt);
+    }
+
+    public void replayRenameMaterializedView(RenameMaterializedViewLog log) {
+        this.alter.replayRenameMaterializedView(log);
+    }
+
+    public void replayChangeMaterializedViewRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
+        this.alter.replayChangeMaterializedViewRefreshScheme(log);
+    }
+
     /*
      * used for handling CacnelAlterStmt (for client is the CANCEL ALTER
      * command). including SchemaChangeHandler and RollupHandler
@@ -2765,7 +2789,9 @@ public class GlobalStateMgr {
             ctx.setCurrentCatalog(newCatalogName);
         }
 
-        // check auth for internal catalog
+        // Check auth for internal catalog.
+        // Here we check the request permission that sent by the mysql client or jdbc.
+        // So we didn't check UseStmt permission in PrivilegeChecker.
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog()) &&
                 !auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,

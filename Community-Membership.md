@@ -59,7 +59,6 @@ They have the authority to merge master branches and are responsible for the pla
 -   Ensure continued health of subproject
 -   Be granted write access to StarRocks repos (to be specified)
 -   Be listed as a StarRocks Committer and featured on the StarRocks official website
--   Be given a Committer package including VS Code Enterprise and GitHub Pro access
 -   Be awarded a StarRocks Committer e-certificate
 
 ## PMC

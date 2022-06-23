@@ -1331,6 +1331,27 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 14> : 14: sum\n" +
                 "  |  <slot 15> : 15: count\n" +
                 "  |  <slot 16> : 16: sum");
+
+        sql = "select avg(distinct 1), count(distinct null), count(distinct 1) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "15:AGGREGATE (update serialize)\n" +
+                "  |  output: multi_distinct_sum(1)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  14:Project\n" +
+                "  |  <slot 17> : 2: t1b\n" +
+                "  |  ");
+
+        sql = "select avg(distinct 1), count(distinct null), count(distinct 1), count(distinct (t1a + t1c)), sum(t1c) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 4:AGGREGATE (update serialize)\n" +
+                "  |  output: multi_distinct_sum(1)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  3:Project\n" +
+                "  |  <slot 21> : 3: t1c");
+        assertContains(plan, " 9:AGGREGATE (update serialize)\n" +
+                "  |  output: multi_distinct_count(NULL)");
         connectContext.getSessionVariable().setCboCteReuse(false);
     }
 

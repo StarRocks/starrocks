@@ -139,9 +139,8 @@ public class VariableMgr {
             }
 
             field.setAccessible(true);
-            ctxBuilder.put(attr.name(),
-                    new VarContext(field, defaultSessionVariable, SESSION | attr.flag(),
-                            getValue(defaultSessionVariable, field), attr));
+            ctxBuilder.put(attr.name(), new VarContext(field, defaultSessionVariable, SESSION | attr.flag(),
+                    getValue(defaultSessionVariable, field), attr));
 
             if (!attr.alias().isEmpty()) {
                 aliasBuilder.put(attr.alias(), attr.name());
@@ -261,6 +260,10 @@ public class VariableMgr {
     //      setVar: variable information that needs to be set
     public static void setVar(SessionVariable sessionVariable, SetVar setVar, boolean onlySetSessionVar)
             throws DdlException {
+        if (SessionVariable.DEPRECATED_VARIABLES.stream().anyMatch(c -> c.equalsIgnoreCase(setVar.getVariable()))) {
+            return;
+        }
+
         VarContext ctx = getVarContext(setVar.getVariable());
         if (ctx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable());
@@ -492,7 +495,7 @@ public class VariableMgr {
 
                 // For session variables, the flag is VariableMgr.SESSION | VariableMgr.INVISIBLE
                 // For global variables, the flag is VariableMgr.GLOBAL | VariableMgr.INVISIBLE
-                if (ctx.getFlag() > VariableMgr.INVISIBLE) {
+                if ((ctx.getFlag() > VariableMgr.INVISIBLE) && !sessionVar.isEnableShowAllVariables()) {
                     continue;
                 }
 
@@ -506,7 +509,7 @@ public class VariableMgr {
                     row.add(getValue(ctx.getObj(), ctx.getField()));
                 }
 
-                if (row.size() > 1 && row.get(0).equalsIgnoreCase(SessionVariable.SQL_MODE)) {
+                if (row.get(0).equalsIgnoreCase(SessionVariable.SQL_MODE)) {
                     try {
                         row.set(1, SqlModeHelper.decode(Long.valueOf(row.get(1))));
                     } catch (DdlException e) {
@@ -542,7 +545,7 @@ public class VariableMgr {
     }
 
     @Retention(RetentionPolicy.RUNTIME)
-    public static @interface VarAttr {
+    public @interface VarAttr {
         // Name in show variables and set statement;
         String name();
 
@@ -552,11 +555,6 @@ public class VariableMgr {
         String show() default "";
 
         int flag() default 0;
-
-        // TODO(zhaochun): min and max is not used.
-        String minValue() default "0";
-
-        String maxValue() default "0";
     }
 
     private static class VarContext {

@@ -10,6 +10,7 @@ import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.HashDistributionDesc;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
@@ -22,22 +23,29 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.RefreshType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
+import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -51,7 +59,32 @@ public class MaterializedViewAnalyzer {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
     }
 
+    public static void analyzeExp(Expr expr, QueryStatement queryStatement, ConnectContext context) {
+        Map<String, TableRelation> tableRelations =
+                AnalyzerUtils.collectAllTableRelation(queryStatement);
+        List<Field> fields = Lists.newArrayList();
+        for (TableRelation value : tableRelations.values()) {
+            fields.addAll(value.getRelationFields().getAllFields());
+        }
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(fields));
+        if (expr instanceof FunctionCallExpr) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+            if (functionCallExpr.getFn() == null) {
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(),
+                        scope, context);
+            }
+        }
+    }
+
     static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+
+        public enum RefreshTimeUnit {
+            YEAR,
+            MONTH,
+            DAY,
+            HOUR,
+            MINUTE
+        }
 
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
@@ -108,6 +141,8 @@ public class MaterializedViewAnalyzer {
                 checkPartitionExpParams(statement);
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, tableNameTableMap);
+                // analyze expression
+                analyzeExp(statement.getPartitionExpDesc().getExpr(), statement.getQueryStatement(), context);
             }
             // check and analyze distribution
             checkDistribution(statement);
@@ -256,9 +291,10 @@ public class MaterializedViewAnalyzer {
                             "only supports single column");
                 }
                 boolean isInPartitionColumns = false;
-                for (Column partitionColumn : partitionColumns) {
-                    if (partitionColumn.getName().equals(slotRef.getColumnName())) {
+                for (Column basePartitionColumn : partitionColumns) {
+                    if (basePartitionColumn.getName().equals(slotRef.getColumnName())) {
                         isInPartitionColumns = true;
+                        statement.setBasePartitionColumn(basePartitionColumn);
                         break;
                     }
                 }
@@ -271,6 +307,7 @@ public class MaterializedViewAnalyzer {
                         partitionInfo.getType().name() + "not supports");
             }
         }
+
 
         private void checkDistribution(CreateMaterializedViewStatement statement) {
             DistributionDesc distributionDesc = statement.getDistributionDesc();
@@ -296,6 +333,44 @@ public class MaterializedViewAnalyzer {
         @Override
         public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt stmt, ConnectContext context) {
             stmt.getDbMvName().normalization(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStatement statement,
+                                                        ConnectContext context) {
+            statement.getMvName().normalization(context);
+            final RefreshSchemeDesc refreshSchemeDesc = statement.getRefreshSchemeDesc();
+            final String newMvName = statement.getNewMvName();
+            if (newMvName != null) {
+                if (statement.getMvName().getTbl().equals(newMvName)) {
+                    throw new SemanticException("Same materialized view name %s", newMvName);
+                }
+            } else if (refreshSchemeDesc != null) {
+                if (refreshSchemeDesc.getType().equals(RefreshType.SYNC)) {
+                    throw new SemanticException("Unsupported change to SYNC refresh type");
+                }
+                if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
+                    AsyncRefreshSchemeDesc async = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+                    final IntervalLiteral intervalLiteral = async.getIntervalLiteral();
+                    if (intervalLiteral != null) {
+                        long step = ((IntLiteral) intervalLiteral.getValue()).getLongValue();
+                        if (step <= 0) {
+                            throw new SemanticException("Unsupported negative or zero step value: %s", step);
+                        }
+                        final String unit = intervalLiteral.getUnitIdentifier().getDescription().toUpperCase();
+                        try {
+                            RefreshTimeUnit.valueOf(unit);
+                        } catch (IllegalArgumentException e) {
+                            throw new SemanticException(
+                                    "Unsupported interval unit: %s, only timeunit %s are supported.", unit,
+                                    Arrays.asList(RefreshTimeUnit.values()));
+                        }
+                    }
+                }
+            } else {
+                throw new SemanticException("Unsupported modification for materialized view");
+            }
             return null;
         }
     }

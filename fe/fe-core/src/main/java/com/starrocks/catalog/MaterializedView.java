@@ -4,10 +4,23 @@ package com.starrocks.catalog;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.UserIdentity;
+import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
+import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
@@ -16,6 +29,9 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -28,24 +44,65 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public enum RefreshType {
         SYNC,
-        ASYNC
+        ASYNC,
+        MANUAL
     }
 
     public static class AsyncRefreshContext {
         // base table id -> (partitionid -> visible version)
         @SerializedName(value = "baseTableVisibleVersionMap")
-        public Map<Long, Map<Long, Long>> baseTableVisibleVersionMap;
+        private Map<Long, Map<Long, Long>> baseTableVisibleVersionMap;
+
+        @SerializedName(value = "starTime")
+        private long startTime;
+
+        @SerializedName(value = "step")
+        private long step;
+
+        @SerializedName(value = "timeUnit")
+        private String timeUnit;
 
         public AsyncRefreshContext() {
             this.baseTableVisibleVersionMap = Maps.newHashMap();
+            this.startTime = Utils.getLongFromDateTime(LocalDateTime.now());
+            this.step = 0;
+            this.timeUnit = null;
         }
 
         public AsyncRefreshContext(Map<Long, Map<Long, Long>> baseTableVisibleVersionMap) {
             this.baseTableVisibleVersionMap = baseTableVisibleVersionMap;
         }
 
+        public Map<Long, Map<Long, Long>> getBaseTableVisibleVersionMap() {
+            return baseTableVisibleVersionMap;
+        }
+
         Map<Long, Long> getPartitionVisibleVersionMapForTable(long tableId) {
             return baseTableVisibleVersionMap.get(tableId);
+        }
+
+        public long getStartTime() {
+            return startTime;
+        }
+
+        public void setStartTime(long startTime) {
+            this.startTime = startTime;
+        }
+
+        public long getStep() {
+            return step;
+        }
+
+        public void setStep(long step) {
+            this.step = step;
+        }
+
+        public String getTimeUnit() {
+            return timeUnit;
+        }
+
+        public void setTimeUnit(String timeUnit) {
+            this.timeUnit = timeUnit;
         }
     }
 
@@ -113,6 +170,11 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "viewDefineSql")
     private String viewDefineSql;
 
+    // table partition id <-> mv partition ids
+    // mv partition id <->  table partition ids
+    @SerializedName(value = "partitionRefMap")
+    private Map<Long, Set<Long>> partitionIdRefMap = new HashMap<>();
+
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
         this.clusterId = GlobalStateMgr.getCurrentState().getClusterId();
@@ -151,11 +213,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.viewDefineSql = viewDefineSql;
     }
 
-    @Override
-    public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
-        TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.MATERIALIZED_VIEW,
-                fullSchema.size(), 0, getName(), "");
-        return tTableDescriptor;
+    public Map<Long, Set<Long>> getPartitionIdRefMap() {
+        return partitionIdRefMap;
     }
 
     public Set<Long> getBaseTableIds() {
@@ -164,6 +223,32 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public void setBaseTableIds(Set<Long> baseTableIds) {
         this.baseTableIds = baseTableIds;
+    }
+
+    public MvRefreshScheme getRefreshScheme() {
+        return refreshScheme;
+    }
+
+    public void setRefreshScheme(MvRefreshScheme refreshScheme) {
+        this.refreshScheme = refreshScheme;
+    }
+
+    @Override
+    public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
+        TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.MATERIALIZED_VIEW,
+                fullSchema.size(), 0, getName(), "");
+        return tTableDescriptor;
+    }
+
+    @Override
+    public MaterializedView selectiveCopy(Collection<String> reservedPartitions, boolean resetState,
+                                          MaterializedIndex.IndexExtState extState) {
+        MaterializedView copied = DeepCopy.copyWithGson(this, MaterializedView.class);
+        if (copied == null) {
+            LOG.warn("failed to copy materialized view: " + getName());
+            return null;
+        }
+        return ((MaterializedView) selectiveCopyInternal(copied, reservedPartitions, resetState, extState));
     }
 
     @Override
@@ -187,6 +272,30 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             // now table must be OlapTable
             // it is checked when creation
             ((OlapTable) table).addRelatedMaterializedView(id);
+        }
+        // analyze expression, because it converts to sql for serialize
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setCluster(SystemInfoService.DEFAULT_CLUSTER);
+        connectContext.setDatabase(db.getFullName());
+        // set privilege
+        connectContext.setQualifiedUser(Auth.ROOT_USER);
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        PartitionInfo partitionInfo = this.getPartitionInfo();
+        if (partitionInfo instanceof SinglePartitionInfo) {
+            return;
+        }
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        // currently, mv only supports one expression
+        Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
+        try {
+            QueryStatement queryStatement = ((QueryStatement) SqlParser.parse(
+                    this.viewDefineSql, connectContext.getSessionVariable().getSqlMode()).get(0));
+            Analyzer.analyze(queryStatement, connectContext);
+            MaterializedViewAnalyzer.analyzeExp(partitionExpr, queryStatement, connectContext);
+        } catch (ParsingException parsingException) {
+            LOG.warn("Parsing viewDefineSql:{} failed, exception:{}", this.viewDefineSql, parsingException.getMessage());
+        } catch (SemanticException semanticException) {
+            LOG.warn("Analyzing viewDefineSql:{} failed, exception:{}", this.viewDefineSql, semanticException.getMessage());
         }
     }
 

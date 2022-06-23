@@ -8,8 +8,10 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -284,7 +286,8 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
 
     private LogicalCTEConsumeOperator buildCteConsume(OptExpression cteProduce, ColumnRefSet requiredColumns,
                                                       ColumnRefFactory factory) {
-        int cteId = ((LogicalCTEProduceOperator) cteProduce.getOp()).getCteId();
+        LogicalCTEProduceOperator produceOperator = (LogicalCTEProduceOperator) cteProduce.getOp();
+        int cteId = produceOperator.getCteId();
 
         // create cte consume, cte output columns
         Map<ColumnRefOperator, ColumnRefOperator> consumeOutputMap = Maps.newHashMap();
@@ -293,6 +296,16 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
             ColumnRefOperator consumeOutput =
                     factory.create(produceOutput, produceOutput.getType(), produceOutput.isNullable());
             consumeOutputMap.put(consumeOutput, produceOutput);
+        }
+        // If there is no requiredColumns, we need to add least one column which is smallest
+        if (consumeOutputMap.isEmpty()) {
+            List<ColumnRefOperator> outputColumns =
+                    produceOperator.getOutputColumns(new ExpressionContext(cteProduce)).getStream().
+                            mapToObj(columnId -> factory.getColumnRef(columnId)).collect(Collectors.toList());
+            ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(outputColumns);
+            ColumnRefOperator consumeOutput =
+                    factory.create(smallestColumn, smallestColumn.getType(), smallestColumn.isNullable());
+            consumeOutputMap.put(consumeOutput, smallestColumn);
         }
 
         return new LogicalCTEConsumeOperator(cteId, consumeOutputMap);

@@ -4,7 +4,7 @@
 
 #include <memory>
 
-#include "gen_cpp/starlake.pb.h"
+#include "gen_cpp/lake_types.pb.h"
 
 namespace starrocks::lake {
 

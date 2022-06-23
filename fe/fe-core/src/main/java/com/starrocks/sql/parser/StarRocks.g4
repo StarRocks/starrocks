@@ -40,6 +40,7 @@ statement
     | createMaterializedViewStatement                                                       #createMaterializedView
     | showMaterializedViewStatement                                                         #showMaterializedView
     | dropMaterializedViewStatement                                                         #dropMaterializedView
+    | alterMaterializedViewStatement                                                        #alterMaterializedView
 
     // Catalog Statement
     | createExternalCatalogStatement                                                        #createCatalog
@@ -77,7 +78,7 @@ statement
     | showWorkGroupStatement                                                                #showWorkGroup
 
     // Other statement
-    | USE schema=identifier                                                                 #use
+    | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
 
@@ -254,11 +255,15 @@ createMaterializedViewStatement
     ;
 
 showMaterializedViewStatement
-    : SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?
+    : SHOW MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 dropMaterializedViewStatement
     : DROP MATERIALIZED VIEW (IF EXISTS)? mvName=qualifiedName
+    ;
+
+alterMaterializedViewStatement
+    : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause)
     ;
 
 // ------------------------------------------- Cluster Mangement Statement ---------------------------------------------
@@ -826,6 +831,7 @@ distributionDesc
 
 refreshSchemeDesc
     : REFRESH (SYNC
+    | ASYNC
     | ASYNC (START '(' string ')')? EVERY '(' interval ')'
     | MANUAL)
     ;
