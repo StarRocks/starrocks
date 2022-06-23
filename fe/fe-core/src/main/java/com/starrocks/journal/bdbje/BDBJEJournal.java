@@ -39,7 +39,6 @@ import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -196,15 +195,6 @@ public class BDBJEJournal implements Journal {
         }
 
         if (!writeSuccessed) {
-            if (op == OperationType.OP_TIMESTAMP) {
-                /*
-                 * Do not exit if the write operation is OP_TIMESTAMP.
-                 * If all the followers exit except master, master should continue provide query service.
-                 * To prevent master exit, we should exempt OP_TIMESTAMP write
-                 */
-                LOG.warn("master can not achieve quorum. write timestamp fail. but will not exit.");
-                return;
-            }
             String msg = "write bdb failed. will exit. journalId: " + id + ", bdb database Name: " +
                     currentJournalDB.getDb().getDatabaseName();
             LOG.error(msg);
