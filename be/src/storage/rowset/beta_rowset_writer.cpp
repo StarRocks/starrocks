@@ -79,7 +79,6 @@ Status BetaRowsetWriter::init() {
     _rowset_meta->set_partition_id(_context.partition_id);
     _rowset_meta->set_tablet_id(_context.tablet_id);
     _rowset_meta->set_tablet_schema_hash(_context.tablet_schema_hash);
-    _rowset_meta->set_rowset_type(_context.rowset_type);
     _rowset_meta->set_rowset_state(_context.rowset_state);
     _rowset_meta->set_segments_overlap(_context.segments_overlap);
     if (_context.rowset_state == PREPARED || _context.rowset_state == COMMITTED) {
@@ -370,7 +369,6 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
 }
 
 Status HorizontalBetaRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
-    assert(rowset->rowset_meta()->rowset_type() == BETA_ROWSET);
     RETURN_IF_ERROR(rowset->link_files_to(_context.rowset_path_prefix, _context.rowset_id));
     _num_rows_written += rowset->num_rows();
     _total_row_size += static_cast<int64_t>(rowset->total_row_size());

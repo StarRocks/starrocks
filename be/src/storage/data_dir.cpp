@@ -243,10 +243,6 @@ Status DataDir::load() {
             // return false will break meta iterator, return true to skip this error
             return true;
         }
-        LOG_IF(FATAL, rowset_meta->rowset_type() == ALPHA_ROWSET)
-                << "must change V1 format to V2 format."
-                << "tablet_id: " << rowset_meta->tablet_id() << ", tablet_uid:" << rowset_meta->tablet_uid()
-                << ", schema_hash: " << rowset_meta->tablet_schema_hash() << ", rowset_id:" << rowset_meta->rowset_id();
         dir_rowset_metas.push_back(rowset_meta);
         return true;
     };
@@ -319,8 +315,7 @@ Status DataDir::load() {
                                                             rowset_meta, &rowset);
         if (!create_status.ok()) {
             LOG(WARNING) << "Fail to create rowset from rowsetmeta,"
-                         << " rowset=" << rowset_meta->rowset_id() << " type=" << rowset_meta->rowset_type()
-                         << " state=" << rowset_meta->rowset_state();
+                         << " rowset=" << rowset_meta->rowset_id() << " state=" << rowset_meta->rowset_state();
             continue;
         }
         if (rowset_meta->rowset_state() == RowsetStatePB::COMMITTED &&

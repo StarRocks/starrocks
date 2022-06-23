@@ -48,7 +48,6 @@ Status CompactionUtils::construct_output_rowset_writer(Tablet* tablet, uint32_t 
     context.tablet_id = tablet->tablet_id();
     context.partition_id = tablet->partition_id();
     context.tablet_schema_hash = tablet->schema_hash();
-    context.rowset_type = BETA_ROWSET;
     context.rowset_path_prefix = tablet->schema_hash_path();
     context.tablet_schema = &(tablet->tablet_schema());
     context.rowset_state = VISIBLE;
