@@ -222,8 +222,6 @@ public class DeleteHandler implements Writable {
                 transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
                         Lists.newArrayList(table.getId()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                        // For version compatibility, keep this set to FRONTEND,
-                        // and set it to DELETE in the next release
                         TransactionState.LoadJobSourceType.DELETE, jobId, Config.stream_load_default_timeout_second);
 
                 MultiDeleteInfo deleteInfo =
