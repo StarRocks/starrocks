@@ -90,12 +90,9 @@ public class DataDescription {
             FunctionSet.NOW,
             FunctionSet.HLL_HASH,
             FunctionSet.SUBSTITUTE,
-            "get_json_string",
-            "get_json_double",
-            "get_json_int",
-            FunctionSet.PARSE_JSON,
-            FunctionSet.JSON_QUERY
-            );
+            FunctionSet.GET_JSON_INT,
+            FunctionSet.GET_JSON_DOUBLE,
+            FunctionSet.GET_JSON_STRING);
 
     private final String tableName;
     private final PartitionNames partitionNames;
