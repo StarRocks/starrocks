@@ -15,13 +15,14 @@ class RandomAccessFile;
 class IBufferedInputStream {
 public:
     virtual Status get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes) = 0;
+    virtual ~IBufferedInputStream() {}
 };
 
 class DefaultBufferedInputStream : public IBufferedInputStream {
 public:
     DefaultBufferedInputStream(RandomAccessFile* file, uint64_t offset, uint64_t length);
 
-    virtual ~DefaultBufferedInputStream() = default;
+    ~DefaultBufferedInputStream() override = default;
 
     void seek_to(uint64_t offset) {
         uint64_t current_file_offset = tell();
@@ -87,7 +88,7 @@ public:
 
     SharedBufferedInputStream(RandomAccessFile* file);
 
-    virtual ~SharedBufferedInputStream() = default;
+    ~SharedBufferedInputStream() override = default;
 
     Status set_io_ranges(const std::vector<IORange>& ranges);
     Status remove_io_range(const IORange& range);

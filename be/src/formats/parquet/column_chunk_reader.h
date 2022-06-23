@@ -9,7 +9,6 @@
 
 #include "column/column.h"
 #include "common/status.h"
-#include "formats/parquet/column_reader.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/level_codec.h"
 #include "fs/fs.h"
@@ -24,6 +23,7 @@ class BlockCompressionCodec;
 namespace starrocks::parquet {
 
 class PageReader;
+class ColumnReaderOptions;
 
 class ColumnChunkReader {
 public:

@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "exec/vectorized/hdfs_scanner.h"
+#include "formats/parquet/column_reader.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/encoding_dict.h"
 #include "formats/parquet/page_reader.h"
