@@ -36,7 +36,6 @@ public class StarOSAgent {
 
     private StarClient client;
     private long serviceId;
-    private boolean connected;
     private Map<String, Long> workerToId;
     private Map<Long, Long> workerToBackend;
     private ReentrantReadWriteLock rwLock;
@@ -51,7 +50,6 @@ public class StarOSAgent {
                 System.exit(-1);
             }
         }
-
         client = new StarClient();
         client.connectServer(Config.starmgr_address);
 
