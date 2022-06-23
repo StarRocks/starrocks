@@ -75,9 +75,9 @@ echo "script run over-----"
 #ls -al $PROJECT/fe/fe-core/target
 if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
     cd $PROJECT/fe/fe-core/target;
-    echo $PROJECT;
-    ls -al $PROJECT/jacococli.jar;
-    java -jar $PROJECT/jacococli.jar;
+    echo "$PROJECT";
+    ls -al "$PROJECT/jacococli.jar";
+    java -jar "$PROJECT/jacococli.jar";
     jacoco_result="jacoco_${GITHUB_PR_NUMBER}.exec"
     mv jacoco.exec $jacoco_result || true
 
