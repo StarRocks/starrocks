@@ -189,6 +189,19 @@ public class TabletChecker extends MasterDaemon {
         LOG.info(stat.incrementalBrief());
     }
 
+    /**
+     * In order to avoid meaningless repair schedule, for task that need to
+     * choose a source replica to clone from, we check that whether we can
+     * find a healthy source replica before send it to pending queue.
+     * <p>
+     * If we don't do this check, the task will go into the pending queue and
+     * get deleted when no healthy source replica found, and then it will be added
+     * to the queue again in the next `TabletChecker` round.
+     */
+    private boolean tryChooseSrcBeforeSchedule(TabletSchedCtx tabletCtx) {
+        return !(tabletCtx.needCloneFromSource() && tabletCtx.getHealthyReplicas().size() == 0);
+    }
+
     private void checkTablets() {
         long start = System.currentTimeMillis();
         long totalTabletNum = 0;
@@ -282,6 +295,10 @@ public class TabletChecker extends MasterDaemon {
                                 // the tablet status will be set again when being scheduled
                                 tabletCtx.setTabletStatus(statusWithPrio.first);
                                 tabletCtx.setOrigPriority(statusWithPrio.second);
+                                tabletCtx.setTablet(localTablet);
+                                if (!tryChooseSrcBeforeSchedule(tabletCtx)) {
+                                    continue;
+                                }
 
                                 AddResult res = tabletScheduler.addTablet(tabletCtx, false /* not force */);
                                 if (res == AddResult.LIMIT_EXCEED) {
