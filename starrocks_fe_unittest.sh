@@ -71,7 +71,7 @@ docker exec --privileged $container_name /bin/bash -c "$cmd"
 
 echo "script run over-----"
 
-#sudo chown -R runner:docker $ROOT/starrocks/fe/fe-core/target
+sudo chown -R runner:docker $ROOT/starrocks/FeCoverageTool
 #ls -al $ROOT/starrocks/fe/fe-core/target
 if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
     cd $ROOT/starrocks/fe/fe-core/target
