@@ -199,12 +199,7 @@ public class TabletChecker extends MasterDaemon {
      * to the queue again in the next `TabletChecker` round.
      */
     private boolean tryChooseSrcBeforeSchedule(TabletSchedCtx tabletCtx) {
-        if (tabletCtx.needCloneFromSource() &&
-                tabletCtx.getHealthyReplicas().size() == 0) {
-            return false; // failed
-        }
-
-        return true;
+        return !(tabletCtx.needCloneFromSource() && tabletCtx.getHealthyReplicas().size() == 0);
     }
 
     private void checkTablets() {
