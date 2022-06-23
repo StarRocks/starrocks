@@ -73,7 +73,7 @@ echo "script run over-----"
 
 #sudo chown -R runner:docker $PROJECT/fe/fe-core/target
 #ls -al $PROJECT/fe/fe-core/target
-cd $PROJECT/fe/fe-core/target
+#cd $PROJECT/fe/fe-core/target
 if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
     #jacoco_result="jacoco_${GITHUB_PR_NUMBER}.exec"
     #mv jacoco.exec $jacoco_result || true
