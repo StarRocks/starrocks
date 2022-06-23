@@ -5,8 +5,8 @@
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "gen_cpp/AgentService_types.h"
+#include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_file.pb.h"
-#include "gen_cpp/starlake.pb.h"
 #include "gutil/strings/util.h"
 #include "storage/lake/group_assigner.h"
 #include "storage/lake/metadata_iterator.h"
@@ -132,21 +132,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     ASSIGN_OR_RETURN(auto group_path, _group_assigner->get_group(req.tablet_id));
 
     // write tablet metadata
-    auto metadata_path = tablet_metadata_path(group_path, tablet_metadata_pb.id(), tablet_metadata_pb.version());
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(metadata_path));
-    ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(metadata_path));
-    RETURN_IF_ERROR(wf->append(tablet_metadata_pb.SerializeAsString()));
-    RETURN_IF_ERROR(wf->close());
-
-    // put tabletmetadata into cache after tabletmetadata object write successfully. just log if put failed.
-    auto cache_key = tablet_metadata_cache_key(tablet_metadata_pb.id(), tablet_metadata_pb.version());
-    auto value_ptr = new std::shared_ptr<TabletMetadata>(new TabletMetadata(tablet_metadata_pb));
-    bool inserted = fill_metacache(cache_key, static_cast<void*>(value_ptr), tablet_metadata_pb.SpaceUsedLong());
-    if (!inserted) {
-        delete value_ptr;
-        LOG(WARNING) << "Failed to put tabletmetadata into cache " << metadata_path;
-    }
-    return Status::OK();
+    return put_tablet_metadata(group_path, tablet_metadata_pb);
 }
 
 StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
@@ -201,7 +187,7 @@ Status TabletManager::put_tablet_metadata(const std::string& group, const Tablet
     return put_tablet_metadata(group, std::move(metadata_ptr));
 }
 
-StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& metadata_path) {
+StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_path) {
     std::string read_buf;
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(metadata_path));
     ASSIGN_OR_RETURN(auto rf, fs->new_random_access_file(metadata_path));
@@ -226,7 +212,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const std::string
     RETURN_IF(ptr != nullptr, ptr);
 
     auto metadata_path = tablet_metadata_path(group, tablet_id, version);
-    ASSIGN_OR_RETURN(ptr, get_tablet_metadata(metadata_path));
+    ASSIGN_OR_RETURN(ptr, load_tablet_metadata(metadata_path));
 
     auto value_ptr = new std::shared_ptr<const TabletMetadata>(ptr);
     bool inserted = fill_metacache(cache_key, static_cast<void*>(value_ptr), ptr->SpaceUsedLong());
@@ -243,7 +229,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const std::string
     RETURN_IF(ptr != nullptr, ptr);
 
     auto metadata_path = tablet_metadata_path(group, path);
-    ASSIGN_OR_RETURN(ptr, get_tablet_metadata(metadata_path));
+    ASSIGN_OR_RETURN(ptr, load_tablet_metadata(metadata_path));
 
     auto value_ptr = new std::shared_ptr<const TabletMetadata>(ptr);
     bool inserted = fill_metacache(path, static_cast<void*>(value_ptr), ptr->SpaceUsedLong());
@@ -288,7 +274,7 @@ StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(const std::stri
     return TabletMetadataIter{this, std::move(group), std::move(objects)};
 }
 
-StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& txnlog_path) {
+StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txnlog_path) {
     std::string read_buf;
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txnlog_path));
     ASSIGN_OR_RETURN(auto rf, fs->new_random_access_file(txnlog_path));
@@ -311,7 +297,7 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const string& group, const std::s
     RETURN_IF(ptr != nullptr, ptr);
 
     auto txnlog_path = txn_log_path(group, path);
-    ASSIGN_OR_RETURN(ptr, get_txn_log(txnlog_path));
+    ASSIGN_OR_RETURN(ptr, load_txn_log(txnlog_path));
 
     auto value_ptr = new std::shared_ptr<const TxnLog>(ptr);
     bool inserted = fill_metacache(path, static_cast<void*>(value_ptr), ptr->SpaceUsedLong());
@@ -329,7 +315,7 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& group, int64_t
     RETURN_IF(ptr != nullptr, ptr);
 
     auto txnlog_path = txn_log_path(group, tablet_id, txn_id);
-    ASSIGN_OR_RETURN(ptr, get_txn_log(txnlog_path));
+    ASSIGN_OR_RETURN(ptr, load_txn_log(txnlog_path));
 
     auto value_ptr = new std::shared_ptr<const TxnLog>(ptr);
     bool inserted = fill_metacache(cache_key, static_cast<void*>(value_ptr), ptr->SpaceUsedLong());

@@ -82,6 +82,14 @@ public class SlotDescriptor {
         this.isMultiRef = false;
     }
 
+    public SlotDescriptor(SlotId id, String name, Type type, boolean isNullable) {
+        this.id = id;
+        this.label_ = name;
+        this.type = type;
+        this.isNullable = isNullable;
+        this.parent = null;
+    }
+
     public SlotDescriptor(SlotId id, TupleDescriptor parent, SlotDescriptor src) {
         this.id = id;
         this.parent = parent;
