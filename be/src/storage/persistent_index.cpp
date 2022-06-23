@@ -283,7 +283,7 @@ static Status find_buckets_to_move(uint32_t pageid, size_t min_pack_to_move, con
             return st;
         } else {
             LOG(ERROR) << "Unknown error, can not find a solution that move " << move_bucket_num
-                       << " buckets: " << st.to_stirng();
+                       << " buckets: " << st.to_string();
             return st;
         }
     }
