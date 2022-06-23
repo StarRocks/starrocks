@@ -27,7 +27,9 @@ import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -42,6 +44,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -153,8 +157,31 @@ public class AlterTest {
     }
 
     private static void createTable(String sql) throws Exception {
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+    }
+
+    private static void createMaterializedView(String sql) throws Exception {
+        Config.enable_experimental_mv = true;
+        CreateMaterializedViewStatement createMaterializedViewStatement =
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+    }
+
+    private static void alterMaterializedView(String sql, boolean expectedException) throws Exception {
+        AlterMaterializedViewStatement alterMaterializedViewStatement =
+                (AlterMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        try {
+            GlobalStateMgr.getCurrentState().alterMaterializedView(alterMaterializedViewStatement);
+            if (expectedException) {
+                Assert.fail();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            if (!expectedException) {
+                Assert.fail();
+            }
+        }
     }
 
     private static void alterTable(String sql, boolean expectedException) throws Exception {
@@ -194,6 +221,66 @@ public class AlterTest {
         } catch (Exception e) {
             Assert.assertEquals(msg, e.getMessage());
         }
+    }
+
+    @Test
+    public void testRenameMaterializedView() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE test.testTable1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        String sql = "create materialized view mv1 " +
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from test.testTable1;";
+        createMaterializedView(sql);
+        String alterStmt = "alter materialized view test.mv1 rename mv2";
+        alterMaterializedView(alterStmt, false);
+    }
+
+    @Test
+    public void testChangeMaterializedViewRefreshScheme() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE test.testTable2\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        String sql = "create materialized view mv1 " +
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from test.testTable2;";
+        createMaterializedView(sql);
+        String alterStmt = "alter materialized view mv1 refresh async EVERY(INTERVAL 1 minute)";
+        alterMaterializedView(alterStmt, false);
+        alterStmt = "alter materialized view mv1 refresh manual";
+        alterMaterializedView(alterStmt, false);
     }
 
     @Test
@@ -594,7 +681,7 @@ public class AlterTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ")";
 
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
@@ -664,7 +751,7 @@ public class AlterTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ")";
 
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
@@ -705,7 +792,7 @@ public class AlterTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ")";
 
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
@@ -734,7 +821,7 @@ public class AlterTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ")";
 
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
@@ -774,7 +861,7 @@ public class AlterTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ")";
 
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
@@ -815,7 +902,7 @@ public class AlterTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ")";
 
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
@@ -856,7 +943,7 @@ public class AlterTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ")";
 
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
@@ -899,7 +986,7 @@ public class AlterTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ")";
 
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
@@ -947,7 +1034,7 @@ public class AlterTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ")";
 
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
@@ -994,7 +1081,7 @@ public class AlterTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ")";
 
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
@@ -1040,7 +1127,7 @@ public class AlterTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ")";
 
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
@@ -1085,7 +1172,7 @@ public class AlterTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ")";
 
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
@@ -1130,7 +1217,7 @@ public class AlterTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ")";
 
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createSQL, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 

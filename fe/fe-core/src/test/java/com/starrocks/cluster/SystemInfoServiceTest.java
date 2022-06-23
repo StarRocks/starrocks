@@ -22,20 +22,25 @@
 package com.starrocks.cluster;
 
 import com.google.common.collect.Lists;
+import com.staros.client.StarClientException;
 import com.starrocks.analysis.AddBackendClause;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.catalog.StarOSAgent;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -254,6 +259,54 @@ public class SystemInfoServiceTest {
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("does not exist"));
         }
+
+        // test removeWorker
+        Config.integrate_starmgr = true;
+        StarOSAgent starosAgent = new StarOSAgent();
+        new Expectations(starosAgent) {
+            {
+                try {
+                    starosAgent.removeWorker("192.168.0.1:1235");
+                    minTimes = 0;
+                    result = null;
+                } catch (DdlException e) {
+                    e.printStackTrace();
+                }
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            StarOSAgent getStarOSAgent() {
+                return starosAgent;
+            }
+        };
+
+        AddBackendClause stmt2 = new AddBackendClause(Lists.newArrayList("192.168.0.1:1235"));
+        stmt2.analyze(analyzer);
+        try {
+            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt2.getHostPortPairs(), true);
+        } catch (DdlException e) {
+            e.printStackTrace();
+        }
+
+        DropBackendClause dropStmt2 = new DropBackendClause(Lists.newArrayList("192.168.0.1:1235"));
+        dropStmt2.analyze(analyzer);
+        try {
+            GlobalStateMgr.getCurrentSystemInfo().dropBackends(dropStmt2);
+        } catch (DdlException e) {
+            e.printStackTrace();
+            Assert.assertTrue(e.getMessage()
+                    .contains("starletPort has not been updated by heartbeat from this backend"));
+        }
+
+        try {
+            GlobalStateMgr.getCurrentSystemInfo().dropBackends(dropStmt2);
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("does not exist"));
+        }
+
+        Config.integrate_starmgr = false;
     }
 
     @Test

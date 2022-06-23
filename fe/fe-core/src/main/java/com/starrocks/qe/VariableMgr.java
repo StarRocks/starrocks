@@ -139,9 +139,8 @@ public class VariableMgr {
             }
 
             field.setAccessible(true);
-            ctxBuilder.put(attr.name(),
-                    new VarContext(field, defaultSessionVariable, SESSION | attr.flag(),
-                            getValue(defaultSessionVariable, field), attr));
+            ctxBuilder.put(attr.name(), new VarContext(field, defaultSessionVariable, SESSION | attr.flag(),
+                    getValue(defaultSessionVariable, field), attr));
 
             if (!attr.alias().isEmpty()) {
                 aliasBuilder.put(attr.alias(), attr.name());
@@ -175,7 +174,15 @@ public class VariableMgr {
     // Set value to a variable
     private static boolean setValue(Object obj, Field field, String value) throws DdlException {
         VarAttr attr = field.getAnnotation(VarAttr.class);
-        String convertedVal = VariableVarConverters.convert(attr.name(), value);
+
+        String variableName;
+        if (attr.show().isEmpty()) {
+            variableName = attr.name();
+        } else {
+            variableName = attr.show();
+        }
+
+        String convertedVal = VariableVarConverters.convert(variableName, value);
         try {
             switch (field.getType().getSimpleName()) {
                 case "boolean":
@@ -214,12 +221,12 @@ public class VariableMgr {
                     break;
                 default:
                     // Unsupported type variable.
-                    ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, attr.name());
+                    ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, variableName);
             }
         } catch (NumberFormatException e) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, attr.name());
+            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, variableName);
         } catch (IllegalAccessException e) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_VALUE_FOR_VAR, attr.name(), value);
+            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_VALUE_FOR_VAR, variableName, value);
         }
 
         return true;
@@ -253,6 +260,10 @@ public class VariableMgr {
     //      setVar: variable information that needs to be set
     public static void setVar(SessionVariable sessionVariable, SetVar setVar, boolean onlySetSessionVar)
             throws DdlException {
+        if (SessionVariable.DEPRECATED_VARIABLES.stream().anyMatch(c -> c.equalsIgnoreCase(setVar.getVariable()))) {
+            return;
+        }
+
         VarContext ctx = getVarContext(setVar.getVariable());
         if (ctx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable());
@@ -484,7 +495,7 @@ public class VariableMgr {
 
                 // For session variables, the flag is VariableMgr.SESSION | VariableMgr.INVISIBLE
                 // For global variables, the flag is VariableMgr.GLOBAL | VariableMgr.INVISIBLE
-                if (ctx.getFlag() > VariableMgr.INVISIBLE) {
+                if ((ctx.getFlag() > VariableMgr.INVISIBLE) && !sessionVar.isEnableShowAllVariables()) {
                     continue;
                 }
 
@@ -498,7 +509,7 @@ public class VariableMgr {
                     row.add(getValue(ctx.getObj(), ctx.getField()));
                 }
 
-                if (row.size() > 1 && row.get(0).equalsIgnoreCase(SessionVariable.SQL_MODE)) {
+                if (row.get(0).equalsIgnoreCase(SessionVariable.SQL_MODE)) {
                     try {
                         row.set(1, SqlModeHelper.decode(Long.valueOf(row.get(1))));
                     } catch (DdlException e) {
@@ -534,7 +545,7 @@ public class VariableMgr {
     }
 
     @Retention(RetentionPolicy.RUNTIME)
-    public static @interface VarAttr {
+    public @interface VarAttr {
         // Name in show variables and set statement;
         String name();
 
@@ -544,11 +555,6 @@ public class VariableMgr {
         String show() default "";
 
         int flag() default 0;
-
-        // TODO(zhaochun): min and max is not used.
-        String minValue() default "0";
-
-        String maxValue() default "0";
     }
 
     private static class VarContext {

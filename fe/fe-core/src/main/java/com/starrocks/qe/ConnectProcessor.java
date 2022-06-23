@@ -66,6 +66,7 @@ import java.io.StringReader;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousCloseException;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
@@ -136,7 +137,7 @@ public class ConnectProcessor {
         ctx.resetSessionVariable();
     }
 
-    private void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics) {
+    public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics) {
         // slow query
         long endTime = System.currentTimeMillis();
         long elapseMs = endTime - ctx.getStartTime();
@@ -237,19 +238,12 @@ public class ConnectProcessor {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
         // convert statement to Java string
         String originStmt = null;
-        try {
-            byte[] bytes = packetBuf.array();
-            int ending = packetBuf.limit() - 1;
-            while (ending >= 1 && bytes[ending] == '\0') {
-                ending--;
-            }
-            originStmt = new String(bytes, 1, ending, "UTF-8");
-        } catch (UnsupportedEncodingException e) {
-            // impossible
-            LOG.error("UTF8 is not supported in this environment.");
-            ctx.getState().setError("Unsupported character set(UTF-8)");
-            return;
+        byte[] bytes = packetBuf.array();
+        int ending = packetBuf.limit() - 1;
+        while (ending >= 1 && bytes[ending] == '\0') {
+            ending--;
         }
+        originStmt = new String(bytes, 1, ending, StandardCharsets.UTF_8);
         ctx.getAuditEventBuilder().reset();
         ctx.getAuditEventBuilder()
                 .setTimestamp(System.currentTimeMillis())

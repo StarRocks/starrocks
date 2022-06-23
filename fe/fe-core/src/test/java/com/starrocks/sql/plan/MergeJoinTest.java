@@ -20,7 +20,7 @@ public class MergeJoinTest extends PlanTestBase {
         PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("merge");
         String sql = " select count(a.v3) from t0 a join t0 b on a.v3 = b.v3;";
         String planFragment = getFragmentPlan(sql);
-        assertContains(planFragment, " 8:MERGE JOIN\n" +
+        assertContains(planFragment, "MERGE JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)");
 
         sql = " select a.v2 from t0 a join t0 b on a.v3 = b.v3;";

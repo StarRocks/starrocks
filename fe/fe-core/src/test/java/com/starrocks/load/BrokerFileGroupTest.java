@@ -18,6 +18,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
+import com.starrocks.qe.ConnectContext;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -35,6 +36,8 @@ public class BrokerFileGroupTest {
     private OlapTable olapTable;
     @Mocked
     private HiveTable hiveTable;
+    @Mocked
+    private ConnectContext ctx;
 
     @Before
     public void setUp() {

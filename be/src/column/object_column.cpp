@@ -129,6 +129,16 @@ void ObjectColumn<T>::append_default(size_t count) {
 }
 
 template <typename T>
+void ObjectColumn<T>::fill_default(const Filter& filter) {
+    for (size_t i = 0; i < filter.size(); i++) {
+        if (filter[i] == 1) {
+            _pool[i] = {};
+        }
+    }
+    _cache_ok = false;
+}
+
+template <typename T>
 Status ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
     size_t replace_num = src.size();
@@ -280,7 +290,7 @@ std::string ObjectColumn<BitmapValue>::debug_item(uint32_t idx) const {
 
 template <typename T>
 StatusOr<ColumnPtr> ObjectColumn<T>::upgrade_if_overflow() {
-    if (reach_capacity_limit()) {
+    if (capacity_limit_reached()) {
         return Status::InternalError("Size of ObjectColumn exceed the limit");
     }
     return nullptr;

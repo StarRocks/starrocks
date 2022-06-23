@@ -109,7 +109,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -1291,13 +1290,9 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
-            boolean notNeedLocalShuffle = aggregationNode.isNeedsFinalize() &&
-                    hasNoExchangeNodes(inputFragment.getPlanRoot());
-            boolean pipelineDopEnabled = ConnectContext.get() != null &&
-                    ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
-                    inputFragment.getPlanRoot().canUsePipeLine();
-            if (pipelineDopEnabled && notNeedLocalShuffle) {
-                inputFragment.setNeedsLocalShuffle(false);
+            // One phase aggregation prefer the inter-instance parallel to avoid local shuffle
+            if (node.isOnePhaseAgg()) {
+                estimateDopOfOnePhaseAgg(inputFragment);
             }
 
             inputFragment.setPlanRoot(aggregationNode);
@@ -1560,9 +1555,7 @@ public class PlanFragmentBuilder {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
-            fragment.setPipelineDop(fragment.getParallelExecNum());
-            fragment.setParallelExecNum(1);
-            fragment.setDopEstimated();
+            fragment.preferPipelineParallel();
         }
 
         /**
@@ -1575,9 +1568,7 @@ public class PlanFragmentBuilder {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
-            fragment.setPipelineDop(fragment.getParallelExecNum());
-            fragment.setParallelExecNum(1);
-            fragment.setDopEstimated();
+            fragment.preferPipelineParallel();
         }
 
         /**
@@ -1590,8 +1581,14 @@ public class PlanFragmentBuilder {
             if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
                 return;
             }
-            // To prevent ancestor nodes from adjusting parallelExecNum and pipelineDop.
-            fragment.setDopEstimated();
+            fragment.preferInstanceParallel();
+        }
+
+        private void estimateDopOfOnePhaseAgg(PlanFragment fragment) {
+            if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
+                return;
+            }
+            fragment.preferInstanceParallel();
         }
 
         // when enable_pipeline_engine=true and enable_global_runtime_filter=false, global runtime filter
@@ -1607,22 +1604,30 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalHashJoin(OptExpression optExpr, ExecPlan context) {
-            return visitPhysicalJoin(optExpr, context);
+            PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
+            PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+            return visitPhysicalJoin(leftFragment, rightFragment, optExpr, context);
         }
 
         @Override
         public PlanFragment visitPhysicalMergeJoin(OptExpression optExpr, ExecPlan context) {
-            PlanNode leftPlanRoot = visit(optExpr.inputAt(0), context).getPlanRoot();
-            PlanNode rightPlanRoot = visit(optExpr.inputAt(1), context).getPlanRoot();
-            context.getFragments().clear();
+            PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
+            PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+            PlanNode leftPlanRoot = leftFragment.getPlanRoot();
+            PlanNode rightPlanRoot = rightFragment.getPlanRoot();
+
             OptExpression leftExpression = optExpr.inputAt(0);
             OptExpression rightExpression = optExpr.inputAt(1);
+
             boolean needDealSort = leftExpression.getInputs().size() > 0 && rightExpression.getInputs().size() > 0;
             if (needDealSort) {
                 optExpr.setChild(0, leftExpression.inputAt(0));
                 optExpr.setChild(1, rightExpression.inputAt(0));
+                leftFragment.setPlanRoot(leftPlanRoot.getChild(0));
+                rightFragment.setPlanRoot(rightPlanRoot.getChild(0));
             }
-            PlanFragment planFragment = visitPhysicalJoin(optExpr, context);
+
+            PlanFragment planFragment = visitPhysicalJoin(leftFragment, rightFragment, optExpr, context);
             if (needDealSort) {
                 leftExpression.setChild(0, optExpr.inputAt(0));
                 rightExpression.setChild(0, optExpr.inputAt(1));
@@ -1634,9 +1639,9 @@ public class PlanFragmentBuilder {
             return planFragment;
         }
 
-        private PlanFragment visitPhysicalJoin(OptExpression optExpr, ExecPlan context) {
-            PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
-            PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+        private PlanFragment visitPhysicalJoin(PlanFragment leftFragment, PlanFragment rightFragment,
+                                               OptExpression optExpr, ExecPlan context) {
+
             PhysicalJoinOperator node = (PhysicalJoinOperator) optExpr.getOp();
 
             ColumnRefSet leftChildColumns = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
@@ -2105,10 +2110,10 @@ public class PlanFragmentBuilder {
             }
 
             SetOperationNode setOperationNode;
-            boolean isUnionAll = false;
+            boolean isUnion = false;
             if (operatorType.equals(OperatorType.PHYSICAL_UNION)) {
+                isUnion = true;
                 setOperationNode = new UnionNode(context.getNextNodeId(), setOperationTuple.getId());
-                isUnionAll = ((PhysicalUnionOperator) setOperation).isUnionAll();
                 setOperationNode.setFirstMaterializedChildIdx_(optExpr.arity());
             } else if (operatorType.equals(OperatorType.PHYSICAL_EXCEPT)) {
                 setOperationNode = new ExceptNode(context.getNextNodeId(), setOperationTuple.getId());
@@ -2152,7 +2157,7 @@ public class PlanFragmentBuilder {
 
                 materializedResultExprLists.add(materializedExpressions);
 
-                if (isUnionAll) {
+                if (isUnion) {
                     fragment.setOutputPartition(DataPartition.RANDOM);
                 } else {
                     fragment.setOutputPartition(DataPartition.hashPartitioned(materializedExpressions));

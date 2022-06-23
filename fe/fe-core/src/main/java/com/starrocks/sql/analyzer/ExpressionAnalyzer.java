@@ -83,6 +83,11 @@ public class ExpressionAnalyzer {
         bottomUpAnalyze(visitor, expression, scope);
     }
 
+    public void analyzeIgnoreSlot(Expr expression, AnalyzeState analyzeState, Scope scope) {
+        IgnoreSlotVisitor visitor = new IgnoreSlotVisitor(analyzeState, session);
+        bottomUpAnalyze(visitor, expression, scope);
+    }
+
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
         for (Expr expr : expression.getChildren()) {
             bottomUpAnalyze(visitor, expr, scope);
@@ -91,7 +96,7 @@ public class ExpressionAnalyzer {
         visitor.visit(expression, scope);
     }
 
-    private class Visitor extends AstVisitor<Void, Scope> {
+    static class Visitor extends AstVisitor<Void, Scope> {
         private final AnalyzeState analyzeState;
         private final ConnectContext session;
 
@@ -537,12 +542,6 @@ public class ExpressionAnalyzer {
                 //TODO: fix how we equal count distinct.
                 fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                if (fn instanceof AggregateFunction) {
-                    throw new SemanticException("Time Type can not used in %s function",
-                            fnName);
-                }
             } else if (FunctionSet.decimalRoundFunctions.contains(fnName) ||
                     Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
                 // Since the priority of decimal version is higher than double version (according functionId),
@@ -551,6 +550,12 @@ public class ExpressionAnalyzer {
                 // lacking of specific decimal type process defined in `getDecimalV3Function`. So we force round functions
                 // to go through `getDecimalV3Function` here
                 fn = getDecimalV3Function(node, argumentTypes);
+            } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                if (fn instanceof AggregateFunction) {
+                    throw new SemanticException("Time Type can not used in %s function",
+                            fnName);
+                }
             } else if (FunctionSet.STR_TO_DATE.equals(fnName)) {
                 fn = getStrToDateFunction(node, argumentTypes);
             } else {
@@ -855,9 +860,27 @@ public class ExpressionAnalyzer {
         }
     }
 
+
+    static class IgnoreSlotVisitor extends Visitor {
+        public IgnoreSlotVisitor(AnalyzeState analyzeState, ConnectContext session) {
+            super(analyzeState, session);
+        }
+
+        @Override
+        public Void visitSlot(SlotRef node, Scope scope) {
+            return null;
+        }
+    }
+
     public static void analyzeExpression(Expr expression, AnalyzeState state, Scope scope, ConnectContext session) {
         ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
         expressionAnalyzer.analyze(expression, state, scope);
+    }
+
+    public static void analyzeExpressionIgnoreSlot(Expr expression, ConnectContext session) {
+        ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
+        expressionAnalyzer.analyzeIgnoreSlot(expression, new AnalyzeState(),
+                new Scope(RelationId.anonymous(), new RelationFields()));
     }
 
 }

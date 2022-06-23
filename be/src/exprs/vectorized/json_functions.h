@@ -121,11 +121,6 @@ public:
      */
     DEFINE_VECTORIZED_FN(json_string);
 
-    /**
-     * @param: [json_object, json_path]
-     * @paramType: [JsonColumn, BinaryColumn]
-     * @return: JsonColumn
-     */
     DEFINE_VECTORIZED_FN(json_query);
 
     /**
@@ -189,24 +184,46 @@ public:
     }
 
 private:
-#define APPEND_NULL_AND_RETURN_IF_ERROR(builder, err) \
-    do {                                              \
-        const simdjson::error_code& e = err;          \
-        if (UNLIKELY(e)) {                            \
-            builder.append_null();                    \
-            return;                                   \
-        }                                             \
-    } while (false)
+    /**
+     * Parse string column as json column
+     * @param: 
+     * @paramType: 
+     * @return: JsonColumn
+     */
+    DEFINE_VECTORIZED_FN(_string_json);
+
+    /**
+     * Convert json column to unescaped binary column with the first/last quote trimmed.
+     * @param: 
+     * @paramType: 
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(_json_string_unescaped);
+
+    /**
+     * Convert json column to int column
+     * @param: [json_column]
+     * @paramType: [JsonColumn]
+     * @return: Int32Column
+     */
+    DEFINE_VECTORIZED_FN(_json_int);
+
+    /**
+     * Convert json column to double column
+     * @param: [json_column]
+     * @paramType: [JsonColumn]
+     * @return: DoubleColumn
+     */
+    DEFINE_VECTORIZED_FN(_json_double);
+
+    /**
+     * @param: [json_object, json_path]
+     * @paramType: [JsonColumn, BinaryColumn]
+     * @return: JsonColumn
+     */
 
     static Status _get_parsed_paths(const std::vector<std::string>& path_exprs,
                                     std::vector<SimpleJsonPath>* parsed_paths);
-
-    /* Following functions are only used in test. */
-    template <PrimitiveType primitive_type>
-    static ColumnPtr _iterate_rows(FunctionContext* context, const Columns& columns);
-
-    template <PrimitiveType primitive_type>
-    static void _build_column(ColumnBuilder<primitive_type>& result, simdjson::ondemand::value& value);
 };
 
 } // namespace vectorized

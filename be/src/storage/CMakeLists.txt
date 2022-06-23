@@ -109,7 +109,6 @@ add_library(Storage STATIC
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
     task/engine_storage_migration_task.cpp
-    task/engine_publish_version_task.cpp
     task/engine_alter_tablet_task.cpp
     column_vector.cpp
     aggregate_iterator.cpp
@@ -165,4 +164,5 @@ add_library(Storage STATIC
     lake/starlet_group_assigner.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp
+    lake/metadata_iterator.cpp
 )

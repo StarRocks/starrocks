@@ -43,7 +43,7 @@ public class SqlModeHelper {
     //  really meaningful.
 
     /* When a new session is create, its sql mode is set to MODE_DEFAULT */
-    public static final long MODE_DEFAULT = 0L;
+    public static final long MODE_DEFAULT = 32L;
     /* Bits for different SQL MODE modes, you can add custom SQL MODE here */
     public static final long MODE_REAL_AS_FLOAT = 1L;
     public static final long MODE_PIPES_AS_CONCAT = 1L << 1;
@@ -53,6 +53,7 @@ public class SqlModeHelper {
     public static final long MODE_ONLY_FULL_GROUP_BY = 1L << 5;
     public static final long MODE_NO_UNSIGNED_SUBTRACTION = 1L << 6;
     public static final long MODE_NO_DIR_IN_CREATE = 1L << 7;
+    public static final long MODE_DOUBLE_LITERAL = 1L << 17;
     public static final long MODE_ANSI = 1L << 18;
     public static final long MODE_NO_AUTO_VALUE_ON_ZERO = 1L << 19;
     public static final long MODE_NO_BACKSLASH_ESCAPES = 1L << 20;
@@ -78,7 +79,7 @@ public class SqlModeHelper {
     public static final long MODE_ALLOWED_MASK =
             (MODE_REAL_AS_FLOAT | MODE_PIPES_AS_CONCAT | MODE_ANSI_QUOTES |
                     MODE_IGNORE_SPACE | MODE_NOT_USED | MODE_ONLY_FULL_GROUP_BY |
-                    MODE_NO_UNSIGNED_SUBTRACTION | MODE_NO_DIR_IN_CREATE |
+                    MODE_NO_UNSIGNED_SUBTRACTION | MODE_NO_DIR_IN_CREATE | MODE_DOUBLE_LITERAL |
                     MODE_NO_AUTO_VALUE_ON_ZERO | MODE_NO_BACKSLASH_ESCAPES |
                     MODE_STRICT_TRANS_TABLES | MODE_STRICT_ALL_TABLES | MODE_NO_ZERO_IN_DATE |
                     MODE_NO_ZERO_DATE | MODE_INVALID_DATES | MODE_ERROR_FOR_DIVISION_BY_ZERO |
@@ -99,6 +100,7 @@ public class SqlModeHelper {
         sqlModeSet.put("ONLY_FULL_GROUP_BY", MODE_ONLY_FULL_GROUP_BY);
         sqlModeSet.put("NO_UNSIGNED_SUBTRACTION", MODE_NO_UNSIGNED_SUBTRACTION);
         sqlModeSet.put("NO_DIR_IN_CREATE", MODE_NO_DIR_IN_CREATE);
+        sqlModeSet.put("MODE_DOUBLE_LITERAL", MODE_DOUBLE_LITERAL);
         sqlModeSet.put("ANSI", MODE_ANSI);
         sqlModeSet.put("NO_AUTO_VALUE_ON_ZERO", MODE_NO_AUTO_VALUE_ON_ZERO);
         sqlModeSet.put("NO_BACKSLASH_ESCAPES", MODE_NO_BACKSLASH_ESCAPES);

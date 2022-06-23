@@ -27,6 +27,7 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
@@ -153,6 +154,10 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    public R visitCreateTableStatement(CreateTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -166,6 +171,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateMaterializedViewStmt(CreateMaterializedViewStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitAlterMaterializedViewStatement(AlterMaterializedViewStatement statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -243,6 +252,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+
+    public R visitUseStatement(UseStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ----------------- Catalog Clause -------------
@@ -471,4 +484,5 @@ public abstract class AstVisitor<R, C> {
     public R visitGroupByClause(GroupByClause node, C context) {
         return null;
     }
+
 }

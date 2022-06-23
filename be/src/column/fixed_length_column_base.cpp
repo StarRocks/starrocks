@@ -10,12 +10,13 @@
 #include "storage/decimal12.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
+#include "util/value_generator.h"
 
 namespace starrocks::vectorized {
 
 template <typename T>
 StatusOr<ColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
-    if (reach_capacity_limit()) {
+    if (capacity_limit_reached()) {
         return Status::InternalError("Size of FixedLengthColumn exceed the limit");
     } else {
         return nullptr;
@@ -46,6 +47,16 @@ void FixedLengthColumnBase<T>::append_value_multiple_times(const Column& src, ui
     _data.resize(orig_size + size);
     for (size_t i = 0; i < size; ++i) {
         _data[orig_size + i] = src_data[index];
+    }
+}
+
+template <typename T>
+void FixedLengthColumnBase<T>::fill_default(const Filter& filter) {
+    T val = DefaultValueGenerator<T>::next_value();
+    for (size_t i = 0; i < filter.size(); i++) {
+        if (filter[i] == 1) {
+            _data[i] = val;
+        }
     }
 }
 

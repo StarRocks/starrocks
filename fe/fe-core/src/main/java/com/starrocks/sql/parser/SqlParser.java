@@ -49,8 +49,9 @@ public class SqlParser {
 
     /**
      * parse sql to expression, only supports new parser
+     *
      * @param expressionSql expression sql
-     * @param sqlMode sqlMode
+     * @param sqlMode       sqlMode
      * @return Expr
      */
     public static Expr parseSqlToExpr(String expressionSql, long sqlMode) {
@@ -89,6 +90,8 @@ public class SqlParser {
     }
 
     private static List<String> splitSQL(String sql) {
+        sql = removeComment(sql);
+
         List<String> sqlLists = Lists.newArrayList();
         boolean inString = false;
         int sqlStartOffset = 0;
@@ -114,5 +117,64 @@ public class SqlParser {
             sqlLists.add(last);
         }
         return sqlLists;
+    }
+
+    /*
+     * The new version of parser can handle comments (discarded directly in lexical analysis).
+     * But there are some special cases when the old and new parsers are compatible.
+     * Because the parser does not support all statements, we split the sql according to ";".
+     * For example, sql: --xxx;\nselect 1; According to the old version, it will be parsed into one statement,
+     * but after splitting according to the statement,
+     * two statements will appear. This leads to incompatibility.
+     * Because originSql is stored in the old version of the materialized view, it is the index stored in the old version.
+     * */
+    private static String removeComment(String sql) {
+        boolean inString = false;
+        char inStringStart = '-';
+        boolean isSimpleComment = false;
+        boolean isBracketComment = false;
+
+        boolean inComment = false;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < sql.length(); ++i) {
+            if (inComment) {
+                if (sql.charAt(i) == '\n' && isSimpleComment) {
+                    inComment = false;
+                }
+
+                if (sql.charAt(i) == '*' && i != sql.length() - 1 && sql.charAt(i + 1) == '/' && isBracketComment) {
+                    inComment = false;
+                    i++;
+                }
+
+                continue;
+            }
+
+            if (sql.charAt(i) == '-' && i != sql.length() - 1 && sql.charAt(i + 1) == '-') {
+                if (!inString) {
+                    inComment = true;
+                    isSimpleComment = true;
+                    continue;
+                }
+            }
+
+            if (sql.charAt(i) == '/' && i != sql.length() - 2 && sql.charAt(i + 1) == '*' && sql.charAt(i + 2) != '+') {
+                if (!inString) {
+                    inComment = true;
+                    isBracketComment = true;
+                    continue;
+                }
+            }
+
+            sb.append(sql.charAt(i));
+
+            if (!inString && (sql.charAt(i) == '\"' || sql.charAt(i) == '\'' || sql.charAt(i) == '`')) {
+                inString = true;
+                inStringStart = sql.charAt(i);
+            } else if (inString && (sql.charAt(i) == inStringStart)) {
+                inString = false;
+            }
+        }
+        return sb.toString();
     }
 }

@@ -60,6 +60,20 @@ public class MaterializedIndexMetaTest {
     }
 
     @Test
+    public void testSetDefineExprCaseInsensitive() {
+        List<Column> schema = Lists.newArrayList();
+        Column column = new Column("UPPER", Type.ARRAY_VARCHAR);
+        schema.add(column);
+        MaterializedIndexMeta meta = new MaterializedIndexMeta(0, schema, 0, 0,
+                (short) 0, TStorageType.COLUMN, KeysType.DUP_KEYS, null);
+
+        Map<String, Expr> columnNameToDefineExpr = Maps.newHashMap();
+        columnNameToDefineExpr.put("upper", new StringLiteral());
+        meta.setColumnsDefineExpr(columnNameToDefineExpr);
+        Assert.assertNotNull(column.getDefineExpr());
+    }
+
+    @Test
     public void testSerializeMaterializedIndexMeta(@Mocked CreateMaterializedViewStmt stmt)
             throws IOException, AnalysisException {
         // 1. Write objects to file
@@ -71,7 +85,7 @@ public class MaterializedIndexMetaTest {
                 CreateMaterializedViewStmt.MATERIALIZED_VIEW_NAME_PREFIX + FunctionSet.BITMAP_UNION + "_" + "k1";
         List<Column> schema = Lists.newArrayList();
         ColumnDef.DefaultValueDef defaultValue1 = new ColumnDef.DefaultValueDef(true, new StringLiteral("1"));
-        schema.add(new Column("k1", Type.TINYINT, true, null, true, defaultValue1, "abc"));
+        schema.add(new Column("K1", Type.TINYINT, true, null, true, defaultValue1, "abc"));
         schema.add(new Column("k2", Type.SMALLINT, true, null, true, defaultValue1, "debug"));
         schema.add(new Column("k3", Type.INT, true, null, true, defaultValue1, ""));
         schema.add(new Column("k4", Type.BIGINT, true, null, true, defaultValue1, "**"));
@@ -89,8 +103,8 @@ public class MaterializedIndexMetaTest {
         short shortKeyColumnCount = 1;
         MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(1, schema, 1, 1, shortKeyColumnCount,
                 TStorageType.COLUMN, KeysType.DUP_KEYS, new OriginStatement(
-                "create materialized view test as select k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, sum(v1), "
-                        + "bitmap_union(to_bitmap(k1)) from test group by k1, k2, k3, k4, k5, "
+                "create materialized view test as select K1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11, k12, sum(v1), "
+                        + "bitmap_union(to_bitmap(K1)) from test group by K1, k2, k3, k4, k5, "
                         + "k6, k7, k8, k9, k10, k11, k12",
                 0));
         indexMeta.write(out);

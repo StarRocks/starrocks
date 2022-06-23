@@ -159,6 +159,20 @@ public class AnalyzeTestUtil {
                 "create table tp(c1 int, c2 int, c3 int) DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
                         + "(PARTITION p1 VALUES [('-2147483648'), ('10')), PARTITION p2 VALUES [('10'), ('20')))"
                         + " DISTRIBUTED BY HASH(`c2`) BUCKETS 2 PROPERTIES('replication_num'='1');");
+        starRocksAssert.withTable("CREATE TABLE test.table_to_drop\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values less than('2020-02-01'),\n" +
+                "    PARTITION p2 values less than('2020-03-01')\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withView("create view test.view_to_drop as select * from test.table_to_drop;");
     }
 
     public static ConnectContext getConnectContext() {
@@ -214,10 +228,12 @@ public class AnalyzeTestUtil {
             Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
         } catch (ParsingException | SemanticException | UnsupportedException e) {
+            e.printStackTrace();
             if (!exceptMessage.equals("")) {
                 Assert.assertTrue(e.getMessage().contains(exceptMessage));
             }
         } catch (Exception e) {
+            e.printStackTrace();
             Assert.fail("analyze exception");
         }
     }

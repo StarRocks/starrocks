@@ -13,7 +13,6 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.common.TypeManager;
 
 import java.util.Arrays;
 import java.util.List;
@@ -21,24 +20,24 @@ import java.util.Set;
 
 public class DecimalV3FunctionAnalyzer {
     public static final Set<String> DECIMAL_UNARY_FUNCTION_SET =
-            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+            new ImmutableSortedSet.Builder<>(String::compareTo)
                     .add(FunctionSet.ABS).add(FunctionSet.POSITIVE).add(FunctionSet.NEGATIVE)
                     .add(FunctionSet.MONEY_FORMAT).build();
 
     public static final Set<String> DECIMAL_IDENTICAL_TYPE_FUNCTION_SET =
-            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
-                    .add(FunctionSet.LEAST).add(FunctionSet.GREATEST).add(FunctionSet.NULL_IF)
-                    .add(FunctionSet.IF_NULL).add(FunctionSet.COALESCE).add(FunctionSet.MOD).build();
+            new ImmutableSortedSet.Builder<>(String::compareTo)
+                    .add(FunctionSet.LEAST).add(FunctionSet.GREATEST).add(FunctionSet.NULLIF)
+                    .add(FunctionSet.IFNULL).add(FunctionSet.COALESCE).add(FunctionSet.MOD).build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION_SAME_TYPE =
-            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+            new ImmutableSortedSet.Builder<>(String::compareTo)
                     .add(FunctionSet.MAX).add(FunctionSet.MIN)
                     .add(FunctionSet.LEAD).add(FunctionSet.LAG)
                     .add(FunctionSet.FIRST_VALUE).add(FunctionSet.LAST_VALUE)
                     .add(FunctionSet.ANY_VALUE).add(FunctionSet.ARRAY_AGG).build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION_WIDER_TYPE =
-            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+            new ImmutableSortedSet.Builder<>(String::compareTo)
                     .add(FunctionSet.COUNT).add(FunctionSet.SUM).add(FunctionSet.SUM_DISTINCT)
                     .add(FunctionSet.MULTI_DISTINCT_SUM).add(FunctionSet.AVG).add(FunctionSet.VARIANCE)
                     .add(FunctionSet.VARIANCE_POP).add(FunctionSet.VAR_POP).add(FunctionSet.VARIANCE_SAMP)
@@ -46,13 +45,17 @@ public class DecimalV3FunctionAnalyzer {
                     .add(FunctionSet.STDDEV_SAMP).build();
 
     public static final Set<String> DECIMAL_AGG_VARIANCE_STDDEV_TYPE =
-            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+            new ImmutableSortedSet.Builder<>(String::compareTo)
                     .add(FunctionSet.VARIANCE).add(FunctionSet.VARIANCE_POP).add(FunctionSet.VAR_POP)
                     .add(FunctionSet.VARIANCE_SAMP).add(FunctionSet.VAR_SAMP).add(FunctionSet.STD)
                     .add(FunctionSet.STDDEV).add(FunctionSet.STDDEV_POP).add(FunctionSet.STDDEV_SAMP).build();
 
+    public static final Set<String> DECIMAL_SUM_FUNCTION_TYPE =
+            new ImmutableSortedSet.Builder<>(String::compareTo).add(FunctionSet.SUM)
+                    .add(FunctionSet.SUM_DISTINCT).add(FunctionSet.MULTI_DISTINCT_SUM).build();
+
     public static final Set<String> DECIMAL_AGG_FUNCTION =
-            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+            new ImmutableSortedSet.Builder<>(String::compareTo)
                     .addAll(DECIMAL_AGG_FUNCTION_SAME_TYPE)
                     .addAll(DECIMAL_AGG_FUNCTION_WIDER_TYPE).build();
 
@@ -185,11 +188,19 @@ public class DecimalV3FunctionAnalyzer {
             } else if (fn.functionName().equals(FunctionSet.AVG)) {
                 // avg on decimal complies with Snowflake-style
                 ScalarType decimal128p38s0 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
-                TypeManager.TypeTriple triple = TypeManager.getReturnTypeOfDecimal(
-                        ArithmeticExpr.Operator.DIVIDE, (ScalarType) argType, decimal128p38s0);
+                final ArithmeticExpr.TypeTriple triple =
+                        ArithmeticExpr.getReturnTypeOfDecimal(ArithmeticExpr.Operator.DIVIDE, (ScalarType) argType,
+                                decimal128p38s0);
                 returnType = triple.returnType;
             } else if (DECIMAL_AGG_VARIANCE_STDDEV_TYPE.contains(fn.functionName())) {
                 returnType = argType;
+            } else if (argType.isDecimalV3() && DECIMAL_SUM_FUNCTION_TYPE.contains(fn.functionName())) {
+                // For decimal aggregation sum, there is a risk of overflow if the scale is too large,
+                // so we limit the maximum scale for this case
+                if (((ScalarType) argType).getScalarScale() > 18) {
+                    argType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 18);
+                    returnType = argType;
+                }
             }
         }
         AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), Arrays.asList(argType), returnType,

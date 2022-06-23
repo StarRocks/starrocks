@@ -1252,7 +1252,11 @@ public class OlapTable extends Table implements GsonPostProcessable {
             LOG.warn("failed to copy olap table: " + getName());
             return null;
         }
+        return selectiveCopyInternal(copied, reservedPartitions, resetState, extState);
+    }
 
+    protected OlapTable selectiveCopyInternal(OlapTable copied, Collection<String> reservedPartitions, boolean resetState,
+                                              IndexExtState extState) {
         if (resetState) {
             // remove shadow index from copied table
             List<MaterializedIndex> shadowIndex =
@@ -1668,6 +1672,31 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 renamePartition(tempPartitionNames.get(i), partitionNames.get(i));
             }
         }
+    }
+
+    // used for unpartitioned table in insert overwrite
+    // replace partition with temp partition
+    public void replacePartition(String sourcePartitionName, String tempPartitionName) {
+        if (partitionInfo.getType() != PartitionType.UNPARTITIONED) {
+            return;
+        }
+        // drop source partition
+        Partition srcPartition = nameToPartition.get(sourcePartitionName);
+        if (srcPartition != null) {
+            idToPartition.remove(srcPartition.getId());
+            nameToPartition.remove(sourcePartitionName);
+            partitionInfo.dropPartition(srcPartition.getId());
+            GlobalStateMgr.getCurrentState().onErasePartition(srcPartition);
+        }
+
+        Partition partition = tempPartitions.getPartition(tempPartitionName);
+        // add
+        addPartition(partition);
+        // drop
+        tempPartitions.dropPartition(tempPartitionName, false);
+
+        // rename partition
+        renamePartition(tempPartitionName, sourcePartitionName);
     }
 
     public void addTempPartition(Partition partition) {

@@ -53,12 +53,18 @@ public class OperationType {
     public static final short OP_BATCH_MODIFY_PARTITION = 211;
 
     // 20~29 120~129 220~229 ...
+    @Deprecated
     public static final short OP_START_ROLLUP = 20;
+    @Deprecated
     public static final short OP_FINISH_ROLLUP = 21;
+    @Deprecated
     public static final short OP_CANCEL_ROLLUP = 23;
     public static final short OP_DROP_ROLLUP = 24;
+    @Deprecated
     public static final short OP_START_SCHEMA_CHANGE = 25;
+    @Deprecated
     public static final short OP_FINISH_SCHEMA_CHANGE = 26;
+    @Deprecated
     public static final short OP_CANCEL_SCHEMA_CHANGE = 27;
     public static final short OP_CLEAR_ROLLUP_INFO = 28;
     public static final short OP_FINISH_CONSISTENCY_CHECK = 29;
@@ -112,14 +118,6 @@ public class OperationType {
     public static final short OP_GLOBAL_VARIABLE = 73;
 
     public static final short OP_CREATE_CLUSTER = 74;
-    public static final short OP_DROP_CLUSTER = 75;
-    public static final short OP_EXPAND_CLUSTER = 76;
-    public static final short OP_MIGRATE_CLUSTER = 77;
-    public static final short OP_LINK_CLUSTER = 78;
-    public static final short OP_ENTER_CLUSTER = 79;
-    public static final short OP_SHOW_CLUSTERS = 80;
-    public static final short OP_UPDATE_DB = 82;
-    public static final short OP_DROP_LINKDB = 83;
     public static final short OP_GLOBAL_VARIABLE_V2 = 84;
 
     public static final short OP_ADD_BROKER = 85;
@@ -140,7 +138,9 @@ public class OperationType {
     //real time load 100 -108
     public static final short OP_UPSERT_TRANSACTION_STATE = 100;
     public static final short OP_DELETE_TRANSACTION_STATE = 101;
+    @Deprecated
     public static final short OP_FINISHING_ROLLUP = 102;
+    @Deprecated
     public static final short OP_FINISHING_SCHEMA_CHANGE = 103;
     public static final short OP_SAVE_TRANSACTION_ID = 104;
 
@@ -226,7 +226,14 @@ public class OperationType {
     public static final short OP_UPDATE_TASK_RUN = 10082;
     public static final short OP_DROP_TASK_RUNS = 10083;
 
+    // materialized view
+    public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
+    public static final short OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME = 10092;
+
     public static final short OP_CREATE_MATERIALIZED_VIEW = 10094;
+    public static final short OP_CREATE_INSERT_OVERWRITE = 10095;
+    public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10096;
+
     // manage system node info 10100 ~ 10120
     public static final short OP_UPDATE_FRONTEND = 10101;
 }

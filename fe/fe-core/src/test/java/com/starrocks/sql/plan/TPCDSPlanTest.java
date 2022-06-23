@@ -575,4 +575,48 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
 
         Assert.assertTrue(plan.contains("dict_col=c_birth_country"));
     }
+
+    @Test
+    public void expressionExtract() throws Exception {
+        String sql = "\n" +
+                "select count(1)\n" +
+                " from store_sales\n" +
+                "     ,customer_demographics\n" +
+                "     ,customer_address\n" +
+                " where 1=1\n" +
+                " and((cd_demo_sk = ss_cdemo_sk\n" +
+                "  and cd_marital_status = 'M'\n" +
+                "  and cd_education_status = 'Advanced Degree'\n" +
+                "  and ss_sales_price between 100.00 and 150.00\n" +
+                "     )or\n" +
+                "     (cd_demo_sk = ss_cdemo_sk\n" +
+                "  and cd_marital_status = 'S'\n" +
+                "  and cd_education_status = 'College'\n" +
+                "  and ss_sales_price between 50.00 and 100.00\n" +
+                "     ) or\n" +
+                "     (cd_demo_sk = ss_cdemo_sk\n" +
+                "  and cd_marital_status = 'W'\n" +
+                "  and cd_education_status = '2 yr Degree'\n" +
+                "  and ss_sales_price between 150.00 and 200.00\n" +
+                "     ))\n" +
+                " and((ss_addr_sk = ca_address_sk\n" +
+                "  and ca_country = 'United States'\n" +
+                "  and ca_state in ('TX', 'OH', 'TX')\n" +
+                "  and ss_net_profit between 100 and 200\n" +
+                "     ) or\n" +
+                "     (ss_addr_sk = ca_address_sk\n" +
+                "  and ca_country = 'United States'\n" +
+                "  and ca_state in ('OR', 'NM', 'KY')\n" +
+                "  and ss_net_profit between 150 and 300\n" +
+                "     ) or\n" +
+                "     (ss_addr_sk = ca_address_sk\n" +
+                "  and ca_country = 'United States'\n" +
+                "  and ca_state in ('VA', 'TX', 'MS')\n" +
+                "  and ss_net_profit between 50 and 250\n" +
+                "     ));";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan,
+                "PREDICATES: 14: ss_sales_price >= 50, 14: ss_sales_price <= 200, 23: ss_net_profit >= 50, 23: ss_net_profit <= 300");
+    }
 }

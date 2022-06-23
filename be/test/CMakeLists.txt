@@ -120,7 +120,7 @@ set(EXEC_FILES
         ./formats/parquet/page_reader_test.cpp
         ./formats/parquet/metadata_test.cpp
         ./formats/parquet/group_reader_test.cpp
-        ./formats/parquet/file_reader_test.cpp        
+        ./formats/parquet/file_reader_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_utils_test.cpp
@@ -151,7 +151,9 @@ set(EXEC_FILES
         ./storage/primary_key_encoder_test.cpp
         ./storage/tablet_mgr_test.cpp
         ./storage/version_graph_test.cpp
-        storage/lake/group_assigner_test.cpp
+        ./storage/lake/async_delta_writer_test.cpp
+        ./storage/lake/delta_writer_test.cpp
+        ./storage/lake/group_assigner_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/tablet_writer_test.cpp
         ./storage/rowset_update_state_test.cpp
@@ -217,6 +219,7 @@ set(EXEC_FILES
         ./runtime/free_list_test.cpp
         ./runtime/int128_arithmetic_ops_test.cpp
         ./runtime/kafka_consumer_pipe_test.cpp
+        ./runtime/lake_tablets_channel_test.cpp
         ./runtime/large_int_value_test.cpp
         ./runtime/memory/chunk_allocator_test.cpp
         ./runtime/memory/system_allocator_test.cpp
@@ -262,6 +265,7 @@ set(EXEC_FILES
         ./util/parse_util_test.cpp
         ./util/path_trie_test.cpp
         ./util/path_util_test.cpp
+        ./util/priority_queue_test.cpp
         ./util/radix_sort_test.cpp
         ./util/rle_encoding_test.cpp
         ./util/scoped_cleanup_test.cpp
@@ -281,27 +285,28 @@ set(EXEC_FILES
         ./util/starrocks_metrics_test.cpp
         ./util/system_metrics_test.cpp
         ./gutil/sysinfo-test.cc
+        ./service/lake_service_test.cpp
         )
 
 if ("${USE_STAROS}" STREQUAL "ON")
-        list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
-endif()
+    list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
+endif ()
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-        set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
-        set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-        set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
-        set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-        set_source_files_properties(./formats/json/binary_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-        set_source_files_properties(./formats/json/numeric_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-        set_source_files_properties(./formats/json/nullable_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
-endif()
+    set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+    set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+    set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx)
+    set_source_files_properties(./exprs/vectorized/json_functions_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+    set_source_files_properties(./formats/json/binary_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+    set_source_files_properties(./formats/json/numeric_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+    set_source_files_properties(./formats/json/nullable_column_test.cpp PROPERTIES COMPILE_FLAGS -mno-avx2)
+endif ()
 
 if (USE_AVX2)
     set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
-endif()
+endif ()
 
 add_executable(starrocks_test ${EXEC_FILES})
 

@@ -31,6 +31,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
+import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -39,6 +40,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TUniqueId;
+import io.opentelemetry.api.trace.Span;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -203,7 +205,7 @@ public class TransactionState implements Writable {
     private CountDownLatch latch;
 
     // this state need not to be serialized
-    private Map<Long, PublishVersionTask> publishVersionTasks;
+    private Map<Long, PublishVersionTask> publishVersionTasks; // Only for OlapTable
     private boolean hasSendTask;
     private long publishVersionTime = -1;
     private TransactionStatus preStatus = null;
@@ -228,6 +230,9 @@ public class TransactionState implements Writable {
 
     private long lastErrTimeMs = 0;
 
+    private Span txnSpan = null;
+    private String traceParent = null;
+
     public TransactionState() {
         this.dbId = -1;
         this.tableIdList = Lists.newArrayList();
@@ -245,6 +250,8 @@ public class TransactionState implements Writable {
         this.publishVersionTasks = Maps.newHashMap();
         this.hasSendTask = false;
         this.latch = new CountDownLatch(1);
+        this.txnSpan = TraceManager.startSpan("txn");
+        this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
     }
 
     public TransactionState(long dbId, List<Long> tableIdList, long transactionId, String label, TUniqueId requestId,
@@ -269,6 +276,10 @@ public class TransactionState implements Writable {
         this.latch = new CountDownLatch(1);
         this.callbackId = callbackId;
         this.timeoutMs = timeoutMs;
+        this.txnSpan = TraceManager.startSpan("txn");
+        txnSpan.setAttribute("txn_id", transactionId);
+        txnSpan.setAttribute("label", label);
+        this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
     }
 
     public void setErrorReplicas(Set<Long> newErrorReplicas) {
@@ -280,6 +291,7 @@ public class TransactionState implements Writable {
                 || transactionStatus == TransactionStatus.COMMITTED;
     }
 
+    // Only for OlapTable
     public void addPublishVersionTask(Long backendId, PublishVersionTask task) {
         this.publishVersionTasks.put(backendId, task);
     }
@@ -372,10 +384,16 @@ public class TransactionState implements Writable {
             if (MetricRepo.isInit) {
                 MetricRepo.COUNTER_TXN_SUCCESS.increase(1L);
             }
+            txnSpan.addEvent("set_visible");
+            txnSpan.end();
         } else if (transactionStatus == TransactionStatus.ABORTED) {
             if (MetricRepo.isInit) {
                 MetricRepo.COUNTER_TXN_FAILED.increase(1L);
             }
+            txnSpan.setAttribute("state", "aborted");
+            txnSpan.end();
+        } else if (transactionStatus == TransactionStatus.COMMITTED) {
+            txnSpan.addEvent("set_committed");
         }
     }
 
@@ -397,7 +415,7 @@ public class TransactionState implements Writable {
                 default:
                     break;
             }
-        } else if (callback == null && callbackId > 0) {
+        } else if (callbackId > 0) {
             switch (transactionStatus) {
                 case COMMITTED:
                     // Maybe listener has been deleted. The txn need to be aborted later.
@@ -698,7 +716,7 @@ public class TransactionState implements Writable {
         return lastErrTimeMs;
     }
 
-    // create publish version task for transaction
+    // create publish version task for OlapTable transaction
     public List<PublishVersionTask> createPublishVersionTask() {
         List<PublishVersionTask> tasks = new ArrayList<>();
         if (this.hasSendTask()) {
@@ -741,10 +759,19 @@ public class TransactionState implements Writable {
                     this.getDbId(),
                     commitTime,
                     partitionVersions,
+                    traceParent,
                     createTime);
             this.addPublishVersionTask(backendId, task);
             tasks.add(task);
         }
         return tasks;
+    }
+
+    public Span getTxnSpan() {
+        return txnSpan;
+    }
+
+    public String getTraceParent() {
+        return traceParent;
     }
 }

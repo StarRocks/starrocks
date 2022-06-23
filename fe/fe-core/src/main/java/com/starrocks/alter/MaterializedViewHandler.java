@@ -468,7 +468,10 @@ public class MaterializedViewHandler extends AlterHandler {
                 if (mvColumnItem.isKey()) {
                     ++numOfKeys;
                 }
-                Preconditions.checkNotNull(baseColumn, "Column[" + mvColumnName + "] does not exist");
+                Preconditions.checkNotNull(baseColumn,
+                        "The materialized view column[" + mvColumnName + "] of aggregation or unique or primary table " +
+                                "cannot be transformed from original column[" +
+                                mvColumnItem.getBaseColumnName() + "]");
                 AggregateType baseAggregationType = baseColumn.getAggregationType();
                 AggregateType mvAggregationType = mvColumnItem.getAggregationType();
                 if (baseColumn.isKey() && !mvColumnItem.isKey()) {
@@ -1154,6 +1157,10 @@ public class MaterializedViewHandler extends AlterHandler {
 
         if (olapTable.existTempPartitions()) {
             throw new DdlException("Can not alter table when there are temp partitions in table");
+        }
+        if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager().hasRunningOverwriteJob(olapTable.getId())) {
+            throw new DdlException("Table[" + olapTable.getName() + "] is doing insert overwrite job, " +
+                    "please create materialized view after insert overwrite");
         }
         Optional<AlterClause> alterClauseOptional = alterClauses.stream().findAny();
         if (alterClauseOptional.isPresent()) {

@@ -233,13 +233,13 @@ parser code {:
 
 // Total keywords of starrocks
 terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_AND, KW_ANTI, KW_ARRAY, KW_AS, KW_ASC, KW_AUTHORS,
-    KW_BACKEND, KW_BACKUP, KW_BETWEEN, KW_BEGIN, KW_BIGINT, KW_BITMAP, KW_BITMAP_UNION, KW_BOOLEAN, KW_BOTH, KW_BROKER, KW_BACKENDS, KW_BY, KW_BUILTIN,
+    KW_BACKEND, KW_BACKUP, KW_BETWEEN, KW_BEGIN, KW_BIGINT, KW_BITMAP, KW_BITMAP_UNION, KW_BOOLEAN, KW_BROKER, KW_BACKENDS, KW_BY, KW_BUILTIN,
     KW_CANCEL, KW_CASE, KW_CAST, KW_CHAIN, KW_CHAR, KW_CHARSET, KW_CHECK, KW_CLUSTER, KW_CLUSTERS,
     KW_COLLATE, KW_COLLATION, KW_COLUMN, KW_COLUMNS, KW_COMMENT, KW_COMMIT, KW_COMMITTED,
     KW_CONFIG, KW_CONNECTION, KW_CONNECTION_ID, KW_CONSISTENT, KW_COSTS, KW_COUNT, KW_CREATE, KW_CROSS, KW_CUBE, KW_CURRENT, KW_CURRENT_TIMESTAMP, KW_CURRENT_USER,
     KW_DATA, KW_DATABASE, KW_DATABASES, KW_DATE, KW_DATETIME, KW_DAY, KW_DECIMAL, KW_DECIMALV2, KW_DECIMAL32, KW_DECIMAL64, KW_DECIMAL128, KW_DECOMMISSION, KW_DEFAULT, KW_DESC, KW_DESCRIBE,
     KW_DELETE, KW_DISTINCT, KW_DISTINCTPC, KW_DISTINCTPCSA, KW_DISTRIBUTED, KW_DISTRIBUTION, KW_DYNAMIC, KW_BUCKETS, KW_DIV, KW_DOUBLE, KW_DROP, KW_DROPP, KW_DUAL, KW_DUPLICATE,
-    KW_ELSE, KW_END, KW_ENGINE, KW_ENGINES, KW_ENTER, KW_ERRORS, KW_EVENTS, KW_EXCEPT, KW_EXISTS, KW_EXPORT,
+    KW_ELSE, KW_END, KW_ENGINE, KW_ENGINES, KW_ERRORS, KW_EVENTS, KW_EXCEPT, KW_EXISTS, KW_EXPORT,
     KW_EXTERNAL, KW_EXTRACT,
     KW_FALSE, KW_FOLLOWER, KW_FOLLOWING, KW_FREE, KW_FROM, KW_FILE, KW_FIRST, KW_FLOAT, KW_FOR, KW_FORCE, KW_FORMAT, KW_FRONTEND, KW_FRONTENDS, KW_FULL, KW_FN, KW_FUNCTION, KW_FUNCTIONS,
     KW_GLOBAL, KW_GRANT, KW_GRANTS, KW_GROUP, KW_GROUPS, KW_GROUPING,
@@ -250,7 +250,7 @@ terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_A
     KW_KEY, KW_KEYS, KW_KILL,
     KW_LABEL, KW_LARGEINT, KW_LAST, KW_LEFT, KW_LESS, KW_LEVEL, KW_LIKE, KW_LIMIT, KW_LINK, KW_LIST, KW_LOAD,
     KW_LOCAL, KW_LOCATION, KW_LATERAL, KW_LOGICAL,
-    KW_MATERIALIZED, KW_MAX, KW_MAX_VALUE, KW_MERGE, KW_MIN, KW_MINUTE, KW_MINUS, KW_MIGRATE, KW_MIGRATIONS, KW_MODIFY, KW_MONTH,
+    KW_MATERIALIZED, KW_MAX, KW_MAX_VALUE, KW_MERGE, KW_MIN, KW_MINUTE, KW_MINUS, KW_MODIFY, KW_MONTH,
     KW_NAME, KW_NAMES, KW_NEGATIVE, KW_NO, KW_NOT, KW_NULL, KW_NULLS,
     KW_OBSERVER, KW_OFFSET, KW_ON, KW_ONLY, KW_OPEN, KW_OR, KW_ORDER, KW_OUTER, KW_OUTFILE, KW_OVER,
     KW_PARTITION, KW_PARTITIONS, KW_PASSWORD, KW_PATH, KW_PAUSE, KW_PIPE, KW_PRECEDING,
@@ -288,12 +288,12 @@ terminal String COMMENTED_PLAN_HINTS;
 
 // Statement that the result of this parser.
 nonterminal List<StatementBase> stmts;
-nonterminal StatementBase stmt, add_stmt, add_param, show_stmt, show_param, help_stmt, load_stmt,
+nonterminal StatementBase stmt, show_stmt, show_param, help_stmt, load_stmt,
     create_routine_load_stmt, pause_routine_load_stmt, resume_routine_load_stmt, stop_routine_load_stmt,
     show_routine_load_stmt, show_routine_load_task_stmt,
     describe_stmt, alter_stmt,
-    use_stmt, kill_stmt, drop_stmt, recover_stmt, grant_stmt, revoke_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt, delete_param, 
-    enter_stmt, unsupported_stmt, export_stmt, admin_stmt, truncate_stmt,
+    kill_stmt, drop_stmt, recover_stmt, grant_stmt, revoke_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt,
+    unsupported_stmt, export_stmt, admin_stmt, truncate_stmt,
     import_columns_stmt, import_where_stmt, install_plugin_stmt, uninstall_plugin_stmt, analyze_stmt, create_analyze_stmt,
     alter_resource_group_stmt;
 
@@ -351,7 +351,6 @@ nonterminal ArrayList<Long> opt_tablet_list, tablet_list;
 nonterminal TableName table_name, opt_table_name;
 nonterminal FunctionName function_name;
 nonterminal Expr where_clause;
-nonterminal Expr where_clause_without_null;
 nonterminal Predicate predicate, between_predicate, comparison_predicate,
   compound_predicate, in_predicate, like_predicate, exists_predicate;
 nonterminal List<List<Predicate>> classifier_list;
@@ -447,12 +446,12 @@ nonterminal String opt_with_label;
 nonterminal String opt_system;
 nonterminal BrokerDesc opt_broker;
 nonterminal ResourceDesc resource_desc;
-nonterminal List<String> opt_col_list, col_list, opt_dup_keys, opt_columns_from_path;
+nonterminal List<String> opt_col_list, opt_dup_keys, opt_columns_from_path;
 nonterminal List<ColWithComment> opt_col_with_comment_list, col_with_comment_list;
 nonterminal ColWithComment col_with_comment;
 nonterminal List<Expr> opt_col_mapping_list;
 nonterminal ColumnSeparator opt_field_term, column_separator;
-nonterminal RowDelimiter opt_row_delimiter, row_delimiter;
+nonterminal RowDelimiter row_delimiter;
 nonterminal String opt_user_role;
 nonterminal TablePattern tbl_pattern;
 nonterminal ResourcePattern resource_pattern;
@@ -468,7 +467,7 @@ nonterminal String opt_from_rollup, opt_to_rollup, function_type;
 nonterminal ColumnPosition opt_col_pos;
 
 // Alter statement
-nonterminal AlterClause alter_system_clause, alter_cluster_clause, alter_table_clause;
+nonterminal AlterClause alter_system_clause, alter_table_clause;
 nonterminal List<AlterClause> alter_table_clause_list, opt_rollup, add_rollup_clause_list, drop_rollup_clause_list;
 nonterminal AddRollupClause add_rollup_clause;
 nonterminal DropRollupClause drop_rollup_clause;
@@ -598,16 +597,12 @@ stmt ::=
     {: RESULT = stmt; :}
     | create_stmt:query
     {: RESULT = query; :}
-    | enter_stmt:enter
-    {: RESULT = enter; :}
     | query_stmt:query
     {: RESULT = query; :}
     | drop_stmt:stmt
     {: RESULT = stmt; :}
     | recover_stmt:stmt
     {: RESULT = stmt; :}
-    | use_stmt:use
-    {: RESULT = use; :}
     | set_stmt:set
     {: RESULT = set; :}
     | kill_stmt:kill
@@ -667,28 +662,6 @@ stmt ::=
     | /* empty: query only has comments */
     {:
         RESULT = new EmptyStmt();
-    :}
-    ;
-
-cluster_name ::=
-    ident:cluster
-    {:
-        RESULT = new ClusterName(cluster, "");
-	:}
-    | ident:cluster DOT ident:db
-    {:
-        RESULT = new ClusterName(cluster, db);
-    :}
-    ;
-
-des_cluster_name ::=
-    ident:cluster
-    {:
-        RESULT = new ClusterName(cluster, "");
-    :}
-    | ident:cluster DOT ident:db
-    {:
-        RESULT = new ClusterName(cluster, db);
     :}
     ;
 
@@ -763,10 +736,6 @@ alter_stmt ::=
     | KW_ALTER KW_SYSTEM alter_system_clause:clause
     {:
         RESULT = new AlterSystemStmt(clause);
-    :}
-    | KW_ALTER KW_CLUSTER ident:name opt_properties:properties
-    {:
-        RESULT = new AlterClusterStmt(name, properties);
     :}
     | KW_ALTER KW_DATABASE ident:dbName KW_SET KW_DATA KW_QUOTA quantity:quota_quantity
     {:
@@ -1097,13 +1066,6 @@ alter_system_clause ::=
     :}
     ;
 
-alter_cluster_clause ::=
-    KW_MODIFY opt_properties:properties
-    {:
-        RESULT = new AlterClusterClause(AlterClusterType.ALTER_CLUSTER_PROPERTIES, properties);
-    :}
-    ;
-
 // Sync Stmt
 sync_stmt ::=
     KW_SYNC
@@ -1133,11 +1095,6 @@ create_stmt ::=
     {:
         RESULT = new CreateDbStmt(ifNotExists, db);
     :}
-    /* cluster */
-   /* KW_CREATE KW_CLUSTER ident:name  opt_properties:properties KW_IDENTIFIED KW_BY STRING_LITERAL:password
-    {:
-        RESULT = new CreateClusterStmt(name, properties, password);
-    :}*/
     /* Function */
     | KW_CREATE function_type:functionType function_name:functionName LPAREN func_args_def:args RPAREN
             KW_RETURNS type_def:returnType opt_intermediate_type:intermediateType opt_properties:properties
@@ -1196,11 +1153,6 @@ create_stmt ::=
         opt_col_with_comment_list:columns opt_comment:comment KW_AS query_stmt:view_def
     {:
         RESULT = new CreateViewStmt(ifNotExists, viewName, columns, comment, view_def);
-    :}
-    /* cluster */
-    | KW_CREATE KW_CLUSTER ident:name opt_properties:properties KW_IDENTIFIED KW_BY STRING_LITERAL:password
-    {:
-        RESULT = new CreateClusterStmt(name, properties, password);
     :}
     | KW_CREATE opt_read_only:isReadOnly KW_REPOSITORY ident:repoName KW_WITH KW_BROKER ident:brokerName
       KW_ON KW_LOCATION STRING_LITERAL:location
@@ -1451,17 +1403,6 @@ column_separator ::=
     :}
     ;
 
-opt_row_delimiter ::=
-    /* Empty */
-    {:
-        RESULT = null;
-    :}
-    | KW_ROWS KW_TERMINATED KW_BY STRING_LITERAL:delimiter
-    {:
-        RESULT = new RowDelimiter(delimiter);
-    :}
-    ;
-
 row_delimiter::=
     KW_ROWS KW_TERMINATED KW_BY STRING_LITERAL:delimiter
     {:
@@ -1521,13 +1462,6 @@ col_with_comment ::=
     ident:col opt_comment:comment
     {:
         RESULT = new ColWithComment(col, comment);
-    :}
-    ;
-
-col_list ::=
-    KW_COLUMNS LPAREN ident_list:colList RPAREN
-    {:
-        RESULT = colList;
     :}
     ;
 
@@ -1756,11 +1690,6 @@ drop_stmt ::=
     | KW_DROP KW_SCHEMA opt_if_exists:ifExists ident:db opt_force:force
     {:
         RESULT = new DropDbStmt(ifExists, db, force);
-    :}
-    /* cluster */
-    | KW_DROP KW_CLUSTER opt_if_exists:ifExists ident:cluster
-    {:
-        RESULT = new DropClusterStmt(ifExists, cluster);
     :}
     /* Function */
     | KW_DROP KW_FUNCTION function_name:functionName LPAREN func_args_def:args RPAREN
@@ -2427,15 +2356,6 @@ show_param ::=
     | KW_CREATE KW_SCHEMA ident:db
     {:
         RESULT = new ShowCreateDbStmt(db);
-    :}
-    /* Cluster */
-    | KW_CLUSTERS
-    {:
-        RESULT = new ShowClusterStmt();
-    :}
-    | KW_MIGRATIONS
-    {:
-        RESULT = new ShowMigrationsStmt();
     :}
     /* Database */
     | KW_DATABASES opt_wild_where
@@ -3144,21 +3064,6 @@ opt_set_qualifier ::=
   | KW_ALL
   {: RESULT = Qualifier.ALL; :}
   ;
-
-// Change cluster
-enter_stmt ::=
-    KW_ENTER ident:cluster
-    {:
-        RESULT = new EnterStmt(cluster);
-    :}
-    ;
-// Change database
-use_stmt ::=
-    KW_USE ident:db
-    {:
-        RESULT = new UseStmt(db);
-    :}
-    ;
 
 // Insert statement
 insert_stmt ::=
@@ -4073,11 +3978,6 @@ where_clause ::=
    /* empty */
   {: RESULT = null; :}
   | KW_WHERE expr:e
-  {: RESULT = e; :}
-  ;
-
-where_clause_without_null ::=
-  KW_WHERE expr:e
   {: RESULT = e; :}
   ;
 
@@ -5303,10 +5203,6 @@ keyword ::=
     | KW_CLUSTERS:id
     {: RESULT = id; :}
     | KW_LINK:id
-    {: RESULT = id; :}
-    | KW_MIGRATE:id
-    {: RESULT = id; :}
-    | KW_MIGRATIONS:id
     {: RESULT = id; :}
     | KW_COUNT:id
     {: RESULT = id; :}
