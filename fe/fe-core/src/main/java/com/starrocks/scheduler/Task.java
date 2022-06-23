@@ -6,7 +6,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.scheduler.persist.Schedule;
+import com.starrocks.scheduler.persist.TaskSchedule;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -30,7 +30,7 @@ public class Task implements Writable {
     private Constants.TaskState state = Constants.TaskState.UNKNOWN;
 
     @SerializedName("schedule")
-    private Schedule schedule;
+    private TaskSchedule schedule;
 
     @SerializedName("createTime")
     private long createTime;
@@ -82,11 +82,11 @@ public class Task implements Writable {
         this.state = state;
     }
 
-    public Schedule getSchedule() {
+    public TaskSchedule getSchedule() {
         return schedule;
     }
 
-    public void setSchedule(Schedule schedule) {
+    public void setSchedule(TaskSchedule schedule) {
         this.schedule = schedule;
     }
 

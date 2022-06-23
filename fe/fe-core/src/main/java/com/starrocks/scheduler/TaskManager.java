@@ -20,9 +20,9 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.scheduler.persist.Schedule;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
+import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import org.apache.logging.log4j.LogManager;
@@ -111,22 +111,22 @@ public class TaskManager {
 
     private void registerPeriodicalTask() {
         for (Task task : periodTaskMap.values()) {
-            Schedule schedule = task.getSchedule();
+            TaskSchedule taskSchedule = task.getSchedule();
             if (task.getState() != Constants.TaskState.ACTIVE) {
                 continue;
             }
 
-            if (schedule == null) {
+            if (taskSchedule == null) {
                 continue;
             }
 
-            LocalDateTime startTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(schedule.getStartTime()),
+            LocalDateTime startTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(taskSchedule.getStartTime()),
                     TimeUtils.getTimeZone().toZoneId());
             Duration duration = Duration.between(LocalDateTime.now(), startTime);
             long initialDelay = duration.getSeconds();
             ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                            executeTask(task.getName()), initialDelay, schedule.getPeriod(),
-                    schedule.getTimeUnit());
+                            executeTask(task.getName()), initialDelay, taskSchedule.getPeriod(),
+                    taskSchedule.getTimeUnit());
             periodFutureMap.put(task.getId(), future);
         }
     }
@@ -188,19 +188,19 @@ public class TaskManager {
                     normalTaskMap.put(task.getId(), task);
                     break;
                 case PERIODICAL:
-                    Schedule schedule = task.getSchedule();
-                    if (schedule == null) {
+                    TaskSchedule taskSchedule = task.getSchedule();
+                    if (taskSchedule == null) {
                         throw new DdlException("Task [" + task.getName() + "] has no scheduling information");
                     }
                     if (!isReplay) {
-                        LocalDateTime startTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(schedule.getStartTime()),
+                        LocalDateTime startTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(taskSchedule.getStartTime()),
                                 TimeUtils.getTimeZone().toZoneId());
                         Duration duration = Duration.between(LocalDateTime.now(), startTime);
                         long initialDelay = duration.getSeconds();
                         // this operation should only run in master
                         ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                                        executeTask(task.getName()), initialDelay, schedule.getPeriod(),
-                                schedule.getTimeUnit());
+                                        executeTask(task.getName()), initialDelay, taskSchedule.getPeriod(),
+                                taskSchedule.getTimeUnit());
                         periodFutureMap.put(task.getId(), future);
                     }
                     nameToTaskMap.put(task.getName(), task);
@@ -223,9 +223,9 @@ public class TaskManager {
         if (task.getState() == Constants.TaskState.PAUSE) {
             return true;
         }
-        Schedule schedule = task.getSchedule();
+        TaskSchedule taskSchedule = task.getSchedule();
         // this will not happen
-        if (schedule == null) {
+        if (taskSchedule == null) {
             LOG.warn("fail to obtain scheduled info for task [{}]", task.getName());
             return true;
         }
@@ -349,8 +349,8 @@ public class TaskManager {
 
     public void replayCreateTask(Task task) {
         if (task.getType() == Constants.TaskType.PERIODICAL) {
-            Schedule schedule = task.getSchedule();
-            if (schedule == null) {
+            TaskSchedule taskSchedule = task.getSchedule();
+            if (taskSchedule == null) {
                 LOG.warn("replay a null schedule period Task [{}]", task.getName());
                 return;
             }
@@ -565,8 +565,8 @@ public class TaskManager {
             List<Task> currentTask = showTasks(null);
             for (Task task : currentTask) {
                 if (task.getType() == Constants.TaskType.PERIODICAL) {
-                    Schedule schedule = task.getSchedule();
-                    if (schedule == null) {
+                    TaskSchedule taskSchedule = task.getSchedule();
+                    if (taskSchedule == null) {
                         taskIdToDelete.add(task.getId());
                         LOG.warn("clean up a null schedule periodical Task [{}]", task.getName());
                         continue;

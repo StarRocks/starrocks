@@ -6,7 +6,7 @@ import com.google.gson.annotations.SerializedName;
 
 import java.util.concurrent.TimeUnit;
 
-public class Schedule {
+public class TaskSchedule {
 
     // Measured in milliseconds, between the start time and midnight, January 1, 1970 UTC.
     @SerializedName("startTime")
@@ -18,7 +18,7 @@ public class Schedule {
     @SerializedName("timeUnit")
     private TimeUnit timeUnit;
 
-    public Schedule(long startTime, long period, TimeUnit timeUnit) {
+    public TaskSchedule(long startTime, long period, TimeUnit timeUnit) {
         this.startTime = startTime;
         this.period = period;
         this.timeUnit = timeUnit;
