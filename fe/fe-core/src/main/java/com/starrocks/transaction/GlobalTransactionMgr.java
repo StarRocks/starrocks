@@ -605,27 +605,6 @@ public class GlobalTransactionMgr implements Writable {
         return checksum;
     }
 
-    public TransactionState getTransactionStateByCallbackIdAndStatus(long dbId, long callbackId,
-                                                                     Set<TransactionStatus> status) {
-        try {
-            DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-            return dbTransactionMgr.getTransactionStateByCallbackIdAndStatus(callbackId, status);
-        } catch (AnalysisException e) {
-            LOG.warn("Get transaction by callbackId and status failed", e);
-            return null;
-        }
-    }
-
-    public TransactionState getTransactionStateByCallbackId(long dbId, long callbackId) {
-        try {
-            DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-            return dbTransactionMgr.getTransactionStateByCallbackId(callbackId);
-        } catch (AnalysisException e) {
-            LOG.warn("Get transaction by callbackId failed", e);
-            return null;
-        }
-    }
-
     public List<Pair<Long, Long>> getTransactionIdByCoordinateBe(String coordinateHost, int limit) {
         ArrayList<Pair<Long, Long>> txnInfos = new ArrayList<>();
         for (DatabaseTransactionMgr databaseTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {

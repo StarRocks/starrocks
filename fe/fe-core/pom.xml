@@ -801,6 +801,26 @@ under the License.
                             <skip>${skip.plugin}</skip>
                         </configuration>
                     </execution>
+                    <execution>
+                        <id>gen_proto_starlake</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <!-- DO NOT use goal 'java', it will terminate the VM after done -->
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>${java.home}/bin/java</executable>
+                            <arguments>
+                                <argument>-jar</argument>
+                                <argument>
+                                    ${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar
+                                </argument>
+                                <argument>--java_out=${basedir}/target/generated-sources/proto</argument>
+                                <argument>${starrocks.home}/gensrc/proto/lake_service.proto</argument>
+                            </arguments>
+                            <skip>${skip.plugin}</skip>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
 

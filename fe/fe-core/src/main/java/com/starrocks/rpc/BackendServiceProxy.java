@@ -54,7 +54,8 @@ public class BackendServiceProxy {
 
     private RpcClient rpcClient;
     // TODO(zc): use TNetworkAddress,
-    private Map<TNetworkAddress, PBackendService> serviceMap;
+    private Map<TNetworkAddress, PBackendService> backendServiceMap;
+    private Map<TNetworkAddress, LakeService> lakeServiceMap;
 
     static {
         int javaRuntimeVersion = JdkUtils.getJavaVersionAsInteger(System.getProperty("java.version"));
@@ -76,15 +77,15 @@ public class BackendServiceProxy {
         rpcOptions.setMaxIdleSize(Config.brpc_connection_pool_size);
         rpcOptions.setMaxWait(Config.brpc_idle_wait_max_time);
         rpcClient = new RpcClient(rpcOptions);
-        serviceMap = Maps.newHashMap();
+        backendServiceMap = Maps.newHashMap();
     }
 
     public static BackendServiceProxy getInstance() {
         return SingletonHolder.INSTANCE;
     }
 
-    protected synchronized PBackendService getProxy(TNetworkAddress address) {
-        PBackendService service = serviceMap.get(address);
+    protected synchronized PBackendService getBackendService(TNetworkAddress address) {
+        PBackendService service = backendServiceMap.get(address);
         if (service != null) {
             return service;
         }
@@ -92,7 +93,20 @@ public class BackendServiceProxy {
         proxy.setHost(address.getHostname());
         proxy.setPort(address.getPort());
         service = proxy.proxy();
-        serviceMap.put(address, service);
+        backendServiceMap.put(address, service);
+        return service;
+    }
+
+    public synchronized LakeService getLakeService(TNetworkAddress address) {
+        LakeService service = lakeServiceMap.get(address);
+        if (service != null) {
+            return service;
+        }
+        ProtobufRpcProxy<LakeService> proxy = new ProtobufRpcProxy(rpcClient, LakeService.class);
+        proxy.setHost(address.getHostname());
+        proxy.setPort(address.getPort());
+        service = proxy.proxy();
+        lakeServiceMap.put(address, service);
         return service;
     }
 
@@ -102,7 +116,7 @@ public class BackendServiceProxy {
         final PExecPlanFragmentRequest pRequest = new PExecPlanFragmentRequest();
         pRequest.setRequest(tRequest);
         try {
-            final PBackendService service = getProxy(address);
+            final PBackendService service = getBackendService(address);
             return service.execPlanFragmentAsync(pRequest);
         } catch (NoSuchElementException e) {
             try {
@@ -112,7 +126,7 @@ public class BackendServiceProxy {
                 } catch (InterruptedException interruptedException) {
                     // do nothing
                 }
-                final PBackendService service = getProxy(address);
+                final PBackendService service = getBackendService(address);
                 return service.execPlanFragmentAsync(pRequest);
             } catch (NoSuchElementException noSuchElementException) {
                 LOG.warn("Execute plan fragment retry failed, address={}:{}",
@@ -141,7 +155,7 @@ public class BackendServiceProxy {
         qid.lo = queryId.lo;
         pRequest.queryId = qid;
         try {
-            final PBackendService service = getProxy(address);
+            final PBackendService service = getBackendService(address);
             return service.cancelPlanFragmentAsync(pRequest);
         } catch (NoSuchElementException e) {
             // retry
@@ -151,7 +165,7 @@ public class BackendServiceProxy {
                 } catch (InterruptedException interruptedException) {
                     // do nothing
                 }
-                final PBackendService service = getProxy(address);
+                final PBackendService service = getBackendService(address);
                 return service.cancelPlanFragmentAsync(pRequest);
             } catch (NoSuchElementException noSuchElementException) {
                 LOG.warn("Cancel plan fragment retry failed, address={}:{}",
@@ -168,7 +182,7 @@ public class BackendServiceProxy {
     public Future<PFetchDataResult> fetchDataAsync(
             TNetworkAddress address, PFetchDataRequest request) throws RpcException {
         try {
-            PBackendService service = getProxy(address);
+            PBackendService service = getBackendService(address);
             return service.fetchDataAsync(request);
         } catch (Throwable e) {
             LOG.warn("fetch data catch a exception, address={}:{}",
@@ -180,7 +194,7 @@ public class BackendServiceProxy {
     public Future<PTriggerProfileReportResult> triggerProfileReportAsync(
             TNetworkAddress address, PTriggerProfileReportRequest request) throws RpcException {
         try {
-            final PBackendService service = getProxy(address);
+            final PBackendService service = getBackendService(address);
             return service.triggerProfileReport(request);
         } catch (Throwable e) {
             LOG.warn("fetch data catch a exception, address={}:{}",
@@ -192,7 +206,7 @@ public class BackendServiceProxy {
     public Future<PProxyResult> getInfo(
             TNetworkAddress address, PProxyRequest request) throws RpcException {
         try {
-            final PBackendService service = getProxy(address);
+            final PBackendService service = getBackendService(address);
             return service.getInfo(request);
         } catch (Throwable e) {
             LOG.warn("failed to get info, address={}:{}", address.getHostname(), address.getPort(), e);

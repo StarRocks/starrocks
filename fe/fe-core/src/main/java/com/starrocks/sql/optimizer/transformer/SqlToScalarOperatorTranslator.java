@@ -36,7 +36,10 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.ResolvedField;
+import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
@@ -66,6 +69,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -124,6 +128,11 @@ public final class SqlToScalarOperatorTranslator {
         return result;
     }
 
+    public static ScalarOperator translate(Expr expression) {
+        IgnoreSlotVisitor visitor = new IgnoreSlotVisitor();
+        return visitor.visit(expression, null);
+    }
+
     public static ScalarOperator translateWithoutRewrite(Expr expression, ExpressionMapping expressionMapping) {
         ColumnRefOperator columnRefOperator = expressionMapping.get(expression);
         if (columnRefOperator != null) {
@@ -140,7 +149,7 @@ public final class SqlToScalarOperatorTranslator {
         return result;
     }
 
-    private static class Visitor extends AstVisitor<ScalarOperator, Void> {
+    static class Visitor extends AstVisitor<ScalarOperator, Void> {
         private final ExpressionMapping expressionMapping;
         private final List<ColumnRefOperator> correlation;
 
@@ -488,6 +497,19 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visitCloneExpr(CloneExpr node, Void context) {
             return new CloneOperator(visit(node.getChild(0)));
+        }
+    }
+
+    static class IgnoreSlotVisitor extends Visitor {
+        public IgnoreSlotVisitor() {
+            super(new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
+                    Collections.EMPTY_LIST);
+        }
+
+        @Override
+        public ScalarOperator visitSlot(SlotRef node, Void context) {
+            return new ColumnRefOperator(node.getSlotId().asInt(),
+                    node.getType(), node.getColumnName(), node.isNullable());
         }
     }
 }

@@ -4,14 +4,15 @@ package com.starrocks.transaction;
 
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.lake.LakeTable;
 
-public class StateMachineFactory {
-    public StateMachine create(DatabaseTransactionMgr dbTxnMgr, Table table) {
+public class TransactionLogApplierFactory {
+    public TransactionLogApplier create(Table table) {
         if (table.isLakeTable()) {
-            return null; // todo
+            return new LakeTableTxnLogApplier((LakeTable) table);
         }
         if (table.isOlapTable()) {
-            return new OlapTableStateMachine(dbTxnMgr, (OlapTable) table);
+            return new OlapTableTxnLogApplier((OlapTable) table);
         }
         return null;
     }

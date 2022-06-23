@@ -4,7 +4,9 @@ package com.starrocks.transaction;
 
 import java.util.List;
 
-public interface StateMachine {
+// TransactionStateListener will be created by the FE master process before it commit a transaction.
+// Used to check if a transaction can be committed and save some information in the TransactionState.
+public interface TransactionStateListener {
     // This method is called by the FE master before changing the in-memory TransactionState to COMMITTED.
     void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets) throws TransactionException;
 
@@ -14,10 +16,4 @@ public interface StateMachine {
 
     // This method is called by the FE master after changed the TransactionState to COMMITTED and persisted the edit log.
     void postWriteCommitLog(TransactionState txnState);
-
-    // This method is called by all the FE nodes after sent/received the edit log to change TransactionState to COMMITTED.
-    void applyCommitLog(TransactionState txnState, TableCommitInfo commitInfo);
-
-    // This method is called by all the FE nodes after sent/received the edit log to change the TransactionState to VISIBLE.
-    void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo);
 }
