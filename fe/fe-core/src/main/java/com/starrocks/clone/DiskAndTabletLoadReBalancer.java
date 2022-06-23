@@ -391,7 +391,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         // cache selected tablets to avoid select same tablet
         Set<Long> selectedTablets = Sets.newHashSet();
         // aliveBeIds to check tablet health
-        List<Long> aliveBeIds = infoService.getClusterBackendIds(clusterName, true);
+        List<Long> aliveBeIds = infoService.getBackendIds(true);
         Map<String, List<Long>> hostGroups = getHostGroups(aliveBeIds);
         int srcBEIndex = beStats.size() - 1;
         int destBEIndex = 0;
@@ -609,7 +609,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         Preconditions.checkArgument(pathStats != null && pathStats.size() > 1 && beId > -1 && beNum > 0);
 
         // aliveBeIds to check tablet health
-        List<Long> aliveBeIds = infoService.getClusterBackendIds(clusterName, true);
+        List<Long> aliveBeIds = infoService.getBackendIds(true);
 
         // src|dest path stat
         int srcPathIndex = pathStats.size() - 1;

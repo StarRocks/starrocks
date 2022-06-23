@@ -139,14 +139,13 @@ public class TabletSchedCtxTest {
         globalStateMgr.getIdToDb().put(DB_ID, db);
 
         // prepare clusterLoadStatistic
-        clusterLoadStatistic =
-                new ClusterLoadStatistic(SystemInfoService.DEFAULT_CLUSTER, systemInfoService, invertedIndex);
+        clusterLoadStatistic = new ClusterLoadStatistic(systemInfoService, invertedIndex);
         clusterLoadStatistic.init();
 
         // mock tabletScheduler
         tabletScheduler = new TabletScheduler(globalStateMgr, systemInfoService, invertedIndex, stat);
         tabletScheduler.getStatisticMap().put(SystemInfoService.DEFAULT_CLUSTER, clusterLoadStatistic);
-        systemInfoService.getClusterBackends(SystemInfoService.DEFAULT_CLUSTER).forEach(be -> {
+        systemInfoService.getBackends().forEach(be -> {
             List<Long> pathHashes =
                     be.getDisks().values().stream().map(DiskInfo::getPathHash).collect(Collectors.toList());
             TabletScheduler.PathSlot slot = new TabletScheduler.PathSlot(pathHashes, Config.schedule_slot_num_per_path);

@@ -1175,8 +1175,7 @@ public class MasterImpl {
             }
 
             List<TBackendMeta> backends = new ArrayList<>();
-            for (Backend backend : GlobalStateMgr.getCurrentState().getCurrentSystemInfo()
-                    .getClusterBackends(db.getClusterName())) {
+            for (Backend backend : GlobalStateMgr.getCurrentState().getCurrentSystemInfo().getBackends()) {
                 TBackendMeta backendMeta = new TBackendMeta();
                 backendMeta.setBackend_id(backend.getId());
                 backendMeta.setHost(backend.getHost());

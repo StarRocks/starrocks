@@ -28,7 +28,6 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.catalog.Column;
@@ -70,7 +69,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -412,6 +410,10 @@ public class SystemInfoService {
         return resultBackends;
     }
 
+    public List<Long> getBackendIds() {
+        return getBackendIds(false);
+    }
+
     public List<Long> getBackendIds(boolean needAlive) {
         ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
         List<Long> backendIds = Lists.newArrayList(idToBackend.keySet());
@@ -447,126 +449,35 @@ public class SystemInfoService {
         return backendIds;
     }
 
-    /**
-     * get cluster's backend id list
-     *
-     * @param name
-     * @return
-     */
-    public List<Backend> getClusterBackends(String name) {
-        final Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
-        final List<Backend> ret = Lists.newArrayList();
-
-        if (Strings.isNullOrEmpty(name)) {
-            return ret;
-        }
-
-        for (Backend backend : copiedBackends.values()) {
-            if (name.equals(backend.getOwnerClusterName())) {
-                ret.add(backend);
-            }
-        }
-        return ret;
-    }
-
-    /**
-     * get cluster's backend id list
-     *
-     * @param clusterName
-     * @return
-     */
-    public List<Long> getClusterBackendIds(String clusterName) {
-        if (Strings.isNullOrEmpty(clusterName)) {
-            return null;
-        }
-
-        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
-        final List<Long> beIds = Lists.newArrayList();
-
-        for (Backend backend : idToBackend.values()) {
-            if (clusterName.equals(backend.getOwnerClusterName())) {
-                beIds.add(backend.getId());
-            }
-        }
-        return beIds;
-    }
-
-    /**
-     * get cluster's backend id list
-     *
-     * @param clusterName
-     * @return
-     */
-    public List<Long> getClusterBackendIds(String clusterName, boolean needAlive) {
-        final Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
-        final List<Long> ret = new ArrayList<Long>();
-
-        if (Strings.isNullOrEmpty(clusterName)) {
-            return null;
-        }
-
-        if (needAlive) {
-            for (Backend backend : copiedBackends.values()) {
-                if (backend != null && clusterName.equals(backend.getOwnerClusterName())
-                        && backend.isAlive()) {
-                    ret.add(backend.getId());
-                }
-            }
-        } else {
-            for (Backend backend : copiedBackends.values()) {
-                if (clusterName.equals(backend.getOwnerClusterName())) {
-                    ret.add(backend.getId());
-                }
-            }
-        }
-
-        return ret;
+    public List<Backend> getBackends() {
+        return idToBackendRef.values().asList();
     }
 
     public List<Long> seqChooseBackendIdsByStorageMedium(int backendNum, boolean needAlive, boolean isCreate,
-                                                         String clusterName, TStorageMedium storageMedium) {
+                                                         TStorageMedium storageMedium) {
         final List<Backend> backends =
-                getClusterBackends(clusterName).stream().filter(v -> !v.diskExceedLimitByStorageMedium(storageMedium))
+                getBackends().stream().filter(v -> !v.diskExceedLimitByStorageMedium(storageMedium))
                         .collect(Collectors.toList());
-        return seqChooseBackendIds(backendNum, needAlive, isCreate, clusterName, backends);
+        return seqChooseBackendIds(backendNum, needAlive, isCreate, backends);
     }
 
-    public List<Long> seqChooseBackendIds(int backendNum, boolean needAlive, boolean isCreate,
-                                          String clusterName) {
+    public List<Long> seqChooseBackendIds(int backendNum, boolean needAlive, boolean isCreate) {
         final List<Backend> backends =
-                getClusterBackends(clusterName).stream().filter(v -> !v.diskExceedLimit()).collect(Collectors.toList());
-        return seqChooseBackendIds(backendNum, needAlive, isCreate, clusterName, backends);
+                getBackends().stream().filter(v -> !v.diskExceedLimit()).collect(Collectors.toList());
+        return seqChooseBackendIds(backendNum, needAlive, isCreate, backends);
     }
 
     // choose backends by round-robin
     // return null if not enough backend
     // use synchronized to run serially
     public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAlive, boolean isCreate,
-                                                       String clusterName, final List<Backend> srcBackends) {
+                                                       final List<Backend> srcBackends) {
         long lastBackendId;
 
-        if (clusterName.equals(DEFAULT_CLUSTER)) {
-            if (isCreate) {
-                lastBackendId = lastBackendIdForCreation;
-            } else {
-                lastBackendId = lastBackendIdForOther;
-            }
+        if (isCreate) {
+            lastBackendId = lastBackendIdForCreation;
         } else {
-            if (isCreate) {
-                if (lastBackendIdForCreationMap.containsKey(clusterName)) {
-                    lastBackendId = lastBackendIdForCreationMap.get(clusterName);
-                } else {
-                    lastBackendId = -1;
-                    lastBackendIdForCreationMap.put(clusterName, lastBackendId);
-                }
-            } else {
-                if (lastBackendIdForOtherMap.containsKey(clusterName)) {
-                    lastBackendId = lastBackendIdForOtherMap.get(clusterName);
-                } else {
-                    lastBackendId = -1;
-                    lastBackendIdForOtherMap.put(clusterName, lastBackendId);
-                }
-            }
+            lastBackendId = lastBackendIdForOther;
         }
 
         // host -> BE list
@@ -632,19 +543,10 @@ public class SystemInfoService {
             }
         }
 
-        if (clusterName.equals(DEFAULT_CLUSTER)) {
-            if (isCreate) {
-                lastBackendIdForCreation = lastBackendId;
-            } else {
-                lastBackendIdForOther = lastBackendId;
-            }
+        if (isCreate) {
+            lastBackendIdForCreation = lastBackendId;
         } else {
-            // update last backendId
-            if (isCreate) {
-                lastBackendIdForCreationMap.put(clusterName, lastBackendId);
-            } else {
-                lastBackendIdForOtherMap.put(clusterName, lastBackendId);
-            }
+            lastBackendIdForOther = lastBackendId;
         }
         if (backendIds.size() != backendNum) {
             failed = true;
@@ -858,7 +760,7 @@ public class SystemInfoService {
     }
 
     private long getClusterAvailableCapacityB(String clusterName) {
-        List<Backend> clusterBackends = getClusterBackends(clusterName);
+        List<Backend> clusterBackends = getBackends();
         long capacity = 0L;
         for (Backend backend : clusterBackends) {
             // Here we do not check if backend is alive,
@@ -899,17 +801,6 @@ public class SystemInfoService {
 
         Collections.shuffle(selectedBackends);
         return selectedBackends.get(0).getId();
-    }
-
-    public Set<String> getClusterNames() {
-        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
-        Set<String> clusterNames = Sets.newHashSet();
-        for (Backend backend : idToBackend.values()) {
-            if (!Strings.isNullOrEmpty(backend.getOwnerClusterName())) {
-                clusterNames.add(backend.getOwnerClusterName());
-            }
-        }
-        return clusterNames;
     }
 
     /*
