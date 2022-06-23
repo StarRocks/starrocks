@@ -421,16 +421,10 @@ public class DataDescription {
             validateNowFunction(mappingColumn);
         } else if (functionName.equalsIgnoreCase(FunctionSet.SUBSTITUTE)) {
             validateSubstituteFunction(args, columnNameMap);
-        } else if (functionName.equalsIgnoreCase("get_json_string")) {
+        } else if (functionName.equalsIgnoreCase(FunctionSet.GET_JSON_DOUBLE) ||
+                functionName.equalsIgnoreCase(FunctionSet.GET_JSON_INT) ||
+                functionName.equalsIgnoreCase(FunctionSet.GET_JSON_STRING)) {
             validateGetJsonFunction(args, columnNameMap);
-        } else if (functionName.equalsIgnoreCase("get_json_double")) {
-            validateGetJsonFunction(args, columnNameMap);
-        } else if (functionName.equalsIgnoreCase("get_json_int")) {
-            validateGetJsonFunction(args, columnNameMap);
-        } else if (functionName.equalsIgnoreCase(FunctionSet.PARSE_JSON)) {
-            validateParseJsonFunction(args, columnNameMap);
-        } else if (functionName.equalsIgnoreCase(FunctionSet.JSON_QUERY)) {
-            validateJsonQueryFunction(args, columnNameMap);
         } else {
             if (isHadoopLoad) {
                 throw new AnalysisException("Unknown function: " + functionName);
@@ -457,38 +451,6 @@ public class DataDescription {
     // eg: k2 = get_json_string(k1, "$.id")
     // this is used for creating derivative column from existing column
     private static void validateGetJsonFunction(List<String> args, Map<String, String> columnNameMap)
-            throws AnalysisException {
-        if (args.size() != 2) {
-            throw new AnalysisException("Should has only two arguments: " + args);
-        }
-
-        String argColumn = args.get(0);
-        if (!columnNameMap.containsKey(argColumn)) {
-            throw new AnalysisException("Column is not in sources, column: " + argColumn);
-        }
-
-        args.set(0, columnNameMap.get(argColumn));
-    }
-
-    // eg: k2 = parse_json(k1)
-    // this is used for creating derivative column from existing column
-    private static void validateParseJsonFunction(List<String> args, Map<String, String> columnNameMap)
-            throws AnalysisException {
-        if (args.size() != 1) {
-            throw new AnalysisException("Should has only one argument: " + args);
-        }
-
-        String argColumn = args.get(0);
-        if (!columnNameMap.containsKey(argColumn)) {
-            throw new AnalysisException("Column is not in sources, column: " + argColumn);
-        }
-
-        args.set(0, columnNameMap.get(argColumn));
-    }
-
-    // eg: k2 = parse_json(k1)
-    // this is used for creating derivative column from existing column
-    private static void validateJsonQueryFunction(List<String> args, Map<String, String> columnNameMap)
             throws AnalysisException {
         if (args.size() != 2) {
             throw new AnalysisException("Should has only two arguments: " + args);

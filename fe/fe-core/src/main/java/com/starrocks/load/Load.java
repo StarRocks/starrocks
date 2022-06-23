@@ -775,23 +775,13 @@ public class Load {
                 return newFunc;
             } else if (funcName.equalsIgnoreCase(FunctionSet.SUBSTITUTE)) {
                 return funcExpr.getChild(0);
-            } else if (funcName.equalsIgnoreCase("get_json_int") ||
-                    funcName.equalsIgnoreCase("get_json_string") ||
-                    funcName.equalsIgnoreCase("get_json_double")) {
+            } else if (funcName.equalsIgnoreCase(FunctionSet.GET_JSON_INT) ||
+                    funcName.equalsIgnoreCase(FunctionSet.GET_JSON_STRING) ||
+                    funcName.equalsIgnoreCase(FunctionSet.GET_JSON_DOUBLE)) {
                 FunctionName jsonFunctionName = new FunctionName(funcName.toLowerCase());
                 List<Expr> getJsonArgs = Lists.newArrayList(funcExpr.getChild(0), funcExpr.getChild(1));
                 return new FunctionCallExpr(
                         jsonFunctionName, new FunctionParams(false, getJsonArgs));
-            } else if (funcName.equalsIgnoreCase(FunctionSet.PARSE_JSON)) {
-                FunctionName parseJsonFunctionName = new FunctionName(funcName.toLowerCase());
-                List<Expr> parseJsonArgs = Lists.newArrayList(funcExpr.getChild(0));
-                return new FunctionCallExpr(
-                        parseJsonFunctionName, new FunctionParams(false, parseJsonArgs));
-            } else if (funcName.equalsIgnoreCase(FunctionSet.JSON_QUERY)) {
-                FunctionName jsonQueryFunctionName = new FunctionName(funcName.toLowerCase());
-                List<Expr> jsonQueryArgs = Lists.newArrayList(funcExpr.getChild(0), funcExpr.getChild(1));
-                return new FunctionCallExpr(
-                        jsonQueryFunctionName, new FunctionParams(false, jsonQueryArgs));
             }
         }
         return originExpr;
