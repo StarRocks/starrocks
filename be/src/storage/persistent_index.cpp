@@ -195,6 +195,7 @@ static Status get_move_buckets(size_t min_pack_to_move, int32_t move_bucket_num,
             if (bucket_packs >= min_pack_to_move) {
                 idxes->emplace_back(i);
                 res->emplace_back(*idxes);
+                idxes->pop_back();
                 return Status::OK();
             }
         }
@@ -220,6 +221,7 @@ static Status get_move_buckets(size_t min_pack_to_move, int32_t move_bucket_num,
             // if we find a solution which move pack num is equal to target pack, we don't need
             // to do further seek, just return directly
             if (move_pack_num == min_pack_to_move) {
+                idxes->pop_back();
                 return Status::OK();
             }
         }
