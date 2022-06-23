@@ -58,8 +58,8 @@ class Column;
 //
 //      // 3. add chunk by columns
 //      for (column_group : column_groups) {
-//          writer->add_columns(chunk, column_group, is_key);
-//          writer->add_columns(chunk, column_group, is_key);
+//          writer->add_columns(chunk1, column_group, is_key);
+//          writer->add_columns(chunk2, column_group, is_key);
 //          ...
 //          writer->flush_columns();
 //      }

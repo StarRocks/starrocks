@@ -84,8 +84,8 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
     DCHECK(_column_indexes.empty());
 
     if (_opts.storage_format_version != 1 && _opts.storage_format_version != 2) {
-        auto v = _opts.storage_format_version;
-        return Status::InvalidArgument(strings::Substitute("Invalid storage_format_version $0", v));
+        return Status::InvalidArgument(
+                strings::Substitute("Invalid storage_format_version $0", _opts.storage_format_version));
     }
 
     // merge partial segment footer
