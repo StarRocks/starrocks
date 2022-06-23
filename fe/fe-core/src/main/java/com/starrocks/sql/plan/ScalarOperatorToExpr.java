@@ -75,6 +75,7 @@ public class ScalarOperatorToExpr {
         return expression.accept(new IgnoreSlotFormatter(ScalarOperatorToExpr::buildExprIgnoreSlot), descTbl);
     }
 
+    @FunctionalInterface
     interface BuildExpr {
         Expr build(ScalarOperator expression, FormatterContext descTbl);
     }
