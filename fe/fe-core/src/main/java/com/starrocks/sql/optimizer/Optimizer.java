@@ -28,7 +28,8 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
-import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateWindowRankRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitRankingWindowRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateRankingWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
@@ -210,7 +211,7 @@ public class Optimizer {
 
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownAggToMetaScanRule());
-        ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownPredicateWindowRankRule());
+        ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownPredicateRankingWindowRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         cleanUpMemoGroup(memo);
@@ -226,6 +227,8 @@ public class Optimizer {
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MERGE_LIMIT);
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoAggRule());
         ruleRewriteIterative(memo, rootTaskContext, new PushDownProjectLimitRule());
+
+        ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownLimitRankingWindowRule());
 
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
