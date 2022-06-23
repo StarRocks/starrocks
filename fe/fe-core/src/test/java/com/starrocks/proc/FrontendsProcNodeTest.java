@@ -86,7 +86,7 @@ public class FrontendsProcNodeTest {
     }
 
     @Test    
-    public void testTitle() {
-        Assert.assertTrue(FrontendsProcNode.TITLE_NAMES.get(1).equals("Host"));
+    public void testIPTitle() {
+        Assert.assertTrue(FrontendsProcNode.TITLE_NAMES.get(1).equals("IP"));
     }
 }
