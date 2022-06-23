@@ -65,20 +65,19 @@ echo "run docker for script"
 
 cmd="cd /root/starrocks;
 export FE_UT_PARALLEL=2;
-timeout 3600 sh run-fe-ut.sh --run com.starrocks.utframe.Demo#testCreateDbAndTable+test2;"
+timeout 3600 sh run-fe-ut.sh --run;"
+# com.starrocks.utframe.Demo#testCreateDbAndTable+test2;
 # sh run-fe-ut.sh --run com.starrocks.utframe.Demo
 # sh run-fe-ut.sh --run com.starrocks.utframe.Demo#testCreateDbAndTable+test2
 docker exec --privileged $container_name /bin/bash -c "$cmd"
 
 echo "script run over-----"
+
 sudo chmod 755 $ROOT/starrocks/*.jar
-ls -al $ROOT/starrocks
-#ls -al $ROOT/starrocks/fe/fe-core/target
 if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
     cd $ROOT/starrocks/fe/fe-core/target
-    pwd
     #jacoco_result="jacoco_${GITHUB_PR_NUMBER}.exec"
-    #mv jacoco.exec $jacoco_result || true
+    mv jacoco.exec $jacoco_result || true
     java -jar $ROOT/starrocks/jacococli.jar report ./$jacoco_result --classfiles ./classes/ --html ./result --sourcefiles $ROOT/starrocks/fe/fe-core/src/main/java/ --encoding utf-8 --name fe-coverage
     ls -al $ROOT/starrocks/fe/fe-core/target
     time_count=0
