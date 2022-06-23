@@ -191,7 +191,7 @@ public class Optimizer {
             cleanUpMemoGroup(memo);
         }
 
-        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.AGGREGATE_REWRITE);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.SUBQUERY_REWRITE);
         CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
 
@@ -254,6 +254,10 @@ public class Optimizer {
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
         tree = new MaterializedViewRule().transform(tree, context).get(0);
         memo.replaceRewriteExpression(memo.getRootGroup(), tree);
+
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
+        CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
 
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteOnlyOnce(memo, rootTaskContext, LimitPruneTabletsRule.getInstance());

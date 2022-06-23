@@ -1940,12 +1940,12 @@ public class JoinTest extends PlanTestBase {
                 "    SELECT MAX(k9)\n" +
                 "    FROM test.pushdown_test);";
         String plan = starRocksAssert.query(sql).explainQuery();
-        assertContains(plan, "  3:SELECT\n" +
-                "  |  predicates: CAST(23: max AS DOUBLE) > 0.0\n" +
-                "  |  \n" +
+        assertContains(plan, "    UNPARTITIONED\n" +
+                "\n" +
                 "  2:AGGREGATE (update finalize)\n" +
                 "  |  output: max(22: k9)\n" +
                 "  |  group by: \n" +
+                "  |  having: CAST(23: max AS DOUBLE) > 0.0\n" +
                 "  |  \n" +
                 "  1:OlapScanNode");
     }
