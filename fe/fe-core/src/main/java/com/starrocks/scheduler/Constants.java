@@ -12,8 +12,8 @@ public class Constants {
     }
 
     public enum TaskState {
-        // For TaskType NORMAL TaskState is NONE.
-        NONE,
+        // For TaskType NORMAL TaskState is UNKNOWN.
+        UNKNOWN,
         // For TaskType PERIODICAL when TaskState is ACTIVE it means scheduling works.
         ACTIVE,
         PAUSE

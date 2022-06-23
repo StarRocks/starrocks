@@ -27,7 +27,7 @@ public class Task implements Writable {
 
     // set default to NONE is for compatibility
     @SerializedName("state")
-    private Constants.TaskState state = Constants.TaskState.NONE;
+    private Constants.TaskState state = Constants.TaskState.UNKNOWN;
 
     @SerializedName("schedule")
     private Schedule schedule;
