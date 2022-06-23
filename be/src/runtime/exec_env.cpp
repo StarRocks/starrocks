@@ -503,6 +503,9 @@ void ExecEnv::_destroy() {
         delete _compaction_mem_tracker;
         _compaction_mem_tracker = nullptr;
     }
+
+    _lake_tablet_manager->prune_metacache();
+
     if (_tablet_meta_mem_tracker) {
         delete _tablet_meta_mem_tracker;
         _tablet_meta_mem_tracker = nullptr;
