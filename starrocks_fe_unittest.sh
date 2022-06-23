@@ -78,7 +78,7 @@ if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
     pwd
     #jacoco_result="jacoco_${GITHUB_PR_NUMBER}.exec"
     #mv jacoco.exec $jacoco_result || true
-    java -jar $ROOT/starrocks/FeCoverageTool/jacococli.jar report ./$jacoco_result --classfiles ./classes/ --html ./result --sourcefiles $ROOT/starrocks/fe/fe-core/src/main/java/ --encoding utf-8 --name fe-coverage
+    java -jar $ROOT/starrocks/FeCoverageTool-main/jacococli.jar report ./$jacoco_result --classfiles ./classes/ --html ./result --sourcefiles $ROOT/starrocks/fe/fe-core/src/main/java/ --encoding utf-8 --name fe-coverage
     ls -al $ROOT/starrocks/fe/fe-core/target
     time_count=0
     pull_status=1
@@ -86,7 +86,7 @@ if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
         if (( $time_count == 3 ));then
             exit 1
         fi
-        timeout 180 java -jar $ROOT/starrocks/FeCoverageTool/cover-checker-console-1.4.0-jar-with-dependencies.jar --cover $ROOT/starrocks/fe/fe-core/target/result/ --github-token 66e4c48809eb7e058eb73668b8c816867e6d7cbe  --repo StarRocks/starrocks --threshold 80 --github-url api.github.com  --pr ${GITHUB_PR_NUMBER} -type jacoco
+        timeout 180 java -jar $ROOT/starrocks/FeCoverageTool-main/cover-checker-console-1.4.0-jar-with-dependencies.jar --cover $ROOT/starrocks/fe/fe-core/target/result/ --github-token 66e4c48809eb7e058eb73668b8c816867e6d7cbe  --repo StarRocks/starrocks --threshold 80 --github-url api.github.com  --pr ${GITHUB_PR_NUMBER} -type jacoco
         pull_status=$?
         time_count=`expr $time_count + 1`
     done
