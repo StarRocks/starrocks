@@ -47,7 +47,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
         boolean hasNoGroup = agg.getGroupingKeys().isEmpty();
         // check cbo is enabled and hasNoGroup is true
-        if (context.getSessionVariable().isCboCteReuse() && hasNoGroup) {
+        if (context.getSessionVariable().isCboCteReuse()) {
             return false;
         }
 
