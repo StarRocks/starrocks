@@ -4,6 +4,7 @@
 
 #include "column/array_column.h"
 #include "exec/vectorized/hdfs_scanner.h"
+#include "formats/parquet/column_converter.h"
 #include "formats/parquet/stored_column_reader.h"
 #include "util/runtime_profile.h"
 
@@ -54,17 +55,13 @@ static void def_rep_to_offset(const LevelInfo& level_info, const level_t* def_le
 
 class ScalarColumnReader : public ColumnReader {
 public:
-    explicit ScalarColumnReader(ColumnReaderOptions opts) : _opts(std::move(opts)) {}
+    explicit ScalarColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
     ~ScalarColumnReader() override = default;
 
-    Status init(int chunk_size, RandomAccessFile* file, const ParquetField* field,
-                const tparquet::ColumnChunk* chunk_metadata, const TypeDescriptor& col_type) {
-        StoredColumnReaderOptions opts;
-        opts.stats = _opts.stats;
-
+    Status init(const ParquetField* field, const TypeDescriptor& col_type,
+                const tparquet::ColumnChunk* chunk_metadata) {
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*field, col_type, _opts.timezone, &converter));
-
-        return StoredColumnReader::create(file, field, chunk_metadata, opts, chunk_size, &_reader);
+        return StoredColumnReader::create(_opts, field, chunk_metadata, &_reader);
     }
 
     Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
@@ -102,14 +99,14 @@ public:
     }
 
 private:
-    ColumnReaderOptions _opts;
+    const ColumnReaderOptions& _opts;
 
     std::unique_ptr<StoredColumnReader> _reader;
 };
 
 class ListColumnReader : public ColumnReader {
 public:
-    explicit ListColumnReader(ColumnReaderOptions opts) : _opts(std::move(opts)) {}
+    explicit ListColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
     ~ListColumnReader() override = default;
 
     Status init(const ParquetField* field, std::unique_ptr<ColumnReader> element_reader) {
@@ -166,29 +163,26 @@ public:
     }
 
 private:
-    ColumnReaderOptions _opts;
+    const ColumnReaderOptions& _opts;
 
     const ParquetField* _field = nullptr;
     std::unique_ptr<ColumnReader> _element_reader;
 };
 
-Status ColumnReader::create(RandomAccessFile* file, const ParquetField* field, const tparquet::RowGroup& row_group,
-                            const TypeDescriptor& col_type, const ColumnReaderOptions& opts, int chunk_size,
+Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             std::unique_ptr<ColumnReader>* output) {
     if (field->type.type == TYPE_MAP || field->type.type == TYPE_STRUCT) {
         return Status::InternalError("not supported type");
     }
     if (field->type.type == TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
-        RETURN_IF_ERROR(ColumnReader::create(file, &field->children[0], row_group, col_type.children[0], opts,
-                                             chunk_size, &child_reader));
+        RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[0], col_type.children[0], &child_reader));
         std::unique_ptr<ListColumnReader> reader(new ListColumnReader(opts));
         RETURN_IF_ERROR(reader->init(field, std::move(child_reader)));
         *output = std::move(reader);
     } else {
         std::unique_ptr<ScalarColumnReader> reader(new ScalarColumnReader(opts));
-        RETURN_IF_ERROR(
-                reader->init(chunk_size, file, field, &row_group.columns[field->physical_column_index], col_type));
+        RETURN_IF_ERROR(reader->init(field, col_type, &opts.row_group_meta->columns[field->physical_column_index]));
         *output = std::move(reader);
     }
     return Status::OK();
