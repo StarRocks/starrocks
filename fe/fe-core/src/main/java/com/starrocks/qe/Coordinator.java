@@ -1166,7 +1166,7 @@ public class Coordinator {
                 continue;
             }
 
-            if (fragment.getDataPartition() == DataPartition.UNPARTITIONED) {
+            if (fragment.getDataPartition() == DataPartition.UNPARTITIONED || fragment.getSink() instanceof ResultSink) {
                 Reference<Long> backendIdRef = new Reference<>();
                 TNetworkAddress execHostport = SimpleScheduler.getHost(this.idToBackend, backendIdRef);
                 if (execHostport == null) {
