@@ -1241,7 +1241,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     // The last is we find PersistentIndexMetaPB and it's version is equal to latest applied version. In this case,
     // we can load from index file directly
     EditVersion lastest_applied_version;
-    tablet->updates()->get_latest_applied_version(&lastest_applied_version);
+    RETURN_IF_ERROR(tablet->updates()->get_latest_applied_version(&lastest_applied_version));
     if (status.ok()) {
         // all applied rowsets has save in existing persistent index meta
         // so we can load persistent index according to PersistentIndexMetaPB
