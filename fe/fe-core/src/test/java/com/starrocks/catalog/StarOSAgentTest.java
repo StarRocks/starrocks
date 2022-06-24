@@ -44,13 +44,13 @@ public class StarOSAgentTest {
                 minTimes = 0;
                 result = null;
 
-                client.bootstrapService("starrocks", "123");
+                client.bootstrapService("starrocks", "starrocks");
                 minTimes = 0;
                 result = 1;
             }
         };
-        starosAgent.registerAndBootstrapService("123");
-        Assert.assertEquals(1, starosAgent.getServiceId());
+        starosAgent.registerAndBootstrapService();
+        Assert.assertEquals(1, starosAgent.getServiceIdForTest());
     }
 
     @Test
@@ -62,20 +62,20 @@ public class StarOSAgentTest {
                 result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
                         "service already exists!");
 
-                client.bootstrapService("starrocks", "123");
+                client.bootstrapService("starrocks", "starrocks");
                 minTimes = 0;
                 result = 3;
             }
         };
-        starosAgent.registerAndBootstrapService("123");
-        Assert.assertEquals(3, starosAgent.getServiceId());
+        starosAgent.registerAndBootstrapService();
+        Assert.assertEquals(3L, starosAgent.getServiceIdForTest());
     }
 
     @Test
     public void testBootstrapServiceException() throws Exception {
         new Expectations() {
             {
-                client.bootstrapService("starrocks", "123");
+                client.bootstrapService("starrocks", "starrocks");
                 minTimes = 0;
                 result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
                         "service already exists!");
@@ -85,22 +85,22 @@ public class StarOSAgentTest {
                 result = 4;
             }
         };
-        starosAgent.registerAndBootstrapService("123");
-        Assert.assertEquals(4, starosAgent.getServiceId());
+        starosAgent.registerAndBootstrapService();
+        Assert.assertEquals(4, starosAgent.getServiceIdForTest());
     }
 
     @Test
     public void testGetServiceId() throws Exception {
         new Expectations() {
             {
-                client.getServiceInfo("123").getServiceId();
+                client.getServiceInfo("starrocks").getServiceId();
                 minTimes = 0;
                 result = 2;
             }
         };
 
-        starosAgent.getServiceId("123");
-        Assert.assertEquals(2, starosAgent.getServiceId());
+        starosAgent.getServiceId();
+        Assert.assertEquals(2L, starosAgent.getServiceIdForTest());
     }
 
     @Test

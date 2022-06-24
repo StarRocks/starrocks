@@ -35,6 +35,8 @@ import java.util.stream.Collectors;
 public class StarOSAgent {
     private static final Logger LOG = LogManager.getLogger(StarOSAgent.class);
 
+    public static final String serviceName = "starrocks";
+
     private StarClient client;
     private long serviceId;
     private Map<String, Long> workerToId;
@@ -61,12 +63,12 @@ public class StarOSAgent {
 
     private void prepare() {
         if (serviceId == -1) {
-            getServiceId("1");
+            getServiceId();
         }
     }
 
     // for ut only
-    public long getServiceId() {
+    public long getServiceIdForTest() {
         return serviceId;
     }
 
@@ -75,7 +77,7 @@ public class StarOSAgent {
         this.serviceId = id;
     }
 
-    public void registerAndBootstrapService(String serviceName) {
+    public void registerAndBootstrapService() {
         if (serviceId != -1) {
             return;
         }
@@ -97,12 +99,12 @@ public class StarOSAgent {
                 LOG.warn(e);
                 System.exit(-1);
             } else {
-                getServiceId(serviceName);
+                getServiceId();
             }
         }
     }
 
-    public void getServiceId(String serviceName) {
+    public void getServiceId() {
         if (serviceId != -1) {
             return;
         }
