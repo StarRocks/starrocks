@@ -173,19 +173,6 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     }
     eval_runtime_bloom_filters(res.get());
     return res;
-
-    /*
-    for (auto& chunk_source : _chunk_sources) {
-        if (chunk_source != nullptr && chunk_source->has_output()) {
-            auto&& chunk = chunk_source->get_next_chunk_from_buffer();
-            eval_runtime_bloom_filters(chunk.value().get());
-
-            return std::move(chunk);
-        }
-    }
-
-    return nullptr;
-    */
 }
 
 int64_t ScanOperator::global_rf_wait_timeout_ns() const {
