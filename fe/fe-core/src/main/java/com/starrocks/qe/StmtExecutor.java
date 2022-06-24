@@ -105,6 +105,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.Constants;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.task.LoadEtlTask;
@@ -787,15 +788,12 @@ public class StmtExecutor {
         Database db = MetaUtils.getStarRocks(context, analyzeStmt.getTableName());
         Table table = MetaUtils.getStarRocksTable(context, analyzeStmt.getTableName());
 
-        AnalyzeJob job = new AnalyzeJob();
-        job.setDbId(db.getId());
-        job.setTableId(table.getId());
-        job.setColumns(analyzeStmt.getColumnNames());
-        job.setType(analyzeStmt.isSample() ? Constants.AnalyzeType.SAMPLE : Constants.AnalyzeType.FULL);
-        job.setScheduleType(Constants.ScheduleType.ONCE);
-        job.setWorkTime(LocalDateTime.now());
-        job.setStatus(Constants.ScheduleStatus.FINISH);
-        job.setProperties(analyzeStmt.getProperties());
+        AnalyzeJob job = new AnalyzeJob(db.getId(), table.getId(), analyzeStmt.getColumnNames(),
+                analyzeStmt.isSample() ? Constants.AnalyzeType.SAMPLE : Constants.AnalyzeType.FULL,
+                Constants.ScheduleType.ONCE,
+                analyzeStmt.getProperties(),
+                Constants.ScheduleStatus.FINISH,
+                LocalDateTime.now());
 
         try {
             statisticExecutor.collectStatisticSync(db.getId(), table.getId(), analyzeStmt.getColumnNames(),
@@ -1229,6 +1227,11 @@ public class StmtExecutor {
                         entity.counterInsertLoadRowsTotal.increase(loadedRows);
                         entity.counterInsertLoadBytesTotal
                                 .increase(Long.valueOf(coord.getLoadCounters().get(LoadJob.LOADED_BYTES)));
+                        BasicStatsMeta basicStatsMeta =
+                                GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(targetTable.getId());
+                        if (basicStatsMeta != null) {
+                            basicStatsMeta.increase(loadedRows);
+                        }
                     }
                 } else {
                     txnStatus = TransactionStatus.COMMITTED;

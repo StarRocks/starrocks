@@ -1322,16 +1322,34 @@ public class Config extends ConfigBase {
     public static boolean enable_statistic_collect = true;
 
     /**
+     * Enable full statistics collection
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_collect_full_statistics = false;
+
+    /**
+     * Statistics collection threshold
+     */
+    @ConfField(mutable = true)
+    public static double statistics_auto_collect_ratio = 0.8;
+
+    /**
+     * Full statistics collection max data size
+     */
+    @ConfField(mutable = true)
+    public static long statistics_max_full_collect_data_size = 100L * 1024 * 1024 * 1024; // 100G
+
+    /**
      * default bucket size of histogram statistics
      */
     @ConfField(mutable = true)
-    public static long histogram_buckets_size = 256;
+    public static long histogram_buckets_size = 64;
 
     /**
-     * default most common value size of histogram statistics
+     * default sample ratio of histogram statistics
      */
     @ConfField(mutable = true)
-    public static long histogram_topn_size = 256;
+    public static double histogram_sample_ratio = 0.1;
 
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.

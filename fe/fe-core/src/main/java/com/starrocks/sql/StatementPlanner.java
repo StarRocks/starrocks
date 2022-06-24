@@ -50,7 +50,7 @@ import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
-import com.starrocks.sql.ast.ShowAnalyzeStmt;
+import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.UseStmt;
@@ -207,8 +207,7 @@ public class StatementPlanner {
                 || statement instanceof RefreshTableStmt
                 || statement instanceof RevokeImpersonateStmt
                 || statement instanceof RevokeRoleStmt
-                || statement instanceof RefreshTableStmt
-                || statement instanceof ShowAnalyzeStmt
+                || statement instanceof ShowAnalyzeJobStmt
                 || statement instanceof ShowCatalogsStmt
                 || statement instanceof ShowColumnStmt
                 || statement instanceof ShowDbStmt

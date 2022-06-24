@@ -157,8 +157,11 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.ShowAnalyzeStmt;
+import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
+import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
+import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
@@ -945,7 +948,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowAnalyzeStatement(StarRocksParser.ShowAnalyzeStatementContext context) {
-        return new ShowAnalyzeStmt();
+        if (context.STATUS() != null) {
+            return new ShowAnalyzeStatusStmt();
+        } else if (context.JOB() != null) {
+            return new ShowAnalyzeJobStmt();
+        } else {
+            return new ShowAnalyzeJobStmt();
+        }
+    }
+
+    @Override
+    public ParseNode visitShowStatsMetaStatement(StarRocksParser.ShowStatsMetaStatementContext context) {
+        return new ShowBasicStatsMetaStmt();
+    }
+
+    @Override
+    public ParseNode visitShowHistogramMetaStatement(StarRocksParser.ShowHistogramMetaStatementContext context) {
+        return new ShowHistogramStatsMetaStmt();
     }
 
     @Override
@@ -973,9 +992,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             bucket = Config.histogram_buckets_size;
         }
-        long mcv = Config.histogram_topn_size;
 
-        return new AnalyzeStmt(tableName, columnNames, properties, true, new AnalyzeHistogramDesc(bucket, mcv));
+        return new AnalyzeStmt(tableName, columnNames, properties, true, new AnalyzeHistogramDesc(bucket));
     }
 
     // ------------------------------------------- Work Group Statement -------------------------------------------------

@@ -64,6 +64,8 @@ statement
     | analyzeHistogramStatement                                                             #analyzeHistogram
     | dropAnalyzeHistogramStatement                                                         #dropHistogram
     | showAnalyzeStatement                                                                  #showAnalyze
+    | showStatsMetaStatement                                                                #showStatsMeta
+    | showHistogramMetaStatement                                                            #showHistogramMeta
 
     // Work Group Statement
     | createWorkGroupStatement                                                              #createWorkGroup
@@ -356,7 +358,15 @@ dropAnalyzeJobStatement
     ;
 
 showAnalyzeStatement
-    : SHOW ANALYZE
+    : SHOW ANALYZE (JOB | STATUS)?
+    ;
+
+showStatsMetaStatement
+    : SHOW STATS META
+    ;
+
+showHistogramMetaStatement
+    : SHOW HISTOGRAM META
     ;
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
@@ -956,8 +966,9 @@ nonReserved
     | GLOBAL | GRANTS
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR
     | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
+    | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
-    | MANUAL | MATERIALIZED | MAX | MIN | MINUTE | MODIFY | MONTH | MERGE
+    | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NULLS
     | OBSERVER | OFFSET | ONLY | OPEN
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
@@ -966,7 +977,7 @@ nonReserved
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
     | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE | STRING
-    | SUBMIT | SYNC
+    | STATS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER

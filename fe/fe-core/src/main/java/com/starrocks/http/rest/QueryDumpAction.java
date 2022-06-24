@@ -17,7 +17,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
-import com.starrocks.statistic.StatisticExecutor;
+import com.starrocks.sql.parser.SqlParser;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
@@ -68,7 +68,7 @@ public class QueryDumpAction extends RestBaseAction {
 
         StatementBase parsedStmt;
         try {
-            parsedStmt = StatisticExecutor.parseSQL(query, context);
+            parsedStmt = SqlParser.parseFirstStatement(query, context.getSessionVariable().getSqlMode());
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             executor.execute();
         } catch (Exception e) {
