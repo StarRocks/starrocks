@@ -64,6 +64,7 @@ public class ClientContextManager {
             clientContexts.putIfAbsent(clientId, new ClientResourceContext(clientId));
         }
         ClientResourceContext clientContext = clientContexts.get(clientId);
+        clientContext.updateClientLastPingTime();
         clientContext.putOutputStream(fd, fsDataOutputStream, brokerFileSystem);
         fdToClientMap.putIfAbsent(fd, clientId);
     }
@@ -74,6 +75,7 @@ public class ClientContextManager {
             clientContexts.putIfAbsent(clientId, new ClientResourceContext(clientId));
         }
         ClientResourceContext clientContext = clientContexts.get(clientId);
+        clientContext.updateClientLastPingTime();
         clientContext.putInputStream(fd, fsDataInputStream, brokerFileSystem);
         fdToClientMap.putIfAbsent(fd, clientId);
     }
@@ -85,6 +87,7 @@ public class ClientContextManager {
                     "the fd is not owned by client {}", clientId);
         }
         ClientResourceContext clientContext = clientContexts.get(clientId);
+        clientContext.updateClientLastPingTime();
         FSDataInputStream fsDataInputStream = clientContext.getInputStream(fd);
         return fsDataInputStream;
     }
@@ -96,6 +99,7 @@ public class ClientContextManager {
                     "the fd is not owned by client {}", clientId);
         }
         ClientResourceContext clientContext = clientContexts.get(clientId);
+        clientContext.updateClientLastPingTime();
         FSDataOutputStream fsDataOutputStream = clientContext.getOutputStream(fd);
         return fsDataOutputStream;
     }
@@ -234,6 +238,10 @@ public class ClientContextManager {
                 return brokerOutputStream.getOutputStream();
             }
             return null;
+        }
+
+        public void updateClientLastPingTime() {
+            this.lastPingTimestamp = System.currentTimeMillis();
         }
         
         public void updateLastPingTime() {
