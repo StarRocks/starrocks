@@ -24,10 +24,14 @@ class AsyncDeltaWriter {
     struct private_type;
 
 public:
+    // Undocemented rule of bthread that -1(0xFFFFFFFFFFFFFFFF) is an invalid ExecutionQueueId
+    constexpr static uint64_t kInvalidQueueId = (uint64_t)-1;
+
     // Create a new transaction in TxnManager and return a AsyncDeltaWriter for write.
     static StatusOr<std::unique_ptr<AsyncDeltaWriter>> open(const DeltaWriterOptions& opt, MemTracker* mem_tracker);
 
-    AsyncDeltaWriter(private_type, std::unique_ptr<DeltaWriter> writer) : _writer(std::move(writer)) {}
+    AsyncDeltaWriter(private_type, std::unique_ptr<DeltaWriter> writer)
+            : _writer(std::move(writer)), _queue_id{kInvalidQueueId} {}
 
     ~AsyncDeltaWriter();
 
