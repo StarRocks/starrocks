@@ -136,22 +136,12 @@ starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id
 }
 
 starrocks::vectorized::Schema ChunkHelper::convert_schema_to_format_v2(const starrocks::TabletSchema& schema) {
-    starrocks::vectorized::Fields fields;
-    for (ColumnId cid = 0; cid < schema.num_columns(); ++cid) {
-        auto f = convert_field_to_format_v2(cid, schema.column(cid));
-        fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
-    }
-    return starrocks::vectorized::Schema(std::move(fields), schema.keys_type());
+    return starrocks::vectorized::Schema(schema.schema());
 }
 
 starrocks::vectorized::Schema ChunkHelper::convert_schema_to_format_v2(const starrocks::TabletSchema& schema,
                                                                        const std::vector<ColumnId>& cids) {
-    starrocks::vectorized::Fields fields;
-    for (ColumnId cid : cids) {
-        auto f = convert_field_to_format_v2(cid, schema.column(cid));
-        fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
-    }
-    return starrocks::vectorized::Schema(std::move(fields), schema.keys_type());
+    return starrocks::vectorized::Schema(schema.schema(), cids);
 }
 
 starrocks::vectorized::Schema ChunkHelper::get_short_key_schema_with_format_v2(const starrocks::TabletSchema& schema) {
