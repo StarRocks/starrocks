@@ -6,8 +6,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.ShowTriggersStmt;
-import com.starrocks.server.GlobalStateMgr;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.proto.ReplicaInfo;
