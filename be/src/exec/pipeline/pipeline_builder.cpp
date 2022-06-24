@@ -150,14 +150,28 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
     return operators_source_with_local_exchange;
 }
 
-MorselQueue* PipelineBuilderContext::morsel_queue_of_source_operator(const SourceOperatorFactory* source_op) {
+size_t PipelineBuilderContext::dop_of_source_operator(int source_node_id) {
+    auto* morsel_queue_factory = morsel_queue_factory_of_source_operator(source_node_id);
+    return morsel_queue_factory->size();
+}
+
+MorselQueueFactory* PipelineBuilderContext::morsel_queue_factory_of_source_operator(int source_node_id) {
+    auto& morsel_queues = _fragment_context->morsel_queue_factories();
+    DCHECK(morsel_queues.count(source_node_id));
+    return morsel_queues[source_node_id].get();
+}
+
+MorselQueueFactory* PipelineBuilderContext::morsel_queue_factory_of_source_operator(
+        const SourceOperatorFactory* source_op) {
     if (!source_op->with_morsels()) {
         return nullptr;
     }
-    auto& morsel_queues = _fragment_context->morsel_queues();
-    auto source_id = source_op->plan_node_id();
-    DCHECK(morsel_queues.count(source_id));
-    return morsel_queues[source_id].get();
+
+    return morsel_queue_factory_of_source_operator(source_op->plan_node_id());
+}
+
+bool PipelineBuilderContext::need_local_shuffle(OpFactories ops) const {
+    return down_cast<SourceOperatorFactory*>(ops[0].get())->need_local_shuffle();
 }
 
 Pipelines PipelineBuilder::build(const FragmentContext& fragment, ExecNode* exec_node) {

@@ -55,4 +55,25 @@ void ExchangeSourceOperatorFactory::close_stream_recvr() {
         _stream_recvr->close();
     }
 }
+
+bool ExchangeSourceOperatorFactory::need_local_shuffle() const {
+    DCHECK(_texchange_node.__isset.partition_type);
+    // There are two ways of shuffle
+    // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED
+    // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so
+    // there is no need to perform local shuffle again at receiver side
+    // 2. Otherwise, add LocalExchangeOperator
+    // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes.
+    return _texchange_node.partition_type != TPartitionType::HASH_PARTITIONED &&
+           _texchange_node.partition_type != TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED;
+}
+
+TPartitionType::type ExchangeSourceOperatorFactory::partition_type() const {
+    DCHECK(_texchange_node.__isset.partition_type);
+    if (_texchange_node.partition_type != TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
+        return SourceOperatorFactory::partition_type();
+    }
+    return _texchange_node.partition_type;
+}
+
 } // namespace starrocks::pipeline

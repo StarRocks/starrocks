@@ -25,9 +25,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
         }
 
         auto it = _num_sinkers.find(instance_id.lo);
-        if (it != _num_sinkers.end()) {
-            it->second += num_sinkers;
-        } else {
+        if (it == _num_sinkers.end()) {
             _num_sinkers[instance_id.lo] = num_sinkers;
 
             _request_seqs[instance_id.lo] = -1;
@@ -46,10 +44,7 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
         }
     }
 
-    _num_remaining_eos = 0;
-    for (auto& [_, num] : _num_sinkers) {
-        _num_remaining_eos += num;
-    }
+    _num_remaining_eos = _num_sinkers.size() * num_sinkers;
 }
 
 SinkBuffer::~SinkBuffer() {

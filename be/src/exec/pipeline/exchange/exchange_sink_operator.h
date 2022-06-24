@@ -33,7 +33,7 @@ public:
     ExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                          const std::shared_ptr<SinkBuffer>& buffer, TPartitionType::type part_type,
                          const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle,
-                         const int32_t num_shuffles, int32_t sender_id, PlanNodeId dest_node_id,
+                         const int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
                          const std::vector<ExprContext*>& partition_expr_ctxs, bool enable_exchange_pass_through,
                          FragmentContext* const fragment_ctx, const std::vector<int32_t>& output_columns);
 
@@ -71,6 +71,7 @@ private:
         return sz > runtime_state()->chunk_size() * 512;
     }
 
+private:
     class Channel;
 
     static const int32_t DEFAULT_DRIVER_SEQUENCE = 0;
@@ -84,17 +85,50 @@ private:
     // then we shuffle for different parallelism at sender side(ExchangeSinkOperator) if _is_pipeline_level_shuffle is true
     const bool _is_pipeline_level_shuffle;
     // Degree of pipeline level shuffle
-    // If _is_pipeline_level_shuffle is false, it is set to 1
-    // If _is_pipeline_level_shuffle is true, it is equal with dop of dest pipeline
-    const int32_t _num_shuffles;
+    // - If _is_pipeline_level_shuffle is false, it is set to 1.
+    // - If _is_pipeline_level_shuffle is true,
+    //      - if each channel is bound to a specific driver sequence, it it set to 1.
+    //      - otherwise, it is equal with dop of dest pipeline.
+    int32_t _num_shuffles_per_channel;
+    int32_t _num_shuffles = 0;
+    // Channel is bound to the specific driver sequence only for the right exchange of local bucket shuffle join.
+    // The shuffle way of right exchange must be identical to the bucket distribution of the left table,
+    // so each bucket has a corresponding channel.
+    // Because each tablet bucket of the left table is assigned to a scan operator with the specific driver sequence,
+    // each channel of the right exchange must be bound to the same driver sequence.
+    //
+    // For example, assume that there are 5 tablet buckets and pipeline_dop is 3.
+    //                                   ┌───────────┐                                                ┌──────────┐
+    //                       ┌──────────►│Join Probe │◄───────────┐                  ┌──────────────► │Join Build│◄────────────────┐
+    //                       │           └───────────┘            │                  │                └──────────┘                 │
+    //                       │                  ▲                 │                  │                       ▲                     │
+    //                       │                  │                 │                  │                       │                     │
+    //               ┌───────┴──────┐   ┌───────┴──────┐  ┌───────┴──────┐  ┌────────┴───────┐      ┌────────┴───────┐  ┌──────────┴─────┐
+    //               │ScanOperator#0│   │ScanOperator#1│  │ScanOperator#2│  │ExchangeSource#0│      │ExchangeSource#1│  │ExchangeSource#2│
+    //               └──────────────┘   └──────────────┘  └──────────────┘  └────────────────┘      └────────────────┘  └────────────────┘
+    //                                                                               ▲                       ▲                    ▲
+    //                                                                               │                       │                    │
+    //                                                                          ┌────┴──────┐           ┌────┴──────┐             │
+    //                                                                          │           │           │           │             │
+    //                                                                    ┌─────┴───┐ ┌─────┴───┐ ┌─────┴───┐ ┌─────┴───┐    ┌────┴────┐
+    // Tablet Bucket      0, 2                1, 3                4       │Channel#0│ │Channel#2│ │Channel#1│ │Channel#3│    │Channel#4│
+    //                                                                    └─────▲───┘ └─────▲───┘ └────▲────┘ └─────▲───┘    └─────▲───┘
+    //                                                                          │           │          │            │              │
+    //                                                                          └───────────┴──────────┴──────┬─────┴──────────────┘
+    //                                                                                                        │
+    //                                                                                                 ┌──────┴───────┐
+    //                                                                                                 │ ExchangeSink │
+    //                                                                                                 └──────────────┘
+    bool _is_channel_bound_driver_sequence = false;
+
     // Sender instance id, unique within a fragment.
     const int32_t _sender_id;
     const PlanNodeId _dest_node_id;
 
     // Will set in prepare
     int32_t _be_number = 0;
-
-    std::vector<std::shared_ptr<Channel>> _channels;
+    phmap::flat_hash_map<int64_t, std::unique_ptr<Channel>> _instance_id2channel;
+    std::vector<Channel*> _channels;
     // index list for channels
     // We need a random order of sending channels to avoid rpc blocking at the same time.
     // But we can't change the order in the vector<channel> directly,
@@ -133,7 +167,8 @@ private:
     vectorized::Columns _partitions_columns;
     std::vector<uint32_t> _hash_values;
     std::vector<uint32_t> _channel_ids;
-    std::vector<uint32_t> _driver_sequences;
+    std::vector<uint32_t> _shuffle_ids;
+    std::vector<int> _driver_sequence_per_shuffle;
     // This array record the channel start point in _row_indexes
     // And the last item is the number of rows of the current shuffle chunk.
     // It will easy to get number of rows belong to one channel by doing
@@ -155,7 +190,7 @@ public:
     ExchangeSinkOperatorFactory(int32_t id, int32_t plan_node_id, std::shared_ptr<SinkBuffer> buffer,
                                 TPartitionType::type part_type,
                                 const std::vector<TPlanFragmentDestination>& destinations,
-                                bool is_pipeline_level_shuffle, int32_t num_shuffles, int32_t sender_id,
+                                bool is_pipeline_level_shuffle, int32_t num_shuffles_per_channel, int32_t sender_id,
                                 PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs,
                                 bool enable_exchange_pass_through, FragmentContext* const fragment_ctx,
                                 const std::vector<int32_t>& output_columns);
@@ -174,7 +209,7 @@ private:
 
     const std::vector<TPlanFragmentDestination>& _destinations;
     const bool _is_pipeline_level_shuffle;
-    const int32_t _num_shuffles;
+    const int32_t _num_shuffles_per_channel;
     int32_t _sender_id;
     const PlanNodeId _dest_node_id;
 
