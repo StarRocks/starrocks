@@ -2,6 +2,7 @@
 
 package com.starrocks.external.hive;
 
+import com.google.common.base.Strings;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -19,7 +20,16 @@ import com.starrocks.common.DdlException;
 import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.ObjectStorageUtils;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.avro.Schema;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
+import org.apache.hudi.avro.HoodieAvroUtils;
+import org.apache.hudi.common.model.HoodieFileFormat;
+import org.apache.hudi.common.model.HoodieTableType;
+import org.apache.hudi.common.table.HoodieTableConfig;
+import org.apache.hudi.common.table.HoodieTableMetaClient;
+import org.apache.hudi.common.table.TableSchemaResolver;
+import org.apache.hudi.common.util.Option;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -320,7 +330,51 @@ public class HiveMetaCache {
 
     private Table loadTable(HiveTableName hiveTableName) throws TException, DdlException {
         org.apache.hadoop.hive.metastore.api.Table hiveTable = client.getTable(hiveTableName);
-        HiveTable table =  HiveMetaStoreTableUtils.convertToSRTable(hiveTable, resourceName);
+        Table table = null;
+        if (hiveTable.getSd().getInputFormat().contains("hudi")) {
+            Map<String, String> hudiProperties = Maps.newHashMap();
+            // table = HiveMetaStoreTableUtils.convertHudiConnTableToSRTable(hiveTable);
+
+            String hudiBasePath = hiveTable.getSd().getLocation();
+            if (!Strings.isNullOrEmpty(hudiBasePath)) {
+                hudiProperties.put("hudi.table.base.path", hudiBasePath);
+            }
+
+            Configuration conf = new Configuration();
+            HoodieTableMetaClient metaClient =
+                    HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
+            HoodieTableConfig hudiTableConfig = metaClient.getTableConfig();
+
+            HoodieTableType hudiTableType = hudiTableConfig.getTableType();
+            if (hudiTableType == HoodieTableType.MERGE_ON_READ) {
+                throw new DdlException("MERGE_ON_READ type of hudi table is NOT supported.");
+            }
+            hudiProperties.put("hudi.table.type", hudiTableType.name());
+
+            Option<String[]> hudiTablePrimaryKey = hudiTableConfig.getRecordKeyFields();
+            if (hudiTablePrimaryKey.isPresent()) {
+                hudiProperties.put("hudi.table.primaryKey", hudiTableConfig.getRecordKeyFieldProp());
+            }
+
+            String hudiTablePreCombineField = hudiTableConfig.getPreCombineField();
+            if (!Strings.isNullOrEmpty(hudiTablePreCombineField)) {
+                hudiProperties.put("hudi.table.preCombineField", hudiTablePreCombineField);
+            }
+
+            HoodieFileFormat hudiBaseFileFormat = hudiTableConfig.getBaseFileFormat();
+            hudiProperties.put("hudi.table.base.file.format", hudiBaseFileFormat.name());
+
+            TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
+            Schema hudiTable;
+            try {
+                hudiTable = HoodieAvroUtils.createHoodieWriteSchema(schemaUtil.getTableAvroSchema());
+            } catch (Exception e) {
+                throw new DdlException("Cannot get hudi table schema.");
+            }
+            table = HiveMetaStoreTableUtils.convertHudiConnTableToSRTable(hudiTable, hiveTable, resourceName);
+        } else {
+            table = HiveMetaStoreTableUtils.convertHiveConnTableToSRTable(hiveTable, resourceName);
+        }
         tableColumnStatsCache.invalidate(new HiveTableColumnsKey(hiveTableName.getDatabaseName(),
                 hiveTableName.getTableName(), null, null, table.getType()));
 

@@ -31,6 +31,7 @@ public class ConnectorMgr {
     // TODO load jar by plugin
     private void init() {
         addConnectorFactory(new HiveConnectorFactory());
+        addConnectorFactory(new HudiConnectorFactory());
         addConnectorFactory(new IcebergConnectorFactory());
     }
 

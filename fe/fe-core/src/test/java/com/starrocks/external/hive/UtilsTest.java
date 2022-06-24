@@ -12,6 +12,9 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.HiveMetaStoreTableUtils;
+import com.starrocks.external.HiveMetaStoreTableUtils;
+import mockit.Mocked;
+import org.apache.avro.Schema;
 import org.apache.hadoop.hive.common.StatsSetupConst;
 import org.junit.Assert;
 import org.junit.Test;
@@ -217,5 +220,13 @@ public class UtilsTest {
         typeStr = "string";
         resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
         Assert.assertEquals(resType, stringType);
+    }
+
+    @Test
+    public void testArraySchema(@Mocked Schema schema) throws DdlException {
+        Schema unionSchema = Schema.createUnion(Schema.create(Schema.Type.INT));
+        Schema arraySchema = Schema.createArray(unionSchema);
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(arraySchema),
+                new ArrayType(ScalarType.createType(PrimitiveType.INT)));
     }
 }

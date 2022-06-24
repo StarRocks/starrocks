@@ -50,6 +50,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.external.HiveMetaStoreTableUtils.isInternalCatalog;
+
 /**
  * Currently, we depend on Hive metastore to obtain table/partition path and statistics.
  * This logic should be decoupled from metastore when the related interfaces are ready.
@@ -71,9 +73,9 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     private static final String HUDI_TABLE_PRE_COMBINE_FIELD = "hudi.table.preCombineField";
     private static final String HUDI_BASE_PATH = "hudi.table.base.path";
     private static final String HUDI_TABLE_BASE_FILE_FORMAT = "hudi.table.base.file.format";
-    private static final String HUDI_DB = "database";
-    private static final String HUDI_TABLE = "table";
-    private static final String HUDI_RESOURCE = "resource";
+    public static final String HUDI_DB = "database";
+    public static final String HUDI_TABLE = "table";
+    public static final String HUDI_RESOURCE = "resource";
 
     private String db;
     private String table;
@@ -208,10 +210,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         String resourceName = copiedProps.remove(HUDI_RESOURCE);
         Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
         HudiResource hudiResource = (HudiResource) resource;
-        if (hudiResource == null) {
+        // trick like hive table, only external table has resourceName
+        if (hudiResource == null && isInternalCatalog(resourceName)) {
             throw new DdlException("Hudi resource [" + resourceName + "] does NOT exists");
         }
-        if (hudiResource.getType() != Resource.ResourceType.HUDI) {
+        if ((resourceName == null || isInternalCatalog(resourceName)) && hudiResource.getType() != Resource.ResourceType.HUDI) {
             throw new DdlException("Resource [" + resourceName + "] is not hudi resource");
         }
 
