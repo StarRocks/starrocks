@@ -15,8 +15,8 @@ namespace starrocks::vectorized {
 class ORCHdfsFileStream : public orc::InputStream {
 public:
     // |file| must outlive ORCHdfsFileStream
-    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, HdfsScanStats* stats)
-            : _file(std::move(file)), _length(length), _stats(stats), _cache_buffer(0), _cache_offset(0) {}
+    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length)
+            : _file(std::move(file)), _length(length), _cache_buffer(0), _cache_offset(0) {}
 
     ~ORCHdfsFileStream() override = default;
 
@@ -75,8 +75,6 @@ public:
     }
 
     void doRead(void* buf, uint64_t length, uint64_t offset) {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
         if (buf == nullptr) {
             throw orc::ParseError("Buffer is null");
         }
@@ -86,7 +84,6 @@ public:
             auto msg = strings::Substitute("Failed to read $0: $1", _file->filename(), status.to_string());
             throw orc::ParseError(msg);
         }
-        _stats->bytes_read += length;
     }
 
     const std::string& getName() const override { return _file->filename(); }
@@ -94,7 +91,6 @@ public:
 private:
     RandomAccessFile* _file;
     uint64_t _length;
-    HdfsScanStats* _stats;
     std::vector<char> _cache_buffer;
     uint64_t _cache_offset;
 };
@@ -375,8 +371,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
 }
 
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
-    auto input_stream =
-            std::make_unique<ORCHdfsFileStream>(_file.get(), _scanner_params.scan_ranges[0]->file_length, &_stats);
+    auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _scanner_params.scan_ranges[0]->file_length);
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     std::unique_ptr<orc::Reader> reader;
     try {

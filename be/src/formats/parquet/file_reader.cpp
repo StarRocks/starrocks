@@ -38,7 +38,7 @@ Status FileReader::init(vectorized::HdfsScannerContext* ctx) {
     if (_is_file_filtered) {
         return Status::OK();
     }
-    _init_group_reader();
+    RETURN_IF_ERROR(_init_group_reader());
     return Status::OK();
 }
 
@@ -416,6 +416,7 @@ Status FileReader::get_next(vectorized::ChunkPtr* chunk) {
                 _scan_row_count += (*chunk)->num_rows();
             }
             if (status.is_end_of_file()) {
+                _row_group_readers[_cur_row_group_idx]->close();
                 _cur_row_group_idx++;
                 return Status::OK();
             }
