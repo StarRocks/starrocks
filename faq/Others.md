@@ -214,7 +214,7 @@ StarRocks 支持单节点部署，所以 BE 最小配置个数是 1 个。BE 需
 
 ## 为什么将 `is_report_success` 指定为 `true` 后 profile 无法显示？
 
-因为报告信息只汇报给主 FE，只有主 FE 可以查看报告信息。
+只有leader所在fe可以查看，因为report信息只汇报给leader节点。同时，如果通过 StarRocks Manager 查看 proflie， 必须确保 FE 配置项 `enable_collect_query_detail_info` 为 `true`。
 
 ## 如何查看 StarRocks 表里的字段注释？
 
