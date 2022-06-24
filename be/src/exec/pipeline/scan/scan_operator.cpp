@@ -327,7 +327,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
         detach_chunk_source(chunk_source_index);
     }
 
-    // NOTE: attach a active source before really creating it, to avoid the race condition
+    // NOTE: attach an active source before really creating it, to avoid the race condition
     bool need_detach = true;
     attach_chunk_source(chunk_source_index);
     DeferOp defer([&]() {
