@@ -112,7 +112,7 @@ private:
             if (_latch) _latch->count_down();
         }
 
-        mutable std::mutex _response_lock;
+        mutable bthread::Mutex _response_lock;
         PTabletWriterAddBatchResult* _response;
         BThreadCountDownLatch* _latch;
 
@@ -168,10 +168,10 @@ private:
     std::vector<Sender> _senders;
     size_t _max_sliding_window_size = config::max_load_dop * 3;
 
-    mutable std::mutex _partitions_ids_lock;
+    mutable bthread::Mutex _partitions_ids_lock;
     std::unordered_set<int64_t> _partition_ids;
 
-    mutable std::mutex _chunk_meta_lock;
+    mutable bthread::Mutex _chunk_meta_lock;
     serde::ProtobufChunkMeta _chunk_meta;
     std::atomic<bool> _has_chunk_meta;
 
