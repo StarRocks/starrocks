@@ -10,8 +10,8 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "storage/vectorized_column_predicate.h"
+#include "util/buffered_stream.h"
 #include "util/runtime_profile.h"
-
 namespace starrocks {
 class RandomAccessFile;
 
@@ -58,14 +58,16 @@ public:
 
     Status init(const GroupReaderParam& _param);
     Status get_next(vectorized::ChunkPtr* chunk, size_t* row_count);
+    void close();
 
 private:
     using SlotIdExprContextsMap = std::unordered_map<int, std::vector<ExprContext*>>;
 
     Status _init_column_readers();
     Status _create_column_reader(const GroupReaderParam::Column& column);
+    Status _set_io_ranges();
     // Extract dict filter columns and conjuncts
-    void _pre_process_columns_and_conjunct_ctxs();
+    void _process_columns_and_conjunct_ctxs();
     bool _can_using_dict_filter(const SlotDescriptor* slot, const SlotIdExprContextsMap& slot_conjunct_ctxs,
                                 const tparquet::ColumnMetaData& column_metadata);
     // Returns true if all of the data pages in the column chunk are dict encoded
@@ -80,6 +82,7 @@ private:
     int _chunk_size;
 
     RandomAccessFile* _file;
+    SharedBufferedInputStream* _sb_stream;
 
     // parquet file meta
     FileMetaData* _file_metadata;
@@ -114,6 +117,8 @@ private:
     GroupReaderParam _param;
 
     ObjectPool _obj_pool;
+
+    ColumnReaderOptions _column_reader_opts;
 };
 
 } // namespace starrocks::parquet

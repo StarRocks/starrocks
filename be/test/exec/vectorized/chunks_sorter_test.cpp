@@ -198,7 +198,7 @@ static Permutation make_permutation(int len) {
     return perm;
 }
 
-static std::vector<ChunkPtr> consume_pages_from_sorter(ChunksSorter& sorter) {
+[[maybe_unused]] static std::vector<ChunkPtr> consume_pages_from_sorter(ChunksSorter& sorter) {
     std::vector<ChunkPtr> result;
 
     bool eos = false;

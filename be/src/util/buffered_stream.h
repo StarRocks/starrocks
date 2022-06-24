@@ -12,11 +12,17 @@ namespace starrocks {
 
 class RandomAccessFile;
 
-class BufferedInputStream {
+class IBufferedInputStream {
 public:
-    BufferedInputStream(RandomAccessFile* file, uint64_t offset, uint64_t length);
+    virtual Status get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes) = 0;
+    virtual ~IBufferedInputStream() {}
+};
 
-    ~BufferedInputStream() = default;
+class DefaultBufferedInputStream : public IBufferedInputStream {
+public:
+    DefaultBufferedInputStream(RandomAccessFile* file, uint64_t offset, uint64_t length);
+
+    ~DefaultBufferedInputStream() override = default;
 
     void seek_to(uint64_t offset) {
         uint64_t current_file_offset = tell();
@@ -46,6 +52,8 @@ public:
 
     void reserve(size_t nbytes);
 
+    Status get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes) override;
+
 private:
     Status _read_data();
     size_t num_remaining() const { return _buf_written - _buf_position; }
@@ -62,6 +70,43 @@ private:
     size_t _buf_written = 0;
 
     uint64_t _file_offset = 0;
+};
+
+class SharedBufferedInputStream : public IBufferedInputStream {
+public:
+    struct IORange {
+        int64_t offset;
+        int64_t size;
+        bool operator<(const IORange& x) const { return offset < x.offset; }
+    };
+    struct CoalesceOptions {
+        static constexpr int64_t MB = 1024 * 1024;
+        int64_t max_read_size = 16 * MB;
+        int64_t max_dist_size = 1 * MB;
+        int64_t max_buffer_size = 8 * MB;
+    };
+
+    SharedBufferedInputStream(RandomAccessFile* file);
+
+    ~SharedBufferedInputStream() override = default;
+
+    Status set_io_ranges(const std::vector<IORange>& ranges);
+    Status remove_io_range(const IORange& range);
+
+    Status get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes) override;
+    void release();
+
+private:
+    struct SharedBuffer {
+    public:
+        int64_t offset;
+        int64_t size;
+        int64_t ref_count;
+        std::vector<uint8_t> buffer;
+    };
+    RandomAccessFile* _file;
+    std::map<int64_t, SharedBuffer> _map;
+    CoalesceOptions _options;
 };
 
 } // namespace starrocks

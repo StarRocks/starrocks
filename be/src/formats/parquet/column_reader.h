@@ -1,19 +1,32 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
+#include "formats/parquet/column_converter.h"
 
-#include <memory>
-
-#include "column_converter.h"
+namespace starrocks {
+class RandomAccessFile;
+class SharedBufferedInputStream;
+namespace vectorized {
+class HdfsScanStats;
+}
+} // namespace starrocks
 
 namespace starrocks::parquet {
+struct ColumnReaderOptions {
+    std::string timezone;
+    int chunk_size = 0;
+    vectorized::HdfsScanStats* stats = nullptr;
+    RandomAccessFile* file = nullptr;
+    SharedBufferedInputStream* sb_stream = nullptr;
+    tparquet::RowGroup* row_group_meta = nullptr;
+    bool use_sb_stream = true;
+};
 
 class ColumnReader {
 public:
     // TODO(zc): review this,
     // create a column reader
-    static Status create(RandomAccessFile* file, const ParquetField* field, const tparquet::RowGroup& row_group,
-                         const TypeDescriptor& col_type, const ColumnReaderOptions& opts, int chunk_size,
+    static Status create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                          std::unique_ptr<ColumnReader>* reader);
 
     virtual ~ColumnReader() = default;

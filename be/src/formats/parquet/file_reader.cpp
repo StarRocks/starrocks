@@ -416,6 +416,7 @@ Status FileReader::get_next(vectorized::ChunkPtr* chunk) {
                 _scan_row_count += (*chunk)->num_rows();
             }
             if (status.is_end_of_file()) {
+                _row_group_readers[_cur_row_group_idx]->close();
                 _cur_row_group_idx++;
                 return Status::OK();
             }

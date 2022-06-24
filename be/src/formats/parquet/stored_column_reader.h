@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 
+#include "column_reader.h"
 #include "common/status.h"
 #include "formats/parquet/column_chunk_reader.h"
 #include "formats/parquet/schema.h"
@@ -13,26 +14,18 @@
 #include "gen_cpp/parquet_types.h"
 
 namespace starrocks {
-class RandomAccessFile;
 namespace vectorized {
 class Column;
-class HdfsScanStats;
 } // namespace vectorized
 } // namespace starrocks
 
 namespace starrocks::parquet {
 
 class ColumnChunkReader;
-
-struct StoredColumnReaderOptions {
-    vectorized::HdfsScanStats* stats = nullptr;
-};
-
 class StoredColumnReader {
 public:
-    static Status create(RandomAccessFile* file, const ParquetField* field,
-                         const tparquet::ColumnChunk* _chunk_metadata, const StoredColumnReaderOptions& opts,
-                         int chunk_size, std::unique_ptr<StoredColumnReader>* out);
+    static Status create(const ColumnReaderOptions& opts, const ParquetField* field,
+                         const tparquet::ColumnChunk* _chunk_metadata, std::unique_ptr<StoredColumnReader>* out);
 
     virtual ~StoredColumnReader() = default;
 
