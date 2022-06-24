@@ -24,6 +24,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -38,13 +40,15 @@ public class StarOSAgent {
     public static final String serviceName = "starrocks";
 
     private StarClient client;
-    private long serviceId;
+    private AtomicLong serviceId;
     private Map<String, Long> workerToId;
     private Map<Long, Long> workerToBackend;
     private ReentrantReadWriteLock rwLock;
+    private AtomicBoolean locked;
 
     public StarOSAgent() {
-        serviceId = -1;
+        serviceId = new AtomicLong(-1L);
+
         // check if Config.starmanager_address == FE address
         if (Config.integrate_starmgr) {
             String[] starMgrAddr = Config.starmgr_address.split(":");
@@ -62,26 +66,22 @@ public class StarOSAgent {
     }
 
     private void prepare() {
-        if (serviceId == -1) {
+        if (serviceId.equals(-1L)) {
             getServiceId();
         }
     }
 
     // for ut only
     public long getServiceIdForTest() {
-        return serviceId;
+        return this.serviceId.get();
     }
 
     // for ut only
     public void setServiceId(long id) {
-        this.serviceId = id;
+        this.serviceId.set(id);
     }
 
     public void registerAndBootstrapService() {
-        if (serviceId != -1) {
-            return;
-        }
-
         try {
             client.registerService("starrocks");
         } catch (StarClientException e) {
@@ -92,7 +92,7 @@ public class StarOSAgent {
         }
 
         try {
-            serviceId = client.bootstrapService("starrocks", serviceName);
+            serviceId.set(client.bootstrapService("starrocks", serviceName));
             LOG.info("get serviceId: {} by bootstrapService to starMgr", serviceId);
         } catch (StarClientException e) {
             if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
@@ -105,12 +105,10 @@ public class StarOSAgent {
     }
 
     public void getServiceId() {
-        if (serviceId != -1) {
-            return;
-        }
         try {
             ServiceInfo serviceInfo = client.getServiceInfo(serviceName);
-            serviceId = serviceInfo.getServiceId();
+            serviceId.set(serviceInfo.getServiceId());
+
         } catch (StarClientException e) {
             LOG.warn(e);
             System.exit(-1);
@@ -125,65 +123,72 @@ public class StarOSAgent {
 
     // for ut only
     public long getWorkerId(String workerIpPort) {
-        return workerToId.get(workerIpPort);
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return workerToId.get(workerIpPort);
+        }
     }
 
     public void addWorker(long backendId, String workerIpPort) {
-        if (serviceId == -1) {
-            LOG.warn("When addWorker serviceId is -1");
-            return;
-        }
-        if (workerToId.containsKey(workerIpPort)) {
-            return;
-        }
-        long workerId = -1;
-        try {
-            workerId = client.addWorker(serviceId, workerIpPort);
-        } catch (StarClientException e) {
-            if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
-                LOG.warn(e);
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            if (!serviceId.equals(-1L)) {
+                LOG.warn("When addWorker serviceId is -1");
                 return;
-            } else {
-                // get workerId from starMgr
-                try {
-                    WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
-                    workerId = workerInfo.getWorkerId();
-                } catch (StarClientException e2) {
-                    LOG.warn(e2);
-                    return;
-                }
-                LOG.info("worker {} already added in starMgr", workerId);
             }
-        }
 
-        workerToId.put(workerIpPort, workerId);
-        workerToBackend.put(workerId, backendId);
-        LOG.info("add worker {} success, backendId is {}", workerId, backendId);
+            if (workerToId.containsKey(workerIpPort)) {
+                return;
+            }
+
+            long workerId = -1;
+            try {
+                workerId = client.addWorker(serviceId.get(), workerIpPort);
+            } catch (StarClientException e) {
+                if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
+                    LOG.warn(e);
+                    return;
+                } else {
+                    // get workerId from starMgr
+                    try {
+                        WorkerInfo workerInfo = client.getWorkerInfo(serviceId.get(), workerIpPort);
+                        workerId = workerInfo.getWorkerId();
+                    } catch (StarClientException e2) {
+                        LOG.warn(e2);
+                        return;
+                    }
+                    LOG.info("worker {} already added in starMgr", workerId);
+                }
+            }
+            workerToId.put(workerIpPort, workerId);
+            workerToBackend.put(workerId, backendId);
+            LOG.info("add worker {} success, backendId is {}", workerId, backendId);
+        }
     }
 
     public void removeWorker(String workerIpPort) throws DdlException {
         long workerId = -1;
-        if (workerToId.containsKey(workerIpPort)) {
-            workerId = workerToId.get(workerIpPort);
-        } else {
-            // When FE && staros restart, workerToId is Empty, but staros already persisted
-            // worker infos, so we need to get workerId from starMgr
-            try {
-                WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
-                workerId = workerInfo.getWorkerId();
-            } catch (StarClientException e) {
-                if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
-                    throw new DdlException("Failed to get worker id from starMgr. error: "
-                            + e.getMessage());
-                }
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            if (workerToId.containsKey(workerIpPort)) {
+                workerId = workerToId.get(workerIpPort);
+            } else {
+                // When FE && staros restart, workerToId is Empty, but staros already persisted
+                // worker infos, so we need to get workerId from starMgr
+                try {
+                    WorkerInfo workerInfo = client.getWorkerInfo(serviceId.get(), workerIpPort);
+                    workerId = workerInfo.getWorkerId();
+                } catch (StarClientException e) {
+                    if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
+                        throw new DdlException("Failed to get worker id from starMgr. error: "
+                                + e.getMessage());
+                    }
 
-                LOG.info("worker {} not exist.", workerIpPort);
-                return;
+                    LOG.info("worker {} not exist.", workerIpPort);
+                    return;
+                }
             }
         }
 
         try {
-            client.removeWorker(serviceId, workerId);
+            client.removeWorker(serviceId.get(), workerId);
         } catch (StarClientException e) {
             // when multi threads remove this worker, maybe we would get "NOT_EXIST"
             // but it is right, so only need to throw exception
@@ -197,20 +202,25 @@ public class StarOSAgent {
     }
 
     public void removeWorkerFromMap(long workerId, String workerIpPort) {
-        workerToBackend.remove(workerId);
-        workerToId.remove(workerIpPort);
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            workerToBackend.remove(workerId);
+            workerToId.remove(workerIpPort);
+        }
+
         LOG.info("remove worker {} success from StarMgr", workerIpPort);
     }
 
     public long getWorkerIdByBackendId(long backendId) {
-        long workerId = -1;
-        for (Map.Entry<Long, Long> entry : workerToBackend.entrySet()) {
-            if (entry.getValue() == backendId) {
-                workerId = entry.getKey();
-                break;
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            long workerId = -1;
+            for (Map.Entry<Long, Long> entry : workerToBackend.entrySet()) {
+                if (entry.getValue() == backendId) {
+                    workerId = entry.getKey();
+                    break;
+                }
             }
+            return workerId;
         }
-        return workerId;
     }
 
     public List<Long> createShards(int numShards, Map<String, String> properties) throws DdlException {
@@ -218,7 +228,7 @@ public class StarOSAgent {
         List<ShardInfo> shardInfos = null;
         try {
             // TODO: support properties
-            shardInfos = client.createShard(serviceId, numShards);
+            shardInfos = client.createShard(serviceId.get(), numShards);
         } catch (StarClientException e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
         }
@@ -230,7 +240,7 @@ public class StarOSAgent {
     private List<ReplicaInfo> getShardReplicas(long shardId) throws UserException {
         prepare();
         try {
-            List<ShardInfo> shardInfos = client.getShardInfo(serviceId, Lists.newArrayList(shardId));
+            List<ShardInfo> shardInfos = client.getShardInfo(serviceId.get(), Lists.newArrayList(shardId));
             Preconditions.checkState(shardInfos.size() == 1);
             return shardInfos.get(0).getReplicaInfoList();
         } catch (StarClientException e) {
