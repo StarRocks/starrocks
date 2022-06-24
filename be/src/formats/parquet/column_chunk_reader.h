@@ -14,29 +14,21 @@
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 #include "util/block_compression.h"
+#include "util/buffered_stream.h"
 
 namespace starrocks {
-class RandomAccessFile;
 class BlockCompressionCodec;
-namespace vectorized {
-class HdfsScanStats;
-}
-
 } // namespace starrocks
 
 namespace starrocks::parquet {
 
-struct ColumnChunkReaderOptions {
-    vectorized::HdfsScanStats* stats = nullptr;
-};
-
 class PageReader;
+class ColumnReaderOptions;
 
 class ColumnChunkReader {
 public:
     ColumnChunkReader(level_t max_def_level, level_t max_rep_level, int32_t type_length,
-                      const tparquet::ColumnChunk* column_chunk, RandomAccessFile* file,
-                      const ColumnChunkReaderOptions& opts);
+                      const tparquet::ColumnChunk* column_chunk, const ColumnReaderOptions& opts);
     ~ColumnChunkReader();
 
     Status init(int chunk_size);
@@ -121,10 +113,9 @@ private:
     level_t _max_rep_level = 0;
     int32_t _type_length = 0;
     const tparquet::ColumnChunk* _chunk_metadata = nullptr;
-    ColumnChunkReaderOptions _opts;
-    RandomAccessFile _file;
-
+    const ColumnReaderOptions& _opts;
     std::unique_ptr<PageReader> _page_reader;
+    std::unique_ptr<DefaultBufferedInputStream> _default_stream;
 
     const BlockCompressionCodec* _compress_codec = nullptr;
 
