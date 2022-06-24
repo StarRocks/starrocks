@@ -9,9 +9,9 @@
 
 SQL语句在StarRocks中的生命周期可以分为查询解析(Query Parsing)、规划(Query Plan)、执行(Query Execution)三个阶段。对于StarRocks而言，查询解析一般不会成为瓶颈，因为分析型需求的QPS普遍不高。
 
-决定StarRocks中查询性能的关键就在于查询规划(Query Plan)和查询执行(Query Execution)，二者的关系可以用一句话描述：Query Plan负责组织算子(Join/Order/Aggregation)之间的关系，Query Exectuion负责执行具体算子。
+决定StarRocks中查询性能的关键就在于查询规划(Query Plan)和查询执行(Query Execution)，二者的关系可以用一句话描述：Query Plan负责组织算子(Join/Order/Aggregation)之间的关系，Query Execution负责执行具体算子。
 
-Query Plan可以从宏观的角度提供给DBA一个视角，获取Query执行的相关信息。一个好的Query Plan很大程度上决定了查询的性能，所以DBA经常需要去查看Query Plan，确定Query Plan是否生成得当。本章以TPCDS的query96为例，展示如何查看StarRocks的Query Plan。
+Query Plan可以从宏观的角度提供给DBA一个视角，获取Query执行的相关信息。一个好的Query Plan很大程度上决定了查询的性能，所以DBA经常需要去查看Query Plan，确定Query Plan是否生成得当。本章以TPC-DS的query96为例，展示如何查看StarRocks的Query Plan。
 
 ~~~ SQL
 -- query96.sql
@@ -30,7 +30,7 @@ where ss_sold_time_sk = time_dim.t_time_sk
 order by count(*) limit 100;
 ~~~
 
-Query Plan可以分为逻辑执行计划(Logical Query Plan)，和物理执行计划(Physical Query Plan)，本章节所讲述的Query Plan默认指代的都是逻辑执行计划。StarRocks中运行EXPLAIN + SQL就可以得到SQL对应的Query Plan，TPCDS query96.sql对应的Query Plan展示如下。
+Query Plan可以分为逻辑执行计划(Logical Query Plan)，和物理执行计划(Physical Query Plan)，本章节所讲述的Query Plan默认指代的都是逻辑执行计划。StarRocks中运行EXPLAIN + SQL就可以得到SQL对应的Query Plan，TPC-DS query96.sql对应的Query Plan展示如下。
 
 ~~~sql
 +------------------------------------------------------------------------------+
@@ -198,13 +198,12 @@ Fragment 1集成了三个Join算子的执行，采用默认的BROADCAST方式进
 
 ## Profile分析
 
-在理解了Plan的作用以后，我们来分析以下BE的执行结果Profile，通过在StarRocksManager中执行查询，点击查询历史，就可看在“执行详情”tab中看到Profile的详细文本信息，在“执行时间”tab中能看到图形化的展示，这里我们采用TPCH的Q4查询来作为例子。
+在理解了Plan的作用以后，我们来分析以下BE的执行结果Profile，通过在StarRocks Manager中执行查询，点击查询历史，就可看在“执行详情”tab中看到Profile的详细文本信息，在“执行时间”tab中能看到图形化的展示，这里我们采用TPC-H的Q4查询来作为例子。
 
-> 注意
-> 如需通过 StarRocksManager 查看 Profile，您需要设置 `enable_collect_query_detail_info` 参数为 `true`。
+> 注意：如需通过 StarRocks Manager 查看 Profile, 在配置 StarRocks Manager 时需要在**ADMIN SET FRONTEND CONFIG**命令里设置FE参数 `enable_collect_query_detail_info`为`true`。
 
 ~~~sql
--- TPCH Q4
+-- TPC-H Q4
 select  o_orderpriority,  count(*) as order_count
 from  orders
 where
@@ -218,7 +217,7 @@ group by o_orderpriority
 order by o_orderpriority;
 ~~~
 
-可以看到这是一个包含了相关子查询，group by，ordery by和count的查询，其中order是订单表，lineitem是货品明细表，这两张都是比较大的事实表，这个查询的含义是按照订单的优先级分组，统计每个分组的订单数量，同时有两个过滤条件：
+可以看到这是一个包含了相关子查询，group by，order by和count的查询，其中order是订单表，lineitem是货品明细表，这两张都是比较大的事实表，这个查询的含义是按照订单的优先级分组，统计每个分组的订单数量，同时有两个过滤条件：
 
 * 订单创建时间是1993年7月 到1993年10月之间
 * 这个订单对应的产品的提交日期(l_commitdate)小于收货日期（l_receiptadate）
@@ -272,7 +271,7 @@ order by o_orderpriority;
 
 ![8-7](../assets/8-7.png)
   
-新的SQL执行从3.106s降低到了1.042s，可以明显看到两张大表没有了Exchange节点，直接通过Colocated Join进行，而且左右表顺序调换了以后整体性能有了大幅提升，新的Join Node信息如下：
+新的SQL执行从3.106s降低到了1.042s，可以明显看到两张大表没有了Exchange节点，直接通过Colocate Join进行，而且左右表顺序调换了以后整体性能有了大幅提升，新的Join Node信息如下：
 
 ~~~sql
 HASH_JOIN_NODE (id=2):(Active: 996.337ms, % non-child: 52.05%)

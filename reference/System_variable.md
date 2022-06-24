@@ -104,7 +104,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * disable_colocate_join
 
-    控制是否启用 Colocation Join 功能。默认为 false，表示启用该功能。true 表示禁用该功能。当该功能被禁用后，查询规划将不会尝试执行 Colocation Join。
+    控制是否启用 Colocate Join 功能。默认为 false，表示启用该功能。true 表示禁用该功能。当该功能被禁用后，查询规划将不会尝试执行 Colocate Join。
 
 * disable_streaming_preaggregations
 
@@ -116,7 +116,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * enable_insert_strict
 
-    用于设置通过 INSERT 语句进行数据导入时，是否开启 strict 模式。默认为 false，即不开启 strict 模式。关于该模式的介绍，可以参阅《[数据导入](../loading/Loading_intro.md)》章节。
+    用于设置通过 INSERT 语句进行数据导入时，是否开启 strict 模式。默认为 false，即不开启 strict 模式。关于该模式的介绍，可以参阅[数据导入](../loading/Loading_intro.md)章节。
 
 * enable_spilling
 
@@ -188,9 +188,10 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * is_report_success
 
-    用于设置是否需要查看查询的 profile。默认为 false，即不需要 profile。
+    用于设置是否需要查看查询的 profile。默认为 `false`，即不需要查看 profile。
 
     默认情况下，只有在查询发生错误时，BE 才会发送 profile 给 FE，用于查看错误。正常结束的查询不会发送 profile。发送 profile 会产生一定的网络开销，对高并发查询场景不利。 当用户希望对一个查询的 profile 进行分析时，可以将这个变量设为 true 后，发送查询。查询结束后，可以通过在当前连接的 FE 的 web 页面（地址：fe_host:fe_http_port/query）查看 profile。该页面会显示最近100条开启了 is_report_success 的查询的 profile。
+    > 注意：如果通过 StarRocks Manager 查看 profile, 在配置 StarRocks Manager 时需要在**ADMIN SET FRONTEND CONFIG**命令里设置FE参数 `enable_collect_query_detail_info`为`true`。
 
 * language
 
@@ -198,15 +199,15 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * license
 
-    显示 StarRocks 的 License。无其他作用。
+    显示 StarRocks 的 license。无其他作用。
 
 * load_mem_limit
 
-    用于指定导入操作的内存限制，单位为 Byte。默认值为 0，即表示不使用该变量，而采用 exec_mem_limit 作为导入操作的内存限制。
+    用于指定导入操作的内存限制，单位为 Byte。默认值为 0，即表示不使用该变量，而采用 `exec_mem_limit` 作为导入操作的内存限制。
 
-    这个变量仅用于 INSERT 操作。因为 INSERT 操作涉及查询和导入两个部分，如果用户不设置此变量，则查询和导入操作各自的内存限制均为 exec_mem_limit。否则，INSERT 的查询部分内存限制为 exec_mem_limit，而导入部分限制为 load_mem_limit。
+    这个变量仅用于 INSERT 操作。因为 INSERT 操作涉及查询和导入两个部分，如果用户不设置此变量，则查询和导入操作各自的内存限制均为 `exec_mem_limit`。否则，INSERT 的查询部分内存限制为 `exec_mem_limit`，而导入部分限制为 l`oad_mem_limit`。
 
-    其他导入方式，如 BROKER LOAD，STREAM LOAD 的内存限制依然使用 exec_mem_limit。
+    其他导入方式，如 Broker Load，STREAM LOAD 的内存限制依然使用 `exec_mem_limit`。
 
 * lower_case_table_names
 

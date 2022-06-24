@@ -126,6 +126,7 @@ set is_report_success = true;
 ```
 
 * 社区版用户可以通过 `http:FE_IP:FE_HTTP_PORT/query` 查看当前的查询和 Profile 信息。
-* 企业版用户可以在 StarRocksManager 的查询页面查看图形化 Profile 展示，点击查询链接可以在 **执行时间** 页面看到树状展示，并可以在 **执行详情** 页面看到完整的 Profile 详细信息。如果以上方法仍达不到预期，您可以发送执行详情页面的文本到社区或者技术支持群以寻求帮助。
+* 企业版用户可以在 StarRocks Manager 的查询页面查看图形化 Profile 展示，点击查询链接可以在 **执行时间** 页面看到树状展示，并可以在 **执行详情** 页面看到完整的 Profile 详细信息。如果以上方法仍达不到预期，您可以发送执行详情页面的文本到社区或者技术支持群以寻求帮助。
 
+> 注意：如果通过 StarRocks Manager 查看 profile, 在配置 StarRocks Manager 时需要在**ADMIN SET FRONTEND CONFIG**命令里设置FE参数 `enable_collect_query_detail_info`为`true`。
 > 有关 Plan 和 Profile 的详细介绍，参考 [查询分析](../administration/Query_planning.md) 和 [性能优化](../administration/Profiling.md) 章节。
