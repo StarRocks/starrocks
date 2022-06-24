@@ -4,13 +4,30 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.MetaNotFoundException;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.server.GlobalStateMgr;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
+import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
+import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
+import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.Constants;
+import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -18,6 +35,8 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.Constants;
+import com.starrocks.statistic.FullStatisticsCollectJob;
+import com.starrocks.statistic.StatisticSQLBuilder;
 import com.starrocks.statistic.FullStatisticsCollectJob;
 import com.starrocks.statistic.StatisticSQLBuilder;
 import com.starrocks.utframe.StarRocksAssert;
@@ -104,6 +123,14 @@ public class AnalyzeStmtTest {
         basicStatsMeta.setHealthy(0.5);
         Assert.assertEquals("[test, t0, FULL, 2020-01-01 01:01:00, {}, 50%]",
                 ShowBasicStatsMetaStmt.showBasicStatsMeta(basicStatsMeta).toString());
+
+        sql = "show histogram meta";
+        ShowHistogramStatsMetaStmt showHistogramStatsMetaStmt = (ShowHistogramStatsMetaStmt) analyzeSuccess(sql);
+        HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(10002, 10004, "v1",
+                Constants.AnalyzeType.HISTOGRAM, LocalDateTime.of(2020, 1, 1, 1, 1),
+                Maps.newHashMap());
+        Assert.assertEquals("[test, t0, v1, HISTOGRAM, 2020-01-01 01:01:00, {}]",
+                ShowHistogramStatsMetaStmt.showHistogramStatsMeta(histogramStatsMeta).toString());
     }
 
     @Test

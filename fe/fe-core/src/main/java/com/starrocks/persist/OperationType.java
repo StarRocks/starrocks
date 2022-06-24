@@ -216,7 +216,7 @@ public class OperationType {
     // create external catalog
     public static final short OP_CREATE_CATALOG = 10051;
 
-    // drop external catalog
+    // drop catalog
     public static final short OP_DROP_CATALOG = 10061;
     // grant & revoke impersonate
     public static final short OP_GRANT_IMPERSONATE = 10062;

@@ -473,7 +473,7 @@ public class ShowExecutor {
     }
 
     // Show databases statement
-    private void handleShowDb() throws AnalysisException {
+    private void handleShowDb() throws AnalysisException, DdlException {
         ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
         List<String> dbNames = new ArrayList<>();
@@ -512,7 +512,7 @@ public class ShowExecutor {
     }
 
     // Show table statement.
-    private void handleShowTable() throws AnalysisException {
+    private void handleShowTable() throws AnalysisException, DdlException {
         ShowTableStmt showTableStmt = (ShowTableStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
         String catalog = ctx.getCurrentCatalog();

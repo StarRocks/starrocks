@@ -57,10 +57,10 @@ public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
 
 
-    private static final String DELETE_TEMPLATE = "DELETE FROM " + Constants.StatisticsTableName + " WHERE ";
+    private static final String DELETE_TEMPLATE = "DELETE FROM " + Constants.SampleStatisticsTableName + " WHERE ";
 
     private static final String SELECT_EXPIRE_TABLE_TEMPLATE =
-            "SELECT DISTINCT table_id" + " FROM " + Constants.StatisticsTableName + " WHERE 1 = 1 ";
+            "SELECT DISTINCT table_id" + " FROM " + Constants.SampleStatisticsTableName + " WHERE 1 = 1 ";
 
     public List<TStatisticData> queryStatisticSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
         String sql;

@@ -216,7 +216,6 @@ public class StatementPlanner {
                 || statement instanceof RefreshTableStmt
                 || statement instanceof RevokeImpersonateStmt
                 || statement instanceof RevokeRoleStmt
-                || statement instanceof RefreshTableStmt
                 || statement instanceof ShowAnalyzeJobStmt
                 || statement instanceof ShowCatalogsStmt
                 || statement instanceof ShowColumnStmt
