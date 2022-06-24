@@ -156,10 +156,18 @@ public class RuntimeFilterDescription {
     }
 
     public boolean isLocalApplicable() {
+<<<<<<< HEAD
         return joinMode.equals(JoinNode.DistributionMode.BROADCAST) ||
                 joinMode.equals(JoinNode.DistributionMode.COLOCATE) ||
                 joinMode.equals(JoinNode.DistributionMode.LOCAL_HASH_BUCKET) ||
                 joinMode.equals(JoinNode.DistributionMode.REPLICATED);
+=======
+        return joinMode.equals(HashJoinNode.DistributionMode.BROADCAST) ||
+                joinMode.equals(HashJoinNode.DistributionMode.COLOCATE) ||
+                joinMode.equals(HashJoinNode.DistributionMode.LOCAL_HASH_BUCKET) ||
+                joinMode.equals(HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET) ||
+                joinMode.equals(HashJoinNode.DistributionMode.REPLICATED);
+>>>>>>> 577ccc696 (add SHUFFLE_HASH_BUCKET to isLocalApplicable (#7729))
     }
 
     public boolean isBroadcastJoin() {
