@@ -108,9 +108,9 @@ else
         # sh run-fe-ut.sh --run com.starrocks.utframe.Demo
         # sh run-fe-ut.sh --run com.starrocks.utframe.Demo#testCreateDbAndTable+test2
         # set trimStackTrace to false to show full stack when debugging specified class or case
-        ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -Dmaven.test.failure.ignore=true -D test=$1
+        ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test=$1
     else    
         echo "Run Frontend UT"
-        ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -Dmaven.test.failure.ignore=true
+        ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false
     fi 
 fi
