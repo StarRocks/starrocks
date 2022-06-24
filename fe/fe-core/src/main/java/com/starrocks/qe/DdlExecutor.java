@@ -36,7 +36,6 @@ import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DropFileStmt;
 import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
-import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.UninstallPluginStmt;
 import com.starrocks.common.DdlException;

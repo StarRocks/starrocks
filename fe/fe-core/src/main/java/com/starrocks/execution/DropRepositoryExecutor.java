@@ -11,6 +11,7 @@ import com.starrocks.qe.ShowResultSet;
 public class DropRepositoryExecutor implements DataDefinitionExecutor {
 
     public ShowResultSet execute(StatementBase stmt, ConnectContext context) throws UserException {
-        return context.getGlobalStateMgr().getBackupHandler().dropRepository((DropRepositoryStmt) stmt);
+        context.getGlobalStateMgr().getBackupHandler().dropRepository((DropRepositoryStmt) stmt);
+        return null;
     }
 }
