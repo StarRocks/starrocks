@@ -656,7 +656,10 @@ public:
             const auto& key = fkeys[replace_idxes[i]];
             const auto v = values[replace_idxes[i]];
             uint64_t hash = FixedKeyHash<KeySize>()(key);
-            _map.emplace_with_hash(hash, key, v);
+            auto p = _map.emplace_with_hash(hash, key, v);
+            if (!p.second) {
+                p.first->second = v;
+            }
         }
         return Status::OK();
     }
@@ -1537,7 +1540,7 @@ Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue
     uint32_t rowid_start = (uint32_t)(values[0] & 0xFFFFFFFF);
     std::vector<size_t> replace_idxes;
     for (size_t i = 0; i < n; ++i) {
-        if (values[i] != NullIndexValue && ((uint32_t)(found_values[i] >> 32)) == src_rssid[i]) {
+        if (found_values[i] != NullIndexValue && ((uint32_t)(found_values[i] >> 32)) == src_rssid[i]) {
             replace_idxes.emplace_back(i);
         } else {
             failed->emplace_back(rowid_start + i);
