@@ -123,7 +123,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     protected int pipelineDop = 1;
     protected boolean dopEstimated = false;
 
-    // Enable shared_scan for this fragment: OlapScanOperator could share the output data to avoid data ske
+    // Enable shared_scan for this fragment: OlapScanOperator could share the output data to avoid data skew
     protected boolean enableSharedScan = true;
 
     protected final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
