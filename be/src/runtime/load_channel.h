@@ -21,6 +21,12 @@
 
 #pragma once
 
+#include "common/compiler_util.h"
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <bthread/mutex.h>
+DIAGNOSTIC_POP
+
 #include <mutex>
 #include <ostream>
 #include <unordered_map>
@@ -88,7 +94,7 @@ private:
     std::atomic<time_t> _last_updated_time;
 
     // lock protect the tablets channel map
-    std::mutex _lock;
+    bthread::Mutex _lock;
     // index id -> tablets channel
     std::unordered_map<int64_t, scoped_refptr<TabletsChannel>> _tablets_channels;
 };

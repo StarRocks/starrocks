@@ -106,7 +106,7 @@ private:
     static std::atomic<uint64_t> _s_tablet_writer_count;
 
     struct Sender {
-        std::mutex lock;
+        bthread::Mutex lock;
         int64_t next_seq = 0;
         bool closed = false;
     };
@@ -147,7 +147,7 @@ private:
             if (_latch) _latch->count_down();
         }
 
-        mutable std::mutex _response_lock;
+        mutable bthread::Mutex _response_lock;
         PTabletWriterAddBatchResult* _response;
         BThreadCountDownLatch* _latch;
 
@@ -200,10 +200,10 @@ private:
     std::atomic<int> _num_remaining_senders;
     std::vector<Sender> _senders;
 
-    mutable std::mutex _partitions_ids_lock;
+    mutable bthread::Mutex _partitions_ids_lock;
     std::unordered_set<int64_t> _partition_ids;
 
-    mutable std::mutex _chunk_meta_lock;
+    mutable bthread::Mutex _chunk_meta_lock;
     serde::ProtobufChunkMeta _chunk_meta;
     std::atomic<bool> _has_chunk_meta;
 
