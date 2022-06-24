@@ -24,7 +24,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -44,7 +43,6 @@ public class StarOSAgent {
     private Map<String, Long> workerToId;
     private Map<Long, Long> workerToBackend;
     private ReentrantReadWriteLock rwLock;
-    private AtomicBoolean locked;
 
     public StarOSAgent() {
         serviceId = new AtomicLong(-1L);
