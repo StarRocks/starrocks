@@ -58,4 +58,12 @@ public class OriginStatement implements Writable {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
+
+    @Override
+    public String toString() {
+        return "OriginStatement{" +
+                "originStmt='" + originStmt + '\'' +
+                ", idx=" + idx +
+                '}';
+    }
 }
