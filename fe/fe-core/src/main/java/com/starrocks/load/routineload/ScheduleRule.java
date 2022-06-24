@@ -32,8 +32,8 @@ public class ScheduleRule {
 
     private static int deadBeCount(String clusterName) {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        int total = systemInfoService.getClusterBackendIds(clusterName, false).size();
-        int alive = systemInfoService.getClusterBackendIds(clusterName, true).size();
+        int total = systemInfoService.getBackendIds(false).size();
+        int alive = systemInfoService.getBackendIds(true).size();
         return total - alive;
     }
 

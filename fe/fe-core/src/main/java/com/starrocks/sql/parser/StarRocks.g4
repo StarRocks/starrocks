@@ -40,6 +40,7 @@ statement
     | createMaterializedViewStatement                                                       #createMaterializedView
     | showMaterializedViewStatement                                                         #showMaterializedView
     | dropMaterializedViewStatement                                                         #dropMaterializedView
+    | alterMaterializedViewStatement                                                        #alterMaterializedView
 
     // Catalog Statement
     | createExternalCatalogStatement                                                        #createCatalog
@@ -261,6 +262,10 @@ dropMaterializedViewStatement
     : DROP MATERIALIZED VIEW (IF EXISTS)? mvName=qualifiedName
     ;
 
+alterMaterializedViewStatement
+    : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause)
+    ;
+
 // ------------------------------------------- Cluster Mangement Statement ---------------------------------------------
 
 alterSystemStatement
@@ -274,7 +279,7 @@ createExternalCatalogStatement
     ;
 
 dropExternalCatalogStatement
-    : DROP EXTERNAL CATALOG catalogName=identifierOrString
+    : DROP CATALOG catalogName=identifierOrString
     ;
 
 showCatalogsStatement
@@ -826,6 +831,7 @@ distributionDesc
 
 refreshSchemeDesc
     : REFRESH (SYNC
+    | ASYNC
     | ASYNC (START '(' string ')')? EVERY '(' interval ')'
     | MANUAL)
     ;

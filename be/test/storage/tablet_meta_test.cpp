@@ -108,8 +108,7 @@ TEST(TabletMetaTest, test_create) {
     std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1);
     TabletMetaSharedPtr tablet_meta;
     Status st = TabletMeta::create(mem_tracker.get(), request, TabletUid(321, 456), 987 /*shared_id*/,
-                                   20000 /*next_unique_id*/, col_ordinal_to_unique_id, RowsetTypePB::BETA_ROWSET,
-                                   &tablet_meta);
+                                   20000 /*next_unique_id*/, col_ordinal_to_unique_id, &tablet_meta);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(tablet_meta != nullptr);
 

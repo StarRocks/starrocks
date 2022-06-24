@@ -63,14 +63,13 @@ Status AlterTabletTask::set_alter_state(AlterTabletState alter_state) {
 Status TabletMeta::create(MemTracker* mem_tracker, const TCreateTabletReq& request, const TabletUid& tablet_uid,
                           uint64_t shard_id, uint32_t next_unique_id,
                           const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
-                          RowsetTypePB rowset_type, TabletMetaSharedPtr* tablet_meta) {
+                          TabletMetaSharedPtr* tablet_meta) {
     *tablet_meta = std::shared_ptr<TabletMeta>(
             new TabletMeta(request.table_id, request.partition_id, request.tablet_id, request.tablet_schema.schema_hash,
                            shard_id, request.tablet_schema, next_unique_id,
                            request.__isset.enable_persistent_index ? request.enable_persistent_index : false,
                            col_ordinal_to_unique_id, tablet_uid,
-                           request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK,
-                           rowset_type),
+                           request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK),
             DeleterWithMemTracker<TabletMeta>(mem_tracker));
     mem_tracker->consume((*tablet_meta)->mem_usage());
     return Status::OK();
@@ -86,8 +85,8 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
                        uint64_t shard_id, const TTabletSchema& tablet_schema, uint32_t next_unique_id,
                        bool enable_persistent_index,
                        const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
-                       const TabletUid& tablet_uid, TTabletType::type tabletType, RowsetTypePB rowset_type)
-        : _tablet_uid(0, 0), _preferred_rowset_type(rowset_type) {
+                       const TabletUid& tablet_uid, TTabletType::type tabletType)
+        : _tablet_uid(0, 0) {
     TabletMetaPB tablet_meta_pb;
     tablet_meta_pb.set_table_id(table_id);
     tablet_meta_pb.set_partition_id(partition_id);
@@ -104,7 +103,7 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
     tablet_meta_pb.set_in_restore_mode(false);
 
     TabletSchemaPB* schema = tablet_meta_pb.mutable_schema();
-    convert_t_schema_to_pb_schema(tablet_schema, next_unique_id, col_ordinal_to_unique_id, rowset_type, schema);
+    convert_t_schema_to_pb_schema(tablet_schema, next_unique_id, col_ordinal_to_unique_id, schema);
 
     init_from_pb(&tablet_meta_pb);
 }
@@ -273,9 +272,6 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
         _in_restore_mode = tablet_meta_pb.in_restore_mode();
     }
 
-    if (tablet_meta_pb.has_preferred_rowset_type()) {
-        _preferred_rowset_type = tablet_meta_pb.preferred_rowset_type();
-    }
     if (tablet_meta_pb.has_updates()) {
         _updatesPB.reset(tablet_meta_pb.release_updates());
     }
@@ -326,9 +322,6 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
     tablet_meta_pb->set_in_restore_mode(in_restore_mode());
 
     // to avoid modify tablet meta to the greatest extend
-    if (_preferred_rowset_type == BETA_ROWSET) {
-        tablet_meta_pb->set_preferred_rowset_type(_preferred_rowset_type);
-    }
     if (_updates != nullptr) {
         _updates->to_updates_pb(tablet_meta_pb->mutable_updates());
     } else if (_updatesPB) {
@@ -604,7 +597,6 @@ bool operator==(const TabletMeta& a, const TabletMeta& b) {
     }
     if (a._alter_task != b._alter_task) return false;
     if (a._in_restore_mode != b._in_restore_mode) return false;
-    if (a._preferred_rowset_type != b._preferred_rowset_type) return false;
     return true;
 }
 

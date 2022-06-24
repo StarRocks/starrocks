@@ -282,4 +282,57 @@ TEST_F(LakeTabletManagerTest, put_get_tabletmetadata_witch_cache_evict) {
     }
 }
 
+TEST_F(LakeTabletManagerTest, tablet_schema_load) {
+    starrocks::lake::TabletMetadata metadata;
+    metadata.set_id(12345);
+    metadata.set_version(2);
+
+    auto schema = metadata.mutable_schema();
+    schema->set_id(10);
+    schema->set_num_short_key_columns(1);
+    schema->set_keys_type(DUP_KEYS);
+    schema->set_num_rows_per_row_block(65535);
+    schema->set_compress_kind(COMPRESS_LZ4);
+    auto c0 = schema->add_column();
+    {
+        c0->set_unique_id(0);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+    }
+    auto c1 = schema->add_column();
+    {
+        c1->set_unique_id(1);
+        c1->set_name("c1");
+        c1->set_type("INT");
+        c1->set_is_key(false);
+        c1->set_is_nullable(false);
+    }
+    auto group = tablet_group("", 12345);
+    _tabletManager->put_tablet_metadata(group, metadata);
+
+    const TabletSchema* ptr = nullptr;
+
+    ASSIGN_OR_ABORT(auto tablet, _tabletManager->get_tablet(12345));
+    {
+        auto st = tablet.get_schema();
+        EXPECT_TRUE(st.ok());
+        EXPECT_EQ(st.value()->id(), 10);
+        EXPECT_EQ(st.value()->num_columns(), 2);
+        EXPECT_EQ(st.value()->column(0).name(), "c0");
+        EXPECT_EQ(st.value()->column(1).name(), "c1");
+        ptr = st.value().get();
+    }
+    {
+        auto st = tablet.get_schema();
+        EXPECT_TRUE(st.ok());
+        EXPECT_EQ(st.value()->id(), 10);
+        EXPECT_EQ(st.value()->num_columns(), 2);
+        EXPECT_EQ(st.value()->column(0).name(), "c0");
+        EXPECT_EQ(st.value()->column(1).name(), "c1");
+        EXPECT_EQ(ptr, st.value().get());
+    }
+}
+
 } // namespace starrocks

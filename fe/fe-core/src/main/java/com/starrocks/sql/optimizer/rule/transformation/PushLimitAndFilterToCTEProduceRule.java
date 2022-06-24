@@ -48,7 +48,7 @@ public class PushLimitAndFilterToCTEProduceRule extends TransformationRule {
 
         int consumeNums = cteContext.getCTEConsumeNums(produce.getCteId());
 
-        return limits.size() == consumeNums || predicates.size() == consumeNums;
+        return consumeNums > 0 && (limits.size() == consumeNums || predicates.size() == consumeNums);
     }
 
     @Override

@@ -259,12 +259,15 @@ public class RuleSet {
                 new PruneAssertOneRowRule()
         ));
 
-        rewriteRules.put(RuleSetType.MULTI_DISTINCT_REWRITE, ImmutableList.of(
+        rewriteRules.put(RuleSetType.AGGREGATE_REWRITE, ImmutableList.of(
                 new RewriteBitmapCountDistinctRule(),
                 new RewriteHllCountDistinctRule(),
-                new RewriteMultiDistinctRule(),
-                new RewriteMultiDistinctWithoutGroupByRule(),
                 new RewriteDuplicateAggregateFnRule()
+        ));
+
+        rewriteRules.put(RuleSetType.MULTI_DISTINCT_REWRITE, ImmutableList.of(
+                new RewriteMultiDistinctRule(),
+                new RewriteMultiDistinctWithoutGroupByRule()
         ));
 
         rewriteRules.put(RuleSetType.PRUNE_SET_OPERATOR, ImmutableList.of(

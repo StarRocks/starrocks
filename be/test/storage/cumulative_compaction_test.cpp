@@ -33,7 +33,6 @@ public:
         rowset_writer_context->tablet_id = 12345;
         rowset_writer_context->tablet_schema_hash = 1111;
         rowset_writer_context->partition_id = 10;
-        rowset_writer_context->rowset_type = _rowset_type;
         rowset_writer_context->rowset_path_prefix = config::storage_root_path + "/data/0/12345/1111";
         rowset_writer_context->rowset_state = VISIBLE;
         rowset_writer_context->tablet_schema = _tablet_schema.get();
@@ -213,7 +212,6 @@ public:
 
 protected:
     std::unique_ptr<TabletSchema> _tablet_schema;
-    RowsetTypePB _rowset_type = BETA_ROWSET;
     std::string _schema_hash_path;
     std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;

@@ -959,10 +959,6 @@ public class SchemaChangeHandler extends AlterHandler {
         schemaChangeJob.setBloomFilterInfo(hasBfChange, bfColumns, bfFpp);
         schemaChangeJob.setAlterIndexInfo(hasIndexChange, indexes);
         schemaChangeJob.setStartTime(ConnectContext.get().getStartTime());
-
-        // If StorageFormat is set to TStorageFormat.V2
-        // which will create tablet with preferred_rowset_type set to BETA
-        // for both base table and rollup index
         schemaChangeJob.setStorageFormat(storageFormat);
 
         // begin checking each table

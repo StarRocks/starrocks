@@ -40,8 +40,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
         TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
 
-        List<Long> tabletIds = finishedTablets.stream().map(
-                TabletCommitInfo::getTabletId).collect(Collectors.toList());
+        List<Long> tabletIds = finishedTablets.stream().map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
         List<TabletMeta> tabletMetaList = tabletInvertedIndex.getTabletMetaList(tabletIds);
         for (int i = 0; i < tabletMetaList.size(); i++) {
             TabletMeta tabletMeta = tabletMetaList.get(i);

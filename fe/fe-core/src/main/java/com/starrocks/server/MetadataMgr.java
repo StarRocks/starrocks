@@ -76,7 +76,7 @@ public class MetadataMgr {
         }
     }
 
-    public List<String> listDbNames(String catalogName) {
+    public List<String> listDbNames(String catalogName) throws DdlException {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> dbNames = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
@@ -84,6 +84,7 @@ public class MetadataMgr {
                 connectorMetadata.get().listDbNames().forEach(dbNames::add);
             } catch (DdlException e) {
                 LOG.error("Failed to listDbNames on catalog {}", catalogName, e);
+                throw e;
             }
         }
         return ImmutableList.copyOf(dbNames.build());
@@ -94,7 +95,7 @@ public class MetadataMgr {
         return connectorMetadata.map(metadata -> metadata.getDb(dbName)).orElse(null);
     }
 
-    public List<String> listTableNames(String catalogName, String dbName) {
+    public List<String> listTableNames(String catalogName, String dbName) throws DdlException {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> tableNames = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
@@ -102,6 +103,7 @@ public class MetadataMgr {
                 connectorMetadata.get().listTableNames(dbName).forEach(tableNames::add);
             } catch (DdlException e) {
                 LOG.error("Failed to listTableNames on [{}.{}]", catalogName, dbName, e);
+                throw e;
             }
         }
         return ImmutableList.copyOf(tableNames.build());
