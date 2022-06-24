@@ -38,9 +38,11 @@
 #include "storage/chunk_helper.h"
 #include "storage/merge_iterator.h"
 #include "storage/olap_define.h"
+#include "storage/row_source_mask.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_manager.h"
 #include "storage/type_utils.h"
 #include "util/pretty_printer.h"
 
@@ -399,10 +401,14 @@ StatusOr<RowsetSharedPtr> HorizontalBetaRowsetWriter::build() {
     if (!_tmp_segment_files.empty()) {
         RETURN_IF_ERROR(_final_merge());
     }
-    // When building a rowset, we must ensure that the current _segment_writer has been
-    // flushed, that is, the current _segment_wirter is nullptr
-    DCHECK(_segment_writer == nullptr) << "segment must be null when build rowset";
-    return BetaRowsetWriter::build();
+    if (_vertical_beta_rowset_writer) {
+        return _vertical_beta_rowset_writer->build();
+    } else {
+        // When building a rowset, we must ensure that the current _segment_writer has been
+        // flushed, that is, the current _segment_writer is nullptr
+        DCHECK(_segment_writer == nullptr) << "segment must be null when build rowset";
+        return BetaRowsetWriter::build();
+    }
 }
 
 // why: when the data is large, multi segment files created, may be OVERLAPPINGed.
@@ -423,10 +429,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     MonotonicStopWatch timer;
     timer.start();
 
-    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema);
-
-    std::vector<vectorized::ChunkIteratorPtr> seg_iterators;
-    seg_iterators.reserve(_num_segment);
+    std::vector<std::shared_ptr<Segment>> segments;
 
     vectorized::SegmentReadOptions seg_options;
     seg_options.fs = _fs;
@@ -435,95 +438,295 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     seg_options.stats = &stats;
 
     for (int seg_id = 0; seg_id < _num_segment; ++seg_id) {
+        if (_num_rows_of_tmp_segment_files[seg_id] == 0) {
+            continue;
+        }
         std::string tmp_segment_file =
                 BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
-
         auto segment_ptr = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), _fs, tmp_segment_file,
                                          seg_id, _context.tablet_schema);
         if (!segment_ptr.ok()) {
             LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
             return segment_ptr.status();
         }
-        if ((*segment_ptr)->num_rows() == 0) {
-            continue;
-        }
-        auto res = (*segment_ptr)->new_iterator(schema, seg_options);
-        if (res.status().is_end_of_file()) {
-            continue;
-        } else if (!res.ok()) {
-            return res.status();
-        } else if (res.value() == nullptr) {
-            continue;
-        } else {
+        segments.emplace_back(segment_ptr.value());
+    }
+
+    std::vector<vectorized::ChunkIteratorPtr> seg_iterators;
+    seg_iterators.reserve(segments.size());
+
+    if (CompactionUtils::choose_compaction_algorithm(_context.tablet_schema->num_columns(),
+                                                     config::vertical_compaction_max_columns_per_group,
+                                                     segments.size()) == VERTICAL_COMPACTION) {
+        std::vector<std::vector<uint32_t>> column_groups;
+        CompactionUtils::split_column_into_groups(_context.tablet_schema->num_columns(),
+                                                  _context.tablet_schema->num_key_columns(),
+                                                  config::vertical_compaction_max_columns_per_group, &column_groups);
+
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[0]);
+
+        for (const auto& segment : segments) {
+            auto res = segment->new_iterator(schema, seg_options);
+            if (!res.ok()) {
+                return res.status();
+            }
             seg_iterators.emplace_back(res.value());
         }
-    }
 
-    ChunkIteratorPtr itr = nullptr;
-    // schema change vectorized
-    // schema change with sorting create temporary segment files first
-    // merge them and create final segment files if _context.write_tmp is true
-    if (_context.write_tmp) {
-        if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS) {
-            itr = new_heap_merge_iterator(seg_iterators);
-        } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
-                   _context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
-            itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), 0);
+        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
+        RETURN_IF(tablet == nullptr, Status::InvalidArgument(fmt::format("Not Found tablet:{}", _context.tablet_id)));
+        auto mask_buffer =
+                std::make_unique<vectorized::RowSourceMaskBuffer>(_context.tablet_id, tablet->data_dir()->path());
+        auto source_masks = std::make_unique<std::vector<vectorized::RowSourceMask>>();
+
+        ChunkIteratorPtr itr;
+        // create temporary segment files at first, then merge them and create final segment files if schema change with sorting
+        if (_context.write_tmp) {
+            if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS) {
+                itr = new_heap_merge_iterator(seg_iterators);
+            } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
+                       _context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
+                itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), true);
+            } else {
+                return Status::NotSupported(
+                        fmt::format("final merge: schema change with sorting do not support {} type",
+                                    KeysType_Name(_context.tablet_schema->keys_type())));
+            }
         } else {
-            return Status::NotSupported(fmt::format("HorizontalBetaRowsetWriter not support {} key type final merge",
-                                                    _context.tablet_schema->keys_type()));
+            itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), true);
         }
-        _context.write_tmp = false;
-    } else {
-        itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), 0);
-    }
-    itr->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
+        itr->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
 
-    auto chunk_shared_ptr = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-    auto chunk = chunk_shared_ptr.get();
+        _context.max_rows_per_segment = CompactionUtils::get_segment_max_rows(config::max_segment_file_size,
+                                                                              _num_rows_written, _total_data_size);
 
-    _num_segment = 0;
-    _num_delfile = 0;
-    _num_rows_written = 0;
-    _num_rows_del = 0;
-    _total_data_size = 0;
-    _total_index_size = 0;
-    if (_rowset_txn_meta_pb) {
-        _rowset_txn_meta_pb->clear_partial_rowset_footers();
-    }
+        auto chunk_shared_ptr = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto chunk = chunk_shared_ptr.get();
 
-    // since the segment already NONOVERLAPPING here, make the _create_segment_writer
-    // method to create segment data files, rather than temporary segment files.
-    _context.segments_overlap = NONOVERLAPPING;
+        _num_segment = 0;
+        _num_delfile = 0;
+        _num_rows_written = 0;
+        _num_rows_del = 0;
+        _total_row_size = 0;
+        _total_data_size = 0;
+        _total_index_size = 0;
 
-    auto char_field_indexes = vectorized::ChunkHelper::get_char_field_indexes(schema);
+        // If BetaRowsetWriter has final merge, it will produce new partial rowset footers and append them to partial_rowset_footers array,
+        // but this array already have old entries, should clear those entries before write new segments for final merge.
+        if (_rowset_txn_meta_pb) {
+            _rowset_txn_meta_pb->clear_partial_rowset_footers();
+        }
 
-    size_t total_rows = 0;
-    size_t total_chunk = 0;
-    while (true) {
-        chunk->reset();
-        auto st = itr->get_next(chunk);
-        if (st.is_end_of_file()) {
-            break;
-        } else if (st.ok()) {
-            vectorized::ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema, chunk);
-            total_rows += chunk->num_rows();
-            total_chunk++;
-            add_chunk(*chunk);
-        } else {
+        // since the segment already NONOVERLAPPING here, make the _create_segment_writer
+        // method to create segment data files, rather than temporary segment files.
+        _context.segments_overlap = NONOVERLAPPING;
+
+        _vertical_beta_rowset_writer = std::make_unique<VerticalBetaRowsetWriter>(_context);
+        if (auto st = _vertical_beta_rowset_writer->init(); !st.ok()) {
+            std::stringstream ss;
+            ss << "Fail to create rowset writer. tablet_id=" << _context.tablet_id << " err=" << st;
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
+
+        auto char_field_indexes = vectorized::ChunkHelper::get_char_field_indexes(schema);
+
+        size_t total_rows = 0;
+        size_t total_chunk = 0;
+        while (true) {
+            chunk->reset();
+            auto st = itr->get_next(chunk, source_masks.get());
+            if (st.is_end_of_file()) {
+                break;
+            } else if (st.ok()) {
+                vectorized::ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema,
+                                                              chunk);
+                total_rows += chunk->num_rows();
+                total_chunk++;
+                if (auto st = _vertical_beta_rowset_writer->add_columns(*chunk, column_groups[0], true); !st.ok()) {
+                    LOG(WARNING) << "writer add_columns error. tablet=" << _context.tablet_id << ", err=" << st;
+                    return st;
+                }
+            } else {
+                return st;
+            }
+            if (!source_masks->empty()) {
+                RETURN_IF_ERROR(mask_buffer->write(*source_masks));
+                source_masks->clear();
+            }
+        }
+        itr->close();
+        if (auto st = _vertical_beta_rowset_writer->flush_columns(); !st.ok()) {
+            LOG(WARNING) << "failed to flush_columns group, tablet=" << _context.tablet_id << ", err=" << st;
             return st;
         }
-    }
-    itr->close();
-    flush();
+        RETURN_IF_ERROR(mask_buffer->flush());
 
-    timer.stop();
-    LOG(INFO) << "rowset writer final merge finished. tablet:" << _context.tablet_id
-              << " #key:" << schema.num_key_fields() << " input("
-              << "entry=" << seg_iterators.size() << " rows=" << stats.raw_rows_read
-              << " bytes=" << PrettyPrinter::print(stats.bytes_read, TUnit::UNIT) << ") output(rows=" << total_rows
-              << " chunk=" << total_chunk << " bytes=" << PrettyPrinter::print(total_data_size(), TUnit::UNIT)
-              << ") duration: " << timer.elapsed_time() / 1000000 << "ms";
+        for (size_t i = 1; i < column_groups.size(); ++i) {
+            mask_buffer->flip_to_read();
+
+            seg_iterators.clear();
+
+            auto schema =
+                    vectorized::ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[i]);
+
+            for (const auto& segment : segments) {
+                auto res = segment->new_iterator(schema, seg_options);
+                if (!res.ok()) {
+                    return res.status();
+                }
+                seg_iterators.emplace_back(res.value());
+            }
+
+            ChunkIteratorPtr itr;
+            // create temporary segment files at first, then merge them and create final segment files if schema change with sorting
+            if (_context.write_tmp) {
+                if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS) {
+                    itr = new_mask_merge_iterator(seg_iterators, mask_buffer.get());
+                } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
+                           _context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
+                    itr = new_aggregate_iterator(new_mask_merge_iterator(seg_iterators, mask_buffer.get()), false);
+                } else {
+                    return Status::NotSupported(
+                            fmt::format("final merge: schema change with sorting do not support {} type",
+                                        KeysType_Name(_context.tablet_schema->keys_type())));
+                }
+            } else {
+                itr = new_aggregate_iterator(new_mask_merge_iterator(seg_iterators, mask_buffer.get()), false);
+            }
+            itr->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
+
+            auto chunk_shared_ptr = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+            auto chunk = chunk_shared_ptr.get();
+
+            auto char_field_indexes = vectorized::ChunkHelper::get_char_field_indexes(schema);
+
+            while (true) {
+                chunk->reset();
+                auto st = itr->get_next(chunk, source_masks.get());
+                if (st.is_end_of_file()) {
+                    break;
+                } else if (st.ok()) {
+                    vectorized::ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema,
+                                                                  chunk);
+                    if (auto st = _vertical_beta_rowset_writer->add_columns(*chunk, column_groups[i], false);
+                        !st.ok()) {
+                        LOG(WARNING) << "writer add_columns error. tablet=" << _context.tablet_id << ", err=" << st;
+                        return st;
+                    }
+                } else {
+                    return st;
+                }
+                if (!source_masks->empty()) {
+                    source_masks->clear();
+                }
+            }
+            itr->close();
+            if (auto st = _vertical_beta_rowset_writer->flush_columns(); !st.ok()) {
+                LOG(WARNING) << "failed to flush_columns group, tablet=" << _context.tablet_id << ", err=" << st;
+                return st;
+            }
+        }
+
+        if (auto st = _vertical_beta_rowset_writer->final_flush(); !st.ok()) {
+            LOG(WARNING) << "failed to final flush rowset when final merge " << _context.tablet_id << ", err=" << st;
+            return st;
+        }
+        timer.stop();
+        LOG(INFO) << "rowset writer vertical final merge finished. tablet:" << _context.tablet_id
+                  << " #key:" << _context.tablet_schema->num_key_columns() << " input("
+                  << "entry=" << seg_iterators.size() << " rows=" << stats.raw_rows_read
+                  << " bytes=" << PrettyPrinter::print(stats.bytes_read, TUnit::UNIT) << ") output(rows=" << total_rows
+                  << " chunk=" << total_chunk << " bytes=" << PrettyPrinter::print(total_data_size(), TUnit::UNIT)
+                  << ") duration: " << timer.elapsed_time() / 1000000 << "ms";
+    } else {
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema);
+
+        for (const auto& segment : segments) {
+            auto res = segment->new_iterator(schema, seg_options);
+            if (!res.ok()) {
+                return res.status();
+            }
+            seg_iterators.emplace_back(res.value());
+        }
+
+        ChunkIteratorPtr itr;
+        // create temporary segment files at first, then merge them and create final segment files if schema change with sorting
+        if (_context.write_tmp) {
+            if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS) {
+                itr = new_heap_merge_iterator(seg_iterators);
+            } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
+                       _context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
+                itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), 0);
+            } else {
+                return Status::NotSupported(
+                        fmt::format("final merge: schema change with sorting do not support {} type",
+                                    KeysType_Name(_context.tablet_schema->keys_type())));
+            }
+            _context.write_tmp = false;
+        } else {
+            itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), 0);
+        }
+        itr->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
+
+        auto chunk_shared_ptr = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto chunk = chunk_shared_ptr.get();
+
+        _num_segment = 0;
+        _num_delfile = 0;
+        _num_rows_written = 0;
+        _num_rows_del = 0;
+        _total_row_size = 0;
+        _total_data_size = 0;
+        _total_index_size = 0;
+
+        // If BetaRowsetWriter has final merge, it will produce new partial rowset footers and append them to partial_rowset_footers array,
+        // but this array already have old entries, should clear those entries before write new segments for final merge.
+        if (_rowset_txn_meta_pb) {
+            _rowset_txn_meta_pb->clear_partial_rowset_footers();
+        }
+
+        // since the segment already NONOVERLAPPING here, make the _create_segment_writer
+        // method to create segment data files, rather than temporary segment files.
+        _context.segments_overlap = NONOVERLAPPING;
+
+        auto char_field_indexes = vectorized::ChunkHelper::get_char_field_indexes(schema);
+
+        size_t total_rows = 0;
+        size_t total_chunk = 0;
+        while (true) {
+            chunk->reset();
+            auto st = itr->get_next(chunk);
+            if (st.is_end_of_file()) {
+                break;
+            } else if (st.ok()) {
+                vectorized::ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema,
+                                                              chunk);
+                total_rows += chunk->num_rows();
+                total_chunk++;
+                if (auto st = add_chunk(*chunk); !st.ok()) {
+                    LOG(WARNING) << "writer add_chunk error: " << st;
+                    return st;
+                }
+            } else {
+                return st;
+            }
+        }
+        itr->close();
+        if (auto st = flush(); !st.ok()) {
+            LOG(WARNING) << "failed to flush, tablet=" << _context.tablet_id << ", err=" << st;
+            return st;
+        }
+
+        timer.stop();
+        LOG(INFO) << "rowset writer horizontal final merge finished. tablet:" << _context.tablet_id
+                  << " #key:" << _context.tablet_schema->num_key_columns() << " input("
+                  << "entry=" << seg_iterators.size() << " rows=" << stats.raw_rows_read
+                  << " bytes=" << PrettyPrinter::print(stats.bytes_read, TUnit::UNIT) << ") output(rows=" << total_rows
+                  << " chunk=" << total_chunk << " bytes=" << PrettyPrinter::print(total_data_size(), TUnit::UNIT)
+                  << ") duration: " << timer.elapsed_time() / 1000000 << "ms";
+    }
+
     span->SetAttribute("output_bytes", total_data_size());
 
     for (const auto& tmp_segment_file : _tmp_segment_files) {
@@ -541,6 +744,8 @@ Status HorizontalBetaRowsetWriter::_flush_segment_writer(std::unique_ptr<Segment
     uint64_t index_size;
     uint64_t footer_position;
     RETURN_IF_ERROR((*segment_writer)->finalize(&segment_size, &index_size, &footer_position));
+    _num_rows_of_tmp_segment_files.push_back(_num_rows_written - _num_rows_flushed);
+    _num_rows_flushed = _num_rows_written;
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
         uint64_t footer_size = segment_size - footer_position;
         auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
