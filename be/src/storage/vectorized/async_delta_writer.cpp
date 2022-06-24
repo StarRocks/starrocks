@@ -12,10 +12,12 @@
 namespace starrocks::vectorized {
 
 AsyncDeltaWriter::~AsyncDeltaWriter() {
-    int r = bthread::execution_queue_stop(_queue_id);
-    LOG_IF(WARNING, r != 0) << "Fail to stop execution queue: " << r;
-    r = bthread::execution_queue_join(_queue_id);
-    LOG_IF(WARNING, r != 0) << "Fail to join execution queue: " << r;
+    if (_queue_id.value != kInvalidQueueId) {
+        int r = bthread::execution_queue_stop(_queue_id);
+        LOG_IF(WARNING, r != 0) << "Fail to stop execution queue: " << r;
+        r = bthread::execution_queue_join(_queue_id);
+        LOG_IF(WARNING, r != 0) << "Fail to join execution queue: " << r;
+    }
     _writer.reset();
 }
 
