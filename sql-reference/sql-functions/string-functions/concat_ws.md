@@ -1,18 +1,18 @@
 # concat_ws
 
-## description
+## 功能
 
-### Syntax
+使用分隔符将两个或以上的字符串拼接成一个新的字符串。新字符串使用分隔符进行连接。
 
-`VARCHAR concat_ws(VARCHAR sep, VARCHAR str,...)`
+### 语法
 
-使用第一个参数 sep 作为连接符，将第二个参数以及后续所有参数拼接成一个字符串。
-如果分隔符是 NULL，返回 NULL。
-`concat_ws`函数不会跳过空字符串，会跳过 NULL 值
+```sql
+VARCHAR concat_ws(VARCHAR sep, VARCHAR str,...)
+```
 
 ### 参数说明
 
-- `sep`: 分隔符，数据类型 VARCHAR.
+- `sep`: 分隔符，数据类型 VARCHAR。
 - `str`: 待拼接的字符串，数据类型 VARCHAR。该函数不会跳过空字符串，会跳过 NULL 值。
 
 ### 返回值说明
@@ -30,14 +30,22 @@ MySQL > select concat_ws("r", "sta", "rocks");
 +--------------------------------+
 | starrocks                      |
 +--------------------------------+
+```
 
+示例2：使用`NULL`作为分隔符，返回 NULL。
+
+```Plain Text
 MySQL > select concat_ws(NULL, "star", "rocks");
 +----------------------------------+
 | concat_ws(NULL, 'star', 'rocks') |
 +----------------------------------+
 | NULL                             |
 +----------------------------------+
+```
 
+示例3：使用`r`作为分隔符，跳过 NULL 值。
+
+```Plain Text
 MySQL > select concat_ws("r", "sta", NULL,"rocks");
 +-------------------------------------+
 | concat_ws("r", "sta", NULL,"rocks") |
@@ -45,7 +53,3 @@ MySQL > select concat_ws("r", "sta", NULL,"rocks");
 | starrocks                           |
 +-------------------------------------+
 ```
-
-## keyword
-
-CONCAT_WS,CONCAT,WS
