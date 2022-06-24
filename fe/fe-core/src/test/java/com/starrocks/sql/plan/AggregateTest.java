@@ -943,8 +943,9 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 8> : if(1: v4 = 4: v1, 1: v4, NULL)\n" +
                 "  |  \n" +
                 "  5:NESTLOOP JOIN\n" +
-                "  |  NESTLOOP JOIN:\n" +
-                "  |  predicates is NULL.\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
                 "  |    \n" +
@@ -1233,8 +1234,9 @@ public class AggregateTest extends PlanTestBase {
                 "    EXCHANGE ID: 09\n" +
                 "    RANDOM");
         assertContains(plan, "  18:NESTLOOP JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.");
+                "  |  join op: CROSS JOIN\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n");
         assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: 13: t1b");

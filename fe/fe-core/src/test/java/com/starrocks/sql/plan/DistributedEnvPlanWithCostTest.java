@@ -482,14 +482,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testCrossJoinPruneChildByProject() throws Exception {
         String sql = "SELECT t2.v7 FROM  t0 right SEMI JOIN t1 on t0.v1=t1.v4, t2";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "7:NESTLOOP JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
+        assertContains(plan, "  7:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  \n" +
-                "  |----6:EXCHANGE\n" +
-                "  |    \n" +
-                "  4:Project\n" +
-                "  |  <slot 1> : 1: v1");
+                "  |----6:EXCHANGE\n");
     }
 
     @Test
@@ -599,9 +597,9 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         assertContains(plan, "cardinality: 25");
         // eval char/varchar type predicate cardinality in join node
         assertContains(plan, " 5:NESTLOOP JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates: ((19: N_NAME = 'CANADA') AND (24: N_NAME = 'IRAN')) OR ((19: N_NAME = 'IRAN') AND (24: N_NAME = 'CANADA'))\n" +
-                "  |  cardinality: 1");
+                "  |  join op: INNER JOIN\n" +
+                "  |  cardinality: 1\n");
+
     }
 
     // TODO(ywb): require any type property could consider parent required property
@@ -636,10 +634,10 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "     Predicates: 23: N_NATIONKEY IN (2, 1)\n" +
                 "     partitionsRatio=1/1, tabletsRatio=1/1\n");
         // eval predicate cardinality in join node
-        assertContains(plan, "6:NESTLOOP JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates: ((18: N_NATIONKEY = 1) AND (23: N_NATIONKEY = 2)) OR ((18: N_NATIONKEY = 2) AND (23: N_NATIONKEY = 1))\n" +
-                "  |  cardinality: 2");
+        assertContains(plan, "  6:NESTLOOP JOIN\n" +
+                "  |  join op: INNER JOIN\n" +
+                "  |  cardinality: 2\n" +
+                "  |  column statistics: \n");
     }
 
     @Test
@@ -1253,7 +1251,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testMultiTableCrossJoin() throws Exception {
         String sql = "select * from lineitem a,lineitem b,lineitem c,lineitem d,lineitem e,lineitem f";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "15:NESTLOOP JOIN\n" +
-                "  |  cross join:");
+        assertContains(plan, "  3:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n");
     }
 }
