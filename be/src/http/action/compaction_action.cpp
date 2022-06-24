@@ -108,7 +108,7 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
     uint32_t schema_hash;
     RETURN_IF_ERROR(get_params(req, &tablet_id, &schema_hash));
 
-    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash);
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
     RETURN_IF(tablet == nullptr,
               Status::InvalidArgument(fmt::format("Not Found tablet:{}, schema hash:{}", tablet_id, schema_hash)));
 
