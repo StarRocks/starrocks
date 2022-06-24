@@ -173,7 +173,7 @@ public:
         auto v = itr->second;
         auto entry = *v;
         if (entry->_ref != 1) {
-            LOG(WARNING) << "try_remove_by_key() failed: cache entry ref != 1 " << entry->_value;
+            VLOG(1) << "try_remove_by_key() failed: cache entry ref != 1 " << entry->_value;
             return false;
         } else {
             _map.erase(itr);
