@@ -143,8 +143,7 @@ private:
 
     RuntimeProfile* _runtime_profile;
     RuntimeProfile::Counter* _rows_returned_counter = nullptr;
-    // Time spent processing the child rows.
-    RuntimeProfile::Counter* _column_append_timer = nullptr;
+    RuntimeProfile::Counter* _column_resize_timer = nullptr;
     RuntimeProfile::Counter* _compute_timer = nullptr;
     RuntimeProfile::Counter* _binary_search_timer = nullptr;
 

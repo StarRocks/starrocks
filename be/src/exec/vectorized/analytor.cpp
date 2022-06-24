@@ -222,7 +222,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
     _compute_timer = ADD_TIMER(_runtime_profile, "ComputeTime");
-    _column_append_timer = ADD_TIMER(_runtime_profile, "ColumnAppendTime");
+    _column_resize_timer = ADD_TIMER(_runtime_profile, "ColumnResizeTime");
     _binary_search_timer = ADD_TIMER(_runtime_profile, "BinarySearchTime");
 
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());
@@ -454,7 +454,7 @@ Status Analytor::add_chunk(const vectorized::ChunkPtr& chunk) {
     const size_t chunk_size = chunk->num_rows();
 
     {
-        SCOPED_TIMER(_column_append_timer);
+        SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
@@ -598,7 +598,7 @@ void Analytor::remove_unused_buffer_values(RuntimeState* state) {
     int64_t remove_count = remove_end_position - _removed_from_buffer_rows;
 
     {
-        SCOPED_TIMER(_column_append_timer);
+        SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
                 _agg_intput_columns[i][j]->remove_first_n_values(remove_count);
