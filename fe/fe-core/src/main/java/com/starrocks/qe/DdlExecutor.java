@@ -26,40 +26,18 @@ import com.starrocks.analysis.AdminCheckTabletsStmt;
 import com.starrocks.analysis.AdminRepairTableStmt;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.AlterDatabaseQuotaStmt;
-import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterResourceStmt;
-import com.starrocks.analysis.AlterSystemStmt;
-import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
-import com.starrocks.analysis.BackupStmt;
-import com.starrocks.analysis.CancelAlterSystemStmt;
-import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.CancelExportStmt;
 import com.starrocks.analysis.CreateFileStmt;
-import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateResourceStmt;
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateUserStmt;
-import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DropFileStmt;
-import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropResourceStmt;
-import com.starrocks.analysis.DropRoleStmt;
-import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.InstallPluginStmt;
-import com.starrocks.analysis.RecoverDbStmt;
-import com.starrocks.analysis.RecoverPartitionStmt;
-import com.starrocks.analysis.RecoverTableStmt;
-import com.starrocks.analysis.RestoreStmt;
-import com.starrocks.analysis.RevokeStmt;
-import com.starrocks.analysis.SetUserPropertyStmt;
-import com.starrocks.analysis.SyncStmt;
-import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UninstallPluginStmt;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
@@ -67,81 +45,12 @@ import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
-import com.starrocks.sql.ast.GrantImpersonateStmt;
-import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
-import com.starrocks.sql.ast.RevokeImpersonateStmt;
-import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 
 public class DdlExecutor {
     public static ShowResultSet execute(GlobalStateMgr globalStateMgr, DdlStmt ddlStmt) throws Exception {
-        if (ddlStmt instanceof CreateUserStmt) {
-            CreateUserStmt stmt = (CreateUserStmt) ddlStmt;
-            globalStateMgr.getAuth().createUser(stmt);
-        } else if (ddlStmt instanceof AlterUserStmt) {
-            AlterUserStmt stmt = (AlterUserStmt) ddlStmt;
-            globalStateMgr.getAuth().alterUser(stmt);
-        } else if (ddlStmt instanceof DropUserStmt) {
-            DropUserStmt stmt = (DropUserStmt) ddlStmt;
-            globalStateMgr.getAuth().dropUser(stmt);
-        } else if (ddlStmt instanceof RevokeRoleStmt) {
-            RevokeRoleStmt stmt = (RevokeRoleStmt) ddlStmt;
-            globalStateMgr.getAuth().revokeRole(stmt);
-        } else if (ddlStmt instanceof GrantRoleStmt) {
-            GrantRoleStmt stmt = (GrantRoleStmt) ddlStmt;
-            globalStateMgr.getAuth().grantRole(stmt);
-        } else if (ddlStmt instanceof GrantStmt) {
-            GrantStmt stmt = (GrantStmt) ddlStmt;
-            globalStateMgr.getAuth().grant(stmt);
-        } else if (ddlStmt instanceof GrantImpersonateStmt) {
-            GrantImpersonateStmt stmt = (GrantImpersonateStmt) ddlStmt;
-            globalStateMgr.getAuth().grantImpersonate(stmt);
-        } else if (ddlStmt instanceof RevokeStmt) {
-            RevokeStmt stmt = (RevokeStmt) ddlStmt;
-            globalStateMgr.getAuth().revoke(stmt);
-        } else if (ddlStmt instanceof RevokeImpersonateStmt) {
-            RevokeImpersonateStmt stmt = (RevokeImpersonateStmt) ddlStmt;
-            globalStateMgr.getAuth().revokeImpersonate(stmt);
-        } else if (ddlStmt instanceof CreateRoleStmt) {
-            globalStateMgr.getAuth().createRole((CreateRoleStmt) ddlStmt);
-        } else if (ddlStmt instanceof DropRoleStmt) {
-            globalStateMgr.getAuth().dropRole((DropRoleStmt) ddlStmt);
-        } else if (ddlStmt instanceof SetUserPropertyStmt) {
-            globalStateMgr.getAuth().updateUserProperty((SetUserPropertyStmt) ddlStmt);
-        } else if (ddlStmt instanceof AlterSystemStmt) {
-            AlterSystemStmt stmt = (AlterSystemStmt) ddlStmt;
-            return globalStateMgr.alterCluster(stmt);
-        } else if (ddlStmt instanceof CancelAlterSystemStmt) {
-            CancelAlterSystemStmt stmt = (CancelAlterSystemStmt) ddlStmt;
-            globalStateMgr.cancelAlterCluster(stmt);
-        } else if (ddlStmt instanceof AlterDatabaseQuotaStmt) {
-            globalStateMgr.alterDatabaseQuota((AlterDatabaseQuotaStmt) ddlStmt);
-        } else if (ddlStmt instanceof AlterDatabaseRename) {
-            globalStateMgr.renameDatabase((AlterDatabaseRename) ddlStmt);
-        } else if (ddlStmt instanceof RecoverDbStmt) {
-            globalStateMgr.recoverDatabase((RecoverDbStmt) ddlStmt);
-        } else if (ddlStmt instanceof RecoverTableStmt) {
-            globalStateMgr.recoverTable((RecoverTableStmt) ddlStmt);
-        } else if (ddlStmt instanceof RecoverPartitionStmt) {
-            globalStateMgr.recoverPartition((RecoverPartitionStmt) ddlStmt);
-        } else if (ddlStmt instanceof CreateViewStmt) {
-            globalStateMgr.createView((CreateViewStmt) ddlStmt);
-        } else if (ddlStmt instanceof BackupStmt) {
-            globalStateMgr.backup((BackupStmt) ddlStmt);
-        } else if (ddlStmt instanceof RestoreStmt) {
-            globalStateMgr.restore((RestoreStmt) ddlStmt);
-        } else if (ddlStmt instanceof CancelBackupStmt) {
-            globalStateMgr.cancelBackup((CancelBackupStmt) ddlStmt);
-        } else if (ddlStmt instanceof CreateRepositoryStmt) {
-            globalStateMgr.getBackupHandler().createRepository((CreateRepositoryStmt) ddlStmt);
-        } else if (ddlStmt instanceof DropRepositoryStmt) {
-            globalStateMgr.getBackupHandler().dropRepository((DropRepositoryStmt) ddlStmt);
-        } else if (ddlStmt instanceof SyncStmt) {
-            return null;
-        } else if (ddlStmt instanceof TruncateTableStmt) {
-            globalStateMgr.truncateTable((TruncateTableStmt) ddlStmt);
-        } else if (ddlStmt instanceof AdminRepairTableStmt) {
+        if (ddlStmt instanceof AdminRepairTableStmt) {
             globalStateMgr.getTabletChecker().repairTable((AdminRepairTableStmt) ddlStmt);
         } else if (ddlStmt instanceof AdminCancelRepairTableStmt) {
             globalStateMgr.getTabletChecker().cancelRepairTable((AdminCancelRepairTableStmt) ddlStmt);
