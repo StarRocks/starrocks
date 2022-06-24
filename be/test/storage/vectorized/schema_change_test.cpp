@@ -497,7 +497,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1003);
 
     ChunkChanger chunk_changer(new_tablet->tablet_schema());
-    
+
     ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(0);
     column_mapping->ref_column = 1;
     column_mapping = chunk_changer.get_mutable_column_mapping(1);
@@ -596,7 +596,8 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
-    ASSERT_TRUE(_sc_procedure->processV2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
+    ASSERT_TRUE(
+            _sc_procedure->processV2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
     delete tablet_rowset_reader;
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1101);
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1102);
@@ -664,7 +665,8 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
-    ASSERT_TRUE(_sc_procedure->processV2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
+    ASSERT_TRUE(
+            _sc_procedure->processV2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
     delete tablet_rowset_reader;
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1103);
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1104);
@@ -727,7 +729,8 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
-    ASSERT_TRUE(_sc_procedure->processV2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
+    ASSERT_TRUE(
+            _sc_procedure->processV2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
     delete tablet_rowset_reader;
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1203);
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1204);
