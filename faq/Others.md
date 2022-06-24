@@ -210,7 +210,7 @@ BE节点最小配置个数是1个,支持单节点部署,推荐集群部署性能
 
 ## set is_report_success = true;后profile不显示
 
-只有leader所在fe可以查看，因为report信息只汇报给leader节点。
+只有leader所在fe可以查看，因为report信息只汇报给leader节点。同时，如果通过 StarRocks Manager 查看 proflie， 必须确保 FE 配置项 `enable_collect_query_detail_info` 为 `true`。
 
 ## 给字段加了注释，表里面怎么看呀，没有显示注释一栏，starrocks支持么？
 
