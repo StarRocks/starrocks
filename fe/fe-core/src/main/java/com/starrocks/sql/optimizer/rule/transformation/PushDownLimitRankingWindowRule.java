@@ -5,6 +5,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.SortPhase;
@@ -103,8 +104,12 @@ public class PushDownLimitRankingWindowRule extends TransformationRule {
             return Collections.emptyList();
         }
 
+        Ordering firstOrdering = topNOperator.getOrderByElements().get(0);
+        if (!firstOrdering.isAscending()) {
+            return Collections.emptyList();
+        }
         // The output column of the window function must be the first order by columns
-        if (!topNOperator.getOrderByElements().get(0).getColumnRef().equals(windowCol)) {
+        if (!firstOrdering.getColumnRef().equals(windowCol)) {
             return Collections.emptyList();
         }
 

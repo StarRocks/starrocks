@@ -450,6 +450,30 @@ public class WindowTest extends PlanTestBase {
                     "  |  offset: 0");
         }
         {
+            // order by direction mismatch
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk desc limit 10, 5";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:SORT\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk desc,v2 limit 10, 5";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:SORT\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+        }
+        {
             // Order by column mismatch
             String sql = "select * from (\n" +
                     "    select *, " +
