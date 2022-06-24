@@ -325,7 +325,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
 
         LogicalAggregationOperator newAggregate = new LogicalAggregationOperator.Builder().withOperator(aggregate).
                 setAggregations(aggregateFn).setGroupingKeys(rewriteGroupingKeys).
-                setPartitionByColumns(rewriteGroupingKeys).build();
+                setPartitionByColumns(rewriteGroupingKeys).setPredicate(null).build();
         return OptExpression.create(newAggregate, OptExpression.create(cteConsume));
     }
 
@@ -362,7 +362,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
 
         LogicalAggregationOperator newAggregate = new LogicalAggregationOperator.Builder().withOperator(aggregate).
                 setAggregations(aggregateFn).setGroupingKeys(rewriteGroupingKeys).
-                setPartitionByColumns(rewriteGroupingKeys).build();
+                setPartitionByColumns(rewriteGroupingKeys).setPredicate(null).build();
 
         return OptExpression.create(newAggregate, OptExpression.create(cteConsume));
     }

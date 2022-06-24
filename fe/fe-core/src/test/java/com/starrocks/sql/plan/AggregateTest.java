@@ -686,8 +686,12 @@ public class AggregateTest extends PlanTestBase {
         Assert.assertTrue(explainString.contains("multi_distinct_count(1: k1)"));
 
         queryStr = "select count(distinct k1, k2),  count(distinct k4) from baseall group by k3";
-        starRocksAssert.query(queryStr).analysisError(
-                "The query contains multi count distinct or sum distinct, each can't have multi columns.");
+        explainString = getFragmentPlan(queryStr);
+        Assert.assertTrue(explainString.contains("13:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 16: k3 <=> 17: k3"));
     }
 
     @Test
