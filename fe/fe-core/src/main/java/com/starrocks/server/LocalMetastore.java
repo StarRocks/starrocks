@@ -2987,7 +2987,6 @@ public class LocalMetastore implements ConnectorMetadata {
         } else {
             stateMgr.getAlterInstance().processDropMaterializedView(stmt);
         }
-        stateMgr.getAlterInstance().processDropMaterializedView(stmt);
     }
 
     @Override
