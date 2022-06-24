@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -132,7 +133,8 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
 
         if (otherAggregate.size() > 0) {
             allCteConsumes.offer(
-                    buildOtherAggregateCTEConsume(otherAggregate, aggregate, cteProduce, columnRefFactory, columnRefMap));
+                    buildOtherAggregateCTEConsume(otherAggregate, aggregate, cteProduce, columnRefFactory,
+                            columnRefMap));
         }
 
         // left deep join tree
@@ -148,11 +150,17 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
         LogicalProjectOperator.Builder builder = new LogicalProjectOperator.Builder();
         builder.setColumnRefMap(columnRefMap);
 
+        OptExpression rightTree = OptExpression.create(builder.build(), allCteConsumes.get(0));
+
+        // Add filter node
+        if (aggregate.getPredicate() != null) {
+            rightTree = OptExpression.create(new LogicalFilterOperator(aggregate.getPredicate()), rightTree);
+        }
+
         context.getCteContext().addForceCTE(cteId);
 
         LogicalCTEAnchorOperator cteAnchor = new LogicalCTEAnchorOperator(cteId);
-        return Lists.newArrayList(OptExpression.create(cteAnchor, cteProduce,
-                OptExpression.create(builder.build(), allCteConsumes.get(0))));
+        return Lists.newArrayList(OptExpression.create(cteAnchor, cteProduce, rightTree));
     }
 
     private LinkedList<OptExpression> buildDistinctAggCTEConsume(LogicalAggregationOperator aggregate,
@@ -175,9 +183,9 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
 
         // Deal with avg(distinct xx) function, because avg needs to compute count and sum, there can use the aggregate
         // node with sum/count function directly if these aggregate node has generated before.
-        Map<ColumnRefOperator, CallOperator> distinctAvgAggregate =  aggregate.getAggregations().entrySet().stream().
+        Map<ColumnRefOperator, CallOperator> distinctAvgAggregate = aggregate.getAggregations().entrySet().stream().
                 filter(kv -> kv.getValue().getFnName().equalsIgnoreCase(FunctionSet.AVG)).collect(Collectors.toMap(
-                Map.Entry::getKey, Map.Entry::getValue));
+                        Map.Entry::getKey, Map.Entry::getValue));
         if (!distinctAvgAggregate.isEmpty()) {
             for (Map.Entry<ColumnRefOperator, CallOperator> aggregation : distinctAvgAggregate.entrySet()) {
                 CallOperator avgCallOperator = aggregation.getValue();
@@ -201,7 +209,8 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
 
                 CallOperator distinctAvgCallOperator = (CallOperator) scalarRewriter.rewrite(
                         new CallOperator("divide", avgCallOperator.getType(),
-                        Lists.newArrayList(sumColumnRef, countColumnRef)), Lists.newArrayList(new ImplicitCastRule()));
+                                Lists.newArrayList(sumColumnRef, countColumnRef)),
+                        Lists.newArrayList(new ImplicitCastRule()));
                 projectionMap.put(aggregation.getKey(), distinctAvgCallOperator);
             }
         }
@@ -246,9 +255,8 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
             aggregateFn.put(otherRef, otherAggFn);
             projectionMap.put(otherRef, otherRef);
         }
-        LogicalAggregationOperator newAggregate =
-                new LogicalAggregationOperator.Builder().withOperator(aggregate).setAggregations(aggregateFn).build();
-
+        LogicalAggregationOperator newAggregate = new LogicalAggregationOperator.Builder()
+                .withOperator(aggregate).setAggregations(aggregateFn).setPredicate(null).build();
 
         return OptExpression.create(newAggregate, OptExpression.create(cteConsume));
     }
@@ -278,8 +286,8 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
         Map<ColumnRefOperator, CallOperator> aggregateFn = Maps.newHashMap();
         aggregateFn.put(aggDistinctRef, aggDistinctFn);
 
-        LogicalAggregationOperator newAggregate =
-                new LogicalAggregationOperator.Builder().withOperator(aggregate).setAggregations(aggregateFn).build();
+        LogicalAggregationOperator newAggregate = new LogicalAggregationOperator.Builder()
+                .withOperator(aggregate).setAggregations(aggregateFn).setPredicate(null).build();
 
         return OptExpression.create(newAggregate, OptExpression.create(cteConsume));
     }
@@ -301,7 +309,7 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
         if (consumeOutputMap.isEmpty()) {
             List<ColumnRefOperator> outputColumns =
                     produceOperator.getOutputColumns(new ExpressionContext(cteProduce)).getStream().
-                            mapToObj(columnId -> factory.getColumnRef(columnId)).collect(Collectors.toList());
+                            mapToObj(factory::getColumnRef).collect(Collectors.toList());
             ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(outputColumns);
             ColumnRefOperator consumeOutput =
                     factory.create(smallestColumn, smallestColumn.getType(), smallestColumn.isNullable());

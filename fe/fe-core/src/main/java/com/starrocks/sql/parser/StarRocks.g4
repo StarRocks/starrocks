@@ -279,7 +279,7 @@ createExternalCatalogStatement
     ;
 
 dropExternalCatalogStatement
-    : DROP EXTERNAL CATALOG catalogName=identifierOrString
+    : DROP CATALOG catalogName=identifierOrString
     ;
 
 showCatalogsStatement

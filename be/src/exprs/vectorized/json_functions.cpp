@@ -224,6 +224,21 @@ ColumnPtr JsonFunctions::get_json_string(FunctionContext* context, const Columns
     return _json_string_unescaped(context, Columns{jsons});
 }
 
+ColumnPtr JsonFunctions::get_native_json_int(FunctionContext* context, const Columns& columns) {
+    auto jsons = json_query(context, columns);
+    return _json_int(context, Columns{jsons});
+}
+
+ColumnPtr JsonFunctions::get_native_json_double(FunctionContext* context, const Columns& columns) {
+    auto jsons = json_query(context, columns);
+    return _json_double(context, Columns{jsons});
+}
+
+ColumnPtr JsonFunctions::get_native_json_string(FunctionContext* context, const Columns& columns) {
+    auto jsons = json_query(context, columns);
+    return json_string(context, Columns{jsons});
+}
+
 ColumnPtr JsonFunctions::parse_json(FunctionContext* context, const Columns& columns) {
     int num_rows = columns[0]->size();
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);

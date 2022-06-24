@@ -2975,7 +2975,7 @@ public class LocalMetastore implements ConnectorMetadata {
         } finally {
             db.readUnlock();
         }
-        if (table != null && table instanceof MaterializedView) {
+        if (table instanceof MaterializedView) {
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
             Set<Long> baseTableIds = ((MaterializedView) table).getBaseTableIds();
             for (Long baseTableId : baseTableIds) {
@@ -2987,7 +2987,6 @@ public class LocalMetastore implements ConnectorMetadata {
         } else {
             stateMgr.getAlterInstance().processDropMaterializedView(stmt);
         }
-        stateMgr.getAlterInstance().processDropMaterializedView(stmt);
     }
 
     @Override

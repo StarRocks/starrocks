@@ -507,7 +507,17 @@ public class TransactionState implements Writable {
     }
 
     public List<Long> getTableIdList() {
+        if (tableIdList.isEmpty()) {
+            // Old version sometimes forgot to set the tabletIdList, collect tabletIdList
+            // from idToTableCommitInfos.
+            // NOTE: this works only when the state is COMMITTED or VISIBLE
+            tableIdList = Lists.newArrayList(idToTableCommitInfos.keySet());
+        }
         return tableIdList;
+    }
+
+    public void setTableIdList(List<Long> tableIdList) {
+        this.tableIdList = tableIdList;
     }
 
     public Map<Long, TableCommitInfo> getIdToTableCommitInfos() {

@@ -89,7 +89,10 @@ public class DataDescription {
             FunctionSet.REPLACE_VALUE,
             FunctionSet.NOW,
             FunctionSet.HLL_HASH,
-            FunctionSet.SUBSTITUTE);
+            FunctionSet.SUBSTITUTE,
+            FunctionSet.GET_JSON_INT,
+            FunctionSet.GET_JSON_DOUBLE,
+            FunctionSet.GET_JSON_STRING);
 
     private final String tableName;
     private final PartitionNames partitionNames;
@@ -415,6 +418,10 @@ public class DataDescription {
             validateNowFunction(mappingColumn);
         } else if (functionName.equalsIgnoreCase(FunctionSet.SUBSTITUTE)) {
             validateSubstituteFunction(args, columnNameMap);
+        } else if (functionName.equalsIgnoreCase(FunctionSet.GET_JSON_DOUBLE) ||
+                functionName.equalsIgnoreCase(FunctionSet.GET_JSON_INT) ||
+                functionName.equalsIgnoreCase(FunctionSet.GET_JSON_STRING)) {
+            validateGetJsonFunction(args, columnNameMap);
         } else {
             if (isHadoopLoad) {
                 throw new AnalysisException("Unknown function: " + functionName);
@@ -428,6 +435,22 @@ public class DataDescription {
             throws AnalysisException {
         if (args.size() != 1) {
             throw new AnalysisException("Should has only one argument: " + args);
+        }
+
+        String argColumn = args.get(0);
+        if (!columnNameMap.containsKey(argColumn)) {
+            throw new AnalysisException("Column is not in sources, column: " + argColumn);
+        }
+
+        args.set(0, columnNameMap.get(argColumn));
+    }
+
+    // eg: k2 = get_json_string(k1, "$.id")
+    // this is used for creating derivative column from existing column
+    private static void validateGetJsonFunction(List<String> args, Map<String, String> columnNameMap)
+            throws AnalysisException {
+        if (args.size() != 2) {
+            throw new AnalysisException("Should has only two arguments: " + args);
         }
 
         String argColumn = args.get(0);
