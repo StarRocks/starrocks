@@ -39,6 +39,7 @@ public class IsNullPredicateTest {
         } catch (AnalysisException e) {
             Assert.fail();
         }
+        Assert.assertEquals(isNullPredicate.getFn(), IsNullPredicate.isNullFN);
 
         IsNullPredicate isNotNullPredicate = new IsNullPredicate(new NullLiteral(), true);
 
@@ -47,6 +48,7 @@ public class IsNullPredicateTest {
         } catch (AnalysisException e) {
             Assert.fail();
         }
+        Assert.assertEquals(isNotNullPredicate.getFn(), IsNullPredicate.isNotNullFN);
     }
 
     @Test
