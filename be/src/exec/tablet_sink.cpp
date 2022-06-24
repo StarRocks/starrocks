@@ -54,8 +54,8 @@ static const uint8_t VALID_SEL_OK_AND_NULL = 0x3;
 
 namespace starrocks::stream_load {
 
-NodeChannel::NodeChannel(OlapTableSink* parent, int64_t index_id, int64_t node_id, int32_t schema_hash)
-        : _parent(parent), _index_id(index_id), _node_id(node_id), _schema_hash(schema_hash) {
+NodeChannel::NodeChannel(OlapTableSink* parent, int64_t index_id, int64_t node_id)
+        : _parent(parent), _index_id(index_id), _node_id(node_id) {
     // restrict the chunk memory usage of send queue
     _mem_tracker = std::make_unique<MemTracker>(config::send_channel_buffer_limit, "", nullptr);
 }
@@ -423,7 +423,7 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<TTabletWithPart
             NodeChannel* channel = nullptr;
             auto it = _node_channels.find(node_id);
             if (it == std::end(_node_channels)) {
-                auto channel_ptr = std::make_unique<NodeChannel>(_parent, _index_id, node_id, _schema_hash);
+                auto channel_ptr = std::make_unique<NodeChannel>(_parent, _index_id, node_id);
                 channel = channel_ptr.get();
                 _node_channels.emplace(node_id, std::move(channel_ptr));
             } else {
@@ -446,9 +446,7 @@ bool IndexChannel::has_intolerable_failure() {
     return _failed_channels.size() >= ((_parent->_num_repicas + 1) / 2);
 }
 
-OlapTableSink::OlapTableSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& texprs,
-                             Status* status)
-        : _pool(pool), _input_row_desc(row_desc), _filter_bitmap(1024) {
+OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status) : _pool(pool) {
     if (!texprs.empty()) {
         *status = Expr::create_expr_trees(_pool, texprs, &_output_expr_ctxs);
     }
@@ -567,11 +565,6 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _close_timer = ADD_TIMER(_profile, "CloseWaitTime");
     _non_blocking_send_timer = ADD_TIMER(_profile, "NonBlockingSendTime");
     _serialize_chunk_timer = ADD_TIMER(_profile, "SerializeChunkTime");
-    _wait_response_timer = ADD_TIMER(_profile, "WaitResponseTime");
-    _compress_timer = ADD_TIMER(_profile, "CompressTime");
-    _append_attachment_timer = ADD_TIMER(_profile, "AppendAttachmentTime");
-    _mark_tablet_timer = ADD_TIMER(_profile, "MarkTabletTime");
-    _pack_chunk_timer = ADD_TIMER(_profile, "PackChunkTime");
 
     _load_mem_limit = state->get_load_mem_limit();
 
@@ -589,7 +582,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
                 tablets.emplace_back(std::move(tablet_with_partition));
             }
         }
-        auto channel = std::make_unique<IndexChannel>(this, index->index_id, index->schema_hash);
+        auto channel = std::make_unique<IndexChannel>(this, index->index_id);
         RETURN_IF_ERROR(channel->init(state, tablets));
         _channels.emplace_back(std::move(channel));
     }
@@ -970,7 +963,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
             }
             chunk->update_column(nullable->data_column(), desc->id());
         } else if (column_ptr->has_null()) {
-            vectorized::NullableColumn* nullable = down_cast<vectorized::NullableColumn*>(column_ptr.get());
+            auto* nullable = down_cast<vectorized::NullableColumn*>(column_ptr.get());
             vectorized::NullData& nulls = nullable->null_column_data();
             for (size_t j = 0; j < num_rows; ++j) {
                 if (nulls[j] && _validate_selection[j] != VALID_SEL_FAILED) {
@@ -987,7 +980,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
         case TYPE_VARCHAR: {
             uint32_t len = desc->type().len;
             vectorized::Column* data_column = vectorized::ColumnHelper::get_data_column(column);
-            vectorized::BinaryColumn* binary = down_cast<vectorized::BinaryColumn*>(data_column);
+            auto* binary = down_cast<vectorized::BinaryColumn*>(data_column);
             vectorized::Offsets& offset = binary->get_offset();
             for (size_t j = 0; j < num_rows; ++j) {
                 if (_validate_selection[j] == VALID_SEL_OK) {
