@@ -741,6 +741,7 @@ under the License.
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>
+                    <threadCount>1</threadCount>
                 </configuration>
             </plugin>
 
