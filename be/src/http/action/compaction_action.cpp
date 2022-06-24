@@ -76,15 +76,13 @@ Status CompactionAction::_handle_show_compaction(HttpRequest* req, std::string* 
     return Status::OK();
 }
 
-Status get_params(HttpRequest* req, uint64_t* tablet_id, uint32_t* schema_hash) {
+Status get_params(HttpRequest* req, uint64_t* tablet_id) {
     std::string req_tablet_id = req->param(TABLET_ID_KEY);
-    std::string req_schema_hash = req->param(TABLET_SCHEMA_HASH_KEY);
 
     try {
         *tablet_id = std::stoull(req_tablet_id);
-        *schema_hash = std::stoul(req_schema_hash);
     } catch (const std::exception& e) {
-        std::string msg = fmt::format("invalid argument.tablet_id:{}, schema_hash:{}", req_tablet_id, req_schema_hash);
+        std::string msg = fmt::format("invalid argument.tablet_id:{}", req_tablet_id);
         LOG(WARNING) << msg;
         return Status::InvalidArgument(msg);
     }
@@ -101,12 +99,11 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
     DeferOp defer([&]() { _running = false; });
 
     uint64_t tablet_id;
-    uint32_t schema_hash;
-    RETURN_IF_ERROR(get_params(req, &tablet_id, &schema_hash));
+    RETURN_IF_ERROR(get_params(req, &tablet_id));
 
-    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash);
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
     RETURN_IF(tablet == nullptr,
-              Status::InvalidArgument(fmt::format("Not Found tablet:{}, schema hash:{}", tablet_id, schema_hash)));
+              Status::InvalidArgument(fmt::format("Not Found tablet:{}, schema hash:{}", tablet_id)));
 
     std::string compaction_type = req->param(PARAM_COMPACTION_TYPE);
     if (compaction_type != to_string(CompactionType::BASE_COMPACTION) &&
