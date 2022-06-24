@@ -1501,6 +1501,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         try {
             if (routineLoadDesc != null) {
                 setRoutineLoadDesc(routineLoadDesc);
+                mergeLoadDescToOriginStatement(routineLoadDesc);
             }
             if (jobProperties != null) {
                 modifyCommonJobProperties(jobProperties);
@@ -1508,7 +1509,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             if (dataSourceProperties != null) {
                 modifyDataSourceProperties(dataSourceProperties);
             }
-            mergeLoadDescToOriginStatement(routineLoadDesc);
             if (!isReplay) {
                 AlterRoutineLoadJobOperationLog log = new AlterRoutineLoadJobOperationLog(id,
                         jobProperties, dataSourceProperties, originStatement);
