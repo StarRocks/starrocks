@@ -1315,7 +1315,8 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 12> : 12: count\n" +
                 "  |  <slot 13> : 13: sum");
 
-        sql = "select avg(distinct t1b + 1), count(distinct t1b+1), sum(distinct t1b + 1), count(t1b) from test_all_type";
+        sql =
+                "select avg(distinct t1b + 1), count(distinct t1b+1), sum(distinct t1b + 1), count(t1b) from test_all_type";
         plan = getFragmentPlan(sql);
         assertContains(plan, " 27:Project\n" +
                 "  |  <slot 12> : CAST(14: sum AS DOUBLE) / CAST(13: count AS DOUBLE)\n" +
@@ -1323,7 +1324,8 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 14> : 14: sum\n" +
                 "  |  <slot 15> : 15: count");
 
-        sql = "select avg(distinct t1b + 1), count(distinct t1b), sum(distinct t1c), count(t1c), sum(t1c) from test_all_type";
+        sql =
+                "select avg(distinct t1b + 1), count(distinct t1b), sum(distinct t1c), count(t1c), sum(t1c) from test_all_type";
         plan = getFragmentPlan(sql);
         assertContains(plan, "47:Project\n" +
                 "  |  <slot 12> : CAST(19: sum AS DOUBLE) / CAST(21: count AS DOUBLE)\n" +
@@ -1342,7 +1344,8 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 17> : 2: t1b\n" +
                 "  |  ");
 
-        sql = "select avg(distinct 1), count(distinct null), count(distinct 1), count(distinct (t1a + t1c)), sum(t1c) from test_all_type";
+        sql =
+                "select avg(distinct 1), count(distinct null), count(distinct 1), count(distinct (t1a + t1c)), sum(t1c) from test_all_type";
         plan = getFragmentPlan(sql);
         assertContains(plan, " 4:AGGREGATE (update serialize)\n" +
                 "  |  output: multi_distinct_sum(1)\n" +
@@ -1426,8 +1429,21 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testAvgCountDistinctWithMultiColumns() throws Exception {
         expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("The query contains multi count distinct or sum distinct, each can't have multi columns");
+        expectedException.expectMessage(
+                "The query contains multi count distinct or sum distinct, each can't have multi columns");
         String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal,s_nationkey) from supplier;";
         getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testAvgCountDistinctWithHaving() throws Exception {
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal) " +
+                "from supplier having avg(distinct s_suppkey) > 3 ;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  16:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0");
+        connectContext.getSessionVariable().setCboCteReuse(false);
     }
 }

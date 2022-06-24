@@ -383,6 +383,29 @@ public class CTEPlanTest extends PlanTestBase {
         String sql = "WITH w_t0 as (SELECT * FROM t0) \n" +
                 "SELECT v1, v2, v3 FROM  w_t0 x0 where false union select v1, v2, v3 from w_t0 x1 where abs(1) = 2";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
+        assertContains(plan, "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  2:AGGREGATE (update finalize)");
+    }
+
+    @Test
+    public void testEmptyCTE() throws Exception {
+        String sql = "WITH w_t0 as (SELECT * FROM t0), " +
+                "          w_t1 as (select * from t1)\n" +
+                "SELECT v1, v2, v3 FROM  w_t0 x0 where false " +
+                "union " +
+                "select v1, v2, v3 from w_t0 x1 where abs(1) = 2 " +
+                "union " +
+                "select v4, v5, v6 from w_t1 x2 where 1 > 2 " +
+                "union " +
+                "select v4, v5, v6 from w_t1 x2 where not null ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  2:AGGREGATE (update finalize)\n");
     }
 }
