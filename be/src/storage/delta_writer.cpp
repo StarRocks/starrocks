@@ -118,7 +118,7 @@ Status DeltaWriter::_init() {
         TabletSharedPtr new_tablet;
         if (!_tablet->is_migrating()) {
             // maybe migration just finish, get the tablet again
-            new_tablet = tablet_mgr->get_tablet(_opt.tablet_id, _opt.schema_hash);
+            new_tablet = tablet_mgr->get_tablet(_opt.tablet_id);
             if (new_tablet == nullptr) {
                 _set_state(kAborted);
                 return Status::NotFound(fmt::format("Not found tablet. tablet_id: {}", _opt.tablet_id));
