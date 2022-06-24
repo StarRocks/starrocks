@@ -89,7 +89,7 @@ public class ShowStmtAnalyzer {
                 catalogName = context.getCurrentCatalog();
             }
             if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR);
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
             return null;
         }
