@@ -105,7 +105,9 @@ Status EvHttpServer::start() {
                 LOG(WARNING) << "Couldn't create an event_base.";
                 return;
             }
+            pthread_rwlock_wrlock(&_rw_lock);
             _event_bases.push_back(base);
+            pthread_rwlock_unlock(&_rw_lock);
 
             /* Create a new evhttp object to handle requests. */
             struct evhttp* http = evhttp_new(base);
@@ -113,7 +115,10 @@ Status EvHttpServer::start() {
                 LOG(WARNING) << "Couldn't create an evhttp.";
                 return;
             }
+
+            pthread_rwlock_wrlock(&_rw_lock);
             _https.push_back(http);
+            pthread_rwlock_unlock(&_rw_lock);
 
             auto res = evhttp_accept_socket(http, _server_fd);
             if (res < 0) {
