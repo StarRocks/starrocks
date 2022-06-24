@@ -102,7 +102,7 @@ Status DeltaWriter::_init() {
         TabletSharedPtr new_tablet;
         if (!_tablet->is_migrating()) {
             // maybe migration just finish, get the tablet again
-            new_tablet = tablet_mgr->get_tablet(_req.tablet_id, _req.schema_hash);
+            new_tablet = tablet_mgr->get_tablet(_req.tablet_id);
             if (new_tablet == nullptr) {
                 std::stringstream ss;
                 ss << "Fail to get tablet. tablet_id=" << _req.tablet_id;
