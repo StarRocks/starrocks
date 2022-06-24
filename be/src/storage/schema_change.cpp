@@ -1513,7 +1513,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         writer_context.segments_overlap = sc_params.rowsets_to_change[i]->rowset_meta()->segments_overlap();
 
         if (sc_params.sc_sorting) {
-            writer_context.write_tmp = true;
+            writer_context.schema_change_sorting = true;
         }
 
         std::unique_ptr<RowsetWriter> rowset_writer;
