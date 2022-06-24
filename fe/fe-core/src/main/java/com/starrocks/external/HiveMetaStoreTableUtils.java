@@ -300,7 +300,7 @@ public class HiveMetaStoreTableUtils {
 
         return ScalarType.createType(primitiveType);
     }
-    
+
     // In the first phase of connector, in order to reduce changes, we use `hive.metastore.uris` as resource name
     // for table of external catalog. The table of external catalog will not create a real resource.
     // We will reconstruct this part later. The concept of resource will not be used for external catalog in the future.

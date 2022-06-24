@@ -198,4 +198,5 @@ public class Utils {
         Type itemType = HiveMetaStoreTableUtils.convertHudiTableColumnType(typeSchema.getElementType());
         return new ArrayType(itemType);
     }
+
 }
