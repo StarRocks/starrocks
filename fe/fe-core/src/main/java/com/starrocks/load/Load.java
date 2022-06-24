@@ -49,6 +49,7 @@ import com.starrocks.backup.Status;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -766,7 +767,7 @@ public class Load {
                 FunctionName nowFunctionName = new FunctionName("NOW");
                 FunctionCallExpr newFunc = new FunctionCallExpr(nowFunctionName, new FunctionParams(null));
                 return newFunc;
-            } else if (funcName.equalsIgnoreCase("substitute")) {
+            } else if (funcName.equalsIgnoreCase(FunctionSet.SUBSTITUTE)) {
                 return funcExpr.getChild(0);
             } else if (funcName.equalsIgnoreCase(FunctionSet.GET_JSON_INT) ||
                     funcName.equalsIgnoreCase(FunctionSet.GET_JSON_STRING) ||

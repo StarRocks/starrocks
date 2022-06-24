@@ -86,14 +86,10 @@ public class DataDescription {
             "replace_value",
             "now",
             FunctionSet.HLL_HASH,
-<<<<<<< HEAD
-            "substitute");
-=======
             FunctionSet.SUBSTITUTE,
             FunctionSet.GET_JSON_INT,
             FunctionSet.GET_JSON_DOUBLE,
             FunctionSet.GET_JSON_STRING);
->>>>>>> 9f689a846 ([Feature] support extract fields from parquet struct (#7655))
 
     private final String tableName;
     private final PartitionNames partitionNames;
