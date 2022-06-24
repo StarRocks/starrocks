@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.ShowTriggersStmt;
 import com.starrocks.server.GlobalStateMgr;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
@@ -128,7 +129,7 @@ public class StarOSAgent {
 
     public void addWorker(long backendId, String workerIpPort) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (!serviceId.equals(-1L)) {
+            if (serviceId.equals(-1L)) {
                 LOG.warn("When addWorker serviceId is -1");
                 return;
             }
@@ -162,7 +163,7 @@ public class StarOSAgent {
         }
     }
 
-    public void removeWorker(String workerIpPort) throws DdlException {
+    private long getWorker(String workerIpPort) throws DdlException {
         long workerId = -1;
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             if (workerToId.containsKey(workerIpPort)) {
@@ -180,10 +181,16 @@ public class StarOSAgent {
                     }
 
                     LOG.info("worker {} not exist.", workerIpPort);
-                    return;
                 }
             }
         }
+
+        return workerId;
+    }
+
+    public void removeWorker(String workerIpPort) throws DdlException {
+
+        long workerId = getWorker(workerIpPort);
 
         try {
             client.removeWorker(serviceId.get(), workerId);
