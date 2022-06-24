@@ -92,9 +92,9 @@ public class IsNullPredicate extends Predicate {
         super.analyzeImpl(analyzer);
 
         if (isNotNull) {
-            fn = isNullFN;
-        } else {
             fn = isNotNullFN;
+        } else {
+            fn = isNullFN;
         }
 
         // determine selectivity
