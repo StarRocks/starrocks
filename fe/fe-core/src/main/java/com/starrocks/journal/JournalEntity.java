@@ -101,6 +101,9 @@ import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
@@ -592,6 +595,21 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_REMOVE_ANALYZER_JOB: {
                 data = AnalyzeJob.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_ANALYZE_STATUS: {
+                data = AnalyzeStatus.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_BASIC_STATS_META: {
+                data = BasicStatsMeta.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_HISTOGRAM_STATS_META: {
+                data = HistogramStatsMeta.read(in);
                 isRead = true;
                 break;
             }

@@ -60,11 +60,14 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
 
     Status st;
     {
-        std::lock_guard<std::mutex> l(_lock);
+        // We will `bthread::execution_queue_join()` in the destructor of AsnycDeltaWriter,
+        // it will block the bthread, so we put its destructor outside the lock.
+        scoped_refptr<TabletsChannel> channel;
+        std::lock_guard l(_lock);
         if (_tablets_channels.find(index_id) == _tablets_channels.end()) {
             TabletsChannelKey key(request.id(), index_id);
-            auto channel = is_lake_tablet ? new_lake_tablets_channel(this, key, _mem_tracker.get())
-                                          : new_local_tablets_channel(this, key, _mem_tracker.get());
+            channel = is_lake_tablet ? new_lake_tablets_channel(this, key, _mem_tracker.get())
+                                     : new_local_tablets_channel(this, key, _mem_tracker.get());
             if (st = channel->open(request); st.ok()) {
                 _tablets_channels.insert({index_id, std::move(channel)});
             }
