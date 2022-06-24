@@ -198,7 +198,10 @@ Fragment 1集成了三个Join算子的执行，采用默认的BROADCAST方式进
 
 ## Profile分析
 
-在理解了Plan的作用以后，我们来分析以下BE的执行结果Profile，通过在StarRocksManager中执行查询，点击查询历史，就可看在“执行详情”tab中看到Profile的详细文本信息，在“执行时间”tab中能看到图形化的展示，这里我们采用TPCH的Q4查询来作为例子
+在理解了Plan的作用以后，我们来分析以下BE的执行结果Profile，通过在StarRocksManager中执行查询，点击查询历史，就可看在“执行详情”tab中看到Profile的详细文本信息，在“执行时间”tab中能看到图形化的展示，这里我们采用TPCH的Q4查询来作为例子。
+
+> 注意
+> 如需通过 StarRocksManager 查看 Profile，您需要设置 `enable_collect_query_detail_info` 参数为 `true`。
 
 ~~~sql
 -- TPCH Q4
