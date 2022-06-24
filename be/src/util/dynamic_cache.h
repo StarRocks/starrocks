@@ -161,14 +161,14 @@ public:
     }
 
     // try remove object by key
-    // return true if object exist and is removed
+    // return true if object not exist or be removed
     // if no one use this object, object will be removed
     // otherwise do not remove the object, return false
     bool try_remove_by_key(const Key& key) {
         std::lock_guard<std::mutex> lg(_lock);
         auto itr = _map.find(key);
         if (itr == _map.end()) {
-            return false;
+            return true;
         }
         auto v = itr->second;
         auto entry = *v;
