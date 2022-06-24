@@ -124,7 +124,9 @@ public class CTEContext {
     }
 
     public int getCTEConsumeNums(int cteId) {
-        Preconditions.checkState(consumeNums.containsKey(cteId));
+        if (!consumeNums.containsKey(cteId)) {
+            return 0;
+        }
         return consumeNums.get(cteId);
     }
 
@@ -147,7 +149,7 @@ public class CTEContext {
     }
 
     public boolean needOptimizeCTE() {
-        return consumeNums.values().stream().reduce(Integer::max).orElse(0) > 0;
+        return consumeNums.values().stream().reduce(Integer::max).orElse(0) > 0 || produces.size() > 0;
     }
 
     public boolean needPushPredicate() {

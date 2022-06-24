@@ -12,6 +12,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -54,7 +55,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
                 .filter(CallOperator::isDistinct).collect(Collectors.toList());
 
         boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getChildren().size() > 1);
-        return (distinctAggOperatorList.size() > 1  || agg.getAggregations().values().stream()
+        return (distinctAggOperatorList.size() > 1 || agg.getAggregations().values().stream()
                 .anyMatch(call -> call.isDistinct() && call.getFnName().equals(FunctionSet.AVG))) && !hasMultiColumns;
     }
 
@@ -126,21 +127,26 @@ public class RewriteMultiDistinctRule extends TransformationRule {
             }
         }
 
+        OptExpression result;
         if (hasAvg) {
             OptExpression aggOpt = OptExpression
                     .create(new LogicalAggregationOperator(AggType.GLOBAL, aggregationOperator.getGroupingKeys(),
                                     newAggMapWithAvg),
                             input.getInputs());
             aggregationOperator.getGroupingKeys().forEach(c -> projections.put(c, c));
-            return Lists.newArrayList(
-                    OptExpression.create(new LogicalProjectOperator(projections), Lists.newArrayList(aggOpt)));
+            result = OptExpression.create(new LogicalProjectOperator(projections), Lists.newArrayList(aggOpt));
         } else {
-            OptExpression aggOpt = OptExpression
+            result = OptExpression
                     .create(new LogicalAggregationOperator(AggType.GLOBAL, aggregationOperator.getGroupingKeys(),
                                     newAggMap),
                             input.getInputs());
-            return Lists.newArrayList(aggOpt);
         }
+
+        if (aggregationOperator.getPredicate() != null) {
+            result = OptExpression.create(new LogicalFilterOperator(aggregationOperator.getPredicate()), result);
+        }
+
+        return Lists.newArrayList(result);
     }
 
     private CallOperator buildMultiCountDistinct(CallOperator oldFunctionCall) {
