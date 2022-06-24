@@ -2755,7 +2755,7 @@ public class GlobalStateMgr {
 
         String[] parts = identifier.split("\\.");
         if (parts.length != 1 && parts.length != 2) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, identifier);
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
         } else if (parts.length == 1) {
             dbName = catalogMgr.isInternalCatalog(currentCatalogName) ?
                     ClusterNamespace.getFullName(ctx.getClusterName(), identifier) : identifier;
@@ -2765,7 +2765,7 @@ public class GlobalStateMgr {
                 dbName = catalogMgr.isInternalCatalog(newCatalogName) ?
                         ClusterNamespace.getFullName(ctx.getClusterName(), parts[1]) : parts[1];
             } else {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, identifier);
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
             }
             ctx.setCurrentCatalog(newCatalogName);
         }

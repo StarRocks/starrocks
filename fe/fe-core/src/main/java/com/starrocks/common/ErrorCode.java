@@ -258,9 +258,11 @@ public enum ErrorCode {
     ERR_QUERY_EXCEPTION(5077, new byte[] {'4', '2', '0', '0', '0'},
             "Query cancelled by crash of backends."),
     ERR_BAD_CATALOG_ERROR(5078, new byte[] {'4', '2', '0', '0', '0'},
-            "Unknown catalog.db '%s'"),
+            "Unknown catalog '%s'"),
     ERROR_NO_WG_ERROR(5079, new byte[] {'4', '2', '0', '0', '0'},
-            "Unknown workgroup '%s' ");
+            "Unknown workgroup '%s' "),
+    ERR_BAD_CATALOG_AND_DB_ERROR(5080, new byte[] {'4', '2', '0', '0', '0'},
+            "Unknown catalog.db '%s'");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;
