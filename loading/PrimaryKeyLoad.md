@@ -352,6 +352,7 @@ create table demo(
   load label demo.demo (
       data infile("hdfs://localhost:9000/demo.csv")
       into table t
+      columns terminated by ","
       format as "csv"
       (c1, c2)
       set (id=c1, name=c2)
