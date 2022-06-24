@@ -479,7 +479,8 @@ public:
                         array_agg);
             } else if (name == "percentile_cont") {
                 auto percentile_cont = AggregateFactory::MakePercentileContAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionVariadic<PercentileContState<ArgPT>>(percentile_cont);
+                return AggregateFactory::MakeNullableAggregateFunctionVariadic<PercentileContState<ArgPT>>(
+                        percentile_cont);
             }
         } else {
             if (name == "count") {
@@ -591,7 +592,8 @@ public:
                         array_agg_value);
             } else if (name == "percentile_cont") {
                 auto percentile_cont = AggregateFactory::MakePercentileContAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionVariadic<PercentileContState<ArgPT>>(percentile_cont);
+                return AggregateFactory::MakeNullableAggregateFunctionVariadic<PercentileContState<ArgPT>>(
+                        percentile_cont);
             }
         } else {
             if (name == "avg") {
