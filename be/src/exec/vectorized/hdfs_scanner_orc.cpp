@@ -451,10 +451,14 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     // in the chunk according to the order it's stored. This will lead two chunk from different file to
     // different column order, so we need to adjust the column order according to the input chunk to make
     // sure every chunk has same column order
-    auto convert_to_output = [chunk, &ck]() {
+    auto output_result_chunk = [chunk, &ck]() {
         const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
         for (auto iter = slot_id_to_index_map.begin(); iter != slot_id_to_index_map.end(); iter++) {
-            (*chunk)->get_column_by_slot_id(iter->first)->swap_column(*ck->get_column_by_slot_id(iter->first));
+            auto ck_iter = ck->get_slot_id_to_index_map().find(iter->first);
+            if (ck_iter == ck->get_slot_id_to_index_map().end()) {
+                continue;
+            }
+            (*chunk)->columns()[iter->second]->swap_column(*ck->columns()[ck_iter->second]);
         }
     };
 
@@ -518,7 +522,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         ck->set_num_rows(chunk_size);
 
         if (!_orc_adapter->has_lazy_load_context()) {
-            convert_to_output();
+            output_result_chunk();
             return Status::OK();
         }
 
@@ -542,7 +546,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
             Chunk& ret_ck = *(ret.value());
             ck->merge(std::move(ret_ck));
         }
-        convert_to_output();
+        output_result_chunk();
         return Status::OK();
     }
     __builtin_unreachable();
