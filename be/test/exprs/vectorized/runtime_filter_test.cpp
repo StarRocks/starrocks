@@ -138,6 +138,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilter) {
     Chunk chunk;
     chunk.append_column(column, 0);
     JoinRuntimeFilter::RunningContext ctx;
+    ctx.use_merged_selection = false;
     auto& selection = ctx.selection;
     selection.assign(column->size(), 1);
     rf->evaluate(column.get(), &ctx);
@@ -408,19 +409,19 @@ void test_grf_helper(size_t num_rows, size_t num_partitions, PartitionByFunc par
     grf_config_func(&grf, &running_ctx);
     {
         running_ctx.selection.assign(num_rows, 1);
-        auto true_count = grf.evaluate(column.get(), &running_ctx);
-        auto true_count2 = SIMD::count_nonzero(running_ctx.selection.data(), num_rows);
+        running_ctx.use_merged_selection = false;
+        grf.evaluate(column.get(), &running_ctx);
+        auto true_count = SIMD::count_nonzero(running_ctx.selection.data(), num_rows);
         ASSERT_EQ(true_count, num_rows);
-        ASSERT_EQ(true_count, true_count2);
     }
     {
         size_t negative_num_rows = 100;
         auto negative_column = gen_random_binary_column(alphabet1, 100, negative_num_rows);
         running_ctx.selection.assign(negative_num_rows, 1);
-        auto true_count = grf.evaluate(negative_column.get(), &running_ctx);
-        auto true_count2 = SIMD::count_nonzero(running_ctx.selection.data(), negative_num_rows);
+        running_ctx.use_merged_selection = false;
+        grf.evaluate(negative_column.get(), &running_ctx);
+        auto true_count = SIMD::count_nonzero(running_ctx.selection.data(), negative_num_rows);
         ASSERT_LE((double)true_count / negative_num_rows, 0.5);
-        ASSERT_EQ(true_count, true_count2);
     }
 }
 void test_colocate_or_bucket_shuffle_grf_helper(size_t num_rows, size_t num_partitions, size_t num_buckets,
