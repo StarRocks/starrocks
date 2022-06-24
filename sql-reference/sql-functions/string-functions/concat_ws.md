@@ -10,7 +10,18 @@
 如果分隔符是 NULL，返回 NULL。
 `concat_ws`函数不会跳过空字符串，会跳过 NULL 值
 
-## example
+### 参数说明
+
+- `sep`: 分隔符，数据类型 VARCHAR.
+- `str`: 待拼接的字符串，数据类型 VARCHAR。该函数不会跳过空字符串，会跳过 NULL 值。
+
+### 返回值说明
+
+返回 VARCHAR 类型的字符串。如果分隔符为 NULL，返回 NULL。
+
+### 示例
+
+示例1：使用`r`作为分隔符，返回`starrocks`。
 
 ```Plain Text
 MySQL > select concat_ws("r", "sta", "rocks");
