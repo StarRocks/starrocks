@@ -161,6 +161,7 @@ public class RuntimeFilterDescription {
         return joinMode.equals(HashJoinNode.DistributionMode.BROADCAST) ||
                 joinMode.equals(HashJoinNode.DistributionMode.COLOCATE) ||
                 joinMode.equals(HashJoinNode.DistributionMode.LOCAL_HASH_BUCKET) ||
+                joinMode.equals(HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET) ||
                 joinMode.equals(HashJoinNode.DistributionMode.REPLICATED);
     }
 
