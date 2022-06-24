@@ -8,10 +8,7 @@
 #include "column/column.h"
 #include "common/status.h"
 #include "common/statusor.h"
-<<<<<<< HEAD
-=======
 #include "gutil/strings/escaping.h"
->>>>>>> 9f689a846 ([Feature] support extract fields from parquet struct (#7655))
 #include "gutil/strings/substitute.h"
 #include "simdjson.h"
 #include "util/json_converter.h"
