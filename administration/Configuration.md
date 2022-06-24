@@ -43,6 +43,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |max_backend_down_time_second|3600|BE 和 FE 失联之后，FE 容忍 BE 重新加回来的最长时间|
 |drop_backend_after_decommission|TRUE|BE 被下线后，是否删除该 BE|
 |catalog_try_lock_timeout_ms|5000|Catalog Lock 获取的超时时长|
+|enable_collect_query_detail_info|false| 是否支持通过 StarRocks Manager 查看 Profile|
 
 * **Query Engine**
 
