@@ -275,13 +275,13 @@ mysql -h 127.0.0.1 -P9030 -uroot
 查看 FE 状态。
 
 ```sql
-SHOW PROC '/frontends'\G;
+SHOW PROC '/frontends'\G
 ```
 
 示例：
 
 ```Plain Text
-MySQL [(none)]> SHOW PROC '/frontends'\G;
+MySQL [(none)]> SHOW PROC '/frontends'\G
 
 *************************** 1. row ***************************
              Name: 172.26.xxx.xx_9010_1652926508967
@@ -393,13 +393,13 @@ bin/start_be.sh --daemon
 通过 MySQL 客户端确认 BE 节点是否启动成功。
 
 ```sql
-SHOW PROC '/backends'\G;
+SHOW PROC '/backends'\G
 ```
 
 示例：
 
 ```Plain Text
-MySQL [(none)]> SHOW PROC '/backends'\G;
+MySQL [(none)]> SHOW PROC '/backends'\G
 
 *************************** 1. row ***************************
             BackendId: 10003
@@ -506,13 +506,13 @@ ALTER SYSTEM ADD BROKER broker1 "172.16.xxx.xx:8000";
 通过 MySQL 客户端确认 Broker 节点是否启动成功。
 
 ```sql
-SHOW PROC "/brokers"\G;
+SHOW PROC "/brokers"\G
 ```
 
 示例：
 
 ```plain text
-MySQL [(none)]> SHOW PROC "/brokers"\G;
+MySQL [(none)]> SHOW PROC "/brokers"\G
 
 *************************** 1. row ***************************
           Name: broker1
