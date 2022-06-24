@@ -103,8 +103,12 @@ public class StatisticUtils {
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
     }
 
+    public static LocalDateTime getPartitionLastUpdateTime(Partition partition) {
+        long time = partition.getVisibleVersionTime();
+        return LocalDateTime.ofInstant(Instant.ofEpochMilli(time), Clock.systemDefaultZone().getZone());
+    }
+
     public static boolean isEmptyTable(Table table) {
         return ((OlapTable) table).getPartitions().stream().noneMatch(Partition::hasData);
     }
-
 }
