@@ -96,23 +96,25 @@ public class JoinTest extends PlanTestBase {
     public void testCrossJoin() throws Exception {
         String sql = "SELECT * from t0 join test_all_type;";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  3:NESTLOOP JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
+        Assert.assertTrue(planFragment, planFragment.contains("  3:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  \n" +
-                "  |----2:EXCHANGE\n" +
-                "  |    \n" +
-                "  0:OlapScanNode"));
+                "  |----2:EXCHANGE\n"));
+
 
         sql = "select * from t0 join test_all_type on NOT 69 IS NOT NULL where true";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  3:NESTLOOP JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
-                "  |  \n" +
-                "  |----2:EXCHANGE\n" +
-                "  |    \n" +
-                "  0:EMPTYSET"));
+        Assert.assertTrue(planFragment,
+                planFragment.contains("  3:NESTLOOP JOIN\n" +
+                        "  |  join op: CROSS JOIN\n" +
+                        "  |  hash predicates:\n" +
+                        "  |  colocate: false, reason: \n" +
+                        "  |  \n" +
+                        "  |----2:EXCHANGE\n" +
+                        "  |    \n" +
+                        "  0:EMPTYSET"));
     }
 
     @Test
@@ -653,8 +655,9 @@ public class JoinTest extends PlanTestBase {
         String sql = "select * from t0 as x0 join t1 as x1 on (1 = 2) is not null;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "3:NESTLOOP JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL");
+                "  |  join op: CROSS JOIN\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n");
     }
 
     @Test
@@ -735,7 +738,9 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  3:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  predicates: 1: v1 != 4: v4, 2: v2 != 5: v5");
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other join predicates: 1: v1 != 4: v4, 2: v2 != 5: v5\n");
     }
 
     @Test
@@ -952,8 +957,10 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
         assertContains(plan, "11:NESTLOOP JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates: 1: v1 + 10: v10 = 2");
+                "  |  join op: CROSS JOIN\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other join predicates: 1: v1 + 10: v10 = 2\n");
     }
 
     @Test
@@ -2637,10 +2644,10 @@ public class JoinTest extends PlanTestBase {
         String sql = "select * from t0 join t2 on t0.v1 < t2.v7";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "  3:NESTLOOP JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates: 1: v1 < 4: v7\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (4: v7), remote = false");
+                "  |  join op: CROSS JOIN\n" +
+                "  |  other join predicates: [1: v1, BIGINT, true] < [4: v7, BIGINT, true]\n" +
+                "  |  cardinality: 1\n");
+
 
         sql = "select * from t0 join t2 on t0.v1 + t2.v7 < 2";
         plan = getVerboseExplain(sql);
@@ -2653,10 +2660,10 @@ public class JoinTest extends PlanTestBase {
         sql = "select * from t0 join t2 on t0.v1 < t2.v7 + t2.v8";
         plan = getVerboseExplain(sql);
         assertContains(plan, "  3:NESTLOOP JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates: 1: v1 < 4: v7 + 5: v8\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (4: v7 + 5: v8), remote = false");
+                "  |  join op: CROSS JOIN\n" +
+                "  |  other join predicates: [1: v1, BIGINT, true] < [4: v7, BIGINT, true] + [5: v8, BIGINT, true]\n" +
+                "  |  cardinality: 1\n");
+
 
         // avoid push down CrossJoin RF across ExchangeNode
         sql = "select * from t1 join [shuffle] t2 on v4 = v7 join t0 on v4 < v1 ";
