@@ -61,7 +61,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     Status st;
     {
         // We will `bthread::execution_queue_join()` in the destructor of AsnycDeltaWriter,
-        // the function will block the bthread, so we put its destructor outside the lock.
+        // it will block the bthread, so we put its destructor outside the lock.
         scoped_refptr<TabletsChannel> channel;
         std::lock_guard<std::mutex> l(_lock);
         if (_tablets_channels.find(index_id) == _tablets_channels.end()) {
