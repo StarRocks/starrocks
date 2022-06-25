@@ -158,7 +158,8 @@ public class DecodeRewriteTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  2:Decode\n" +
                 "  |  <dict id 10> : <string id 3>"));
         String thrift = getThriftPlan(sql);
-        Assert.assertTrue(thrift.contains("TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
+        System.out.println("thrift = " + thrift);
+        Assert.assertTrue(thrift.contains("TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1])"));
     }
 
     @Test
@@ -276,8 +277,8 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "  |  <slot 14> : DictExpr(12: S_ADDRESS,[upper(<place-holder>)])"));
         Assert.assertFalse(plan.contains("common expressions"));
         plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[mock], ids:[1])]"));
-        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[mock], ids:[1])]"));
+        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[6D 6F 63 6B], ids:[1])]"));
+        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[6D 6F 63 6B], ids:[1])]"));
 
         sql = "select count(*) from supplier group by S_ADDRESS";
         plan = getFragmentPlan(sql);
@@ -288,14 +289,14 @@ public class DecodeRewriteTest extends PlanTestBase {
 
         sql = "select count(*) from supplier group by S_ADDRESS";
         plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
+        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1])"));
         Assert.assertTrue(plan.contains("partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
-                "query_global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
+                "query_global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1])"));
 
         sql = "select count(distinct S_NATIONKEY) from supplier group by S_ADDRESS";
         plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
-                "query_global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
+                "query_global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1])"));
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -861,5 +862,4 @@ public class DecodeRewriteTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  2:Project\n" +
                 "  |  <slot 16> : 16: t1a"));
     }
-
 }
