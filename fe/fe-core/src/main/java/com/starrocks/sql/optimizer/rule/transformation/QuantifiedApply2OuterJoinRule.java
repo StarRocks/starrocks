@@ -157,11 +157,17 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
          * after: with xx as (select t1.v2, t1.v3 from t1)
          *        select t0.v1,
          *             case
+         *                 // t1 empty table and without where clause `t0.v3 = t1.v3`, then t1Rows may be 0
          *                 // t1 empty table, if t1Rows is null, means the result of join correlation predicate must be false
+         *                 // `any_or_null in (empty) -> false`
          *                 when t1Rows = 0 or t1Rows is null then false
+         *                 // `null in (any_or_null...) -> null`
          *                 when t0.v2 is null then null
+         *                 // `a in (a, [any_or_null...]) -> true`
          *                 when t1d.v2 is not null then true
+         *                 // `a in (null, [not_a_or_null...]) -> null`
          *                 when v2NotNulls < t1Rows then null
+         *                 // `a in (not_a...) -> false`, not_a cannot be null
          *                 else false
          *             end
          *         from t0
@@ -349,7 +355,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             Preconditions.checkState(countAggregateCounts.size() == 1);
 
             CallOperator countNullFn = SubqueryUtils.createCountRowsOperator(countAggregateCounts.get(0));
-            countNulls = factory.create("countNulls", countNullFn.getType(), countNullFn.isNullable());
+            countNulls = factory.create("countNotNulls", countNullFn.getType(), countNullFn.isNullable());
             aggregates.put(countNulls, countNullFn);
 
             return OptExpression.create(
@@ -375,7 +381,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
          * Project:
          * case
          *     when t1Rows = 0 or t1Rows is null then false
-         *     when t0.v2 is null then is null
+         *     when t0.v2 is null then null
          *     when t1d.v2 is not null then true
          *     when v2NotNulls < t1Rows then null
          *     else false
