@@ -3,37 +3,51 @@
 package com.starrocks.execution;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.analysis.AdminCancelRepairTableStmt;
+import com.starrocks.analysis.AdminCheckTabletsStmt;
+import com.starrocks.analysis.AdminRepairTableStmt;
+import com.starrocks.analysis.AdminSetConfigStmt;
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
+import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.AlterViewStmt;
+import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CancelBackupStmt;
+import com.starrocks.analysis.CancelExportStmt;
 import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.analysis.CreateFileStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateRepositoryStmt;
+import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.DdlStmt;
+import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DropDbStmt;
+import com.starrocks.analysis.DropFileStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropRepositoryStmt;
+import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropUserStmt;
+import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.GrantStmt;
+import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.RecoverDbStmt;
@@ -47,15 +61,22 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.SyncStmt;
 import com.starrocks.analysis.TruncateTableStmt;
+import com.starrocks.analysis.UninstallPluginStmt;
+import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.DdlExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.DropAnalyzeJobStmt;
+import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 
 public class DataDefinitionExecutorFactory {
     private static final ImmutableMap<Class<? extends StatementBase>, DataDefinitionExecutor> executorMap =
@@ -95,7 +116,7 @@ public class DataDefinitionExecutorFactory {
                     .put(SetUserPropertyStmt.class, new SetUserPropertyExecutor())
                     .put(AlterSystemStmt.class, new AlterSystemExecutor())
                     .put(CancelAlterSystemStmt.class, new CancelAlterSystemExecutor())
-                    .put(AlterDatabaseQuotaStmt.class, new AlterDatabaseQuotaExecutor()) 
+                    .put(AlterDatabaseQuotaStmt.class, new AlterDatabaseQuotaExecutor())
                     .put(AlterDatabaseRename.class, new AlterDatabaseRenameExecutor())
                     .put(RecoverDbStmt.class, new RecoverDbExecutor())
                     .put(RecoverTableStmt.class, new RecoverTableExecutor())
@@ -107,7 +128,29 @@ public class DataDefinitionExecutorFactory {
                     .put(CreateRepositoryStmt.class, new CreateRepositoryExecutor())
                     .put(DropRepositoryStmt.class, new DropRepositoryExecutor())
                     .put(SyncStmt.class, new SyncExecutor())
-                    .put(TruncateTableStmt.class, new TruncateTableExecutor())                                    
+                    .put(TruncateTableStmt.class, new TruncateTableExecutor())
+                    .put(AdminRepairTableStmt.class, new AdminRepairTableExecutor())
+                    .put(AdminCancelRepairTableStmt.class, new AdminCancelRepairTableExecutor())
+                    .put(AdminSetConfigStmt.class, new AdminSetConfigExecutor())
+                    .put(CreateFileStmt.class, new CreateFileExecutor())
+                    .put(DropFileStmt.class, new DropFileExecutor())
+                    .put(InstallPluginStmt.class, new InstallPluginExecutor())
+                    .put(UninstallPluginStmt.class, new UninstallPluginExecutor())
+                    .put(AdminCheckTabletsStmt.class, new AdminCheckTabletsExecutor())
+                    .put(AdminSetReplicaStatusStmt.class, new AdminSetReplicaStatusExecutor())
+                    .put(CreateResourceStmt.class, new CreateResourceExecutor())
+                    .put(DropResourceStmt.class, new DropResourceExecutor())
+                    .put(AlterResourceStmt.class, new AlterResourceExecutor())
+                    .put(CancelExportStmt.class, new CancelExportExecutor())
+                    .put(CreateAnalyzeJobStmt.class, new CreateAnalyzeJobExecutor())
+                    .put(DropAnalyzeJobStmt.class, new DropAnalyzeJobExecutor())
+                    .put(RefreshTableStmt.class, new RefreshTableExecutor())
+                    .put(CreateWorkGroupStmt.class, new CreateWorkGroupExecutor())
+                    .put(DropWorkGroupStmt.class, new DropWorkGroupExecutor())
+                    .put(AlterWorkGroupStmt.class, new AlterWorkGroupExecutor())
+                    .put(CreateCatalogStmt.class, new CreateCatalogExecutor())
+                    .put(DropCatalogStmt.class, new DropCatalogExecutor())
+                    .put(SubmitTaskStmt.class, new SubmitTaskExecutor())
                     .build();
 
     public static ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
@@ -115,7 +158,7 @@ public class DataDefinitionExecutorFactory {
         if (executor != null) {
             return executor.execute(stmt, context);
         } else {
-            return DdlExecutor.execute(context.getGlobalStateMgr(), (DdlStmt) stmt);
+            throw new DdlException("Unknown statement.");
         }
     }
 }
