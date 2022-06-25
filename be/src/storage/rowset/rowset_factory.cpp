@@ -25,7 +25,6 @@
 
 #include "beta_rowset.h"
 #include "gen_cpp/olap_file.pb.h"
-#include "rowset_writer_adapter.h"
 #include "runtime/exec_env.h"
 #include "storage/rowset/beta_rowset_writer.h"
 #include "storage/rowset/rowset_writer.h"
@@ -64,11 +63,7 @@ Status RowsetFactory::create_rowset_writer(const RowsetWriterContext& context, s
         return Status::InvalidArgument("invalid memory_format_version");
     }
 
-    if (memory_format_version != storage_format_version) {
-        auto adapter_context = context;
-        adapter_context.memory_format_version = memory_format_version;
-        *output = std::make_unique<vectorized::RowsetWriterAdapter>(adapter_context);
-    } else if (context.writer_type == kHorizontal) {
+    if (context.writer_type == kHorizontal) {
         *output = std::make_unique<HorizontalBetaRowsetWriter>(context);
     } else {
         DCHECK(context.writer_type == kVertical);
