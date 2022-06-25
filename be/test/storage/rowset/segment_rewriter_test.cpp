@@ -139,7 +139,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     seg_options.stats = &stats;
     auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
-    ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
+    ASSERT_FALSE(!res.ok() || res.value() == nullptr);
     auto seg_iterator = res.value();
 
     size_t count = 0;
@@ -186,7 +186,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
 
     ASSERT_EQ(rewrite_segment->num_rows(), num_rows);
     res = rewrite_segment->new_iterator(schema, seg_options);
-    ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
+    ASSERT_FALSE(!res.ok() || res.value() == nullptr);
     auto rewrite_seg_iterator = res.value();
 
     count = 0;

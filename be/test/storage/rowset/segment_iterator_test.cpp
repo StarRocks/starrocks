@@ -127,9 +127,6 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     seg_options.fs = _fs;
     seg_options.stats = &stats;
 
-    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
-    auto res = segment->new_iterator(schema, seg_options);
-
     vectorized::Schema vec_schema;
     vec_schema.append(std::make_shared<vectorized::Field>(0, "c1", OLAP_FIELD_TYPE_INT, -1, -1, false));
     vec_schema.append(std::make_shared<vectorized::Field>(1, "c2", OLAP_FIELD_TYPE_VARCHAR, -1, -1, false));
@@ -247,9 +244,6 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     OlapReaderStatistics stats;
     seg_options.fs = _fs;
     seg_options.stats = &stats;
-
-    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
-    auto res = segment->new_iterator(schema, seg_options);
 
     ColumnIterator* scalar_iter = nullptr;
     DeferOp defer([&]() { delete scalar_iter; });
