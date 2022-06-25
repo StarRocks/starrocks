@@ -515,7 +515,7 @@ void TaskWorkerPool::_alter_tablet(TaskWorkerPool* worker_pool_this, const TAgen
     } else {
         LOG(WARNING) << process_name << " failed. signature: " << signature;
         error_msgs.push_back(process_name + " failed");
-        error_msgs.push_back("status: " + AgentUtils::print_agent_status(status));
+        error_msgs.push_back("status: " + print_agent_status(status));
         task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
     }
 
