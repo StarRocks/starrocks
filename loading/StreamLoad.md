@@ -13,7 +13,7 @@ StarRocks支持从本地直接导入数据，支持 CSV 文件格式。数据量
 Stream Load 通过 HTTP 协议提交和传输数据。这里通过 curl 命令展示如何提交导入，用户也可以通过其他HTTP client进行操作，举例：
 
 ~~~bash
-curl --location-trusted -u root -T date -H "label:123"  -H "columns: k1, k2, v1" -T testData \ http://abc.com:8030/api/test/date/_stream_load
+curl --location-trusted -u root -H "label:123"  -H "columns: k1, k2, v1" -T testData  http://abc.com:8030/api/test/date/_stream_load
 ~~~
 
 **说明：**
