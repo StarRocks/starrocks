@@ -3,7 +3,7 @@
 #include "formats/parquet/page_reader.h"
 
 #include "common/config.h"
-#include "fs/fs.h"
+// #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "util/thrift_util.h"
 
@@ -12,10 +12,8 @@ namespace starrocks::parquet {
 static constexpr size_t kHeaderBufSize = 1024;
 static constexpr size_t kHeaderBufMaxSize = 16 * 1024;
 
-PageReader::PageReader(RandomAccessFile* file, uint64_t start_offset, uint64_t length)
-        : _stream(file, start_offset, length), _start_offset(start_offset), _finish_offset(start_offset + length) {
-    _stream.reserve(config::parquet_buffer_stream_reserve_size);
-}
+PageReader::PageReader(IBufferedInputStream* stream, uint64_t start_offset, uint64_t length)
+        : _stream(stream), _start_offset(start_offset), _finish_offset(start_offset + length) {}
 
 Status PageReader::next_header() {
     if (_offset != _next_header_pos) {
@@ -31,9 +29,10 @@ Status PageReader::next_header() {
 
     uint32_t header_length = 0;
     size_t nbytes = kHeaderBufSize;
-
+    size_t remaining = _finish_offset - _offset;
     do {
-        RETURN_IF_ERROR(_stream.get_bytes(&page_buf, &nbytes, true));
+        nbytes = std::min(nbytes, remaining);
+        RETURN_IF_ERROR(_stream->get_bytes(&page_buf, _offset, &nbytes));
 
         header_length = nbytes;
         auto st = deserialize_thrift_msg(page_buf, &header_length, TProtocolType::COMPACT, &_cur_header);
@@ -41,15 +40,13 @@ Status PageReader::next_header() {
             break;
         }
         nbytes <<= 2;
-        if (nbytes > kHeaderBufMaxSize) {
+        if ((nbytes > kHeaderBufMaxSize) || (_offset + nbytes) >= _finish_offset) {
             return Status::Corruption("Failed to decode parquet page header");
         }
     } while (true);
 
     _offset += header_length;
     _next_header_pos = _offset + _cur_header.compressed_page_size;
-    _stream.skip(header_length);
-
     return Status::OK();
 }
 
@@ -58,7 +55,7 @@ Status PageReader::read_bytes(const uint8_t** buffer, size_t size) {
         return Status::InternalError("Size to read exceed page size");
     }
     uint64_t nbytes = size;
-    RETURN_IF_ERROR(_stream.get_bytes(buffer, &nbytes));
+    RETURN_IF_ERROR(_stream->get_bytes(buffer, _offset, &nbytes));
     DCHECK_EQ(nbytes, size);
     _offset += nbytes;
     return Status::OK();

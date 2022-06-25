@@ -25,7 +25,8 @@
 #define PACKAGE_VERSION
 #endif
 
-#include <bfd.h>
+class bfd;
+class bfd_symbol;
 
 #include <mutex>
 #include <string>

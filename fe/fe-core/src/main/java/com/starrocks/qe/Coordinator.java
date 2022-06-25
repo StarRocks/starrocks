@@ -113,6 +113,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -1337,9 +1338,20 @@ public class Coordinator {
     }
 
     private boolean isUnionFragment(PlanFragment fragment) {
-        List<UnionNode> l = Lists.newArrayList();
-        fragment.getPlanRoot().collect(UnionNode.class, l);
-        return !l.isEmpty();
+        Deque<PlanNode> dq = new LinkedList<>();
+        dq.offer(fragment.getPlanRoot());
+
+        while (!dq.isEmpty()) {
+            PlanNode nd = dq.poll();
+
+            if (nd instanceof UnionNode) {
+                return true;
+            }
+            if (!(nd instanceof ExchangeNode)) {
+                nd.getChildren().forEach(dq::offer);
+            }
+        }
+        return false;
     }
 
     static final int BUCKET_ABSENT = 2147483647;

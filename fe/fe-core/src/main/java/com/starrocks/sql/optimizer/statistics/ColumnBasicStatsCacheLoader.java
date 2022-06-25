@@ -32,12 +32,12 @@ import java.util.concurrent.Executor;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
-public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<CacheKey, Optional<ColumnStatistic>> {
+public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCacheKey, Optional<ColumnStatistic>> {
     private static final Logger LOG = LogManager.getLogger(ColumnBasicStatsCacheLoader.class);
     private final StatisticExecutor statisticExecutor = new StatisticExecutor();
 
     @Override
-    public @NonNull CompletableFuture<Optional<ColumnStatistic>> asyncLoad(@NonNull CacheKey cacheKey,
+    public @NonNull CompletableFuture<Optional<ColumnStatistic>> asyncLoad(@NonNull ColumnStatsCacheKey cacheKey,
                                                                            @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -57,14 +57,14 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<CacheKey, O
     }
 
     @Override
-    public CompletableFuture<Map<@NonNull CacheKey, @NonNull Optional<ColumnStatistic>>> asyncLoadAll(
-            @NonNull Iterable<? extends @NonNull CacheKey> keys, @NonNull Executor executor) {
+    public CompletableFuture<Map<@NonNull ColumnStatsCacheKey, @NonNull Optional<ColumnStatistic>>> asyncLoadAll(
+            @NonNull Iterable<? extends @NonNull ColumnStatsCacheKey> keys, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
-            Map<CacheKey, Optional<ColumnStatistic>> result = new HashMap<>();
+            Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = new HashMap<>();
             try {
                 long tableId = -1;
                 List<String> columns = new ArrayList<>();
-                for (CacheKey key : keys) {
+                for (ColumnStatsCacheKey key : keys) {
                     tableId = key.tableId;
                     columns.add(key.column);
                 }
@@ -73,12 +73,12 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<CacheKey, O
                 if (!statisticData.isEmpty()) {
                     for (TStatisticData data : statisticData) {
                         ColumnStatistic columnStatistic = convert2ColumnStatistics(data);
-                        result.put(new CacheKey(data.tableId, data.columnName),
+                        result.put(new ColumnStatsCacheKey(data.tableId, data.columnName),
                                 Optional.of(columnStatistic));
                     }
                 } else {
                     // put null for cache key which can't get TStatisticData from BE
-                    for (CacheKey cacheKey : keys) {
+                    for (ColumnStatsCacheKey cacheKey : keys) {
                         result.put(cacheKey, Optional.empty());
                     }
                 }
@@ -93,7 +93,7 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<CacheKey, O
 
     @Override
     public CompletableFuture<Optional<ColumnStatistic>> asyncReload(
-            @NonNull CacheKey key, @NonNull Optional<ColumnStatistic> oldValue,
+            @NonNull ColumnStatsCacheKey key, @NonNull Optional<ColumnStatistic> oldValue,
             @NonNull Executor executor) {
         return asyncLoad(key, executor);
     }

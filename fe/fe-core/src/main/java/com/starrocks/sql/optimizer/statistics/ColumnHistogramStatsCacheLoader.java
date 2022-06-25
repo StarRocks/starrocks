@@ -50,14 +50,14 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<CacheKe
     }
 
     @Override
-    public CompletableFuture<Map<@NonNull CacheKey, @NonNull Optional<Histogram>>> asyncLoadAll(
-            @NonNull Iterable<? extends @NonNull CacheKey> keys, @NonNull Executor executor) {
+    public CompletableFuture<Map<@NonNull ColumnStatsCacheKey, @NonNull Optional<Histogram>>> asyncLoadAll(
+            @NonNull Iterable<? extends @NonNull ColumnStatsCacheKey> keys, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
-            Map<CacheKey, Optional<Histogram>> result = new HashMap<>();
+            Map<ColumnStatsCacheKey, Optional<Histogram>> result = new HashMap<>();
             try {
                 long tableId = -1;
                 List<String> columns = new ArrayList<>();
-                for (CacheKey key : keys) {
+                for (ColumnStatsCacheKey key : keys) {
                     tableId = key.tableId;
                     columns.add(key.column);
                 }
@@ -65,7 +65,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<CacheKe
                 for (TStatisticData histogramStatsData : histogramStatsDataList) {
                     List<Bucket> buckets = convert(histogramStatsData.histogram);
                     Histogram histogram = new Histogram(buckets);
-                    result.put(new CacheKey(histogramStatsData.tableId, histogramStatsData.columnName),
+                    result.put(new ColumnStatsCacheKey(histogramStatsData.tableId, histogramStatsData.columnName),
                             Optional.of(histogram));
                 }
 
@@ -80,7 +80,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<CacheKe
 
     @Override
     public CompletableFuture<Optional<Histogram>> asyncReload(
-            @NonNull CacheKey key, @NonNull Optional<Histogram> oldValue,
+            @NonNull ColumnStatsCacheKey key, @NonNull Optional<Histogram> oldValue,
             @NonNull Executor executor) {
         return asyncLoad(key, executor);
     }

@@ -81,7 +81,7 @@ public:
                                           const uint32_t transport_speed_limit_kbps, const uint32_t timeout_second);
 
     // Print AgentStatus as string
-    virtual std::string print_agent_status(AgentStatus status);
+    static std::string print_agent_status(AgentStatus status);
 
     // Execute shell cmd
     virtual bool exec_cmd(const std::string& command, std::string* errmsg);

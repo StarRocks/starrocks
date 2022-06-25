@@ -229,7 +229,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalBetaRowsetWriter::_create_seg
     std::string path;
     if ((_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
          _context.segments_overlap != NONOVERLAPPING) ||
-        _context.write_tmp) {
+        _context.schema_change_sorting) {
         path = BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
         _tmp_segment_files.emplace_back(path);
     } else {
@@ -481,7 +481,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
 
         ChunkIteratorPtr itr;
         // create temporary segment files at first, then merge them and create final segment files if schema change with sorting
-        if (_context.write_tmp) {
+        if (_context.schema_change_sorting) {
             if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS) {
                 itr = new_heap_merge_iterator(seg_iterators);
             } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
@@ -580,7 +580,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
 
             ChunkIteratorPtr itr;
             // create temporary segment files at first, then merge them and create final segment files if schema change with sorting
-            if (_context.write_tmp) {
+            if (_context.schema_change_sorting) {
                 if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS) {
                     itr = new_mask_merge_iterator(seg_iterators, mask_buffer.get());
                 } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
@@ -652,7 +652,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
 
         ChunkIteratorPtr itr;
         // create temporary segment files at first, then merge them and create final segment files if schema change with sorting
-        if (_context.write_tmp) {
+        if (_context.schema_change_sorting) {
             if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS) {
                 itr = new_heap_merge_iterator(seg_iterators);
             } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
@@ -663,7 +663,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                         fmt::format("final merge: schema change with sorting do not support {} type",
                                     KeysType_Name(_context.tablet_schema->keys_type())));
             }
-            _context.write_tmp = false;
+            _context.schema_change_sorting = false;
         } else {
             itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), 0);
         }
