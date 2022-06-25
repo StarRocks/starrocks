@@ -66,12 +66,12 @@ NodeChannel::~NodeChannel() {
         _open_closure = nullptr;
     }
 
-    for (size_t i = 0; i < _add_batch_closures.size(); i++) {
-        if (_add_batch_closures[i] != nullptr) {
-            if (_add_batch_closures[i]->unref()) {
-                delete _add_batch_closures[i];
+    for (auto& closure : _add_batch_closures) {
+        if (closure != nullptr) {
+            if (closure->unref()) {
+                delete closure;
             }
-            _add_batch_closures[i] = nullptr;
+            closure = nullptr;
         }
     }
 
@@ -229,7 +229,7 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
         SCOPED_TIMER(_parent->_compress_timer);
 
         // Try compressing data to _compression_scratch, swap if compressed data is smaller
-        int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
+        size_t max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
 
         if (_compression_scratch.size() < max_compressed_size) {
             _compression_scratch.resize(max_compressed_size);
@@ -270,7 +270,7 @@ Status NodeChannel::add_chunk(vectorized::Chunk* input, const int64_t* tablet_id
 
         if (_cur_chunk->num_rows() < _runtime_state->chunk_size()) {
             // 2. chunk not full
-            if (_chunk_queue.size() == 0) {
+            if (_chunk_queue.empty()) {
                 return Status::OK();
             }
             // passthrough: try to send data if queue not empty
@@ -452,7 +452,7 @@ Status NodeChannel::_wait_one_prev_request() {
     return Status::OK();
 }
 
-Status NodeChannel::close_wait(RuntimeState* state) {
+Status NodeChannel::close() {
     if (_cancelled) {
         return _err_st;
     }
@@ -462,6 +462,10 @@ Status NodeChannel::close_wait(RuntimeState* state) {
         RETURN_IF_ERROR(add_chunk(nullptr, nullptr, nullptr, 0, 0, true));
     }
 
+    return _err_st;
+}
+
+Status NodeChannel::wait(RuntimeState* state) {
     // 2. wait eos request finish
     RETURN_IF_ERROR(_wait_all_prev_request());
 
@@ -876,12 +880,32 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
             Status err_st = Status::OK();
             while (ordinal < _channels.size() && !intolerable_failure) {
                 auto& index_channel = _channels[ordinal];
+                index_channel->for_each_node_channel([&index_channel, &err_st](NodeChannel* ch) {
+                    auto channel_status = ch->close();
+                    if (!channel_status.ok()) {
+                        LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
+                                     << ", load_info=" << ch->print_load_info()
+                                     << ", error_msg=" << channel_status.get_error_msg();
+                        err_st = channel_status;
+                        index_channel->mark_as_failed(ch);
+                    }
+                });
+                if (index_channel->has_intolerable_failure()) {
+                    status = err_st;
+                    intolerable_failure = true;
+                }
+                ordinal++;
+            }
+
+            ordinal = 0;
+            while (ordinal < _channels.size() && !intolerable_failure) {
+                auto& index_channel = _channels[ordinal];
                 index_channel->for_each_node_channel([&index_channel, &state, &node_add_batch_counter_map,
                                                       &serialize_batch_ns, &mem_exceeded_block_ns, &queue_push_lock_ns,
                                                       &actual_consume_ns, &err_st](NodeChannel* ch) {
-                    auto channel_status = ch->close_wait(state);
+                    auto channel_status = ch->wait(state);
                     if (!channel_status.ok()) {
-                        LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
+                        LOG(WARNING) << "close wait channel failed. channel_name=" << ch->name()
                                      << ", load_info=" << ch->print_load_info()
                                      << ", error_msg=" << channel_status.get_error_msg();
                         err_st = channel_status;
@@ -896,6 +920,7 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
                 }
                 ordinal++;
             }
+
             for (int i = ordinal; i < _channels.size(); ++i) {
                 auto& index_channel = _channels[i];
                 index_channel->for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
@@ -1040,7 +1065,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
                     vectorized::NullableColumn::create(column_ptr, vectorized::NullColumn::create(num_rows, 0));
             chunk->update_column(std::move(new_column), desc->id());
         } else if (!desc->is_nullable() && column_ptr->is_nullable()) {
-            vectorized::NullableColumn* nullable = down_cast<vectorized::NullableColumn*>(column_ptr.get());
+            auto* nullable = down_cast<vectorized::NullableColumn*>(column_ptr.get());
             // Non-nullable column shouldn't have null value,
             // If there is null value, which means expr compute has a error.
             if (nullable->has_null()) {
@@ -1093,7 +1118,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
         }
         case TYPE_DECIMALV2: {
             column = vectorized::ColumnHelper::get_data_column(column);
-            vectorized::DecimalColumn* decimal = down_cast<vectorized::DecimalColumn*>(column);
+            auto* decimal = down_cast<vectorized::DecimalColumn*>(column);
             std::vector<DecimalV2Value>& datas = decimal->get_data();
             int scale = desc->type().scale;
             for (size_t j = 0; j < num_rows; ++j) {
@@ -1131,7 +1156,7 @@ void OlapTableSink::_padding_char_column(vectorized::Chunk* chunk) {
         if (desc->type().type == TYPE_CHAR) {
             vectorized::Column* column = chunk->get_column_by_slot_id(desc->id()).get();
             vectorized::Column* data_column = vectorized::ColumnHelper::get_data_column(column);
-            vectorized::BinaryColumn* binary = down_cast<vectorized::BinaryColumn*>(data_column);
+            auto* binary = down_cast<vectorized::BinaryColumn*>(data_column);
             vectorized::Offsets& offset = binary->get_offset();
             uint32_t len = desc->type().len;
 

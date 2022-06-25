@@ -145,7 +145,9 @@ public:
     Status add_chunk(vectorized::Chunk* chunk, const int64_t* tablet_ids, const uint32_t* indexes, uint32_t from,
                      uint32_t size, bool eos);
 
-    Status close_wait(RuntimeState* state);
+    Status close();
+
+    Status wait(RuntimeState* state);
 
     void cancel(const Status& err_st);
 
@@ -289,7 +291,7 @@ private:
     // So we need to pad char column after compute buckect hash.
     void _padding_char_column(vectorized::Chunk* chunk);
 
-    void _print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc);
+    static void _print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc);
 
     static void _print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc);
 
