@@ -52,7 +52,7 @@ public class SetUserPropertyStmt extends DdlStmt {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
+    public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
         if (Strings.isNullOrEmpty(user)) {
             // If param 'user' is not set, use the login user name.
@@ -71,7 +71,7 @@ public class SetUserPropertyStmt extends DdlStmt {
 
         boolean isSelf = user.equals(ConnectContext.get().getQualifiedUser());
         for (SetVar var : propertyList) {
-            ((SetUserPropertyVar) var).analyze(analyzer, isSelf);
+            ((SetUserPropertyVar) var).analyze(isSelf);
         }
     }
 

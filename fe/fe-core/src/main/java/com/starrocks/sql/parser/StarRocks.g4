@@ -59,6 +59,7 @@ statement
     | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
     | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
             (WHERE where=expression)?                                                       #adminShowReplicaStatus
+    | SET setVarList                                                                        #setStmt
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
@@ -435,6 +436,14 @@ varType
     : GLOBAL
     | LOCAL
     | SESSION
+    ;
+
+setVar
+    : varType? IDENTIFIER '=' expression
+    ;
+
+setVarList
+    : setVar (',' setVar)*
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------

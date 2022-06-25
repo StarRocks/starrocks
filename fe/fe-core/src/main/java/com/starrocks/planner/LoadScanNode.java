@@ -32,7 +32,6 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
-import com.starrocks.load.Load;
 
 import java.util.List;
 import java.util.Map;
@@ -69,7 +68,7 @@ public abstract class LoadScanNode extends ScanNode {
             smap.getRhs().add(slotRef);
         }
         whereExpr = whereExpr.clone(smap);
-        whereExpr = Load.analyzeAndCastExprForLoad(whereExpr);
+        whereExpr = Expr.analyzeAndCastFold(whereExpr);
 
         if (!whereExpr.getType().isBoolean()) {
             throw new UserException("where statement is not a valid statement return bool");

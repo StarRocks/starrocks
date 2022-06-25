@@ -35,9 +35,15 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.io.Writable;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.sql.plan.ScalarOperatorToExpr;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprOpcode;
@@ -1833,4 +1839,14 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return true;
     }
 
+    public static Expr analyzeAndCastFold(Expr expr) {
+        ExpressionAnalyzer.analyzeExpressionIgnoreSlot(expr, ConnectContext.get());
+        // Translating expr to scalar in order to do some rewrites
+        ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expr);
+        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+        // Add cast and constant fold
+        scalarOperator = scalarRewriter.rewrite(scalarOperator, ScalarOperatorRewriter.CastAndFold_RULES);
+        return ScalarOperatorToExpr.buildExprIgnoreSlot(scalarOperator,
+                new ScalarOperatorToExpr.FormatterContext(Maps.newHashMap()));
+    }
 }

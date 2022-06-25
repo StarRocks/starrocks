@@ -23,7 +23,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.starrocks.catalog.WorkGroup;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
@@ -34,11 +33,12 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.HeartbeatFlags;
 import org.apache.commons.lang3.StringUtils;
 
 // change one variable.
-public class SetVar {
+public class SetVar implements ParseNode {
 
     private String variable;
     private Expr value;
@@ -83,19 +83,19 @@ public class SetVar {
     }
 
     // Value can be null. When value is null, means to set variable to DEFAULT.
-    public void analyze(Analyzer analyzer) throws UserException {
+    public void analyze() {
         if (type == null) {
             type = SetType.DEFAULT;
         }
 
         if (Strings.isNullOrEmpty(variable)) {
-            throw new AnalysisException("No variable name in set statement.");
+            throw new SemanticException("No variable name in set statement.");
         }
 
         if (type == SetType.GLOBAL) {
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
                         "ADMIN");
             }
         }
@@ -109,33 +109,24 @@ public class SetVar {
             value = new StringLiteral(((SlotRef) value).getColumnName());
         }
 
-        try {
-            value.analyze(analyzer);
-        } catch (AnalysisException e) {
-            throw new AnalysisException("Set statement only support constant expr.");
-        }
+        value = Expr.analyzeAndCastFold(value);
 
         if (!value.isConstant()) {
-            throw new AnalysisException("Set statement only support constant expr.");
+            throw new SemanticException("Set statement only support constant expr.");
         }
 
-        final Expr literalExpr = value.getResultValue();
-        if (!(literalExpr instanceof LiteralExpr)) {
-            throw new AnalysisException("Set statement doesn't support computing expr:" + literalExpr.toSql());
-        }
-
-        result = (LiteralExpr) literalExpr;
+        result = (LiteralExpr) value;
 
         if (variable.equalsIgnoreCase(GlobalVariable.DEFAULT_ROWSET_TYPE)) {
-            if (result != null && !HeartbeatFlags.isValidRowsetType(result.getStringValue())) {
-                throw new AnalysisException("Invalid rowset type, now we support {alpha, beta}.");
+            if (!HeartbeatFlags.isValidRowsetType(result.getStringValue())) {
+                throw new SemanticException("Invalid rowset type, now we support {alpha, beta}.");
             }
         }
 
         if (getVariable().equalsIgnoreCase("prefer_join_method")) {
             String value = getValue().getStringValue();
             if (!value.equalsIgnoreCase("broadcast") && !value.equalsIgnoreCase("shuffle")) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_VALUE_FOR_VAR, "prefer_join_method", value);
+                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_VALUE_FOR_VAR, "prefer_join_method", value);
             }
         }
 
@@ -148,15 +139,19 @@ public class SetVar {
             checkNonNegativeLongVariable(SessionVariable.QUERY_MEM_LIMIT);
         }
 
-        // Check variable time_zone value is valid
-        if (getVariable().equalsIgnoreCase(SessionVariable.TIME_ZONE)) {
-            this.value = new StringLiteral(TimeUtils.checkTimeZoneValidAndStandardize(getValue().getStringValue()));
-            this.result = (LiteralExpr) this.value;
-        }
+        try {
+            // Check variable time_zone value is valid
+            if (getVariable().equalsIgnoreCase(SessionVariable.TIME_ZONE)) {
+                this.value = new StringLiteral(TimeUtils.checkTimeZoneValidAndStandardize(getValue().getStringValue()));
+                this.result = (LiteralExpr) this.value;
+            }
 
-        if (getVariable().equalsIgnoreCase(SessionVariable.EXEC_MEM_LIMIT)) {
-            this.value = new StringLiteral(Long.toString(ParseUtil.analyzeDataVolumn(getValue().getStringValue())));
-            this.result = (LiteralExpr) this.value;
+            if (getVariable().equalsIgnoreCase(SessionVariable.EXEC_MEM_LIMIT)) {
+                this.value = new StringLiteral(Long.toString(ParseUtil.analyzeDataVolumn(getValue().getStringValue())));
+                this.result = (LiteralExpr) this.value;
+            }
+        } catch (UserException e) {
+            throw new SemanticException(e.getMessage());
         }
 
         if (getVariable().equalsIgnoreCase(SessionVariable.SQL_SELECT_LIMIT)) {
@@ -168,7 +163,7 @@ public class SetVar {
             if (!StringUtils.isEmpty(wgName)) {
                 WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(wgName);
                 if (wg == null) {
-                    throw new AnalysisException("resource group not exists: " + wgName);
+                    throw new SemanticException("resource group not exists: " + wgName);
                 }
             }
         }
@@ -183,15 +178,15 @@ public class SetVar {
         return toSql();
     }
 
-    private void checkNonNegativeLongVariable(String field) throws AnalysisException {
+    private void checkNonNegativeLongVariable(String field) {
         String value = getValue().getStringValue();
         try {
             long num = Long.parseLong(value);
             if (num < 0) {
-                throw new AnalysisException(field + " must be equal or greater than 0.");
+                throw new SemanticException(field + " must be equal or greater than 0.");
             }
         } catch (NumberFormatException ex) {
-            throw new AnalysisException(field + " is not a number");
+            throw new SemanticException(field + " is not a number");
         }
     }
 }
