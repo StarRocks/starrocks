@@ -39,6 +39,7 @@
 
 namespace starrocks {
 
+class AgentServer;
 class ExecEnv;
 
 class TaskWorkerPool {
@@ -72,7 +73,7 @@ public:
 
     typedef void* (*CALLBACK_FUNCTION)(void*);
 
-    TaskWorkerPool(TaskWorkerType task_worker_type, ExecEnv* env, const TMasterInfo& master_info, int worker_num);
+    TaskWorkerPool(AgentServer* agent_server, TaskWorkerType task_worker_type, ExecEnv* env, int worker_num);
     ~TaskWorkerPool();
 
     // start the task worker callback thread
@@ -116,7 +117,6 @@ private:
     bool _register_task_info(TTaskType::type task_type, int64_t signature);
     void _remove_task_info(TTaskType::type task_type, int64_t signature);
     void _spawn_callback_worker_thread(CALLBACK_FUNCTION callback_func);
-    void _finish_task(const TFinishTaskRequest& finish_task_request);
 
     using TAgentTaskRequestPtr = std::shared_ptr<TAgentTaskRequest>;
 
@@ -133,11 +133,10 @@ private:
     AgentStatus _move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::string& src, int64_t job_id,
                           bool overwrite, std::vector<std::string>* error_msgs);
 
-    // Reference to the ExecEnv::_master_info
-    const TMasterInfo& _master_info;
+    const TMasterInfo& master_info();
+
+    AgentServer* _agent_server;
     TBackend _backend;
-    std::unique_ptr<AgentUtils> _agent_utils;
-    std::unique_ptr<MasterServerClient> _master_client;
     ExecEnv* _env;
 
     // Protect task queue
@@ -149,7 +148,6 @@ private:
     TaskWorkerType _task_worker_type;
     CALLBACK_FUNCTION _callback_function;
 
-    static FrontendServiceClientCache _master_service_client_cache;
     static std::atomic<int64_t> _s_report_version;
 
     static std::mutex _s_task_signatures_locks[TTaskType::type::NUM_TASK_TYPE];

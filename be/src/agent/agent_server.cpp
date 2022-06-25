@@ -26,10 +26,13 @@
 #include <filesystem>
 #include <string>
 
+#include "agent/status.h"
 #include "agent/task_worker_pool.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "gen_cpp/MasterService_types.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
 #include "util/phmap/phmap.h"
@@ -43,9 +46,15 @@ const uint32_t REPORT_TASK_WORKER_COUNT = 1;
 const uint32_t REPORT_DISK_STATE_WORKER_COUNT = 1;
 const uint32_t REPORT_OLAP_TABLE_WORKER_COUNT = 1;
 const uint32_t REPORT_WORKGROUP_WORKER_COUNT = 1;
+const uint32_t TASK_FINISH_MAX_RETRY = 3;
+const uint32_t ALTER_FINISH_TASK_MAX_RETRY = 10;
+
+FrontendServiceClientCache g_master_service_client_cache;
 
 AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
-        : _exec_env(exec_env), _master_info(master_info) {
+        : _exec_env(exec_env),
+          _master_info(master_info),
+          _master_client(new MasterServerClient(master_info, &g_master_service_client_cache)) {
     for (auto& path : exec_env->store_paths()) {
         try {
             string dpp_download_path_str = path.path + DPP_PREFIX;
@@ -62,8 +71,8 @@ AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
     // to make code to be more readable.
 
 #ifndef BE_TEST
-#define CREATE_AND_START_POOL(type, pool_name, worker_num)                                                         \
-    pool_name.reset(new TaskWorkerPool(TaskWorkerPool::TaskWorkerType::type, _exec_env, master_info, worker_num)); \
+#define CREATE_AND_START_POOL(type, pool_name, worker_num)                                                  \
+    pool_name.reset(new TaskWorkerPool(this, TaskWorkerPool::TaskWorkerType::type, _exec_env, worker_num)); \
     pool_name->start();
 
 #else
@@ -334,6 +343,41 @@ void AgentServer::release_snapshot(TAgentResult& t_agent_result, const std::stri
 void AgentServer::publish_cluster_state(TAgentResult& t_agent_result, const TAgentPublishRequest& request) {
     Status status = Status::NotSupported("deprecated method(publish_cluster_state) was invoked");
     status.to_thrift(&t_agent_result.status);
+}
+
+void AgentServer::finish_task(const TFinishTaskRequest& finish_task_request) {
+    // Return result to FE
+    TMasterResult result;
+    uint32_t try_time = 0;
+    int32_t sleep_time_second = config::sleep_one_second;
+    int32_t max_retry_times = TASK_FINISH_MAX_RETRY;
+
+    while (try_time < max_retry_times) {
+        StarRocksMetrics::instance()->finish_task_requests_total.increment(1);
+        AgentStatus client_status = _master_client->finish_task(finish_task_request, &result);
+
+        if (client_status == STARROCKS_SUCCESS) {
+            // This means FE alter thread pool is full, all alter finish request to FE is meaningless
+            // so that we will sleep && retry 10 times
+            if (result.status.status_code == TStatusCode::TOO_MANY_TASKS &&
+                finish_task_request.task_type == TTaskType::ALTER) {
+                max_retry_times = ALTER_FINISH_TASK_MAX_RETRY;
+                sleep_time_second = sleep_time_second * 2;
+            } else {
+                break;
+            }
+        }
+        try_time += 1;
+        StarRocksMetrics::instance()->finish_task_requests_failed.increment(1);
+        LOG(WARNING) << "finish task failed retry: " << try_time << "/" << TASK_FINISH_MAX_RETRY
+                     << "client_status: " << client_status << " status_code: " << result.status.status_code;
+
+        sleep(sleep_time_second);
+    }
+}
+
+AgentStatus AgentServer::report_task(const TReportRequest& request, TMasterResult* result) {
+    return _master_client->report(request, result);
 }
 
 } // namespace starrocks
