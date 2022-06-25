@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer.rule.join;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.FeConstants;
@@ -189,11 +188,11 @@ public class ReorderJoinRule extends Rule {
                     }
                 }
 
-                if (outputColumns.size() == 0) {
-                    outputColumns.add(Utils.findSmallestColumnRef(projection.getOutputColumns()));
-                }
-
                 if (outputColumns.size() != projection.getColumnRefMap().size()) {
+                    if (outputColumns.size() == 0) {
+                        outputColumns.add(Utils.findSmallestColumnRef(projection.getOutputColumns()));
+                    }
+
                     Map<ColumnRefOperator, ScalarOperator> newOutputProjections = Maps.newHashMap();
                     for (ColumnRefOperator ref : outputColumns) {
                         newOutputProjections.put(ref, projection.getColumnRefMap().get(ref));
@@ -217,7 +216,8 @@ public class ReorderJoinRule extends Rule {
 
         @Override
         public OptExpression visitLogicalJoin(OptExpression optExpression, ColumnRefSet requireColumns) {
-            ColumnRefSet outputColumns = optExpression.getOutputColumns();
+            ColumnRefSet outputColumns = optExpression.inputAt(0).getOutputColumns().clone();
+            outputColumns.union(optExpression.inputAt(1).getOutputColumns());
             ColumnRefSet newOutputColumns = new ColumnRefSet();
             for (int id : outputColumns.getColumnIds()) {
                 if (requireColumns.contains(id)) {
@@ -234,9 +234,6 @@ public class ReorderJoinRule extends Rule {
                                 .collect(Collectors.toMap(Function.identity(), Function.identity())),
                                 new HashMap<>()))
                         .build();
-            } else if (joinOperator.getProjection() != null) {
-                Preconditions.checkState(
-                        newOutputColumns.cardinality() >= joinOperator.getProjection().getColumnRefMap().size());
             }
 
             requireColumns = ((LogicalJoinOperator) optExpression.getOp()).getRequiredChildInputColumns();
