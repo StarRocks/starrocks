@@ -4,6 +4,7 @@ package com.starrocks.journal.bdbje;
 
 import com.sleepycat.je.DatabaseEntry;
 import com.sleepycat.je.LockMode;
+import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.journal.JournalException;
 import org.apache.commons.io.FileUtils;
@@ -15,11 +16,14 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
+import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 public class BDBEnvironmentTest {
     private static final Logger LOG = LogManager.getLogger(BDBEnvironmentTest.class);
@@ -335,5 +339,145 @@ public class BDBEnvironmentTest {
         Assert.assertTrue(true);
         maserEnvironment.setup();
         Assert.fail();
+    }
+
+    /**
+     * simulate master failover, return the index of the instance that remains follower
+     */
+    private int masterFailOver() throws Exception {
+        int oldFollowerIndex = 0;
+        // master down
+        masterEnvironment.close();
+        LOG.warn("======> master env is closed");
+        Thread.sleep(1000);
+
+        // find the new master
+        BDBEnvironment newMasterEnvironment = null;
+        while (newMasterEnvironment == null) {
+            Thread.sleep(1000);
+            for (int i = 0; i < 2; ++ i) {
+                if (followerEnvironments[i].getReplicatedEnvironment().getState() == ReplicatedEnvironment.State.MASTER) {
+                    newMasterEnvironment = followerEnvironments[i];
+                    LOG.warn("=========> new master is {}", newMasterEnvironment.getReplicatedEnvironment().getNodeName());
+                    newMasterEnvironment.setup();
+                    oldFollowerIndex = 1 - i;
+                    break;
+                }
+            }
+        }
+
+        // start the old master
+        BDBEnvironment oldMasterEnvironment = new BDBEnvironment(
+                masterPath,
+                "master",
+                masterNodeHostPort,
+                masterNodeHostPort,
+                true);
+        oldMasterEnvironment.setup();
+        LOG.warn("============> old master is setup as follower");
+        Thread.sleep(1000);
+
+        masterEnvironment = newMasterEnvironment;
+        masterNodeHostPort = followerNodeHostPorts[1 - oldFollowerIndex];
+        return oldFollowerIndex;
+    }
+
+    /**
+     * this function try to remove all but itself from master's helper socket
+     * because I found that in the normal case, there is only one helper socket
+     */
+    void resetHelper() {
+        String []fields = masterNodeHostPort.split(":");
+        assert (fields.length == 2);
+        String host = fields[0];
+        int port = Integer.valueOf(fields[1]);
+        Set<InetSocketAddress> old = masterEnvironment.getReplicationGroupAdmin().getHelperSockets();
+
+        Iterator<InetSocketAddress> iter = old.iterator();
+        while(iter.hasNext()) {
+            InetSocketAddress addr = iter.next();
+            if (!addr.getHostString().equals(host)) {
+                LOG.warn("host {} != {}", addr.getHostString(), host);
+                iter.remove();
+            } else if (addr.getPort() != port) {
+                LOG.warn("port {} != {}", addr.getPort(), port);
+                iter.remove();
+            }
+        }
+        assert (old.size() == 1);
+        masterEnvironment.getReplicationGroupAdmin().setHelperSockets(old);
+        LOG.info("helper socket {}", masterEnvironment.getReplicationGroupAdmin().getHelperSockets());
+    }
+
+    private void printHAStatus() {
+        LOG.info("---------------------");
+        LOG.info("{}", masterEnvironment.getReplicatedEnvironment().getGroup().getRepGroupImpl().toString());
+        LOG.info("---------------------");
+    }
+
+    @Test
+    public void testDropAdd() throws Exception {
+        initClusterMasterFollower();
+
+        int oldFollowerIndex = 0;
+        // TODO: if we uncomment this, this ut will fails at step 5
+        // oldFollowerIndex = masterFailOver();
+
+        printHAStatus();
+
+        String oldFollowerName = followerEnvironments[oldFollowerIndex].getReplicatedEnvironment().getNodeName();
+        String groupName = followerEnvironments[oldFollowerIndex].getReplicationGroupAdmin().getGroup().getMember(oldFollowerName).getName();
+        String oldFollowerHostPort = followerNodeHostPorts[oldFollowerIndex];
+
+        // 1. follower1 down
+        followerEnvironments[oldFollowerIndex].close();
+        Thread.sleep(2000);
+        LOG.warn("=============> after {}:{} is down", oldFollowerName, oldFollowerHostPort);
+        printHAStatus();
+
+        // 2. remove old follower1
+        masterEnvironment.removeNode(groupName);
+        Thread.sleep(2000);
+        LOG.warn("=============> after remove {}:{}", oldFollowerName, oldFollowerHostPort);
+        printHAStatus();
+
+        // 3. bad new follower start for the first time
+        // helper = self, use a new generated name
+        String newFollowerName = "newFollower";
+        File newFollowerPath = createTmpDir();
+        BDBEnvironment newfollowerEnvironment = new BDBEnvironment(
+                newFollowerPath,
+                newFollowerName,
+                oldFollowerHostPort,
+                oldFollowerHostPort,
+                true);
+        LOG.warn("=========> start new follower for the first time");
+        // should set up successfully as a standalone master
+        newfollowerEnvironment.setup();
+        Thread.sleep(10000);
+        newfollowerEnvironment.close();
+
+        // 4. bad new follower start for the second time
+        // helper = master
+        newfollowerEnvironment = new BDBEnvironment(
+                newFollowerPath,
+                newFollowerName,
+                oldFollowerHostPort,
+                masterNodeHostPort,
+                true);
+        LOG.warn("==========> start new follower for the second time");
+        try {
+            newfollowerEnvironment.setup();
+        } catch (Exception e) {
+            LOG.warn("===========> failed for the second time, as expect, ", e);
+        }
+
+        // 5. normally master won't down
+        // will get a `com.sleepycat.je.EnvironmentFailureException` if you uncommented masterFailOver()
+        // exception messages: Ids: 1 were equal. But names: master, newFollower weren't!
+        for (int i = 0; i < 10; ++i) {
+            Thread.sleep(1000);
+            LOG.warn("==============> getDatabasesNames() {}", masterEnvironment.getDatabaseNames());
+        }
     }
 }

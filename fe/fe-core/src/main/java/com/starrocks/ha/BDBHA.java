@@ -26,11 +26,8 @@ import com.google.common.collect.Sets;
 import com.sleepycat.bind.tuple.TupleBinding;
 import com.sleepycat.je.DatabaseEntry;
 import com.sleepycat.je.OperationStatus;
-import com.sleepycat.je.rep.MasterStateException;
-import com.sleepycat.je.rep.MemberNotFoundException;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.ReplicationGroup;
-import com.sleepycat.je.rep.ReplicationMutableConfig;
 import com.sleepycat.je.rep.ReplicationNode;
 import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
@@ -202,20 +199,7 @@ public class BDBHA implements HAProtocol {
 
     @Override
     public boolean removeElectableNode(String nodeName) {
-        ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
-        if (replicationGroupAdmin == null) {
-            return false;
-        }
-        try {
-            replicationGroupAdmin.removeMember(nodeName);
-        } catch (MemberNotFoundException e) {
-            LOG.error("the deleting electable node is not found {}", nodeName, e);
-            return false;
-        } catch (MasterStateException e) {
-            LOG.error("the deleting electable node is master {}", nodeName, e);
-            return false;
-        }
-        return true;
+        return environment.removeNode(nodeName);
     }
 
     // When new Follower FE is added to the cluster, it should also be added to the helper sockets in
@@ -270,9 +254,7 @@ public class BDBHA implements HAProtocol {
         unstableNodes.add(nodeName);
         ReplicatedEnvironment replicatedEnvironment = environment.getReplicatedEnvironment();
         if (replicatedEnvironment != null) {
-            replicatedEnvironment.
-                    setRepMutableConfig(new ReplicationMutableConfig().
-                            setElectableGroupSizeOverride(currentFollowerCnt - unstableNodes.size()));
+            environment.resetElectableGroupSizeOverride(currentFollowerCnt - unstableNodes.size());
         }
     }
 
@@ -283,12 +265,9 @@ public class BDBHA implements HAProtocol {
             if (unstableNodes.isEmpty()) {
                 // Setting ElectableGroupSizeOverride to 0 means remove this config,
                 // and bdb will use the normal electable group size.
-                replicatedEnvironment.
-                        setRepMutableConfig(new ReplicationMutableConfig().setElectableGroupSizeOverride(0));
+                environment.resetElectableGroupSizeOverride(0);
             } else {
-                replicatedEnvironment.
-                        setRepMutableConfig(new ReplicationMutableConfig().
-                                setElectableGroupSizeOverride(currentFollowerCnt - unstableNodes.size()));
+                environment.resetElectableGroupSizeOverride(currentFollowerCnt - unstableNodes.size());
             }
         }
     }

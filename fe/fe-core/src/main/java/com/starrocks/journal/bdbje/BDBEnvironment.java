@@ -31,6 +31,8 @@ import com.sleepycat.je.Durability.SyncPolicy;
 import com.sleepycat.je.EnvironmentConfig;
 import com.sleepycat.je.TransactionConfig;
 import com.sleepycat.je.rep.InsufficientLogException;
+import com.sleepycat.je.rep.MasterStateException;
+import com.sleepycat.je.rep.MemberNotFoundException;
 import com.sleepycat.je.rep.NetworkRestore;
 import com.sleepycat.je.rep.NetworkRestoreConfig;
 import com.sleepycat.je.rep.NoConsistencyRequiredPolicy;
@@ -38,6 +40,7 @@ import com.sleepycat.je.rep.NodeType;
 import com.sleepycat.je.rep.RepInternal;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.ReplicationConfig;
+import com.sleepycat.je.rep.ReplicationMutableConfig;
 import com.sleepycat.je.rep.RestartRequiredException;
 import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.DbResetRepGroup;
@@ -561,5 +564,27 @@ public class BDBEnvironment {
      */
     TransactionConfig getTxnConfig() {
         return txnConfig;
+    }
+
+    public void resetElectableGroupSizeOverride(int n) {
+        replicatedEnvironment.
+                setRepMutableConfig(new ReplicationMutableConfig().setElectableGroupSizeOverride(n));
+    }
+
+    public boolean removeNode(String nodeName) {
+        if (replicationGroupAdmin == null) {
+            return false;
+        }
+
+        try {
+            replicationGroupAdmin.removeMember(nodeName);
+        } catch (MemberNotFoundException e) {
+            LOG.error("the deleting electable node is not found {}", nodeName, e);
+            return false;
+        } catch (MasterStateException e) {
+            LOG.error("the deleting electable node is master {}", nodeName, e);
+            return false;
+        }
+        return true;
     }
 }
