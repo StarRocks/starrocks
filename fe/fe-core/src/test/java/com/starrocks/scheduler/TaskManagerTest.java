@@ -2,14 +2,17 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.DmlStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
@@ -27,7 +30,15 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Deque;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class TaskManagerTest {
 
@@ -135,7 +146,7 @@ public class TaskManagerTest {
     }
 
     @Test
-    public void SubmitMvTaskTest(){
+    public void SubmitMvTaskTest() throws DdlException {
         new MockUp<StmtExecutor>() {
             @Mock
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {}
@@ -165,6 +176,57 @@ public class TaskManagerTest {
         }
 
         Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
+    }
+
+    @Test
+    public void periodicalTaskRegularTest() throws DdlException {
+
+        LocalDateTime now = LocalDateTime.now();
+
+        Task task = new Task();
+        task.setName("test_periodical");
+        task.setCreateTime(System.currentTimeMillis());
+        task.setDbName("test");
+        task.setDefinition("select 1");
+        task.setExpireTime(0L);
+        long startTime = now.plusSeconds(3).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        TaskSchedule taskSchedule = new TaskSchedule(startTime, 5, TimeUnit.SECONDS);
+        task.setSchedule(taskSchedule);
+        task.setType(Constants.TaskType.PERIODICAL);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        LOG.info("start time is :" + now);
+        taskManager.createTask(task, false);
+        TaskRunHistory taskRunHistory = taskManager.getTaskRunManager().getTaskRunHistory();
+        taskRunHistory.getAllHistory().clear();
+
+        ThreadUtil.sleepAtLeastIgnoreInterrupts(10000L);
+        taskManager.dropTasks(ImmutableList.of(task.getId()), true);
+
+        Deque<TaskRunStatus> allHistory = taskRunHistory.getAllHistory();
+        for (TaskRunStatus taskRunStatus : allHistory) {
+            LOG.info(taskRunStatus);
+        }
+
+        Assert.assertEquals(2, allHistory.size());
+    }
+
+    @Test
+    public void taskSerializeTest() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String submitSQL = "submit task as create table temp as select count(*) as cnt from tbl1";
+        SubmitTaskStmt submitTaskStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL, ctx);
+        Task task = TaskBuilder.buildTask(submitTaskStmt, ctx);
+
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
+        task.write(dataOutputStream);
+
+        ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
+        DataInputStream dataInputStream = new DataInputStream(inputStream);
+        Task readTask = Task.read(dataInputStream);
+        // upgrade should default task type to manual
+        Assert.assertEquals(readTask.getType(), Constants.TaskType.MANUAL);
+        Assert.assertEquals(readTask.getState(), Constants.TaskState.UNKNOWN);
     }
 
 }
