@@ -607,4 +607,7 @@ public class TaskManager {
         public List<TaskRunStatus> runStatus;
     }
 
+    public Map<String, Task> getNameToTaskMap() {
+        return nameToTaskMap;
+    }
 }

@@ -158,6 +158,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
@@ -2992,6 +2993,38 @@ public class LocalMetastore implements ConnectorMetadata {
     @Override
     public void alterMaterializedView(AlterMaterializedViewStatement stmt) throws DdlException, MetaNotFoundException {
         stateMgr.getAlterInstance().processAlterMaterializedView(stmt);
+    }
+
+    @Override
+    public void refreshMaterializedView(RefreshMaterializedViewStatement stmt)
+            throws DdlException, MetaNotFoundException {
+        final String mvName = stmt.getMvName().getTbl();
+        final String dbName = stmt.getMvName().getDb();
+        Database db = this.getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        MaterializedView materializedView = null;
+        db.readLock();
+        try {
+            final Table table = db.getTable(mvName);
+            if (table instanceof MaterializedView) {
+                materializedView = (MaterializedView) table;
+            }
+        } finally {
+            db.readUnlock();
+        }
+        if (materializedView == null) {
+            throw new MetaNotFoundException("Materialized view " + mvName + " is not found");
+        }
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
+        if (!taskManager.getNameToTaskMap().containsKey(mvTaskName)) {
+            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+            taskManager.createTask(task, true);
+        }
+        // run task
+        taskManager.executeTask(mvTaskName);
     }
 
     /*

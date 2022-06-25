@@ -211,6 +211,7 @@ import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -2622,6 +2623,10 @@ public class GlobalStateMgr {
 
     public void alterMaterializedView(AlterMaterializedViewStatement stmt) throws DdlException, MetaNotFoundException {
         localMetastore.alterMaterializedView(stmt);
+    }
+
+    public void refreshMaterializedView(RefreshMaterializedViewStatement stmt) throws DdlException, MetaNotFoundException {
+        localMetastore.refreshMaterializedView(stmt);
     }
 
     public void replayRenameMaterializedView(RenameMaterializedViewLog log) {

@@ -73,6 +73,7 @@ import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
@@ -92,6 +93,7 @@ public class DataDefinitionExecutorFactory {
                     .put(CreateMaterializedViewStatement.class, new CreateMaterializedViewStatementExecutor())
                     .put(DropMaterializedViewStmt.class, new DropMaterializedViewExecutor())
                     .put(AlterMaterializedViewStatement.class, new AlterMaterializedViewExecutor())
+                    .put(RefreshMaterializedViewStatement.class, new RefreshMaterializedViewExecutor())
                     .put(AlterTableStmt.class, new AlterTableExecutor())
                     .put(AlterViewStmt.class, new AlterViewExecutor())
                     .put(CancelAlterTableStmt.class, new CancelAlterTableExecutor())

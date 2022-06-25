@@ -41,6 +41,7 @@ statement
     | showMaterializedViewStatement                                                         #showMaterializedView
     | dropMaterializedViewStatement                                                         #dropMaterializedView
     | alterMaterializedViewStatement                                                        #alterMaterializedView
+    | refreshMaterializedViewStatement                                                      #refreshMaterializedView
 
     // Catalog Statement
     | createExternalCatalogStatement                                                        #createCatalog
@@ -266,6 +267,10 @@ dropMaterializedViewStatement
 
 alterMaterializedViewStatement
     : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause)
+    ;
+
+refreshMaterializedViewStatement
+    : REFRESH MATERIALIZED VIEW mvName=qualifiedName
     ;
 
 // ------------------------------------------- Cluster Mangement Statement ---------------------------------------------
