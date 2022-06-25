@@ -40,7 +40,7 @@ Header中支持的属性见下文的导入任务参数说明，格式为: -H "ke
 **示例：**
 
 ~~~bash
-curl --location-trusted -u root -T date -H "label:123" \
+curl --location-trusted -u root -T data.file -H "label:123" \
     http://abc.com:8030/api/test/date/_stream_load
 ~~~
 
