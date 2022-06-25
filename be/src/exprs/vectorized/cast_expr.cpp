@@ -114,7 +114,12 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
         } else if constexpr (pt_is_boolean<FromType>) {
             value = JsonValue::from_bool(viewer.value(row));
         } else if constexpr (pt_is_binary<FromType>) {
-            value = JsonValue::from_string(viewer.value(row));
+            auto maybe = JsonValue::parse_json_or_string(viewer.value(row));
+            if (maybe.ok()) {
+                value = maybe.value();
+            } else {
+                overflow = true;
+            }
         } else {
             CHECK(false) << "not supported type " << FromType;
         }
