@@ -98,4 +98,9 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_NO_SYNC;
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }
