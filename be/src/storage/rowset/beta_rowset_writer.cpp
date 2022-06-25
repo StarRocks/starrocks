@@ -81,6 +81,7 @@ Status BetaRowsetWriter::init() {
     _rowset_meta->set_partition_id(_context.partition_id);
     _rowset_meta->set_tablet_id(_context.tablet_id);
     _rowset_meta->set_tablet_schema_hash(_context.tablet_schema_hash);
+    _rowset_meta->set_rowset_type(BETA_ROWSET);
     _rowset_meta->set_rowset_state(_context.rowset_state);
     _rowset_meta->set_segments_overlap(_context.segments_overlap);
     if (_context.rowset_state == PREPARED || _context.rowset_state == COMMITTED) {
