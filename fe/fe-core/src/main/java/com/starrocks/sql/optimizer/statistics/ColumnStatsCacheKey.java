@@ -26,7 +26,7 @@ class ColumnStatsCacheKey {
         if (tableId != cacheKey.tableId) {
             return false;
         }
-        return column.equals(cacheKey.column);
+        return column.equalsIgnoreCase(cacheKey.column);
     }
 
     @Override
