@@ -2,7 +2,6 @@
 
 package com.starrocks.planner;
 
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.TableRef;
@@ -23,9 +22,8 @@ public class NestLoopJoinNode extends JoinNode {
     private static final Logger LOG = LogManager.getLogger(NestLoopJoinNode.class);
 
     public NestLoopJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
-                            JoinOperator joinOp,
-                            List<Expr> joinConjuncts) {
-        super("NESTLOOP JOIN", id, outer, inner, joinOp, Lists.newArrayList(), joinConjuncts);
+                            JoinOperator joinOp, List<Expr> eqJoinConjuncts, List<Expr> joinConjuncts) {
+        super("NESTLOOP JOIN", id, outer, inner, joinOp, eqJoinConjuncts, joinConjuncts);
 
     }
 

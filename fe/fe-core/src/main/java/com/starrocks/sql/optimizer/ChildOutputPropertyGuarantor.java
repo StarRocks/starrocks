@@ -114,8 +114,9 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         return true;
     }
 
-    private void enforceChildGatherDistribution(GroupExpression child, PhysicalPropertySet childOutputProperty, int childIndex) {
-        DistributionSpec enforceDistributionSpec = DistributionSpec.createGatherDistributionSpec();
+    private void enforceChildBroadcastDistribution(GroupExpression child, PhysicalPropertySet childOutputProperty,
+                                                   int childIndex) {
+        DistributionSpec enforceDistributionSpec = DistributionSpec.createReplicatedDistributionSpec();
 
         enforceChildDistribution(enforceDistributionSpec, child, childOutputProperty);
 
@@ -262,8 +263,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         PhysicalPropertySet leftChildOutputProperty = childrenOutputProperties.get(0);
         PhysicalPropertySet rightChildOutputProperty = childrenOutputProperties.get(1);
 
-        enforceChildGatherDistribution(leftChild, leftChildOutputProperty, 0);
-        enforceChildGatherDistribution(rightChild, rightChildOutputProperty, 1);
+        enforceChildBroadcastDistribution(rightChild, rightChildOutputProperty, 1);
         return visitOperator(node, context);
     }
 

@@ -1608,6 +1608,13 @@ public class PlanFragmentBuilder {
         }
 
         @Override
+        public PlanFragment visitPhysicalNestLoopJoin(OptExpression optExpr, ExecPlan context) {
+            PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
+            PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+            return visitPhysicalJoin(leftFragment, rightFragment, optExpr, context);
+        }
+
+        @Override
         public PlanFragment visitPhysicalMergeJoin(OptExpression optExpr, ExecPlan context) {
             PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
             PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
@@ -1637,13 +1644,6 @@ public class PlanFragmentBuilder {
             return planFragment;
         }
 
-
-        public PlanFragment visitPhysicalNestLoopJoin(OptExpression optExpr, ExecPlan context) {
-            PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
-            PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
-            return visitPhysicalJoin(leftFragment, rightFragment, optExpr, context);
-        }
-
         private PlanFragment visitPhysicalJoin(PlanFragment leftFragment, PlanFragment rightFragment,
                                                OptExpression optExpr, ExecPlan context) {
             PhysicalJoinOperator node = (PhysicalJoinOperator) optExpr.getOp();
@@ -1653,8 +1653,7 @@ public class PlanFragmentBuilder {
 
             // 2. Get eqJoinConjuncts
             List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
-                    leftChildColumns,
-                    rightChildColumns,
+                    leftChildColumns, rightChildColumns,
                     Utils.extractConjuncts(node.getOnPredicate()));
 
             if (node.getJoinType().isCrossJoin()
@@ -1664,14 +1663,22 @@ public class PlanFragmentBuilder {
                         .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                                 new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
+                List<Expr> onConjuncts = Utils.extractConjuncts(node.getOnPredicate()).stream()
+                        .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                        .collect(Collectors.toList());
+                List<Expr> eqJoinConjuncts =
+                        eqOnPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                .collect(Collectors.toList());
 
                 NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
-                        leftFragment.getPlanRoot(),
-                        rightFragment.getPlanRoot(),
-                        null, node.getJoinType(), conjuncts);
+                        leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
+                        null, node.getJoinType(), eqJoinConjuncts, onConjuncts);
 
                 joinNode.setLimit(node.getLimit());
                 joinNode.computeStatistics(optExpr.getStatistics());
+                joinNode.addConjuncts(conjuncts);
 
                 // Connect parent and child fragment
                 rightFragment.getPlanRoot().setFragment(leftFragment);
