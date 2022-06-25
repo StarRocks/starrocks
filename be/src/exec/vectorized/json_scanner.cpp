@@ -79,6 +79,14 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
         _cur_file_eof = true;
     }
 
+    if (!status.ok()) {
+        if (status.is_end_of_file()) {
+            _cur_file_eof = true;
+        } else {
+            return status;
+        }
+    }
+
     if (src_chunk->num_rows() == 0) {
         return Status::EndOfFile("EOF of reading json file");
     }

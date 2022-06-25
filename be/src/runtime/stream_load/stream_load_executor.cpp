@@ -111,6 +111,10 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                 ctx->write_data_cost_nanos = MonotonicNanos() - ctx->start_write_data_nanos;
                 ctx->promise.set_value(status);
 
+                if (!executor->runtime_state()->get_error_log_file_path().empty()) {
+                    ctx->error_url = to_load_error_http_path(executor->runtime_state()->get_error_log_file_path());
+                }
+
                 if (ctx->unref()) {
                     delete ctx;
                 }
