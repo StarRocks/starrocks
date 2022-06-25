@@ -34,7 +34,7 @@ The attributes supported in the header are described in the import job parameter
 **Example:**
 
 ~~~bash
-curl --location-trusted -u root -T date -H "label:123" \
+curl --location-trusted -u root -T data.file -H "label:123" \
     http://abc.com:8030/api/test/date/_stream_load
 ~~~
 
