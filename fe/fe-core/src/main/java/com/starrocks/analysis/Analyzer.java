@@ -49,8 +49,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.rewrite.BetweenToCompoundRule;
 import com.starrocks.rewrite.ExprRewriteRule;
 import com.starrocks.rewrite.ExprRewriter;
-import com.starrocks.rewrite.NormalizeBinaryPredicatesRule;
-import com.starrocks.rewrite.ReplaceDateFormatRule;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -59,7 +57,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.IdentityHashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -72,9 +69,6 @@ import java.util.Set;
  * other than the one holding the referenced conjuncts), to make substitute()
  * simple.
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 @Deprecated
 public class Analyzer {
     private static final Logger LOG = LogManager.getLogger(Analyzer.class);
@@ -104,10 +98,6 @@ public class Analyzer {
 
     // map from tuple id to the current output column index
     private final Map<TupleId, Integer> currentOutputColumn = Maps.newHashMap();
-    // used for Information Schema Table Scan
-    private String schemaDb;
-    private String schemaWild;
-    private String schemaTable; // table used in DESCRIBE Table
 
     // Current depth of nested analyze() calls. Used for enforcing a
     // maximum expr-tree depth. Needs to be manually maintained by the user
@@ -135,22 +125,12 @@ public class Analyzer {
     // Whether to ignore cast expressions
     // Compatibility with older versions, maybe delete in near future
     private boolean ignoreCast = false;
+    private String schemaDb;
+    private String schemaTable;
+    private String schemaWild;
 
     public void setIgnoreCast() {
         ignoreCast = true;
-    }
-
-    public boolean ignoreCast() {
-        return ignoreCast;
-    }
-
-    public void setIsSubquery() {
-        isSubquery = true;
-        globalState.containsSubquery = true;
-    }
-
-    public void setIsWithClause() {
-        isWithClause_ = true;
     }
 
     public boolean isWithClause() {
@@ -159,10 +139,6 @@ public class Analyzer {
 
     public void setUDFAllowed(boolean val) {
         this.isUDFAllowed = val;
-    }
-
-    public boolean isUDFAllowed() {
-        return this.isUDFAllowed;
     }
 
     public void setTimezone(String timezone) {
@@ -252,14 +228,6 @@ public class Analyzer {
             this.globalStateMgr = globalStateMgr;
             this.context = context;
             List<ExprRewriteRule> rules = Lists.newArrayList();
-            // BetweenPredicates must be rewritten to be executable. Other non-essential
-            // expr rewrites can be disabled via a query option. When rewrites are enabled
-            // BetweenPredicates should be rewritten first to help trigger other rules.
-            rules.add(BetweenToCompoundRule.INSTANCE);
-            // Binary predicates must be rewritten to a canonical form for both predicate
-            // pushdown and Parquet row group pruning based on min/max statistics.
-            rules.add(NormalizeBinaryPredicatesRule.INSTANCE);
-            rules.add(ReplaceDateFormatRule.INSTANCE);
             exprRewriter_ = new ExprRewriter(rules);
         }
     }
@@ -324,16 +292,6 @@ public class Analyzer {
         this.globalState = globalState;
     }
 
-    /**
-     * Returns a new analyzer with the specified parent analyzer but with a new
-     * global state.
-     */
-    public static Analyzer createWithNewGlobalState(Analyzer parentAnalyzer) {
-        GlobalState globalState =
-                new GlobalState(parentAnalyzer.globalState.globalStateMgr, parentAnalyzer.getContext());
-        return new Analyzer(parentAnalyzer, globalState);
-    }
-
     public void setIsExplain() {
         globalState.isExplain = true;
     }
@@ -352,29 +310,6 @@ public class Analyzer {
 
     public int getCallDepth() {
         return callDepth;
-    }
-
-    /**
-     * Registers a local view definition with this analyzer. Throws an exception if a view
-     * definition with the same alias has already been registered or if the number of
-     * explicit column labels is greater than the number of columns in the view statement.
-     */
-    public void registerLocalView(View view) throws AnalysisException {
-        Preconditions.checkState(view.isLocalView());
-        if (view.hasColLabels()) {
-            List<String> viewLabels = view.getColLabels();
-            List<String> queryStmtLabels = view.getQueryStmt().getColLabels();
-            if (viewLabels.size() > queryStmtLabels.size()) {
-                throw new AnalysisException("WITH-clause view '" + view.getName() +
-                        "' returns " + queryStmtLabels.size() + " columns, but " +
-                        viewLabels.size() + " labels were specified. The number of column " +
-                        "labels must be smaller or equal to the number of returned columns.");
-            }
-        }
-        if (localViews_.put(view.getName(), view) != null) {
-            throw new AnalysisException(
-                    String.format("Duplicate table alias: '%s'", view.getName()));
-        }
     }
 
     /**
@@ -755,37 +690,6 @@ public class Analyzer {
         }
     }
 
-    // register all conjuncts and handle constant conjuncts with ids
-    public void registerConjuncts(List<Expr> l, List<TupleId> ids) throws AnalysisException {
-        for (Expr e : l) {
-            registerConjuncts(e, true, ids);
-        }
-    }
-
-    /**
-     * Register all conjuncts that make up 'e'. If fromHavingClause is false, this conjunct
-     * is assumed to originate from a WHERE or ON clause.
-     */
-    public void registerConjuncts(Expr e, boolean fromHavingClause) throws AnalysisException {
-        registerConjuncts(e, fromHavingClause, null);
-    }
-
-    public void registerConjuncts(List<Expr> conjuncts, boolean fromHavingClause, List<TupleId> ids)
-            throws AnalysisException {
-        for (Expr conjunct : conjuncts) {
-            registerConjunctWithConstant(conjunct, ids);
-            markConstantConjunct(conjunct, fromHavingClause);
-        }
-    }
-
-    // Register all conjuncts and handle constant conjuncts with ids
-    public void registerConjuncts(Expr e, boolean fromHavingClause, List<TupleId> ids) throws AnalysisException {
-        for (Expr conjunct : e.getConjuncts()) {
-            registerConjunctWithConstant(conjunct, ids);
-            markConstantConjunct(conjunct, fromHavingClause);
-        }
-    }
-
     private void registerConjunctWithConstant(Expr conjunct, List<TupleId> ids) {
         registerConjunct(conjunct);
         if (ids != null) {
@@ -981,10 +885,6 @@ public class Analyzer {
         return new TableName(getDefaultDb(), tableName.getTbl());
     }
 
-    public TupleId getTupleId(SlotId slotId) {
-        return globalState.descTbl.getSlotDesc(slotId).getParent().getId();
-    }
-
     /**
      * Return rhs ref of last Join clause that outer-joined id.
      */
@@ -1060,21 +960,8 @@ public class Analyzer {
         return hasAncestors() ? ancestors.get(0) : null;
     }
 
-    /**
-     * Returns true if the query block corresponding to this analyzer is guaranteed
-     * to return an empty result set, e.g., due to a limit 0 or a constant predicate
-     * that evaluates to false.
-     */
-    public boolean hasEmptyResultSet() {
-        return hasEmptyResultSet_;
-    }
-
     public void setHasEmptyResultSet() {
         hasEmptyResultSet_ = true;
-    }
-
-    public boolean hasEmptySpjResultSet() {
-        return hasEmptySpjResultSet_;
     }
 
     /**
@@ -1141,31 +1028,10 @@ public class Analyzer {
                     // aliases and having it analyzed is needed for the following EvalPredicate() call
                     conjunct.analyze(this);
                 }
-                // If where predicate is null or false, the result set is empty
-                if (isFalseOrNullLiteral(conjunct)) {
-                    if (fromHavingClause) {
-                        hasEmptyResultSet_ = true;
-                    } else {
-                        hasEmptySpjResultSet_ = true;
-                    }
-                }
             } catch (AnalysisException ex) {
                 throw new AnalysisException("Error evaluating \"" + conjunct.toSql() + "\"", ex);
             }
         }
-    }
-
-    private boolean isFalseOrNullLiteral(Expr conjunct) throws AnalysisException {
-        final Expr newConjunct = conjunct.getResultValue();
-        if (newConjunct instanceof BoolLiteral) {
-            markConjunctAssigned(conjunct);
-            BoolLiteral value = (BoolLiteral) newConjunct;
-            return !value.getValue();
-        } else if (newConjunct instanceof NullLiteral) {
-            markConjunctAssigned(conjunct);
-            return true;
-        }
-        return false;
     }
 
     public boolean isOjConjunct(Expr e) {
@@ -1203,21 +1069,6 @@ public class Analyzer {
             result.add(e);
         }
         return result;
-    }
-
-    /**
-     * Returns list of candidate equi-join conjuncts excluding auxiliary predicates
-     */
-    public List<Expr> getEqJoinConjunctsExcludeAuxPredicates(TupleId id) {
-        final List<Expr> candidateEqJoinPredicates = getEqJoinConjuncts(id);
-        final Iterator<Expr> iterator = candidateEqJoinPredicates.iterator();
-        while (iterator.hasNext()) {
-            final Expr expr = iterator.next();
-            if (expr.isAuxExpr()) {
-                iterator.remove();
-            }
-        }
-        return candidateEqJoinPredicates;
     }
 
     public int getCurrentOutputColumn(TupleId id) {
@@ -1316,41 +1167,6 @@ public class Analyzer {
         return compatibleType;
     }
 
-    /**
-     * Casts the exprs in the given lists position-by-position such that for every i,
-     * the i-th expr among all expr lists is compatible.
-     * Throw an AnalysisException if the types are incompatible.
-     */
-    public void castToSetOpsCompatibleTypes(List<List<Expr>> exprLists)
-            throws AnalysisException {
-        if (exprLists == null || exprLists.size() < 2) {
-            return;
-        }
-
-        // Determine compatible types for exprs, position by position.
-        List<Expr> firstList = exprLists.get(0);
-        for (int i = 0; i < firstList.size(); ++i) {
-            // Type compatible with the i-th exprs of all expr lists.
-            // Initialize with type of i-th expr in first list.
-            Type compatibleType = firstList.get(i).getType();
-            // Remember last compatible expr for error reporting.
-            Expr lastCompatibleExpr = firstList.get(i);
-            for (int j = 1; j < exprLists.size(); ++j) {
-                Preconditions.checkState(exprLists.get(j).size() == firstList.size());
-                compatibleType = getCompatibleType(compatibleType,
-                        lastCompatibleExpr, exprLists.get(j).get(i));
-                lastCompatibleExpr = exprLists.get(j).get(i);
-            }
-            // Now that we've found a compatible type, add implicit casts if necessary.
-            for (int j = 0; j < exprLists.size(); ++j) {
-                if (!exprLists.get(j).get(i).getType().equals(compatibleType)) {
-                    Expr castExpr = exprLists.get(j).get(i).castTo(compatibleType);
-                    exprLists.get(j).set(i, castExpr);
-                }
-            }
-        }
-    }
-
     public long getConnectId() {
         return globalState.context.getConnectionId();
     }
@@ -1371,14 +1187,6 @@ public class Analyzer {
         return globalState.context.getQualifiedUser();
     }
 
-    public String getUserIdentity(boolean currentUser) {
-        if (currentUser) {
-            return "";
-        } else {
-            return getQualifiedUser() + "@" + ConnectContext.get().getRemoteIP();
-        }
-    }
-
     public String getSchemaDb() {
         return schemaDb;
     }
@@ -1393,17 +1201,6 @@ public class Analyzer {
 
     public String getSchemaWild() {
         return schemaWild;
-    }
-
-    // for Schema Table Schema like SHOW TABLES LIKE "abc%"
-    public void setSchemaInfo(String db, String table, String wild) {
-        schemaDb = db;
-        schemaTable = table;
-        schemaWild = wild;
-    }
-
-    public String getTargetDbName(FunctionName fnName) {
-        return fnName.isFullyQualified() ? fnName.getDb() : getDefaultDb();
     }
 
     /**
@@ -1542,10 +1339,6 @@ public class Analyzer {
                 }
             }
         }
-    }
-
-    public Map<String, View> getLocalViews() {
-        return localViews_;
     }
 
     public boolean isOuterJoined(TupleId tid) {

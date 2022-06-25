@@ -21,14 +21,7 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.SqlModeHelper;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TBoolLiteral;
 import com.starrocks.thrift.TExprNode;
@@ -75,15 +68,6 @@ public class SysVariableDesc extends Expr {
 
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        VariableMgr.fillValue(analyzer.getContext().getSessionVariable(), this);
-        if (!Strings.isNullOrEmpty(name) && name.equalsIgnoreCase(SessionVariable.SQL_MODE)) {
-            setType(Type.VARCHAR);
-            try {
-                setStringValue(SqlModeHelper.decode(intValue));
-            } catch (DdlException e) {
-                ErrorReport.reportAnalysisException(e.getMessage());
-            }
-        }
     }
 
     public String getName() {

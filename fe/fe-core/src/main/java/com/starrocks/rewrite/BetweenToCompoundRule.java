@@ -38,9 +38,6 @@ import com.starrocks.common.AnalysisException;
  * A BETWEEN X AND Y ==> A >= X AND A <= Y
  * A NOT BETWEEN X AND Y ==> A < X OR A > Y
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 @Deprecated
 public final class BetweenToCompoundRule implements ExprRewriteRule {
     public static ExprRewriteRule INSTANCE = new BetweenToCompoundRule();

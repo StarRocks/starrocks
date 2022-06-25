@@ -97,9 +97,4 @@ public class MultiCastPlanFragment extends PlanFragment {
         Preconditions.checkState(false);
     }
 
-    @Override
-    public void setTransferQueryStatisticsWithEveryBatch(boolean value) {
-        Preconditions.checkState(false);
-    }
-
 }
