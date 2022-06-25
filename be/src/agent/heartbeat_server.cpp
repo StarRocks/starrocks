@@ -28,11 +28,9 @@
 
 #include "common/status.h"
 #include "gen_cpp/HeartbeatService.h"
-#include "gen_cpp/Status_types.h"
 #include "runtime/heartbeat_flags.h"
 #include "service/backend_options.h"
 #include "storage/storage_engine.h"
-#include "storage/utils.h"
 #include "util/debug_util.h"
 #include "util/network_util.h"
 #include "util/thrift_server.h"

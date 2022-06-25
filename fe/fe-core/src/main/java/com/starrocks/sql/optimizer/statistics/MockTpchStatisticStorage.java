@@ -2,7 +2,9 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 
 import java.time.LocalDate;
@@ -251,6 +253,11 @@ public class MockTpchStatisticStorage implements StatisticStorage {
     @Override
     public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
         return columns.stream().map(column -> getColumnStatistic(table, column)).collect(Collectors.toList());
+    }
+
+    @Override
+    public Map<ColumnRefOperator, Histogram> getHistogramStatistics(Table table, List<ColumnRefOperator> columns) {
+        return Maps.newHashMap();
     }
 
     private LocalDateTime formatDateFromString(String dateStr) {

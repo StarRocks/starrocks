@@ -43,6 +43,7 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -363,9 +364,9 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         for (Pair<Integer, ColumnDict> dictPair : dicts) {
             TGlobalDict globalDict = new TGlobalDict();
             globalDict.setColumnId(dictPair.first);
-            List<String> strings = Lists.newArrayList();
+            List<ByteBuffer> strings = Lists.newArrayList();
             List<Integer> integers = Lists.newArrayList();
-            for (Map.Entry<String, Integer> kv : dictPair.second.getDict().entrySet()) {
+            for (Map.Entry<ByteBuffer, Integer> kv : dictPair.second.getDict().entrySet()) {
                 strings.add(kv.getKey());
                 integers.add(kv.getValue());
             }

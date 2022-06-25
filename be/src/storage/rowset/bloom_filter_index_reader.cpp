@@ -53,7 +53,7 @@ StatusOr<bool> BloomFilterIndexReader::load(FileSystem* fs, const std::string& f
         }
         if (curr_state == kLoading) {
             int r = bthread::futex_wait_private(&_state, curr_state, nullptr);
-            PLOG_IF(ERROR, r != 0) << " bthread::futex_wait_private";
+            PLOG_IF(ERROR, r != 0 && errno != EAGAIN) << " bthread::futex_wait_private";
         }
     }
 }

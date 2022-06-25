@@ -18,7 +18,7 @@ public class StatisticSQLBuilder {
     private static final String QUERY_SAMPLE_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_DATA_VERSION + " as INT), update_time, db_id, table_id, column_name,"
                     + " row_count, data_size, distinct_count, null_count, max, min"
-                    + " FROM " + Constants.StatisticsTableName
+                    + " FROM " + Constants.SampleStatisticsTableName
                     + " WHERE $predicate";
 
     private static final String QUERY_FULL_STATISTIC_TEMPLATE =
