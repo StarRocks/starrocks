@@ -4,12 +4,15 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.ImmutableMap;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
 
 public class MockDictManager implements IDictManager {
-    private static final ImmutableMap<String, Integer> mockDict = ImmutableMap.of("mock", 1);
-
+    
+    private static final ImmutableMap<ByteBuffer, Integer> mockDict =
+            ImmutableMap.of(ByteBuffer.wrap("mock".getBytes(StandardCharsets.UTF_8)), 1);
     private static final ColumnDict columnDict = new ColumnDict(mockDict, 1);
 
     private MockDictManager() {
