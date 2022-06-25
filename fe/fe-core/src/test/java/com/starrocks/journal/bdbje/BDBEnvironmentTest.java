@@ -156,6 +156,8 @@ public class BDBEnvironmentTest {
         DatabaseEntry value = randomEntry();
         masterDb.put(null, key, value);
 
+        Thread.sleep(1000);
+
         // follower read
         for (BDBEnvironment followerEnvironment: followerEnvironments) {
             Assert.assertEquals(1, followerEnvironment.getDatabaseNames().size());
@@ -211,6 +213,8 @@ public class BDBEnvironmentTest {
             Assert.assertEquals(DB_INDEX_ARR[i], masterEnvironment.getDatabaseNames().get(i));
             masterDb.put(null, key, value);
 
+            Thread.sleep(1000);
+
             // follower read
             for (BDBEnvironment followerEnvironment: followerEnvironments) {
                 Assert.assertEquals(i + 1, followerEnvironment.getDatabaseNames().size());
@@ -261,6 +265,8 @@ public class BDBEnvironmentTest {
         Assert.assertEquals(1, masterEnvironment.getDatabaseNames().size());
         Assert.assertEquals(DB_INDEX_OLD, masterEnvironment.getDatabaseNames().get(0));
 
+        Thread.sleep(1000);
+
         // follower read db 0
         for (BDBEnvironment followerEnvironment: followerEnvironments) {
             CloseSafeDatabase followerDb = followerEnvironment.openDatabase(DB_NAME_OLD);
@@ -303,6 +309,8 @@ public class BDBEnvironmentTest {
             LOG.info("mv {} to {}", src, followerPath);
             FileUtils.moveDirectory(src, followerPath);
         }
+
+        Thread.sleep(1000);
 
         // start follower
         for (int i = 0; i < 2; ++ i) {
