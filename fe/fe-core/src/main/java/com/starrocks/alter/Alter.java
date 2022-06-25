@@ -75,7 +75,6 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
-import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TTabletMetaType;
@@ -244,14 +243,6 @@ public class Alter {
             }
         } finally {
             db.writeUnlock();
-        }
-    }
-
-    public void processRefreshMaterializedView(RefreshMaterializedViewStatement stmt) throws DdlException {
-        String dbName = stmt.getMvName().getDb();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        if (db == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
     }
 

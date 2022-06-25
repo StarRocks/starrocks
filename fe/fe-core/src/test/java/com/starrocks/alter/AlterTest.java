@@ -301,7 +301,7 @@ public class AlterTest {
     @Test
     public void testRefreshMaterializedView() throws Exception {
         starRocksAssert.useDatabase("test")
-                .withTable("CREATE TABLE test.testTable1\n" +
+                .withTable("CREATE TABLE test.testTable3\n" +
                         "(\n" +
                         "    k1 date,\n" +
                         "    k2 int,\n" +
@@ -321,7 +321,7 @@ public class AlterTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
-                "as select k1, k2 from test.testTable1;";
+                "as select k1, k2 from test.testTable3;";
         createMaterializedView(sql);
         String alterStmt = "refresh materialized view test.mv1";
         refreshMaterializedView(alterStmt, false);
