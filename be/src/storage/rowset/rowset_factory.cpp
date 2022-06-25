@@ -23,8 +23,8 @@
 
 #include <memory>
 
-#include "beta_rowset.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "rowset.h"
 #include "rowset_writer_adapter.h"
 #include "runtime/exec_env.h"
 #include "storage/rowset/beta_rowset_writer.h"
@@ -35,7 +35,7 @@ namespace starrocks {
 
 Status RowsetFactory::create_rowset(const TabletSchema* schema, const std::string& rowset_path,
                                     const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset) {
-    *rowset = BetaRowset::create(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), schema, rowset_path, rowset_meta);
+    *rowset = Rowset::create(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), schema, rowset_path, rowset_meta);
     RETURN_IF_ERROR((*rowset)->init());
     return Status::OK();
 }

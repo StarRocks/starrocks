@@ -19,8 +19,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/rowset/beta_rowset.h"
-
 #include <string>
 #include <vector>
 
@@ -34,6 +32,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/data_dir.h"
+#include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
@@ -312,7 +311,7 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
         seg_options.stats = &_stats;
 
         std::string segment_file =
-                BetaRowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
+                Rowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
 
         auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), seg_options.fs, segment_file, 0, &tablet_schema);
         ASSERT_NE(segment->num_rows(), 0);
@@ -415,7 +414,7 @@ TEST_F(BetaRowsetTest, FinalMergeVerticalTest) {
     seg_options.stats = &_stats;
 
     std::string segment_file =
-            BetaRowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
+            Rowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
     auto segment =
             *Segment::open(_tablet_meta_mem_tracker.get(), seg_options.fs, segment_file, 0, &tablet->tablet_schema());
     ASSERT_NE(segment->num_rows(), 0);
