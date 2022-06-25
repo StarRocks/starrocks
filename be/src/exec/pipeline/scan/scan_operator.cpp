@@ -213,6 +213,20 @@ inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
     return !ptr.owner_before(wp{}) && !wp{}.owner_before(ptr);
 }
 
+void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_source_index) {
+    if (!_chunk_sources[chunk_source_index]->has_next_chunk()) {
+        _chunk_sources[chunk_source_index]->close(state);
+        _chunk_sources[chunk_source_index] = nullptr;
+    }
+
+    _last_growth_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
+    _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
+    _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
+    _decrease_committed_scan_tasks();
+    _num_running_io_tasks--;
+    _is_io_task_running[chunk_source_index] = false;
+}
+
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
     if (!_try_to_increase_committed_scan_tasks()) {
         return Status::OK();
@@ -238,18 +252,11 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                     if (!status.ok() && !status.is_end_of_file()) {
                         _set_scan_status(status);
                     }
-                    // TODO (by laotan332): More detailed information is needed
                     _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
                     _workgroup->increment_real_runtime_ns(_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
-
-                    _last_growth_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
-                    _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
-                    _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
                 }
 
-                _decrease_committed_scan_tasks();
-                _num_running_io_tasks--;
-                _is_io_task_running[chunk_source_index] = false;
+                _finish_chunk_source_task(state, chunk_source_index);
             }
         });
 
@@ -269,19 +276,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                     if (!status.ok() && !status.is_end_of_file()) {
                         _set_scan_status(status);
                     }
-                    _last_growth_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
-                    _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
-                    _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
                 }
 
-                _decrease_committed_scan_tasks();
-                // Close the chunk source if no more chunk
-                if (!_chunk_sources[chunk_source_index]->has_next_chunk()) {
-                    _chunk_sources[chunk_source_index]->close(state);
-                    _chunk_sources[chunk_source_index] = nullptr;
-                }
-                _num_running_io_tasks--;
-                _is_io_task_running[chunk_source_index] = false;
+                _finish_chunk_source_task(state, chunk_source_index);
             }
         };
         // TODO(by satanson): set a proper priority

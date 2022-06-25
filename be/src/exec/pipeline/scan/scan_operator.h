@@ -77,6 +77,7 @@ private:
     Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
+    void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index);
     void _merge_chunk_source_profiles();
 
     inline void _set_scan_status(const Status& status) {
