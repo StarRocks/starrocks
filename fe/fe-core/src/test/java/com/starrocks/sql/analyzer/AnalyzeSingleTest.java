@@ -533,4 +533,10 @@ public class AnalyzeSingleTest {
         selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
         Assert.assertEquals("1", selectRelation.getSelectList().getOptHints().get("broadcast_row_limit"));
     }
+
+    @Test
+    public void test() {
+        StatementBase statementBase = analyzeSuccess("set query_timeout=180000;set parallel_fragment_exec_instance_num=32;insert into ssb_1g_dates_aggregate select * from ssb_100g_dates;insert into ssb_1g_lineorder_flat SELECT `LO_ORDERDATE`, `LO_ORDERKEY` , `LO_LINENUMBER` , `LO_CUSTKEY` , `LO_PARTKEY` , `LO_SUPPKEY` , `LO_ORDERPRIORITY` , `LO_SHIPPRIORITY` , `LO_QUANTITY` , `LO_EXTENDEDPRICE` , `LO_ORDTOTALPRICE` , `LO_DISCOUNT` , `LO_REVENUE` , `LO_SUPPLYCOST` , `LO_TAX` , `LO_COMMITDATE` , `LO_SHIPMODE` , `C_NAME` , `C_ADDRESS` , `C_CITY` , `C_NATION` , `C_REGION` , `C_PHONE` , `C_MKTSEGMENT` , `S_NAME` , `S_ADDRESS` , `S_CITY` , `S_NATION` , `S_REGION` , `S_PHONE` , `P_NAME` , `P_MFGR` , `P_CATEGORY` , `P_BRAND` , `P_COLOR` , `P_TYPE` , `P_SIZE` , `P_CONTAINER` FROM ssb_100g_lineorder l INNER JOIN ssb_100g_customer c ON (c.C_CUSTKEY = l.LO_CUSTKEY)  INNER JOIN ssb_100g_supplier s ON (s.S_SUPPKEY = l.LO_SUPPKEY)  INNER JOIN ssb_100g_part p ON  (p.P_PARTKEY = l.LO_PARTKEY) where year(LO_ORDERDATE) in (1997);");
+
+    }
 }

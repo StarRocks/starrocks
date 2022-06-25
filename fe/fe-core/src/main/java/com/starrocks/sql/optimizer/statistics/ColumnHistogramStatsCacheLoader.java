@@ -21,12 +21,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
-public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<CacheKey, Optional<Histogram>> {
+public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCacheKey, Optional<Histogram>> {
     private static final Logger LOG = LogManager.getLogger(ColumnBasicStatsCacheLoader.class);
     private final StatisticExecutor statisticExecutor = new StatisticExecutor();
 
     @Override
-    public @NonNull CompletableFuture<Optional<Histogram>> asyncLoad(@NonNull CacheKey cacheKey,
+    public @NonNull CompletableFuture<Optional<Histogram>> asyncLoad(@NonNull ColumnStatsCacheKey cacheKey,
                                                                      @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -96,8 +96,9 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<CacheKe
         List<Bucket> buckets = Lists.newArrayList();
         for (int i = 0; i < histogramObj.size(); ++i) {
             JsonArray bucketJsonArray = histogramObj.get(i).getAsJsonArray();
-            Bucket bucket = new Bucket(bucketJsonArray.get(0).getAsString(),
-                    bucketJsonArray.get(1).getAsString(),
+            Bucket bucket = new Bucket(
+                    Double.parseDouble(bucketJsonArray.get(0).getAsString()),
+                    Double.parseDouble(bucketJsonArray.get(1).getAsString()),
                     Long.parseLong(bucketJsonArray.get(2).getAsString()),
                     Long.parseLong(bucketJsonArray.get(3).getAsString()));
             buckets.add(bucket);
