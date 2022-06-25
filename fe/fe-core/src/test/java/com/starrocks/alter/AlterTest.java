@@ -27,6 +27,7 @@ import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -167,6 +168,13 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
     }
 
+    private static void dropMaterializedView(String sql) throws Exception {
+        Config.enable_experimental_mv = true;
+        DropMaterializedViewStmt dropMaterializedViewStmt =
+                (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().dropMaterializedView(dropMaterializedViewStmt);
+    }
+
     private static void alterMaterializedView(String sql, boolean expectedException) throws Exception {
         AlterMaterializedViewStatement alterMaterializedViewStatement =
                 (AlterMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
@@ -265,6 +273,7 @@ public class AlterTest {
         createMaterializedView(sql);
         String alterStmt = "alter materialized view test.mv1 rename mv2";
         alterMaterializedView(alterStmt, false);
+        dropMaterializedView("drop materialized view test.mv2");
     }
 
     @Test
@@ -296,6 +305,7 @@ public class AlterTest {
         alterMaterializedView(alterStmt, false);
         alterStmt = "alter materialized view mv1 refresh manual";
         alterMaterializedView(alterStmt, false);
+        dropMaterializedView("drop materialized view test.mv1");
     }
 
     @Test
@@ -325,6 +335,7 @@ public class AlterTest {
         createMaterializedView(sql);
         String alterStmt = "refresh materialized view test.mv1";
         refreshMaterializedView(alterStmt, false);
+        dropMaterializedView("drop materialized view test.mv1");
     }
 
     @Test
