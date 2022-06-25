@@ -68,10 +68,10 @@ public class StatisticExecutor {
     private static final String QUERY_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_DATA_VERSION + " as INT), update_time, db_id, table_id, column_name,"
                     + " row_count, data_size, distinct_count, null_count, max, min"
-                    + " FROM " + Constants.StatisticsTableName
+                    + " FROM " + Constants.SampleStatisticsTableName
                     + " WHERE 1 = 1";
 
-    private static final String INSERT_STATISTIC_TEMPLATE = "INSERT INTO " + Constants.StatisticsTableName;
+    private static final String INSERT_STATISTIC_TEMPLATE = "INSERT INTO " + Constants.SampleStatisticsTableName;
 
     private static final String INSERT_SELECT_FULL_TEMPLATE =
             "SELECT $tableId, '$columnName', $dbId, '$tableName', '$dbName', COUNT(1), "
@@ -94,10 +94,10 @@ public class StatisticExecutor {
                     + "    GROUP BY t0.`$columnName` "
                     + ") as t1";
 
-    private static final String DELETE_TEMPLATE = "DELETE FROM " + Constants.StatisticsTableName + " WHERE ";
+    private static final String DELETE_TEMPLATE = "DELETE FROM " + Constants.SampleStatisticsTableName + " WHERE ";
 
     private static final String SELECT_EXPIRE_TABLE_TEMPLATE =
-            "SELECT DISTINCT table_id" + " FROM " + Constants.StatisticsTableName + " WHERE 1 = 1 ";
+            "SELECT DISTINCT table_id" + " FROM " + Constants.SampleStatisticsTableName + " WHERE 1 = 1 ";
 
     private static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
 

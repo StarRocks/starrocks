@@ -9,10 +9,8 @@ public class Constants {
     public static final int STATISTIC_DICT_VERSION = 101;
     public static final int STATISTIC_HISTOGRAM_VERSION = 2;
 
-    public static final String StatisticsDBName =
-            SystemInfoService.DEFAULT_CLUSTER + ":" + "_statistics_";
-    public static final String StatisticsTableName = "table_statistic_v1";
-
+    public static final String StatisticsDBName = SystemInfoService.DEFAULT_CLUSTER + ":" + "_statistics_";
+    public static final String SampleStatisticsTableName = "table_statistic_v1";
     public static final String FullStatisticsTableName = "column_statistics";
     public static final String HistogramStatisticsTableName = "histogram_statistics";
 

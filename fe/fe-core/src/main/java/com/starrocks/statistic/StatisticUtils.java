@@ -81,7 +81,7 @@ public class StatisticUtils {
         }
 
         // check table
-        OlapTable table = (OlapTable) db.getTable(Constants.StatisticsTableName);
+        OlapTable table = (OlapTable) db.getTable(Constants.SampleStatisticsTableName);
         if (table == null) {
             return false;
         }
