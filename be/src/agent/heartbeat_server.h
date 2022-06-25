@@ -32,7 +32,6 @@
 
 namespace starrocks {
 
-const uint32_t HEARTBEAT_INTERVAL = 10;
 class StorageEngine;
 class Status;
 class ThriftServer;
