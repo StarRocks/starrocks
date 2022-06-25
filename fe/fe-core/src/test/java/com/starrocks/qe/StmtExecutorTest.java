@@ -33,6 +33,7 @@ import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.execution.DataDefinitionExecutorFactory;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlSerializer;
@@ -505,11 +506,11 @@ public class StmtExecutorTest {
             }
         };
 
-        DdlExecutor ddlExecutor = new DdlExecutor();
+        DataDefinitionExecutorFactory ddlExecutor = new DataDefinitionExecutorFactory();
         new Expectations(ddlExecutor) {
             {
                 // Mock ddl
-                DdlExecutor.execute((GlobalStateMgr) any, (DdlStmt) any);
+                DataDefinitionExecutorFactory.execute((DdlStmt) any, (ConnectContext) any);
                 result = null;
                 minTimes = 0;
             }
@@ -539,11 +540,11 @@ public class StmtExecutorTest {
             }
         };
 
-        DdlExecutor ddlExecutor = new DdlExecutor();
+        DataDefinitionExecutorFactory ddlExecutor = new DataDefinitionExecutorFactory();
         new Expectations(ddlExecutor) {
             {
                 // Mock ddl
-                DdlExecutor.execute((GlobalStateMgr) any, (DdlStmt) any);
+                DataDefinitionExecutorFactory.execute((DdlStmt) any, (ConnectContext) any);
                 minTimes = 0;
                 result = new DdlException("ddl fail");
             }
@@ -573,11 +574,11 @@ public class StmtExecutorTest {
             }
         };
 
-        DdlExecutor ddlExecutor = new DdlExecutor();
+        DataDefinitionExecutorFactory ddlExecutor = new DataDefinitionExecutorFactory();
         new Expectations(ddlExecutor) {
             {
                 // Mock ddl
-                DdlExecutor.execute((GlobalStateMgr) any, (DdlStmt) any);
+                DataDefinitionExecutorFactory.execute((DdlStmt) any, (ConnectContext) any);
                 minTimes = 0;
                 result = new Exception("bug");
             }

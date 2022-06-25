@@ -364,7 +364,6 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
                                                      RuntimeBloomFilterEvalContext& eval_context) {
     eval_context.selectivity.clear();
     size_t chunk_size = chunk->num_rows();
-    auto& selection = eval_context.running_context.selection;
     auto& merged_selection = eval_context.running_context.merged_selection;
     auto& use_merged_selection = eval_context.running_context.use_merged_selection;
     use_merged_selection = true;
@@ -374,6 +373,9 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
         if (filter == nullptr) {
             continue;
         }
+        auto& selection = eval_context.running_context.use_merged_selection
+                                  ? eval_context.running_context.merged_selection
+                                  : eval_context.running_context.selection;
         auto ctx = rf_desc->probe_expr_ctx();
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
         // for colocate grf
