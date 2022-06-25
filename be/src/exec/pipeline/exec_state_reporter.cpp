@@ -4,6 +4,7 @@
 #include <thrift/Thrift.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
+#include "agent/master_info.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
@@ -97,8 +98,9 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Frag
         params.__isset.error_log = (params.error_log.size() > 0);
     }
 
-    if (exec_env->master_info()->__isset.backend_id) {
-        params.__set_backend_id(exec_env->master_info()->backend_id);
+    auto backend_id = get_backend_id();
+    if (backend_id.has_value()) {
+        params.__set_backend_id(backend_id.value());
     }
     return params;
 }
