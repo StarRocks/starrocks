@@ -671,6 +671,7 @@ public class AggregateTest extends PlanTestBase {
 
     @Test
     public void testMultiCountDistinct() throws Exception {
+        connectContext.getSessionVariable().setCboCteReuse(true);
         String queryStr = "select count(distinct k1, k2) from baseall group by k3";
         String explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("group by: 1: k1, 2: k2, 3: k3"));
@@ -692,6 +693,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: k3 <=> 17: k3"));
+        connectContext.getSessionVariable().setCboCteReuse(false);
     }
 
     @Test
