@@ -158,10 +158,6 @@ private:
     Segment(const Segment&) = delete;
     const Segment& operator=(const Segment&) = delete;
 
-    // struct private_type {
-    //     explicit private_type(int) {}
-    // };
-
     // open segment file and read the minimum amount of necessary information (footer)
     Status _open(MemTracker* mem_tracker, size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer);
     Status _create_column_readers(MemTracker* mem_tracker, SegmentFooterPB* footer);
