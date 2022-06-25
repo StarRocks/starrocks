@@ -20,6 +20,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -96,7 +97,7 @@ public class CacheDictManager implements IDictManager {
             throw new RuntimeException("Collect dict error in BE");
         }
         TGlobalDict tGlobalDict = statisticData.dict;
-        ImmutableMap.Builder<String, Integer> dicts = ImmutableMap.builder();
+        ImmutableMap.Builder<ByteBuffer, Integer> dicts = ImmutableMap.builder();
         if (!tGlobalDict.isSetIds()) {
             return Optional.empty();
         }
@@ -109,7 +110,7 @@ public class CacheDictManager implements IDictManager {
             int dictDataSize = 0;
             for (int i = 0; i < dictSize; i++) {
                 // a UTF-8 code may take up to 3 bytes
-                dictDataSize += tGlobalDict.strings.get(i).length() * 3;
+                dictDataSize += tGlobalDict.strings.get(i).limit();
                 // string offsets
                 dictDataSize += 4;
             }
