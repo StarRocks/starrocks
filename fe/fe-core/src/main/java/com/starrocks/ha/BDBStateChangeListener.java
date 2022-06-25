@@ -33,7 +33,7 @@ import org.apache.logging.log4j.Logger;
 public class BDBStateChangeListener implements StateChangeListener {
     public static final Logger LOG = LogManager.getLogger(EditLog.class);
     private FrontendNodeType newType = FrontendNodeType.UNKNOWN;
-    private boolean isElectable;
+    private final boolean isElectable;
 
     public BDBStateChangeListener(boolean isElectable) {
         this.isElectable = isElectable;
