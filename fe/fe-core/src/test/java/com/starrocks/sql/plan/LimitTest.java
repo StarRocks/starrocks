@@ -380,9 +380,10 @@ public class LimitTest extends PlanTestBase {
 
         sql = "select * from t0, t1 limit 10";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:NESTLOOP JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
+        Assert.assertTrue(plan, plan.contains("3:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n" +

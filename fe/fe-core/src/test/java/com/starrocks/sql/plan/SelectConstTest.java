@@ -99,8 +99,9 @@ public class SelectConstTest extends PlanTestBase {
                 "  |  <slot 7> : if(5: max > 1, 2, 3)\n" +
                 "  |  \n" +
                 "  4:NESTLOOP JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
                 "  |    \n" +
@@ -113,8 +114,9 @@ public class SelectConstTest extends PlanTestBase {
                 "  |  <slot 9> : if(7: max > 1, 4, 5)\n" +
                 "  |  \n" +
                 "  4:NESTLOOP JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
                 "  |    \n" +

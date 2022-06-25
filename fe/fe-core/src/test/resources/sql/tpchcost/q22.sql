@@ -65,9 +65,11 @@ UNPARTITIONED
 |  <slot 6> : 6: C_ACCTBAL
 |  <slot 32> : substring(5: C_PHONE, 1, 2)
 |
-12:CROSS JOIN
-|  cross join:
-|  predicates: 6: C_ACCTBAL > 19: avg
+12:NESTLOOP JOIN
+|  join op: CROSS JOIN
+|  hash predicates:
+|  colocate: false, reason:
+|  other join predicates: 6: C_ACCTBAL > 19: avg
 |
 |----11:EXCHANGE
 |

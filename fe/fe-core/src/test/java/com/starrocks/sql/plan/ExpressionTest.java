@@ -565,13 +565,12 @@ public class ExpressionTest extends PlanTestBase {
     public void testEmptyProjectCountStar() throws Exception {
         String sql = "select count(*) from test_all_type a, test_all_type b where a.t1a is not null";
         String plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("  3:NESTLOOP JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
+        Assert.assertTrue(plan, plan.contains("  3:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
                 "  |  * t1a-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
-                "  |  * t1b-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"));
+                "  |  * t1b-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n"));
     }
 
     @Test
