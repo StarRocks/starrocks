@@ -203,6 +203,9 @@ public class FunctionSet {
     public static final String ST_ASTEXT = "st_astext";
 
     // JSON functions
+    public static final String GET_JSON_INT = "get_json_int";
+    public static final String GET_JSON_DOUBLE = "get_json_double";
+    public static final String GET_JSON_STRING = "get_json_string";
     public static final String JSON_QUERY = "json_query";
     public static final String PARSE_JSON = "parse_json";
     public static final String JSON_ARRAY = "json_array";
