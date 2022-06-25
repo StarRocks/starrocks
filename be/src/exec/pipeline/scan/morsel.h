@@ -20,7 +20,6 @@ class Tablet;
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 class Rowset;
 using RowsetSharedPtr = std::shared_ptr<Rowset>;
-class Rowset;
 class Segment;
 using SegmentSharedPtr = std::shared_ptr<Segment>;
 
