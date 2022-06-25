@@ -245,4 +245,8 @@ public abstract class StatementBase implements ParseNode {
         return false;
     }
 
+    public boolean isSupportNewPlanner() {
+        return false;
+    }
+
 }

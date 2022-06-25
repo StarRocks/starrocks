@@ -208,4 +208,9 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitAdminShowReplicaStatusStatement(this, context);
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }
