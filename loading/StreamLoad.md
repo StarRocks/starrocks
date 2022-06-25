@@ -31,8 +31,7 @@ Stream Load 通过 HTTP 协议提交和传输数据。这里通过 curl 命令�
 **语法：**
 
 ~~~bash
-curl --location-trusted -u user:passwd [-H ""...] -T data.file -XPUT \
-    http://fe_host:http_port/api/{db}/{table}/_stream_load
+curl --location-trusted -u root -H "label:123"  -H "columns: k1, k2, v1" -T testData  http://abc.com:8030/api/test/date/_stream_load
 ~~~
 
 Header中支持的属性见下文的导入任务参数说明，格式为: -H "key1:value1"。如果同时有多个任务参数，需要用多个 -H 来指示，类似于 \-H "key1:value1" -H "key2:value2"……
