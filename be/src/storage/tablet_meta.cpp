@@ -321,6 +321,8 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
 
     tablet_meta_pb->set_in_restore_mode(in_restore_mode());
 
+    tablet_meta_pb->set_preferred_rowset_type(BETA_ROWSET);
+
     // to avoid modify tablet meta to the greatest extend
     if (_updates != nullptr) {
         _updates->to_updates_pb(tablet_meta_pb->mutable_updates());
