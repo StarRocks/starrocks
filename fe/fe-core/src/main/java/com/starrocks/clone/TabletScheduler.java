@@ -233,10 +233,17 @@ public class TabletScheduler extends MasterDaemon {
 
     /**
      * add a ready-to-be-scheduled tablet to pendingTablets, if it has not being added before.
-     * if force is true, do not check if tablet is already added before.
      */
     public synchronized AddResult addTablet(TabletSchedCtx tablet, boolean force) {
-        if (!force && containsTablet(tablet.getTabletId())) {
+        // Under no circumstance should we repeatedly add a tablet to pending queue
+        // to schedule, because this will break the scheduling logic. Besides, with current design,
+        // we have to maintain the constraint that `allTabletIds = runningTablets + pendingTablets`.
+        // `allTabletIds` and `runningTablets` are defined as unique container, if we schedule a
+        // tablet with different `TabletSchedCtx` at the same time, the reference in `runningTablets`
+        // can be messed up.
+        // `force` here should only mean that we can exceed the size limit of
+        // `pendingTablets` and `runningTablets` if there is too many tablets to schedule.
+        if (pendingTablets.stream().filter(t -> t.getTabletId() == tablet.getTabletId()).count() != 0) {
             return AddResult.ALREADY_IN;
         }
 
@@ -381,6 +388,16 @@ public class TabletScheduler extends MasterDaemon {
         LOG.info("adjust priority for all tablets. changed: {}, total: {}", changedNum, size);
     }
 
+    private void debugLogPendingTabletsStats() {
+        StringBuilder sb = new StringBuilder();
+        for (Priority prio : Priority.values()) {
+            sb.append(String.format("%s priority tablets count: %d\n",
+                    prio.name(),
+                    pendingTablets.stream().filter(t -> t.getDynamicPriority() == prio).count()));
+        }
+        LOG.debug("pending tablets current count: {}\n{}", pendingTablets.size(), sb);
+    }
+
     /**
      * get at most BATCH_NUM tablets from queue, and try to schedule them.
      * After handle, the tablet info should be
@@ -393,6 +410,7 @@ public class TabletScheduler extends MasterDaemon {
     private void schedulePendingTablets() {
         long start = System.currentTimeMillis();
         List<TabletSchedCtx> currentBatch = getNextTabletCtxBatch();
+        debugLogPendingTabletsStats();
         LOG.debug("get {} tablets to schedule", currentBatch.size());
 
         AgentBatchTask batchTask = new AgentBatchTask();
@@ -407,6 +425,8 @@ public class TabletScheduler extends MasterDaemon {
                 tabletCtx.setErrMsg(e.getMessage());
 
                 if (e.getStatus() == Status.SCHEDULE_FAILED) {
+                    LOG.info("scheduling for tablet[{}] failed, type: {}, reason: {}",
+                            tabletCtx.getTabletId(), tabletCtx.getType().name(), e.getMessage());
                     if (tabletCtx.getType() == Type.BALANCE) {
                         // if balance is disabled, remove this tablet
                         if (Config.disable_balance) {
