@@ -410,8 +410,10 @@ public class TabletScheduler extends MasterDaemon {
     private void schedulePendingTablets() {
         long start = System.currentTimeMillis();
         List<TabletSchedCtx> currentBatch = getNextTabletCtxBatch();
-        debugLogPendingTabletsStats();
-        LOG.debug("get {} tablets to schedule", currentBatch.size());
+        if (LOG.isDebugEnabled()) {
+            debugLogPendingTabletsStats();
+            LOG.debug("get {} tablets to schedule", currentBatch.size());
+        }
 
         AgentBatchTask batchTask = new AgentBatchTask();
         for (TabletSchedCtx tabletCtx : currentBatch) {
