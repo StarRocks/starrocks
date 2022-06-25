@@ -43,8 +43,8 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.execution.DataDefinitionExecutorFactory;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.DdlExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -211,7 +211,9 @@ public class StarRocksAssert {
         Analyzer.analyze(statement, ctx);
 
         Assert.assertTrue(statement.getClass().getSimpleName().contains("WorkGroupStmt"));
-        DdlExecutor.execute(GlobalStateMgr.getCurrentState(), (DdlStmt) statement);
+        ConnectContext connectCtx = new ConnectContext();
+        connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        DataDefinitionExecutorFactory.execute((DdlStmt) statement, connectCtx);
 
     }
 
