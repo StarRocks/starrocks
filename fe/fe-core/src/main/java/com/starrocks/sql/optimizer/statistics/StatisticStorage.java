@@ -3,13 +3,17 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.List;
+import java.util.Map;
 
 public interface StatisticStorage {
     ColumnStatistic getColumnStatistic(Table table, String column);
 
     List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns);
+
+    Map<ColumnRefOperator, Histogram> getHistogramStatistics(Table table, List<ColumnRefOperator> columns);
 
     void expireColumnStatistics(Table table, List<String> columns);
 

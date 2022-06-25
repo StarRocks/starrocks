@@ -171,7 +171,7 @@ public class CachedStatisticStorageTest {
     public void testConvert2ColumnStatistics() {
         Database db = connectContext.getGlobalStateMgr().getDb("default_cluster:test");
         OlapTable table = (OlapTable) db.getTable("t0");
-        CachedStatisticStorage cachedStatisticStorage = Deencapsulation.newInstance(CachedStatisticStorage.class);
+        ColumnBasicStatsCacheLoader cachedStatisticStorage = Deencapsulation.newInstance(ColumnBasicStatsCacheLoader.class);
 
         TStatisticData statisticData = new TStatisticData();
         statisticData.setDbId(db.getId());
