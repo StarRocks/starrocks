@@ -39,24 +39,34 @@ import java.util.concurrent.ThreadLocalRandom;
 // VERSION file contains clusterId. eg:
 //      clusterId=123456
 // ROLE file contains FrontendNodeType and NodeName. eg:
+//      hostType=IP(FQDN)
 //      role=OBSERVER
 //      name=172.0.0.1_1234_DNwid284dasdwd
+
 public class Storage {
     private static final Logger LOG = LogManager.getLogger(Storage.class);
 
-    public static final String CLUSTER_ID = "clusterId";
-    public static final String TOKEN = "token";
-    public static final String FRONTEND_ROLE = "role";
-    public static final String NODE_NAME = "name";
-    public static final String IMAGE = "image";
     public static final String IMAGE_NEW = "image.ckpt";
+    public static final String IMAGE = "image";
     public static final String VERSION_FILE = "VERSION";
     public static final String ROLE_FILE = "ROLE";
 
+    // version file props keys
+    private static final String VERSION_PROP_CLUSTER_ID = "clusterId";
+    private static final String VERSION_PROP_TOKEN = "token";
+    // role file props keys
+    private static final String ROLE_PROP_FRONTEND_ROLE = "role";
+    private static final String ROLE_PROP_NODE_NAME = "name";
+    private static final String ROLE_PROP_HOST_TYPE = "hostType";
+
+    // version file props values
     private int clusterID = 0;
     private String token;
+    // role file props values
     private FrontendNodeType role = FrontendNodeType.UNKNOWN;
     private String nodeName;
+    private String hostType = "";
+
     private long imageJournalId;
     private String metaDir;
 
@@ -86,9 +96,9 @@ public class Storage {
         if (versionFile.isFile()) {
             try (FileInputStream in = new FileInputStream(versionFile)) {
                 prop.load(in);
-                clusterID = Integer.parseInt(prop.getProperty(CLUSTER_ID));
-                if (prop.getProperty(TOKEN) != null) {
-                    token = prop.getProperty(TOKEN);
+                clusterID = Integer.parseInt(prop.getProperty(VERSION_PROP_CLUSTER_ID));
+                if (prop.getProperty(VERSION_PROP_TOKEN) != null) {
+                    token = prop.getProperty(VERSION_PROP_TOKEN);
                 }
             }
         }
@@ -97,9 +107,10 @@ public class Storage {
         if (roleFile.isFile()) {
             try (FileInputStream in = new FileInputStream(roleFile)) {
                 prop.load(in);
-                role = FrontendNodeType.valueOf(prop.getProperty(FRONTEND_ROLE));
+                role = FrontendNodeType.valueOf(prop.getProperty(ROLE_PROP_FRONTEND_ROLE));
                 // For compatibility, NODE_NAME may not exist in ROLE file, set nodeName to null
-                nodeName = prop.getProperty(NODE_NAME, null);
+                nodeName = prop.getProperty(ROLE_PROP_NODE_NAME, null);
+                hostType = prop.getProperty(ROLE_PROP_HOST_TYPE, "");
             }
         }
 
@@ -175,17 +186,15 @@ public class Storage {
 
     private void setFields(Properties properties) throws IOException {
         Preconditions.checkState(clusterID > 0);
-        properties.setProperty(CLUSTER_ID, String.valueOf(clusterID));
-
+        properties.setProperty(VERSION_PROP_CLUSTER_ID, String.valueOf(clusterID));
         if (!Strings.isNullOrEmpty(token)) {
-            properties.setProperty(TOKEN, token);
+            properties.setProperty(VERSION_PROP_TOKEN, token);
         }
     }
 
     public void writeClusterIdAndToken() throws IOException {
         Properties properties = new Properties();
         setFields(properties);
-
         try (RandomAccessFile file = new RandomAccessFile(new File(metaDir, VERSION_FILE), "rws")) {
             file.seek(0);
             try (FileOutputStream out = new FileOutputStream(file.getFD())) {
@@ -197,27 +206,24 @@ public class Storage {
 
     // note: if you want to use this func, please make sure that properties that have stored in role file
     // could not be delete
-    public void writeFrontendRoleAndNodeName(FrontendNodeType role, String nameNode) throws IOException {
-        Preconditions.checkState(!Strings.isNullOrEmpty(nameNode));
-        Properties properties = new Properties();
-        properties.setProperty(FRONTEND_ROLE, role.name());
-        properties.setProperty(NODE_NAME, nameNode);
-
-        try (RandomAccessFile file = new RandomAccessFile(new File(metaDir, ROLE_FILE), "rws")) {
-            file.seek(0);
-            try (FileOutputStream out = new FileOutputStream(file.getFD())) {
-                properties.store(out, null);
-                file.setLength(out.getChannel().position());
-            }
-        }
+    public void writeFrontendRoleAndNodeName(FrontendNodeType role, String nodeName) throws IOException {
+        Preconditions.checkState(!Strings.isNullOrEmpty(nodeName));
+        this.role = role;
+        this.nodeName = nodeName;
+        writeRoleFile();
     }
 
     public void writeFeStartFeHostType(String hostType) throws IOException {
         Preconditions.checkState(!Strings.isNullOrEmpty(hostType));
+        this.hostType = hostType;
+        writeRoleFile();
+    }
+
+    private void writeRoleFile() throws IOException {
         Properties properties = new Properties();
-        properties.setProperty(FRONTEND_ROLE, this.role.name());
-        properties.setProperty(NODE_NAME, this.nodeName);
-        properties.setProperty("hostType", hostType);
+        properties.setProperty(ROLE_PROP_FRONTEND_ROLE, this.role.name());
+        properties.setProperty(ROLE_PROP_NODE_NAME, this.nodeName);
+        properties.setProperty(ROLE_PROP_HOST_TYPE, this.hostType);
         try (RandomAccessFile file = new RandomAccessFile(new File(metaDir, ROLE_FILE), "rws")) {
             file.seek(0);
             try (FileOutputStream out = new FileOutputStream(file.getFD())) {
