@@ -57,7 +57,6 @@ public:
     Version version{};
     TabletUid tablet_uid = {0, 0};
     PUniqueId load_id{};
-    // temporary segment files create or not, set false as default
     bool schema_change_sorting = false;
 
     RowsetStatePB rowset_state = PREPARED;
