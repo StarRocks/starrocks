@@ -134,15 +134,20 @@ public class FunctionSet {
     // string functions
     public static final String SUBSTRING = "substring";
     public static final String STARTS_WITH = "starts_with";
+    public static final String SUBSTITUTE = "substitute";
 
     // geo functions
     public static final String ST_ASTEXT = "st_astext";
     public static final String GEO_FUNCTION_PREFIX = "st_";
+
     // JSON functions
     public static final String JSON_QUERY = "json_query";
     public static final String PARSE_JSON = "parse_json";
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
+    public static final String GET_JSON_INT = "get_json_int";
+    public static final String GET_JSON_DOUBLE = "get_json_double";
+    public static final String GET_JSON_STRING = "get_json_string";
 
     // Array functions
     public static final String ARRAY_DIFFERENCE = "array_difference";

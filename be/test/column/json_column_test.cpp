@@ -15,6 +15,7 @@
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "runtime/types.h"
+#include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "util/json.h"
 
@@ -37,6 +38,33 @@ PARALLEL_TEST(JsonColumnTest, test_parse) {
         ASSERT_TRUE(json.ok());
         ASSERT_TRUE(json.value().to_string().ok());
         ASSERT_EQ(json_str, json.value().to_string().value());
+    }
+}
+
+PARALLEL_TEST(JsonColumnTest, test_to_string) {
+    {
+        // normal json with string
+        auto maybe_json = JsonValue::parse(R"( {"a": "a"} )");
+        ASSERT_TRUE(maybe_json.ok());
+        EXPECT_EQ(R"({"a": "a"})", maybe_json.value().to_string().value());
+    }
+
+    {
+        // value string with quote
+        auto maybe_json = JsonValue::parse(R"( {"a": "\"a\""} )");
+        ASSERT_TRUE(maybe_json.ok());
+        EXPECT_EQ(R"({"a": "\"a\""})", maybe_json.value().to_string().value());
+    }
+
+    {
+        // string type
+        auto maybe_json = JsonValue::from_string("a");
+        EXPECT_EQ(R"("a")", maybe_json.to_string().value());
+    }
+    {
+        // string type with quote
+        auto maybe_json = JsonValue::from_string("\"a\"");
+        EXPECT_EQ(R"("\"a\"")", maybe_json.to_string().value());
     }
 }
 
