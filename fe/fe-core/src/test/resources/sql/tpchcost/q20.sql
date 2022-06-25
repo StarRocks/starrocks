@@ -204,9 +204,6 @@ OutPut Exchange Id: 14
 |  aggregate: sum[([48: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [33: L_SUPPKEY, INT, false], [32: L_PARTKEY, INT, false]
 |  cardinality: 86732673
-|  probe runtime filters:
-|  - filter_id = 1, probe_expr = (32: L_PARTKEY)
-|  - filter_id = 2, probe_expr = (33: L_SUPPKEY)
 |  column statistics:
 |  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
@@ -214,6 +211,9 @@ OutPut Exchange Id: 14
 |
 3:EXCHANGE
 cardinality: 86732673
+probe runtime filters:
+- filter_id = 1, probe_expr = (32: L_PARTKEY)
+- filter_id = 2, probe_expr = (33: L_SUPPKEY)
 
 PLAN FRAGMENT 5(F02)
 
