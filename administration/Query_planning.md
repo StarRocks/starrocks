@@ -200,8 +200,6 @@ Fragment 1集成了三个Join算子的执行，采用默认的BROADCAST方式进
 
 在理解了Plan的作用以后，我们来分析以下BE的执行结果Profile，通过在StarRocks Manager中执行查询，点击查询历史，就可看在“执行详情”tab中看到Profile的详细文本信息，在“执行时间”tab中能看到图形化的展示，这里我们采用TPC-H的Q4查询来作为例子。
 
-> 注意：如需通过 StarRocks Manager 查看 Profile, 在配置 StarRocks Manager 时需要在**ADMIN SET FRONTEND CONFIG**命令里设置FE参数 `enable_collect_query_detail_info`为`true`。
-
 ~~~sql
 -- TPC-H Q4
 select  o_orderpriority,  count(*) as order_count
