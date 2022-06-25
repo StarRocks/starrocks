@@ -186,47 +186,6 @@ public class StatementPlanner {
     public static boolean supportedByNewPlanner(StatementBase statement) {
         return AlterTableStmt.isSupportNewPlanner(statement)
                 || AlterSystemStmt.isSupportNewPlanner(statement)
-                || statement instanceof AdminSetConfigStmt
-                || statement instanceof AdminSetReplicaStatusStmt
-                || statement instanceof AdminShowConfigStmt
-                || statement instanceof AdminShowReplicaDistributionStmt
-                || statement instanceof AdminShowReplicaStatusStmt
-                || statement instanceof AlterMaterializedViewStatement
-                || statement instanceof AlterViewStmt
-                || statement instanceof AlterWorkGroupStmt
-                || statement instanceof AnalyzeStmt
-                || statement instanceof CreateAnalyzeJobStmt
-                || statement instanceof CreateCatalogStmt
-                || statement instanceof CreateTableStmt
-                || statement instanceof CreateTableAsSelectStmt
-                || statement instanceof CreateMaterializedViewStatement
-                || statement instanceof CreateMaterializedViewStmt
-                || statement instanceof CreateViewStmt
-                || statement instanceof CreateWorkGroupStmt
-                || statement instanceof DmlStmt
-                || statement instanceof DropAnalyzeJobStmt
-                || statement instanceof DropCatalogStmt
-                || statement instanceof DropMaterializedViewStmt
-                || statement instanceof DropTableStmt
-                || statement instanceof DropWorkGroupStmt
-                || statement instanceof ExecuteAsStmt
-                || statement instanceof GrantImpersonateStmt
-                || statement instanceof GrantRoleStmt
-                || statement instanceof QueryStatement
-                || statement instanceof RefreshTableStmt
-                || statement instanceof RevokeImpersonateStmt
-                || statement instanceof RevokeRoleStmt
-                || statement instanceof ShowAnalyzeJobStmt
-                || statement instanceof ShowCatalogsStmt
-                || statement instanceof ShowColumnStmt
-                || statement instanceof ShowCreateTableStmt
-                || statement instanceof ShowDbStmt
-                || statement instanceof ShowMaterializedViewStmt
-                || statement instanceof ShowTableStmt
-                || statement instanceof ShowTableStatusStmt
-                || statement instanceof ShowVariablesStmt
-                || statement instanceof ShowWorkGroupStmt
-                || statement instanceof SubmitTaskStmt
-                || statement instanceof UseStmt;
+                || statement.isSupportNewPlanner();
     }
 }
