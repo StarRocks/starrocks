@@ -19,6 +19,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include "storage/rowset/rowset.h"
+
 #include <string>
 #include <vector>
 
@@ -32,7 +34,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/data_dir.h"
-#include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
@@ -51,7 +52,7 @@ namespace starrocks {
 
 static StorageEngine* k_engine = nullptr;
 
-class BetaRowsetTest : public testing::Test {
+class RowsetTest : public testing::Test {
 protected:
     OlapReaderStatistics _stats;
 
@@ -82,7 +83,7 @@ protected:
         ExecEnv* exec_env = starrocks::ExecEnv::GetInstance();
         exec_env->set_storage_engine(k_engine);
 
-        const std::string rowset_dir = config::storage_root_path + "/data/beta_rowset_test";
+        const std::string rowset_dir = config::storage_root_path + "/data/rowset_test";
         ASSERT_TRUE(fs::create_directories(rowset_dir).ok());
         StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
         i++;
@@ -237,7 +238,7 @@ protected:
         rowset_writer_context->tablet_id = 12345;
         rowset_writer_context->tablet_schema_hash = 1111;
         rowset_writer_context->partition_id = 10;
-        rowset_writer_context->rowset_path_prefix = config::storage_root_path + "/data/beta_rowset_test";
+        rowset_writer_context->rowset_path_prefix = config::storage_root_path + "/data/rowset_test";
         rowset_writer_context->rowset_state = VISIBLE;
         rowset_writer_context->tablet_schema = tablet_schema;
         rowset_writer_context->version.first = 0;
@@ -250,7 +251,7 @@ private:
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
 };
 
-TEST_F(BetaRowsetTest, FinalMergeTest) {
+TEST_F(RowsetTest, FinalMergeTest) {
     TabletSchema tablet_schema;
     create_primary_tablet_schema(&tablet_schema);
     RowsetSharedPtr rowset;
@@ -348,7 +349,7 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
     }
 }
 
-TEST_F(BetaRowsetTest, FinalMergeVerticalTest) {
+TEST_F(RowsetTest, FinalMergeVerticalTest) {
     auto tablet = create_tablet(12345, 1111);
     RowsetSharedPtr rowset;
     const uint32_t rows_per_segment = 1024;
@@ -449,7 +450,7 @@ TEST_F(BetaRowsetTest, FinalMergeVerticalTest) {
     EXPECT_EQ(count, rows_per_segment * 2);
 }
 
-TEST_F(BetaRowsetTest, VerticalWriteTest) {
+TEST_F(RowsetTest, VerticalWriteTest) {
     TabletSchema tablet_schema;
     create_tablet_schema(&tablet_schema);
 
