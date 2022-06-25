@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.FunctionName;
@@ -14,6 +15,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
@@ -23,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -81,12 +84,30 @@ import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_
  *                     /               \
  *                CTEConsume        CTEConsume
  *
+ * Before:
+ *          Agg[cd(v1), cd(v2), sum(v4), max(v5)] group by v3
+ *                      |
+ *                  Child Plan
+ *
+ * After:
+ *                     CTEAnchor
+ *                   /            \
+ *           CTEProduce         inner join (v3 <=> v3)
+ *             /                 /                  \
+ *      Child Plan       inner join(v3 <=> v3)     Agg[sum(v4), max(v5)]
+ *                        /          \               group by v3
+ *                       /            \                   \
+ *                 Agg[cd(v1)]     Agg[cd(v2)]        CTEConsume
+ *                 group by v3     group by v3
+ *                     /               \
+ *                CTEConsume        CTEConsume
+ *
  *
  */
-public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
+public class RewriteMultiDistinctByCTERule extends TransformationRule {
     private final ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
 
-    public RewriteMultiDistinctWithoutGroupByRule() {
+    public RewriteMultiDistinctByCTERule() {
         super(RuleType.TF_REWRITE_MULTI_DISTINCT_WITHOUT_GROUP_BY,
                 Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(Pattern.create(
                         OperatorType.PATTERN_LEAF)));
@@ -96,17 +117,14 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         // check cte is disabled or hasNoGroup false
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
-        boolean hasNoGroup = agg.getGroupingKeys().isEmpty();
-        if (!context.getSessionVariable().isCboCteReuse() || !hasNoGroup) {
+        if (!context.getSessionVariable().isCboCteReuse()) {
             return false;
         }
 
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
                 .filter(CallOperator::isDistinct).collect(Collectors.toList());
-        boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(c -> c.getChildren().size() > 1);
 
-        return (distinctAggOperatorList.size() > 1
-                && !hasMultiColumns) || agg.getAggregations().values().stream()
+        return distinctAggOperatorList.size() > 1 || agg.getAggregations().values().stream()
                 .anyMatch(call -> call.isDistinct() && call.getFnName().equals(FunctionSet.AVG));
     }
 
@@ -137,13 +155,27 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
                             columnRefMap));
         }
 
+        List<ColumnRefOperator> groupingKeys = aggregate.getGroupingKeys();
         // left deep join tree
         while (allCteConsumes.size() > 1) {
             OptExpression left = allCteConsumes.poll();
             OptExpression right = allCteConsumes.poll();
+            OptExpression join = null;
+            if (groupingKeys.isEmpty()) {
+                join = OptExpression.create(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null), left,
+                        right);
+            } else {
+                // create inner join when aggregate has group by keys
+                join = buildInnerJoin(left, right);
+                // Add project map for group keys.
+                LogicalJoinOperator joinOperator = (LogicalJoinOperator) join.getOp();
+                List<ColumnRefOperator> joinOnPredicateColumns = getJoinOnPredicateColumn(joinOperator);
+                Preconditions.checkState(groupingKeys.size() == joinOnPredicateColumns.size());
 
-            OptExpression join =
-                    OptExpression.create(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null), left, right);
+                for (int index = 0; index < groupingKeys.size(); ++index) {
+                    columnRefMap.put(groupingKeys.get(index), joinOnPredicateColumns.get(index));
+                }
+            }
             allCteConsumes.offerFirst(join);
         }
         // Add project node
@@ -161,6 +193,36 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
 
         LogicalCTEAnchorOperator cteAnchor = new LogicalCTEAnchorOperator(cteId);
         return Lists.newArrayList(OptExpression.create(cteAnchor, cteProduce, rightTree));
+    }
+
+    private OptExpression buildInnerJoin(OptExpression left, OptExpression right) {
+        // Get on predicate columns from left and right children.
+        List<ColumnRefOperator> onPredicateLeftColumns = getJoinOnPredicateColumn(left.getOp());
+        List<ColumnRefOperator> onPredicateRightColumns = getJoinOnPredicateColumn(right.getOp());
+        Preconditions.checkState(onPredicateLeftColumns.size() == onPredicateRightColumns.size());
+
+        List<ScalarOperator> onPredicateList = Lists.newArrayList();
+        for (int index = 0; index < onPredicateLeftColumns.size(); ++index) {
+            // Build on predicate for new inner join.
+            ScalarOperator onPredicate = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL,
+                    onPredicateLeftColumns.get(index), onPredicateRightColumns.get(index));
+            onPredicateList.add(onPredicate);
+        }
+        return OptExpression.create(new LogicalJoinOperator(JoinOperator.INNER_JOIN,
+                Utils.compoundAnd(onPredicateList)), left, right);
+    }
+
+    private List<ColumnRefOperator> getJoinOnPredicateColumn(Operator operator) {
+        List<ColumnRefOperator> onPredicateColumns;
+        if (operator instanceof LogicalAggregationOperator) {
+            LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) operator;
+            onPredicateColumns = aggregationOperator.getGroupingKeys();
+        } else {
+            LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
+            onPredicateColumns = Utils.extractConjuncts(joinOperator.getOnPredicate()).stream().
+                    map(predicate -> (ColumnRefOperator) predicate.getChild(0)).collect(Collectors.toList());
+        }
+        return onPredicateColumns;
     }
 
     private LinkedList<OptExpression> buildDistinctAggCTEConsume(LogicalAggregationOperator aggregate,
@@ -242,8 +304,10 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
         ColumnRefSet allCteConsumeRequiredColumns = new ColumnRefSet();
         otherAggregateRef.stream().map(k -> aggregate.getAggregations().get(k).getUsedColumns())
                 .forEach(allCteConsumeRequiredColumns::union);
-        LogicalCTEConsumeOperator cteConsume = buildCteConsume(cteProduce, allCteConsumeRequiredColumns, factory);
+        List<ColumnRefOperator> groupingKeys = aggregate.getGroupingKeys();
+        allCteConsumeRequiredColumns.union(groupingKeys);
 
+        LogicalCTEConsumeOperator cteConsume = buildCteConsume(cteProduce, allCteConsumeRequiredColumns, factory);
         // rewrite aggregate
         Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMap();
         cteConsume.getCteOutputColumnRefMap().forEach((k, v) -> rewriteMap.put(v, k));
@@ -255,9 +319,13 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
             aggregateFn.put(otherRef, otherAggFn);
             projectionMap.put(otherRef, otherRef);
         }
-        LogicalAggregationOperator newAggregate = new LogicalAggregationOperator.Builder()
-                .withOperator(aggregate).setAggregations(aggregateFn).setPredicate(null).build();
+        List<ColumnRefOperator> rewriteGroupingKeys = groupingKeys.stream().
+                map(column -> (ColumnRefOperator) rewriter.rewrite(column)).collect(
+                Collectors.toList());
 
+        LogicalAggregationOperator newAggregate = new LogicalAggregationOperator.Builder().withOperator(aggregate).
+                setAggregations(aggregateFn).setGroupingKeys(rewriteGroupingKeys).
+                setPartitionByColumns(rewriteGroupingKeys).setPredicate(null).build();
         return OptExpression.create(newAggregate, OptExpression.create(cteConsume));
     }
 
@@ -274,6 +342,9 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
                                                           LogicalAggregationOperator aggregate,
                                                           OptExpression cteProduce, ColumnRefFactory factory) {
         ColumnRefSet cteConsumeRequiredColumns = aggDistinctCall.getUsedColumns();
+        List<ColumnRefOperator> groupingKeys = aggregate.getGroupingKeys();
+        cteConsumeRequiredColumns.union(groupingKeys);
+
         LogicalCTEConsumeOperator cteConsume = buildCteConsume(cteProduce, cteConsumeRequiredColumns, factory);
 
         // rewrite aggregate count distinct
@@ -282,12 +353,16 @@ public class RewriteMultiDistinctWithoutGroupByRule extends TransformationRule {
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
         CallOperator aggDistinctFn =
                 (CallOperator) rewriter.rewrite(aggDistinctCall);
+        List<ColumnRefOperator> rewriteGroupingKeys = groupingKeys.stream().
+                map(column -> (ColumnRefOperator) rewriter.rewrite(column)).collect(
+                Collectors.toList());
 
         Map<ColumnRefOperator, CallOperator> aggregateFn = Maps.newHashMap();
         aggregateFn.put(aggDistinctRef, aggDistinctFn);
 
-        LogicalAggregationOperator newAggregate = new LogicalAggregationOperator.Builder()
-                .withOperator(aggregate).setAggregations(aggregateFn).setPredicate(null).build();
+        LogicalAggregationOperator newAggregate = new LogicalAggregationOperator.Builder().withOperator(aggregate).
+                setAggregations(aggregateFn).setGroupingKeys(rewriteGroupingKeys).
+                setPartitionByColumns(rewriteGroupingKeys).setPredicate(null).build();
 
         return OptExpression.create(newAggregate, OptExpression.create(cteConsume));
     }

@@ -317,6 +317,7 @@ public class RoutineLoadJobTest {
                 "   \"property.client.id\" = \"" + clientId + "\"," +
                 "   \"property.kafka_default_offsets\" = \"" + defaultOffsets + "\"" +
                 ")";
+        routineLoadJob.setOrigStmt(new OriginStatement(originStmt, 0));
         AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseAndAnalyzeStmt(originStmt, connectContext);
         routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
                 stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
@@ -339,6 +340,7 @@ public class RoutineLoadJobTest {
                 "COLUMNS TERMINATED BY \",\"," +
                 "PARTITION(p1, p2, p3)," +
                 "ROWS TERMINATED BY \"A\"";
+        routineLoadJob.setOrigStmt(new OriginStatement(originStmt, 0));
         AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseAndAnalyzeStmt(originStmt, connectContext);
         routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
                 stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
