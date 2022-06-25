@@ -188,11 +188,11 @@ public class ReorderJoinRule extends Rule {
                     }
                 }
 
-                if (outputColumns.size() != projection.getColumnRefMap().size()) {
-                    if (outputColumns.size() == 0) {
-                        outputColumns.add(Utils.findSmallestColumnRef(projection.getOutputColumns()));
-                    }
+                if (outputColumns.size() == 0) {
+                    outputColumns.add(Utils.findSmallestColumnRef(projection.getOutputColumns()));
+                }
 
+                if (outputColumns.size() != projection.getColumnRefMap().size()) {
                     Map<ColumnRefOperator, ScalarOperator> newOutputProjections = Maps.newHashMap();
                     for (ColumnRefOperator ref : outputColumns) {
                         newOutputProjections.put(ref, projection.getColumnRefMap().get(ref));
@@ -216,6 +216,7 @@ public class ReorderJoinRule extends Rule {
 
         @Override
         public OptExpression visitLogicalJoin(OptExpression optExpression, ColumnRefSet requireColumns) {
+            // use children output columns as join output columns.
             ColumnRefSet outputColumns = optExpression.inputAt(0).getOutputColumns().clone();
             outputColumns.union(optExpression.inputAt(1).getOutputColumns());
             ColumnRefSet newOutputColumns = new ColumnRefSet();
