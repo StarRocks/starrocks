@@ -3,7 +3,7 @@
 #pragma once
 
 #include "storage/compaction.h"
-#include "storage/rowset/beta_rowset.h"
+#include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 
 namespace starrocks {

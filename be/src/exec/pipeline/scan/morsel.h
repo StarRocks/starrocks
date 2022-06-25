@@ -20,7 +20,7 @@ class Tablet;
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 class Rowset;
 using RowsetSharedPtr = std::shared_ptr<Rowset>;
-class BetaRowset;
+class Rowset;
 class Segment;
 using SegmentSharedPtr = std::shared_ptr<Segment>;
 
@@ -177,7 +177,7 @@ private:
     rowid_t _upper_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key, bool lower, rowid_t end) const;
 
     ScanMorsel* _cur_scan_morsel();
-    BetaRowset* _cur_rowset();
+    Rowset* _cur_rowset();
     // Return nullptr, when _segment_idx exceeds the segments of the current rowset.
     Segment* _cur_segment();
 

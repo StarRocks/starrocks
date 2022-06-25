@@ -39,7 +39,7 @@
 #include "storage/merge_iterator.h"
 #include "storage/olap_define.h"
 #include "storage/row_source_mask.h"
-#include "storage/rowset/beta_rowset.h"
+#include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -151,8 +151,8 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
 }
 
 Status BetaRowsetWriter::flush_src_rssids(uint32_t segment_id) {
-    auto path = BetaRowset::segment_srcrssid_file_path(_context.rowset_path_prefix, _context.rowset_id,
-                                                       static_cast<int>(segment_id));
+    auto path = Rowset::segment_srcrssid_file_path(_context.rowset_path_prefix, _context.rowset_id,
+                                                   static_cast<int>(segment_id));
     ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
     RETURN_IF_ERROR(wfile->append(Slice((const char*)(_src_rssids->data()), _src_rssids->size() * sizeof(uint32_t))));
     RETURN_IF_ERROR(wfile->close());
@@ -180,13 +180,13 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
             }
             _tmp_segment_files.clear();
             for (auto i = 0; i < _num_segment; ++i) {
-                auto path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
+                auto path = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
                 auto st = _fs->delete_file(path);
                 LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
                         << "Fail to delete file=" << path << ", " << st.to_string();
             }
             for (auto i = 0; i < _num_delfile; ++i) {
-                auto path = BetaRowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
+                auto path = Rowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
                 auto st = _fs->delete_file(path);
                 LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
                         << "Fail to delete file=" << path << ", " << st.to_string();
@@ -213,7 +213,7 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
             //}
         } else {
             for (int i = 0; i < _num_segment; ++i) {
-                auto path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
+                auto path = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
                 auto st = _fs->delete_file(path);
                 LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
                         << "Fail to delete file=" << path << ", " << st.to_string();
@@ -230,13 +230,13 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalBetaRowsetWriter::_create_seg
     if ((_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
          _context.segments_overlap != NONOVERLAPPING) ||
         _context.schema_change_sorting) {
-        path = BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
+        path = Rowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
         _tmp_segment_files.emplace_back(path);
     } else {
         // for update final merge scenario, we marked segments_overlap to NONOVERLAPPING in
         // function _final_merge, so we create segment data file here, rather than
         // temporary segment files.
-        path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
+        path = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
     }
     ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
@@ -321,7 +321,7 @@ Status HorizontalBetaRowsetWriter::_flush_chunk(const vectorized::Chunk& chunk) 
 Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Chunk& upserts,
                                                             const vectorized::Column& deletes) {
     auto flush_del_file = [&](const vectorized::Column& deletes) {
-        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(BetaRowset::segment_del_file_path(
+        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(Rowset::segment_del_file_path(
                                              _context.rowset_path_prefix, _context.rowset_id, _num_delfile)));
         size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
         std::vector<uint8_t> content(sz);
@@ -418,8 +418,8 @@ StatusOr<RowsetSharedPtr> HorizontalBetaRowsetWriter::build() {
 Status HorizontalBetaRowsetWriter::_final_merge() {
     if (_num_segment == 1) {
         RETURN_IF_ERROR_WITH_WARN(
-                _fs->rename_file(BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, 0),
-                                 BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, 0)),
+                _fs->rename_file(Rowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, 0),
+                                 Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, 0)),
                 "Fail to rename file");
         return Status::OK();
     }
@@ -442,7 +442,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
             continue;
         }
         std::string tmp_segment_file =
-                BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
+                Rowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
         auto segment_ptr = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), _fs, tmp_segment_file,
                                          seg_id, _context.tablet_schema);
         if (!segment_ptr.ok()) {
@@ -787,7 +787,7 @@ VerticalBetaRowsetWriter::~VerticalBetaRowsetWriter() {
         }
 
         for (int i = 0; i < _num_segment; ++i) {
-            auto path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
+            auto path = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, i);
             auto st = _fs->delete_file(path);
             LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
                     << "Fail to delete file=" << path << ", " << st.to_string();
@@ -922,8 +922,8 @@ Status VerticalBetaRowsetWriter::final_flush() {
 StatusOr<std::unique_ptr<SegmentWriter>> VerticalBetaRowsetWriter::_create_segment_writer(
         const std::vector<uint32_t>& column_indexes, bool is_key) {
     std::lock_guard<std::mutex> l(_lock);
-    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(BetaRowset::segment_file_path(
-                                         _context.rowset_path_prefix, _context.rowset_id, _num_segment)));
+    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(Rowset::segment_file_path(_context.rowset_path_prefix,
+                                                                                  _context.rowset_id, _num_segment)));
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), _num_segment, schema, _writer_options);
     RETURN_IF_ERROR(segment_writer->init(column_indexes, is_key));

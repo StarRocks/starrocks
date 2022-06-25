@@ -68,7 +68,9 @@ using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
 // is changed, this segment can not be used any more. For example, after a schema
 // change finished, client should disable all cached Segment for old TabletSchema.
 class Segment : public std::enable_shared_from_this<Segment> {
-    struct private_type;
+    struct private_type {
+        explicit private_type(int) {}
+    };
 
 public:
     static StatusOr<std::shared_ptr<Segment>> open(MemTracker* mem_tracker, std::shared_ptr<FileSystem> blk_mgr,
@@ -156,9 +158,9 @@ private:
     Segment(const Segment&) = delete;
     const Segment& operator=(const Segment&) = delete;
 
-    struct private_type {
-        explicit private_type(int) {}
-    };
+    // struct private_type {
+    //     explicit private_type(int) {}
+    // };
 
     // open segment file and read the minimum amount of necessary information (footer)
     Status _open(MemTracker* mem_tracker, size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer);

@@ -906,8 +906,6 @@ Status TabletManager::start_trash_sweep() {
         } else if (!st.is_not_found()) {
             LOG(ERROR) << "Fail to get tablet meta: " << st;
             break;
-        } else {
-            // nothing to do here
         }
 
         if (info.flag == kMoveFilesToTrash) {
