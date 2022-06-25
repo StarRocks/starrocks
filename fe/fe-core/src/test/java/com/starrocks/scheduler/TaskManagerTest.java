@@ -224,8 +224,9 @@ public class TaskManagerTest {
         ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
         DataInputStream dataInputStream = new DataInputStream(inputStream);
         Task readTask = Task.read(dataInputStream);
-        // upgrade should default task type to normal
-        Assert.assertEquals(readTask.getType(), Constants.TaskType.NORMAL);
+        // upgrade should default task type to manual
+        Assert.assertEquals(readTask.getType(), Constants.TaskType.MANUAL);
+        Assert.assertEquals(readTask.getState(), Constants.TaskState.UNKNOWN);
     }
 
 }

@@ -21,11 +21,11 @@ public class Task implements Writable {
     @SerializedName("name")
     private String name;
 
-    // set default to NORMAL is for compatibility
+    // set default to MANUAL is for compatibility
     @SerializedName("type")
-    private Constants.TaskType type = Constants.TaskType.NORMAL;
+    private Constants.TaskType type = Constants.TaskType.MANUAL;
 
-    // set default to NONE is for compatibility
+    // set default to UNKNOWN is for compatibility
     @SerializedName("state")
     private Constants.TaskState state = Constants.TaskState.UNKNOWN;
 
