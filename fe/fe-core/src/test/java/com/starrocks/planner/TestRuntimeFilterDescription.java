@@ -31,13 +31,34 @@ public class TestRuntimeFilterDescription {
             JoinNode.DistributionMode joinMode = (JoinNode.DistributionMode) tc[0];
             Integer eqCount = (Integer) tc[1];
             Boolean canPush = (Boolean) tc[2];
-            TRuntimeFilterBuildJoinMode rfJoinMode = (TRuntimeFilterBuildJoinMode)tc[3];
+            TRuntimeFilterBuildJoinMode rfJoinMode = (TRuntimeFilterBuildJoinMode) tc[3];
             RuntimeFilterDescription rf = new RuntimeFilterDescription(ctx.getSessionVariable());
             rf.setJoinMode(joinMode);
             rf.setEqualCount(eqCount);
             rf.setOnlyLocal(false);
             Assert.assertEquals(rf.canPushAcrossExchangeNode(), canPush);
             Assert.assertEquals(rf.toThrift().getBuild_join_mode(), rfJoinMode);
+        }
+    }
+
+    @Test
+    public void testIsLocalApplicable() throws IOException {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        Object[][] testCases = new Object[][]{
+                {JoinNode.DistributionMode.BROADCAST, true},
+                {JoinNode.DistributionMode.COLOCATE, true},
+                {JoinNode.DistributionMode.LOCAL_HASH_BUCKET, true},
+                {JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET, true},
+                {JoinNode.DistributionMode.PARTITIONED, false},
+                {JoinNode.DistributionMode.REPLICATED, true},
+        };
+
+        for (Object[] tc : testCases) {
+            JoinNode.DistributionMode joinMode = (JoinNode.DistributionMode) tc[0];
+            Boolean expect = (Boolean) tc[1];
+            RuntimeFilterDescription rf = new RuntimeFilterDescription(ctx.getSessionVariable());
+            rf.setJoinMode(joinMode);
+            Assert.assertEquals(rf.isLocalApplicable(), expect);
         }
     }
 }
