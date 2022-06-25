@@ -30,6 +30,5 @@ add_library(Rowset STATIC
     rowset.cpp
     rowset_factory.cpp
     rowset_meta_manager.cpp
-    beta_rowset.cpp
     beta_rowset_writer.cpp
     )
