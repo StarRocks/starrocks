@@ -17,6 +17,7 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -254,13 +255,22 @@ public class StarOSAgent {
     public long getPrimaryBackendIdByShard(long shardId) throws UserException {
         List<ReplicaInfo> replicas = getShardReplicas(shardId);
 
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             for (ReplicaInfo replicaInfo : replicas) {
                 if (replicaInfo.getReplicaRole() == ReplicaRole.PRIMARY) {
                     WorkerInfo workerInfo = replicaInfo.getWorkerInfo();
                     long workerId = workerInfo.getWorkerId();
                     if (!workerToBackend.containsKey(workerId)) {
-                        throw new UserException("Failed to get backend by worker. worker id: " + workerId);
+                        // get backendId from system info
+                        String workerAddr = workerInfo.getIpPort();
+                        String[] pair = workerAddr.split(":");
+                        long backendId = GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(pair[0]);
+
+                        // put it into map
+                        workerToId.put(workerAddr, workerId);
+                        workerToBackend.put(workerId, backendId);
+                        return backendId;
+                        // throw new UserException("Failed to get backend by worker. worker id: " + workerId);
                     }
 
                     return workerToBackend.get(workerId);
@@ -280,10 +290,19 @@ public class StarOSAgent {
                 WorkerInfo workerInfo = replicaInfo.getWorkerInfo();
                 long workerId = workerInfo.getWorkerId();
                 if (!workerToBackend.containsKey(workerId)) {
-                    throw new UserException("Failed to get backend by worker. worker id: " + workerId);
-                }
+                    // get backendId from system info
+                    String workerAddr = workerInfo.getIpPort();
+                    String[] pair = workerAddr.split(":");
+                    long backendId = GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(pair[0]);
 
-                backendIds.add(workerToBackend.get(workerId));
+                    // put it into map
+                    workerToId.put(workerAddr, workerId);
+                    workerToBackend.put(workerId, backendId);
+                    backendIds.add(backendId);
+                    // throw new UserException("Failed to get backend by worker. worker id: " + workerId);
+                } else {
+                    backendIds.add(workerToBackend.get(workerId));
+                }
             }
         }
         return backendIds;
