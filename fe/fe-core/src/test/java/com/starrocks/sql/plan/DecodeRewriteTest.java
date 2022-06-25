@@ -158,7 +158,8 @@ public class DecodeRewriteTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  2:Decode\n" +
                 "  |  <dict id 10> : <string id 3>"));
         String thrift = getThriftPlan(sql);
-        Assert.assertTrue(thrift.contains("TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
+        System.out.println("thrift = " + thrift);
+        Assert.assertTrue(thrift.contains("TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1])"));
     }
 
     @Test
@@ -276,8 +277,8 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "  |  <slot 14> : DictExpr(12: S_ADDRESS,[upper(<place-holder>)])"));
         Assert.assertFalse(plan.contains("common expressions"));
         plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[mock], ids:[1])]"));
-        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[mock], ids:[1])]"));
+        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[6D 6F 63 6B], ids:[1])]"));
+        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:12, strings:[6D 6F 63 6B], ids:[1])]"));
 
         sql = "select count(*) from supplier group by S_ADDRESS";
         plan = getFragmentPlan(sql);
@@ -288,14 +289,14 @@ public class DecodeRewriteTest extends PlanTestBase {
 
         sql = "select count(*) from supplier group by S_ADDRESS";
         plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
+        Assert.assertTrue(plan.contains("global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1])"));
         Assert.assertTrue(plan.contains("partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
-                "query_global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
+                "query_global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1])"));
 
         sql = "select count(distinct S_NATIONKEY) from supplier group by S_ADDRESS";
         plan = getThriftPlan(sql);
         Assert.assertTrue(plan.contains("partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
-                "query_global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
+                "query_global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1])"));
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -862,4 +863,48 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "  |  <slot 16> : 16: t1a"));
     }
 
+<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/sql/plan/DecodeRewriteTest.java
+=======
+    @Test
+    public void testCTEWithDecode() throws Exception {
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        connectContext.getSessionVariable().setEnablePipelineEngine(true);
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        String sql =
+                "with v1 as( select S_ADDRESS a, count(*) b from supplier group by S_ADDRESS) select x1.a, x1.b from v1 x1 join v1 x2 on x1.a=x2.a";
+        String plan = getThriftPlan(sql);
+        Assert.assertTrue(plan.contains("query_global_dicts:[TGlobalDict(columnId:28, strings:[6D 6F 63 6B], ids:[1])"));
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        connectContext.getSessionVariable().setEnablePipelineEngine(false);
+    }
+
+    @Test
+    public void testMetaScan() throws Exception {
+        String sql = "select max(v1), min(v1) from t0 [_META_]";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  0:MetaScan\n" +
+                "     <id 6> : max_v1\n" +
+                "     <id 7> : min_v1"));
+
+        String thrift = getThriftPlan(sql);
+        Assert.assertTrue(thrift.contains("id_to_names:{6=max_v1, 7=min_v1}"));
+    }
+
+    @Test
+    public void testMetaScan2() throws Exception {
+        String sql = "select max(t1c), min(t1d), dict_merge(t1a) from test_all_type [_META_]";
+        String plan = getFragmentPlan(sql);
+
+        Assert.assertTrue(plan.contains("  0:MetaScan\n" +
+                "     <id 16> : dict_merge_t1a\n" +
+                "     <id 14> : max_t1c\n" +
+                "     <id 15> : min_t1d"));
+
+        String thrift = getThriftPlan(sql);
+        Assert.assertTrue(thrift.contains("TFunctionName(function_name:dict_merge), " +
+                "binary_type:BUILTIN, arg_types:[TTypeDesc(types:[TTypeNode(type:ARRAY), " +
+                "TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))])]"));
+    }
+
+>>>>>>> 8cf944be8 ([Bug]Fixed the inability to recognize non-UTF-8 encoded strings when collecting dictionary information (#7795)):fe/fe-core/src/test/java/com/starrocks/sql/plan/LowCardinalityTest.java
 }
