@@ -373,8 +373,8 @@ public class ReplayFromDumpTest {
     public void testJoinReOrderPruneColumns() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null, TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         // check without exception
         Assert.assertTrue(replayPair.second.contains("<slot 19> : 19: id_tinyint"));
     }
+
 }

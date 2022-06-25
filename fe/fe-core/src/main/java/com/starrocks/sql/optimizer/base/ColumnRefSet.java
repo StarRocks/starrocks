@@ -41,7 +41,7 @@ public class ColumnRefSet implements Cloneable {
     }
 
     @Override
-    public Object clone() {
+    public ColumnRefSet clone() {
         try {
             ColumnRefSet result = (ColumnRefSet) super.clone();
             result.bitSet = (BitSet) bitSet.clone();
