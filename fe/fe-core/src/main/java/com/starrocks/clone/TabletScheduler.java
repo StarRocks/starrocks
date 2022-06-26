@@ -243,7 +243,7 @@ public class TabletScheduler extends MasterDaemon {
         // can be messed up.
         // `force` here should only mean that we can exceed the size limit of
         // `pendingTablets` and `runningTablets` if there is too many tablets to schedule.
-        if(containsTablet(tablet.getTabletId())) {
+        if (containsTablet(tablet.getTabletId())) {
             return AddResult.ALREADY_IN;
         }
 
@@ -1220,7 +1220,10 @@ public class TabletScheduler extends MasterDaemon {
 
     private synchronized void addBackToPendingTablets(TabletSchedCtx tabletCtx) {
         // Since we know it's add back, corresponding tablet id is still recorded in `allTabletIds`,
-        // so we explicitly remove the id from `allTabletIds`, otherwise `addTablet()` may fail
+        // so we explicitly remove the id from `allTabletIds`, otherwise `addTablet()` may fail.
+        // And when adding back, we don't want it to be failed because of exceeding limit of
+        // `Config.max_scheduling_tablets` since it's already got scheduled before, we just adjusted
+        // its priority and want it to be scheduled again, so we set force to be true here.
         allTabletIds.remove(tabletCtx.getTabletId());
         addTablet(tabletCtx, true /* force */);
     }
