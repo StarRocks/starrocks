@@ -116,11 +116,6 @@ public class MultiItemListPartitionDesc extends PartitionDesc {
                 throw new AnalysisException(
                         "(" + String.join(",", values) + ") size should be equal to partition column size ");
             }
-            for (String value : values) {
-                if (StringUtils.isBlank(value)) {
-                    throw new AnalysisException("Partition value should not have blank item");
-                }
-            }
         }
     }
 
