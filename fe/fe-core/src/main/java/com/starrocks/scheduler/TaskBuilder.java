@@ -32,7 +32,7 @@ public class TaskBuilder {
 
     public static Task buildMvTask(MaterializedView materializedView, String dbName) {
         Task task = new Task();
-        task.setName("mv-" + materializedView.getId());
+        task.setName(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setCreateTime(System.currentTimeMillis());
         task.setDbName(dbName);
@@ -42,5 +42,9 @@ public class TaskBuilder {
         task.setDefinition(materializedView.getViewDefineSql());
         task.setExpireTime(0L);
         return task;
+    }
+
+    public static String getMvTaskName(long mvId) {
+        return "mv-" + mvId;
     }
 }
