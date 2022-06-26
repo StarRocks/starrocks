@@ -2994,6 +2994,35 @@ public class LocalMetastore implements ConnectorMetadata {
         stateMgr.getAlterInstance().processAlterMaterializedView(stmt);
     }
 
+    @Override
+    public void refreshMaterializedView(String dbName, String mvName) throws DdlException, MetaNotFoundException {
+        Database db = this.getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        MaterializedView materializedView = null;
+        db.readLock();
+        try {
+            final Table table = db.getTable(mvName);
+            if (table instanceof MaterializedView) {
+                materializedView = (MaterializedView) table;
+            }
+        } finally {
+            db.readUnlock();
+        }
+        if (materializedView == null) {
+            throw new MetaNotFoundException(mvName + " is not a materialized view");
+        }
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
+        if (!taskManager.containTask(mvTaskName)) {
+            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+            taskManager.createTask(task, true);
+        }
+        // run task
+        taskManager.executeTask(mvTaskName);
+    }
+
     /*
      * used for handling CacnelAlterStmt (for client is the CANCEL ALTER
      * command). including SchemaChangeHandler and RollupHandler

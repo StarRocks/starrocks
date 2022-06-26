@@ -38,6 +38,7 @@ import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
@@ -371,6 +372,13 @@ public class MaterializedViewAnalyzer {
             } else {
                 throw new SemanticException("Unsupported modification for materialized view");
             }
+            return null;
+        }
+
+        @Override
+        public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement,
+                                                          ConnectContext context) {
+            statement.getMvName().normalization(context);
             return null;
         }
     }
