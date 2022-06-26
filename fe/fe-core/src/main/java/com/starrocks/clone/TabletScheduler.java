@@ -243,7 +243,7 @@ public class TabletScheduler extends MasterDaemon {
         // can be messed up.
         // `force` here should only mean that we can exceed the size limit of
         // `pendingTablets` and `runningTablets` if there is too many tablets to schedule.
-        if (pendingTablets.stream().filter(t -> t.getTabletId() == tablet.getTabletId()).count() != 0) {
+        if(containsTablet(tablet.getTabletId())) {
             return AddResult.ALREADY_IN;
         }
 
@@ -1218,6 +1218,13 @@ public class TabletScheduler extends MasterDaemon {
         throw new SchedException(Status.SCHEDULE_FAILED, "unable to find dest path which can be fit in");
     }
 
+    private synchronized void addBackToPendingTablets(TabletSchedCtx tabletCtx) {
+        // Since we know it's add back, corresponding tablet id is still recorded in `allTabletIds`,
+        // so we explicitly remove the id from `allTabletIds`, otherwise `addTablet()` may fail
+        allTabletIds.remove(tabletCtx.getTabletId());
+        addTablet(tabletCtx, true /* force */);
+    }
+
     /**
      * For some reason, a tablet info failed to be scheduled this time,
      * So we dynamically change its priority and add back to queue, waiting for next round.
@@ -1225,7 +1232,7 @@ public class TabletScheduler extends MasterDaemon {
     private void dynamicAdjustPrioAndAddBackToPendingTablets(TabletSchedCtx tabletCtx, String message) {
         Preconditions.checkState(tabletCtx.getState() == TabletSchedCtx.State.PENDING);
         tabletCtx.adjustPriority(stat);
-        addTablet(tabletCtx, true /* force */);
+        addBackToPendingTablets(tabletCtx);
     }
 
     private void finalizeTabletCtx(TabletSchedCtx tabletCtx, TabletSchedCtx.State state, String reason) {
