@@ -62,6 +62,8 @@ public interface ConnectorMetadata {
 
     default void createDb(CreateDbStmt stmt) throws DdlException {}
 
+    default void createDb(String clusterName, String dbName, boolean isSetIfNotExists) throws  DdlException {}
+
     default void dropDb(DropDbStmt stmt) throws DdlException {}
 
     default List<Long> getDbIds() {

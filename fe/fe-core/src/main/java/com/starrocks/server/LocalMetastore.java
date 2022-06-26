@@ -352,6 +352,36 @@ public class LocalMetastore implements ConnectorMetadata {
         LOG.info("createDb dbName = " + fullDbName + ", id = " + id);
     }
 
+    @Override
+    public void createDb(String clusterName, String dbName, boolean isSetIfNotExists) throws DdlException {
+        long id = 0L;
+        if (!tryLock(false)) {
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
+        }
+        try {
+            if (!nameToCluster.containsKey(clusterName)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER, clusterName);
+            }
+            if (fullNameToDb.containsKey(dbName)) {
+                if (isSetIfNotExists) {
+                    LOG.info("create database[{}] which already exists", dbName);
+                    return;
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_CREATE_EXISTS, dbName);
+                }
+            } else {
+                id = getNextId();
+                Database db = new Database(id, dbName);
+                db.setClusterName(clusterName);
+                unprotectCreateDb(db);
+                editLog.logCreateDb(db);
+            }
+        } finally {
+            unlock();
+        }
+        LOG.info("createDb dbName = " + dbName + ", id = " + id);
+    }
+
     // For replay edit log, needn't lock metadata
     public void unprotectCreateDb(Database db) {
         idToDb.put(db.getId(), db);

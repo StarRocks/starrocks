@@ -11,7 +11,11 @@ import com.starrocks.qe.ShowResultSet;
 public class CreateDbExecutor implements DataDefinitionExecutor {
 
     public ShowResultSet execute(StatementBase stmt, ConnectContext context) throws DdlException {
-        context.getGlobalStateMgr().createDb((CreateDbStmt) stmt);
+        CreateDbStmt createDbStmt = (CreateDbStmt) stmt;
+        String clusterName = createDbStmt.getClusterName();
+        String fullDbName = createDbStmt.getFullDbName();
+        boolean isSetIfNotExists = createDbStmt.isSetIfNotExists();
+        context.getGlobalStateMgr().getLocalMetastore().createDb(clusterName, fullDbName, isSetIfNotExists);
         return null;
     }
 }

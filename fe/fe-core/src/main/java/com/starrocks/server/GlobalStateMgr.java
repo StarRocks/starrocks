@@ -716,6 +716,10 @@ public class GlobalStateMgr {
         return metadataMgr;
     }
 
+    public LocalMetastore getLocalMetastore() {
+        return localMetastore;
+    }
+
     @VisibleForTesting
     public void setMetadataMgr(MetadataMgr metadataMgr) {
         this.metadataMgr = metadataMgr;
