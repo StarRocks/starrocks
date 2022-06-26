@@ -9,7 +9,8 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 public class RefreshMaterializedViewExecutor implements DataDefinitionExecutor {
 
     public ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
-        context.getGlobalStateMgr().refreshMaterializedView((RefreshMaterializedViewStatement) stmt);
+        context.getGlobalStateMgr().getLocalMetastore()
+                .refreshMaterializedView((RefreshMaterializedViewStatement) stmt);
         return null;
     }
 }

@@ -195,7 +195,7 @@ public class AlterTest {
         RefreshMaterializedViewStatement refreshMaterializedViewStatement =
                 (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().refreshMaterializedView(refreshMaterializedViewStatement);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(refreshMaterializedViewStatement);
             if (expectedException) {
                 Assert.fail();
             }
