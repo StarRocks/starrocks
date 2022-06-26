@@ -15,9 +15,6 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
         return mvName;
     }
 
-    public void setMvName(TableName mvName) {
-        this.mvName = mvName;
-    }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

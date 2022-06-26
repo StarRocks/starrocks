@@ -3019,7 +3019,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
-        if (!taskManager.getNameToTaskMap().containsKey(mvTaskName)) {
+        if (!taskManager.containTask(mvTaskName)) {
             Task task = TaskBuilder.buildMvTask(materializedView, dbName);
             taskManager.createTask(task, true);
         }

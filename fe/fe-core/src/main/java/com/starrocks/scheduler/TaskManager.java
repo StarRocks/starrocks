@@ -607,7 +607,7 @@ public class TaskManager {
         public List<TaskRunStatus> runStatus;
     }
 
-    public Map<String, Task> getNameToTaskMap() {
-        return nameToTaskMap;
+    public boolean containTask(String taskName) {
+        return nameToTaskMap.containsKey(taskName);
     }
 }
