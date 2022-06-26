@@ -863,12 +863,8 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private void analyzeAddPartition(OlapTable olapTable, List<PartitionDesc> partitionDescs,
-                                     AddPartitionClause addPartitionClause)
+                                     AddPartitionClause addPartitionClause, PartitionInfo partitionInfo)
             throws DdlException, AnalysisException, NotImplementedException {
-
-        // check partition type
-        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        checkPartitionType(partitionInfo);
 
         Set<String> existPartitionNameSet =
                 CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable, partitionDescs);
@@ -963,9 +959,9 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private List<Partition> findPartitionList(Database db, OlapTable copiedTable, List<PartitionDesc> partitionDescs,
-                                              HashMap<String, Set<Long>> partitionNameToTabletSet,
-                                              Set<Long> tabletIdSetForAll)
+    private List<Partition> createPartitionList(Database db, OlapTable copiedTable, List<PartitionDesc> partitionDescs,
+                                                HashMap<String, Set<Long>> partitionNameToTabletSet,
+                                                Set<Long> tabletIdSetForAll)
             throws DdlException {
         List<Partition> partitionList = Lists.newArrayListWithCapacity(partitionDescs.size());
         for (PartitionDesc partitionDesc : partitionDescs) {
@@ -989,21 +985,6 @@ public class LocalMetastore implements ConnectorMetadata {
             partitionNameToTabletSet.put(partitionName, tabletIdSet);
         }
         return partitionList;
-    }
-
-    private OlapTable checkTableAgain(Database db, String tableName,
-                                      Set<String> existPartitionNameSet,
-                                      List<PartitionDesc> partitionDescs) throws DdlException {
-        OlapTable olapTable = checkTable(db, tableName);
-        existPartitionNameSet = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable,
-                partitionDescs);
-
-        if (existPartitionNameSet.size() > 0) {
-            for (String partitionName : existPartitionNameSet) {
-                LOG.info("add partition[{}] which already exists", partitionName);
-            }
-        }
-        return olapTable;
     }
 
     private void checkIfMetaChange(OlapTable olapTable, OlapTable copiedTable, String tableName) throws DdlException {
@@ -1036,7 +1017,7 @@ public class LocalMetastore implements ConnectorMetadata {
     private void updatePartitionInfo(PartitionInfo partitionInfo, List<Partition> partitionList,
                                      List<PartitionDesc> partitionDescs, Set<String> existPartitionNameSet,
                                      AddPartitionClause addPartitionClause, OlapTable olapTable)
-            throws DdlException, AnalysisException {
+            throws DdlException {
         boolean isTempPartition = addPartitionClause.isTempPartition();
         if (partitionInfo instanceof RangePartitionInfo) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
@@ -1120,6 +1101,10 @@ public class LocalMetastore implements ConnectorMetadata {
                                      AddPartitionClause addPartitionClause, PartitionInfo partitionInfo,
                                      List<Partition> partitionList, Set<String> existPartitionNameSet)
             throws DdlException {
+        if (partitionList == null || partitionList.size() != 1) {
+            throw new DdlException("Only support add one partition when add list partition now");
+        }
+
         boolean isTempPartition = addPartitionClause.isTempPartition();
         Partition partition = partitionList.get(0);
         if (existPartitionNameSet.contains(partition.getName())) {
@@ -1188,12 +1173,14 @@ public class LocalMetastore implements ConnectorMetadata {
         try {
             olapTable = checkTable(db, tableName);
 
-            // check partition type
+            // get partition info
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
 
+            // check partition type
             checkPartitionType(partitionInfo);
 
-            analyzeAddPartition(olapTable, partitionDescs, addPartitionClause);
+            // analyze add partition
+            analyzeAddPartition(olapTable, partitionDescs, addPartitionClause, partitionInfo);
 
             // get distributionInfo
             distributionInfo = getDistributionInfo(olapTable, addPartitionClause);
@@ -1219,9 +1206,9 @@ public class LocalMetastore implements ConnectorMetadata {
         Set<Long> tabletIdSetForAll = Sets.newHashSet();
         HashMap<String, Set<Long>> partitionNameToTabletSet = Maps.newHashMap();
         try {
-            // find partition list
+            // create partition list
             List<Partition> partitionList =
-                    findPartitionList(db, copiedTable, partitionDescs, partitionNameToTabletSet, tabletIdSetForAll);
+                    createPartitionList(db, copiedTable, partitionDescs, partitionNameToTabletSet, tabletIdSetForAll);
 
             // build partitions
             buildPartitions(db, copiedTable, partitionList);
@@ -1259,7 +1246,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 cleanExistPartitionNameSet(existPartitionNameSet, partitionNameToTabletSet);
                 db.writeUnlock();
             }
-        } catch (DdlException | AnalysisException e) {
+        } catch (DdlException e) {
             cleanTabletIdSetForAll(tabletIdSetForAll);
             throw new DdlException(e.getMessage());
         }
@@ -1302,7 +1289,7 @@ public class LocalMetastore implements ConnectorMetadata {
             PartitionType partitionType = partitionInfo.getType();
             if (partitionType == PartitionType.LIST) {
                 try {
-                    ((ListPartitionInfo) partitionInfo).unprotectHandleNewartitionDesc(
+                    ((ListPartitionInfo) partitionInfo).unprotectHandleNewPartitionDesc(
                             info.asListPartitionPersistInfo());
                 } catch (AnalysisException e) {
                     throw new DdlException(e.getMessage());

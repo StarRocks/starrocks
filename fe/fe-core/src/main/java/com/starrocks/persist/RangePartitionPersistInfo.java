@@ -8,6 +8,8 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -17,7 +19,8 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-public class RangePartitionPersistInfo extends PartitionPersistInfoV2 {
+public class RangePartitionPersistInfo extends PartitionPersistInfoV2
+        implements GsonPreProcessable, GsonPostProcessable {
 
     private Range<PartitionKey> range;
 

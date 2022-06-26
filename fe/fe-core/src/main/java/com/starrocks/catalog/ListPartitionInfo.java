@@ -9,6 +9,7 @@ import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.ListPartitionPersistInfo;
@@ -278,53 +279,58 @@ public class ListPartitionInfo extends PartitionInfo {
 
     public void handleNewListPartitionDescs(List<PartitionDesc> partitionDescs, List<Partition> partitionList,
                                             Set<String> existPartitionNameSet, boolean isTempPartition)
-            throws AnalysisException {
-        for (int i = 0; i < partitionDescs.size(); i++) {
-            Partition partition = partitionList.get(i);
-            String name = partition.getName();
-            if (!existPartitionNameSet.contains(name)) {
-                long partitionId = partition.getId();
-                PartitionDesc partitionDesc = partitionDescs.get(i);
-                this.idToDataProperty.put(partitionId, partitionDesc.getPartitionDataProperty());
-                this.idToReplicationNum.put(partitionId, partitionDesc.getReplicationNum());
-                this.idToInMemory.put(partitionId, partitionDesc.isInMemory());
-                if (partitionDesc instanceof MultiItemListPartitionDesc) {
-                    MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
-                    this.idToMultiValues.put(partitionId, multiItemListPartitionDesc.getMultiValues());
-                    this.setMultiLiteralExprValues(partitionId, multiItemListPartitionDesc.getMultiValues());
-                } else if (partitionDesc instanceof SingleItemListPartitionDesc) {
-                    SingleItemListPartitionDesc singleItemListPartitionDesc =
-                            (SingleItemListPartitionDesc) partitionDesc;
-                    this.idToValues.put(partitionId, singleItemListPartitionDesc.getValues());
-                    this.setLiteralExprValues(partitionId, singleItemListPartitionDesc.getValues());
-                } else {
-                    throw new AnalysisException(
-                            "add list partition only support single item or multi item list partition now");
+            throws DdlException {
+        try {
+            for (int i = 0; i < partitionDescs.size(); i++) {
+                Partition partition = partitionList.get(i);
+                String name = partition.getName();
+                if (!existPartitionNameSet.contains(name)) {
+                    long partitionId = partition.getId();
+                    PartitionDesc partitionDesc = partitionDescs.get(i);
+                    this.idToDataProperty.put(partitionId, partitionDesc.getPartitionDataProperty());
+                    this.idToReplicationNum.put(partitionId, partitionDesc.getReplicationNum());
+                    this.idToInMemory.put(partitionId, partitionDesc.isInMemory());
+                    if (partitionDesc instanceof MultiItemListPartitionDesc) {
+                        MultiItemListPartitionDesc multiItemListPartitionDesc =
+                                (MultiItemListPartitionDesc) partitionDesc;
+                        this.idToMultiValues.put(partitionId, multiItemListPartitionDesc.getMultiValues());
+                        this.setMultiLiteralExprValues(partitionId, multiItemListPartitionDesc.getMultiValues());
+                    } else if (partitionDesc instanceof SingleItemListPartitionDesc) {
+                        SingleItemListPartitionDesc singleItemListPartitionDesc =
+                                (SingleItemListPartitionDesc) partitionDesc;
+                        this.idToValues.put(partitionId, singleItemListPartitionDesc.getValues());
+                        this.setLiteralExprValues(partitionId, singleItemListPartitionDesc.getValues());
+                    } else {
+                        throw new DdlException(
+                                "add list partition only support single item or multi item list partition now");
+                    }
+                    this.idToIsTempPartition.put(partitionId, isTempPartition);
                 }
-                this.idToIsTempPartition.put(partitionId, isTempPartition);
             }
+        } catch (Exception e) {
+            throw new DdlException(e.getMessage());
         }
     }
 
-    public void unprotectHandleNewartitionDesc(ListPartitionPersistInfo partitionPersistInfo) throws AnalysisException {
+    public void unprotectHandleNewPartitionDesc(ListPartitionPersistInfo partitionPersistInfo)
+            throws AnalysisException {
         Partition partition = partitionPersistInfo.getPartition();
         long partitionId = partition.getId();
         this.idToDataProperty.put(partitionId, partitionPersistInfo.getDataProperty());
         this.idToReplicationNum.put(partitionId, partitionPersistInfo.getReplicationNum());
         this.idToInMemory.put(partitionId, partitionPersistInfo.isInMemory());
+        this.idToIsTempPartition.put(partitionId, partitionPersistInfo.isTempPartition());
 
         List<List<String>> multiValues = partitionPersistInfo.getMultiValues();
         if (multiValues != null && multiValues.size() > 0) {
-            this.idToMultiValues.put(partitionId, partitionPersistInfo.getMultiValues());
-            this.setMultiLiteralExprValues(partitionId, partitionPersistInfo.getMultiValues());
+            this.idToMultiValues.put(partitionId, multiValues);
+            this.setMultiLiteralExprValues(partitionId, multiValues);
         }
 
         List<String> values = partitionPersistInfo.getValues();
         if (values != null && values.size() > 0) {
-            if (values.size() > 0) {
-                this.idToValues.put(partitionId, partitionPersistInfo.getValues());
-                this.setLiteralExprValues(partitionId, partitionPersistInfo.getValues());
-            }
+            this.idToValues.put(partitionId, values);
+            this.setLiteralExprValues(partitionId, values);
         }
 
     }

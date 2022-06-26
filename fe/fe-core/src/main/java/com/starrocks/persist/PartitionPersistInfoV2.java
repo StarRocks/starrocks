@@ -5,18 +5,15 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class PartitionPersistInfoV2 implements Writable, GsonPreProcessable, GsonPostProcessable {
+public class PartitionPersistInfoV2 implements Writable {
 
     @SerializedName("dbId")
     private Long dbId;
@@ -32,8 +29,6 @@ public class PartitionPersistInfoV2 implements Writable, GsonPreProcessable, Gso
     private boolean isInMemory;
     @SerializedName("isTempPartition")
     private boolean isTempPartition;
-    @SerializedName("partitionType")
-    private PartitionType partitionType;
 
     public PartitionPersistInfoV2(Long dbId, Long tableId, Partition partition,
                                   DataProperty dataProperty, short replicationNum,
@@ -45,21 +40,6 @@ public class PartitionPersistInfoV2 implements Writable, GsonPreProcessable, Gso
         this.replicationNum = replicationNum;
         this.isInMemory = isInMemory;
         this.isTempPartition = isTempPartition;
-        this.initPartitionType();
-    }
-
-    private void initPartitionType() {
-        if (this.isListPartitionPersistInfo()) {
-            this.partitionType = PartitionType.LIST;
-        } else if (this.isRangePartitionPersistInfo()) {
-            this.partitionType = PartitionType.RANGE;
-        } else {
-            this.partitionType = PartitionType.UNPARTITIONED;
-        }
-    }
-
-    public PartitionType getPartitionType() {
-        return this.partitionType;
     }
 
     public final boolean isListPartitionPersistInfo() {
@@ -86,12 +66,7 @@ public class PartitionPersistInfoV2 implements Writable, GsonPreProcessable, Gso
 
     public static PartitionPersistInfoV2 read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        ListPartitionPersistInfo info = GsonUtils.GSON.fromJson(json, ListPartitionPersistInfo.class);
-        if (info.getPartitionType() != PartitionType.LIST) {
-            return GsonUtils.GSON.fromJson(json, RangePartitionPersistInfo.class);
-        } else {
-            return info;
-        }
+        return GsonUtils.GSON.fromJson(json, PartitionPersistInfoV2.class);
     }
 
     public Long getDbId() {
@@ -122,13 +97,4 @@ public class PartitionPersistInfoV2 implements Writable, GsonPreProcessable, Gso
         return this.isTempPartition;
     }
 
-    @Override
-    public void gsonPostProcess() throws IOException {
-
-    }
-
-    @Override
-    public void gsonPreProcess() throws IOException {
-
-    }
 }

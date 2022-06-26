@@ -121,6 +121,7 @@ public class PartitionPersistInfoV2Test {
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         PartitionPersistInfoV2 partitionPersistInfoV2 = PartitionPersistInfoV2.read(in);
 
+        Assert.assertEquals(partitionPersistInfoV2.getClass(), ListPartitionPersistInfo.class);
         Assert.assertEquals(partitionPersistInfoV2.getDbId(),
                 listPartitionPersistInfo.getDbId());
         Assert.assertEquals(partitionPersistInfoV2.getTableId(),
@@ -168,6 +169,7 @@ public class PartitionPersistInfoV2Test {
         DataInputStream in = new DataInputStream(new FileInputStream(file));
         PartitionPersistInfoV2 partitionPersistInfoV2 = PartitionPersistInfoV2.read(in);
 
+        Assert.assertEquals(partitionPersistInfoV2.getClass(), RangePartitionPersistInfo.class);
         Assert.assertEquals(partitionPersistInfoV2.getDbId(),
                 rangePartitionPersistInfo.getDbId());
         Assert.assertEquals(partitionPersistInfoV2.getTableId(),
