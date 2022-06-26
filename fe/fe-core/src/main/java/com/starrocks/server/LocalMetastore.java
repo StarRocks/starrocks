@@ -3015,7 +3015,7 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
         if (materializedView == null) {
-            throw new MetaNotFoundException("Materialized view " + mvName + " is not found");
+            throw new MetaNotFoundException(mvName + " is not a materialized view");
         }
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());

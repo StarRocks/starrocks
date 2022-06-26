@@ -145,6 +145,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.Util;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
@@ -462,7 +463,7 @@ public class GlobalStateMgr {
         return feStartTime;
     }
 
-    public LocalMetastore getLocalMetastore() {
+    public ConnectorMetadata getLocalMetastore() {
         return localMetastore;
     }
 
