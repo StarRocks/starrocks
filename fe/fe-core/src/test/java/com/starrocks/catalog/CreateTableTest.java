@@ -47,7 +47,7 @@ public class CreateTableTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().createDb(createDbStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getClusterName(), createDbStmt.getFullDbName());
     }
 
     private static void createTable(String sql) throws Exception {

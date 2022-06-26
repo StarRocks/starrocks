@@ -27,7 +27,7 @@ public class ColocateTableIndexTest {
         // create db1
         String createDbStmtStr = "create database db1;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().createDb(createDbStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getClusterName(), createDbStmt.getFullDbName());
 
         // create table1_1->group1
         String sql = "CREATE TABLE db1.table1_1 (k1 int, k2 int, k3 varchar(32))\n" +
@@ -64,7 +64,7 @@ public class ColocateTableIndexTest {
         // create db2
         createDbStmtStr = "create database db2;";
         createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().createDb(createDbStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getClusterName(), createDbStmt.getFullDbName());
         // create table2_1 -> group2
         sql = "CREATE TABLE db2.table2_1 (k1 int, k2 int, k3 varchar(32))\n" +
                 "PRIMARY KEY(k1)\n" +

@@ -6,7 +6,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
-import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
@@ -21,6 +20,7 @@ import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.CreateExistException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
@@ -60,9 +60,7 @@ public interface ConnectorMetadata {
         return null;
     }
 
-    default void createDb(CreateDbStmt stmt) throws DdlException {}
-
-    default void createDb(String clusterName, String dbName, boolean isSetIfNotExists) throws  DdlException {}
+    default void createDb(String clusterName, String dbName) throws  DdlException, CreateExistException {}
 
     default void dropDb(DropDbStmt stmt) throws DdlException {}
 

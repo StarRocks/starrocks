@@ -118,7 +118,7 @@ public class UtilsTest {
         CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
-            GlobalStateMgr.getCurrentState().createDb(dbStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getClusterName(), dbStmt.getFullDbName());
         } catch (DdlException e) {
             return;
         }

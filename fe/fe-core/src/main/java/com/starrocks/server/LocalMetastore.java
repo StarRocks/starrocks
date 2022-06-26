@@ -42,7 +42,6 @@ import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.ColumnRenameClause;
-import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
@@ -116,6 +115,7 @@ import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.CreateExistException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -321,57 +321,18 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public void createDb(CreateDbStmt stmt) throws DdlException {
-        final String clusterName = stmt.getClusterName();
-        String fullDbName = stmt.getFullDbName();
+    public void createDb(String clusterName, String dbName) throws DdlException, CreateExistException {
         long id = 0L;
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            if (!nameToCluster.containsKey(clusterName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER, clusterName);
-            }
-            if (fullNameToDb.containsKey(fullDbName)) {
-                if (stmt.isSetIfNotExists()) {
-                    LOG.info("create database[{}] which already exists", fullDbName);
-                    return;
-                } else {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_CREATE_EXISTS, fullDbName);
-                }
-            } else {
-                id = getNextId();
-                Database db = new Database(id, fullDbName);
-                db.setClusterName(clusterName);
-                unprotectCreateDb(db);
-                editLog.logCreateDb(db);
-            }
-        } finally {
-            unlock();
-        }
-        LOG.info("createDb dbName = " + fullDbName + ", id = " + id);
-    }
-
-    @Override
-    public void createDb(String clusterName, String dbName, boolean isSetIfNotExists) throws DdlException {
-        long id = 0L;
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
-        }
-        try {
-            if (!nameToCluster.containsKey(clusterName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER, clusterName);
-            }
             if (fullNameToDb.containsKey(dbName)) {
-                if (isSetIfNotExists) {
-                    LOG.info("create database[{}] which already exists", dbName);
-                    return;
-                } else {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_CREATE_EXISTS, dbName);
-                }
+                throw new CreateExistException("Create Db Exists");
             } else {
                 id = getNextId();
                 Database db = new Database(id, dbName);
+                // String clusterName = idToCluster.get(stateMgr.getClusterId()).getName();
                 db.setClusterName(clusterName);
                 unprotectCreateDb(db);
                 editLog.logCreateDb(db);

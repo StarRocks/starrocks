@@ -38,7 +38,7 @@ public class CreateLakeTableTest {
         // create database
         String createDbStmtStr = "create database lake_test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().createDb(createDbStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getClusterName(), createDbStmt.getFullDbName());
 
         Config.use_staros = true;
     }
