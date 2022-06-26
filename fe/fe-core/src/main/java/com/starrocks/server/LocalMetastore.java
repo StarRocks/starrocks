@@ -158,7 +158,6 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
@@ -2996,10 +2995,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public void refreshMaterializedView(RefreshMaterializedViewStatement stmt)
-            throws DdlException, MetaNotFoundException {
-        final String mvName = stmt.getMvName().getTbl();
-        final String dbName = stmt.getMvName().getDb();
+    public void refreshMaterializedView(String dbName, String mvName) throws DdlException, MetaNotFoundException {
         Database db = this.getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
