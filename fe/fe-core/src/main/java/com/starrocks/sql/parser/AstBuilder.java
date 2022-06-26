@@ -159,6 +159,7 @@ import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.Relation;
@@ -726,6 +727,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
         }
         return new AlterMaterializedViewStatement(mvName, newMvName, refreshSchemeDesc);
+    }
+
+    @Override
+    public ParseNode visitRefreshMaterializedViewStatement(
+            StarRocksParser.RefreshMaterializedViewStatementContext context) {
+        QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
+        TableName mvName = qualifiedNameToTableName(mvQualifiedName);
+        return new RefreshMaterializedViewStatement(mvName);
     }
 
     // ------------------------------------------- Cluster Management Statement -----------------------------------------

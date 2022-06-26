@@ -83,4 +83,8 @@ public class SubmitTaskStmt extends DdlStmt {
         return visitor.visitSubmitTaskStmt(this, context);
     }
 
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

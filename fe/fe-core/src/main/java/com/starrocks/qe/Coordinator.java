@@ -1148,6 +1148,7 @@ public class Coordinator {
         // compute hosts of producer fragment before those of consumer fragment(s),
         // the latter might inherit the set of hosts from the former
         // compute hosts *bottom up*.
+        boolean isGatherOutput = fragments.get(0).getDataPartition() == DataPartition.UNPARTITIONED;
 
         for (int i = fragments.size() - 1; i >= 0; --i) {
             PlanFragment fragment = fragments.get(i);
@@ -1219,8 +1220,9 @@ public class Coordinator {
                 // of hostSet, that it to say, each backend has exactly one fragment.
                 Set<TNetworkAddress> hostSet = Sets.newHashSet();
 
-                if (isUnionFragment(fragment)) {
+                if (isUnionFragment(fragment) && isGatherOutput) {
                     // union fragment use all children's host
+                    // if output fragment isn't gather, all fragment must keep 1 instance
                     for (PlanFragment child : fragment.getChildren()) {
                         FragmentExecParams childParams = fragmentExecParamsMap.get(child.getFragmentId());
                         childParams.instanceExecParams.stream().map(e -> e.host).forEach(hostSet::add);

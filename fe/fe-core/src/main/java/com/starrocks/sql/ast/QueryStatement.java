@@ -40,4 +40,9 @@ public class QueryStatement extends StatementBase {
     public RedirectStatus getRedirectStatus() {
         return null;
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

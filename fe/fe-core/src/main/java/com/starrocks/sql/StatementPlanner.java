@@ -1,34 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql;
 
-import com.starrocks.analysis.AdminSetConfigStmt;
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.AdminShowConfigStmt;
-import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
-import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.AlterViewStmt;
-import com.starrocks.analysis.AlterWorkGroupStmt;
-import com.starrocks.analysis.CreateMaterializedViewStmt;
-import com.starrocks.analysis.CreateTableAsSelectStmt;
-import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DmlStmt;
-import com.starrocks.analysis.DropMaterializedViewStmt;
-import com.starrocks.analysis.DropTableStmt;
-import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
-import com.starrocks.analysis.ShowColumnStmt;
-import com.starrocks.analysis.ShowCreateTableStmt;
-import com.starrocks.analysis.ShowDbStmt;
-import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.analysis.ShowTableStatusStmt;
-import com.starrocks.analysis.ShowTableStmt;
-import com.starrocks.analysis.ShowVariablesStmt;
-import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Database;
@@ -39,26 +16,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
-import com.starrocks.sql.ast.AlterMaterializedViewStatement;
-import com.starrocks.sql.ast.AnalyzeStmt;
-import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
-import com.starrocks.sql.ast.CreateCatalogStmt;
-import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.DropAnalyzeJobStmt;
-import com.starrocks.sql.ast.DropCatalogStmt;
-import com.starrocks.sql.ast.ExecuteAsStmt;
-import com.starrocks.sql.ast.GrantImpersonateStmt;
-import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.Relation;
-import com.starrocks.sql.ast.RevokeImpersonateStmt;
-import com.starrocks.sql.ast.RevokeRoleStmt;
-import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
-import com.starrocks.sql.ast.ShowCatalogsStmt;
-import com.starrocks.sql.ast.SubmitTaskStmt;
-import com.starrocks.sql.ast.UseStmt;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
@@ -186,47 +146,6 @@ public class StatementPlanner {
     public static boolean supportedByNewPlanner(StatementBase statement) {
         return AlterTableStmt.isSupportNewPlanner(statement)
                 || AlterSystemStmt.isSupportNewPlanner(statement)
-                || statement instanceof AdminSetConfigStmt
-                || statement instanceof AdminSetReplicaStatusStmt
-                || statement instanceof AdminShowConfigStmt
-                || statement instanceof AdminShowReplicaDistributionStmt
-                || statement instanceof AdminShowReplicaStatusStmt
-                || statement instanceof AlterMaterializedViewStatement
-                || statement instanceof AlterViewStmt
-                || statement instanceof AlterWorkGroupStmt
-                || statement instanceof AnalyzeStmt
-                || statement instanceof CreateAnalyzeJobStmt
-                || statement instanceof CreateCatalogStmt
-                || statement instanceof CreateTableStmt
-                || statement instanceof CreateTableAsSelectStmt
-                || statement instanceof CreateMaterializedViewStatement
-                || statement instanceof CreateMaterializedViewStmt
-                || statement instanceof CreateViewStmt
-                || statement instanceof CreateWorkGroupStmt
-                || statement instanceof DmlStmt
-                || statement instanceof DropAnalyzeJobStmt
-                || statement instanceof DropCatalogStmt
-                || statement instanceof DropMaterializedViewStmt
-                || statement instanceof DropTableStmt
-                || statement instanceof DropWorkGroupStmt
-                || statement instanceof ExecuteAsStmt
-                || statement instanceof GrantImpersonateStmt
-                || statement instanceof GrantRoleStmt
-                || statement instanceof QueryStatement
-                || statement instanceof RefreshTableStmt
-                || statement instanceof RevokeImpersonateStmt
-                || statement instanceof RevokeRoleStmt
-                || statement instanceof ShowAnalyzeJobStmt
-                || statement instanceof ShowCatalogsStmt
-                || statement instanceof ShowColumnStmt
-                || statement instanceof ShowCreateTableStmt
-                || statement instanceof ShowDbStmt
-                || statement instanceof ShowMaterializedViewStmt
-                || statement instanceof ShowTableStmt
-                || statement instanceof ShowTableStatusStmt
-                || statement instanceof ShowVariablesStmt
-                || statement instanceof ShowWorkGroupStmt
-                || statement instanceof SubmitTaskStmt
-                || statement instanceof UseStmt;
+                || statement.isSupportNewPlanner();
     }
 }

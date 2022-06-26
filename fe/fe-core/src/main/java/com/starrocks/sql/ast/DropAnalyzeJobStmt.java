@@ -14,4 +14,9 @@ public class DropAnalyzeJobStmt extends DdlStmt {
     public long getId() {
         return id;
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }
