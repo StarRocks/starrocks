@@ -523,7 +523,6 @@ PARALLEL_TEST(PersistentIndexTest, test_get_move_buckets) {
     }
     int32_t sum = 0;
     for (int32_t i = 0; i < 16; ++i) {
-        LOG(INFO) << "build test[" << i << "] is " << static_cast<int32_t>(bucket_packs_in_page[i]);
         sum += bucket_packs_in_page[i];
     }
 
@@ -531,13 +530,12 @@ PARALLEL_TEST(PersistentIndexTest, test_get_move_buckets) {
     for (int32_t i = 0; i < 100; ++i) {
         res.clear();
         int32_t target = rand() % sum;
-        LOG(INFO) << "loop " << i << " and target is " << target;
         Status st = index.test_get_move_buckets(target, bucket_packs_in_page.data(), &res);
         if (!st.ok()) {
             LOG(WARNING) << "get move bucket failed: " << st.to_string();
             ASSERT_TRUE(false);
         }
-        int32_t find_target;
+        int32_t find_target = 0;
         for (int32_t i = 0; i < res.size(); ++i) {
             find_target += bucket_packs_in_page[res[i]];
         }
