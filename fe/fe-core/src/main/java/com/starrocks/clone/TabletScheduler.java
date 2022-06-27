@@ -427,7 +427,7 @@ public class TabletScheduler extends MasterDaemon {
                 tabletCtx.setErrMsg(e.getMessage());
 
                 if (e.getStatus() == Status.SCHEDULE_FAILED) {
-                    LOG.info("scheduling for tablet[{}] failed, type: {}, reason: {}",
+                    LOG.debug("scheduling for tablet[{}] failed, type: {}, reason: {}",
                             tabletCtx.getTabletId(), tabletCtx.getType().name(), e.getMessage());
                     if (tabletCtx.getType() == Type.BALANCE) {
                         // if balance is disabled, remove this tablet
