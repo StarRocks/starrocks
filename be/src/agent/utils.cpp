@@ -25,6 +25,7 @@
 
 #include <sstream>
 
+#include "agent/master_info.h"
 #include "common/status.h"
 
 using std::map;
@@ -36,18 +37,17 @@ using apache::thrift::transport::TTransportException;
 
 namespace starrocks {
 
-MasterServerClient::MasterServerClient(const TMasterInfo& master_info, FrontendServiceClientCache* client_cache)
-        : _master_info(master_info), _client_cache(client_cache) {}
+MasterServerClient::MasterServerClient(FrontendServiceClientCache* client_cache) : _client_cache(client_cache) {}
 
 AgentStatus MasterServerClient::finish_task(const TFinishTaskRequest& request, TMasterResult* result) {
     Status client_status;
-    FrontendServiceConnection client(_client_cache, _master_info.network_address, config::thrift_rpc_timeout_ms,
-                                     &client_status);
+    TNetworkAddress network_address = get_master_address();
+    FrontendServiceConnection client(_client_cache, network_address, config::thrift_rpc_timeout_ms, &client_status);
 
     if (!client_status.ok()) {
         LOG(WARNING) << "Fail to get master client from cache. "
-                     << "host=" << _master_info.network_address.hostname
-                     << ", port=" << _master_info.network_address.port << ", code=" << client_status.code();
+                     << "host=" << network_address.hostname << ", port=" << network_address.port
+                     << ", code=" << client_status.code();
         return STARROCKS_ERROR;
     }
 
@@ -59,8 +59,8 @@ AgentStatus MasterServerClient::finish_task(const TFinishTaskRequest& request, T
             client_status = client.reopen(config::thrift_rpc_timeout_ms);
             if (!client_status.ok()) {
                 LOG(WARNING) << "Fail to get master client from cache. "
-                             << "host=" << _master_info.network_address.hostname
-                             << ", port=" << _master_info.network_address.port << ", code=" << client_status.code();
+                             << "host=" << network_address.hostname << ", port=" << network_address.port
+                             << ", code=" << client_status.code();
                 return STARROCKS_ERROR;
             }
             client->finishTask(*result, request);
@@ -68,8 +68,8 @@ AgentStatus MasterServerClient::finish_task(const TFinishTaskRequest& request, T
     } catch (TException& e) {
         client.reopen(config::thrift_rpc_timeout_ms);
         LOG(WARNING) << "Fail to finish_task. "
-                     << "host=" << _master_info.network_address.hostname
-                     << ", port=" << _master_info.network_address.port << ", error=" << e.what();
+                     << "host=" << network_address.hostname << ", port=" << network_address.port
+                     << ", error=" << e.what();
         return STARROCKS_ERROR;
     }
 
@@ -78,13 +78,13 @@ AgentStatus MasterServerClient::finish_task(const TFinishTaskRequest& request, T
 
 AgentStatus MasterServerClient::report(const TReportRequest& request, TMasterResult* result) {
     Status client_status;
-    FrontendServiceConnection client(_client_cache, _master_info.network_address, config::thrift_rpc_timeout_ms,
-                                     &client_status);
+    TNetworkAddress network_address = get_master_address();
+    FrontendServiceConnection client(_client_cache, network_address, config::thrift_rpc_timeout_ms, &client_status);
 
     if (!client_status.ok()) {
         LOG(WARNING) << "Fail to get master client from cache. "
-                     << "host=" << _master_info.network_address.hostname
-                     << " port=" << _master_info.network_address.port << " code=" << client_status.code();
+                     << "host=" << network_address.hostname << " port=" << network_address.port
+                     << " code=" << client_status.code();
         return STARROCKS_ERROR;
     }
 
@@ -100,8 +100,8 @@ AgentStatus MasterServerClient::report(const TReportRequest& request, TMasterRes
                 client_status = client.reopen(config::thrift_rpc_timeout_ms);
                 if (!client_status.ok()) {
                     LOG(WARNING) << "Fail to get master client from cache. "
-                                 << "host=" << _master_info.network_address.hostname
-                                 << ", port=" << _master_info.network_address.port << ", code=" << client_status.code();
+                                 << "host=" << network_address.hostname << ", port=" << network_address.port
+                                 << ", code=" << client_status.code();
                     return STARROCKS_ERROR;
                 }
 
@@ -116,8 +116,8 @@ AgentStatus MasterServerClient::report(const TReportRequest& request, TMasterRes
     } catch (TException& e) {
         client.reopen(config::thrift_rpc_timeout_ms);
         LOG(WARNING) << "Fail to report to master. "
-                     << "host=" << _master_info.network_address.hostname
-                     << ", port=" << _master_info.network_address.port << ", code=" << client_status.code();
+                     << "host=" << network_address.hostname << ", port=" << network_address.port
+                     << ", code=" << client_status.code();
         return STARROCKS_ERROR;
     }
 
