@@ -185,6 +185,115 @@ struct MoveDest {
     bool operator<(const MoveDest& rhs) const { return npack < rhs.npack; }
 };
 
+static Status get_move_buckets(size_t target, const uint8_t* bucket_packs_in_page, std::vector<int32_t>* res) {
+    std::vector<int> bucketid_ordered_by_packs(bucket_per_page);
+    size_t total_pack = 0;
+    for (int i = 0; i < bucket_per_page; i++) {
+        bucketid_ordered_by_packs[i] = i;
+        total_pack += bucket_packs_in_page[i];
+    }
+    std::sort(bucketid_ordered_by_packs.begin(), bucketid_ordered_by_packs.end(),
+              [&](const int& l, const int& r) -> bool { return bucket_packs_in_page[l] < bucket_packs_in_page[r]; });
+
+    std::vector<std::vector<int32_t>> idxes;
+    int32_t dp[bucket_per_page][total_pack + 1];
+    for (int i = 0; i < bucket_per_page; ++i) {
+        for (int j = 0; j < total_pack + 1; ++j) {
+            dp[i][j] = -1;
+        }
+    }
+    std::vector<int32_t> idx = {0};
+    idxes.emplace_back(idx);
+    size_t min_pack = bucket_packs_in_page[bucketid_ordered_by_packs[0]];
+    dp[0][min_pack] = 0;
+
+    for (int i = 1; i < bucket_per_page; ++i) {
+        size_t packs = bucket_packs_in_page[bucketid_ordered_by_packs[i]];
+        for (size_t j = 0; j < packs; ++j) {
+            dp[i][j] = dp[i - 1][j];
+        }
+        if (dp[i - 1][packs] != -1) {
+            dp[i][packs] = dp[i - 1][packs];
+        } else {
+            std::vector<int32_t> idx = {i};
+            idxes.emplace_back(idx);
+            dp[i][packs] = idxes.size() - 1;
+        }
+
+        if (packs == target) {
+            auto& idx = idxes.back();
+            for (int32_t j = 0; j < idx.size(); ++j) {
+                res->emplace_back(bucketid_ordered_by_packs[idx[j]]);
+            }
+            return Status::OK();
+        }
+
+        if (packs > target) {
+            continue;
+        }
+
+        for (size_t j = packs + 1; j <= total_pack; ++j) {
+            int32_t pos = dp[i - 1][j];
+            if (pos != -1) {
+                dp[i][j] = pos;
+            } else {
+                pos = dp[i - 1][j - packs];
+                if (pos != -1) {
+                    std::vector<int32_t> idx(idxes[pos].begin(), idxes[pos].end());
+                    idx.emplace_back(i);
+                    idxes.emplace_back(idx);
+                    dp[i][j] = idxes.size() - 1;
+                    pos = idxes.size() - 1;
+                }
+            }
+
+            if (j == target && pos != -1) {
+                auto& idx = idxes[pos];
+                for (int32_t k = 0; k < idx.size(); ++k) {
+                    res->emplace_back(bucketid_ordered_by_packs[idx[k]]);
+                }
+                return Status::OK();
+            }
+
+            if (j > target && pos != -1) {
+                break;
+            }
+        }
+    }
+
+    for (size_t i = target; i < total_pack; i++) {
+        int32_t pos = dp[bucket_per_page - 1][i];
+        if (pos != -1) {
+            //find result
+            auto& idx = idxes[pos];
+            for (int32_t j = 0; j < idx.size(); ++j) {
+                res->emplace_back(bucketid_ordered_by_packs[idx[j]]);
+            }
+            return Status::OK();
+        }
+    }
+    return Status::InternalError("failed to get moved bucket");
+}
+
+static Status find_buckets_to_move(uint32_t pageid, size_t min_pack_to_move, const uint8_t* bucket_packs_in_page,
+                                   std::vector<BucketToMove>* buckets_to_move) {
+    std::vector<int32_t> res;
+    Status st = get_move_buckets(min_pack_to_move, bucket_packs_in_page, &res);
+    if (!st.ok()) {
+        LOG(WARNING) << "find buckets to move failed, status: " << st.to_string();
+        return st;
+    }
+
+    size_t move_packs = 0;
+    for (int32_t i = 0; i < res.size(); ++i) {
+        buckets_to_move->emplace_back(bucket_packs_in_page[res[i]], pageid, res[i]);
+        move_packs += bucket_packs_in_page[res[i]];
+    }
+    DCHECK(move_packs >= min_pack_to_move);
+
+    return Status::OK();
+}
+/*
 static Status get_move_buckets(size_t min_pack_to_move, int32_t move_bucket_num, const uint8_t* bucket_packs_in_page,
                                size_t s_begin, size_t s_end, std::vector<uint32_t>* idxes,
                                std::vector<std::vector<uint32_t>>* res, std::vector<int>& bucketid_ordered_by_packs) {
@@ -292,6 +401,7 @@ static Status find_buckets_to_move(uint32_t pageid, size_t min_pack_to_move, con
 
     return Status::InternalError("find_buckets_to_move");
 }
+*/
 
 struct BucketMovement {
     uint32_t src_pageid;
@@ -439,6 +549,7 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_
             copy_kv_to_page(kv_size, bucket_info.size, bucket_kv_ptrs_tags[bid].first.data(),
                             bucket_kv_ptrs_tags[bid].second.data(), page.pack(cur_packid));
             cur_packid += bucket_packs[bid];
+            //LOG(INFO) << "cur_packid is " << cur_packid;
             DCHECK(cur_packid <= page_size / pack_size);
         }
         for (auto& move : moves) {
@@ -1846,6 +1957,11 @@ Status PersistentIndex::_merge_compaction() {
         }
     }
     return writer.finish();
+}
+
+Status PersistentIndex::test_get_move_buckets(size_t target, const uint8_t* bucket_packs_in_page,
+                                              std::vector<int>* res) {
+    return get_move_buckets(target, bucket_packs_in_page, res);
 }
 
 } // namespace starrocks

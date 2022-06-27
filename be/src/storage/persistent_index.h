@@ -301,6 +301,8 @@ public:
 
     size_t mutable_index_capacity();
 
+    Status test_get_move_buckets(size_t target, const uint8_t* bucket_packs_in_page, std::vector<int>* res);
+
 private:
     std::string _get_l0_index_file_name(std::string& dir, const EditVersion& version);
 
