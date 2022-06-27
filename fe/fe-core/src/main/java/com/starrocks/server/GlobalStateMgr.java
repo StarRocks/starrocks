@@ -575,10 +575,7 @@ public class GlobalStateMgr {
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
-
-        if (Config.integrate_starmgr) {
-            this.starMgrServer = new StarMgrServer();
-        }
+        this.starMgrServer = new StarMgrServer();
     }
 
     public static void destroyCheckpoint() {
@@ -1346,16 +1343,12 @@ public class GlobalStateMgr {
     }
 
     public long saveStarMgrMeta(DataOutputStream dos, long checksum) throws IOException {
-        if (Config.integrate_starmgr) {
-            starMgrServer.dumpMeta(dos);
-        }
+        starMgrServer.dumpMeta(dos);
         return checksum;
     }
 
     public long loadStarMgrMeta(DataInputStream dis, long checksum) throws IOException {
-        if (Config.integrate_starmgr) {
-            starMgrServer.loadMeta(dis);
-        }
+        starMgrServer.loadMeta(dis);
         return checksum;
     }
 
