@@ -115,7 +115,6 @@ import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.CreateExistException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -321,19 +320,18 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public void createDb(String clusterName, String dbName) throws DdlException, CreateExistException {
+    public void createDb(String dbName) throws DdlException {
         long id = 0L;
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
             if (fullNameToDb.containsKey(dbName)) {
-                throw new CreateExistException("Create Db Exists");
+                ErrorReport.reportDdlException(ErrorCode.ERR_DB_CREATE_EXISTS, dbName);
             } else {
                 id = getNextId();
                 Database db = new Database(id, dbName);
-                // String clusterName = idToCluster.get(stateMgr.getClusterId()).getName();
-                db.setClusterName(clusterName);
+                db.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
                 unprotectCreateDb(db);
                 editLog.logCreateDb(db);
             }

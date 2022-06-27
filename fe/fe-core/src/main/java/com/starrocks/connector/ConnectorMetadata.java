@@ -20,7 +20,6 @@ import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.CreateExistException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
@@ -60,7 +59,7 @@ public interface ConnectorMetadata {
         return null;
     }
 
-    default void createDb(String clusterName, String dbName) throws  DdlException, CreateExistException {}
+    default void createDb(String dbName) throws  DdlException {}
 
     default void dropDb(DropDbStmt stmt) throws DdlException {}
 

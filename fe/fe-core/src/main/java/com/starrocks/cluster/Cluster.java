@@ -81,10 +81,6 @@ public class Cluster implements Writable {
         return id;
     }
 
-    public String getName() {
-        return name;
-    }
-
     public void addDb(String name, long id) {
         if (Strings.isNullOrEmpty(name)) {
             return;

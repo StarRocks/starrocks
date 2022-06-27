@@ -59,7 +59,7 @@ public class CachedStatisticStorageTest {
         CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getClusterName(), dbStmt.getFullDbName());
+            GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
         } catch (DdlException e) {
             return;
         }

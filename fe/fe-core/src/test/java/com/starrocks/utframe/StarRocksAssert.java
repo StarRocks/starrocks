@@ -90,7 +90,7 @@ public class StarRocksAssert {
 
         CreateDbStmt createDbStmt =
                 (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt("create database " + dbName + ";", ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getClusterName(), createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
         return this;
     }
 
@@ -112,7 +112,7 @@ public class StarRocksAssert {
     public StarRocksAssert withDatabaseWithoutAnalyze(String dbName) throws Exception {
         CreateDbStmt dbStmt = new CreateDbStmt(false, dbName);
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getClusterName(), dbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
         return this;
     }
 
