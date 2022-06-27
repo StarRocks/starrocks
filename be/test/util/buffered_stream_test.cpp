@@ -23,7 +23,7 @@ TEST_F(BufferedStreamTest, Normal) {
     }
     StringRandomAccessFile file(std::move(test_str));
 
-    BufferedInputStream stream(&file, 0, 10);
+    DefaultBufferedInputStream stream(&file, 0, 10);
 
     ASSERT_EQ(0, stream.tell());
     {
@@ -59,7 +59,7 @@ TEST_F(BufferedStreamTest, Large) {
     test_str.resize(66 * 1024);
     StringRandomAccessFile file(std::move(test_str));
 
-    BufferedInputStream stream(&file, 0, 66 * 1024);
+    DefaultBufferedInputStream stream(&file, 0, 66 * 1024);
 
     // get 1K
     {
@@ -91,7 +91,7 @@ TEST_F(BufferedStreamTest, Large2) {
     test_str.resize(65 * 1024);
     StringRandomAccessFile file(std::move(test_str));
 
-    BufferedInputStream stream(&file, 0, 65 * 1024);
+    DefaultBufferedInputStream stream(&file, 0, 65 * 1024);
 
     // get 1K
     {

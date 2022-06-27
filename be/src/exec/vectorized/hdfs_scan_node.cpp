@@ -703,7 +703,6 @@ void HdfsScanNode::_update_status(const Status& status) {
 
 void HdfsScanNode::_init_counter() {
     _profile.runtime_profile = _runtime_profile.get();
-    _profile.pool = _pool;
 
     // inherited from scan node.
     _profile.rows_read_counter = _rows_read_counter;

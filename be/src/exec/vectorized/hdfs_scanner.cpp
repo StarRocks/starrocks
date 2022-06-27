@@ -123,9 +123,8 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
 
 void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     DCHECK(!has_pending_token());
-    if (_is_closed) {
-        return;
-    }
+    bool expect = false;
+    if (!_is_closed.compare_exchange_strong(expect, true)) return;
     update_counter();
     Expr::close(_conjunct_ctxs, runtime_state);
     Expr::close(_min_max_conjunct_ctxs, runtime_state);
@@ -134,13 +133,12 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     }
     do_close(runtime_state);
     _file.reset(nullptr);
-    _is_closed = true;
     if (_is_open && _scanner_params.open_limit != nullptr) {
         _scanner_params.open_limit->fetch_sub(1, std::memory_order_relaxed);
     }
 }
 
-void HdfsScanner::cleanup() {
+void HdfsScanner::fianlize() {
     if (_runtime_state != nullptr) {
         close(_runtime_state);
     }

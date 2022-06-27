@@ -6,6 +6,7 @@
 
 #include "column/column.h"
 #include "env/env.h"
+#include "exec/parquet/column_reader.h"
 #include "exec/parquet/encoding.h"
 #include "exec/parquet/encoding_dict.h"
 #include "exec/parquet/page_reader.h"
@@ -13,6 +14,7 @@
 #include "exec/parquet/utils.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "storage/vectorized/column_predicate.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::parquet {
@@ -64,16 +66,13 @@ private:
 };
 
 ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_level, int32_t type_length,
-                                     const tparquet::ColumnChunk* column_chunk, RandomAccessFile* file,
-                                     const ColumnChunkReaderOptions& opts)
+                                     const tparquet::ColumnChunk* column_chunk, const ColumnReaderOptions& opts)
         : _max_def_level(max_def_level),
           _max_rep_level(max_rep_level),
           _type_length(type_length),
           _chunk_metadata(column_chunk),
           _opts(opts),
-          _file(new RandomAccessFileWrapper(file, opts.stats)) {}
-
-ColumnChunkReader::~ColumnChunkReader() = default;
+          _file(new RandomAccessFileWrapper(opts.file, opts.stats)) {}
 
 Status ColumnChunkReader::init(int chunk_size) {
     int64_t start_offset = 0;
@@ -82,8 +81,13 @@ Status ColumnChunkReader::init(int chunk_size) {
     } else {
         start_offset = metadata().data_page_offset;
     }
-
-    _page_reader = std::make_unique<PageReader>(_file.get(), start_offset, metadata().total_compressed_size);
+    size_t size = metadata().total_compressed_size;
+    IBufferedInputStream* stream = _opts.sb_stream;
+    if (!_opts.use_sb_stream) {
+        _default_stream = std::make_unique<DefaultBufferedInputStream>(_opts.file, start_offset, size);
+        stream = _default_stream.get();
+    }
+    _page_reader = std::make_unique<PageReader>(stream, start_offset, size);
 
     // seek to the first page
     _page_reader->seek_to_offset(start_offset);
@@ -94,7 +98,7 @@ Status ColumnChunkReader::init(int chunk_size) {
     RETURN_IF_ERROR(_try_load_dictionary(chunk_size));
     RETURN_IF_ERROR(_parse_page_data());
     return Status::OK();
-}
+} // namespace starrocks::parquet
 
 Status ColumnChunkReader::next_page() {
     RETURN_IF_ERROR(_parse_page_header());
@@ -146,7 +150,7 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
         RETURN_IF_ERROR(_compress_codec->decompress(com_slice, &_data));
     } else {
         _data.size = uncompressed_size;
-        _page_reader->read_bytes((const uint8_t**)&_data.data, _data.size);
+        RETURN_IF_ERROR(_page_reader->read_bytes((const uint8_t**)&_data.data, _data.size));
     }
 
     return Status::OK();
