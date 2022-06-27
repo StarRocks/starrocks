@@ -4,6 +4,7 @@
 
 #include "connector/connector.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
 
@@ -15,13 +16,18 @@ namespace pipeline {
 
 class ConnectorScanOperatorFactory final : public ScanOperatorFactory {
 public:
-    ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node);
+    ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop);
 
     ~ConnectorScanOperatorFactory() override = default;
 
     Status do_prepare(RuntimeState* state) override;
     void do_close(RuntimeState* state) override;
     OperatorPtr do_create(int32_t dop, int32_t driver_sequence) override;
+    BalancedChunkBuffer& get_chunk_buffer() { return _chunk_buffer; }
+
+private:
+    // TODO: support round-robin
+    BalancedChunkBuffer _chunk_buffer;
 };
 
 class ConnectorScanOperator final : public ScanOperator {
@@ -41,7 +47,7 @@ private:
 class ConnectorChunkSource final : public ChunkSource {
 public:
     ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                         ScanOperator* op, vectorized::ConnectorScanNode* scan_node);
+                         ScanOperator* op, vectorized::ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
 
     ~ConnectorChunkSource() override;
 
@@ -52,6 +58,8 @@ public:
     bool has_next_chunk() const override;
 
     bool has_output() const override;
+
+    virtual bool has_shared_output() const override;
 
     virtual size_t get_buffer_size() const override;
 
@@ -87,7 +95,7 @@ private:
     bool _closed = false;
     uint64_t _rows_read = 0;
     uint64_t _bytes_read = 0;
-    UnboundedBlockingQueue<vectorized::ChunkPtr> _chunk_buffer;
+    BalancedChunkBuffer& _chunk_buffer;
 };
 
 } // namespace pipeline

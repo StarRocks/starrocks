@@ -34,7 +34,7 @@ public:
     // Whether cache is empty or not
     virtual bool has_output() const = 0;
 
-    virtual bool has_shared_output() const { return false; }
+    virtual bool has_shared_output() const = 0;
 
     virtual size_t get_buffer_size() const = 0;
 
