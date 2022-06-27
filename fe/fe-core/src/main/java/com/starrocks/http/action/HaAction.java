@@ -75,7 +75,7 @@ public class HaAction extends WebBaseAction {
         buffer.append("<h2>Current Journal Id</h2>");
         buffer.append("<pre>");
         if (GlobalStateMgr.getCurrentState().isMaster()) {
-            buffer.append("<p>" + GlobalStateMgr.getCurrentState().getEditLog().getMaxJournalId() + "</p>");
+            buffer.append("<p>" + GlobalStateMgr.getCurrentState().getMaxJournalId() + "</p>");
         } else {
             buffer.append("<p>" + GlobalStateMgr.getCurrentState().getReplayedJournalId() + "</p>");
         }
@@ -135,7 +135,7 @@ public class HaAction extends WebBaseAction {
     }
 
     private void appendDbNames(StringBuilder buffer) {
-        List<Long> names = GlobalStateMgr.getCurrentState().getEditLog().getDatabaseNames();
+        List<Long> names = GlobalStateMgr.getCurrentState().getJournal().getDatabaseNames();
         if (names == null) {
             return;
         }
