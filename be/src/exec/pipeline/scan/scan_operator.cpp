@@ -91,9 +91,6 @@ bool ScanOperator::has_output() const {
     if (!_get_scan_status().ok()) {
         return true;
     }
-    if (has_shared_chunk_source()) {
-        return true;
-    }
     if (has_buffer_output()) {
         return true;
     }
