@@ -102,7 +102,6 @@ public:
     bool join() {
         if (cid != INVALID_BTHREAD_ID) {
             brpc::Join(cid);
-            cid = INVALID_BTHREAD_ID;
             return true;
         } else {
             return false;
@@ -221,6 +220,7 @@ private:
     Status _err_st = Status::OK();
 
     RuntimeState* _runtime_state = nullptr;
+    std::mutex _lock;
 };
 
 class IndexChannel {
@@ -274,6 +274,8 @@ public:
 
     // close() will send RPCs too. If RPCs failed, return error.
     Status close(RuntimeState* state, Status close_status) override;
+
+    void cancel() override;
 
     // Returns the runtime profile for the sink.
     RuntimeProfile* profile() override { return _profile; }
