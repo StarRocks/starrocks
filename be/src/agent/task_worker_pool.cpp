@@ -779,13 +779,14 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
 
                 if (st.ok()) {
                     break;
-                } else if (st.is_service_unavailable()) {
-                    // Status::ServiceUnavailable is returned when all of the threads of the pool are busy.
-                    LOG(WARNING) << "publish version threadpool is busy, retry later. txn_id: "
-                                 << publish_version_req.transaction_id << ", tablet_id: " << tablet_rs.first.tablet_id;
-                    // In general, publish version is fast. A small sleep is needed here.
-                    SleepFor(MonoDelta::FromMilliseconds(50 * retry_time));
                 }
+
+                // Status::ServiceUnavailable is returned when all of the threads of the pool are busy.
+                LOG(WARNING) << "publish version thread pool is not ready, retry later. txn_id: "
+                             << publish_version_req.transaction_id << ", tablet_id: " << tablet_rs.first.tablet_id
+                             << ", err: " << st;
+                // In general, publish version is fast. A small sleep is needed here.
+                SleepFor(MonoDelta::FromMilliseconds(50 * retry_time));
 
                 if (++retry_time < PUBLISH_VERSION_SUBMIT_MAX_RETRY) {
                     LOG(WARNING) << "Retry of publish version on partition is beyond limit. partition: " << partition_id
