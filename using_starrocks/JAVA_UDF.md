@@ -28,19 +28,12 @@ In the **$FE_HOME/conf/fe.conf** file of each frontend (FE), set `enable_ud``f` 
 
     ```Plain%20Text
     project
-
     |--pom.xml
-
     |--src
-
     |  |--main
-
     |  |  |--java
-
     |  |  |--resources
-
     |  |--test
-
     |--target
     ```
 
@@ -48,127 +41,68 @@ In the **$FE_HOME/conf/fe.conf** file of each frontend (FE), set `enable_ud``f` 
 
     ```XML
     <?xml version="1.0" encoding="UTF-8"?>
-
-    <projectxmlns="http://maven.apache.org/POM/4.0.0"xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-
+    <project xmlns="http://maven.apache.org/POM/4.0.0"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
         <modelVersion>4.0.0</modelVersion>
 
-
-
         <groupId>org.example</groupId>
-
         <artifactId>udf</artifactId>
-
         <version>1.0-SNAPSHOT</version>
 
-
-
         <properties>
-
             <maven.compiler.source>8</maven.compiler.source>
-
             <maven.compiler.target>8</maven.compiler.target>
-
         </properties>
 
-
-
         <dependencies>
-
             <dependency>
-
                 <groupId>com.alibaba</groupId>
-
                 <artifactId>fastjson</artifactId>
-
                 <version>1.2.76</version>
-
             </dependency>
-
         </dependencies>
 
-
-
         <build>
-
             <plugins>
-
                 <plugin>
-
                     <groupId>org.apache.maven.plugins</groupId>
-
                     <artifactId>maven-dependency-plugin</artifactId>
-
                     <version>2.10</version>
-
                     <executions>
-
                         <execution>
-
                             <id>copy-dependencies</id>
-
                             <phase>package</phase>
-
                             <goals>
-
                                 <goal>copy-dependencies</goal>
-
                             </goals>
-
                             <configuration>
-
                                 <outputDirectory>${project.build.directory}/lib</outputDirectory>
-
                             </configuration>
-
                         </execution>
-
                     </executions>
-
                 </plugin>
-
                 <plugin>
-
                     <groupId>org.apache.maven.plugins</groupId>
-
                     <artifactId>maven-assembly-plugin</artifactId>
-
                     <version>3.3.0</version>
-
                     <executions>
-
                         <execution>
-
                             <id>make-assembly</id>
-
                             <phase>package</phase>
-
                             <goals>
-
                                 <goal>single</goal>
-
                             </goals>
-
                         </execution>
-
                     </executions>
-
                     <configuration>
-
                         <descriptorRefs>
-
                             <descriptorRef>jar-with-dependencies</descriptorRef>
-
                         </descriptorRefs>
-
                     </configuration>
-
                 </plugin>
-
             </plugins>
-
         </build>
-
     </project>
     ```
 
