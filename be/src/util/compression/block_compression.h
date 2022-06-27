@@ -26,6 +26,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
+#include "util/raw_container.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -50,7 +51,8 @@ public:
     // allocating a very large block of memory at the beginning and then shrink it lator.
     // This optimization is only used in LZ4F and ZSTD.
     virtual Status compress(const Slice& input, Slice* output, bool use_compression_buffer = false,
-                            size_t uncompressed_size = -1, faststring* compressed_body = nullptr) const = 0;
+                            size_t uncompressed_size = -1, faststring* compressed_body1 = nullptr,
+                            raw::RawString* compressed_body2 = nullptr) const = 0;
 
     // Default implementation will merge input list into a big buffer and call
     // compress(Slice) to finish compression. If compression type support
@@ -61,7 +63,8 @@ public:
     // allocating a very large block of memory at the beginning and then shrink it later.
     // This optimization is only used in LZ4F and ZSTD.
     virtual Status compress(const std::vector<Slice>& input, Slice* output, bool use_compression_buffer = false,
-                            size_t uncompressed_size = -1, faststring* compressed_body = nullptr) const;
+                            size_t uncompressed_size = -1, faststring* compressed_body1 = nullptr,
+                            raw::RawString* compressed_body2 = nullptr) const;
 
     // Decompress input data into output, output's capacity should be large
     // enough for decompressed data. Size of decompressed data will be set in

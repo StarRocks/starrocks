@@ -33,6 +33,8 @@ namespace starrocks::compression {
  *        ZSTD_DCtx_Pool zstd_dctx_pool_singleton
  *        LZ4F_CCtx_Pool lz4f_cctx_pool_singleton
  *        LZ4F_DCtx_Pool lz4f_dctx_pool_singleton
+ *        LZ4_DCtx_Pool lz4_dctx_pool_singleton
+ *        LZ4_DCtx_Pool lz4_dctx_pool_singleton
  * 
  * Before compression, we will first apply for a compression context from the corresponding pool 
  * through getZSTD_CCtx(for ZSTD compression context).
@@ -84,6 +86,8 @@ size_t get_zstd_cctx_created_count();
 
 size_t get_zstd_dctx_created_count();
 
+// ==============================================================
+
 struct LZ4F_CCtx_Creator {
     StatusOr<LZ4FCompressContext*> operator()() const noexcept;
 };
@@ -125,5 +129,48 @@ LZ4F_DCtx_Pool& lz4f_dctx_pool();
 size_t get_lz4f_cctx_created_count();
 
 size_t get_lz4f_dctx_created_count();
+
+// ==============================================================
+
+struct LZ4_CCtx_Creator {
+    StatusOr<LZ4CompressContext*> operator()() const noexcept;
+};
+
+struct LZ4_DCtx_Creator {
+    StatusOr<LZ4DecompressContext*> operator()() const noexcept;
+};
+
+struct LZ4_CCtx_Deleter {
+    void operator()(LZ4CompressContext* ctx) const noexcept;
+};
+
+struct LZ4_DCtx_Deleter {
+    void operator()(LZ4DecompressContext* ctx) const noexcept;
+};
+
+struct LZ4_CCtx_Resetter {
+    Status operator()(LZ4CompressContext* ctx) const noexcept;
+};
+
+struct LZ4_DCtx_Resetter {
+    Status operator()(LZ4DecompressContext* ctx) const noexcept;
+};
+
+using LZ4_CCtx_Pool = CompressionContextPool<LZ4CompressContext, LZ4_CCtx_Creator, LZ4_CCtx_Deleter, LZ4_CCtx_Resetter>;
+
+using LZ4_DCtx_Pool =
+        CompressionContextPool<LZ4DecompressContext, LZ4_DCtx_Creator, LZ4_DCtx_Deleter, LZ4_DCtx_Resetter>;
+
+StatusOr<LZ4_CCtx_Pool::Ref> getLZ4_CCtx();
+
+StatusOr<LZ4_DCtx_Pool::Ref> getLZ4_DCtx();
+
+LZ4_CCtx_Pool& lz4_cctx_pool();
+
+LZ4_DCtx_Pool& lz4_dctx_pool();
+
+size_t get_lz4_cctx_created_count();
+
+size_t get_lz4_dctx_created_count();
 
 } // namespace starrocks::compression

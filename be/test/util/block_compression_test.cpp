@@ -29,6 +29,7 @@
 #include "gen_cpp/segment.pb.h"
 #include "util/faststring.h"
 #include "util/random.h"
+#include "util/raw_container.h"
 
 namespace starrocks {
 class BlockCompressionTest : public testing::Test {
@@ -210,7 +211,7 @@ static std::string random_string(int len) {
 
 static const size_t kBenchmarkCompressionTimes = 1000;
 static const size_t kBenchmarkCompressionConcurrentThreads = 32;
-static const size_t kBenchmarkCompressionMultiSliceNum = 5;
+static const size_t kBenchmarkCompressionMultiSliceNum = 2;
 static const size_t str_length = 1024 * 64;
 
 void benchmark_single_slice_compression(starrocks::CompressionTypePB type, std::string& str) {
@@ -284,7 +285,7 @@ void benchmark_compression_buffer(starrocks::CompressionTypePB type, std::string
     for (int i = 0; i < kBenchmarkCompressionTimes; i++) {
         faststring compressed;
         Slice compressed_slice;
-        st = codec->compress(orig_slices, &compressed_slice, true, total_size, &compressed);
+        st = codec->compress(orig_slices, &compressed_slice, true, total_size, &compressed, nullptr);
         compressed.shrink_to_fit();
         ASSERT_TRUE(st.ok());
     }
@@ -349,14 +350,73 @@ TEST_F(BlockCompressionTest, LZ4F_compression_LARGE_PAGE_TEST) {
     }
 
     size_t total_size = orig.size();
-    faststring compressed;
+    raw::RawString compressed;
     Slice compressed_slice;
-    st = codec->compress(orig_slices, &compressed_slice, true, total_size, &compressed);
+    st = codec->compress(orig_slices, &compressed_slice, true, total_size, nullptr, &compressed);
     ASSERT_TRUE(st.ok());
 }
 
+//#define LZ4_BENCHMARK
 //#define LZ4F_BENCHMARK
 //#define ZSTD_BENCHMARK
+
+#ifdef LZ4_BENCHMARK
+TEST_F(BlockCompressionTest, LZ4_benchmark_single_slice_compression) {
+    std::string str = random_string(str_length);
+    benchmark_single_slice_compression(starrocks::CompressionTypePB::LZ4, str);
+}
+
+TEST_F(BlockCompressionTest, LZ4_benchmark_compression) {
+    std::string str = random_string(str_length);
+    benchmark_compression(starrocks::CompressionTypePB::LZ4, str);
+}
+
+TEST_F(BlockCompressionTest, LZ4_benchmark_compression_buffer) {
+    std::string str = random_string(str_length);
+    benchmark_compression_buffer(starrocks::CompressionTypePB::LZ4, str);
+}
+
+TEST_F(BlockCompressionTest, LZ4_benchmark_decompression) {
+    std::string str = random_string(str_length);
+    benchmark_decompression(starrocks::CompressionTypePB::LZ4, str);
+}
+
+TEST_F(BlockCompressionTest, MultiThread_LZ4_benchmark_compression) {
+    std::string str = random_string(str_length);
+    std::vector<std::shared_ptr<std::thread>> threads;
+    for (int i = 0; i < kBenchmarkCompressionConcurrentThreads; i++) {
+        threads.push_back(std::shared_ptr<std::thread>(
+                new std::thread([this, &str] { benchmark_compression(starrocks::CompressionTypePB::LZ4, str); })));
+    }
+    for (int i = 0; i < threads.size(); ++i) {
+        threads[i]->join();
+    }
+}
+
+TEST_F(BlockCompressionTest, MultiThread_LZ4_benchmark_compression_buffer) {
+    std::string str = random_string(str_length);
+    std::vector<std::shared_ptr<std::thread>> threads;
+    for (int i = 0; i < kBenchmarkCompressionConcurrentThreads; i++) {
+        threads.push_back(std::shared_ptr<std::thread>(new std::thread(
+                [this, &str] { benchmark_compression_buffer(starrocks::CompressionTypePB::LZ4, str); })));
+    }
+    for (int i = 0; i < threads.size(); ++i) {
+        threads[i]->join();
+    }
+}
+
+TEST_F(BlockCompressionTest, MultiThread_LZ4_benchmark_decompression) {
+    std::string str = random_string(str_length);
+    std::vector<std::shared_ptr<std::thread>> threads;
+    for (int i = 0; i < kBenchmarkCompressionConcurrentThreads; i++) {
+        threads.push_back(std::shared_ptr<std::thread>(
+                new std::thread([this, &str] { benchmark_decompression(starrocks::CompressionTypePB::LZ4, str); })));
+    }
+    for (int i = 0; i < threads.size(); ++i) {
+        threads[i]->join();
+    }
+}
+#endif
 
 #ifdef LZ4F_BENCHMARK
 TEST_F(BlockCompressionTest, LZ4F_benchmark_single_slice_compression) {

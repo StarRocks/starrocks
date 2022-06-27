@@ -110,6 +110,8 @@ size_t get_zstd_dctx_created_count() {
     return zstd_dctx_pool_singleton.created_count();
 }
 
+// ==============================================================
+
 LZ4F_CCtx_Pool lz4f_cctx_pool_singleton;
 LZ4F_DCtx_Pool lz4f_dctx_pool_singleton;
 
@@ -202,6 +204,93 @@ size_t get_lz4f_cctx_created_count() {
 
 size_t get_lz4f_dctx_created_count() {
     return lz4f_dctx_pool_singleton.created_count();
+}
+
+// ==============================================================
+
+LZ4_CCtx_Pool lz4_cctx_pool_singleton;
+LZ4_DCtx_Pool lz4_dctx_pool_singleton;
+
+StatusOr<LZ4CompressContext*> LZ4_CCtx_Creator::operator()() const noexcept {
+    LZ4CompressContext* context = new (std::nothrow) LZ4CompressContext();
+    if (context == nullptr) {
+        return Status::InvalidArgument("Fail to init LZ4 compression context");
+    }
+    context->ctx = LZ4_createStream();
+    if (context->ctx == nullptr) {
+        delete context;
+        return Status::InvalidArgument("Fail to init LZ4 compression context");
+    }
+    return context;
+}
+
+StatusOr<LZ4DecompressContext*> LZ4_DCtx_Creator::operator()() const noexcept {
+    LZ4DecompressContext* context = new (std::nothrow) LZ4DecompressContext();
+    if (context == nullptr) {
+        return Status::InvalidArgument("Fail to init LZ4F decompression context");
+    }
+    context->ctx = LZ4_createStreamDecode();
+    if (context->ctx == nullptr) {
+        delete context;
+        return Status::InvalidArgument("Fail to init LZ4 decompression context");
+    }
+    return context;
+}
+
+void LZ4_CCtx_Deleter::operator()(LZ4CompressContext* context) const noexcept {
+    DCHECK(!context->compression_fail);
+    LZ4_freeStream(context->ctx);
+    delete context;
+}
+
+void LZ4_DCtx_Deleter::operator()(LZ4DecompressContext* context) const noexcept {
+    DCHECK(!context->decompression_fail);
+    LZ4_freeStreamDecode(context->ctx);
+    delete context;
+}
+
+Status LZ4_CCtx_Resetter::operator()(LZ4CompressContext* context) const noexcept {
+    context->compression_count++;
+    if (context->compression_fail) {
+        context->compression_fail = false;
+    }
+
+    LZ4_resetStream(context->ctx);
+
+    return Status::OK();
+}
+
+Status LZ4_DCtx_Resetter::operator()(LZ4DecompressContext* context) const noexcept {
+    context->decompression_count++;
+    if (context->decompression_fail == true) {
+        context->decompression_fail = false;
+    }
+    LZ4_setStreamDecode(context->ctx, nullptr, 0);
+    return Status::OK();
+}
+
+StatusOr<LZ4_CCtx_Pool::Ref> getLZ4_CCtx() {
+    return lz4_cctx_pool_singleton.get();
+}
+
+StatusOr<LZ4_DCtx_Pool::Ref> getLZ4_DCtx() {
+    return lz4_dctx_pool_singleton.get();
+}
+
+LZ4_CCtx_Pool& lz4_cctx_pool() {
+    return lz4_cctx_pool_singleton;
+}
+
+LZ4_DCtx_Pool& lz4_dctx_pool() {
+    return lz4_dctx_pool_singleton;
+}
+
+size_t get_lz4_cctx_created_count() {
+    return lz4_cctx_pool_singleton.created_count();
+}
+
+size_t get_lz4_dctx_created_count() {
+    return lz4_dctx_pool_singleton.created_count();
 }
 
 } // namespace starrocks::compression
