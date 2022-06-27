@@ -831,7 +831,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
                     // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
                     // But it seems that there's no limit for the number of tablets of a partition.
                     // Since a large queue size brings a little overhead, a big one is chosen here.
-                    .set_max_queue_size(2048)
+                    .set_max_queue_size(8192)
                     .build(&threadpool);
     assert(st.ok());
 
