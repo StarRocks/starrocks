@@ -21,6 +21,7 @@
 
 #include "runtime/stream_load/stream_load_executor.h"
 
+#include "agent/master_info.h"
 #include "common/status.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
@@ -142,7 +143,7 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
     }
     request.__set_request_id(ctx->id.to_thrift());
 
-    TNetworkAddress master_addr = _exec_env->master_info()->network_address;
+    TNetworkAddress master_addr = get_master_address();
     TLoadTxnBeginResult result;
 #ifndef BE_TEST
     RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
@@ -185,7 +186,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
         request.__isset.txnCommitAttachment = true;
     }
 
-    TNetworkAddress master_addr = _exec_env->master_info()->network_address;
+    TNetworkAddress master_addr = get_master_address();
     TLoadTxnCommitResult result;
 #ifndef BE_TEST
     RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
@@ -213,7 +214,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
 Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
     StarRocksMetrics::instance()->txn_rollback_request_total.increment(1);
 
-    TNetworkAddress master_addr = _exec_env->master_info()->network_address;
+    TNetworkAddress master_addr = get_master_address();
     TLoadTxnRollbackRequest request;
     set_request_auth(&request, ctx->auth);
     request.db = ctx->db;
