@@ -25,6 +25,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
@@ -260,12 +261,8 @@ public class MysqlPassword {
         }
 
         byte[] passwd = null;
-        try {
-            passwdString = passwdString.toUpperCase();
-            passwd = passwdString.getBytes("UTF-8");
-        } catch (UnsupportedEncodingException e) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_UNKNOWN_ERROR);
-        }
+        passwdString = passwdString.toUpperCase();
+        passwd = passwdString.getBytes(StandardCharsets.UTF_8);
         if (passwd.length != SCRAMBLE_LENGTH_HEX_LENGTH || passwd[0] != PVERSION41_CHAR) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_PASSWD_LENGTH, 41);
         }
