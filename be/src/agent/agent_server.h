@@ -53,17 +53,12 @@ public:
     // TODO(lingbin): This method is deprecated, should be removed later.
     void publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request);
 
-    void finish_task(const TFinishTaskRequest& finish_task_request);
-
-    AgentStatus report_task(const TReportRequest& request, TMasterResult* result);
-
     AgentServer(const AgentServer&) = delete;
     const AgentServer& operator=(const AgentServer&) = delete;
 
 private:
     // Not Owned
     ExecEnv* _exec_env;
-    std::unique_ptr<MasterServerClient> _master_client;
 
     std::unique_ptr<TaskWorkerPool> _create_tablet_workers;
     std::unique_ptr<TaskWorkerPool> _drop_tablet_workers;
