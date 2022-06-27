@@ -52,7 +52,6 @@ public:
         k_stream_load_rollback_result = TLoadTxnRollbackResult();
         k_stream_load_put_result = TStreamLoadPutResult();
 
-        _env._master_info = new TMasterInfo();
         _env._load_stream_mgr = new LoadStreamMgr();
         _env._stream_load_executor = new StreamLoadExecutor(&_env);
 
@@ -61,8 +60,6 @@ public:
     }
 
     void TearDown() override {
-        delete _env._master_info;
-        _env._master_info = nullptr;
         delete _env._load_stream_mgr;
         _env._load_stream_mgr = nullptr;
         delete _env._stream_load_executor;

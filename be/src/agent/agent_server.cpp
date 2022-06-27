@@ -26,6 +26,7 @@
 #include <filesystem>
 #include <string>
 
+#include "agent/master_info.h"
 #include "agent/status.h"
 #include "agent/task_worker_pool.h"
 #include "common/logging.h"
@@ -51,10 +52,8 @@ const uint32_t ALTER_FINISH_TASK_MAX_RETRY = 10;
 
 FrontendServiceClientCache g_master_service_client_cache;
 
-AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
-        : _exec_env(exec_env),
-          _master_info(master_info),
-          _master_client(new MasterServerClient(master_info, &g_master_service_client_cache)) {
+AgentServer::AgentServer(ExecEnv* exec_env)
+        : _exec_env(exec_env), _master_client(new MasterServerClient(&g_master_service_client_cache)) {
     for (auto& path : exec_env->store_paths()) {
         try {
             string dpp_download_path_str = path.path + DPP_PREFIX;
@@ -140,10 +139,9 @@ AgentServer::~AgentServer() {
 // resend request when something is wrong(BE may need some logic to guarantee idempotence.
 void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks) {
     Status ret_st;
-
-    // TODO check master_info here if it is the same with that of heartbeat rpc
-    if (_master_info.network_address.hostname == "" || _master_info.network_address.port == 0) {
-        Status ret_st = Status::Cancelled("Have not get FE Master heartbeat yet");
+    auto master_address = get_master_address();
+    if (master_address.hostname.empty() || master_address.port == 0) {
+        ret_st = Status::Cancelled("Have not get FE Master heartbeat yet");
         ret_st.to_thrift(&agent_result.status);
         return;
     }

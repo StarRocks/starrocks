@@ -255,17 +255,10 @@ int main(int argc, char** argv) {
 
     // Begin to start Heartbeat services
     starrocks::ThriftRpcHelper::setup(exec_env);
-    starrocks::TMasterInfo* master_info = exec_env->master_info();
-    starrocks::ThriftServer* heartbeat_thrift_server;
-    starrocks::AgentStatus heartbeat_status = starrocks::create_heartbeat_server(
-            exec_env, starrocks::config::heartbeat_service_port, &heartbeat_thrift_server,
-            starrocks::config::heartbeat_service_thread_count, master_info);
-
-    if (starrocks::AgentStatus::STARROCKS_SUCCESS != heartbeat_status) {
-        LOG(ERROR) << "Heartbeat services did not start correctly, exiting";
-        starrocks::shutdown_logging();
-        exit(1);
-    }
+    auto res = starrocks::create_heartbeat_server(exec_env, starrocks::config::heartbeat_service_port,
+                                                  starrocks::config::heartbeat_service_thread_count);
+    CHECK(res.ok()) << res.status();
+    auto heartbeat_thrift_server = std::move(res).value();
 
     starrocks::Status status = heartbeat_thrift_server->start();
     if (!status.ok()) {
@@ -297,7 +290,6 @@ int main(int argc, char** argv) {
 
     heartbeat_thrift_server->stop();
     heartbeat_thrift_server->join();
-    delete heartbeat_thrift_server;
 
     engine->stop();
     delete engine;

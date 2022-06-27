@@ -28,6 +28,7 @@
 #include <sstream>
 #include <utility>
 
+#include "agent/master_info.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -158,9 +159,9 @@ Status SmallFileMgr::_download_file(int64_t file_id, const std::string& md5, std
     HttpClient client;
 
     std::stringstream url_ss;
-    TMasterInfo* master_info = _exec_env->master_info();
-    url_ss << master_info->network_address.hostname << ":" << master_info->http_port << "/api/get_small_file?"
-           << "file_id=" << file_id << "&token=" << master_info->token;
+    TMasterInfo master_info = get_master_info();
+    url_ss << master_info.network_address.hostname << ":" << master_info.http_port << "/api/get_small_file?"
+           << "file_id=" << file_id << "&token=" << master_info.token;
 
     std::string url = url_ss.str();
 
