@@ -149,7 +149,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
     @Override
     public PhysicalPropertySet visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator node, ExpressionContext context) {
-        return createGatherPropertySet();
+        return childrenOutputProperties.get(0);
     }
 
     public PhysicalPropertySet visitPhysicalJoin(PhysicalJoinOperator node, ExpressionContext context) {

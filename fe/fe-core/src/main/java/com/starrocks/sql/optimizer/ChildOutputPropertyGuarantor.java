@@ -258,13 +258,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
 
     @Override
     public Void visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator node, ExpressionContext context) {
-        GroupExpression leftChild = childrenBestExprList.get(0);
-        GroupExpression rightChild = childrenBestExprList.get(1);
-        PhysicalPropertySet leftChildOutputProperty = childrenOutputProperties.get(0);
-        PhysicalPropertySet rightChildOutputProperty = childrenOutputProperties.get(1);
-
-        enforceChildBroadcastDistribution(rightChild, rightChildOutputProperty, 1);
-        return visitOperator(node, context);
+        return visitPhysicalJoin(node, context);
     }
 
     public Void visitPhysicalJoin(PhysicalJoinOperator node, ExpressionContext context) {
