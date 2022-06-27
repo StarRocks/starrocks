@@ -36,7 +36,7 @@ import java.util.stream.Collectors;
 public class StarOSAgent {
     private static final Logger LOG = LogManager.getLogger(StarOSAgent.class);
 
-    public static final String serviceName = "starrocks";
+    public static final String SERVICE_NAME = "starrocks";
 
     private StarClient client;
     private AtomicLong serviceId;
@@ -90,7 +90,7 @@ public class StarOSAgent {
         }
 
         try {
-            serviceId.set(client.bootstrapService("starrocks", serviceName));
+            serviceId.set(client.bootstrapService("starrocks", SERVICE_NAME));
             LOG.info("get serviceId: {} by bootstrapService to starMgr", serviceId);
         } catch (StarClientException e) {
             if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
@@ -104,7 +104,7 @@ public class StarOSAgent {
 
     public void getServiceId() {
         try {
-            ServiceInfo serviceInfo = client.getServiceInfo(serviceName);
+            ServiceInfo serviceInfo = client.getServiceInfo(SERVICE_NAME);
             serviceId.set(serviceInfo.getServiceId());
 
         } catch (StarClientException e) {

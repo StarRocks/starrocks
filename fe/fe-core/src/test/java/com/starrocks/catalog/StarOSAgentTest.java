@@ -234,7 +234,7 @@ public class StarOSAgentTest {
     }
 
     @Test
-    public void testRemoveWorkerfromMap() {
+    public void testRemoveWorkerFromMap() {
         String workerHost = "127.0.0.1:8090";
         Map<String, Long> mockWorkerToId = Maps.newHashMap();
         mockWorkerToId.put(workerHost, 5L);
