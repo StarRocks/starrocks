@@ -39,6 +39,7 @@ ScanOperator::~ScanOperator() {
         if (_chunk_sources[i] != nullptr) {
             _chunk_sources[i]->close(state);
             _chunk_sources[i] = nullptr;
+            detach_chunk_source(i);
         }
     }
 }
@@ -213,16 +214,18 @@ inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
 }
 
 void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_source_index) {
-    if (!_chunk_sources[chunk_source_index]->has_next_chunk()) {
-        _chunk_sources[chunk_source_index]->close(state);
-        _chunk_sources[chunk_source_index] = nullptr;
-    }
-
     _last_growth_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
     _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
     _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
     _decrease_committed_scan_tasks();
     _num_running_io_tasks--;
+
+    if (!_chunk_sources[chunk_source_index]->has_next_chunk()) {
+        _chunk_sources[chunk_source_index]->close(state);
+        _chunk_sources[chunk_source_index] = nullptr;
+        detach_chunk_source(chunk_source_index);
+    }
+
     _is_io_task_running[chunk_source_index] = false;
 }
 

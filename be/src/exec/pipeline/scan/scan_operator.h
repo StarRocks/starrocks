@@ -51,7 +51,7 @@ public:
 
     // Shared scan
     virtual void attach_chunk_source(int32_t source_index) = 0;
-    virtual void detach_chunk_source(int32_t source_index) = 0;
+    virtual void detach_chunk_source(int32_t source_index) {}
     virtual bool has_shared_chunk_source() const = 0;
     virtual bool has_buffer_output() const = 0;
     virtual ChunkPtr get_chunk_from_buffer() = 0;
