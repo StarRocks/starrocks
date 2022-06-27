@@ -84,7 +84,7 @@ public:
             } else
                 break;
         }
-        this->data(state).items = std::move(res);;
+        this->data(state).items = std::move(res);
         this->data(state).rate = rate;
     }
 
