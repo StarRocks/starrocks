@@ -113,6 +113,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -1147,6 +1148,7 @@ public class Coordinator {
         // compute hosts of producer fragment before those of consumer fragment(s),
         // the latter might inherit the set of hosts from the former
         // compute hosts *bottom up*.
+        boolean isGatherOutput = fragments.get(0).getDataPartition() == DataPartition.UNPARTITIONED;
 
         for (int i = fragments.size() - 1; i >= 0; --i) {
             PlanFragment fragment = fragments.get(i);
@@ -1218,8 +1220,9 @@ public class Coordinator {
                 // of hostSet, that it to say, each backend has exactly one fragment.
                 Set<TNetworkAddress> hostSet = Sets.newHashSet();
 
-                if (isUnionFragment(fragment)) {
+                if (isUnionFragment(fragment) && isGatherOutput) {
                     // union fragment use all children's host
+                    // if output fragment isn't gather, all fragment must keep 1 instance
                     for (PlanFragment child : fragment.getChildren()) {
                         FragmentExecParams childParams = fragmentExecParamsMap.get(child.getFragmentId());
                         childParams.instanceExecParams.stream().map(e -> e.host).forEach(hostSet::add);
@@ -1337,9 +1340,20 @@ public class Coordinator {
     }
 
     private boolean isUnionFragment(PlanFragment fragment) {
-        List<UnionNode> l = Lists.newArrayList();
-        fragment.getPlanRoot().collect(UnionNode.class, l);
-        return !l.isEmpty();
+        Deque<PlanNode> dq = new LinkedList<>();
+        dq.offer(fragment.getPlanRoot());
+
+        while (!dq.isEmpty()) {
+            PlanNode nd = dq.poll();
+
+            if (nd instanceof UnionNode) {
+                return true;
+            }
+            if (!(nd instanceof ExchangeNode)) {
+                nd.getChildren().forEach(dq::offer);
+            }
+        }
+        return false;
     }
 
     static final int BUCKET_ABSENT = 2147483647;

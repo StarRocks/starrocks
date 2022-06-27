@@ -57,12 +57,9 @@ public:
     Version version{};
     TabletUid tablet_uid = {0, 0};
     PUniqueId load_id{};
-    // temporary segment files create or not, set false as default
-    // only use for schema change vectorized by now
-    bool write_tmp = false;
+    bool schema_change_sorting = false;
 
     RowsetStatePB rowset_state = PREPARED;
-    RowsetTypePB rowset_type = BETA_ROWSET;
     SegmentsOverlapPB segments_overlap = OVERLAP_UNKNOWN;
 
     // segment file use uint32 to represent row number, therefore the maximum is UINT32_MAX.

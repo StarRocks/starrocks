@@ -231,9 +231,9 @@ inline Status HeapMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
             } else {
                 // all keys in |min_chunk| are less than heap top, but |min_chunk|'s current offset is larger than 0
                 // here we append the remaining rows in |min_chunk| to the chunk.
-                size_t remaing_row_num = min_chunk.remaining_rows();
-                if (rows + remaing_row_num <= _chunk_size) {
-                    append_row_num = remaing_row_num;
+                size_t remain_row_num = min_chunk.remaining_rows();
+                if (rows + remain_row_num <= _chunk_size) {
+                    append_row_num = remain_row_num;
                 } else {
                     append_row_num = _chunk_size - rows;
                 }

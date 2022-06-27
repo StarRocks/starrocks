@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.common;
 
+import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.internal.TemporaryBuffers;
 import io.opentelemetry.api.trace.Span;
@@ -23,8 +24,8 @@ public class TraceManager {
         if (instance == null) {
             synchronized (TraceManager.class) {
                 if (instance == null) {
-                    OpenTelemetrySdkBuilder builder = OpenTelemetrySdk.builder();
                     if (!Config.jaeger_grpc_endpoint.isEmpty()) {
+                        OpenTelemetrySdkBuilder builder = OpenTelemetrySdk.builder();
                         SpanProcessor processor = BatchSpanProcessor.builder(
                                 JaegerGrpcSpanExporter.builder().setEndpoint(Config.jaeger_grpc_endpoint)
                                         .build()).build();
@@ -34,9 +35,11 @@ public class TraceManager {
                                 .setResource(resource)
                                 .build();
                         builder.setTracerProvider(sdkTracerProvider);
+                        OpenTelemetry openTelemetry = builder.buildAndRegisterGlobal();
+                        instance = openTelemetry.getTracer(SERVICE_NAME);
+                    } else {
+                        instance = GlobalOpenTelemetry.get().getTracer(SERVICE_NAME);
                     }
-                    OpenTelemetry openTelemetry = builder.buildAndRegisterGlobal();
-                    instance = openTelemetry.getTracer(SERVICE_NAME);
                 }
             }
         }

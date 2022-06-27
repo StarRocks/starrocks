@@ -8,6 +8,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.Constants;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -74,20 +75,19 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     }
 
     public AnalyzeJob toAnalyzeJob() {
-        AnalyzeJob job = new AnalyzeJob();
-        job.setDbId(dbId);
-        job.setTableId(tableId);
-        job.setColumns(columnNames);
-        job.setType(isSample ? Constants.AnalyzeType.SAMPLE : Constants.AnalyzeType.FULL);
-        job.setScheduleType(Constants.ScheduleType.SCHEDULE);
-        job.setProperties(properties);
-        job.setStatus(Constants.ScheduleStatus.PENDING);
-
-        return job;
+        return new AnalyzeJob(dbId, tableId, columnNames,
+                isSample ? Constants.AnalyzeType.SAMPLE : Constants.AnalyzeType.FULL,
+                Constants.ScheduleType.SCHEDULE, properties, Constants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateAnalyzeJobStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

@@ -1203,7 +1203,7 @@ public class ReportHandler extends Daemon {
                 }
             }
 
-            List<Long> aliveBeIdsInCluster = infoService.getClusterBackendIds(db.getClusterName(), true);
+            List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
             Pair<TabletStatus, TabletSchedCtx.Priority> status = tablet.getHealthStatusWithPriority(infoService,
                     db.getClusterName(), visibleVersion,
                     replicationNum, aliveBeIdsInCluster);

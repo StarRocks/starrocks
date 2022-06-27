@@ -36,6 +36,8 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
@@ -399,6 +401,19 @@ public class DatabaseTransactionMgr {
         txnSpan.setAttribute("db", db.getFullName());
         StringBuilder tableListString = new StringBuilder();
         txnSpan.addEvent("commit_start");
+
+        if (transactionState.getTableIdList().isEmpty()) {
+            // Defensive programming, there have been instances where the upper layer caller forgot to set tableIdList.
+            Set<Long> tableSet = Sets.newHashSet();
+            List<Long> tabletIds = tabletCommitInfos.stream().map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
+            List<TabletMeta> tabletMetaList = globalStateMgr.getTabletInvertedIndex().getTabletMetaList(tabletIds);
+            for (TabletMeta meta : tabletMetaList) {
+                if (meta != TabletInvertedIndex.NOT_EXIST_TABLET_META) {
+                    tableSet.add(meta.getTableId());
+                }
+            }
+            transactionState.setTableIdList(Lists.newArrayList(tableSet));
+        }
 
         List<TransactionStateListener> stateListeners = Lists.newArrayList();
         for (Long tableId : transactionState.getTableIdList()) {
@@ -848,7 +863,7 @@ public class DatabaseTransactionMgr {
         if (!isReplay) {
             if (transactionState.getTransactionStatus() != TransactionStatus.PREPARE
                     || transactionState.getSourceType() == TransactionState.LoadJobSourceType.FRONTEND) {
-                // if this is a prepare txn, and load source type is not FRONTEND
+                // if this is a prepared txn, and load source type is not FRONTEND
                 // no need to persist it. if prepare txn lost, the following commit will just be failed.
                 // user only need to retry this txn.
                 // The FRONTEND type txn is committed and running asynchronously, so we have to persist it.

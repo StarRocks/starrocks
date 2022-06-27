@@ -94,7 +94,6 @@ private:
 
     bool _do_aggregate;
 
-    // column aggregator
     std::vector<ColumnAggregatorPtr> _column_aggregator;
 
     // status

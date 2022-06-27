@@ -228,8 +228,7 @@ bool PrimaryKeyEncoder::is_supported(const vectorized::Field& f) {
     if (f.is_nullable()) {
         return false;
     }
-    auto type = f.type()->type();
-    switch (type) {
+    switch (f.type()->type()) {
     case OLAP_FIELD_TYPE_BOOL:
     case OLAP_FIELD_TYPE_TINYINT:
     case OLAP_FIELD_TYPE_SMALLINT:

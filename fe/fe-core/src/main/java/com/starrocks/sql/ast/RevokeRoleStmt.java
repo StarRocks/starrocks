@@ -11,4 +11,9 @@ public class RevokeRoleStmt extends BaseGrantRevokeRoleStmt {
     public RevokeRoleStmt(String role, UserIdentity userIdent) {
         super(role, userIdent, "REVOKE", "FROM");
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

@@ -199,7 +199,7 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
 
 Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_t next_unique_id,
                                      const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
-                                     RowsetTypePB rowset_type, TabletSchemaPB* schema) {
+                                     TabletSchemaPB* schema) {
     if (tablet_schema.__isset.id) {
         schema->set_id(tablet_schema.id);
     }
@@ -224,7 +224,7 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     schema->set_compress_kind(COMPRESS_LZ4);
 
     FieldTypeVersion field_version = FieldTypeVersion::kV1;
-    if ((rowset_type == BETA_ROWSET) && (config::storage_format_version == 2)) {
+    if (config::storage_format_version == 2) {
         field_version = FieldTypeVersion::kV2;
     }
 

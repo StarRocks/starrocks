@@ -79,8 +79,9 @@ public:
 
     ////////////////// parsing  //////////////////////
     static Status parse(const Slice& src, JsonValue* out);
-
     static StatusOr<JsonValue> parse(const Slice& src);
+    // Try to parse it as JSON object, otherwise consider it as a string
+    static StatusOr<JsonValue> parse_json_or_string(const Slice& src);
 
     ////////////////// serialization  //////////////////////
     size_t serialize(uint8_t* dst) const;

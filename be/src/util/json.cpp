@@ -2,18 +2,50 @@
 
 #include "util/json.h"
 
+#include <algorithm>
+#include <cctype>
 #include <string>
 #include <vector>
 
 #include "column/column.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "gutil/strings/escaping.h"
+#include "gutil/strings/substitute.h"
 #include "simdjson.h"
 #include "util/json_converter.h"
 #include "velocypack/ValueType.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
+
+static bool is_json_start_char(char ch) {
+    return ch == '{' || ch == '[' || ch == '"' || std::isdigit(ch);
+}
+
+StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
+    try {
+        if (src.empty()) {
+            return JsonValue(noneJsonSlice());
+        }
+        // Check the first character for its type
+        auto end = src.get_data() + src.get_size();
+        auto iter = std::find_if_not(src.get_data(), end, std::iswspace);
+        if (iter != end && is_json_start_char(*iter)) {
+            // Parse it as an object or array
+            auto b = vpack::Parser::fromJson(src.get_data(), src.get_size());
+            JsonValue res;
+            res.assign(*b);
+            return res;
+        } else {
+            // Consider it as a sub-type string
+            return from_string(src);
+        }
+    } catch (const vpack::Exception& e) {
+        return fromVPackException(e);
+    }
+    return Status::OK();
+}
 
 Status JsonValue::parse(const Slice& src, JsonValue* out) {
     try {

@@ -49,13 +49,6 @@ public:
     Status open(RuntimeState* state);
     void close(RuntimeState* state) override;
 
-    enum FrameType {
-        Unbounded,               // BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-        UnboundedPrecedingRange, // RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-        UnboundedPrecedingRows,  // ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-        Sliding                  // ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING
-    };
-
     bool is_sink_complete() { return _is_sink_complete.load(std::memory_order_acquire); }
     void sink_complete() { _is_sink_complete.store(true, std::memory_order_release); }
     bool is_chunk_buffer_empty();
@@ -63,12 +56,13 @@ public:
     void offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk);
 
     bool reached_limit() const { return _limit != -1 && _num_rows_returned >= _limit; }
-    std::vector<vectorized::ChunkPtr>& input_chunks() { return _input_chunks; }
-    std::vector<int64_t>& input_chunk_first_row_positions() { return _input_chunk_first_row_positions; }
-    int64_t input_rows() const { return _input_rows; }
+    int64_t first_total_position_of_current_chunk() const {
+        return _input_chunk_first_row_positions[_output_chunk_index];
+    }
+    size_t current_chunk_size() const;
     void update_input_rows(int64_t increment) { _input_rows += increment; }
-    int64_t output_chunk_index() const { return _output_chunk_index; }
-    bool has_output() { return _output_chunk_index < _input_chunks.size(); }
+    bool has_output() const { return _output_chunk_index < _input_chunks.size(); }
+    bool is_current_chunk_finished_eval() { return _window_result_position >= current_chunk_size(); }
     int64_t window_result_position() const { return _window_result_position; }
     void set_window_result_position(int64_t window_result_position) {
         _window_result_position = window_result_position;
@@ -99,14 +93,15 @@ public:
 
     FrameRange get_sliding_frame_range();
 
+    Status add_chunk(const vectorized::ChunkPtr& chunk);
+
     void update_window_batch(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start, int64_t frame_end);
     void reset_window_state();
-    void get_window_function_result(size_t start, size_t end);
+    void get_window_function_result(size_t frame_start, size_t frame_end);
 
     bool is_partition_boundary_reached();
     Status output_result_chunk(vectorized::ChunkPtr* chunk);
     void create_agg_result_columns(int64_t chunk_size);
-    void append_column(size_t chunk_size, vectorized::Column* dst_column, vectorized::ColumnPtr& src_column);
 
     bool is_new_partition();
     int64_t get_total_position(int64_t local_position);
@@ -147,9 +142,11 @@ private:
     std::mutex _buffer_mutex;
 
     RuntimeProfile* _runtime_profile;
-    RuntimeProfile::Counter* _rows_returned_counter;
-    // Time spent processing the child rows.
-    RuntimeProfile::Counter* _compute_timer{};
+    RuntimeProfile::Counter* _rows_returned_counter = nullptr;
+    RuntimeProfile::Counter* _column_resize_timer = nullptr;
+    RuntimeProfile::Counter* _compute_timer = nullptr;
+    RuntimeProfile::Counter* _binary_search_timer = nullptr;
+
     int64_t _num_rows_returned = 0;
     int64_t _limit; // -1: no limit
     bool _has_lead_lag_function = false;
@@ -223,6 +220,7 @@ private:
     bool _need_partition_materializing = false;
 
 private:
+    void _append_column(size_t chunk_size, vectorized::Column* dst_column, vectorized::ColumnPtr& src_column);
     void _update_window_batch_normal(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                      int64_t frame_end);
     // lead and lag function is special, the frame_start and frame_end
@@ -230,7 +228,7 @@ private:
     void _update_window_batch_lead_lag(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                        int64_t frame_end);
 
-    static int64_t _find_first_not_equal(vectorized::Column* column, int64_t target, int64_t start, int64_t end);
+    int64_t _find_first_not_equal(vectorized::Column* column, int64_t target, int64_t start, int64_t end);
 };
 
 // Helper class that properly invokes destructor when state goes out of scope.

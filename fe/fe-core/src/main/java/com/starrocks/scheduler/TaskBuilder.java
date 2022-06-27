@@ -6,7 +6,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 
 import java.util.Map;
@@ -17,8 +16,6 @@ public class TaskBuilder {
 
     public static Task buildTask(SubmitTaskStmt submitTaskStmt, ConnectContext context) {
         Task task = new Task();
-        long taskId = GlobalStateMgr.getCurrentState().getNextId();
-        task.setId(taskId);
         String taskName = submitTaskStmt.getTaskName();
         if (taskName == null) {
             taskName = "ctas-" + DebugUtil.printId(context.getExecutionId());
@@ -35,9 +32,7 @@ public class TaskBuilder {
 
     public static Task buildMvTask(MaterializedView materializedView, String dbName) {
         Task task = new Task();
-        long taskId = GlobalStateMgr.getCurrentState().getNextId();
-        task.setId(taskId);
-        task.setName("mv-" + materializedView.getId());
+        task.setName(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setCreateTime(System.currentTimeMillis());
         task.setDbName(dbName);
@@ -47,5 +42,9 @@ public class TaskBuilder {
         task.setDefinition(materializedView.getViewDefineSql());
         task.setExpireTime(0L);
         return task;
+    }
+
+    public static String getMvTaskName(long mvId) {
+        return "mv-" + mvId;
     }
 }

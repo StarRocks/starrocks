@@ -463,7 +463,6 @@ Status PushHandler::_delete_convert(const TabletSharedPtr& cur_tablet, RowsetSha
         context.tablet_id = cur_tablet->tablet_id();
         context.partition_id = _request.partition_id;
         context.tablet_schema_hash = cur_tablet->schema_hash();
-        context.rowset_type = BETA_ROWSET;
         context.rowset_path_prefix = cur_tablet->schema_hash_path();
         context.tablet_schema = &cur_tablet->tablet_schema();
         context.rowset_state = PREPARED;
@@ -520,7 +519,6 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
     context.tablet_id = cur_tablet->tablet_id();
     context.partition_id = _request.partition_id;
     context.tablet_schema_hash = cur_tablet->schema_hash();
-    context.rowset_type = BETA_ROWSET;
     context.rowset_path_prefix = cur_tablet->schema_hash_path();
     context.tablet_schema = &(cur_tablet->tablet_schema());
     context.rowset_state = PREPARED;

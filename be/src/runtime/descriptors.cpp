@@ -517,6 +517,7 @@ Status DescriptorTbl::create(ObjectPool* pool, const TDescriptorTable& thrift_tb
             break;
 
         case TTableType::OLAP_TABLE:
+        case TTableType::MATERIALIZED_VIEW:
             desc = pool->add(new OlapTableDescriptor(tdesc));
             break;
 

@@ -173,13 +173,17 @@ public class PublishVersionDaemon extends MasterDaemon {
         } // end for readyTransactionStates
     }
 
+    // TODO: support mix OlapTable with LakeTable
     boolean isLakeTableTransaction(TransactionState transactionState) {
         Database db = GlobalStateMgr.getCurrentState().getDb(transactionState.getDbId());
         if (db == null) {
             return false;
         }
-        // TODO: support mix OlapTable with LakeTable
-        Table table = db.getTable(transactionState.getTableIdList().get(0));
+        if (transactionState.getIdToTableCommitInfos().isEmpty()) {
+            return false;
+        }
+        long anyTableId = transactionState.getIdToTableCommitInfos().keySet().stream().findFirst().get();
+        Table table = db.getTable(anyTableId);
         return table.isLakeTable();
     }
 

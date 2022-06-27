@@ -200,6 +200,9 @@ public class OperationType {
     // statistic 10010 ~ 10020
     public static final short OP_ADD_ANALYZER_JOB = 10010;
     public static final short OP_REMOVE_ANALYZER_JOB = 10011;
+    public static final short OP_ADD_ANALYZE_STATUS = 10012;
+    public static final short OP_ADD_BASIC_STATS_META = 10013;
+    public static final short OP_ADD_HISTOGRAM_STATS_META = 10014;
 
     // workgroup 10021 ~ 10030
     public static final short OP_WORKGROUP = 10021;
@@ -213,7 +216,7 @@ public class OperationType {
     // create external catalog
     public static final short OP_CREATE_CATALOG = 10051;
 
-    // drop external catalog
+    // drop catalog
     public static final short OP_DROP_CATALOG = 10061;
     // grant & revoke impersonate
     public static final short OP_GRANT_IMPERSONATE = 10062;

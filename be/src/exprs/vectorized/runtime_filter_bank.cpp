@@ -300,10 +300,8 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
         return;
     }
     if (!eval_context.selectivity.empty()) {
-        const auto num_rows = chunk->num_rows();
         auto& selection = eval_context.running_context.selection;
-        size_t true_count = 0;
-        selection.assign(num_rows, 1);
+        eval_context.running_context.use_merged_selection = false;
         for (auto& kv : eval_context.selectivity) {
             RuntimeFilterProbeDescriptor* rf_desc = kv.second;
             const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
@@ -315,17 +313,16 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
             // for colocate grf
             eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
             filter->evaluate(column.get(), &eval_context.running_context);
-            // true_count is accummulated
-            true_count = SIMD::count_nonzero(selection);
+
+            auto true_count = SIMD::count_nonzero(selection);
             eval_context.run_filter_nums += 1;
 
             if (true_count == 0) {
                 chunk->set_num_rows(0);
                 return;
+            } else {
+                chunk->filter(selection);
             }
-        }
-        if (true_count != num_rows) {
-            chunk->filter(selection);
         }
     }
 }
@@ -367,20 +364,25 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
                                                      RuntimeBloomFilterEvalContext& eval_context) {
     eval_context.selectivity.clear();
     size_t chunk_size = chunk->num_rows();
-    auto& selection = eval_context.running_context.selection;
-    selection.assign(chunk_size, 1);
+    auto& merged_selection = eval_context.running_context.merged_selection;
+    auto& use_merged_selection = eval_context.running_context.use_merged_selection;
+    use_merged_selection = true;
     for (auto& it : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = it.second;
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
         if (filter == nullptr) {
             continue;
         }
+        auto& selection = eval_context.running_context.use_merged_selection
+                                  ? eval_context.running_context.merged_selection
+                                  : eval_context.running_context.selection;
         auto ctx = rf_desc->probe_expr_ctx();
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
         // for colocate grf
         eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
         // true count is not accummulated, it is evaluated for each RF respectively
-        auto true_count = filter->evaluate(column.get(), &eval_context.running_context);
+        filter->evaluate(column.get(), &eval_context.running_context);
+        auto true_count = SIMD::count_nonzero(selection);
         eval_context.run_filter_nums += 1;
         double selectivity = true_count * 1.0 / chunk_size;
         if (selectivity <= 0.5) {     // useful filter
@@ -397,22 +399,25 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
             } else {
                 auto it = eval_context.selectivity.end();
                 it--;
-                // In case of  all the runtime filters' selectivity is above 0.01 and below 0.5,
-                // the top 3 runtime filters of the highest selectivity are chosen to filter data, but if we have
-                // more than 3 runtime filters, the 4th, 5th, etc. can take place of the chosen runtime-filter of
-                // the lowest selectivity only in two cases:
-                // 1. current rf is a local rf;
-                // 2. current rf is a global rf and the chosen rf of the lowest selectivity is also a global rf.
-                // A global rf should not take place of local rf since global rf costs more time than local rf.
-                if (selectivity < it->first && (rf_desc->is_local() || !it->second->is_local())) {
+                if (selectivity < it->first) {
                     eval_context.selectivity.erase(it);
                     eval_context.selectivity.emplace(selectivity, rf_desc);
+                }
+            }
+
+            if (use_merged_selection) {
+                use_merged_selection = false;
+            } else {
+                uint8_t* dest = merged_selection.data();
+                const uint8_t* src = selection.data();
+                for (size_t j = 0; j < chunk_size; ++j) {
+                    dest[j] = src[j] & dest[j];
                 }
             }
         }
     }
     if (!eval_context.selectivity.empty()) {
-        chunk->filter(selection);
+        chunk->filter(merged_selection);
     }
 }
 

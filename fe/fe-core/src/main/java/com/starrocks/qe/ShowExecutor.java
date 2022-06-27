@@ -131,9 +131,15 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
-import com.starrocks.sql.ast.ShowAnalyzeStmt;
+import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
+import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
+import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -257,8 +263,14 @@ public class ShowExecutor {
             handleShowPlugins();
         } else if (stmt instanceof ShowSqlBlackListStmt) {
             handleShowSqlBlackListStmt();
-        } else if (stmt instanceof ShowAnalyzeStmt) {
-            handleShowAnalyze();
+        } else if (stmt instanceof ShowAnalyzeJobStmt) {
+            handleShowAnalyzeJob();
+        } else if (stmt instanceof ShowAnalyzeStatusStmt) {
+            handleShowAnalyzeStatus();
+        } else if (stmt instanceof ShowBasicStatsMetaStmt) {
+            handleShowBasicStatsMeta();
+        } else if (stmt instanceof ShowHistogramStatsMetaStmt) {
+            handleShowHistogramStatsMeta();
         } else if (stmt instanceof ShowWorkGroupStmt) {
             handleShowWorkGroup();
         } else if (stmt instanceof ShowUserStmt) {
@@ -461,7 +473,7 @@ public class ShowExecutor {
     }
 
     // Show databases statement
-    private void handleShowDb() throws AnalysisException {
+    private void handleShowDb() throws AnalysisException, DdlException {
         ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
         List<String> dbNames = new ArrayList<>();
@@ -500,7 +512,7 @@ public class ShowExecutor {
     }
 
     // Show table statement.
-    private void handleShowTable() throws AnalysisException {
+    private void handleShowTable() throws AnalysisException, DdlException {
         ShowTableStmt showTableStmt = (ShowTableStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
         String catalog = ctx.getCurrentCatalog();
@@ -1293,7 +1305,7 @@ public class ShowExecutor {
 
     private void handleShowBackends() {
         final ShowBackendsStmt showStmt = (ShowBackendsStmt) stmt;
-        List<List<String>> backendInfos = BackendsProcDir.getClusterBackendInfos(showStmt.getClusterName());
+        List<List<String>> backendInfos = BackendsProcDir.getClusterBackendInfos();
         resultSet = new ShowResultSet(showStmt.getMetaData(), backendInfos);
     }
 
@@ -1522,13 +1534,56 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
-    private void handleShowAnalyze() {
+    private void handleShowAnalyzeJob() {
         List<AnalyzeJob> jobs = ctx.getGlobalStateMgr().getAnalyzeManager().getAllAnalyzeJobList();
         List<List<String>> rows = Lists.newArrayList();
         jobs.sort(Comparator.comparing(AnalyzeJob::getId));
         for (AnalyzeJob job : jobs) {
             try {
-                rows.add(job.showAnalyzeJobs());
+                rows.add(ShowAnalyzeJobStmt.showAnalyzeJobs(job));
+            } catch (MetaNotFoundException e) {
+                // pass
+            }
+        }
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private void handleShowAnalyzeStatus() {
+        List<AnalyzeStatus> statuses = new ArrayList<>(ctx.getGlobalStateMgr().getAnalyzeManager()
+                .getAnalyzeStatusMap().values());
+        List<List<String>> rows = Lists.newArrayList();
+        statuses.sort(Comparator.comparing(AnalyzeStatus::getId));
+        for (AnalyzeStatus status : statuses) {
+            try {
+                rows.add(ShowAnalyzeStatusStmt.showAnalyzeStatus(status));
+            } catch (MetaNotFoundException e) {
+                // pass
+            }
+        }
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private void handleShowBasicStatsMeta() {
+        List<BasicStatsMeta> metas = new ArrayList<>(ctx.getGlobalStateMgr().getAnalyzeManager()
+                .getBasicStatsMetaMap().values());
+        List<List<String>> rows = Lists.newArrayList();
+        for (BasicStatsMeta meta : metas) {
+            try {
+                rows.add(ShowBasicStatsMetaStmt.showBasicStatsMeta(meta));
+            } catch (MetaNotFoundException e) {
+                // pass
+            }
+        }
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private void handleShowHistogramStatsMeta() {
+        List<HistogramStatsMeta> metas = new ArrayList<>(ctx.getGlobalStateMgr().getAnalyzeManager()
+                .getHistogramStatsMetaMap().values());
+        List<List<String>> rows = Lists.newArrayList();
+        for (HistogramStatsMeta meta : metas) {
+            try {
+                rows.add(ShowHistogramStatsMetaStmt.showHistogramStatsMeta(meta));
             } catch (MetaNotFoundException e) {
                 // pass
             }

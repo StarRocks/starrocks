@@ -151,8 +151,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
                     _pending_commits.emplace(version, rowset);
                 } else {
                     LOG(WARNING) << "Fail to create rowset from pending rowset meta. rowset="
-                                 << rowset_meta->rowset_id() << " type=" << rowset_meta->rowset_type()
-                                 << " state=" << rowset_meta->rowset_state();
+                                 << rowset_meta->rowset_id() << " state=" << rowset_meta->rowset_state();
                 }
                 return true;
             }));
@@ -174,7 +173,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
                     _rowsets[rowset_meta->get_rowset_seg_id()] = std::move(rowset);
                 } else {
                     LOG(WARNING) << "Fail to create rowset from rowset meta. rowset=" << rowset_meta->rowset_id()
-                                 << " type=" << rowset_meta->rowset_type() << " state=" << rowset_meta->rowset_state();
+                                 << " state=" << rowset_meta->rowset_state();
                 }
                 all_rowsets.insert(rowset_meta->get_rowset_seg_id());
                 return true;
@@ -1083,27 +1082,21 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
         }
     }
 
-    uint32_t max_rows_per_segment =
-            CompactionUtils::get_segment_max_rows(config::max_segment_file_size, input_row_num, input_rowsets_size);
+    CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
+            _tablet.num_columns(), config::vertical_compaction_max_columns_per_group, input_rowsets.size());
 
-    int64_t max_columns_per_group = config::vertical_compaction_max_columns_per_group;
-    size_t num_columns = _tablet.num_columns();
-    CompactionAlgorithm algorithm =
-            CompactionUtils::choose_compaction_algorithm(num_columns, max_columns_per_group, input_rowsets.size());
-
-    // create rowset writer
     RowsetWriterContext context(kDataFormatV2, config::storage_format_version);
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
     context.tablet_uid = _tablet.tablet_uid();
     context.tablet_id = _tablet.tablet_id();
     context.partition_id = _tablet.partition_id();
     context.tablet_schema_hash = _tablet.schema_hash();
-    context.rowset_type = BETA_ROWSET;
     context.rowset_path_prefix = _tablet.schema_hash_path();
-    context.tablet_schema = &(_tablet.tablet_schema());
+    context.tablet_schema = &_tablet.tablet_schema();
     context.rowset_state = COMMITTED;
     context.segments_overlap = NONOVERLAPPING;
-    context.max_rows_per_segment = max_rows_per_segment;
+    context.max_rows_per_segment =
+            CompactionUtils::get_segment_max_rows(config::max_segment_file_size, input_row_num, input_rowsets_size);
     context.writer_type =
             (algorithm == VERTICAL_COMPACTION ? RowsetWriterType::kVertical : RowsetWriterType::kHorizontal);
     std::unique_ptr<RowsetWriter> rowset_writer;
@@ -1158,13 +1151,13 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     int64_t creation_time = time(nullptr);
     edit.set_creation_time(creation_time);
     uint32_t rowsetid = _next_rowset_id;
-    auto& inputs = (*pinfo)->inputs;
-    auto& ors = _edit_version_infos.back()->rowsets;
+    const auto& inputs = (*pinfo)->inputs;
+    const auto& ors = _edit_version_infos.back()->rowsets;
     for (auto rowset_id : inputs) {
         if (std::find(ors.begin(), ors.end(), rowset_id) == ors.end()) {
             // This may happen after a full clone.
             _compaction_state.reset();
-            auto msg = Substitute("compaction input rowset($0) not found $2", rowset_id, _debug_string(false, false));
+            auto msg = Substitute("compaction input rowset($0) not found $1", rowset_id, _debug_string(false, false));
             LOG(WARNING) << msg;
             return Status::Cancelled(msg);
         }
@@ -2245,9 +2238,8 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         const auto& src_rowset = src_rowsets[i];
 
         RowsetReleaseGuard guard(src_rowset->shared_from_this());
-        auto beta_rowset = down_cast<BetaRowset*>(src_rowset.get());
-        auto res = beta_rowset->get_segment_iterators2(base_schema, base_tablet->data_dir()->get_meta(),
-                                                       version.major(), &stats);
+        auto res = src_rowset->get_segment_iterators2(base_schema, base_tablet->data_dir()->get_meta(), version.major(),
+                                                      &stats);
         if (!res.ok()) {
             return res.status();
         }
@@ -2260,7 +2252,6 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         writer_context.tablet_id = _tablet.tablet_id();
         writer_context.partition_id = _tablet.partition_id();
         writer_context.tablet_schema_hash = _tablet.schema_hash();
-        writer_context.rowset_type = _tablet.tablet_meta()->preferred_rowset_type();
         writer_context.rowset_path_prefix = _tablet.schema_hash_path();
         writer_context.tablet_schema = &_tablet.tablet_schema();
         writer_context.rowset_state = VISIBLE;
@@ -2509,7 +2500,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         for (int seg_id = 0; seg_id < rowset.num_segments(); seg_id++) {
             RowsetId rowset_id;
             rowset_id.init(rowset.rowset_id());
-            auto path = BetaRowset::segment_file_path(_tablet.schema_hash_path(), rowset_id, seg_id);
+            auto path = Rowset::segment_file_path(_tablet.schema_hash_path(), rowset_id, seg_id);
             auto st = FileSystem::Default()->path_exists(path);
             if (!st.ok()) {
                 return Status::InternalError("segment file does not exist: " + st.to_string());
@@ -2518,7 +2509,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         for (int del_id = 0; del_id < rowset.num_delete_files(); del_id++) {
             RowsetId rowset_id;
             rowset_id.init(rowset.rowset_id());
-            auto path = BetaRowset::segment_del_file_path(_tablet.schema_hash_path(), rowset_id, del_id);
+            auto path = Rowset::segment_del_file_path(_tablet.schema_hash_path(), rowset_id, del_id);
             auto st = FileSystem::Default()->path_exists(path);
             if (!st.ok()) {
                 return Status::InternalError("delete file does not exist: " + st.to_string());
@@ -2810,7 +2801,7 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
             ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
         }
         std::string seg_path =
-                BetaRowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
+                Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
         auto segment = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path,
                                      rssid - iter->first, &rowset->schema());
         if (!segment.ok()) {

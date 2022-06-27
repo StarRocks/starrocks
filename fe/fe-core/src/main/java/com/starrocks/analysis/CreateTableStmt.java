@@ -680,4 +680,8 @@ public class CreateTableStmt extends DdlStmt {
         return visitor.visitCreateTableStatement(this, context);
     }
 
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }
