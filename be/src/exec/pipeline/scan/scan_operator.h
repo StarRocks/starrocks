@@ -48,11 +48,13 @@ public:
     virtual Status do_prepare(RuntimeState* state) = 0;
     virtual void do_close(RuntimeState* state) = 0;
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
-    virtual void attach_chunk_source(int32_t source_index) {}
-    virtual void detach_chunk_source(int32_t source_index) {}
-    virtual bool has_shared_chunk_source() const { return false; }
-    virtual bool has_buffer_output() const { return false; }
-    virtual ChunkPtr get_chunk_from_buffer() { return nullptr; }
+
+    // Shared scan
+    virtual void attach_chunk_source(int32_t source_index) = 0;
+    virtual void detach_chunk_source(int32_t source_index) = 0;
+    virtual bool has_shared_chunk_source() const = 0;
+    virtual bool has_buffer_output() const = 0;
+    virtual ChunkPtr get_chunk_from_buffer() = 0;
 
     virtual int64_t get_last_scan_rows_num() {
         int64_t scan_rows_num = _last_scan_rows_num;

@@ -26,7 +26,7 @@ public:
     BalancedChunkBuffer& get_chunk_buffer() { return _chunk_buffer; }
 
 private:
-    // TODO: support round-robin
+    // TODO: refactor the OlapScanContext, move them into the context
     BalancedChunkBuffer _chunk_buffer;
 };
 
@@ -41,7 +41,17 @@ public:
     void do_close(RuntimeState* state) override;
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
 
+    // TODO: refactor it into the base class
+    void attach_chunk_source(int32_t source_index) override;
+    void detach_chunk_source(int32_t source_index) override;
+    bool has_shared_chunk_source() const override;
+    bool has_buffer_output() const override;
+    ChunkPtr get_chunk_from_buffer() override;
+
 private:
+    using ActiveInputSet = phmap::flat_hash_set<int32_t>;
+
+    ActiveInputSet _active_inputs;
 };
 
 class ConnectorChunkSource final : public ChunkSource {

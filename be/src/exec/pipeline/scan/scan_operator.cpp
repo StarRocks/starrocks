@@ -39,7 +39,6 @@ ScanOperator::~ScanOperator() {
         if (_chunk_sources[i] != nullptr) {
             _chunk_sources[i]->close(state);
             _chunk_sources[i] = nullptr;
-            detach_chunk_source(i);
         }
     }
 }
