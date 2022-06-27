@@ -1,6 +1,6 @@
 name: Docs Improvement
 description: Help us improve the Docs!
-labels: docs/suggesion
+labels: docs/suggestion
 title: "[Improvement]: " 
 body:
 - type: markdown
