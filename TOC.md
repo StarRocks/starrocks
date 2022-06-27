@@ -44,7 +44,7 @@
   + [Array](/using_starrocks/Array.md)
   + [Window Function](/using_starrocks/Window_function.md)
   + [SHOW ROLES](/sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
-  + [Java UDFs](/using_starrocks/Java-UDFs.md)
+  + [Java UDFs](/using_starrocks/JAVA_UDF.md)
   + [Cost Based Optimizer](/using_starrocks/Cost_based_optimizer.md)
   + [Lateral Join](/using_starrocks/Lateral_join.md)
   + [Configure a time zone](/using_starrocks/timezone.md)
