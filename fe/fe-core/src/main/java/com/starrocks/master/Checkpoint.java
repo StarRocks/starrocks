@@ -24,8 +24,8 @@ package com.starrocks.master;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.journal.Journal;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
@@ -50,12 +50,12 @@ public class Checkpoint extends MasterDaemon {
 
     private GlobalStateMgr globalStateMgr;
     private String imageDir;
-    private EditLog editLog;
+    private Journal journal;
 
-    public Checkpoint(EditLog editLog) {
+    public Checkpoint(Journal journal) {
         super("leaderCheckpointer", FeConstants.checkpoint_interval_second * 1000L);
         this.imageDir = GlobalStateMgr.getServingState().getImageDir();
-        this.editLog = editLog;
+        this.journal = journal;
     }
 
     @Override
@@ -68,7 +68,7 @@ public class Checkpoint extends MasterDaemon {
             // get max image version
             imageVersion = storage.getImageJournalId();
             // get max finalized journal id
-            checkPointVersion = editLog.getFinalizedJournalId();
+            checkPointVersion = journal.getFinalizedJournalId();
             LOG.info("checkpoint imageVersion {}, checkPointVersion {}", imageVersion, checkPointVersion);
             if (imageVersion >= checkPointVersion) {
                 return;
@@ -82,7 +82,7 @@ public class Checkpoint extends MasterDaemon {
         // generate new image file
         LOG.info("begin to generate new image: image.{}", checkPointVersion);
         globalStateMgr = GlobalStateMgr.getCurrentState();
-        globalStateMgr.setEditLog(editLog);
+        globalStateMgr.setJournal(journal);
         try {
             globalStateMgr.loadImage(imageDir);
             globalStateMgr.replayJournal(checkPointVersion);
@@ -185,7 +185,7 @@ public class Checkpoint extends MasterDaemon {
                 }
                 deleteVersion = Math.min(minOtherNodesJournalId, checkPointVersion);
             }
-            editLog.deleteJournals(deleteVersion + 1);
+            journal.deleteJournals(deleteVersion + 1);
             if (MetricRepo.isInit) {
                 MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
             }

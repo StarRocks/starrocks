@@ -35,7 +35,6 @@ import com.sleepycat.je.LockMode;
 import com.sleepycat.je.OperationStatus;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.meta.MetaContext;
-import com.starrocks.server.GlobalStateMgr;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -67,7 +66,7 @@ public class BDBTool {
             env = new Environment(new File(metaPath), envConfig);
         } catch (DatabaseException e) {
             e.printStackTrace();
-            System.err.println("Failed to open BDBJE env: " + GlobalStateMgr.getCurrentState().getBdbDir() + ". exit");
+            System.err.println("Failed to open BDBJE env: " + metaPath + ". exit");
             return false;
         }
         Preconditions.checkNotNull(env);

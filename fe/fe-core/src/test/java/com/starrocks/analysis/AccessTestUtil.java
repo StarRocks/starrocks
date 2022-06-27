@@ -37,8 +37,10 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.journal.JournalTask;
 import com.starrocks.load.Load;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
@@ -51,6 +53,8 @@ import mockit.Expectations;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 
 public class AccessTestUtil {
     private static FakeEditLog fakeEditLog;
@@ -93,8 +97,9 @@ public class AccessTestUtil {
 
             Auth auth = fetchAdminAccess();
 
+            BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<JournalTask>(100);
             fakeEditLog = new FakeEditLog();
-            EditLog editLog = new EditLog("name");
+            EditLog editLog = new EditLog(journalQueue);
             globalStateMgr.setEditLog(editLog);
 
             Database db = new Database(50000L, "testCluster:testDb");
