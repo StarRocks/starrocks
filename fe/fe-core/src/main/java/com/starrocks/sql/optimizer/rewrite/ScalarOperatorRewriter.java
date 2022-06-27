@@ -23,7 +23,7 @@ public class ScalarOperatorRewriter {
             new ImplicitCastRule()
     );
 
-    public static final List<ScalarOperatorRewriteRule> CastAndFold_RULES = Lists.newArrayList(
+    public static final List<ScalarOperatorRewriteRule> CAST_AND_FOLD_RULES = Lists.newArrayList(
             new ImplicitCastRule(),
             new ReduceCastRule(),
             new FoldConstantsRule()
