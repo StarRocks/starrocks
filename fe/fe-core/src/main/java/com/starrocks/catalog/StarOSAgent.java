@@ -128,6 +128,7 @@ public class StarOSAgent {
     }
 
     public void addWorker(long backendId, String workerIpPort) {
+        prepare();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             if (serviceId.equals(-1L)) {
                 LOG.warn("When addWorker serviceId is -1");
@@ -189,6 +190,7 @@ public class StarOSAgent {
     }
 
     public void removeWorker(String workerIpPort) throws DdlException {
+        prepare();
 
         long workerId = getWorker(workerIpPort);
 
@@ -289,7 +291,7 @@ public class StarOSAgent {
         List<ReplicaInfo> replicas = getShardReplicas(shardId);
 
         Set<Long> backendIds = Sets.newHashSet();
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             for (ReplicaInfo replicaInfo : replicas) {
                 // TODO: check worker state
                 WorkerInfo workerInfo = replicaInfo.getWorkerInfo();
