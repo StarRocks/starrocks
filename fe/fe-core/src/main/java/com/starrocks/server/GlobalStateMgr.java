@@ -29,7 +29,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Range;
-import com.sleepycat.je.rep.InsufficientLogException;
 import com.staros.manager.StarManager;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob;
