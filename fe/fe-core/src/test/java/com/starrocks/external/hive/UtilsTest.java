@@ -157,7 +157,7 @@ public class UtilsTest {
         Type resType = Utils.convertToArrayType(typeStr);
         Assert.assertEquals(arrayType, resType);
 
-        itemType = ScalarType.createType(PrimitiveType.VARCHAR);
+        itemType = ScalarType.createDefaultString();
         arrayType = new ArrayType(itemType);
         typeStr = "Array<string>";
         resType = Utils.convertToArrayType(typeStr);
