@@ -74,6 +74,8 @@ ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_leve
           _opts(opts),
           _file(new RandomAccessFileWrapper(opts.file, opts.stats)) {}
 
+ColumnChunkReader::~ColumnChunkReader() = default;
+
 Status ColumnChunkReader::init(int chunk_size) {
     int64_t start_offset = 0;
     if (metadata().__isset.dictionary_page_offset) {
@@ -98,7 +100,7 @@ Status ColumnChunkReader::init(int chunk_size) {
     RETURN_IF_ERROR(_try_load_dictionary(chunk_size));
     RETURN_IF_ERROR(_parse_page_data());
     return Status::OK();
-} // namespace starrocks::parquet
+}
 
 Status ColumnChunkReader::next_page() {
     RETURN_IF_ERROR(_parse_page_header());
