@@ -24,14 +24,15 @@ public class NestLoopJoinTest extends PlanTestBase {
         sql = " select a.v2 from t0 a join t0 b on a.v3 = b.v3;";
         String planFragment = getFragmentPlan(sql);
         System.err.println(planFragment);
-        Assert.assertTrue(planFragment, planFragment.contains(" 4:NESTLOOP JOIN\n" +
+        Assert.assertTrue(planFragment, planFragment.contains(" 3:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 3: v3 = 6: v3\n" +
                 "  |  \n" +
-                "  |----3:EXCHANGE\n" +
+                "  |----2:EXCHANGE\n" +
                 "  |    \n" +
-                "  1:EXCHANGE"));
+                "  0:OlapScanNode\n"));
     }
 
     @Test
