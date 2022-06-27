@@ -21,12 +21,12 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -34,7 +34,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 public class SetPassVarTest {
-    private Analyzer analyzer;
 
     @Mocked
     private Auth auth;
@@ -43,7 +42,6 @@ public class SetPassVarTest {
 
     @Before
     public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
         MockedAuth.mockedAuth(auth);
         MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
         UserIdentity currentUser = new UserIdentity("root", "192.168.1.1");
@@ -52,26 +50,26 @@ public class SetPassVarTest {
     }
 
     @Test
-    public void testNormal() throws UserException, AnalysisException {
+    public void testNormal() throws UserException {
         SetPassVar stmt;
 
         //  mode: SET PASSWORD FOR 'testUser' = 'testPass';
         stmt = new SetPassVar(new UserIdentity("testUser", "%"), "*88EEBA7D913688E7278E2AD071FDB5E76D76D34B");
-        stmt.analyze(analyzer);
-        Assert.assertEquals("testCluster:testUser", stmt.getUserIdent().getQualifiedUser());
+        stmt.analyze();
+        Assert.assertEquals("default_cluster:testUser", stmt.getUserIdent().getQualifiedUser());
         Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", new String(stmt.getPassword()));
-        Assert.assertEquals("SET PASSWORD FOR 'testCluster:testUser'@'%' = '*XXX'",
+        Assert.assertEquals("SET PASSWORD FOR 'default_cluster:testUser'@'%' = '*XXX'",
                 stmt.toString());
 
         // empty password
         stmt = new SetPassVar(new UserIdentity("testUser", "%"), null);
-        stmt.analyze(analyzer);
-        Assert.assertEquals("SET PASSWORD FOR 'testCluster:testUser'@'%' = '*XXX'", stmt.toString());
+        stmt.analyze();
+        Assert.assertEquals("SET PASSWORD FOR 'default_cluster:testUser'@'%' = '*XXX'", stmt.toString());
 
         // empty user
         // empty password
         stmt = new SetPassVar(null, null);
-        stmt.analyze(analyzer);
+        stmt.analyze();
         Assert.assertEquals("SET PASSWORD FOR 'root'@'192.168.1.1' = '*XXX'", stmt.toString());
     }
 
@@ -80,18 +78,18 @@ public class SetPassVarTest {
         String setSql = "set sql_mode = concat(@@sql_mode,',STRICT_TRANS_TABLES');";
         SetStmt stmt = (SetStmt) UtFrameUtils.parseAndAnalyzeStmt(setSql, ctx);
         ctx.getSessionVariable().setSqlMode(SqlModeHelper.MODE_STRICT_TRANS_TABLES);
-        stmt.analyze(analyzer);
+        stmt.analyze();
         SetVar setVars = stmt.getSetVars().get(0);
 
         Assert.assertTrue(setVars.getValue().getStringValue().contains("STRICT_TRANS_TABLES"));
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testBadPassword() throws UserException, AnalysisException {
+    @Test(expected = SemanticException.class)
+    public void testBadPassword() {
         SetPassVar stmt;
         //  mode: SET PASSWORD FOR 'testUser' = 'testPass';
         stmt = new SetPassVar(new UserIdentity("testUser", "%"), "*88EEBAHD913688E7278E2AD071FDB5E76D76D34B");
-        stmt.analyze(analyzer);
+        stmt.analyze();
         Assert.fail("No exception throws.");
     }
 

@@ -58,7 +58,7 @@ public class ClusterNamespace {
             return false;
         }
         final String[] ele = str.split(CLUSTER_DELIMITER);
-        return (ele.length > 1) ? true : false;
+        return ele.length > 1;
     }
 
     private static String linkString(String cluster, String name) {
@@ -69,9 +69,7 @@ public class ClusterNamespace {
                 || name.equalsIgnoreCase(Auth.ADMIN_USER)) {
             return name;
         }
-        final StringBuilder sb = new StringBuilder(cluster);
-        sb.append(CLUSTER_DELIMITER).append(name);
-        return sb.toString();
+        return cluster + CLUSTER_DELIMITER + name;
     }
 
     private static String extract(String fullName, int index) {

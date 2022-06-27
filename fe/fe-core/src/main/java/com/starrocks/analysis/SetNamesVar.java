@@ -22,9 +22,9 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.sql.analyzer.SemanticException;
 
 // Now only support utf-8
 public class SetNamesVar extends SetVar {
@@ -47,7 +47,7 @@ public class SetNamesVar extends SetVar {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
+    public void analyze() {
         if (Strings.isNullOrEmpty(charset)) {
             charset = DEFAULT_NAMES;
         } else {
@@ -59,11 +59,11 @@ public class SetNamesVar extends SetVar {
         }
 
         if (!charset.equalsIgnoreCase(DEFAULT_NAMES)&&!charset.equalsIgnoreCase(GBK_NAMES)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_UNKNOWN_CHARACTER_SET, charset);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_CHARACTER_SET, charset);
         }
         // be is not supported yet,so Display unsupported information to the user
         if (!charset.equalsIgnoreCase(DEFAULT_NAMES)){
-            throw new AnalysisException("charset name " + charset + " is not supported yet");
+            throw new SemanticException("charset name " + charset + " is not supported yet");
         }
     }
 

@@ -54,6 +54,7 @@ import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
@@ -112,6 +113,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitAdminSetConfigStatement(AdminSetConfigStmt statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    public R visitSetStatement(SetStmt stmt, C context) {
+        return visitStatement(stmt, context);
     }
 
     public R visitAdminShowConfigStatement(AdminShowConfigStmt statement, C context) {
