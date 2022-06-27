@@ -261,16 +261,20 @@ public class StarOSAgent {
                     WorkerInfo workerInfo = replicaInfo.getWorkerInfo();
                     long workerId = workerInfo.getWorkerId();
                     if (!workerToBackend.containsKey(workerId)) {
-                        // get backendId from system info
+                        // get backendId from system info by host & starletPort
                         String workerAddr = workerInfo.getIpPort();
                         String[] pair = workerAddr.split(":");
-                        long backendId = GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(pair[0]);
+                        long backendId = GlobalStateMgr.getCurrentSystemInfo()
+                                .getBackendIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
+
+                        if (backendId == -1L) {
+                            throw new UserException("Failed to get backend by worker. worker id: " + workerId);
+                        }
 
                         // put it into map
                         workerToId.put(workerAddr, workerId);
                         workerToBackend.put(workerId, backendId);
                         return backendId;
-                        // throw new UserException("Failed to get backend by worker. worker id: " + workerId);
                     }
 
                     return workerToBackend.get(workerId);
@@ -293,13 +297,17 @@ public class StarOSAgent {
                     // get backendId from system info
                     String workerAddr = workerInfo.getIpPort();
                     String[] pair = workerAddr.split(":");
-                    long backendId = GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(pair[0]);
+                    long backendId = GlobalStateMgr.getCurrentSystemInfo()
+                            .getBackendIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
+
+                    if (backendId == -1L) {
+                        throw new UserException("Failed to get backend by worker. worker id: " + workerId);
+                    }
 
                     // put it into map
                     workerToId.put(workerAddr, workerId);
                     workerToBackend.put(workerId, backendId);
                     backendIds.add(backendId);
-                    // throw new UserException("Failed to get backend by worker. worker id: " + workerId);
                 } else {
                     backendIds.add(workerToBackend.get(workerId));
                 }

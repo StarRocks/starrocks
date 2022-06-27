@@ -366,6 +366,16 @@ public class SystemInfoService {
         return null;
     }
 
+    public long getBackendIdWithStarletPort(String host, int starletPort) {
+        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
+        for (Backend backend : idToBackend.values()) {
+            if (backend.getHost().equals(host) && backend.getStarletPort() == starletPort) {
+                return backend.getId();
+            }
+        }
+        return -1L;
+    }
+
     public Backend getBackendWithBePort(String host, int bePort) {
 
         Pair<String, String> targetPair;
