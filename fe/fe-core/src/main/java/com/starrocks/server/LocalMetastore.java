@@ -113,6 +113,7 @@ import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -320,14 +321,14 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public void createDb(String dbName) throws DdlException {
+    public void createDb(String dbName) throws DdlException, AlreadyExistsException {
         long id = 0L;
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
             if (fullNameToDb.containsKey(dbName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_DB_CREATE_EXISTS, dbName);
+                throw new AlreadyExistsException("Database Already Exists");
             } else {
                 id = getNextId();
                 Database db = new Database(id, dbName);
