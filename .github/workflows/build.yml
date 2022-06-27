@@ -21,7 +21,9 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       with:
-        projectBaseDir: .
+        projectBaseDir: ${{github.workspace}}
+        cmake-opts: ""
+        make-opts: test ARGS=-V
         args: >
           -Dsonar.organization=dulong41
           -Dsonar.projectKey=dulong41_starrocks
