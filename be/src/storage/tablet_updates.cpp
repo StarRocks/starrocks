@@ -1157,7 +1157,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
         if (std::find(ors.begin(), ors.end(), rowset_id) == ors.end()) {
             // This may happen after a full clone.
             _compaction_state.reset();
-            auto msg = Substitute("compaction input rowset($0) not found $2", rowset_id, _debug_string(false, false));
+            auto msg = Substitute("compaction input rowset($0) not found $1", rowset_id, _debug_string(false, false));
             LOG(WARNING) << msg;
             return Status::Cancelled(msg);
         }
