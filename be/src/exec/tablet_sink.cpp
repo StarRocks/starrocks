@@ -135,7 +135,7 @@ Status NodeChannel::init(RuntimeState* state) {
     return Status::OK();
 }
 
-void NodeChannel::open() {
+void NodeChannel::try_open() {
     PTabletWriterOpenRequest request;
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(_index_id);
@@ -740,7 +740,7 @@ Status OlapTableSink::try_open(RuntimeState* state) {
     RETURN_IF_ERROR(_vectorized_partition->open(state));
 
     for (auto& index_channel : _channels) {
-        index_channel->for_each_node_channel([](NodeChannel* ch) { ch->open(); });
+        index_channel->for_each_node_channel([](NodeChannel* ch) { ch->try_open(); });
     }
 
     return Status::OK();
