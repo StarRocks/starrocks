@@ -26,6 +26,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -168,6 +169,18 @@ public class PublishVersionDaemon extends MasterDaemon {
                     }
                     // clear publish version tasks to reduce memory usage when state changed to visible.
                     transactionState.clearPublishVersionTasks();
+
+                    // Refresh materialized view when base table update transaction has been visible
+                    long dbId = transactionState.getDbId();
+                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                    for (long tableId : transactionState.getTableIdList()) {
+                        Table table = db.getTable(tableId);
+                        Set<Long> relatedMvs = ((OlapTable) table).getRelatedMaterializedViews();
+                        for (long mvId : relatedMvs) {
+                            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .refreshMaterializedView(db.getFullName(), db.getTable(mvId).getName());
+                        }
+                    }
                 }
             }
         } // end for readyTransactionStates
