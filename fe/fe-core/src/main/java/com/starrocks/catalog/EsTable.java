@@ -79,8 +79,8 @@ public class EsTable extends Table {
     // index name can be specific index, wildcard matched or alias.
     private String indexName;
 
-    // which type used for `indexName`, default to `_doc`
-    private String mappingType = "_doc";
+    // which type used for `indexName`
+    private String mappingType = null;
     private String transport = "http";
     // only save the partition definition, save the partition key,
     // partition list is got from es cluster dynamically and is saved in esTableState
@@ -226,6 +226,8 @@ public class EsTable extends Table {
         if (!Strings.isNullOrEmpty(properties.get(TYPE))
                 && !Strings.isNullOrEmpty(properties.get(TYPE).trim())) {
             mappingType = properties.get(TYPE).trim();
+        } else {
+            mappingType = null;
         }
         if (!Strings.isNullOrEmpty(properties.get(TRANSPORT))
                 && !Strings.isNullOrEmpty(properties.get(TRANSPORT).trim())) {
@@ -270,7 +272,9 @@ public class EsTable extends Table {
         tableContext.put("userName", userName);
         tableContext.put("passwd", passwd);
         tableContext.put("indexName", indexName);
-        tableContext.put("mappingType", mappingType);
+        if (mappingType != null) {
+            tableContext.put("mappingType", mappingType);
+        }
         tableContext.put("transport", transport);
         if (majorVersion != null) {
             tableContext.put("majorVersion", majorVersion.toString());
@@ -316,7 +320,9 @@ public class EsTable extends Table {
                 // index name
                 adler32.update(indexName.getBytes(charsetName));
                 // mappingType
-                adler32.update(mappingType.getBytes(charsetName));
+                if (mappingType != null) {
+                    adler32.update(mappingType.getBytes(charsetName));
+                }
                 // transport
                 adler32.update(transport.getBytes(charsetName));
             }

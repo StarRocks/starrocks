@@ -53,7 +53,9 @@ ESScanReader::ESScanReader(const std::string& target, const std::map<std::string
           _doc_value_mode(doc_value_mode) {
     _target = target;
     _index = props.at(KEY_INDEX);
-    _type = props.at(KEY_TYPE);
+    if (props.find(KEY_TYPE) != props.end()) {
+        _type = props.at(KEY_TYPE);
+    }
     if (props.find(KEY_USER_NAME) != props.end()) {
         _user_name = props.at(KEY_USER_NAME);
     }
@@ -77,21 +79,25 @@ ESScanReader::ESScanReader(const std::string& target, const std::map<std::string
 
     if (props.find(KEY_TERMINATE_AFTER) != props.end()) {
         _exactly_once = true;
-        std::stringstream scratch;
         // just send a normal search  against the elasticsearch with additional terminate_after param to achieve terminate early effect when limit take effect
-        scratch << _target << REQUEST_SEPARATOR << _index << REQUEST_SEPARATOR << _type << "/_search?"
-                << "terminate_after=" << props.at(KEY_TERMINATE_AFTER) << REQUEST_PREFERENCE_PREFIX << _shards << "&"
-                << filter_path;
-        _search_url = scratch.str();
+        if (_type.empty()) {
+            _search_url = fmt::format("{}/{}/_search?terminate_after={}&preference=_shards:{}&{}", _target, _index,
+                                      props.at(KEY_TERMINATE_AFTER), _shards, filter_path);
+        } else {
+            _search_url = fmt::format("{}/{}/{}/_search?terminate_after={}&preference=_shards:{}&{}", _target, _index,
+                                      _type, props.at(KEY_TERMINATE_AFTER), _shards, filter_path);
+        }
     } else {
         _exactly_once = false;
-        std::stringstream scratch;
         // scroll request for scanning
         // add terminate_after for the first scroll to avoid decompress all postings list
-        scratch << _target << REQUEST_SEPARATOR << _index << REQUEST_SEPARATOR << _type << "/_search?"
-                << "scroll=" << _scroll_keep_alive << REQUEST_PREFERENCE_PREFIX << _shards << "&" << filter_path
-                << "&terminate_after=" << batch_size_str;
-        _init_scroll_url = scratch.str();
+        if (_type.empty()) {
+            _init_scroll_url = fmt::format("{}/{}/_search?scroll={}&preference=_shards:{}&{}", _target, _index,
+                                           _scroll_keep_alive, _shards, filter_path);
+        } else {
+            _init_scroll_url = fmt::format("{}/{}/{}/_search?scroll={}&preference=_shards:{}&{}", _target, _index,
+                                           _type, _scroll_keep_alive, _shards, filter_path);
+        }
         _next_scroll_url = _target + REQUEST_SEARCH_SCROLL_PATH + "?" + filter_path;
     }
     _eos = false;
