@@ -404,6 +404,7 @@ public class GlobalStateMgr {
     private StarOSAgent starOSAgent;
 
     private MetadataMgr metadataMgr;
+    private ScanRangeMgr scanRangeMgr;
     private CatalogMgr catalogMgr;
     private ConnectorMgr connectorMgr;
     private TaskManager taskManager;
@@ -567,7 +568,8 @@ public class GlobalStateMgr {
 
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.metadataMgr = new MetadataMgr(localMetastore);
-        this.connectorMgr = new ConnectorMgr(metadataMgr);
+        this.scanRangeMgr = new ScanRangeMgr();
+        this.connectorMgr = new ConnectorMgr(metadataMgr, scanRangeMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
@@ -722,6 +724,10 @@ public class GlobalStateMgr {
 
     public MetadataMgr getMetadataMgr() {
         return metadataMgr;
+    }
+
+    public ScanRangeMgr getScanRangeMgr() {
+        return scanRangeMgr;
     }
 
     @VisibleForTesting

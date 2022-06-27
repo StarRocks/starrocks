@@ -11,6 +11,14 @@ public interface Connector {
     ConnectorMetadata getMetadata() throws Exception;
 
     /**
+     * @throws UnsupportedOperationException if this connector does not support tables with splits
+     */
+    default ConnectorScanRangeMgr getScanRangeMgr()
+    {
+        throw new UnsupportedOperationException();
+    }
+
+    /**
      * Shutdown the connector by releasing any held resources such as
      * threads, sockets, etc. This method will only be called when no
      * queries are using the connector. After this method is called,
