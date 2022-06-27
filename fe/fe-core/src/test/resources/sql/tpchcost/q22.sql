@@ -69,7 +69,7 @@ UNPARTITIONED
 |  join op: CROSS JOIN
 |  hash predicates:
 |  colocate: false, reason:
-|  other join predicates: 6: C_ACCTBAL > 19: avg
+|  other predicates: 6: C_ACCTBAL > 19: avg
 |
 |----11:EXCHANGE
 |

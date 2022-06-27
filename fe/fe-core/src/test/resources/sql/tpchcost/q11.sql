@@ -55,7 +55,7 @@ UNPARTITIONED
 |  join op: CROSS JOIN
 |  hash predicates:
 |  colocate: false, reason:
-|  other join predicates: 21: sum > 43: expr
+|  other predicates: 21: sum > 43: expr
 |
 |----25:EXCHANGE
 |
