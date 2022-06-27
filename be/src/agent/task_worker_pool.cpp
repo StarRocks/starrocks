@@ -1053,7 +1053,7 @@ void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this)
                     // because the primary index is available in cache
                     // But it will be remove from index cache after apply is finished
                     auto manager = StorageEngine::instance()->update_manager();
-                    manager->index_cache().remove_by_key(tablet->tablet_id());
+                    manager->index_cache().try_remove_by_key(tablet->tablet_id());
                     break;
                 }
             }
