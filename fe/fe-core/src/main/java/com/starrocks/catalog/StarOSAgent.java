@@ -205,7 +205,7 @@ public class StarOSAgent {
         List<ShardInfo> shardInfos = null;
         try {
             // TODO: support properties
-            shardInfos = client.createShard(serviceId, numShards, 1, null);
+            shardInfos = client.createShard(serviceId, numShards, 1, null, null);
         } catch (StarClientException e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
         }
