@@ -172,6 +172,7 @@ import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
+import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
@@ -421,6 +422,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<String> hostPorts =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         return new DropComputeNodeClause(hostPorts);
+    }
+
+    @Override
+    public ParseNode visitShowComputeNodes(StarRocksParser.ShowComputeNodesContext context) {
+        return new ShowComputeNodesStmt();
     }
 
     @Override

@@ -525,6 +525,23 @@ public class SystemInfoService {
         return getBackendIds(false);
     }
 
+    public List<Long> getComputeNodeIds(boolean needAlive) {
+        ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
+        List<Long> computeNodeIds = Lists.newArrayList(idToComputeNode.keySet());
+        if (!needAlive) {
+            return computeNodeIds;
+        } else {
+            Iterator<Long> iter = computeNodeIds.iterator();
+            while (iter.hasNext()) {
+                ComputeNode computeNode = this.getComputeNode(iter.next());
+                if (computeNode == null || !computeNode.isAlive()) {
+                    iter.remove();
+                }
+            }
+            return computeNodeIds;
+        }
+    }
+
     public List<Long> getBackendIds(boolean needAlive) {
         ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
         List<Long> backendIds = Lists.newArrayList(idToBackend.keySet());

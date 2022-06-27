@@ -23,6 +23,7 @@ package com.starrocks.cluster;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -113,6 +114,10 @@ public class Cluster implements Writable {
     }
     public boolean isDefaultCluster() {
         return SystemInfoService.DEFAULT_CLUSTER.equalsIgnoreCase(name);
+    }
+
+    public List<Long> getComputeNodeIdList() {
+        return Lists.newArrayList(computeNodeIdSet);
     }
 
     public void setBackendIdList(List<Long> backendIdList) {

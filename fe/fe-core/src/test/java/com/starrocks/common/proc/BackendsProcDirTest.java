@@ -32,6 +32,7 @@ import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class BackendsProcDirTest {
@@ -119,14 +120,6 @@ public class BackendsProcDirTest {
     @After
     public void tearDown() {
         // systemInfoService = null;
-    }
-
-    @Test
-    public void testRegister() {
-        BackendsProcDir dir;
-
-        dir = new BackendsProcDir(systemInfoService);
-        Assert.assertFalse(dir.register("100000", new BaseProcDir()));
     }
 
     @Test(expected = AnalysisException.class)

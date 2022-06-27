@@ -199,6 +199,10 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    public R visitShowComputeNodes(ShowComputeNodesStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitQueryStatement(QueryStatement statement, C context) {
         return visitStatement(statement, context);
     }

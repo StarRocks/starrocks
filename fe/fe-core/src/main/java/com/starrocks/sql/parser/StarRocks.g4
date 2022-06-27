@@ -63,6 +63,7 @@ statement
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
+    | showNodesStatement                                                                    #showNodes
 
     // Analyze Statement
     | analyzeStatement                                                                      #analyze
@@ -444,6 +445,10 @@ showDatabasesStatement
 
 showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showNodesStatement
+    : SHOW COMPUTE NODES                                                       #showComputeNodes
     ;
 
 varType
