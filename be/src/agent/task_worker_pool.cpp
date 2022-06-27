@@ -781,7 +781,7 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
                     break;
                 } else if (st.is_service_unavailable()) {
                     // Status::ServiceUnavailable is returned when all of the threads of the pool are busy.
-                    LOG(WARNING) << "publish version threadpool is busy, retry later. [txn_id: "
+                    LOG(WARNING) << "publish version threadpool is busy, retry later. txn_id: "
                                  << publish_version_req.transaction_id << ", tablet_id: " << tablet_rs.first.tablet_id;
                     // In general, publish version is fast. A small sleep is needed here.
                     SleepFor(MonoDelta::FromMilliseconds(50 * retry_time));
