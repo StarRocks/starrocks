@@ -75,10 +75,6 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
         _cur_file_eof = false;
     }
     Status status = _cur_file_reader->read_chunk(src_chunk.get(), _max_chunk_size, _src_slot_descriptors);
-    if (status.is_end_of_file()) {
-        _cur_file_eof = true;
-    }
-
     if (!status.ok()) {
         if (status.is_end_of_file()) {
             _cur_file_eof = true;
