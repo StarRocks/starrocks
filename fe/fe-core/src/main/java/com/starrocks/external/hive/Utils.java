@@ -195,7 +195,6 @@ public class Utils {
     }
 
     public static ArrayType convertToArrayType(Schema typeSchema) throws DdlException {
-        ArrayType arrayType;
         Type itemType = HiveMetaStoreTableUtils.convertHudiTableColumnType(typeSchema.getElementType());
         return new ArrayType(itemType);
     }
