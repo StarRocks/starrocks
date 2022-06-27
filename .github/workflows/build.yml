@@ -26,4 +26,5 @@ jobs:
           -Dsonar.organization=dulong41
           -Dsonar.projectKey=dulong41_starrocks
           -Dsonar.sources=be/
-          -Dsonar.verbose=true
+          -Dsonar.cfamily.build-wrapper-output=$WORKSPACE/bw-output
+          -Dsonar.cfamily.gcov.reportsPath=ctest
