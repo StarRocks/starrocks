@@ -274,8 +274,10 @@ void DeltaWriter::_reset_mem_table() {
 }
 
 Status DeltaWriter::commit() {
-    auto scoped =
-            trace::Scope(Tracer::Instance().start_trace_txn_tablet("delta_writer_commit", _opt.txn_id, _opt.tablet_id));
+    auto span = Tracer::Instance().start_trace_or_add_span("delta_writer_commit", _opt.parent_span);
+    span->SetAttribute("txn_id", _opt.txn_id);
+    span->SetAttribute("tablet_id", _opt.tablet_id);
+    auto scoped = trace::Scope(span);
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     auto state = _get_state();
     switch (state) {
