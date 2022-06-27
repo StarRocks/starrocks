@@ -185,7 +185,7 @@ public class StarOSAgentTest {
     public void testCreateShards() throws StarClientException, DdlException {
         new Expectations() {
             {
-                client.createShard(1L, 2, 1, null);
+                client.createShard(1L, 2, 1, null, null);
                 minTimes = 0;
                 result = Lists.newArrayList(ShardInfo.newBuilder().setShardId(10L).build(),
                         ShardInfo.newBuilder().setShardId(11L).build());
