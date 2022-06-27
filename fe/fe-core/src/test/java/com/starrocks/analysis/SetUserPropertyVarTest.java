@@ -20,34 +20,27 @@ package com.starrocks.analysis;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 public class SetUserPropertyVarTest {
-    private Analyzer analyzer;
-
-    @Before
-    public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
-    }
 
     @Test
-    public void testNormal() throws AnalysisException, UserException {
+    public void testNormal() throws UserException {
         SetUserPropertyVar var = new SetUserPropertyVar("quota.normal", "1000");
-        var.analyze(analyzer, true);
+        var.analyze(true);
         Assert.assertEquals("quota.normal", var.getPropertyKey());
         Assert.assertEquals("1000", var.getPropertyValue());
         Assert.assertEquals("'quota.normal' = '1000'", var.toString());
 
         var = new SetUserPropertyVar("load_cluster.starrocks-dpp", "");
-        var.analyze(analyzer, true);
+        var.analyze(true);
         Assert.assertEquals("'load_cluster.starrocks-dpp' = ''", var.toString());
     }
 
     @Test(expected = AnalysisException.class)
-    public void testUnknownProperty() throws UserException, AnalysisException {
+    public void testUnknownProperty() throws UserException{
         SetUserPropertyVar var = new SetUserPropertyVar("unknown_property", "1000");
-        var.analyze(analyzer, true);
+        var.analyze( true);
         Assert.fail("No exception throws.");
     }
 }

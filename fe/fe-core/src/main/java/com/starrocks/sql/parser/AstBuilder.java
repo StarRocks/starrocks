@@ -92,7 +92,9 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
+import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
@@ -1702,6 +1704,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String configValue = property.getValue();
         configs.put(configKey, configValue);
         return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs);
+    }
+
+    @Override public ParseNode visitSetVar(StarRocksParser.SetVarContext ctx) {
+        Expr expr = (Expr) visit(ctx.expression());
+        String variable = ctx.IDENTIFIER().getText();
+        if (ctx.varType() != null) {
+            return new SetVar(getVariableType(ctx.varType()), variable, expr);
+        }
+        return visitChildren(ctx);
+    }
+
+    @Override
+    public ParseNode visitSetStmt(StarRocksParser.SetStmtContext ctx) {
+        List<SetVar> propertyList = visit(ctx.setVarList().setVar(), SetVar.class);
+        return new SetStmt(propertyList);
     }
 
     @Override

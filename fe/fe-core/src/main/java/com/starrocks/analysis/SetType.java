@@ -25,28 +25,24 @@ public enum SetType {
     GLOBAL("GLOBAL"),
     SESSION("SESSION");
 
-    private String desc;
+    private final String desc;
 
     SetType(String desc) {
         this.desc = desc;
     }
 
     public TVarType toThrift() {
-        switch (this) {
-            case GLOBAL:
-                return TVarType.GLOBAL;
-            default:
-                return TVarType.SESSION;
+        if (this == SetType.GLOBAL) {
+            return TVarType.GLOBAL;
         }
+        return TVarType.SESSION;
     }
 
     public static SetType fromThrift(TVarType tType) {
-        switch (tType) {
-            case GLOBAL:
-                return SetType.GLOBAL;
-            default:
-                return SetType.SESSION;
+        if (tType == TVarType.GLOBAL) {
+            return SetType.GLOBAL;
         }
+        return SetType.SESSION;
     }
 
     public String toSql() {
