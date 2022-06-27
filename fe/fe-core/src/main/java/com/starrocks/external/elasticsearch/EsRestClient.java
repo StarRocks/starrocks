@@ -134,11 +134,8 @@ public class EsRestClient {
      * @return
      * @throws Exception
      */
-    public String getMapping(String indexName, boolean includeTypeName) throws StarRocksESException {
+    public String getMapping(String indexName) throws StarRocksESException {
         String path = indexName + "/_mapping";
-        if (includeTypeName) {
-            path += "?include_type_name=true";
-        }
         String indexMapping = execute(path);
         if (indexMapping == null) {
             throw new StarRocksESException("index[" + indexName + "] not found");
