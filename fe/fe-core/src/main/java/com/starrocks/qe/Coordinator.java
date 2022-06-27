@@ -2392,9 +2392,7 @@ public class Coordinator {
                         }
                     }
 
-                    if (sessionVariable.isEnableExchangePassThrough()) {
-                        params.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
-                    }
+                    params.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
                 }
                 paramsList.add(params);
             }
