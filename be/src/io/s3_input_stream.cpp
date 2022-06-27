@@ -8,6 +8,8 @@
 #include <aws/s3/model/HeadObjectRequest.h>
 #include <fmt/format.h>
 
+#include "common/config.h"
+
 namespace starrocks::io {
 
 StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
@@ -22,6 +24,11 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
     request.SetBucket(_bucket);
     request.SetKey(_object);
     request.SetRange(std::move(range));
+    if (config::object_storage_request_payer_enabled) {
+        request.SetRequestPayer(Aws::S3::Model::RequestPayer::requester);
+    } else {
+        request.SetRequestPayer(Aws::S3::Model::RequestPayer::NOT_SET);
+    }
 
     Aws::S3::Model::GetObjectOutcome outcome = _s3client->GetObject(request);
     if (outcome.IsSuccess()) {
