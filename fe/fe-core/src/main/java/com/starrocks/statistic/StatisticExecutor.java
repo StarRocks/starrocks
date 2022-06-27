@@ -243,6 +243,7 @@ public class StatisticExecutor {
             executor.execute();
 
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+                LOG.warn("ERROR Collect statistic SQL: {}", sql);
                 throw new DdlException(context.getState().getErrorMessage());
             }
         }
