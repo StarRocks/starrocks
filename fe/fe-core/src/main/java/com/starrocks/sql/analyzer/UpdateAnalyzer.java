@@ -2,6 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
@@ -17,6 +18,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.common.TypeManager;
 
 import java.util.List;
 import java.util.Map;
@@ -50,7 +52,13 @@ public class UpdateAnalyzer {
                 if (col.isKey()) {
                     throw new SemanticException("primary key column cannot be updated: " + col.getName());
                 }
-                item = new SelectListItem(new CastExpr(col.getType(), assign.getExpr()), col.getName());
+                if (assign.getExpr() instanceof LiteralExpr) {
+                    // TypeManager.addCastExpr can check if the literal can be cast to the column type
+                    item = new SelectListItem(TypeManager.addCastExpr(assign.getExpr(), col.getType()), col.getName());
+                } else {
+                    // There are still cases that this expr cannot cast to the column type, that's a known issue
+                    item = new SelectListItem(new CastExpr(col.getType(), assign.getExpr()), col.getName());
+                }
             } else {
                 item = new SelectListItem(new SlotRef(tableName, col.getName()), col.getName());
             }
