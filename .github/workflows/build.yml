@@ -25,8 +25,5 @@ jobs:
         args: >
           -Dsonar.organization=dulong41
           -Dsonar.projectKey=dulong41_starrocks
-          # -Dsonar.python.coverage.reportPaths=coverage.xml
           -Dsonar.sources=be/
-          # -Dsonar.test.exclusions=tests/**
-          # -Dsonar.tests=tests/
           -Dsonar.verbose=true
