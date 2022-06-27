@@ -1137,6 +1137,8 @@ public class GlobalStateMgr {
             checksum = catalogMgr.loadCatalogs(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = loadInsertOverwriteJobs(dis, checksum);
+            checksum = nodeMgr.loadComputeNodes(dis, checksum);
+            remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1385,6 +1387,8 @@ public class GlobalStateMgr {
             checksum = catalogMgr.saveCatalogs(dos, checksum);
             dos.writeLong(checksum);
             checksum = saveInsertOverwriteJobs(dos, checksum);
+            checksum = nodeMgr.saveComputeNodes(dos, checksum);
+            dos.writeLong(checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();

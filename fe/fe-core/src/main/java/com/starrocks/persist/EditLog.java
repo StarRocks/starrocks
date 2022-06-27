@@ -79,6 +79,7 @@ import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
@@ -437,6 +438,16 @@ public class EditLog {
                 case OperationType.OP_DELETE_REPLICA: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
                     globalStateMgr.replayDeleteReplica(info);
+                    break;
+                }
+                case OperationType.OP_ADD_COMPUTE_NODE: {
+                    ComputeNode computeNode = (ComputeNode) journal.getData();
+                    GlobalStateMgr.getCurrentSystemInfo().replayAddComputeNode(computeNode);
+                    break;
+                }
+                case OperationType.OP_DROP_COMPUTE_NODE: {
+                    DropComputeNodeLog dropComputeNodeLog = (DropComputeNodeLog) journal.getData();
+                    GlobalStateMgr.getCurrentSystemInfo().replayDropComputeNode(dropComputeNodeLog.getComputeNodeId());
                     break;
                 }
                 case OperationType.OP_ADD_BACKEND: {
@@ -1146,8 +1157,16 @@ public class EditLog {
         logEdit(OperationType.OP_FINISH_CONSISTENCY_CHECK, info);
     }
 
+    public void logAddComputeNode(ComputeNode computeNode) {
+        logEdit(OperationType.OP_ADD_COMPUTE_NODE, computeNode);
+    }
+
     public void logAddBackend(Backend be) {
         logEdit(OperationType.OP_ADD_BACKEND, be);
+    }
+
+    public void logDropComputeNode(DropComputeNodeLog log) {
+        logEdit(OperationType.OP_DROP_COMPUTE_NODE, log);
     }
 
     public void logDropBackend(Backend be) {

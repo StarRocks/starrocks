@@ -5,6 +5,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.BackendClause;
+import com.starrocks.analysis.ComputeNodeClause;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.FrontendClause;
 import com.starrocks.analysis.ModifyBackendAddressClause;
@@ -29,6 +30,20 @@ public class AlterSystemStmtAnalyzer {
     static class AlterSystemStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         public void analyze(AlterSystemStmt statement, ConnectContext session) {
             visit(statement.getAlterClause(), session);
+        }
+
+        @Override
+        public Void visitComputeNodeClause(ComputeNodeClause computeNodeClause, ConnectContext context) {
+            try {
+                for (String hostPort : computeNodeClause.getHostPorts()) {
+                    Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
+                    computeNodeClause.getHostPortPairs().add(pair);
+                }
+                Preconditions.checkState(!computeNodeClause.getHostPortPairs().isEmpty());
+            } catch (AnalysisException e) {
+                throw new SemanticException("compute node host or port is wrong!");
+            }
+            return null;
         }
 
         @Override

@@ -158,17 +158,17 @@ public class SimpleSchedulerTest {
         ImmutableMap<Long, Backend> immutableThreeBackends = ImmutableMap.copyOf(threeBackends);
 
         {   // abmormal
-            Assert.assertNull(SimpleScheduler.getHost(nullBackends, ref));
-            Assert.assertNull(SimpleScheduler.getHost(emptyBackends, ref));
+            Assert.assertNull(SimpleScheduler.getBackendHost(nullBackends, ref));
+            Assert.assertNull(SimpleScheduler.getBackendHost(emptyBackends, ref));
         }   // normal
         {
-            String a = SimpleScheduler.getHost(immutableThreeBackends, ref).hostname;
-            String b = SimpleScheduler.getHost(immutableThreeBackends, ref).hostname;
-            String c = SimpleScheduler.getHost(immutableThreeBackends, ref).hostname;
+            String a = SimpleScheduler.getBackendHost(immutableThreeBackends, ref).hostname;
+            String b = SimpleScheduler.getBackendHost(immutableThreeBackends, ref).hostname;
+            String c = SimpleScheduler.getBackendHost(immutableThreeBackends, ref).hostname;
             Assert.assertTrue(!a.equals(b) && !a.equals(c) && !b.equals(c));
-            a = SimpleScheduler.getHost(immutableThreeBackends, ref).hostname;
-            b = SimpleScheduler.getHost(immutableThreeBackends, ref).hostname;
-            c = SimpleScheduler.getHost(immutableThreeBackends, ref).hostname;
+            a = SimpleScheduler.getBackendHost(immutableThreeBackends, ref).hostname;
+            b = SimpleScheduler.getBackendHost(immutableThreeBackends, ref).hostname;
+            c = SimpleScheduler.getBackendHost(immutableThreeBackends, ref).hostname;
             Assert.assertTrue(!a.equals(b) && !a.equals(c) && !b.equals(c));
         }
     }
@@ -193,12 +193,12 @@ public class SimpleSchedulerTest {
 
         SimpleScheduler.addToBlacklist(Long.valueOf(100));
         SimpleScheduler.addToBlacklist(Long.valueOf(101));
-        address = SimpleScheduler.getHost(immutableThreeBackends, ref);
+        address = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
         // only backendc can work
         Assert.assertEquals(address.hostname, "addressC");
         SimpleScheduler.addToBlacklist(Long.valueOf(102));
         // no backend can work
-        address = SimpleScheduler.getHost(immutableThreeBackends, ref);
+        address = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
         Assert.assertNull(address);
     }
 }
