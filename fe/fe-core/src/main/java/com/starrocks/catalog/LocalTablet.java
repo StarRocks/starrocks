@@ -460,6 +460,10 @@ public class LocalTablet extends Tablet {
             }
             alive++;
 
+            if (replica.needFurtherRepair() && needFurtherRepairReplica == null) {
+                needFurtherRepairReplica = replica;
+            }
+
             if (replica.getLastFailedVersion() > 0 || replica.getVersion() < visibleVersion) {
                 // this replica is alive but version incomplete
                 continue;
@@ -477,10 +481,6 @@ public class LocalTablet extends Tablet {
                 continue;
             }
             availableInCluster++;
-
-            if (replica.needFurtherRepair() && needFurtherRepairReplica == null) {
-                needFurtherRepairReplica = replica;
-            }
         }
 
         // 1. alive replicas are not enough
