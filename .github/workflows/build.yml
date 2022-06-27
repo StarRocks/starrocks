@@ -3,7 +3,7 @@ on:
   # a pull request.
   push:
     branches:
-      - master
+      - main
   pull_request:
       types: [opened, synchronize, reopened]
 name: Sonar Scan
