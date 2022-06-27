@@ -418,6 +418,14 @@ public class LocalTablet extends Tablet {
         return tabletRowCount;
     }
 
+    private Pair<TabletStatus, TabletSchedCtx.Priority> createRedundantSchedCtx(
+            TabletStatus status, Priority prio, Replica needFurtherRepairReplica) {
+        if (needFurtherRepairReplica != null) {
+            return Pair.create(TabletStatus.NEED_FURTHER_REPAIR, TabletSchedCtx.Priority.HIGH);
+        }
+        return Pair.create(status, prio);
+    }
+
     /**
      * A replica is healthy only if
      * 1. the backend is available
@@ -452,6 +460,10 @@ public class LocalTablet extends Tablet {
             }
             alive++;
 
+            if (replica.needFurtherRepair() && needFurtherRepairReplica == null) {
+                needFurtherRepairReplica = replica;
+            }
+
             if (replica.getLastFailedVersion() > 0 || replica.getVersion() < visibleVersion) {
                 // this replica is alive but version incomplete
                 continue;
@@ -469,10 +481,6 @@ public class LocalTablet extends Tablet {
                 continue;
             }
             availableInCluster++;
-
-            if (replica.needFurtherRepair() && needFurtherRepairReplica == null) {
-                needFurtherRepairReplica = replica;
-            }
         }
 
         // 1. alive replicas are not enough
@@ -487,7 +495,8 @@ public class LocalTablet extends Tablet {
             // 2. replicas.size() >= aliveBackendsNum: the existing replicas occupies all available backends
             // 3. aliveBackendsNum >= replicationNum: make sure after deleting, there will be at least one backend for new replica.
             // 4. replicationNum > 1: if replication num is set to 1, do not delete any replica, for safety reason
-            return Pair.create(TabletStatus.FORCE_REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH);
+            return createRedundantSchedCtx(TabletStatus.FORCE_REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH,
+                    needFurtherRepairReplica);
         } else if (alive < (replicationNum / 2) + 1) {
             return Pair.create(TabletStatus.REPLICA_MISSING, TabletSchedCtx.Priority.HIGH);
         } else if (alive < replicationNum) {
@@ -500,11 +509,9 @@ public class LocalTablet extends Tablet {
         } else if (aliveAndVersionComplete < replicationNum) {
             return Pair.create(TabletStatus.VERSION_INCOMPLETE, TabletSchedCtx.Priority.NORMAL);
         } else if (aliveAndVersionComplete > replicationNum) {
-            if (needFurtherRepairReplica != null) {
-                return Pair.create(TabletStatus.NEED_FURTHER_REPAIR, TabletSchedCtx.Priority.HIGH);
-            }
             // we set REDUNDANT as VERY_HIGH, because delete redundant replicas can free the space quickly.
-            return Pair.create(TabletStatus.REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH);
+            return createRedundantSchedCtx(TabletStatus.REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH,
+                    needFurtherRepairReplica);
         }
 
         // 3. replica is under relocating
@@ -517,9 +524,9 @@ public class LocalTablet extends Tablet {
             if (replicaBeIds.containsAll(availableBeIds)
                     && availableBeIds.size() >= replicationNum
                     && replicationNum > 1) { // No BE can be choose to create a new replica
-                return Pair.create(TabletStatus.FORCE_REDUNDANT,
+                return createRedundantSchedCtx(TabletStatus.FORCE_REDUNDANT,
                         stable < (replicationNum / 2) + 1 ? TabletSchedCtx.Priority.NORMAL :
-                                TabletSchedCtx.Priority.LOW);
+                                TabletSchedCtx.Priority.LOW, needFurtherRepairReplica);
             }
             if (stable < (replicationNum / 2) + 1) {
                 return Pair.create(TabletStatus.REPLICA_RELOCATING, TabletSchedCtx.Priority.NORMAL);
@@ -532,11 +539,9 @@ public class LocalTablet extends Tablet {
         if (availableInCluster < replicationNum) {
             return Pair.create(TabletStatus.REPLICA_MISSING_IN_CLUSTER, TabletSchedCtx.Priority.LOW);
         } else if (replicas.size() > replicationNum) {
-            if (needFurtherRepairReplica != null) {
-                return Pair.create(TabletStatus.NEED_FURTHER_REPAIR, TabletSchedCtx.Priority.HIGH);
-            }
             // we set REDUNDANT as VERY_HIGH, because delete redundant replicas can free the space quickly.
-            return Pair.create(TabletStatus.REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH);
+            return createRedundantSchedCtx(TabletStatus.REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH,
+                    needFurtherRepairReplica);
         }
 
         // 5. healthy
