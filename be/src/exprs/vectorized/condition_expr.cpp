@@ -8,11 +8,14 @@
 #include "column/column_viewer.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column_base.h"
+#include "column/nullable_column.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/vectorized/function_helper.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
+#include "runtime/types.h"
 #include "simd/selector.h"
 #include "util/dispatch.h"
 #include "util/percentile_value.h"
@@ -21,12 +24,12 @@ namespace starrocks::vectorized {
 
 template <bool isConstC0, bool isConst1, PrimitiveType Type>
 struct SelectIfOP {
-    static ColumnPtr eval(ColumnPtr& value0, ColumnPtr& value1, ColumnPtr& selector, ColumnBuilder<Type>& builder) {
+    static ColumnPtr eval(ColumnPtr& value0, ColumnPtr& value1, ColumnPtr& selector, const TypeDescriptor& type_desc) {
         [[maybe_unused]] Column::Filter& select_vec = ColumnHelper::merge_nullable_filter(selector.get());
         [[maybe_unused]] auto* input_data0 = ColumnHelper::get_data_column(value0.get());
         [[maybe_unused]] auto* input_data1 = ColumnHelper::get_data_column(value1.get());
 
-        ColumnPtr res = builder.build(false);
+        ColumnPtr res = ColumnHelper::create_column(type_desc, false);
         auto* res_col = down_cast<RunTimeColumnType<Type>*>(res.get());
         auto& res_data = res_col->get_data();
         res_data.resize(select_vec.size());
@@ -77,14 +80,18 @@ public:
         }
 
         Columns list = {lhs, rhs};
+        return _evaluate_general(list);
+    }
 
-        ColumnViewer<Type> lhs_viewer(lhs);
-        ColumnViewer<Type> rhs_viewer(rhs);
+private:
+    ColumnPtr _evaluate_general(const Columns& columns) {
+        ColumnViewer<Type> lhs_viewer(columns[0]);
+        ColumnViewer<Type> rhs_viewer(columns[1]);
+        auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
 
-        size_t size = list[0]->size();
-        ColumnBuilder<Type> result(size, this->type().precision, this->type().scale);
+        ColumnBuilder<Type> result(num_rows, this->type().precision, this->type().scale);
 
-        for (int row = 0; row < size; ++row) {
+        for (int row = 0; row < num_rows; ++row) {
             if (lhs_viewer.is_null(row)) {
                 result.append(rhs_viewer.value(row), rhs_viewer.is_null(row));
             } else {
@@ -92,7 +99,7 @@ public:
             }
         }
 
-        return result.build(ColumnHelper::is_all_const(list));
+        return result.build(ColumnHelper::is_all_const(columns));
     }
 };
 
@@ -114,11 +121,15 @@ public:
         }
 
         Columns list = {lhs, rhs};
+        return _evaluate_general(list);
+    }
 
-        ColumnViewer<Type> lhs_viewer(lhs);
-        ColumnViewer<Type> rhs_viewer(rhs);
+private:
+    ColumnPtr _evaluate_general(const Columns& columns) {
+        ColumnViewer<Type> lhs_viewer(columns[0]);
+        ColumnViewer<Type> rhs_viewer(columns[1]);
 
-        size_t size = list[0]->size();
+        size_t size = columns[0]->size();
         ColumnBuilder<Type> result(size, this->type().precision, this->type().scale);
         for (int row = 0; row < size; ++row) {
             if (lhs_viewer.is_null(row)) {
@@ -134,7 +145,7 @@ public:
             result.append(lhs_viewer.value(row), lhs_viewer.is_null(row));
         }
 
-        return result.build(ColumnHelper::is_all_const(list));
+        return result.build(ColumnHelper::is_all_const(columns));
     }
 };
 
@@ -167,30 +178,72 @@ public:
         auto lhs_nulls = ColumnHelper::count_nulls(lhs);
         auto rhs_nulls = ColumnHelper::count_nulls(rhs);
 
-        ColumnViewer<TYPE_BOOLEAN> bhs_viewer(bhs);
-        ColumnViewer<Type> lhs_viewer(lhs);
-        ColumnViewer<Type> rhs_viewer(rhs);
-        size_t size = list[0]->size();
-        ColumnBuilder<Type> result(size, this->type().precision, this->type().scale);
-
         // optimization for 3 columns all not null.
         if (bhs_nulls == 0 && lhs_nulls == 0 && rhs_nulls == 0) {
             // only arithmetic type could use SIMD optimization
             if (bhs->is_constant() || !isArithmeticPT<Type>) {
-                for (int row = 0; row < size; ++row) {
-                    if (!bhs_viewer.value(row)) {
-                        result.append(rhs_viewer.value(row));
-                    } else {
-                        result.append(lhs_viewer.value(row));
-                    }
-                }
+                return _evaluate_general<false>(list);
             } else if constexpr (isArithmeticPT<Type>) {
-                return dispatch_nonull_template<SelectIfOP, Type>(lhs, rhs, bhs, result);
+                return dispatch_nonull_template<SelectIfOP, Type>(lhs, rhs, bhs, type());
             } else {
                 __builtin_unreachable();
             }
         } else {
-            for (int row = 0; row < size; ++row) {
+            if constexpr (isArithmeticPT<Type>) {
+                // SIMD branch
+                size_t num_rows = list[0]->size();
+                // get null data
+                auto lns = get_null_column(num_rows, lhs);
+                auto rns = get_null_column(num_rows, rhs);
+                // get data columns
+                auto lds = get_data_column(num_rows, lhs);
+                auto rds = get_data_column(num_rows, rhs);
+                // call select if
+                auto selector = bhs->only_null() ? UInt8Column::create(num_rows) : bhs;
+                auto select_data = dispatch_nonull_template<SelectIfOP, Type>(lds, rds, bhs, type());
+                auto select_null =
+                        dispatch_nonull_template<SelectIfOP, TYPE_BOOLEAN>(lns, rns, bhs, TypeDescriptor(TYPE_BOOLEAN));
+                auto res = NullableColumn::create(select_data, ColumnHelper::as_column<NullColumn>(select_null));
+                return res;
+            } else {
+                return _evaluate_general<true>(list);
+            }
+        }
+    }
+
+private:
+    ColumnPtr get_null_column(int num_rows, ColumnPtr& input_col) {
+        if (input_col->only_null()) {
+            auto res = UInt8Column::create(num_rows);
+            res->get_data().assign(num_rows, 1);
+            return res;
+        } else if (input_col->is_nullable()) {
+            return down_cast<NullableColumn*>(input_col.get())->null_column();
+        } else {
+            return UInt8Column::create(num_rows);
+        }
+    }
+    ColumnPtr get_data_column(int num_rows, ColumnPtr& input_col) {
+        if (input_col->only_null()) {
+            auto res = ColumnHelper::create_column(type(), false);
+            res->resize(num_rows);
+            return res;
+        } else if (input_col->is_nullable()) {
+            return down_cast<NullableColumn*>(input_col.get())->data_column();
+        } else {
+            return input_col;
+        }
+    }
+
+    template <bool check_null>
+    ColumnPtr _evaluate_general(const Columns& columns) {
+        auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
+        ColumnViewer<TYPE_BOOLEAN> bhs_viewer(columns[0]);
+        ColumnViewer<Type> lhs_viewer(columns[1]);
+        ColumnViewer<Type> rhs_viewer(columns[2]);
+        ColumnBuilder<Type> result(num_rows, this->type().precision, this->type().scale);
+        if constexpr (check_null) {
+            for (int row = 0; row < num_rows; ++row) {
                 if (bhs_viewer.is_null(row) || !bhs_viewer.value(row)) {
                     if (rhs_viewer.is_null(row)) {
                         result.append_null();
@@ -205,9 +258,16 @@ public:
                     }
                 }
             }
+        } else {
+            for (int row = 0; row < num_rows; ++row) {
+                if (!bhs_viewer.value(row)) {
+                    result.append(rhs_viewer.value(row));
+                } else {
+                    result.append(lhs_viewer.value(row));
+                }
+            }
         }
-
-        return result.build(ColumnHelper::is_all_const(list));
+        return result.build(all_const);
     }
 };
 
