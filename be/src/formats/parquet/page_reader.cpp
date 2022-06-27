@@ -9,8 +9,7 @@
 
 namespace starrocks::parquet {
 
-static constexpr size_t kHeaderBufSize = 1024;
-static constexpr size_t kHeaderBufMaxSize = 16 * 1024;
+static constexpr size_t kHeaderInitSize = 1024;
 
 PageReader::PageReader(IBufferedInputStream* stream, uint64_t start_offset, uint64_t length)
         : _stream(stream), _start_offset(start_offset), _finish_offset(start_offset + length) {}
@@ -28,7 +27,7 @@ Status PageReader::next_header() {
     const uint8_t* page_buf = nullptr;
 
     uint32_t header_length = 0;
-    size_t nbytes = kHeaderBufSize;
+    size_t nbytes = kHeaderInitSize;
     size_t remaining = _finish_offset - _offset;
     do {
         nbytes = std::min(nbytes, remaining);
@@ -39,10 +38,11 @@ Status PageReader::next_header() {
         if (st.ok()) {
             break;
         }
-        nbytes <<= 2;
-        if ((nbytes > kHeaderBufMaxSize) || (_offset + nbytes) >= _finish_offset) {
+
+        if ((nbytes > config::parquet_header_max_size) || (_offset + nbytes) >= _finish_offset) {
             return Status::Corruption("Failed to decode parquet page header");
         }
+        nbytes <<= 2;
     } while (true);
 
     _offset += header_length;
