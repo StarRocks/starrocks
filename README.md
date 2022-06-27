@@ -37,14 +37,6 @@ StarRocks is the next-generation data platform designed to make data-intensive r
 It delivers query speeds 5 to 10 times faster than other popular solutions. StarRocks can perform real-time analytics well while updating historical records. It can also enhance real-time analytics with historical data from data lakes easily. With StarRocks, you can get rid of the de-normalized tables and get the best performance and flexibility.<br>
 
 
-<br>
-
- <p align="center">
-    <img src="https://github.com/kateshaowanjou/demo-1/blob/master/docs/imgs/new_banner.png">
-   </a>
-
-<br>
-
 ## Features
 
 * **🚀 Native vectorized SQL engine:** StarRocks adopts vectorization technology to make full use of the parallel computing power of CPU, achieving sub-second query returns in multi-dimensional analyses, which is 5 to 10 times faster than previous systems.
@@ -58,13 +50,12 @@ It delivers query speeds 5 to 10 times faster than other popular solutions. Star
 
 
 
-
 <br>
   
 ## Architecture Overview
 
  <p align="center">
-    <img src="https://github.com/kateshaowanjou/starrocks/blob/main/Arch.png">
+    <img src="https://github.com/StarRocks/starrocks/blob/main/Arch.png">
    </a>
 </p>
 
