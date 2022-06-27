@@ -731,8 +731,15 @@ public class ReportHandler extends Daemon {
                             continue;
                         }
 
-                        tablet.deleteReplicaByBackendId(backendId);
-                        ++deleteCounter;
+                        // Defer the meta delete to next tablet report, see `Replica.deferReplicaDeleteToNextReport`
+                        // for details.
+                        if (replica.getDeferReplicaDeleteToNextReport()) {
+                            replica.setDeferReplicaDeleteToNextReport(false);
+                            continue;
+                        } else {
+                            tablet.deleteReplicaByBackendId(backendId);
+                            ++deleteCounter;
+                        }
 
                         // remove replica related tasks
                         AgentTaskQueue.removeReplicaRelatedTasks(backendId, tabletId);
@@ -742,9 +749,9 @@ public class ReportHandler extends Daemon {
                                 indexId, tabletId, backendId);
 
                         GlobalStateMgr.getCurrentState().getEditLog().logDeleteReplica(info);
-                        LOG.warn("delete replica[{}] in tablet[{}] from meta. backend[{}], report version: {}"
-                                        + ", current report version: {}",
-                                replica.getId(), tabletId, backendId, backendReportVersion,
+                        LOG.warn("delete replica[{}] with state[{}] in tablet[{}] from meta. backend[{}]," +
+                                        " report version: {}, current report version: {}",
+                                replica.getId(), replica.getState().name(), tabletId, backendId, backendReportVersion,
                                 currentBackendReportVersion);
 
                         // check for clone
