@@ -841,8 +841,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     - filter_id = 0, probe_expr = (1: v1 + 1)"));
         }
     }
-
-    @Test
+    
     public void testLimitTabletPrune(@Mocked Replica replica) throws Exception {
         new Expectations() {
             {
