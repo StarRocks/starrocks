@@ -149,7 +149,7 @@ public class Optimizer {
             context.getRuleSet().addMergeJoinImplementationRule();
         } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
             context.getRuleSet().addHashJoinImplementationRule();
-        } else if ("cross".equalsIgnoreCase(joinImplementationMode) || "nestloop".equalsIgnoreCase(joinImplementationMode)) {
+        } else if ("nestloop".equalsIgnoreCase(joinImplementationMode)) {
             context.getRuleSet().addNestLoopJoinImplementationRule();
         } else {
             context.getRuleSet().addAutoJoinImplementationRule();
