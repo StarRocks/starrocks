@@ -122,7 +122,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
             GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
-        } catch (UserException e) {
+        } catch (DdlException e) {
             LOG.warn("Failed to create database " + e.getMessage());
             return false;
         }
