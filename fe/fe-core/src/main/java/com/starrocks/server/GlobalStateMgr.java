@@ -51,7 +51,6 @@ import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.ColumnRenameClause;
-import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
@@ -722,6 +721,10 @@ public class GlobalStateMgr {
 
     public MetadataMgr getMetadataMgr() {
         return metadataMgr;
+    }
+
+    public ConnectorMetadata getMetadata() {
+        return localMetastore;
     }
 
     @VisibleForTesting
@@ -1770,11 +1773,6 @@ public class GlobalStateMgr {
 
     public int getFollowerCnt() {
         return nodeMgr.getFollowerCnt();
-    }
-
-    // The interface which DdlExecutor needs.
-    public void createDb(CreateDbStmt stmt) throws DdlException {
-        localMetastore.createDb(stmt);
     }
 
     // For replay edit log, needn't lock metadata
