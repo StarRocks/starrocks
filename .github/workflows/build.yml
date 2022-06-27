@@ -17,7 +17,7 @@ jobs:
         fetch-depth: 0
     - name: Build & clean
       run: |
-        apt-get install -y byacc
+        sudo apt-get install -y byacc
         ./build.sh --be --clean
     - name: SonarCloud Scan
       uses: sonarsource/sonarcloud-github-action@master
