@@ -43,7 +43,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -226,7 +225,7 @@ public class PartitionsProcDir implements ProcDirInterface {
     private List<List<Comparable>> getPartitionInfos() {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(olapTable);
-        Preconditions.checkState(olapTable.getType() == TableType.OLAP || olapTable.getType() == TableType.MATERIALIZED_VIEW);
+        Preconditions.checkState(olapTable.isNativeTable());
 
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();

@@ -169,6 +169,10 @@ public class Table extends MetaObject implements Writable {
         return type == TableType.MATERIALIZED_VIEW;
     }
 
+    public boolean isNativeTable() {
+        return isOlapTable() || isMaterializedView();
+    }
+
     public boolean isLakeTable() {
         return type == TableType.LAKE;
     }
