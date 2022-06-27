@@ -49,7 +49,6 @@ public:
     virtual void do_close(RuntimeState* state) = 0;
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
 
-
     virtual int64_t get_last_scan_rows_num() {
         int64_t scan_rows_num = _last_scan_rows_num;
         _last_scan_rows_num = 0;
@@ -119,7 +118,6 @@ protected:
     std::atomic<int>& _num_committed_scan_tasks;
 
 private:
-
     int32_t _io_task_retry_cnt = 0;
     PriorityThreadPool* _io_threads = nullptr;
     std::atomic<int> _num_running_io_tasks = 0;
