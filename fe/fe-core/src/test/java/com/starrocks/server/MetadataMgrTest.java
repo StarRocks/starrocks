@@ -67,12 +67,9 @@ public class MetadataMgrTest {
 
         List<String> internalTables = metadataMgr.listTableNames("default_catalog", "default_cluster:db1");
         Assert.assertTrue(internalTables.contains("tbl1"));
-        try {
-            metadataMgr.listTableNames("default_catalog", "default_cluster:db2");
-            Assert.fail();
-        } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("Database default_cluster:db2 doesn't exist"));
-        }
+
+        metadataMgr.listTableNames("default_catalog", "default_cluster:db2");
+        Assert.fail();
 
 
         List<String> externalTables = metadataMgr.listTableNames("hive_catalog", "db2");
