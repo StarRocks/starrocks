@@ -239,4 +239,7 @@ public class OperationType {
 
     // manage system node info 10100 ~ 10120
     public static final short OP_UPDATE_FRONTEND = 10101;
+
+    // manage compute node 10201 ~ 10220
+    public static final short OP_ADD_COMPUTE_NODE = 10201;
 }

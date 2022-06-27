@@ -28,6 +28,7 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.catalog.Column;
@@ -45,8 +46,10 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -60,6 +63,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -81,6 +85,8 @@ public class SystemInfoService {
     private volatile ImmutableMap<Long, Backend> idToBackendRef;
     private volatile ImmutableMap<Long, AtomicLong> idToReportVersionRef;
 
+    private volatile ImmutableMap<Long, ComputeNode> idToComputeNodeRef;
+
     // last backend id used by round robin for sequential choosing backends for
     // tablet creation
     private final ConcurrentHashMap<String, Long> lastBackendIdForCreationMap;
@@ -97,9 +103,61 @@ public class SystemInfoService {
         idToBackendRef = ImmutableMap.<Long, Backend>of();
         idToReportVersionRef = ImmutableMap.<Long, AtomicLong>of();
 
+        idToComputeNodeRef = ImmutableMap.<Long, ComputeNode>of();
+
         lastBackendIdForCreationMap = new ConcurrentHashMap<String, Long>();
         lastBackendIdForOtherMap = new ConcurrentHashMap<String, Long>();
         pathHashToDishInfoRef = ImmutableMap.<Long, DiskInfo>of();
+    }
+
+    public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs)
+            throws DdlException {
+        for (Pair<String, Integer> pair : hostPortPairs) {
+            // check is already exist
+            if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
+                throw new DdlException("Same backend already exists[" + pair.first + ":" + pair.second + "]");
+            }
+            if (getComputeNodeWithHeartbeatPort(pair.first, pair.second) != null) {
+                throw new DdlException("Same compute node already exists[" + pair.first + ":" + pair.second + "]");
+            }
+        }
+
+        for (Pair<String, Integer> pair : hostPortPairs) {
+            addComputeNode(pair.first, pair.second);
+        }
+    }
+
+    private ComputeNode getComputeNodeWithHeartbeatPort(String host, Integer heartPort) {
+        ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
+        for (ComputeNode computeNode : idToComputeNode.values()) {
+            if (computeNode.getHost().equals(host) && computeNode.getHeartbeatPort() == heartPort) {
+                return computeNode;
+            }
+        }
+        return null;
+    }
+
+    // Final entry of adding compute node
+    private void addComputeNode(String host, int heartbeatPort) throws DdlException {
+        ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
+        // update idToComputor
+        Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
+        copiedComputeNodes.put(newComputeNode.getId(), newComputeNode);
+        idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
+
+        setComputeNodeOwner(newComputeNode);
+
+        // log
+        GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
+        LOG.info("finished to add {} ", newComputeNode);
+    }
+
+    private void setComputeNodeOwner(ComputeNode computeNode) {
+        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(DEFAULT_CLUSTER);
+        Preconditions.checkState(cluster != null);
+        cluster.addComputeNode(computeNode.getId());
+        computeNode.setOwnerClusterName(DEFAULT_CLUSTER);
+        computeNode.setBackendState(BackendState.using);
     }
 
     // for deploy manager
@@ -344,6 +402,10 @@ public class SystemInfoService {
         return idToBackendRef.get(backendId);
     }
 
+    public ComputeNode getComputeNode(long computeNodeId) {
+        return idToComputeNodeRef.get(computeNodeId);
+    }
+
     public boolean checkBackendAvailable(long backendId) {
         Backend backend = idToBackendRef.get(backendId);
         return backend != null && backend.isAvailable();
@@ -568,6 +630,10 @@ public class SystemInfoService {
         return idToBackendRef;
     }
 
+    public ImmutableMap<Long, ComputeNode> getIdComputeNode() {
+        return idToComputeNodeRef;
+    }
+
     public ImmutableMap<Long, Backend> getBackendsInCluster(String cluster) {
         if (Strings.isNullOrEmpty(cluster)) {
             return idToBackendRef;
@@ -625,6 +691,21 @@ public class SystemInfoService {
         return checksum;
     }
 
+    public long saveComputeNodes(DataOutputStream dos, long checksum) throws IOException {
+        SystemInfoService.SerializeData data = new SystemInfoService.SerializeData();
+        data.computeNodes = idToComputeNodeRef.values().asList();
+        checksum ^= data.computeNodes.size();
+        String s = GsonUtils.GSON.toJson(data);
+        Text.writeString(dos, s);
+        return checksum;
+    }
+
+    private static class SerializeData {
+        @SerializedName("computeNodes")
+        public List<ComputeNode> computeNodes;
+
+    }
+
     public long loadBackends(DataInputStream dis, long checksum) throws IOException {
         int count = dis.readInt();
         checksum ^= count;
@@ -633,6 +714,27 @@ public class SystemInfoService {
             checksum ^= key;
             Backend backend = Backend.read(dis);
             replayAddBackend(backend);
+        }
+        return checksum;
+    }
+
+    public long loadComputeNodes(DataInputStream dis, long checksum) throws IOException {
+        int computeNodeSize = 0;
+        try {
+            String s = Text.readString(dis);
+            SystemInfoService.SerializeData data = GsonUtils.GSON.fromJson(s, SystemInfoService.SerializeData.class);
+            if (data != null) {
+                if (data.computeNodes != null) {
+                    for (ComputeNode computeNode : data.computeNodes) {
+                        replayAddComputeNode(computeNode);
+                    }
+                    computeNodeSize = data.computeNodes.size();
+                }
+            }
+            checksum ^= computeNodeSize;
+            LOG.info("finished replaying compute node from image");
+        } catch (EOFException e) {
+            LOG.info("no compute node to replay.");
         }
         return checksum;
     }
@@ -682,6 +784,27 @@ public class SystemInfoService {
             throw new AnalysisException("Unknown host: " + e.getMessage());
         } catch (Exception e) {
             throw new AnalysisException("Encounter unknown exception: " + e.getMessage());
+        }
+    }
+
+    public void replayAddComputeNode(ComputeNode newComputeNode) {
+        // update idToComputeNode
+        newComputeNode.setOwnerClusterName(DEFAULT_CLUSTER);
+        newComputeNode.setBackendState(BackendState.using);
+        Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
+        copiedComputeNodes.put(newComputeNode.getId(), newComputeNode);
+        idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
+
+        // to add compute to DEFAULT_CLUSTER
+        if (newComputeNode.getBackendState() == BackendState.using) {
+            final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(DEFAULT_CLUSTER);
+            if (null != cluster) {
+                // replay log
+                cluster.addComputeNode(newComputeNode.getId());
+            } else {
+                // This happens in loading image when fe is restarted, because loadCluster is after loadComputeNode,
+                // cluster is not created. CN in cluster will be updated in loadCluster.
+            }
         }
     }
 
