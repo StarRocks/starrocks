@@ -77,14 +77,4 @@ struct LZ4CompressContext {
     faststring compression_buffer;
 };
 
-struct LZ4DecompressContext {
-    LZ4DecompressContext() : ctx(nullptr), decompression_fail(false), decompression_count(0) {}
-
-    // LZ4 decompression context
-    LZ4_streamDecode_t* ctx;
-
-    bool decompression_fail;
-    uint32_t decompression_count;
-};
-
 } // namespace starrocks::compression

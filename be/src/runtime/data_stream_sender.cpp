@@ -706,8 +706,7 @@ Status DataStreamSender::serialize_chunk(const vectorized::Chunk* src, ChunkPB* 
     if (_compress_codec != nullptr && uncompressed_size > 0) {
         SCOPED_TIMER(_compress_timer);
 
-        if (_compress_codec->type() == CompressionTypePB::LZ4_FRAME ||
-            _compress_codec->type() == CompressionTypePB::ZSTD || _compress_codec->type() == CompressionTypePB::LZ4) {
+        if (use_compression_pool(_compress_codec->type())) {
             Slice compressed_slice;
             Slice input(dst->data());
             _compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,

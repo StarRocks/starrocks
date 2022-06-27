@@ -23,9 +23,6 @@
 
 namespace starrocks::compression {
 
-ZSTD_CCtx_Pool zstd_cctx_pool_singleton;
-ZSTD_DCtx_Pool zstd_dctx_pool_singleton;
-
 StatusOr<ZSTDCompressionContext*> ZSTD_CCtx_Creator::operator()() const noexcept {
     ZSTDCompressionContext* context = new (std::nothrow) ZSTDCompressionContext();
     if (context == nullptr) {
@@ -86,34 +83,27 @@ Status ZSTD_DCtx_Resetter::operator()(ZSTDDecompressContext* context) const noex
     return Status::OK();
 }
 
-StatusOr<ZSTD_CCtx_Pool::Ref> getZSTD_CCtx() {
-    return zstd_cctx_pool_singleton.get();
-}
-
-StatusOr<ZSTD_DCtx_Pool::Ref> getZSTD_DCtx() {
-    return zstd_dctx_pool_singleton.get();
-}
-
 ZSTD_CCtx_Pool& zstd_cctx_pool() {
+    static std::string pool_name = "zstd_compress";
+    static ZSTD_CCtx_Pool zstd_cctx_pool_singleton(pool_name);
     return zstd_cctx_pool_singleton;
 }
 
 ZSTD_DCtx_Pool& zstd_dctx_pool() {
+    static std::string pool_name = "zstd_decompress";
+    static ZSTD_DCtx_Pool zstd_dctx_pool_singleton(pool_name);
     return zstd_dctx_pool_singleton;
 }
 
-size_t get_zstd_cctx_created_count() {
-    return zstd_cctx_pool_singleton.created_count();
+StatusOr<ZSTD_CCtx_Pool::Ref> getZSTD_CCtx() {
+    return zstd_cctx_pool().get();
 }
 
-size_t get_zstd_dctx_created_count() {
-    return zstd_dctx_pool_singleton.created_count();
+StatusOr<ZSTD_DCtx_Pool::Ref> getZSTD_DCtx() {
+    return zstd_dctx_pool().get();
 }
 
 // ==============================================================
-
-LZ4F_CCtx_Pool lz4f_cctx_pool_singleton;
-LZ4F_DCtx_Pool lz4f_dctx_pool_singleton;
 
 StatusOr<LZ4FCompressContext*> LZ4F_CCtx_Creator::operator()() const noexcept {
     LZ4FCompressContext* context = new (std::nothrow) LZ4FCompressContext();
@@ -163,6 +153,7 @@ Status LZ4F_CCtx_Resetter::operator()(LZ4FCompressContext* context) const noexce
         auto res = LZ4F_createCompressionContext(&new_ctx, LZ4F_VERSION);
         if (res != 0) {
             delete context;
+            context = nullptr;
             return Status::InvalidArgument(
                     strings::Substitute("Fail to reinit LZ4FRAME compress context, res=$0", LZ4F_getErrorName(res)));
         }
@@ -182,34 +173,27 @@ Status LZ4F_DCtx_Resetter::operator()(LZ4FDecompressContext* context) const noex
     return Status::OK();
 }
 
-StatusOr<LZ4F_CCtx_Pool::Ref> getLZ4F_CCtx() {
-    return lz4f_cctx_pool_singleton.get();
-}
-
-StatusOr<LZ4F_DCtx_Pool::Ref> getLZ4F_DCtx() {
-    return lz4f_dctx_pool_singleton.get();
-}
-
 LZ4F_CCtx_Pool& lz4f_cctx_pool() {
+    static std::string pool_name = "lz4f_compress";
+    static LZ4F_CCtx_Pool lz4f_cctx_pool_singleton(pool_name);
     return lz4f_cctx_pool_singleton;
 }
 
 LZ4F_DCtx_Pool& lz4f_dctx_pool() {
+    static std::string pool_name = "lz4f_decompress";
+    static LZ4F_DCtx_Pool lz4f_dctx_pool_singleton(pool_name);
     return lz4f_dctx_pool_singleton;
 }
 
-size_t get_lz4f_cctx_created_count() {
-    return lz4f_cctx_pool_singleton.created_count();
+StatusOr<LZ4F_CCtx_Pool::Ref> getLZ4F_CCtx() {
+    return lz4f_cctx_pool().get();
 }
 
-size_t get_lz4f_dctx_created_count() {
-    return lz4f_dctx_pool_singleton.created_count();
+StatusOr<LZ4F_DCtx_Pool::Ref> getLZ4F_DCtx() {
+    return lz4f_dctx_pool().get();
 }
 
 // ==============================================================
-
-LZ4_CCtx_Pool lz4_cctx_pool_singleton;
-LZ4_DCtx_Pool lz4_dctx_pool_singleton;
 
 StatusOr<LZ4CompressContext*> LZ4_CCtx_Creator::operator()() const noexcept {
     LZ4CompressContext* context = new (std::nothrow) LZ4CompressContext();
@@ -224,28 +208,9 @@ StatusOr<LZ4CompressContext*> LZ4_CCtx_Creator::operator()() const noexcept {
     return context;
 }
 
-StatusOr<LZ4DecompressContext*> LZ4_DCtx_Creator::operator()() const noexcept {
-    LZ4DecompressContext* context = new (std::nothrow) LZ4DecompressContext();
-    if (context == nullptr) {
-        return Status::InvalidArgument("Fail to init LZ4F decompression context");
-    }
-    context->ctx = LZ4_createStreamDecode();
-    if (context->ctx == nullptr) {
-        delete context;
-        return Status::InvalidArgument("Fail to init LZ4 decompression context");
-    }
-    return context;
-}
-
 void LZ4_CCtx_Deleter::operator()(LZ4CompressContext* context) const noexcept {
     DCHECK(!context->compression_fail);
     LZ4_freeStream(context->ctx);
-    delete context;
-}
-
-void LZ4_DCtx_Deleter::operator()(LZ4DecompressContext* context) const noexcept {
-    DCHECK(!context->decompression_fail);
-    LZ4_freeStreamDecode(context->ctx);
     delete context;
 }
 
@@ -260,37 +225,13 @@ Status LZ4_CCtx_Resetter::operator()(LZ4CompressContext* context) const noexcept
     return Status::OK();
 }
 
-Status LZ4_DCtx_Resetter::operator()(LZ4DecompressContext* context) const noexcept {
-    context->decompression_count++;
-    if (context->decompression_fail == true) {
-        context->decompression_fail = false;
-    }
-    LZ4_setStreamDecode(context->ctx, nullptr, 0);
-    return Status::OK();
-}
-
-StatusOr<LZ4_CCtx_Pool::Ref> getLZ4_CCtx() {
-    return lz4_cctx_pool_singleton.get();
-}
-
-StatusOr<LZ4_DCtx_Pool::Ref> getLZ4_DCtx() {
-    return lz4_dctx_pool_singleton.get();
-}
-
 LZ4_CCtx_Pool& lz4_cctx_pool() {
+    static std::string pool_name = "lz4_compress";
+    static LZ4_CCtx_Pool lz4_cctx_pool_singleton(pool_name);
     return lz4_cctx_pool_singleton;
 }
 
-LZ4_DCtx_Pool& lz4_dctx_pool() {
-    return lz4_dctx_pool_singleton;
+StatusOr<LZ4_CCtx_Pool::Ref> getLZ4_CCtx() {
+    return lz4_cctx_pool().get();
 }
-
-size_t get_lz4_cctx_created_count() {
-    return lz4_cctx_pool_singleton.created_count();
-}
-
-size_t get_lz4_dctx_created_count() {
-    return lz4_dctx_pool_singleton.created_count();
-}
-
 } // namespace starrocks::compression

@@ -46,7 +46,8 @@ Status BlockCompressionCodec::compress(const std::vector<Slice>& inputs, Slice* 
                                        size_t uncompressed_size, faststring* compressed_body1,
                                        raw::RawString* compressed_body2) const {
     if (inputs.size() == 1) {
-        return compress(inputs[0], output);
+        return compress(inputs[0], output, use_compression_buffer, uncompressed_size, compressed_body1,
+                        compressed_body2);
     }
     faststring buf;
     // we compute total size to avoid more memory copy
@@ -76,7 +77,15 @@ public:
         return _compress(input, output, use_compression_buffer, uncompressed_size, compressed_body1, compressed_body2);
     }
 
-    Status decompress(const Slice& input, Slice* output) const override { return _decompress(input, output); }
+    Status decompress(const Slice& input, Slice* output) const override {
+        auto decompressed_len = LZ4_decompress_safe(input.data, output->data, input.size, output->size);
+        if (decompressed_len < 0) {
+            return Status::InvalidArgument(
+                    strings::Substitute("fail to do LZ4 decompress, error=$0", decompressed_len));
+        }
+        output->size = decompressed_len;
+        return Status::OK();
+    }
 
     size_t max_compressed_len(size_t len) const override { return LZ4_compressBound(len); }
 
@@ -119,7 +128,7 @@ private:
             }
         }
 
-        int32_t acceleration = 0;
+        int32_t acceleration = 1;
         size_t compressed_size =
                 LZ4_compress_fast_continue(ctx, input.data, output->data, input.size, output->size, acceleration);
 
@@ -152,24 +161,6 @@ private:
             }
         }
 
-        return Status::OK();
-    }
-
-    Status _decompress(const Slice& input, Slice* output) const {
-        StatusOr<compression::LZ4_DCtx_Pool::Ref> ref = compression::getLZ4_DCtx();
-        Status status = ref.status();
-        if (!status.ok()) {
-            return status;
-        }
-        compression::LZ4DecompressContext* context = ref.value().get();
-        LZ4_streamDecode_t* ctx = context->ctx;
-
-        int decompressed_size = LZ4_decompress_safe_continue(ctx, input.data, output->data, input.size, output->size);
-
-        if (decompressed_size < 0) {
-            context->decompression_fail = true;
-            return Status::InvalidArgument("Fail to do LZ4 decompress");
-        }
         return Status::OK();
     }
 };
@@ -999,6 +990,13 @@ Status get_block_compression_codec(CompressionTypePB type, const BlockCompressio
         return Status::NotFound(strings::Substitute("unknown compression type($0)", type));
     }
     return Status::OK();
+}
+
+bool use_compression_pool(CompressionTypePB type) {
+    if (type == CompressionTypePB::LZ4_FRAME || type == CompressionTypePB::ZSTD || type == CompressionTypePB::LZ4) {
+        return true;
+    }
+    return false;
 }
 
 } // namespace starrocks

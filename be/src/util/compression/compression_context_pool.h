@@ -23,6 +23,7 @@
 
 #include "common/status.h"
 #include "common/statusor.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::compression {
 
@@ -60,39 +61,34 @@ public:
     using Object = T;
     using Ref = std::unique_ptr<T, ReturnToPoolDeleter>;
 
-    explicit CompressionContextPool(Creator creator = Creator(), Deleter deleter = Deleter(),
-                                    Resetter resetter = Resetter())
+    explicit CompressionContextPool(const std::string& pool_name, Creator creator = Creator(),
+                                    Deleter deleter = Deleter(), Resetter resetter = Resetter())
             : _creator(std::move(creator)),
               _deleter(std::move(deleter)),
               _resetter(std::move(resetter)),
               _stack(),
-              _created(0) {}
+              _created_counter(0) {
+        auto metrics = StarRocksMetrics::instance()->metrics();
+        std::string full_name = pool_name + "_context_pool_create_count";
+        _created_counter_metrics = std::make_unique<UIntGauge>(MetricUnit::NOUNIT);
+        metrics->register_metric(full_name, _created_counter_metrics.get());
+        metrics->register_hook(full_name, [this]() { _created_counter_metrics->set_value(_created_counter.load()); });
+    }
 
     StatusOr<Ref> get() {
-        std::unique_lock wrlock(_stack_lock);
+        std::lock_guard<std::mutex> l(_stack_lock);
         if (_stack.empty()) {
-            StatusOr<T*> t = _creator();
-            auto status = t.status();
-            if (!status.ok()) {
-                return status;
-            }
-            _created++;
-            return Ref(t.value(), get_deleter());
+            ASSIGN_OR_RETURN(T * t, _creator());
+            _created_counter++;
+            return Ref(t, get_deleter());
         }
         auto ptr = std::move(_stack.back());
         _stack.pop_back();
-        if (!ptr) {
-            return Status::InternalError("a nullptr snuck into our context pool!?!?");
-        }
+        DCHECK(ptr);
         return Ref(ptr.release(), get_deleter());
     }
 
-    size_t created_count() const { return _created.load(); }
-
-    size_t size() {
-        std::shared_lock rdlock(_stack_lock);
-        return _stack->size();
-    }
+    size_t created_count() const { return _created_counter.load(); }
 
     ReturnToPoolDeleter get_deleter() { return ReturnToPoolDeleter(this); }
 
@@ -104,7 +100,7 @@ public:
     }
 
     void flush_shallow() {
-        std::unique_lock wrlock(_stack_lock);
+        std::lock_guard<std::mutex> l(_stack_lock);
         _stack->resize(0);
     }
 
@@ -112,7 +108,13 @@ private:
     void add(InternalRef ptr) {
         DCHECK(ptr);
         _resetter(ptr.get());
-        std::unique_lock wrlock(_stack_lock);
+        Status status = _resetter(ptr.get());
+        // if reset fail, then delete this context
+        if (!status.ok()) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> l(_stack_lock);
         _stack.push_back(std::move(ptr));
     }
 
@@ -120,9 +122,10 @@ private:
     Deleter _deleter;
     Resetter _resetter;
 
-    std::shared_mutex _stack_lock;
+    std::mutex _stack_lock;
     std::vector<InternalRef> _stack;
 
-    std::atomic<size_t> _created;
+    std::unique_ptr<UIntGauge> _created_counter_metrics;
+    std::atomic<size_t> _created_counter;
 };
 } // namespace starrocks::compression

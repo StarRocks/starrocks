@@ -95,4 +95,6 @@ protected:
 // Return not OK, if error happens.
 Status get_block_compression_codec(CompressionTypePB type, const BlockCompressionCodec** codec);
 
+bool use_compression_pool(CompressionTypePB type);
+
 } // namespace starrocks
