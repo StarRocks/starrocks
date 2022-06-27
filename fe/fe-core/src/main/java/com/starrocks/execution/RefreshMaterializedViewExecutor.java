@@ -4,9 +4,8 @@ package com.starrocks.execution;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
-
-import static com.starrocks.scheduler.Constants.MANUAL_TASK_RUN_PRIORITY;
 
 public class RefreshMaterializedViewExecutor implements DataDefinitionExecutor {
 
@@ -14,7 +13,7 @@ public class RefreshMaterializedViewExecutor implements DataDefinitionExecutor {
         final RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
         context.getGlobalStateMgr().getLocalMetastore()
                 .refreshMaterializedView(refreshMaterializedViewStatement.getMvName().getDb(),
-                        refreshMaterializedViewStatement.getMvName().getTbl(), MANUAL_TASK_RUN_PRIORITY);
+                        refreshMaterializedViewStatement.getMvName().getTbl(), Constants.TaskRunPriority.NORMAL.value());
         return null;
     }
 }

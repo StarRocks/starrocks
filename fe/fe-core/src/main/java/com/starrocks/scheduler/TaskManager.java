@@ -48,8 +48,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-import static com.starrocks.scheduler.Constants.DEFAULT_TASK_RUN_PRIORITY;
-
 public class TaskManager {
 
     private static final Logger LOG = LogManager.getLogger(TaskManager.class);
@@ -239,7 +237,7 @@ public class TaskManager {
     }
 
     public SubmitResult executeTask(String taskName) {
-        return executeTask(taskName, DEFAULT_TASK_RUN_PRIORITY);
+        return executeTask(taskName, Constants.TaskRunPriority.LOWEST.value());
     }
 
     public SubmitResult executeTask(String taskName, int priority) {

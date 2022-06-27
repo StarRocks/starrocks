@@ -34,6 +34,20 @@ public class Constants {
         SUCCESS,
     }
 
-    public static final int DEFAULT_TASK_RUN_PRIORITY = 0;
-    public static final int MANUAL_TASK_RUN_PRIORITY = 20;
+    // Used to determine the scheduling order of Pending TaskRun to Running TaskRun
+    // The bigger the priority, the higher the priority, the default value is LOWEST
+    public enum TaskRunPriority {
+        LOWEST(0), LOW(20), NORMAL(50), HIGH(80), HIGHEST(100);
+
+        private final int value;
+
+        TaskRunPriority(int value) {
+            this.value = value;
+        }
+
+        public int value() {
+            return value;
+        }
+    }
+
 }

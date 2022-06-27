@@ -42,6 +42,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -56,8 +57,6 @@ import org.junit.Test;
 
 import java.util.List;
 import java.util.Map;
-
-import static com.starrocks.scheduler.Constants.DEFAULT_TASK_RUN_PRIORITY;
 
 public class AlterTest {
 
@@ -199,7 +198,8 @@ public class AlterTest {
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .refreshMaterializedView(refreshMaterializedViewStatement.getMvName().getDb(),
-                            refreshMaterializedViewStatement.getMvName().getTbl(), DEFAULT_TASK_RUN_PRIORITY);
+                            refreshMaterializedViewStatement.getMvName().getTbl(),
+                            Constants.TaskRunPriority.LOWEST.value());
             if (expectedException) {
                 Assert.fail();
             }

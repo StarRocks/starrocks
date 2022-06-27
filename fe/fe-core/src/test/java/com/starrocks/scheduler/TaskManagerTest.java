@@ -42,8 +42,6 @@ import java.util.List;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-import static com.starrocks.scheduler.Constants.DEFAULT_TASK_RUN_PRIORITY;
-
 public class TaskManagerTest {
 
     private static final Logger LOG = LogManager.getLogger(TaskManagerTest.class);
@@ -128,7 +126,7 @@ public class TaskManagerTest {
         TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
-        taskRunManager.submitTaskRun(taskRun, DEFAULT_TASK_RUN_PRIORITY);
+        taskRunManager.submitTaskRun(taskRun, Constants.TaskRunPriority.LOWEST.value());
 
         ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
 
