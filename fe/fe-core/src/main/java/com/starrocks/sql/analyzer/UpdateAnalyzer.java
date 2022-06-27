@@ -61,8 +61,10 @@ public class UpdateAnalyzer {
                     throw new SemanticException("primary key column cannot be updated: " + col.getName());
                 }
                 if (assign.getExpr() instanceof LiteralExpr) {
+                    // TypeManager.addCastExpr can check if the literal can be cast to the column type
                     item = new SelectListItem(TypeManager.addCastExpr(assign.getExpr(), col.getType()), col.getName());
                 } else {
+                    // There are still cases that this expr cannot cast to the column type, that's a known issue
                     item = new SelectListItem(new CastExpr(col.getType(), assign.getExpr()), col.getName());
                 }
             } else {
