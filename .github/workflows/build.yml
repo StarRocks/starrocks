@@ -16,7 +16,9 @@ jobs:
         # Disabling shallow clone is recommended for improving relevancy of reporting
         fetch-depth: 0
     - name: Build & clean
-      run: ./build.sh --be --clean
+      run: |
+        apt-get install -y byacc
+        ./build.sh --be --clean
     - name: SonarCloud Scan
       uses: sonarsource/sonarcloud-github-action@master
       env:
@@ -25,7 +27,7 @@ jobs:
       with:
         projectBaseDir: ${{github.workspace}}
         cmake-opts: ""
-        make-opts: sh build.sh --clean
+        make-opts: ./build.sh --be --clean
         args: >
           -Dsonar.organization=dulong41
           -Dsonar.projectKey=dulong41_starrocks
