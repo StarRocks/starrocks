@@ -48,6 +48,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
+import static com.starrocks.scheduler.Constants.DEFAULT_TASK_RUN_PRIORITY;
+
 public class TaskManager {
 
     private static final Logger LOG = LogManager.getLogger(TaskManager.class);
@@ -237,11 +239,15 @@ public class TaskManager {
     }
 
     public SubmitResult executeTask(String taskName) {
+        return executeTask(taskName, DEFAULT_TASK_RUN_PRIORITY);
+    }
+
+    public SubmitResult executeTask(String taskName, int priority) {
         Task task = nameToTaskMap.get(taskName);
         if (task == null) {
             return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
-        return taskRunManager.submitTaskRun(TaskRunBuilder.newBuilder(task).build());
+        return taskRunManager.submitTaskRun(TaskRunBuilder.newBuilder(task).build(), priority);
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
@@ -461,7 +467,7 @@ public class TaskManager {
                 TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
                 Queue<TaskRun> taskRuns = taskRunManager.getPendingTaskRunMap().computeIfAbsent(taskRun.getTaskId(),
-                        u -> Queues.newConcurrentLinkedQueue());
+                        u -> Queues.newPriorityBlockingQueue());
                 taskRuns.offer(taskRun);
                 break;
             // this will happen in build image

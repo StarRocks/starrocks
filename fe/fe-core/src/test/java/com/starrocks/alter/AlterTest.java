@@ -57,6 +57,8 @@ import org.junit.Test;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.scheduler.Constants.DEFAULT_TASK_RUN_PRIORITY;
+
 public class AlterTest {
 
     private static ConnectContext connectContext;
@@ -197,7 +199,7 @@ public class AlterTest {
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .refreshMaterializedView(refreshMaterializedViewStatement.getMvName().getDb(),
-                            refreshMaterializedViewStatement.getMvName().getTbl());
+                            refreshMaterializedViewStatement.getMvName().getTbl(), DEFAULT_TASK_RUN_PRIORITY);
             if (expectedException) {
                 Assert.fail();
             }

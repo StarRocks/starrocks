@@ -2995,7 +2995,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public void refreshMaterializedView(String dbName, String mvName) throws DdlException, MetaNotFoundException {
+    public void refreshMaterializedView(String dbName, String mvName, int priority) throws DdlException, MetaNotFoundException {
         Database db = this.getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
@@ -3019,8 +3019,7 @@ public class LocalMetastore implements ConnectorMetadata {
             Task task = TaskBuilder.buildMvTask(materializedView, dbName);
             taskManager.createTask(task, true);
         }
-        // run task
-        taskManager.executeTask(mvTaskName);
+        taskManager.executeTask(mvTaskName, priority);
     }
 
     /*

@@ -3,6 +3,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Queues;
 import com.starrocks.analysis.DmlStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -38,7 +39,10 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Deque;
 import java.util.List;
+import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
+
+import static com.starrocks.scheduler.Constants.DEFAULT_TASK_RUN_PRIORITY;
 
 public class TaskManagerTest {
 
@@ -124,7 +128,7 @@ public class TaskManagerTest {
         TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
-        taskRunManager.submitTaskRun(taskRun);
+        taskRunManager.submitTaskRun(taskRun, DEFAULT_TASK_RUN_PRIORITY);
 
         ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
 
@@ -229,4 +233,44 @@ public class TaskManagerTest {
         Assert.assertEquals(readTask.getState(), Constants.TaskState.UNKNOWN);
     }
 
+    @Test
+    public void testTaskRunPriority() {
+        PriorityBlockingQueue<TaskRun> queue = Queues.newPriorityBlockingQueue();
+        long now = System.currentTimeMillis();
+        Task task = new Task();
+        task.setName("test");
+
+        TaskRun taskRun1 = TaskRunBuilder.newBuilder(task).build();
+        taskRun1.initStatus("1", now);
+        taskRun1.getStatus().setPriority(0);
+
+        TaskRun taskRun2 = TaskRunBuilder.newBuilder(task).build();
+        taskRun2.initStatus("2", now);
+        taskRun2.getStatus().setPriority(10);
+
+        TaskRun taskRun3 = TaskRunBuilder.newBuilder(task).build();
+        taskRun3.initStatus("3", now + 100);
+        taskRun3.getStatus().setPriority(5);
+
+        TaskRun taskRun4 = TaskRunBuilder.newBuilder(task).build();
+        taskRun4.initStatus("4", now);
+        taskRun4.getStatus().setPriority(5);
+
+        queue.offer(taskRun1);
+        queue.offer(taskRun2);
+        queue.offer(taskRun3);
+        queue.offer(taskRun4);
+
+        TaskRunStatus get1 = queue.poll().getStatus();
+        Assert.assertEquals(get1.getPriority(), 10);
+        TaskRunStatus get2 = queue.poll().getStatus();
+        Assert.assertEquals(get2.getPriority(), 5);
+        Assert.assertEquals(get2.getCreateTime(), now);
+        TaskRunStatus get3 = queue.poll().getStatus();
+        Assert.assertEquals(get3.getPriority(), 5);
+        Assert.assertEquals(get3.getCreateTime(), now + 100);
+        TaskRunStatus get4 = queue.poll().getStatus();
+        Assert.assertEquals(get4.getPriority(), 0);
+
+    }
 }

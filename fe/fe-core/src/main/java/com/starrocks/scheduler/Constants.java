@@ -34,4 +34,6 @@ public class Constants {
         SUCCESS,
     }
 
+    public static final int DEFAULT_TASK_RUN_PRIORITY = 0;
+    public static final int MANUAL_TASK_RUN_PRIORITY = 20;
 }
