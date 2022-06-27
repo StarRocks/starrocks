@@ -163,7 +163,7 @@ public class Table extends MetaObject implements Writable {
     }
 
     public boolean isOlapTable() {
-        return type == TableType.OLAP;
+        return type == TableType.OLAP || type == TableType.MATERIALIZED_VIEW;
     }
 
     public boolean isLakeTable() {
