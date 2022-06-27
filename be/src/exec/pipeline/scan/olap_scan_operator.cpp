@@ -117,6 +117,11 @@ ChunkPtr OlapScanOperator::get_chunk_from_buffer() {
     return nullptr;
 }
 
+bool OlapScanOperator::has_available_buffer() const {
+    // TODO: consider the global buffer
+    return _ctx->get_chunk_buffer().size(_driver_sequence) <= _buffer_size;
+}
+
 size_t OlapScanOperator::max_scan_concurrency() const {
     int64_t query_limit = runtime_state()->query_mem_tracker_ptr()->limit();
 

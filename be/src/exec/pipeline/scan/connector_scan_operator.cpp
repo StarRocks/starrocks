@@ -72,6 +72,12 @@ bool ConnectorScanOperator::has_buffer_output() const {
     return !buffer.empty(_driver_sequence);
 }
 
+bool ConnectorScanOperator::has_available_buffer() const {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& buffer = factory->get_chunk_buffer();
+    return buffer.size(_driver_sequence) <= _buffer_size;
+}
+
 ChunkPtr ConnectorScanOperator::get_chunk_from_buffer() {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     auto& buffer = factory->get_chunk_buffer();

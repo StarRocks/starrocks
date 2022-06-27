@@ -227,6 +227,11 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
 }
 
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
+    // Check if the buffer has available capacity to avoid occupy too much momory
+    if (!has_available_buffer()) {
+        return Status::OK();
+    }
+    // Check if exceed the concurrency limitation
     if (!_try_to_increase_committed_scan_tasks()) {
         return Status::OK();
     }

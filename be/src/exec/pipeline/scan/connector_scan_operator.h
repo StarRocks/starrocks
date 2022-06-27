@@ -46,6 +46,7 @@ public:
     void detach_chunk_source(int32_t source_index) override;
     bool has_shared_chunk_source() const override;
     bool has_buffer_output() const override;
+    bool has_available_buffer() const override;
     ChunkPtr get_chunk_from_buffer() override;
 
 private:

@@ -43,13 +43,16 @@ public:
     Status do_prepare(RuntimeState* state) override;
     void do_close(RuntimeState* state) override;
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
+
+    size_t max_scan_concurrency() const override;
+
+protected:
     void attach_chunk_source(int32_t source_index) override;
     void detach_chunk_source(int32_t source_index) override;
     bool has_shared_chunk_source() const override;
     bool has_buffer_output() const override;
+    bool has_available_buffer() const override;
     ChunkPtr get_chunk_from_buffer() override;
-
-    size_t max_scan_concurrency() const override;
 
 private:
     size_t _avg_max_scan_concurrency() const;
