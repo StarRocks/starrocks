@@ -23,7 +23,7 @@ jobs:
       with:
         projectBaseDir: ${{github.workspace}}
         cmake-opts: ""
-        make-opts: test ARGS=-V
+        make-opts: sh build.sh --clean
         args: >
           -Dsonar.organization=dulong41
           -Dsonar.projectKey=dulong41_starrocks
