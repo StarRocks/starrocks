@@ -10,8 +10,6 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.Objects;
-
 public class PhysicalNestLoopJoinOperator extends PhysicalJoinOperator {
 
     public PhysicalNestLoopJoinOperator(JoinOperator joinType,
@@ -47,26 +45,6 @@ public class PhysicalNestLoopJoinOperator extends PhysicalJoinOperator {
     @Override
     public String getJoinAlgo() {
         return "NESTLOOP";
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-        PhysicalNestLoopJoinOperator that = (PhysicalNestLoopJoinOperator) o;
-        return joinType == that.joinType && Objects.equals(onPredicate, that.onPredicate);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), joinType, onPredicate);
     }
 
 }
