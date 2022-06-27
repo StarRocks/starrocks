@@ -489,6 +489,14 @@ public class NodeMgr {
         return systemInfo.saveBackends(dos, checksum);
     }
 
+    public long loadComputeNodes(DataInputStream dis, long checksum) throws IOException {
+        return systemInfo.loadComputeNodes(dis, checksum);
+    }
+
+    public long saveComputeNodes(DataOutputStream dos, long checksum) throws IOException {
+        return systemInfo.saveComputeNodes(dos, checksum);
+    }
+
     private StorageInfo getStorageInfo(URL url) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
 

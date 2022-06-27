@@ -1129,6 +1129,9 @@ public class StmtExecutor {
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
         try {
             if (execPlan.getFragments().get(0).getSink() instanceof OlapTableSink) {
+                //if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
+                context.getSessionVariable().setPreferComputeNode(false);
+                context.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink dataSink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
                 dataSink.init(context.getExecutionId(), transactionId, database.getId(),
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS());
