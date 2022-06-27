@@ -337,13 +337,20 @@ Status NodeChannel::add_chunk(vectorized::Chunk* input, const int64_t* tablet_id
         RETURN_IF_ERROR(_serialize_chunk(chunk.get(), pchunk));
     }
 
-    _add_batch_closures[_current_request_index]->ref();
-    _add_batch_closures[_current_request_index]->reset();
-    _add_batch_closures[_current_request_index]->cntl.set_timeout_ms(_rpc_timeout_ms);
+    {
+        std::lock_guard<std::mutex> l(_lock);
+        if (_cancelled) {
+            return Status::InternalError("the load is already cancelled");
+        }
+        _add_batch_closures[_current_request_index]->ref();
+        _add_batch_closures[_current_request_index]->reset();
+        _add_batch_closures[_current_request_index]->cntl.set_timeout_ms(_rpc_timeout_ms);
 
-    _stub->tablet_writer_add_chunk(&_add_batch_closures[_current_request_index]->cntl, &request,
-                                   &_add_batch_closures[_current_request_index]->result,
-                                   _add_batch_closures[_current_request_index]);
+        _stub->tablet_writer_add_chunk(&_add_batch_closures[_current_request_index]->cntl, &request,
+                                       &_add_batch_closures[_current_request_index]->result,
+                                       _add_batch_closures[_current_request_index]);
+    }
+
     _next_packet_seq++;
 
     return Status::OK();
@@ -475,25 +482,28 @@ Status NodeChannel::close_wait(RuntimeState* state) {
 
 void NodeChannel::cancel(const Status& err_st) {
     // cancel rpc request, accelerate the release of related resources
-    for (auto closure : _add_batch_closures) {
-        closure->cancel();
+    std::lock_guard<std::mutex> l(_lock);
+    if (!_cancelled) {
+        for (auto closure : _add_batch_closures) {
+            closure->cancel();
+        }
+
+        _cancelled = true;
+        _err_st = err_st;
+
+        PTabletWriterCancelRequest request;
+        request.set_allocated_id(&_parent->_load_id);
+        request.set_index_id(_index_id);
+        request.set_sender_id(_parent->_sender_id);
+        request.set_txn_id(_parent->_txn_id);
+
+        auto closure = new RefCountClosure<PTabletWriterCancelResult>();
+
+        closure->ref();
+        closure->cntl.set_timeout_ms(_rpc_timeout_ms);
+        _stub->tablet_writer_cancel(&closure->cntl, &request, &closure->result, closure);
+        request.release_id();
     }
-
-    _cancelled = true;
-    _err_st = err_st;
-
-    PTabletWriterCancelRequest request;
-    request.set_allocated_id(&_parent->_load_id);
-    request.set_index_id(_index_id);
-    request.set_sender_id(_parent->_sender_id);
-    request.set_txn_id(_parent->_txn_id);
-
-    auto closure = new RefCountClosure<PTabletWriterCancelResult>();
-
-    closure->ref();
-    closure->cntl.set_timeout_ms(_rpc_timeout_ms);
-    _stub->tablet_writer_cancel(&closure->cntl, &request, &closure->result, closure);
-    request.release_id();
 }
 
 IndexChannel::~IndexChannel() = default;
@@ -854,6 +864,16 @@ Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel
         }
     }
     return Status::OK();
+}
+
+void OlapTableSink::cancel() {
+    int ordinal = 0;
+    for (size_t i = 0; i < _channels.size(); i++) {
+        auto& index_channel = _channels[ordinal];
+        index_channel->for_each_node_channel([](NodeChannel* ch) {
+            ch->cancel(Status::InternalError("load is already cancelled"));
+        });
+    }
 }
 
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {

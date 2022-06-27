@@ -64,6 +64,8 @@ public:
         return Status::OK();
     }
 
+    virtual void cancel() {}
+
     // Creates a new data sink from thrift_sink. A pointer to the
     // new sink is written to *sink, and is owned by the caller.
     static Status create_data_sink(RuntimeState* state, const TDataSink& thrift_sink,
