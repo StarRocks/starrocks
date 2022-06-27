@@ -11,6 +11,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -36,11 +37,14 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -62,8 +66,70 @@ public class StatisticsCalculatorTest {
         optimizerContext = new OptimizerContext(new Memo(), columnRefFactory, connectContext);
 
         starRocksAssert = new StarRocksAssert(connectContext);
-        String DB_NAME = "test";
+        String DB_NAME = "statistics_test";
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
+        FeConstants.runningUnitTest = true;
+    }
+
+    @Before
+    public void before() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `test_all_type` (\n" +
+                "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
+                "  `t1b` smallint(6) NULL COMMENT \"\",\n" +
+                "  `t1c` int(11) NULL COMMENT \"\",\n" +
+                "  `t1d` bigint(20) NULL COMMENT \"\",\n" +
+                "  `t1e` float NULL COMMENT \"\",\n" +
+                "  `t1f` double NULL COMMENT \"\",\n" +
+                "  `t1g` bigint(20) NULL COMMENT \"\",\n" +
+                "  `id_datetime` datetime NULL COMMENT \"\",\n" +
+                "  `id_date` date NULL COMMENT \"\", \n" +
+                "  `id_decimal` decimal(10,2) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`t1a`)\n" +
+                "PARTITION BY RANGE (id_date)\n" +
+                "(\n" +
+                "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
+                "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"), \n" +
+                "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")  \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `test_all_type_day_partition` (\n" +
+                "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
+                "  `t1b` smallint(6) NULL COMMENT \"\",\n" +
+                "  `t1c` int(11) NULL COMMENT \"\",\n" +
+                "  `t1d` bigint(20) NULL COMMENT \"\",\n" +
+                "  `t1e` float NULL COMMENT \"\",\n" +
+                "  `t1f` double NULL COMMENT \"\",\n" +
+                "  `t1g` bigint(20) NULL COMMENT \"\",\n" +
+                "  `id_datetime` datetime NULL COMMENT \"\",\n" +
+                "  `id_date` date NULL COMMENT \"\", \n" +
+                "  `id_decimal` decimal(10,2) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`t1a`)\n" +
+                "PARTITION BY RANGE (id_date)\n" +
+                "(\n" +
+                "partition p1 values [('2020-04-23'), ('2020-04-24')),\n" +
+                "partition p2 values [('2020-04-24'), ('2020-04-25')),\n" +
+                "partition p3 values [('2020-04-25'), ('2020-04-26')) \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+    }
+
+    @After
+    public void after() throws Exception {
+        starRocksAssert.dropTable("test_all_type");
+        starRocksAssert.dropTable("test_all_type_day_partition");
     }
 
     @Test
@@ -149,30 +215,8 @@ public class StatisticsCalculatorTest {
 
     @Test
     public void testLogicalOlapTableScan() throws Exception {
-        starRocksAssert.withTable("CREATE TABLE `test_all_type` (\n" +
-                "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
-                "  `t1b` smallint(6) NULL COMMENT \"\",\n" +
-                "  `t1c` int(11) NULL COMMENT \"\",\n" +
-                "  `t1d` bigint(20) NULL COMMENT \"\",\n" +
-                "  `t1e` float NULL COMMENT \"\",\n" +
-                "  `t1f` double NULL COMMENT \"\",\n" +
-                "  `t1g` bigint(20) NULL COMMENT \"\",\n" +
-                "  `id_datetime` datetime NULL COMMENT \"\",\n" +
-                "  `id_date` date NULL COMMENT \"\", \n" +
-                "  `id_decimal` decimal(10,2) NULL COMMENT \"\", \n" +
-                "  `id_json` JSON NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`t1a`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
-                ");");
-
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("test_all_type");
+        OlapTable table = (OlapTable) globalStateMgr.getDb("default_cluster:statistics_test").getTable("test_all_type");
         Collection<Partition> partitions = table.getPartitions();
         List<Long> partitionIds =
                 partitions.stream().mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
@@ -213,41 +257,72 @@ public class StatisticsCalculatorTest {
             Assert.assertEquals(1000 * partitions.size(), expressionContext.getStatistics().getOutputRowCount(), 0.001);
             Assert.assertEquals(1000 * partitions.size(), expressionContext.getStatistics().getComputeSize(), 0.001);
         }
-        starRocksAssert.dropTable("test_all_type");
+    }
+
+    @Test
+    public void testLogicalOlapTableEmptyPartition(@Mocked CachedStatisticStorage cachedStatisticStorage) {
+        FeConstants.runningUnitTest = false;
+
+        ColumnRefOperator id_date = columnRefFactory.create("id_date", Type.DATE, true);
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        Table table = globalStateMgr.getDb("default_cluster:statistics_test").getTable("test_all_type");
+
+        List<Partition> partitions = new ArrayList<>(((OlapTable) table).getPartitions());
+
+        Partition partition1 = partitions.get(0);
+        Partition partition2 = partitions.get(1);
+        Partition partition3 = partitions.get(2);
+        // mock one empty partition
+        partition1.setVisibleVersion(Partition.PARTITION_INIT_VERSION, System.currentTimeMillis());
+        partition2.setVisibleVersion(2, System.currentTimeMillis());
+        partition3.setVisibleVersion(2, System.currentTimeMillis());
+        List<Long> partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
+                mapToLong(Partition::getId).boxed().collect(Collectors.toList());
+
+        new Expectations() {
+            {
+                cachedStatisticStorage.getColumnStatistics(table, Lists.newArrayList("id_date"));
+                result = new ColumnStatistic(0, Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 01, 0, 0, 0)),
+                        0, 0, 30);
+                minTimes = 0;
+
+                cachedStatisticStorage.getColumnStatistic(table, "id_date");
+                result = new ColumnStatistic(0, Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 01, 0, 0, 0)),
+                        0, 0, 30);
+                minTimes = 0;
+            }
+        };
+
+        LogicalOlapScanOperator olapScanOperator =
+                new LogicalOlapScanOperator(table,
+                        ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
+                        ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date),
+                        null, -1, null,
+                        ((OlapTable) table).getBaseIndexId(),
+                        partitionIds,
+                        null,
+                        Lists.newArrayList(),
+                        Lists.newArrayList());
+
+        GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
+        groupExpression.setGroup(new Group(0));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
+                columnRefFactory, optimizerContext);
+        statisticsCalculator.estimatorStats();
+        ColumnStatistic columnStatistic = expressionContext.getStatistics().getColumnStatistic(id_date);
+        Assert.assertEquals(30, columnStatistic.getDistinctValuesCount(), 0.001);
+
+        FeConstants.runningUnitTest = true;
     }
 
     @Test
     public void testLogicalOlapTableScanPartitionPrune1(@Mocked CachedStatisticStorage cachedStatisticStorage)
             throws Exception {
-        starRocksAssert.withTable("CREATE TABLE `test_all_type` (\n" +
-                "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
-                "  `t1b` smallint(6) NULL COMMENT \"\",\n" +
-                "  `t1c` int(11) NULL COMMENT \"\",\n" +
-                "  `t1d` bigint(20) NULL COMMENT \"\",\n" +
-                "  `t1e` float NULL COMMENT \"\",\n" +
-                "  `t1f` double NULL COMMENT \"\",\n" +
-                "  `t1g` bigint(20) NULL COMMENT \"\",\n" +
-                "  `id_datetime` datetime NULL COMMENT \"\",\n" +
-                "  `id_date` date NULL COMMENT \"\", \n" +
-                "  `id_decimal` decimal(10,2) NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`t1a`)\n" +
-                "PARTITION BY RANGE (id_date)\n" +
-                "(\n" +
-                "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
-                "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"), \n" +
-                "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")  \n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
-                ");");
         ColumnRefOperator id_date = columnRefFactory.create("id_date", Type.DATE, true);
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        Table table = globalStateMgr.getDb("default_cluster:test").getTable("test_all_type");
+        Table table = globalStateMgr.getDb("default_cluster:statistics_test").getTable("test_all_type");
 
         new Expectations() {
             {
@@ -327,41 +402,15 @@ public class StatisticsCalculatorTest {
         Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 1, 0, 0, 0)),
                 columnStatistic.getMaxValue(), 0.001);
         Assert.assertEquals(20, columnStatistic.getDistinctValuesCount(), 0.001);
-        starRocksAssert.dropTable("test_all_type");
     }
 
     @Test
     public void testLogicalOlapTableScanPartitionPrune2(@Mocked CachedStatisticStorage cachedStatisticStorage)
             throws Exception {
-        starRocksAssert.withTable("CREATE TABLE `test_all_type` (\n" +
-                "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
-                "  `t1b` smallint(6) NULL COMMENT \"\",\n" +
-                "  `t1c` int(11) NULL COMMENT \"\",\n" +
-                "  `t1d` bigint(20) NULL COMMENT \"\",\n" +
-                "  `t1e` float NULL COMMENT \"\",\n" +
-                "  `t1f` double NULL COMMENT \"\",\n" +
-                "  `t1g` bigint(20) NULL COMMENT \"\",\n" +
-                "  `id_datetime` datetime NULL COMMENT \"\",\n" +
-                "  `id_date` date NULL COMMENT \"\", \n" +
-                "  `id_decimal` decimal(10,2) NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`t1a`)\n" +
-                "PARTITION BY RANGE (id_date)\n" +
-                "(\n" +
-                "partition p1 values [('2020-04-23'), ('2020-04-24')),\n" +
-                "partition p2 values [('2020-04-24'), ('2020-04-25')),\n" +
-                "partition p3 values [('2020-04-25'), ('2020-04-26')) \n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
-                ");");
         ColumnRefOperator id_date = columnRefFactory.create("id_date", Type.DATE, true);
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("test_all_type");
+        OlapTable table = (OlapTable) globalStateMgr.getDb("default_cluster:statistics_test").getTable("test_all_type_day_partition");
 
         new Expectations() {
             {
@@ -413,7 +462,7 @@ public class StatisticsCalculatorTest {
         // select partition p2, p3
         partitionIds.clear();
         partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
-                mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
+                mapToLong(Partition::getId).boxed().collect(Collectors.toList());
         olapScanOperator =
                 new LogicalOlapScanOperator(table,
                         ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
@@ -439,7 +488,6 @@ public class StatisticsCalculatorTest {
         Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 26, 0, 0, 0)),
                 columnStatistic.getMaxValue(), 0.001);
         Assert.assertEquals(2, columnStatistic.getDistinctValuesCount(), 0.001);
-        starRocksAssert.dropTable("test_all_type");
     }
 
     @Test
