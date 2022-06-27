@@ -316,7 +316,7 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
         auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), seg_options.fs, segment_file, 0, &tablet_schema);
         ASSERT_NE(segment->num_rows(), 0);
         auto res = segment->new_iterator(schema, seg_options);
-        ASSERT_FALSE(!res.ok() || res.value() == nullptr);
+        ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
         auto seg_iterator = res.value();
 
         seg_iterator->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
@@ -419,7 +419,7 @@ TEST_F(BetaRowsetTest, FinalMergeVerticalTest) {
             *Segment::open(_tablet_meta_mem_tracker.get(), seg_options.fs, segment_file, 0, &tablet->tablet_schema());
     ASSERT_NE(segment->num_rows(), 0);
     auto res = segment->new_iterator(schema, seg_options);
-    ASSERT_FALSE(!res.ok() || res.value() == nullptr);
+    ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
     auto seg_iterator = res.value();
 
     seg_iterator->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
@@ -510,7 +510,7 @@ TEST_F(BetaRowsetTest, VerticalWriteTest) {
     rs_opts.stats = &_stats;
     auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
     auto res = rowset->new_iterator(schema, rs_opts);
-    ASSERT_FALSE(!res.ok() || res.value() == nullptr);
+    ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
 
     auto iterator = res.value();
     int count = 0;

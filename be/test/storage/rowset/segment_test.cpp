@@ -232,7 +232,7 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
     auto res = segment->new_iterator(schema, seg_options);
-    ASSERT_FALSE(!res.ok() || res.value() == nullptr);
+    ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
     auto seg_iterator = res.value();
 
     size_t count = 0;
@@ -334,7 +334,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
     seg_options.stats = &stats;
     auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
-    ASSERT_FALSE(!res.ok() || res.value() == nullptr);
+    ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
     auto seg_iterator = res.value();
 
     size_t count = 0;
@@ -433,7 +433,7 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     seg_options.stats = &stats;
     auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
-    ASSERT_FALSE(!res.ok() || res.value() == nullptr);
+    ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
     auto seg_iterator = res.value();
 
     size_t count = 0;

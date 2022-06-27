@@ -195,6 +195,9 @@ StatusOr<int64_t> Rowset::estimate_compaction_segment_iterator_num() {
         //       continue;
         //    }
         //    auto res = seg_ptr->new_iterator(segment_schema, seg_options);
+        //    if (res.status().is_end_of_file()) {
+        //     continue;
+        //    }
 
         segment_num++;
     }
@@ -451,6 +454,9 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> Rowset::get_segment_iterator
             continue;
         }
         auto res = seg_ptr->new_iterator(schema, seg_options);
+        if (res.status().is_end_of_file()) {
+            continue;
+        }
         if (!res.ok()) {
             return res.status();
         }
