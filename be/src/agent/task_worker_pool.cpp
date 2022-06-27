@@ -743,7 +743,7 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
         tablet_infos.reserve(tablet_related_rs.size());
 
         // vector for tablet publishing version status, which collects the execution results of the corresponding tablet.
-        std::vector<Status> statuses(tablet_related_rs.size(), Status::OK());
+        std::vector<Status> statuses(tablet_related_rs.size(), Status::Unknown("publish task not being executed"));
 
         size_t idx = 0;
         // each tablet
@@ -752,11 +752,11 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
 
             uint32_t retry_time = 0;
 
-            auto st = &statuses[idx];
-            while (retry_time++ < PUBLISH_VERSION_SUBMIT_MAX_RETRY) {
+            auto status = &statuses[idx];
+            while (true) {
                 // submit publishing tablet version task to the threadpool.
-                *st = threadpool->submit_func([&worker_pool_this, &tablet_rs, st, &version, &transaction_id,
-                                               &partition_id]() {
+                auto st = threadpool->submit_func([&worker_pool_this, &tablet_rs, status, &version, &transaction_id,
+                                                   &partition_id]() {
                     const TabletInfo& tablet_info = tablet_rs.first;
                     const RowsetSharedPtr& rowset = tablet_rs.second;
                     // if rowset is null, it means this be received write task, but failed during write
@@ -765,29 +765,35 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
                     if (rowset == nullptr) {
                         LOG(WARNING) << "Not found rowset of tablet: " << tablet_info.tablet_id << ", txn_id "
                                      << transaction_id;
-                        *st = Status::NotFound(fmt::format("Not found rowset of tablet: {}, txn_id: {}",
-                                                           tablet_info.tablet_id, transaction_id));
+                        *status = Status::NotFound(fmt::format("Not found rowset of tablet: {}, txn_id: {}",
+                                                               tablet_info.tablet_id, transaction_id));
                         return;
                     }
                     EnginePublishVersionTask engine_task(transaction_id, partition_id, version, tablet_info, rowset);
 
-                    *st = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
-                    if (!st->ok())
+                    *status = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+                    if (status->ok())
                         LOG(WARNING) << "failed to publish version for tablet, tablet_id " << tablet_info.tablet_id
-                                     << ", txn_id " << transaction_id << ", err: " << st;
+                                     << ", txn_id " << transaction_id << ", err: " << *status;
                 });
 
-                if (st->is_service_unavailable()) {
+                if (st.ok()) {
+                    break;
+                } else if (st.is_service_unavailable()) {
                     // Status::ServiceUnavailable is returned when all of the threads of the pool are busy.
                     LOG(WARNING) << "publish version threadpool is busy, retry later. [txn_id: "
                                  << publish_version_req.transaction_id << ", tablet_id: " << tablet_rs.first.tablet_id;
                     // In general, publish version is fast. A small sleep is needed here.
                     SleepFor(MonoDelta::FromMilliseconds(50 * retry_time));
-                    continue;
                 }
-                break;
-            }
 
+                if (++retry_time < PUBLISH_VERSION_SUBMIT_MAX_RETRY) {
+                    LOG(WARNING) << "Retry of publish version on partition is beyond limit. partition: " << partition_id
+                                 << ", txn_id: " << transaction_id << ", version: " << version
+                                 << ", retry_time: " << retry_time;
+                    break;
+                }
+            }
             ++idx;
         }
         // wait until that all jobs in threadpool are done.
