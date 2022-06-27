@@ -1,15 +1,28 @@
 # StarRocks version 2.1
 
+## 2.1.10
+
+Release date: June 24, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- Switching Leader FE node repetitively may cause all load jobs hang and fail. [#7350](https://github.com/StarRocks/starrocks/issues/7350)
+- Field of DECIMAL(18,2) type is shown as DECIMAL64(18,2) when checking the table schema with `DESC` SQL. [#7309](https://github.com/StarRocks/starrocks/pull/7309)
+- BE crashes when the memory usage estimation of MemTable exceeds 4GB, because, during a data skew in load, some fields may occupy a large amount of memory resources. [#7161](https://github.com/StarRocks/starrocks/issues/7161)
+- A large number of small segment files are created due to the overflow in the calculation of the max_rows_per_segment when there are many input rows in a compaction. [#5610](https://github.com/StarRocks/starrocks/issues/5610)
+
 ## 2.1.8
 
 Release date: June 9, 2022
 
-Improvements
+### Improvements
 
 - The concurrency control mechanism used for internal processing workloads such as schema changes is optimized to reduce the pressure on frontend (FE) metadata. As such, load jobs are less likely to pile up and slow down if these load jobs are concurrently run to load a large amount of data. [#6560](https://github.com/StarRocks/starrocks/pull/6560) [#6804](https://github.com/StarRocks/starrocks/pull/6804)
 - The performance of StarRocks in loading data at a high frequency is improved. [#6532](https://github.com/StarRocks/starrocks/pull/6532) [#6533](https://github.com/StarRocks/starrocks/pull/6533)
 
-Bug Fixes
+### Bug Fixes
 
 The following bugs are fixed:
 
