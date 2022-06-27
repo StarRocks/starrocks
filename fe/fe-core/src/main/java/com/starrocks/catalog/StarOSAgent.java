@@ -64,8 +64,10 @@ public class StarOSAgent {
     }
 
     private void prepare() {
-        if (serviceId.equals(-1L)) {
-            getServiceId();
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            if (serviceId.equals(-1L)) {
+                getServiceId();
+            }
         }
     }
 
@@ -106,10 +108,9 @@ public class StarOSAgent {
         try {
             ServiceInfo serviceInfo = client.getServiceInfo(SERVICE_NAME);
             serviceId.set(serviceInfo.getServiceId());
-
         } catch (StarClientException e) {
             LOG.warn(e);
-            System.exit(-1);
+            return;
         }
         LOG.info("get serviceId {} from starMgr", serviceId);
     }
