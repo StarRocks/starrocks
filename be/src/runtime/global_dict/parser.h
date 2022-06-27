@@ -67,6 +67,8 @@ private:
     template <bool close_original_expr>
     Status _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
                               const std::vector<SlotId>& slot_ids);
+    Status rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slot_id);
+    Status _eval_and_rewrite(ExprContext* ctx, Expr* expr, DictOptimizeContext* dict_opt_ctx, int32_t targetSlotId);
 
     RuntimeState* _runtime_state = nullptr;
     GlobalDictMaps* _mutable_dict_maps = nullptr;

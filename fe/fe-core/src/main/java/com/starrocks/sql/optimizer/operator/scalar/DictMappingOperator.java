@@ -12,8 +12,8 @@ import java.util.Objects;
 
 public class DictMappingOperator extends ScalarOperator {
 
-    private final ColumnRefOperator dictColumn;
-    private final ScalarOperator originScalaOperator;
+    private ColumnRefOperator dictColumn;
+    private ScalarOperator originScalaOperator;
 
     public DictMappingOperator(ColumnRefOperator dictColumn, ScalarOperator originScalaOperator, Type retType) {
         super(OperatorType.DICT_MAPPING, retType);
@@ -71,5 +71,12 @@ public class DictMappingOperator extends ScalarOperator {
     @Override
     public ColumnRefSet getUsedColumns() {
         return dictColumn.getUsedColumns();
+    }
+
+    public ScalarOperator clone() {
+        DictMappingOperator clone = (DictMappingOperator) super.clone();
+        clone.dictColumn = (ColumnRefOperator) this.dictColumn.clone();
+        clone.originScalaOperator = this.originScalaOperator.clone();
+        return clone;
     }
 }

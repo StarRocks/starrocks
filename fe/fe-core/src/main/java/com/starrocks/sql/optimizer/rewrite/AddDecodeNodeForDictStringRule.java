@@ -88,7 +88,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
     private final Map<Long, List<Integer>> tableIdToStringColumnIds = Maps.newHashMap();
 
-    private static final Type ID_TYPE = Type.INT;
+    public static final Type ID_TYPE = Type.INT;
 
     static class DecodeContext {
         // The parent operators whether need the child operators to encode
@@ -151,9 +151,11 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
     public static class DecodeVisitor extends OptExpressionVisitor<OptExpression, DecodeContext> {
 
-        public static boolean couldApplyDictOptimize(ScalarOperator operator) {
-            return operator.getUsedColumns().cardinality() == 1 &&
-                    operator.accept(new CouldApplyDictOptimizeVisitor(), null);
+        public static boolean couldApplyDictOptimize(ScalarOperator operator, Set<Integer> sids) {
+            final CouldApplyDictOptimizeContext couldApplyCtx = new CouldApplyDictOptimizeContext();
+            couldApplyCtx.sids = sids;
+            operator.accept(new CouldApplyDictOptimizeVisitor(), couldApplyCtx);
+            return couldApplyCtx.couldAppliedOperator;
         }
 
         public static boolean isSimpleStrictPredicate(ScalarOperator operator) {
@@ -165,7 +167,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 Projection projection = optExpression.getOp().getProjection();
                 context.needEncode = context.needEncode || projection.needApplyStringDict(context.allStringColumnIds);
                 if (context.needEncode) {
-                    projection.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns);
+                    projection.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns,
+                            context.allStringColumnIds);
                 }
             }
         }
@@ -176,7 +179,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             Collection<Integer> dictColumnIds = context.stringColumnIdToDictColumnIds.values();
             // if projection has not support operator in dict column,
             // Decode node will be inserted
-            if (projection.hasUnsupportedDictOperator(stringColumnIds)) {
+            if (projection.hasUnsupportedDictOperator(stringColumnIds, context.allStringColumnIds)) {
                 return true;
             }
 
@@ -345,7 +348,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                         // we could make the first column apply low cardinality optimization
                         boolean couldApply = predicates.stream()
                                 .allMatch(predicate -> !predicate.getUsedColumns().contains(columnId) ||
-                                        couldApplyDictOptimize(predicate));
+                                        couldApplyDictOptimize(predicate, context.allStringColumnIds));
                         if (!couldApply) {
                             globalDictStringColumns.remove(stringColumn);
                             dictStringIdToIntIds.remove(stringColumn.getId());
@@ -354,7 +357,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                             for (int i = 0; i < predicates.size(); i++) {
                                 ScalarOperator predicate = predicates.get(i);
                                 if (predicate.getUsedColumns().contains(columnId)) {
-                                    Preconditions.checkState(couldApplyDictOptimize(predicate));
+                                    Preconditions.checkState(
+                                            couldApplyDictOptimize(predicate, context.allStringColumnIds));
                                     if (newDictColumn == null) {
                                         newDictColumn = context.columnRefFactory.create(
                                                 stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
@@ -516,40 +520,23 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 return;
             }
 
-            if (!Projection.couldApplyDictOptimize(valueOperator)) {
+            if (!Projection.couldApplyDictOptimize(valueOperator, context.allStringColumnIds)) {
                 return;
             }
+            // rewrite value operator
+            final DictMappingRewriter rewriter = new DictMappingRewriter(context);
+            final ScalarOperator newCallOperator = rewriter.rewrite(valueOperator.clone());
+            if (!valueOperator.getType().equals(newCallOperator.getType())) {
+                Preconditions.checkState(valueOperator.getType().isVarchar());
+                ColumnRefOperator newDictColumn = context.columnRefFactory.create(
+                        keyColumn.getName(), ID_TYPE, keyColumn.isNullable());
+                newProjectMap.remove(keyColumn);
+                newProjectMap.put(newDictColumn, newCallOperator);
 
-            int stringColumnId = valueOperator.getUsedColumns().getFirstId();
-            if (context.stringColumnIdToDictColumnIds.containsKey(stringColumnId)) {
-                // if output was TYPE_VARCHAR rewrite as DictColumn
-                // if output was other type, only rewrite input column
-                if (valueOperator.getType().isVarchar()) {
-                    Integer columnId =
-                            context.stringColumnIdToDictColumnIds.get(valueOperator.getUsedColumns().getFirstId());
-                    ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
-
-                    ColumnRefOperator newDictColumn = context.columnRefFactory.create(
-                            keyColumn.getName(), ID_TYPE, keyColumn.isNullable());
-
-                    final DictMappingOperator newCallOperator =
-                            new DictMappingOperator(dictColumn, valueOperator.clone(), ID_TYPE);
-
-                    newProjectMap.put(newDictColumn, newCallOperator);
-                    newProjectMap.remove(keyColumn);
-
-                    context.stringFunctions.put(newDictColumn, newCallOperator);
-
-                    newStringToDicts.put(keyColumn.getId(), newDictColumn.getId());
-                } else {
-                    Integer columnId =
-                            context.stringColumnIdToDictColumnIds.get(valueOperator.getUsedColumns().getFirstId());
-                    ColumnRefOperator dictColumn = context.columnRefFactory.getColumnRef(columnId);
-                    final DictMappingOperator newCallOperator =
-                            new DictMappingOperator(dictColumn, valueOperator.clone(), valueOperator.getType());
-                    newProjectMap.put(keyColumn, newCallOperator);
-                }
-
+                context.stringFunctions.put(newDictColumn, newCallOperator);
+                newStringToDicts.put(keyColumn.getId(), newDictColumn.getId());
+            } else {
+                newProjectMap.put(keyColumn, newCallOperator);
             }
         }
 
@@ -898,69 +885,138 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         return result;
     }
 
-    public static class CouldApplyDictOptimizeVisitor extends ScalarOperatorVisitor<Boolean, Void> {
+    public static class CouldApplyDictOptimizeContext {
+        public Set<Integer> sids;
+
+        boolean worthApplied = false;
+        boolean couldAppliedOperator = false;
+        boolean hasUnsupportedOperator = false;
+
+        void reset() {
+            couldAppliedOperator = false;
+            hasUnsupportedOperator = false;
+        }
+    }
+
+    // could apply dict optimize
+    // visit()
+    public static class CouldApplyDictOptimizeVisitor
+            extends ScalarOperatorVisitor<Void, CouldApplyDictOptimizeContext> {
 
         public CouldApplyDictOptimizeVisitor() {
         }
 
         @Override
-        public Boolean visit(ScalarOperator scalarOperator, Void context) {
-            return false;
+        public Void visit(ScalarOperator scalarOperator, CouldApplyDictOptimizeContext context) {
+            context.hasUnsupportedOperator = true;
+            return null;
+        }
+
+        private Void couldApply(ScalarOperator operator, CouldApplyDictOptimizeContext context) {
+            boolean hasUnsupportedOperator = false;
+            boolean couldAppliedOperator = false;
+            for (ScalarOperator child : operator.getChildren()) {
+                context.reset();
+                child.accept(this, context);
+                hasUnsupportedOperator = hasUnsupportedOperator || context.hasUnsupportedOperator;
+                couldAppliedOperator = couldAppliedOperator || context.couldAppliedOperator;
+            }
+
+            // check
+            if (hasUnsupportedOperator) {
+                context.couldAppliedOperator = context.worthApplied && couldAppliedOperator;
+            } else {
+                context.couldAppliedOperator = couldAppliedOperator;
+            }
+            context.hasUnsupportedOperator = hasUnsupportedOperator;
+
+            return null;
         }
 
         @Override
-        public Boolean visitCall(CallOperator call, Void context) {
+        public Void visitCall(CallOperator call, CouldApplyDictOptimizeContext context) {
             if (!call.getFunction().isCouldApplyDictOptimize()) {
-                return false;
+                context.hasUnsupportedOperator = true;
+                return null;
             }
-            return call.getChildren().stream().allMatch(scalarOperator -> scalarOperator.accept(this, null));
+
+            return couldApply(call, context);
         }
 
         @Override
-        public Boolean visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-            if (predicate.getBinaryType() == EQ_FOR_NULL) {
-                return false;
+        public Void visitBinaryPredicate(BinaryPredicateOperator predicate, CouldApplyDictOptimizeContext context) {
+            if (predicate.getBinaryType() == EQ_FOR_NULL || !predicate.getChild(1).isConstant() ||
+                    !predicate.getChild(0).isColumnRef()) {
+                context.couldAppliedOperator = false;
+                context.hasUnsupportedOperator = true;
+                return null;
             }
-            if (!predicate.getChild(1).isConstant()) {
-                return false;
+
+            predicate.getChild(0).accept(this, context);
+            context.worthApplied |= context.couldAppliedOperator;
+            return null;
+        }
+
+        @Override
+        public Void visitInPredicate(InPredicateOperator predicate, CouldApplyDictOptimizeContext context) {
+            if (!predicate.allValuesMatch(ScalarOperator::isConstantRef) || !predicate.getChild(0).isColumnRef()) {
+                context.couldAppliedOperator = false;
+                context.hasUnsupportedOperator = true;
+                return null;
             }
-            return predicate.getChild(0).isColumnRef();
+
+            predicate.getChild(0).accept(this, context);
+            context.worthApplied |= context.couldAppliedOperator;
+            return null;
         }
 
         @Override
-        public Boolean visitInPredicate(InPredicateOperator predicate, Void context) {
-            return predicate.getChild(0).isColumnRef() &&
-                    predicate.allValuesMatch(ScalarOperator::isConstantRef);
+        public Void visitIsNullPredicate(IsNullPredicateOperator predicate, CouldApplyDictOptimizeContext context) {
+            if (!predicate.getChild(0).isColumnRef()) {
+                context.couldAppliedOperator = false;
+                context.hasUnsupportedOperator = true;
+                return null;
+            }
+
+            predicate.getChild(0).accept(this, context);
+            context.worthApplied |= context.couldAppliedOperator;
+            return null;
         }
 
         @Override
-        public Boolean visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
-            return predicate.getChild(0).isColumnRef();
+        public Void visitCastOperator(CastOperator operator, CouldApplyDictOptimizeContext context) {
+            operator.getChild(0).accept(this, context);
+            context.worthApplied |= context.couldAppliedOperator;
+            return null;
         }
 
         @Override
-        public Boolean visitCastOperator(CastOperator operator, Void context) {
-            return operator.getChild(0).accept(this, null);
+        public Void visitCaseWhenOperator(CaseWhenOperator operator, CouldApplyDictOptimizeContext context) {
+            couldApply(operator, context);
+            context.worthApplied |= context.couldAppliedOperator;
+            return null;
+
         }
 
         @Override
-        public Boolean visitCaseWhenOperator(CaseWhenOperator operator, Void context) {
-            return operator.getChildren().stream().allMatch(scalarOperator -> scalarOperator.accept(this, null));
+        public Void visitVariableReference(ColumnRefOperator variable, CouldApplyDictOptimizeContext context) {
+            context.couldAppliedOperator = context.sids.contains(variable.getId());
+            context.hasUnsupportedOperator = !context.couldAppliedOperator;
+            return null;
         }
 
         @Override
-        public Boolean visitVariableReference(ColumnRefOperator variable, Void context) {
-            return true;
+        public Void visitConstant(ConstantOperator literal, CouldApplyDictOptimizeContext context) {
+            context.couldAppliedOperator = false;
+            context.hasUnsupportedOperator = false;
+            return null;
         }
 
         @Override
-        public Boolean visitConstant(ConstantOperator literal, Void context) {
-            return true;
-        }
-
-        @Override
-        public Boolean visitLikePredicateOperator(LikePredicateOperator predicate, Void context) {
-            return true;
+        public Void visitLikePredicateOperator(LikePredicateOperator predicate, CouldApplyDictOptimizeContext context) {
+            predicate.getChild(0).accept(this, context);
+            context.worthApplied |= context.couldAppliedOperator;
+            return null;
         }
     }
 
