@@ -2221,17 +2221,14 @@ public class Coordinator {
             if (connectContext != null) {
                 SessionVariable sessionVariable = connectContext.getSessionVariable();
 
+                // First try to use the resource group specified by the variable
                 if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
-                    // Specify the resource group through variable
                     String rgName = sessionVariable.getResourceGroup();
-                    WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(rgName);
-                    if (wg == null) {
-                        throw new UserException("Invalid resource_group: " + rgName);
-                    } else {
-                        workgroup = wg;
-                    }
-                } else {
-                    // Specify the resource group through classifier
+                    workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(rgName);
+                }
+
+                // Second if the specified resource group not exist try to use the default one
+                if (workgroup == null) {
                     workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                             connectContext, WorkGroupClassifier.QueryType.SELECT, dbIds);
                 }
