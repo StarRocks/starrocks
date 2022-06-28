@@ -320,7 +320,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "    numwait desc,\n" +
                 "    s_name limit 100;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(227, planCount);
+        Assert.assertEquals(86, planCount);
     }
 
     @Test

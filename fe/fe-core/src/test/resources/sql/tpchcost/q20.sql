@@ -43,7 +43,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 25:MERGING-EXCHANGE
-cardinality: 1561188
+cardinality: 40000
 column statistics:
 * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
@@ -59,7 +59,7 @@ OutPut Exchange Id: 25
 24:SORT
 |  order by: [2, VARCHAR, false] ASC
 |  offset: 0
-|  cardinality: 1561188
+|  cardinality: 40000
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
@@ -70,7 +70,7 @@ OutPut Exchange Id: 25
 |  output columns:
 |  2 <-> [2: S_NAME, VARCHAR, false]
 |  3 <-> [3: S_ADDRESS, VARCHAR, false]
-|  cardinality: 1561188
+|  cardinality: 40000
 |  column statistics:
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
@@ -81,7 +81,7 @@ OutPut Exchange Id: 25
 |  build runtime filters:
 |  - filter_id = 4, build_expr = (1: S_SUPPKEY), remote = true
 |  output columns: 2, 3
-|  cardinality: 1561188
+|  cardinality: 40000
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
