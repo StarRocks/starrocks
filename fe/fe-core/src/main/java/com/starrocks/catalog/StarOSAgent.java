@@ -24,7 +24,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -39,13 +38,12 @@ public class StarOSAgent {
     public static final String SERVICE_NAME = "starrocks";
 
     private StarClient client;
-    private AtomicLong serviceId;
+    private Long serviceId;
     private Map<String, Long> workerToId;
     private Map<Long, Long> workerToBackend;
     private ReentrantReadWriteLock rwLock;
 
     public StarOSAgent() {
-        serviceId = new AtomicLong(-1L);
 
         // check if Config.starmanager_address == FE address
         if (Config.integrate_starmgr) {
@@ -73,12 +71,12 @@ public class StarOSAgent {
 
     // for ut only
     public long getServiceIdForTest() {
-        return this.serviceId.get();
+        return serviceId;
     }
 
     // for ut only
     public void setServiceId(long id) {
-        this.serviceId.set(id);
+        serviceId = id;
     }
 
     public void registerAndBootstrapService() {
@@ -91,15 +89,17 @@ public class StarOSAgent {
             }
         }
 
-        try {
-            serviceId.set(client.bootstrapService("starrocks", SERVICE_NAME));
-            LOG.info("get serviceId: {} by bootstrapService to starMgr", serviceId);
-        } catch (StarClientException e) {
-            if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
-                LOG.warn(e);
-                System.exit(-1);
-            } else {
-                getServiceId();
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            try {
+                serviceId = client.bootstrapService("starrocks", SERVICE_NAME);
+                LOG.info("get serviceId: {} by bootstrapService to starMgr", serviceId);
+            } catch (StarClientException e) {
+                if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
+                    LOG.warn(e);
+                    System.exit(-1);
+                } else {
+                    getServiceId();
+                }
             }
         }
     }
@@ -107,7 +107,7 @@ public class StarOSAgent {
     public void getServiceId() {
         try {
             ServiceInfo serviceInfo = client.getServiceInfo(SERVICE_NAME);
-            serviceId.set(serviceInfo.getServiceId());
+            serviceId = serviceInfo.getServiceId();
         } catch (StarClientException e) {
             LOG.warn(e);
             return;
@@ -141,7 +141,7 @@ public class StarOSAgent {
 
             long workerId = -1;
             try {
-                workerId = client.addWorker(serviceId.get(), workerIpPort);
+                workerId = client.addWorker(serviceId, workerIpPort);
             } catch (StarClientException e) {
                 if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
                     LOG.warn(e);
@@ -149,7 +149,7 @@ public class StarOSAgent {
                 } else {
                     // get workerId from starMgr
                     try {
-                        WorkerInfo workerInfo = client.getWorkerInfo(serviceId.get(), workerIpPort);
+                        WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
                         workerId = workerInfo.getWorkerId();
                     } catch (StarClientException e2) {
                         LOG.warn(e2);
@@ -173,7 +173,7 @@ public class StarOSAgent {
                 // When FE && staros restart, workerToId is Empty, but staros already persisted
                 // worker infos, so we need to get workerId from starMgr
                 try {
-                    WorkerInfo workerInfo = client.getWorkerInfo(serviceId.get(), workerIpPort);
+                    WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
                     workerId = workerInfo.getWorkerId();
                 } catch (StarClientException e) {
                     if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
@@ -195,7 +195,7 @@ public class StarOSAgent {
         long workerId = getWorker(workerIpPort);
 
         try {
-            client.removeWorker(serviceId.get(), workerId);
+            client.removeWorker(serviceId, workerId);
         } catch (StarClientException e) {
             // when multi threads remove this worker, maybe we would get "NOT_EXIST"
             // but it is right, so only need to throw exception
@@ -235,7 +235,7 @@ public class StarOSAgent {
         List<ShardInfo> shardInfos = null;
         try {
             // TODO: support properties
-            shardInfos = client.createShard(serviceId.get(), numShards);
+            shardInfos = client.createShard(serviceId, numShards);
         } catch (StarClientException e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
         }
@@ -247,7 +247,7 @@ public class StarOSAgent {
     private List<ReplicaInfo> getShardReplicas(long shardId) throws UserException {
         prepare();
         try {
-            List<ShardInfo> shardInfos = client.getShardInfo(serviceId.get(), Lists.newArrayList(shardId));
+            List<ShardInfo> shardInfos = client.getShardInfo(serviceId, Lists.newArrayList(shardId));
             Preconditions.checkState(shardInfos.size() == 1);
             return shardInfos.get(0).getReplicaInfoList();
         } catch (StarClientException e) {
@@ -304,7 +304,8 @@ public class StarOSAgent {
                             .getBackendIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
 
                     if (backendId == -1L) {
-                        throw new UserException("Failed to get backend by worker. worker id: " + workerId);
+                        LOG.warn("backendId for {} is -1", workerAddr);
+                        continue;
                     }
 
                     // put it into map
@@ -316,6 +317,11 @@ public class StarOSAgent {
                 }
             }
         }
+
+        if (backendIds.isEmpty()) {
+            throw new UserException("Failed to get backendId by shard, shardId is " + shardId);
+        }
+
         return backendIds;
     }
 }
