@@ -62,7 +62,7 @@ under the License.
                 </property>
             </activation>
             <properties>
-                <starrocks.thrift>${env.STARROCKS_THIRDPARTY}/installed/bin/thrift</starrocks.thrift>
+                <starrocks.thrift>/usr/local/bin/thrift</starrocks.thrift>
             </properties>
         </profile>
     </profiles>
