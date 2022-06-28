@@ -72,9 +72,9 @@ AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(34: expr)}] group by [[]] having [nu
     EXCHANGE GATHER
         INNER JOIN (join-predicate [37: cast = 36: cast] post-join-predicate [null])
             INNER JOIN (join-predicate [19: L_SUPPKEY = 12: PS_SUPPKEY AND 18: L_PARTKEY = 11: PS_PARTKEY] post-join-predicate [null])
-                EXCHANGE SHUFFLE[19, 18]
+                EXCHANGE SHUFFLE[18]
                     SCAN (columns[18: L_PARTKEY, 19: L_SUPPKEY, 21: L_QUANTITY, 22: L_EXTENDEDPRICE, 23: L_DISCOUNT] predicate[null])
-                EXCHANGE SHUFFLE[12, 11]
+                EXCHANGE SHUFFLE[11]
                     SCAN (columns[11: PS_PARTKEY, 12: PS_SUPPKEY, 14: PS_SUPPLYCOST] predicate[null])
             EXCHANGE BROADCAST
                 SCAN (columns[1: P_PARTKEY, 2: P_NAME] predicate[2: P_NAME LIKE %peru%])
@@ -196,9 +196,9 @@ AGGREGATE ([GLOBAL] aggregate [{35: sum=sum(35: sum)}] group by [[]] having [nul
         AGGREGATE ([LOCAL] aggregate [{35: sum=sum(34: expr)}] group by [[]] having [null]
             INNER JOIN (join-predicate [37: cast = 36: cast] post-join-predicate [null])
                 INNER JOIN (join-predicate [19: L_SUPPKEY = 12: PS_SUPPKEY AND 18: L_PARTKEY = 11: PS_PARTKEY] post-join-predicate [null])
-                    EXCHANGE SHUFFLE[19, 18]
+                    EXCHANGE SHUFFLE[18]
                         SCAN (columns[18: L_PARTKEY, 19: L_SUPPKEY, 21: L_QUANTITY, 22: L_EXTENDEDPRICE, 23: L_DISCOUNT] predicate[null])
-                    EXCHANGE SHUFFLE[12, 11]
+                    EXCHANGE SHUFFLE[11]
                         SCAN (columns[11: PS_PARTKEY, 12: PS_SUPPKEY, 14: PS_SUPPLYCOST] predicate[null])
                 EXCHANGE BROADCAST
                     SCAN (columns[1: P_PARTKEY, 2: P_NAME] predicate[2: P_NAME LIKE %peru%])
