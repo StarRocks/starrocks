@@ -13,7 +13,7 @@ namespace vectorized {
 class ChunkIterator;
 class RowsetReadOptions;
 class Schema;
-}
+} // namespace vectorized
 
 namespace lake {
 

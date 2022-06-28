@@ -49,7 +49,9 @@ Rowset::Rowset(std::string group, TabletSchemaPtr tablet_schema, RowsetMetadataP
           _tablet_schema(std::move(tablet_schema)),
           _rowset_metadata(std::move(rowset_metadata)) {}
 
-Rowset::~Rowset() { _segments.clear(); }
+Rowset::~Rowset() {
+    _segments.clear();
+}
 
 // TODO: support
 //  1. delete predicates
