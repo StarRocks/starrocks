@@ -6,6 +6,52 @@
 
 namespace starrocks::vectorized {
 
+class RandomAccessFileWrapper : public RandomAccessFile {
+public:
+    RandomAccessFileWrapper(RandomAccessFile* file, vectorized::HdfsScanStats* stats) : _file(file), _stats(stats) {}
+
+    ~RandomAccessFileWrapper() override = default;
+
+    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        ASSIGN_OR_RETURN(auto nread, _file->read_at(offset, data, size));
+        _stats->bytes_read += nread;
+        return nread;
+    }
+
+    Status read_at_fully(int64_t offset, void* data, int64_t size) const override {
+        SCOPED_RAW_TIMER(&_stats->io_ns);
+        _stats->io_count += 1;
+        RETURN_IF_ERROR(_file->read_at_fully(offset, data, size));
+        _stats->bytes_read += size;
+        return Status::OK();
+    }
+
+    Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override {
+        Status st;
+        {
+            SCOPED_RAW_TIMER(&_stats->io_ns);
+            _stats->io_count += 1;
+            st = _file->readv_at(offset, res, res_cnt);
+            for (int i = 0; i < res_cnt; ++i) {
+                _stats->bytes_read += res[i].size;
+            }
+        }
+        return st;
+    }
+
+    // Return the size of this file
+    Status size(uint64_t* size) const override { return _file->size(size); }
+
+    // Return name of this file
+    const std::string& filename() const override { return _file->filename(); }
+
+private:
+    RandomAccessFile* _file;
+    vectorized::HdfsScanStats* _stats;
+};
+
 Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     _runtime_state = runtime_state;
     _scanner_params = scanner_params;
@@ -108,7 +154,8 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
         return Status::OK();
     }
     CHECK(_file == nullptr) << "File has already been opened";
-    ASSIGN_OR_RETURN(_file, _scanner_params.env->new_random_access_file(_scanner_params.path));
+    ASSIGN_OR_RETURN(_raw_file, _scanner_params.env->new_random_access_file(_scanner_params.path));
+    _file = std::make_unique<RandomAccessFileWrapper>(_raw_file.get(), &_stats);
     _build_file_read_param();
     auto status = do_open(runtime_state);
     if (status.ok()) {
@@ -123,9 +170,8 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
 
 void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     DCHECK(!has_pending_token());
-    if (_is_closed) {
-        return;
-    }
+    bool expect = false;
+    if (!_is_closed.compare_exchange_strong(expect, true)) return;
     update_counter();
     Expr::close(_conjunct_ctxs, runtime_state);
     Expr::close(_min_max_conjunct_ctxs, runtime_state);
@@ -134,13 +180,13 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     }
     do_close(runtime_state);
     _file.reset(nullptr);
-    _is_closed = true;
+    _raw_file.reset(nullptr);
     if (_is_open && _scanner_params.open_limit != nullptr) {
         _scanner_params.open_limit->fetch_sub(1, std::memory_order_relaxed);
     }
 }
 
-void HdfsScanner::cleanup() {
+void HdfsScanner::fianlize() {
     if (_runtime_state != nullptr) {
         close(_runtime_state);
     }

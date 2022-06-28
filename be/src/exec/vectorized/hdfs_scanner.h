@@ -47,7 +47,6 @@ struct HdfsScanStats {
 
 struct HdfsScanProfile {
     RuntimeProfile* runtime_profile = nullptr;
-
     RuntimeProfile::Counter* rows_read_counter = nullptr;
     RuntimeProfile::Counter* bytes_read_counter = nullptr;
     RuntimeProfile::Counter* scan_timer = nullptr;
@@ -180,7 +179,7 @@ public:
     void close(RuntimeState* runtime_state) noexcept;
     Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
     Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
-    void cleanup();
+    void fianlize();
 
     int64_t raw_rows_read() const { return _stats.raw_rows_read; }
     void set_keep_priority(bool v) { _keep_priority = v; }
@@ -221,7 +220,7 @@ public:
 
 private:
     bool _is_open = false;
-    bool _is_closed = false;
+    std::atomic<bool> _is_closed = false;
     bool _keep_priority = false;
     Status _build_file_read_param();
     MonotonicStopWatch _pending_queue_sw;
@@ -242,6 +241,7 @@ protected:
     std::unordered_map<SlotId, std::vector<ExprContext*>> _conjunct_ctxs_by_slot;
     // predicate which havs min/max
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
+    std::unique_ptr<RandomAccessFile> _raw_file;
     std::unique_ptr<RandomAccessFile> _file;
 };
 

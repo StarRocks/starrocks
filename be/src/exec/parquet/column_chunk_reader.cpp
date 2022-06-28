@@ -6,6 +6,7 @@
 
 #include "column/column.h"
 #include "env/env.h"
+#include "exec/parquet/column_reader.h"
 #include "exec/parquet/encoding.h"
 #include "exec/parquet/encoding_dict.h"
 #include "exec/parquet/page_reader.h"
@@ -17,62 +18,13 @@
 
 namespace starrocks::parquet {
 
-class RandomAccessFileWrapper : public RandomAccessFile {
-public:
-    RandomAccessFileWrapper(RandomAccessFile* file, vectorized::HdfsScanStats* stats) : _file(file), _stats(stats) {}
-
-    ~RandomAccessFileWrapper() override = default;
-
-    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) const override {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
-        ASSIGN_OR_RETURN(auto nread, _file->read_at(offset, data, size));
-        _stats->bytes_read += nread;
-        return nread;
-    }
-
-    Status read_at_fully(int64_t offset, void* data, int64_t size) const override {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
-        RETURN_IF_ERROR(_file->read_at_fully(offset, data, size));
-        _stats->bytes_read += size;
-        return Status::OK();
-    }
-
-    Status readv_at(uint64_t offset, const Slice* res, size_t res_cnt) const override {
-        Status st;
-        {
-            SCOPED_RAW_TIMER(&_stats->io_ns);
-            _stats->io_count += 1;
-            st = _file->readv_at(offset, res, res_cnt);
-            for (int i = 0; i < res_cnt; ++i) {
-                _stats->bytes_read += res[i].size;
-            }
-        }
-        return st;
-    }
-
-    // Return the size of this file
-    Status size(uint64_t* size) const override { return _file->size(size); }
-
-    // Return name of this file
-    const std::string& filename() const override { return _file->filename(); }
-
-private:
-    RandomAccessFile* _file;
-    vectorized::HdfsScanStats* _stats;
-};
-
 ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_level, int32_t type_length,
-                                     const tparquet::ColumnChunk* column_chunk, RandomAccessFile* file,
-                                     const ColumnChunkReaderOptions& opts)
+                                     const tparquet::ColumnChunk* column_chunk, const ColumnReaderOptions& opts)
         : _max_def_level(max_def_level),
           _max_rep_level(max_rep_level),
           _type_length(type_length),
           _chunk_metadata(column_chunk),
-          _opts(opts),
-          _file(new RandomAccessFileWrapper(file, opts.stats)) {}
-
+          _opts(opts) {}
 ColumnChunkReader::~ColumnChunkReader() = default;
 
 Status ColumnChunkReader::init(int chunk_size) {
@@ -82,8 +34,13 @@ Status ColumnChunkReader::init(int chunk_size) {
     } else {
         start_offset = metadata().data_page_offset;
     }
-
-    _page_reader = std::make_unique<PageReader>(_file.get(), start_offset, metadata().total_compressed_size);
+    size_t size = metadata().total_compressed_size;
+    IBufferedInputStream* stream = _opts.sb_stream;
+    if (!_opts.use_sb_stream) {
+        _default_stream = std::make_unique<DefaultBufferedInputStream>(_opts.file, start_offset, size);
+        stream = _default_stream.get();
+    }
+    _page_reader = std::make_unique<PageReader>(stream, start_offset, size);
 
     // seek to the first page
     _page_reader->seek_to_offset(start_offset);
@@ -146,7 +103,7 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
         RETURN_IF_ERROR(_compress_codec->decompress(com_slice, &_data));
     } else {
         _data.size = uncompressed_size;
-        _page_reader->read_bytes((const uint8_t**)&_data.data, _data.size);
+        RETURN_IF_ERROR(_page_reader->read_bytes((const uint8_t**)&_data.data, _data.size));
     }
 
     return Status::OK();

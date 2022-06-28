@@ -41,7 +41,6 @@ Status FileReader::init(const starrocks::vectorized::HdfsFileReaderParam& param)
             return Status::OK();
         }
     }
-
     // create and init row group reader
     RETURN_IF_ERROR(_init_group_reader());
 
@@ -476,6 +475,7 @@ Status FileReader::_get_next_internal(vectorized::ChunkPtr* chunk) {
                 _scan_row_count += (*chunk)->num_rows();
             }
             if (status.is_end_of_file()) {
+                _row_group_readers[_cur_row_group_idx]->close();
                 _cur_row_group_idx++;
                 return Status::OK();
             }
