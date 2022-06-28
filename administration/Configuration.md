@@ -372,7 +372,7 @@ BE 配置项暂不支持在线修改，生效需在 be.conf 中修改并重启 b
 |max_compaction_concurrency|4|BaseCompaction + CumulativeCompaction 的最大并发， -1 代表没有限制。|
 |compaction_trace_threshold|60|单次 Compaction 打印 trace 的时间阈值，如果单次 compaction 时间超过该阈值就打印 trace，单位为秒|
 |webserver_port|8040|Http Server 端口|
-|webserver_num_workers|5|Http Server 线程数|
+|webserver_num_workers|48|Http Server 线程数|
 |periodic_counter_update_period_ms|500|Counter 统计信息的间隔|
 |load_data_reserve_hours|4|小批量导入生成的文件保留的时间|
 |load_error_log_reserve_hours|48|导入数据信息保留的时长|
