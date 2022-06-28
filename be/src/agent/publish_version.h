@@ -9,10 +9,10 @@
 
 namespace starrocks {
 
-class ThreadPool;
+class ThreadPoolToken;
 class DataDir;
 
-void run_publish_version_task(ThreadPool& threadpool, const TAgentTaskRequest& publish_version_task,
+void run_publish_version_task(ThreadPoolToken* token, const TAgentTaskRequest& publish_version_task,
                               TFinishTaskRequest& finish_task, std::unordered_set<DataDir*>& affected_dirs);
 
 } // namespace starrocks
