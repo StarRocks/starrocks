@@ -4151,6 +4151,40 @@ public class LocalMetastore implements ConnectorMetadata {
                                 batchTask.addTask(dropTask);
                             } // end for replicas
                         }
+
+                        // drop shard and lake tablet
+                        if (olapTable.isLakeTable()) {
+                            // 1. delete shard
+                            try {
+                                Set<Long> shardIds = new HashSet<>();
+                                shardIds.add(tabletId);
+                                GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(shardIds);
+                            } catch (DdlException e) {
+                                LOG.warn("failed to delete shard from starMgr");
+                                // record shardId and tablet
+                                GlobalStateMgr.getCurrentState().getShardDelete().addShardId(tabletId, (LakeTablet) tablet);
+                                continue;
+                            }
+
+                            // 2. drop tablet
+                            // TODO: check if the task succ from BE
+                            try {
+                                long backendId = ((LakeTablet) tablet).getPrimaryBackendId();
+                                DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
+                                AgentBatchTask batchTask = batchTaskMap.get(backendId);
+                                if (batchTask == null) {
+                                    batchTask = new AgentBatchTask();
+                                    batchTaskMap.put(backendId, batchTask);
+                                }
+                                batchTask.addTask(dropTask);
+                            } catch (UserException e) {
+                                LOG.warn("failed to get primary backendId");
+                                // record shardId and tablet
+                                GlobalStateMgr.getCurrentState().getShardDelete().addShardId(tabletId, (LakeTablet) tablet);
+                            }
+                        }
+
+
                     } // end for tablets
                 } // end for indices
             } // end for partitions
