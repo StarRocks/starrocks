@@ -96,7 +96,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         String sql = "select t1a,v1 from test_all_type, t0";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("3:CROSS JOIN"));
+        Assert.assertTrue(planFragment.contains("3:NESTLOOP JOIN"));
 
         setTableStatistics(table2, 10000);
         setTableStatistics(t0, 10000);

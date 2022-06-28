@@ -29,6 +29,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Range;
+import com.staros.manager.StarManager;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJob.JobType;
@@ -217,6 +218,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
@@ -411,6 +413,8 @@ public class GlobalStateMgr {
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
 
+    private StarMgrServer starMgrServer;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -570,6 +574,7 @@ public class GlobalStateMgr {
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
+        this.starMgrServer = new StarMgrServer();
     }
 
     public static void destroyCheckpoint() {
@@ -828,7 +833,10 @@ public class GlobalStateMgr {
         // 6. start task cleaner thread
         createTaskCleaner();
 
-        // 7. start state listener thread
+        // 7. start starMgr server, must do this before 8
+        startStarMgrServer();
+
+        // 8. start state listener thread
         createStateListener();
         listener.start();
     }
@@ -1075,6 +1083,10 @@ public class GlobalStateMgr {
             replayer.start();
         }
 
+        if (Config.integrate_starmgr) {
+            starMgrServer.stopBackgroundThreads();
+        }
+
         startNonMasterDaemonThreads();
 
         MetricRepo.init();
@@ -1139,6 +1151,8 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = loadInsertOverwriteJobs(dis, checksum);
             checksum = nodeMgr.loadComputeNodes(dis, checksum);
+            remoteChecksum = dis.readLong();
+            checksum = loadStarMgrMeta(dis, checksum);
             remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
@@ -1320,6 +1334,16 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long saveStarMgrMeta(DataOutputStream dos, long checksum) throws IOException {
+        starMgrServer.dumpMeta(dos);
+        return checksum;
+    }
+
+    public long loadStarMgrMeta(DataInputStream dis, long checksum) throws IOException {
+        starMgrServer.loadMeta(dis);
+        return checksum;
+    }
+
     public long loadResources(DataInputStream in, long checksum) throws IOException {
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_87) {
             resourceMgr = ResourceMgr.read(in);
@@ -1389,6 +1413,8 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = saveInsertOverwriteJobs(dos, checksum);
             checksum = nodeMgr.saveComputeNodes(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = saveStarMgrMeta(dos, checksum);
             dos.writeLong(checksum);
         }
 
@@ -3155,6 +3181,26 @@ public class GlobalStateMgr {
             taskManager.removeExpiredTaskRuns();
         } catch (Throwable t) {
             LOG.warn("task manager clean expire task runs history failed", t);
+        }
+    }
+
+    public StarManager getStarMgr() {
+        if (!Config.integrate_starmgr) {
+            LOG.fatal("FE not integrated with starmgr!");
+            System.exit(-1);
+        }
+        return starMgrServer.getStarMgr();
+    }
+
+    private void startStarMgrServer() {
+        if (!Config.integrate_starmgr) {
+            return;
+        }
+        try {
+            starMgrServer.start(editLog, idGenerator);
+        } catch (Exception e) {
+            LOG.fatal("start star manager failed, {}.", e.getMessage());
+            System.exit(-1);
         }
     }
 }

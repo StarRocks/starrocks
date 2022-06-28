@@ -435,6 +435,11 @@ struct TMergeJoinNode {
   54: optional list<Types.TSlotId> output_columns
 }
 
+struct TNestLoopJoinNode {
+    1: optional TJoinOp join_op
+    2: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
+}
+
 enum TAggregationOp {
   INVALID,
   COUNT,

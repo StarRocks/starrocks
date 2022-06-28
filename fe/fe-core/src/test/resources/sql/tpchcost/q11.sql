@@ -51,9 +51,11 @@ UNPARTITIONED
 |  <slot 1> : 1: PS_PARTKEY
 |  <slot 21> : 21: sum
 |
-26:CROSS JOIN
-|  cross join:
-|  predicates: 21: sum > 43: expr
+26:NESTLOOP JOIN
+|  join op: CROSS JOIN
+|  hash predicates:
+|  colocate: false, reason:
+|  other predicates: 21: sum > 43: expr
 |
 |----25:EXCHANGE
 |

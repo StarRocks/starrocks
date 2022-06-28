@@ -12,6 +12,7 @@ import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardInfo;
+import com.staros.proto.StatusCode;
 import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
@@ -83,7 +84,7 @@ public class StarOSAgent {
         try {
             client.registerService("starrocks");
         } catch (StarClientException e) {
-            if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
+            if (e.getCode() != StatusCode.ALREADY_EXIST) {
                 LOG.warn(e);
                 System.exit(-1);
             }
@@ -199,8 +200,8 @@ public class StarOSAgent {
         } catch (StarClientException e) {
             // when multi threads remove this worker, maybe we would get "NOT_EXIST"
             // but it is right, so only need to throw exception
-            // if code is not StarClientException.ExceptionCode.NOT_EXIST
-            if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
+            // if code is not StatusCode.NOT_EXIST
+            if (e.getCode() != StatusCode.NOT_EXIST) {
                 throw new DdlException("Failed to remove worker. error: " + e.getMessage());
             }
         }
@@ -235,7 +236,7 @@ public class StarOSAgent {
         List<ShardInfo> shardInfos = null;
         try {
             // TODO: support properties
-            shardInfos = client.createShard(serviceId, numShards);
+            shardInfos = client.createShard(serviceId, numShards, 1, null);
         } catch (StarClientException e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
         }
