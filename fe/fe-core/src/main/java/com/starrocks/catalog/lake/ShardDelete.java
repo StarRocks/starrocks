@@ -2,12 +2,15 @@
 
 package com.starrocks.catalog.lake;
 
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.lake.proto.DropTabletRequest;
+import com.starrocks.lake.proto.DropTabletResponse;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.rpc.BackendServiceProxy;
 import com.starrocks.rpc.LakeService;
@@ -22,9 +25,11 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 public class ShardDelete extends MasterDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(ShardDelete.class);
@@ -65,7 +70,9 @@ public class ShardDelete extends MasterDaemon implements Writable {
                 LakeService lakeService = BackendServiceProxy.getInstance().getLakeService(address);
 
                 DropTabletRequest request = new DropTabletRequest();
-                request.tabletIds = entry.getValue();
+                List<Long> tabletIds = Lists.newArrayList();;
+                tabletIds.add(shardId);
+                request.tabletIds = tabletIds;
 
                 Future<DropTabletResponse> responseFuture = lakeService.dropTablet(request);
                 try {
