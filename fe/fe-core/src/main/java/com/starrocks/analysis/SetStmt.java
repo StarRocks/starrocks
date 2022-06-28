@@ -48,6 +48,7 @@ public class SetStmt extends StatementBase {
 
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
+        analyze();
     }
 
     public void analyze()  {
@@ -96,7 +97,10 @@ public class SetStmt extends StatementBase {
 
     @Override
     public boolean isSupportNewPlanner() {
-        return true;
+        return setVars.stream().noneMatch(var -> var instanceof SetNamesVar ||
+                var instanceof SetPassVar ||
+                var instanceof SetTransaction ||
+                var instanceof SetUserPropertyVar);
     }
 
     @Override
