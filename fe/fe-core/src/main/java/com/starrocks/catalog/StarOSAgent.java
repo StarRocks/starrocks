@@ -12,7 +12,6 @@ import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardInfo;
-import com.staros.proto.StatusCode;
 import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
@@ -77,7 +76,7 @@ public class StarOSAgent {
         try {
             client.registerService("starrocks");
         } catch (StarClientException e) {
-            if (e.getCode() != StatusCode.ALREADY_EXIST) {
+            if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
                 LOG.warn(e);
                 System.exit(-1);
             }
@@ -87,7 +86,7 @@ public class StarOSAgent {
             serviceId = client.bootstrapService("starrocks", serviceName);
             LOG.info("get serviceId: {} by bootstrapService to starMgr", serviceId);
         } catch (StarClientException e) {
-            if (e.getCode() != StatusCode.ALREADY_EXIST) {
+            if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
                 LOG.warn(e);
                 System.exit(-1);
             } else {
@@ -132,7 +131,7 @@ public class StarOSAgent {
         try {
             workerId = client.addWorker(serviceId, workerIpPort);
         } catch (StarClientException e) {
-            if (e.getCode() != StatusCode.ALREADY_EXIST) {
+            if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
                 LOG.warn(e);
                 return;
             } else {
@@ -164,7 +163,7 @@ public class StarOSAgent {
                 WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
                 workerId = workerInfo.getWorkerId();
             } catch (StarClientException e) {
-                if (e.getCode() != StatusCode.NOT_EXIST) {
+                if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
                     throw new DdlException("Failed to get worker id from starMgr. error: "
                             + e.getMessage());
                 }
@@ -179,8 +178,8 @@ public class StarOSAgent {
         } catch (StarClientException e) {
             // when multi threads remove this worker, maybe we would get "NOT_EXIST"
             // but it is right, so only need to throw exception
-            // if code is not StatusCode.NOT_EXIST
-            if (e.getCode() != StatusCode.NOT_EXIST) {
+            // if code is not StarClientException.ExceptionCode.NOT_EXIST
+            if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
                 throw new DdlException("Failed to remove worker. error: " + e.getMessage());
             }
         }
@@ -205,7 +204,7 @@ public class StarOSAgent {
         List<ShardInfo> shardInfos = null;
         try {
             // TODO: support properties
-            shardInfos = client.createShard(serviceId, numShards, 1, null);
+            shardInfos = client.createShard(serviceId, numShards);
         } catch (StarClientException e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
         }
