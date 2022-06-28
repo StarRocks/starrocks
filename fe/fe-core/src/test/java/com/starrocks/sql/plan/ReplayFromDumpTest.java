@@ -300,7 +300,6 @@ public class ReplayFromDumpTest {
                 getPlanFragment(getDumpInfoFromFile("query_dump/cross_reorder"), null, TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("14:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other predicates: (2: v2 = CAST(8: v2 AS VARCHAR(1048576))) OR (3: v3 = 8: v2)\n"));
     }
@@ -395,7 +394,6 @@ public class ReplayFromDumpTest {
                 "  |  \n" +
                 "  17:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----16:EXCHANGE\n" +

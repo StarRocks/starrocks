@@ -90,7 +90,6 @@ HASH_PARTITIONED: 69: year
 |
 29:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 14: S_NATIONKEY = 60: N_NATIONKEY
 |
@@ -104,7 +103,6 @@ HASH_PARTITIONED: 69: year
 |
 25:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 21: L_SUPPKEY = 11: S_SUPPKEY
 |
@@ -118,7 +116,6 @@ HASH_PARTITIONED: 69: year
 |
 21:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 37: O_CUSTKEY = 46: C_CUSTKEY
 |
@@ -133,7 +130,6 @@ HASH_PARTITIONED: 69: year
 |
 8:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 36: O_ORDERKEY = 19: L_ORDERKEY
 |
@@ -202,7 +198,6 @@ UNPARTITIONED
 |
 18:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 49: C_NATIONKEY = 55: N_NATIONKEY
 |
@@ -232,7 +227,6 @@ UNPARTITIONED
 |
 15:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 57: N_REGIONKEY = 65: R_REGIONKEY
 |
@@ -288,7 +282,6 @@ BUCKET_SHUFFLE_HASH_PARTITIONED: 19: L_ORDERKEY
 |
 5:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 20: L_PARTKEY = 1: P_PARTKEY
 |

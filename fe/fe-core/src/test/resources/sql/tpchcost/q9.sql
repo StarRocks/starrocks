@@ -78,7 +78,6 @@ HASH_PARTITIONED: 53: N_NAME, 57: year
 |
 21:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 21: L_SUPPKEY = 11: S_SUPPKEY
 |
@@ -94,7 +93,6 @@ HASH_PARTITIONED: 53: N_NAME, 57: year
 |
 13:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 21: L_SUPPKEY = 37: PS_SUPPKEY
 |  equal join conjunct: 20: L_PARTKEY = 36: PS_PARTKEY
@@ -117,7 +115,6 @@ UNPARTITIONED
 |
 18:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 14: S_NATIONKEY = 52: N_NATIONKEY
 |
@@ -190,7 +187,6 @@ HASH_PARTITIONED: 21: L_SUPPKEY, 20: L_PARTKEY
 |
 8:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 19: L_ORDERKEY = 42: O_ORDERKEY
 |
@@ -206,7 +202,6 @@ HASH_PARTITIONED: 21: L_SUPPKEY, 20: L_PARTKEY
 |
 4:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 20: L_PARTKEY = 1: P_PARTKEY
 |

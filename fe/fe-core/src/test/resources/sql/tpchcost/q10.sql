@@ -69,7 +69,6 @@ UNPARTITIONED
 |
 13:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 4: C_NATIONKEY = 37: N_NATIONKEY
 |
@@ -88,7 +87,6 @@ UNPARTITIONED
 |
 9:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 1: C_CUSTKEY = 11: O_CUSTKEY
 |
@@ -139,7 +137,6 @@ BUCKET_SHUFFLE_HASH_PARTITIONED: 11: O_CUSTKEY
 |
 6:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 20: L_ORDERKEY = 10: O_ORDERKEY
 |
