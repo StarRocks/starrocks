@@ -2233,8 +2233,10 @@ public class Coordinator {
                             connectContext, WorkGroupClassifier.QueryType.SELECT, dbIds);
                 }
 
-                connectContext.getAuditEventBuilder().setResourceGroup(workgroup.getName());
-                connectContext.setWorkGroup(workgroup);
+                if (workgroup != null) {
+                    connectContext.getAuditEventBuilder().setResourceGroup(workgroup.getName());
+                    connectContext.setWorkGroup(workgroup);
+                }
             }
             setBucketSeqToInstanceForRuntimeFilters();
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
