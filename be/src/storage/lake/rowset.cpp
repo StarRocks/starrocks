@@ -137,7 +137,8 @@ Status Rowset::load_segments() {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_group));
     size_t footer_size_hint = 16 * 1024;
     uint32_t seg_id = 0;
-    for (const auto& seg_path : _rowset_metadata->segments()) {
+    for (const auto& seg_name : _rowset_metadata->segments()) {
+        auto seg_path = fmt::format("{}/{}", _group, seg_name);
         auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path, seg_id++,
                                  _tablet_schema.get(), &footer_size_hint);
         if (!res.ok()) {
