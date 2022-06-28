@@ -132,13 +132,14 @@ public class TaskManagerTest {
 
         Constants.TaskRunState state = taskRuns.get(0).getState();
 
-        int retryCount = 0, maxRetry = 5;
+        int retryCount = 0, maxRetry = 30;
         while (retryCount < maxRetry) {
             retryCount ++;
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
             if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
                 break;
             }
+            LOG.info("SubmitTaskRegularTest is waiting for retryCount:" + retryCount);
         }
 
         Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
@@ -166,13 +167,14 @@ public class TaskManagerTest {
 
         Constants.TaskRunState state = taskRuns.get(0).getState();
 
-        int retryCount = 0, maxRetry = 5;
+        int retryCount = 0, maxRetry = 30;
         while (retryCount < maxRetry) {
             retryCount ++;
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
             if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
                 break;
             }
+            LOG.info("SubmitTaskRegularTest is waiting for retryCount:" + retryCount);
         }
 
         Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
