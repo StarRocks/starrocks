@@ -372,9 +372,8 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
     // collect removable workgroups
     while (it != _workgroup_expired_versions.end()) {
         auto wg_it = _workgroups.find(*it);
-        DCHECK(wg_it != _workgroups.end());
-        int128_t wg_id = *it;
-        if (wg_it->second->is_removable()) {
+        if (wg_it != _workgroups.end() && wg_it->second->is_removable()) {
+            int128_t wg_id = *it;
             _sum_cpu_limit -= wg_it->second->cpu_limit();
             _workgroups.erase(wg_it);
             _workgroup_expired_versions.erase(it++);
@@ -454,6 +453,8 @@ void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
     auto wg_it = _workgroups.find(unique_id);
     if (wg_it != _workgroups.end()) {
         wg_it->second->mark_del();
+        _workgroup_expired_versions.push_back(unique_id);
+        LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << version_id << ")";
     }
     LOG(INFO) << "delete workgroup " << wg->name();
 }
