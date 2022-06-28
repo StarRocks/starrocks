@@ -38,13 +38,13 @@ public class StarOSAgent {
     public static final String SERVICE_NAME = "starrocks";
 
     private StarClient client;
-    private Long serviceId;
+    private long serviceId;
     private Map<String, Long> workerToId;
     private Map<Long, Long> workerToBackend;
     private ReentrantReadWriteLock rwLock;
 
     public StarOSAgent() {
-
+        serviceId = -1;
         // check if Config.starmanager_address == FE address
         if (Config.integrate_starmgr) {
             String[] starMgrAddr = Config.starmgr_address.split(":");
@@ -63,7 +63,7 @@ public class StarOSAgent {
 
     private void prepare() {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (serviceId.equals(-1L)) {
+            if (serviceId == -1) {
                 getServiceId();
             }
         }
@@ -130,7 +130,7 @@ public class StarOSAgent {
     public void addWorker(long backendId, String workerIpPort) {
         prepare();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (serviceId.equals(-1L)) {
+            if (serviceId == -1) {
                 LOG.warn("When addWorker serviceId is -1");
                 return;
             }
