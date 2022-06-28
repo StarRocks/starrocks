@@ -170,7 +170,7 @@ public class StarOSAgent {
                 workerId = client.addWorker(serviceId, workerIpPort);
             } catch (StarClientException e) {
                 if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
-                    LOG.warn(e);
+                    LOG.warn("Failed to addWorker. Error: {}", e);
                     return;
                 } else {
                     // get workerId from starMgr
@@ -178,7 +178,7 @@ public class StarOSAgent {
                         WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
                         workerId = workerInfo.getWorkerId();
                     } catch (StarClientException e2) {
-                        LOG.warn(e2);
+                        LOG.warn("Failed to get getWorkerInfo. Error: {}", e2);
                         return;
                     }
                     LOG.info("worker {} already added in starMgr", workerId);
