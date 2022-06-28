@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
+
 #include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
@@ -20,7 +22,6 @@
 #include "util/faststring.h"
 
 namespace starrocks {
-
 PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
     using Key = uint64_t;
     vector<Key> keys;
@@ -508,6 +509,31 @@ PARALLEL_TEST(PersistentIndexTest, test_replace) {
         ASSERT_EQ(values[i], new_get_values[i]);
     }
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+}
+
+PARALLEL_TEST(PersistentIndexTest, test_get_move_buckets) {
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_get_move_buckets";
+    PersistentIndex index(kPersistentIndexDir);
+    std::vector<uint8_t> bucket_packs_in_page;
+    bucket_packs_in_page.reserve(16);
+    srand((int)time(NULL));
+    for (int32_t i = 0; i < 16; ++i) {
+        bucket_packs_in_page.emplace_back(rand() % 32);
+    }
+    int32_t sum = 0;
+    for (int32_t i = 0; i < 16; ++i) {
+        sum += bucket_packs_in_page[i];
+    }
+
+    for (int32_t i = 0; i < 100; ++i) {
+        int32_t target = rand() % sum;
+        auto ret = index.test_get_move_buckets(target, bucket_packs_in_page.data());
+        int32_t find_target = 0;
+        for (int32_t i = 0; i < ret.size(); ++i) {
+            find_target += bucket_packs_in_page[ret[i]];
+        }
+        ASSERT_TRUE(find_target >= target);
+    }
 }
 
 } // namespace starrocks
