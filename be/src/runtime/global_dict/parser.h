@@ -16,6 +16,7 @@ namespace starrocks {
 
 class RuntimeState;
 class ExprContext;
+class Expr;
 class SlotDescriptor;
 
 namespace vectorized {
@@ -60,7 +61,7 @@ public:
                                    std::vector<SlotDescriptor*>* slot_descs);
 
 private:
-    Status _check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
+    Status _check_could_apply_dict_optimize(Expr* expr, DictOptimizeContext* dict_opt_ctx);
 
     // use code mapping rewrite expr
     template <bool close_original_expr>

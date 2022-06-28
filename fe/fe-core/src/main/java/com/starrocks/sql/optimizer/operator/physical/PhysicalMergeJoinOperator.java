@@ -45,6 +45,11 @@ public class PhysicalMergeJoinOperator extends PhysicalJoinOperator {
     }
 
     @Override
+    public String getJoinAlgo() {
+        return "MERGE";
+    }
+
+    @Override
     public boolean equals(Object o) {
         if (this == o) {
             return true;

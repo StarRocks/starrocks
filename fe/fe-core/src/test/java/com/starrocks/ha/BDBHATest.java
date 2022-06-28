@@ -23,7 +23,7 @@ public class BDBHATest {
 
     @Test
     public void testAddAndRemoveUnstableNode() {
-        BDBJEJournal journal = (BDBJEJournal) GlobalStateMgr.getCurrentState().getEditLog().getJournal();
+        BDBJEJournal journal = (BDBJEJournal) GlobalStateMgr.getCurrentState().getJournal();
         BDBEnvironment environment = journal.getBdbEnvironment();
 
         BDBHA ha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
@@ -46,7 +46,7 @@ public class BDBHATest {
 
     @Test
     public void testAddAndDropFollower() throws Exception {
-        BDBJEJournal journal = (BDBJEJournal) GlobalStateMgr.getCurrentState().getEditLog().getJournal();
+        BDBJEJournal journal = (BDBJEJournal) GlobalStateMgr.getCurrentState().getJournal();
         BDBEnvironment environment = journal.getBdbEnvironment();
 
         // add two followers

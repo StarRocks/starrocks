@@ -4,6 +4,9 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.HashMultimap;
+import com.google.common.collect.ImmutableCollection;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
@@ -15,7 +18,7 @@ import com.starrocks.external.PredicateUtils;
 import com.starrocks.external.iceberg.ExpressionConverter;
 import com.starrocks.external.iceberg.IcebergUtil;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
@@ -71,9 +74,11 @@ public class IcebergScanNode extends ScanNode {
     }
 
     private void getAliveBackends() throws UserException {
-        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
-            if (be.isAlive()) {
-                hostToBeId.put(be.getHost(), be.getId());
+        ImmutableCollection<ComputeNode> computeNodes = ImmutableList.copyOf(GlobalStateMgr.getCurrentSystemInfo().getComputeNodes());
+
+        for (ComputeNode computeNode : computeNodes) {
+            if (computeNode.isAlive()) {
+                hostToBeId.put(computeNode.getHost(), computeNode.getId());
             }
         }
         if (hostToBeId.isEmpty()) {

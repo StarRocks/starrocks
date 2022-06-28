@@ -15,6 +15,7 @@
 #include "runtime/global_dict/miscs.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
+#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "simd/gather.h"
 
@@ -128,55 +129,27 @@ private:
     DictOptimizeContext* _dict_opt_ctx;
 };
 
-Status DictOptimizeParser::_check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx) {
-    if (auto f = dynamic_cast<DictMappingExpr*>(expr_ctx->root())) {
+Status DictOptimizeParser::_check_could_apply_dict_optimize(Expr* expr, DictOptimizeContext* dict_opt_ctx) {
+    if (auto f = dynamic_cast<DictMappingExpr*>(expr)) {
         dict_opt_ctx->slot_id = f->slot_id();
         dict_opt_ctx->could_apply_dict_optimize = true;
         return Status::OK();
     }
 
-    // if expr was slot reference, we don't have to rewrite predicate
-    if (expr_ctx->root()->is_slotref()) {
-        dict_opt_ctx->could_apply_dict_optimize = false;
-        return Status::OK();
-    }
-
-    // TODO: remove these check after 2.4
-    std::vector<SlotId> slot_ids;
-    expr_ctx->root()->get_slot_ids(&slot_ids);
-
-    // Some string functions have multiple input slots, but their input slots are the same
-    // eg: concat(slot1, slot1)
-    auto only_one_slots = [](auto& slots) {
-        int prev_slot = -1;
-        for (auto slot : slots) {
-            if (prev_slot != -1 && prev_slot != slot) return false;
-            prev_slot = slot;
-        }
-        return !slots.empty();
-    };
-
-    if (only_one_slots(slot_ids) && _mutable_dict_maps->count(slot_ids.back())) {
-        dict_opt_ctx->slot_id = slot_ids.back();
-        dict_opt_ctx->could_apply_dict_optimize = true;
-    }
     return Status::OK();
 }
 
 Status DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx,
                                            SlotId targetSlotId) {
-    // DCHECK_NE(expr_ctx->root()->type().type, TYPE_VARCHAR);
     SlotId need_decode_slot_id = dict_opt_ctx->slot_id;
     SlotId expr_slot_id = need_decode_slot_id;
 
-    bool is_old_version = true;
     Expr* origin_expr = expr_ctx->root();
     if (auto f = dynamic_cast<DictMappingExpr*>(expr_ctx->root())) {
         origin_expr = f->get_child(1);
         std::vector<SlotId> slots;
         f->get_slot_ids(&slots);
         expr_slot_id = slots.back();
-        is_old_version = false;
     }
 
     DCHECK(_mutable_dict_maps->count(need_decode_slot_id) > 0);
@@ -198,9 +171,11 @@ Status DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeCo
     }
     // insert dict result to global dicts
 
-    // old lowcardinality optimization origin_expr return type was TYPE_INT
-    // we want make old_version also generate new dict
-    if (origin_expr->type().type == TYPE_VARCHAR || is_old_version) {
+    // if dict expr return type not equels to origin expr return type
+    // it means dict expr return a lowcardinality column. we need insert it
+    // to global dicts
+    if (origin_expr->type().type != expr_ctx->root()->type().type) {
+        DCHECK_EQ(origin_expr->type().type, TYPE_VARCHAR);
         DCHECK_GE(targetSlotId, 0);
         ColumnViewer<TYPE_VARCHAR> viewer(result_column);
         int num_rows = codes.size();
@@ -265,7 +240,7 @@ Status DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_c
     for (int i = 0; i < expr_ctxs.size(); ++i) {
         auto& expr_ctx = expr_ctxs[i];
         DictOptimizeContext dict_ctx;
-        _check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
+        _check_could_apply_dict_optimize(expr_ctx->root(), &dict_ctx);
         if (dict_ctx.could_apply_dict_optimize) {
             eval_expression(expr_ctx, &dict_ctx, slot_ids[i]);
             auto* dict_ctx_handle = _free_pool.add(new DictOptimizeContext(std::move(dict_ctx)));
@@ -307,7 +282,7 @@ void DictOptimizeParser::close(RuntimeState* state) noexcept {
 }
 
 Status DictOptimizeParser::check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx) {
-    return _check_could_apply_dict_optimize(expr_ctx, dict_opt_ctx);
+    return _check_could_apply_dict_optimize(expr_ctx->root(), dict_opt_ctx);
 }
 
 void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const std::vector<ExprContext*>& conjunct_ctxs,
@@ -321,20 +296,6 @@ void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const s
             SlotDescriptor* newSlot = runtime_state->global_obj_pool()->add(new SlotDescriptor(*(*slot_descs)[i]));
             newSlot->type().type = TYPE_VARCHAR;
             (*slot_descs)[i] = newSlot;
-        }
-    }
-
-    // TODO: remove this code in 2.4
-    // rewrite slot-id for conjunct
-    std::vector<SlotId> slots;
-    for (auto& conjunct : conjunct_ctxs) {
-        slots.clear();
-        Expr* expr_root = conjunct->root();
-        if (expr_root->get_slot_ids(&slots) == 1) {
-            if (auto iter = dict_slots_mapping.find(slots[0]); iter != dict_slots_mapping.end()) {
-                ColumnRef* column_ref = expr_root->get_column_ref();
-                column_ref->set_slot_id(iter->second);
-            }
         }
     }
 }

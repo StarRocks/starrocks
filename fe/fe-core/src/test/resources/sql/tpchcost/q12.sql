@@ -74,7 +74,6 @@ HASH_PARTITIONED: 25: L_SHIPMODE
 |
 4:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 1: O_ORDERKEY = 11: L_ORDERKEY
 |

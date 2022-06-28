@@ -29,7 +29,6 @@ UNPARTITIONED
 |
 5:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 2: v2 = 5: v11
 |
@@ -122,7 +121,6 @@ UNPARTITIONED
 |
 6:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 3: v3 = 6: v12
 |  other join predicates: 2: v2 < 7: sum
@@ -232,7 +230,6 @@ UNPARTITIONED
 |
 8:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 3: v3 = 6: v12
 |  equal join conjunct: 11: abs = 10: abs

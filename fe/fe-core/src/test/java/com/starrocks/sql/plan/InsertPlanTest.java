@@ -543,17 +543,14 @@ public class InsertPlanTest extends PlanTestBase {
         String plan = getInsertExecPlan(sql);
         Assert.assertTrue(plan.contains("  11:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (COLOCATE)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: true\n" +
                 "  |  equal join conjunct: 1: distinct_id = 49: distinct_id"));
         Assert.assertTrue(plan.contains("  7:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (COLOCATE)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: true\n" +
                 "  |  equal join conjunct: 1: distinct_id = 45: distinct_id"));
         Assert.assertTrue(plan.contains("  3:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (COLOCATE)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: true\n" +
                 "  |  equal join conjunct: 1: distinct_id = 41: distinct_id"));
         FeConstants.runningUnitTest = false;

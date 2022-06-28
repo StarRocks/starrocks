@@ -98,9 +98,9 @@ public class SelectConstTest extends PlanTestBase {
         assertPlanContains("select case when (select max(v4) from t1) > 1 then 2 else 3 end", "  5:Project\n" +
                 "  |  <slot 7> : if(5: max > 1, 2, 3)\n" +
                 "  |  \n" +
-                "  4:CROSS JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
+                "  4:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
                 "  |    \n" +
@@ -112,9 +112,9 @@ public class SelectConstTest extends PlanTestBase {
                 "  |  <slot 3> : 2\n" +
                 "  |  <slot 9> : if(7: max > 1, 4, 5)\n" +
                 "  |  \n" +
-                "  4:CROSS JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
+                "  4:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
                 "  |    \n" +

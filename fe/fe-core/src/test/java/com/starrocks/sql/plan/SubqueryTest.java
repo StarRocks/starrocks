@@ -61,16 +61,16 @@ public class SubqueryTest extends PlanTestBase {
         assertContains(plan, "  15:Project\n" +
                 "  |  <slot 19> : if(8: expr > 74219, 13: expr, 17: avg)\n" +
                 "  |  \n" +
-                "  14:CROSS JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
+                "  14:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----13:EXCHANGE\n" +
                 "  |    \n" +
                 "  1:AGGREGATE (update finalize)");
-        assertContains(plan, "  11:CROSS JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
+        assertContains(plan, "  11:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----10:EXCHANGE\n" +
                 "  |    \n" +
@@ -129,13 +129,11 @@ public class SubqueryTest extends PlanTestBase {
 
         Assert.assertTrue(explainString.contains("  5:HASH JOIN\n" +
                 "  |  join op: RIGHT ANTI JOIN (COLOCATE)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: true\n" +
                 "  |  equal join conjunct: 9: id = 2: id\n" +
                 "  |  other join predicates: 1: dt = 2"));
         Assert.assertTrue(explainString.contains("  |    3:HASH JOIN\n" +
                 "  |    |  join op: LEFT ANTI JOIN (COLOCATE)\n" +
-                "  |    |  hash predicates:\n" +
                 "  |    |  colocate: true\n" +
                 "  |    |  equal join conjunct: 2: id = 5: id\n" +
                 "  |    |  other join predicates: 1: dt = 1"));
@@ -207,8 +205,8 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  18:Project\n" +
                     "  |  <slot 15> : 1\n" +
                     "  |  \n" +
-                    "  17:CROSS JOIN\n" +
-                    "  |  cross join:");
+                    "  17:NESTLOOP JOIN\n" +
+                    "  |  join op: CROSS JOIN");
         }
         {
             String sql = "SELECT DISTINCT 1\n" +
@@ -224,8 +222,8 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  18:Project\n" +
                     "  |  <slot 15> : 1\n" +
                     "  |  \n" +
-                    "  17:CROSS JOIN\n" +
-                    "  |  cross join:");
+                    "  17:NESTLOOP JOIN\n" +
+                    "  |  join op: CROSS JOIN");
         }
         {
             String sql = "SELECT DISTINCT(t1d)\n" +
@@ -241,8 +239,8 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  18:Project\n" +
                     "  |  <slot 4> : 4: t1d\n" +
                     "  |  \n" +
-                    "  17:CROSS JOIN\n" +
-                    "  |  cross join:");
+                    "  17:NESTLOOP JOIN\n" +
+                    "  |  join op: CROSS JOIN");
         }
         FeConstants.runningUnitTest = false;
     }
@@ -260,7 +258,6 @@ public class SubqueryTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  30:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: v1 = 1: v1\n" +
                 "  |  \n" +

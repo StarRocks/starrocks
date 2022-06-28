@@ -4,7 +4,11 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
@@ -15,7 +19,9 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.Constants;
+import com.starrocks.statistic.FullStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.StatisticSQLBuilder;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -108,6 +114,33 @@ public class AnalyzeStmtTest {
                 Maps.newHashMap());
         Assert.assertEquals("[test, t0, v1, HISTOGRAM, 2020-01-01 01:01:00, {}]",
                 ShowHistogramStatsMetaStmt.showHistogramStatsMeta(histogramStatsMeta).toString());
+    }
+
+    @Test
+    public void testStatisticsSqlBuilder() {
+        Database database = GlobalStateMgr.getCurrentState().getDb(10002L);
+        OlapTable table = (OlapTable) database.getTable(10004L);
+        Partition partition = table.getPartition(10003L);
+
+        Assert.assertEquals("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
+                        "cast(avg(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  max(max), min(min) " +
+                        "FROM column_statistics WHERE table_id = 10004 and column_name in ('v1', 'v2') GROUP BY db_id, table_id, column_name",
+                StatisticSQLBuilder.buildQueryFullStatisticsSQL(10004L, Lists.newArrayList("v1", "v2")));
+        Assert.assertEquals("SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
+                        "data_size, distinct_count, null_count, max, min " +
+                        "FROM table_statistic_v1 WHERE db_id = 10002 and table_id = 10004 and column_name in ('v1', 'v2')",
+                StatisticSQLBuilder.buildQuerySampleStatisticsSQL(10002L, 10004L, Lists.newArrayList("v1", "v2")));
+
+        FullStatisticsCollectJob collectJob = new FullStatisticsCollectJob(null, database, table,
+                Lists.newArrayList(10003L),
+                Lists.newArrayList("v1", "v2"));
+        Assert.assertEquals("INSERT INTO column_statistics  SELECT 10004, 10003, 'v1', 10002, 'test.t0', 't0', " +
+                        "COUNT(1), COUNT(1) * 8, IFNULL(hll_union(hll_hash(`v1`)), hll_empty()), COUNT(1) - COUNT(`v1`), " +
+                        "IFNULL(MAX(`v1`), ''), IFNULL(MIN(`v1`), ''), NOW() FROM test.t0 partition t0 " +
+                        "UNION ALL  " +
+                        "SELECT 10004, 10003, 'v2', 10002, 'test.t0', 't0', COUNT(1), COUNT(1) * 8, IFNULL(hll_union(hll_hash(`v2`)), " +
+                        "hll_empty()), COUNT(1) - COUNT(`v2`), IFNULL(MAX(`v2`), ''), IFNULL(MIN(`v2`), ''), NOW() FROM test.t0 partition t0 ",
+                collectJob.buildCollectFullStatisticSQL(database, table, partition, Lists.newArrayList("v1", "v2")));
     }
 
     @Test

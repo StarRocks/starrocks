@@ -24,6 +24,7 @@ import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.ComputeNodeClause;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -203,6 +204,10 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    public R visitShowComputeNodes(ShowComputeNodesStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitQueryStatement(QueryStatement statement, C context) {
         return visitStatement(statement, context);
     }
@@ -299,6 +304,9 @@ public abstract class AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    public R visitComputeNodeClause(ComputeNodeClause clause, C context) {
+        return visitNode(clause, context);
+    }
 
     public R visitFrontendClause(FrontendClause clause, C context) {
         return visitNode(clause, context);

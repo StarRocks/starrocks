@@ -90,6 +90,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
@@ -458,8 +459,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
      */
     private ColumnStatistic adjustPartitionStatistic(Collection<Long> selectedPartitionId, OlapTable olapTable) {
         int selectedPartitionsSize = selectedPartitionId.size();
-        int allPartitionsSize = olapTable.getPartitions().size();
-        if (selectedPartitionsSize != allPartitionsSize) {
+        int allNoEmptyPartitionsSize = (int) olapTable.getPartitions().stream().filter(Partition::hasData).count();
+        if (selectedPartitionsSize != allNoEmptyPartitionsSize) {
             if (olapTable.getPartitionColumnNames().size() != 1) {
                 return null;
             }
@@ -500,7 +501,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 }
                 double distinctValues =
                         partitionColumnStatistic.getDistinctValuesCount() * 1.0 * selectedPartitionsSize /
-                                allPartitionsSize;
+                                allNoEmptyPartitionsSize;
                 return buildFrom(partitionColumnStatistic).
                         setMinValue(min).setMaxValue(max).setDistinctValuesCount(max(distinctValues, 1)).build();
             }
@@ -728,6 +729,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalMergeJoin(PhysicalMergeJoinOperator node, ExpressionContext context) {
+        return computeJoinNode(context, node.getJoinType(), node.getOnPredicate());
+    }
+
+    @Override
+    public Void visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator node, ExpressionContext context) {
         return computeJoinNode(context, node.getJoinType(), node.getOnPredicate());
     }
 
