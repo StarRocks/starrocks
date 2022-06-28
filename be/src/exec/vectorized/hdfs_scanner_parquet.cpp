@@ -8,8 +8,9 @@
 
 namespace starrocks::vectorized {
 
-class HdfsParquetProfile {
-public:
+static const std::string kParquetProfileSectionPrefix = "Parquet";
+
+void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     // read & decode
     RuntimeProfile::Counter* level_decode_timer = nullptr;
     RuntimeProfile::Counter* value_decode_timer = nullptr;
@@ -24,12 +25,7 @@ public:
     RuntimeProfile::Counter* group_dict_filter_timer = nullptr;
     RuntimeProfile::Counter* group_dict_decode_timer = nullptr;
 
-    void init(RuntimeProfile* root);
-};
-
-static const std::string kParquetProfileSectionPrefix = "Parquet";
-
-void HdfsParquetProfile::init(RuntimeProfile* root) {
+    RuntimeProfile* root = profile->runtime_profile;
     ADD_TIMER(root, kParquetProfileSectionPrefix);
     level_decode_timer = ADD_CHILD_TIMER(root, "LevelDecodeTime", kParquetProfileSectionPrefix);
     value_decode_timer = ADD_CHILD_TIMER(root, "ValueDecodeTime", kParquetProfileSectionPrefix);
@@ -41,30 +37,19 @@ void HdfsParquetProfile::init(RuntimeProfile* root) {
     group_chunk_read_timer = ADD_CHILD_TIMER(root, "GroupChunkRead", kParquetProfileSectionPrefix);
     group_dict_filter_timer = ADD_CHILD_TIMER(root, "GroupDictFilter", kParquetProfileSectionPrefix);
     group_dict_decode_timer = ADD_CHILD_TIMER(root, "GroupDictDecode", kParquetProfileSectionPrefix);
+
+    COUNTER_UPDATE(value_decode_timer, _stats.value_decode_ns);
+    COUNTER_UPDATE(level_decode_timer, _stats.level_decode_ns);
+    COUNTER_UPDATE(page_read_timer, _stats.page_read_ns);
+    COUNTER_UPDATE(footer_read_timer, _stats.footer_read_ns);
+    COUNTER_UPDATE(column_reader_init_timer, _stats.column_reader_init_ns);
+    COUNTER_UPDATE(group_chunk_read_timer, _stats.group_chunk_read_ns);
+    COUNTER_UPDATE(group_dict_filter_timer, _stats.group_dict_filter_ns);
+    COUNTER_UPDATE(group_dict_decode_timer, _stats.group_dict_decode_ns);
 }
 
 Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
-    HdfsScanProfile* profile = scanner_params.profile;
-    // initialized once.
-    if (profile != nullptr && profile->parquet_profile == nullptr) {
-        profile->parquet_profile = profile->pool->add(new HdfsParquetProfile());
-        profile->parquet_profile->init(profile->runtime_profile);
-    }
     return Status::OK();
-}
-
-void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
-    HdfsParquetProfile* parquet_profile = profile->parquet_profile;
-    if (parquet_profile != nullptr) {
-        COUNTER_UPDATE(parquet_profile->value_decode_timer, _stats.value_decode_ns);
-        COUNTER_UPDATE(parquet_profile->level_decode_timer, _stats.level_decode_ns);
-        COUNTER_UPDATE(parquet_profile->page_read_timer, _stats.page_read_ns);
-        COUNTER_UPDATE(parquet_profile->footer_read_timer, _stats.footer_read_ns);
-        COUNTER_UPDATE(parquet_profile->column_reader_init_timer, _stats.column_reader_init_ns);
-        COUNTER_UPDATE(parquet_profile->group_chunk_read_timer, _stats.group_chunk_read_ns);
-        COUNTER_UPDATE(parquet_profile->group_dict_filter_timer, _stats.group_dict_filter_ns);
-        COUNTER_UPDATE(parquet_profile->group_dict_decode_timer, _stats.group_dict_decode_ns);
-    }
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {

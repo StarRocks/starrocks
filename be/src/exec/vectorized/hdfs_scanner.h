@@ -45,11 +45,8 @@ struct HdfsScanStats {
     int64_t group_dict_decode_ns = 0;
 };
 
-class HdfsParquetProfile;
-
 struct HdfsScanProfile {
     RuntimeProfile* runtime_profile = nullptr;
-    ObjectPool* pool = nullptr;
 
     RuntimeProfile::Counter* rows_read_counter = nullptr;
     RuntimeProfile::Counter* bytes_read_counter = nullptr;
@@ -65,7 +62,6 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* io_counter = nullptr;
     RuntimeProfile::Counter* column_read_timer = nullptr;
     RuntimeProfile::Counter* column_convert_timer = nullptr;
-    HdfsParquetProfile* parquet_profile = nullptr;
 };
 
 struct HdfsScannerParams {
