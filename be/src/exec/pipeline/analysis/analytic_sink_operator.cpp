@@ -163,15 +163,19 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_unbounded_pr
         _analytor->reset_window_state();
     }
 
+    bool has_finish_current_partition = true;
     while (_analytor->has_output()) {
         if (_analytor->reached_limit()) {
             return Status::OK();
         }
-        _analytor->find_partition_end();
+        if (has_finish_current_partition) {
+            _analytor->find_partition_end();
+        }
         _analytor->find_peer_group_end();
 
         // We cannot evaluate if peer group end is not reached
         if (!_analytor->found_peer_group_end().first) {
+            DCHECK(!_analytor->found_partition_end().first);
             break;
         }
 
@@ -213,7 +217,10 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_unbounded_pr
 
         if (_analytor->found_partition_end().first &&
             _analytor->current_row_position() == _analytor->found_partition_end().second) {
+            has_finish_current_partition = true;
             _analytor->reset_state_for_next_partition();
+        } else {
+            has_finish_current_partition = false;
         }
     }
 

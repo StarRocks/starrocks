@@ -118,6 +118,7 @@ Status AnalyticNode::_get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr
             *eos = true;
             return Status::OK();
         }
+        DCHECK(_analytor->has_output());
         SCOPED_TIMER(_analytor->compute_timer());
 
         bool is_new_partition = _analytor->is_new_partition();
