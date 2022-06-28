@@ -49,7 +49,6 @@ UNPARTITIONED
 |
 4:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 18: P_PARTKEY = 2: L_PARTKEY
 |
