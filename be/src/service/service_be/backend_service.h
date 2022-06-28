@@ -21,49 +21,18 @@
 
 #pragma once
 
-#include <thrift/protocol/TDebugProtocol.h>
-
-#include <ctime>
-#include <map>
 #include <memory>
 
-#include "agent/agent_server.h"
-#include "common/status.h"
-#include "gen_cpp/BackendService.h"
-#include "gen_cpp/StarrocksExternalService_types.h"
-#include "gen_cpp/TStarrocksExternalService.h"
 #include "service/backend_base.h"
 
 namespace starrocks {
 
+class AgentServer;
 class ExecEnv;
 class ThriftServer;
 class TAgentResult;
 class TAgentTaskRequest;
 class TAgentPublishRequest;
-class TMiniLoadEtlTaskRequest;
-class TMiniLoadEtlStatusResult;
-class TMiniLoadEtlStatusRequest;
-class TDeleteEtlFilesRequest;
-class TPlanExecRequest;
-class TPlanExecParams;
-class TExecPlanFragmentParams;
-class TExecPlanFragmentResult;
-class TInsertResult;
-class TReportExecStatusArgs;
-class TReportExecStatusParams;
-class TReportExecStatusResult;
-class TCancelPlanFragmentArgs;
-class TCancelPlanFragmentResult;
-class TTransmitDataArgs;
-class TTransmitDataResult;
-class TNetworkAddress;
-class TClientRequest;
-class TExecRequest;
-class TSessionState;
-class TQueryOptions;
-class TExportTaskRequest;
-class TExportStatusResult;
 
 // This class just forward rpc requests to actual handlers, used
 // to bind multiple services on single port.
@@ -71,27 +40,18 @@ class BackendService : public BackendServiceBase {
 public:
     explicit BackendService(ExecEnv* exec_env);
 
-    ~BackendService() override = default;
+    ~BackendService() override;
 
     // NOTE: now we do not support multiple backend in one process
-    static Status create_service(ExecEnv* exec_env, int port, ThriftServer** server);
+    static std::unique_ptr<ThriftServer> create(ExecEnv* exec_env, int port);
 
-    // Agent service
-    void submit_tasks(TAgentResult& return_value, const std::vector<TAgentTaskRequest>& tasks) override {
-        _agent_server->submit_tasks(return_value, tasks);
-    }
+    void submit_tasks(TAgentResult& return_value, const std::vector<TAgentTaskRequest>& tasks) override;
 
-    void make_snapshot(TAgentResult& return_value, const TSnapshotRequest& snapshot_request) override {
-        _agent_server->make_snapshot(return_value, snapshot_request);
-    }
+    void make_snapshot(TAgentResult& return_value, const TSnapshotRequest& snapshot_request) override;
 
-    void release_snapshot(TAgentResult& return_value, const std::string& snapshot_path) override {
-        _agent_server->release_snapshot(return_value, snapshot_path);
-    }
+    void release_snapshot(TAgentResult& return_value, const std::string& snapshot_path) override;
 
-    void publish_cluster_state(TAgentResult& result, const TAgentPublishRequest& request) override {
-        _agent_server->publish_cluster_state(result, request);
-    }
+    void publish_cluster_state(TAgentResult& result, const TAgentPublishRequest& request) override;
 
     void get_tablet_stat(TTabletStatResult& result) override;
 

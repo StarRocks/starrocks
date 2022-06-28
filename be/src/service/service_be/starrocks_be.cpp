@@ -38,11 +38,10 @@ void start_be() {
 
     // Begin to start services
     // 1. Start thrift server with 'be_port'.
-    starrocks::ThriftServer* thrift_server = nullptr;
-    EXIT_IF_ERROR(starrocks::BackendService::create_service(exec_env, starrocks::config::be_port, &thrift_server));
-    Status status = thrift_server->start();
-    if (!status.ok()) {
-        LOG(ERROR) << "StarRocks Be server did not start correctly, exiting";
+    auto thrift_server = starrocks::BackendService::create(exec_env, starrocks::config::be_port);
+    if (auto status = thrift_server->start(); !status.ok()) {
+        LOG(ERROR) << "Fail to start BackendService thrift server on port " << starrocks::config::be_port << ": "
+                   << status;
         starrocks::shutdown_logging();
         exit(1);
     }
@@ -73,8 +72,7 @@ void start_be() {
     // 3. Start HTTP service.
     std::unique_ptr<starrocks::HttpServiceBE> http_service = std::make_unique<starrocks::HttpServiceBE>(
             exec_env, starrocks::config::webserver_port, starrocks::config::webserver_num_workers);
-    status = http_service->start();
-    if (!status.ok()) {
+    if (auto status = http_service->start(); !status.ok()) {
         LOG(ERROR) << "Internal Error:" << status.message();
         LOG(ERROR) << "StarRocks Be http service did not start correctly, exiting";
         starrocks::shutdown_logging();
@@ -92,5 +90,4 @@ void start_be() {
 
     thrift_server->stop();
     thrift_server->join();
-    delete thrift_server;
 }
