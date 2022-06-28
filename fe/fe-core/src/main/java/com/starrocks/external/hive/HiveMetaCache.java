@@ -26,11 +26,13 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 import static com.google.common.cache.CacheLoader.asyncReloading;
@@ -131,7 +133,7 @@ public class HiveMetaCache {
         databaseNamesCache = newCacheBuilder(MAX_NAMES_CACHE_SIZE)
                 .build(asyncReloading(new CacheLoader<String, List<String>>() {
                     @Override
-                        public List<String> load(String key) throws Exception {
+                    public List<String> load(String key) throws Exception {
                         return loadAllDatabaseNames();
                     }
                 }, executor));
@@ -327,7 +329,7 @@ public class HiveMetaCache {
 
     private Table loadTable(HiveTableName hiveTableName) throws TException, DdlException {
         org.apache.hadoop.hive.metastore.api.Table hiveTable = client.getTable(hiveTableName);
-        HiveTable table =  HiveMetaStoreTableUtils.convertToSRTable(hiveTable, resourceName);
+        HiveTable table = HiveMetaStoreTableUtils.convertToSRTable(hiveTable, resourceName);
         tableColumnStatsCache.invalidate(new HiveTableColumnsKey(hiveTableName.getDatabaseName(),
                 hiveTableName.getTableName(), null, null, table.getType()));
 
@@ -475,22 +477,30 @@ public class HiveMetaCache {
 
     public void refreshPartition(HiveMetaStoreTableInfo hmsTable, List<String> partNames) throws DdlException {
         GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().lock();
-        for (String partName : partNames) {
-            partitionRefreshExecutor.submit(() -> {
-                try {
-                    List<String> partValues = client.partitionNameToVals(partName);
-                    HivePartitionKey key =
-                            new HivePartitionKey(hmsTable.getDb(), hmsTable.getTable(), hmsTable.getTableType(),
-                                    partValues);
-                    partitionsCache.put(key, loadPartition(key));
-                    partitionStatsCache.put(key, loadPartitionStats(key));
-                } catch (Exception e) {
-                    LOG.warn("refresh partition cache failed", e);
-                    throw new RuntimeException("refresh partition cached failed: " + e.getMessage());
-                }
-            });
+        Map<HivePartitionKey, Future<HivePartition>> hivePartitionFutures = new HashMap();
+        Map<HivePartitionKey, Future<HivePartitionStats>> hivePartitionStatsFutures = new HashMap();
+        try {
+            for (String partName : partNames) {
+                List<String> partValues = client.partitionNameToVals(partName);
+                HivePartitionKey key = new HivePartitionKey(hmsTable.getDb(), hmsTable.getTable(),
+                        hmsTable.getTableType(), partValues);
+                Future<HivePartition> partitionFuture = partitionRefreshExecutor.submit(() -> loadPartition(key));
+                Future<HivePartitionStats> partitionStatsFuture = partitionRefreshExecutor.submit(() -> loadPartitionStats(key));
+                hivePartitionFutures.put(key, partitionFuture);
+                hivePartitionStatsFutures.put(key, partitionStatsFuture);
+            }
+            for (Map.Entry<HivePartitionKey, Future<HivePartition>> entry : hivePartitionFutures.entrySet()) {
+                partitionsCache.put(entry.getKey(), entry.getValue().get());
+            }
+            for (Map.Entry<HivePartitionKey, Future<HivePartitionStats>> entry : hivePartitionStatsFutures.entrySet()) {
+                partitionStatsCache.put(entry.getKey(), entry.getValue().get());
+            }
+        } catch (Exception e) {
+            LOG.warn("refresh partition cache failed", e);
+            throw new DdlException("refresh partition cached failed: " + e.getMessage());
+        } finally {
+            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().unlock();
         }
-        GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().unlock();
     }
 
     public void refreshColumnStats(HiveMetaStoreTableInfo hmsTable)
