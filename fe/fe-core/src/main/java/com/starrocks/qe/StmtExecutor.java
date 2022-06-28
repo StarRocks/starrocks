@@ -51,6 +51,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.WorkGroup;
@@ -93,6 +94,7 @@ import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
@@ -107,7 +109,12 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.Constants;
+import com.starrocks.statistic.FullStatisticsCollectJob;
+import com.starrocks.statistic.HistogramStatisticsCollectJob;
+import com.starrocks.statistic.SampleStatisticsCollectJob;
 import com.starrocks.statistic.StatisticExecutor;
+import com.starrocks.statistic.StatisticsCollectJob;
+import com.starrocks.statistic.TableCollectJob;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExplainLevel;
@@ -125,6 +132,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -782,29 +790,39 @@ public class StmtExecutor {
         }
     }
 
-    private void handleAnalyzeStmt() throws Exception {
+    private void handleAnalyzeStmt() {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
-        StatisticExecutor statisticExecutor = new StatisticExecutor();
         Database db = MetaUtils.getStarRocks(context, analyzeStmt.getTableName());
-        Table table = MetaUtils.getStarRocksTable(context, analyzeStmt.getTableName());
+        OlapTable table = (OlapTable) MetaUtils.getStarRocksTable(context, analyzeStmt.getTableName());
 
-        AnalyzeJob job = new AnalyzeJob(db.getId(), table.getId(), analyzeStmt.getColumnNames(),
+        AnalyzeJob analyzeJob = new AnalyzeJob(db.getId(), table.getId(), analyzeStmt.getColumnNames(),
                 analyzeStmt.isSample() ? Constants.AnalyzeType.SAMPLE : Constants.AnalyzeType.FULL,
                 Constants.ScheduleType.ONCE,
                 analyzeStmt.getProperties(),
-                Constants.ScheduleStatus.FINISH,
-                LocalDateTime.now());
+                Constants.ScheduleStatus.RUNNING,
+                LocalDateTime.MIN);
 
-        try {
-            statisticExecutor.collectStatisticSync(db.getId(), table.getId(), analyzeStmt.getColumnNames(),
-                    analyzeStmt.isSample(), job.getSampleCollectRows());
-            GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, job.getColumns());
-        } catch (Exception e) {
-            job.setReason(e.getMessage());
-            throw e;
+        StatisticsCollectJob collectJob;
+        if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
+            analyzeJob.setType(Constants.AnalyzeType.HISTOGRAM);
+            collectJob = new HistogramStatisticsCollectJob(analyzeJob, db, table, analyzeStmt.getColumnNames());
+        } else {
+            if (Constants.AnalyzeType.FULL == analyzeJob.getType()) {
+                if (Config.enable_collect_full_statistics) {
+                    List<Long> partitionIdList = new ArrayList<>();
+                    table.getPartitions().stream().map(Partition::getId).forEach(partitionIdList::add);
+                    collectJob = new FullStatisticsCollectJob(analyzeJob, db, table, partitionIdList,
+                            analyzeStmt.getColumnNames());
+                } else {
+                    collectJob = new TableCollectJob(analyzeJob, db, table, analyzeStmt.getColumnNames());
+                }
+            } else {
+                collectJob = new SampleStatisticsCollectJob(analyzeJob, db, table, analyzeStmt.getColumnNames());
+            }
         }
 
-        GlobalStateMgr.getCurrentState().getAnalyzeManager().addAnalyzeJob(job);
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.collectStatistics(collectJob);
     }
 
     private void handleAddSqlBlackListStmt() {

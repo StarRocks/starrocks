@@ -672,7 +672,7 @@ public abstract class Type implements Cloneable {
 
     public boolean canStatistic() {
         // TODO(mofei) support statistic by for JSON
-        return !isOnlyMetricType() && !isJsonType();
+        return !isOnlyMetricType() && !isJsonType() && !isComplexType();
     }
 
     public boolean canDistributedBy() {
