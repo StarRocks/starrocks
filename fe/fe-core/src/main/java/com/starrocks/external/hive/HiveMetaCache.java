@@ -341,6 +341,7 @@ public class HiveMetaCache {
         } else {
             table = HiveMetaStoreTableUtils.convertHiveConnTableToSRTable(hiveTable, resourceName);
         }
+        HiveTable table = HiveMetaStoreTableUtils.convertToSRTable(hiveTable, resourceName);
         tableColumnStatsCache.invalidate(new HiveTableColumnsKey(hiveTableName.getDatabaseName(),
                 hiveTableName.getTableName(), null, null, table.getType()));
 
