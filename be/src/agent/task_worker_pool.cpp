@@ -735,7 +735,6 @@ void* TaskWorkerPool::_delete_worker_thread_callback(void* arg_this) {
 
 void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
     auto* worker_pool_this = (TaskWorkerPool*)arg_this;
-
     std::unique_ptr<ThreadPool> threadpool;
     auto st =
             ThreadPoolBuilder("publish_version")
@@ -746,8 +745,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
                     // Since a large queue size brings a little overhead, a big one is chosen here.
                     .set_max_queue_size(2048)
                     .build(&threadpool);
-    assert(st.ok());
-
+    CHECK(st.ok()) << st;
     struct VersionCmp {
         bool operator()(const TAgentTaskRequestPtr& lhs, const TAgentTaskRequestPtr& rhs) const {
             if (lhs->publish_version_req.__isset.commit_timestamp &&
