@@ -157,7 +157,7 @@ enum TPushType {
 enum TTaskType {
     CREATE,
     DROP,
-    PUSH,
+    PUSH, // Deprecated
     CLONE,
     STORAGE_MEDIUM_MIGRATE,
     ROLLUP, // Deprecated
