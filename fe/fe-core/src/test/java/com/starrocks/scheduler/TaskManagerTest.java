@@ -125,15 +125,12 @@ public class TaskManagerTest {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
         taskRunManager.submitTaskRun(taskRun);
-
-        ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-
         List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
+        Constants.TaskRunState state = null;
 
-        Constants.TaskRunState state = taskRuns.get(0).getState();
-
-        int retryCount = 0, maxRetry = 30;
+        int retryCount = 0, maxRetry = 5;
         while (retryCount < maxRetry) {
+            state = taskRuns.get(0).getState();
             retryCount ++;
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
             if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
@@ -160,15 +157,12 @@ public class TaskManagerTest {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         taskManager.createTask(task, true);
         taskManager.executeTask(task.getName());
-
-        ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-
         List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
 
-        Constants.TaskRunState state = taskRuns.get(0).getState();
-
-        int retryCount = 0, maxRetry = 30;
+        Constants.TaskRunState state = null;
+        int retryCount = 0, maxRetry = 5;
         while (retryCount < maxRetry) {
+            state = taskRuns.get(0).getState();
             retryCount ++;
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
             if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
