@@ -139,7 +139,7 @@ public class TaskManagerTest {
             if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
                 break;
             }
-            LOG.info("SubmitTaskRegularTest is waiting for retryCount:" + retryCount);
+            LOG.info("SubmitTaskRegularTest is waiting for TaskRunState retryCount:" + retryCount);
         }
 
         Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
@@ -174,7 +174,7 @@ public class TaskManagerTest {
             if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
                 break;
             }
-            LOG.info("SubmitTaskRegularTest is waiting for retryCount:" + retryCount);
+            LOG.info("SubmitMvTaskTest is waiting for TaskRunState retryCount:" + retryCount);
         }
 
         Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
