@@ -100,7 +100,6 @@ public class SelectConstTest extends PlanTestBase {
                 "  |  \n" +
                 "  4:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +
@@ -115,7 +114,6 @@ public class SelectConstTest extends PlanTestBase {
                 "  |  \n" +
                 "  4:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE\n" +

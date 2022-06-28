@@ -39,7 +39,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment, planFragment.contains("4:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE"));
@@ -70,7 +69,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "     TABLE: t2"));
         Assert.assertTrue(planFragment.contains("  9:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 4: v10 = 1: v4\n" +
                 "  |  \n" +
@@ -137,7 +135,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  25:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: v10 = 13: v4\n" +
                 "  |  \n" +
@@ -147,7 +144,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "     TABLE: t3"));
         Assert.assertTrue(planFragment.contains("  11:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 4: v10 = 1: v4\n" +
                 "  |  \n" +
@@ -170,7 +166,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
         // Top join tree
         Assert.assertTrue(planFragment.contains("  21:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 14: v10 = 11: v4\n" +
                 "  |  \n" +
@@ -190,7 +185,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
         // Left sub join tree (b)
         Assert.assertTrue(planFragment.contains("  19:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 12: v5 = 10: count\n" +
                 "  |  \n" +
@@ -210,7 +204,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
         // Right sub join tree (a)
         Assert.assertTrue(planFragment, planFragment.contains("  16:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----15:EXCHANGE\n" +
@@ -233,12 +226,10 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "on t1.v5 = a.v8 ";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 10: v4 = 13: v10\n"));
 
         Assert.assertTrue(planFragment.contains("  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 4: v10 = 1: v4\n"));
     }
@@ -250,7 +241,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment, planFragment.contains("4:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE"));
@@ -282,7 +272,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "     TABLE: t2"));
         Assert.assertTrue(planFragment.contains("  9:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 4: v10 = 1: v4\n" +
                 "  |  \n" +
@@ -350,7 +339,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  25:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: v10 = 13: v4\n" +
                 "  |  \n" +
@@ -360,7 +348,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "     TABLE: t3"));
         Assert.assertTrue(planFragment.contains("  11:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 4: v10 = 1: v4\n" +
                 "  |  \n" +
@@ -383,7 +370,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
         // Top join tree
         Assert.assertTrue(planFragment.contains("  25:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 14: v10 = 11: v4\n" +
                 "  |  \n" +
@@ -403,7 +389,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
         // Left sub join tree (b)
         Assert.assertTrue(planFragment, planFragment.contains("  23:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 10: count = 12: v5\n" +
                 "  |  \n" +
@@ -414,7 +399,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |  \n" +
                 "  19:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----18:EXCHANGE\n" +
@@ -440,7 +424,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |  \n" +
                 "  16:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----15:EXCHANGE\n" +
@@ -463,12 +446,10 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "on t1.v5 = a.v8 ";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 13: v10 = 10: v4\n"));
 
         Assert.assertTrue(planFragment.contains("  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 4: v10 = 1: v4\n"));
     }
@@ -482,7 +463,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |  \n" +
                 "  7:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n"));
 
         sql = "select * from (select v1, 2 as v, 3 from t0 inner join t1 on v2 = v4) t,t2;";

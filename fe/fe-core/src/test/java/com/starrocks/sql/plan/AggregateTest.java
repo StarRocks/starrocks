@@ -689,7 +689,6 @@ public class AggregateTest extends PlanTestBase {
         explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: k3 <=> 17: k3"));
     }
@@ -861,7 +860,6 @@ public class AggregateTest extends PlanTestBase {
                     "  |  \n" +
                     "  3:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                    "  |  hash predicates:\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 1: v1 = 4: v4");
         }
@@ -879,7 +877,6 @@ public class AggregateTest extends PlanTestBase {
                     "  |  \n" +
                     "  3:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                    "  |  hash predicates:\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 1: v1 = 4: v4");
         }
@@ -902,7 +899,6 @@ public class AggregateTest extends PlanTestBase {
                     "  |  \n" +
                     "  2:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (COLOCATE)\n" +
-                    "  |  hash predicates:\n" +
                     "  |  colocate: true\n" +
                     "  |  equal join conjunct: 1: v1 = 4: v4");
         }
@@ -920,7 +916,6 @@ public class AggregateTest extends PlanTestBase {
                     "  |  \n" +
                     "  3:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                    "  |  hash predicates:\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 1: v4 = 4: v1");
         }
@@ -948,7 +943,6 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  5:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
@@ -1239,7 +1233,6 @@ public class AggregateTest extends PlanTestBase {
                 "    RANDOM");
         assertContains(plan, "  18:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n");
         assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
@@ -1384,7 +1377,6 @@ public class AggregateTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, " 13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 15: t1a <=> 13: t1a");
 
@@ -1392,7 +1384,6 @@ public class AggregateTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 13: t1a <=> 16: t1a\n" +
                 "  |  equal join conjunct: 14: t1b <=> 17: t1b\n" +
@@ -1402,12 +1393,10 @@ public class AggregateTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 20: t1c <=> 15: t1c");
         assertContains(plan, "21:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 15: t1c <=> 17: t1c");
 
@@ -1419,7 +1408,6 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 11> : CAST(2: t1b AS INT) + 1");
         assertContains(plan, "22:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: t1c <=> 19: t1c\n" +
                 "  |  equal join conjunct: 17: expr <=> 20: expr");
