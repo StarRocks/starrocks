@@ -336,15 +336,10 @@ public class HiveMetaStoreTableUtils {
             fullSchema.add(column);
         }
 
-        // Adding some necessary properties to adapt initialization of HiveTable.
         Map<String, String> properties = Maps.newHashMap();
-        //old_test
         properties.put(HiveTable.HIVE_DB, hiveTable.getDbName());
-        //test_part_table
         properties.put(HiveTable.HIVE_TABLE, hiveTable.getTableName());
-        //thrift://127.0.0.1:9083
         properties.put(HiveTable.HIVE_METASTORE_URIS, resoureName);
-        ////thrift://127.0.0.1:9083
         properties.put(HiveTable.HIVE_RESOURCE, resoureName);
 
         return new HiveTable(connectorTableIdIdGenerator.getNextId().asInt(), hiveTable.getTableName(),
@@ -365,16 +360,11 @@ public class HiveMetaStoreTableUtils {
             fullSchema.add(column);
         }
 
-        // Adding some necessary properties to adapt initialization of HudiTable.
         Map<String, String> properties = Maps.newHashMap();
-        //qzd
         properties.put(HudiTable.HUDI_DB, hmsTable.getDbName());
-        //hudi_col_test
         properties.put(HudiTable.HUDI_TABLE, hmsTable.getTableName());
-        //hudi_emr
         properties.put(HudiTable.HUDI_RESOURCE, resourceName);
 
-        //new HudiTable(id, hudi table name, hudi table all columns, properties)
         return new HudiTable(connectorTableIdIdGenerator.getNextId().asInt(), hudiTable.getName(),
                 fullSchema, properties);
     }

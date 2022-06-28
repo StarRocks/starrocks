@@ -333,8 +333,6 @@ public class HiveMetaCache {
         Table table = null;
         if (hiveTable.getSd().getInputFormat().contains("hudi")) {
             Map<String, String> hudiProperties = Maps.newHashMap();
-            // table = HiveMetaStoreTableUtils.convertHudiConnTableToSRTable(hiveTable);
-
             String hudiBasePath = hiveTable.getSd().getLocation();
             if (!Strings.isNullOrEmpty(hudiBasePath)) {
                 hudiProperties.put("hudi.table.base.path", hudiBasePath);
