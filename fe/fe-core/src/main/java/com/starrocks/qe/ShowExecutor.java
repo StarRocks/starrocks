@@ -708,60 +708,57 @@ public class ShowExecutor {
         ShowColumnStmt showStmt = (ShowColumnStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
         Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDb());
-        if (db != null) {
-            db.readLock();
-            try {
-                Table table = db.getTable(showStmt.getTable());
-                if (table != null) {
-                    PatternMatcher matcher = null;
-                    if (showStmt.getPattern() != null) {
-                        matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),
-                                CaseSensibility.COLUMN.getCaseSensibility());
-                    }
-                    List<Column> columns = table.getBaseSchema();
-                    for (Column col : columns) {
-                        if (matcher != null && !matcher.match(col.getName())) {
-                            continue;
-                        }
-                        final String columnName = col.getName();
-                        final String columnType = col.getType().canonicalName().toLowerCase();
-                        final String isAllowNull = col.isAllowNull() ? "YES" : "NO";
-                        final String isKey = col.isKey() ? "YES" : "NO";
-                        final String defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
-                        final String aggType = col.getAggregationType() == null
-                                || col.isAggregationTypeImplicit() ? "" : col.getAggregationType().toSql();
-                        if (showStmt.isVerbose()) {
-                            // Field Type Collation Null Key Default Extra
-                            // Privileges Comment
-                            rows.add(Lists.newArrayList(columnName,
-                                    columnType,
-                                    "",
-                                    isAllowNull,
-                                    isKey,
-                                    defaultValue,
-                                    aggType,
-                                    "",
-                                    col.getComment()));
-                        } else {
-                            // Field Type Null Key Default Extra
-                            rows.add(Lists.newArrayList(columnName,
-                                    columnType,
-                                    isAllowNull,
-                                    isKey,
-                                    defaultValue,
-                                    aggType));
-                        }
-                    }
-                } else {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR,
-                            db.getFullName() + "." + showStmt.getTable());
-                }
-            } finally {
-                db.readUnlock();
+        if (db == null) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showStmt.getDb());
+        }
+        db.readLock();
+        try {
+            Table table = db.getTable(showStmt.getTable());
+            if (table == null) {
+                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR,
+                        showStmt.getDb() + "." + showStmt.getTable());
             }
-        } else {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR,
-                    showStmt.getDb() + "." + showStmt.getTable());
+            PatternMatcher matcher = null;
+            if (showStmt.getPattern() != null) {
+                matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),
+                        CaseSensibility.COLUMN.getCaseSensibility());
+            }
+            List<Column> columns = table.getBaseSchema();
+            for (Column col : columns) {
+                if (matcher != null && !matcher.match(col.getName())) {
+                    continue;
+                }
+                final String columnName = col.getName();
+                final String columnType = col.getType().canonicalName().toLowerCase();
+                final String isAllowNull = col.isAllowNull() ? "YES" : "NO";
+                final String isKey = col.isKey() ? "YES" : "NO";
+                final String defaultValue = col.getMetaDefaultValue(Lists.newArrayList());
+                final String aggType = col.getAggregationType() == null
+                        || col.isAggregationTypeImplicit() ? "" : col.getAggregationType().toSql();
+                if (showStmt.isVerbose()) {
+                    // Field Type Collation Null Key Default Extra
+                    // Privileges Comment
+                    rows.add(Lists.newArrayList(columnName,
+                            columnType,
+                            "",
+                            isAllowNull,
+                            isKey,
+                            defaultValue,
+                            aggType,
+                            "",
+                            col.getComment()));
+                } else {
+                    // Field Type Null Key Default Extra
+                    rows.add(Lists.newArrayList(columnName,
+                            columnType,
+                            isAllowNull,
+                            isKey,
+                            defaultValue,
+                            aggType));
+                }
+            }
+        } finally {
+            db.readUnlock();
         }
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }

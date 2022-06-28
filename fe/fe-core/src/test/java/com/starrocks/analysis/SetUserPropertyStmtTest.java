@@ -53,7 +53,7 @@ public class SetUserPropertyStmtTest {
 
         SetUserPropertyStmt stmt = new SetUserPropertyStmt("testUser", propertyVarList);
         stmt.analyze(analyzer);
-        Assert.assertEquals("testCluster:testUser", stmt.getUser());
+        Assert.assertEquals("default_cluster:testUser", stmt.getUser());
     }
 
     @Test(expected = AnalysisException.class)

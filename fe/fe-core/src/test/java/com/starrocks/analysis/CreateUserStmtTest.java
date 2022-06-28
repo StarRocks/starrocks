@@ -54,7 +54,7 @@ public class CreateUserStmtTest {
         new Expectations() {
             {
                 analyzer.getClusterName();
-                result = "testCluster";
+                result = "default_cluster";
                 auth.checkHasPriv((ConnectContext) any, PrivPredicate.GRANT, Auth.PrivLevel.GLOBAL, Auth
                         .PrivLevel.DATABASE);
                 result = true;
@@ -63,30 +63,30 @@ public class CreateUserStmtTest {
 
         CreateUserStmt stmt = new CreateUserStmt(new UserDesc(new UserIdentity("user", "%"), "passwd", true));
         stmt.analyze(analyzer);
-        Assert.assertEquals("CREATE USER 'testCluster:user'@'%' IDENTIFIED BY '*XXX'", stmt.toString());
+        Assert.assertEquals("CREATE USER 'default_cluster:user'@'%' IDENTIFIED BY '*XXX'", stmt.toString());
         Assert.assertEquals(new String(stmt.getPassword()), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
         Assert.assertNull(stmt.getAuthPlugin());
 
         stmt = new CreateUserStmt(
                 new UserDesc(new UserIdentity("user", "%"), "*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0", false));
         stmt.analyze(analyzer);
-        Assert.assertEquals("testCluster:user", stmt.getUserIdent().getQualifiedUser());
+        Assert.assertEquals("default_cluster:user", stmt.getUserIdent().getQualifiedUser());
         Assert.assertEquals(
-                "CREATE USER 'testCluster:user'@'%' IDENTIFIED BY PASSWORD '*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0'",
+                "CREATE USER 'default_cluster:user'@'%' IDENTIFIED BY PASSWORD '*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0'",
                 stmt.toString());
         Assert.assertEquals(new String(stmt.getPassword()), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
         Assert.assertNull(stmt.getAuthPlugin());
 
         stmt = new CreateUserStmt(new UserDesc(new UserIdentity("user", "%"), "", false));
         stmt.analyze(analyzer);
-        Assert.assertEquals("CREATE USER 'testCluster:user'@'%'", stmt.toString());
+        Assert.assertEquals("CREATE USER 'default_cluster:user'@'%'", stmt.toString());
         Assert.assertEquals(new String(stmt.getPassword()), "");
         Assert.assertNull(stmt.getAuthPlugin());
 
         stmt = new CreateUserStmt(
                 new UserDesc(new UserIdentity("user", "%"), AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), "passwd", true));
         stmt.analyze(analyzer);
-        Assert.assertEquals("CREATE USER 'testCluster:user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'passwd'",
+        Assert.assertEquals("CREATE USER 'default_cluster:user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'passwd'",
                 stmt.toString());
         Assert.assertEquals(new String(stmt.getPassword()), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
         Assert.assertEquals(AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthPlugin());
@@ -95,14 +95,14 @@ public class CreateUserStmtTest {
                 "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0", false));
         stmt.analyze(analyzer);
         Assert.assertEquals(
-                "CREATE USER 'testCluster:user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0'",
+                "CREATE USER 'default_cluster:user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0'",
                 stmt.toString());
         Assert.assertEquals(new String(stmt.getPassword()), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
         Assert.assertEquals(AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthPlugin());
 
         stmt = new CreateUserStmt(new UserDesc(new UserIdentity("user", "%"), AuthPlugin.MYSQL_NATIVE_PASSWORD.name()));
         stmt.analyze(analyzer);
-        Assert.assertEquals("CREATE USER 'testCluster:user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD",
+        Assert.assertEquals("CREATE USER 'default_cluster:user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD",
                 stmt.toString());
         Assert.assertEquals(new String(stmt.getPassword()), "");
         Assert.assertEquals(AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthPlugin());
@@ -112,7 +112,7 @@ public class CreateUserStmtTest {
                         "uid=gengjun,ou=people,dc=example,dc=io", false));
         stmt.analyze(analyzer);
         Assert.assertEquals(
-                "CREATE USER 'testCluster:user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE AS 'uid=gengjun,ou=people,dc=example,dc=io'",
+                "CREATE USER 'default_cluster:user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE AS 'uid=gengjun,ou=people,dc=example,dc=io'",
                 stmt.toString());
         Assert.assertEquals(new String(stmt.getPassword()), "");
         Assert.assertEquals(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), stmt.getAuthPlugin());
@@ -123,7 +123,7 @@ public class CreateUserStmtTest {
                         "uid=gengjun,ou=people,dc=example,dc=io", true));
         stmt.analyze(analyzer);
         Assert.assertEquals(
-                "CREATE USER 'testCluster:user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE BY 'uid=gengjun,ou=people,dc=example,dc=io'",
+                "CREATE USER 'default_cluster:user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE BY 'uid=gengjun,ou=people,dc=example,dc=io'",
                 stmt.toString());
         Assert.assertEquals(new String(stmt.getPassword()), "");
         Assert.assertEquals(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), stmt.getAuthPlugin());
@@ -132,7 +132,7 @@ public class CreateUserStmtTest {
         stmt = new CreateUserStmt(
                 new UserDesc(new UserIdentity("user", "%"), AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name()));
         stmt.analyze(analyzer);
-        Assert.assertEquals("CREATE USER 'testCluster:user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE",
+        Assert.assertEquals("CREATE USER 'default_cluster:user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE",
                 stmt.toString());
         Assert.assertEquals(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), stmt.getAuthPlugin());
         Assert.assertNull(stmt.getUserForAuthPlugin());
@@ -143,7 +143,7 @@ public class CreateUserStmtTest {
         new Expectations() {
             {
                 analyzer.getClusterName();
-                result = "testCluster";
+                result = "default_cluster";
             }
         };
         CreateUserStmt stmt = new CreateUserStmt(new UserDesc(new UserIdentity("", "%"), "passwd", true));
@@ -156,7 +156,7 @@ public class CreateUserStmtTest {
         new Expectations() {
             {
                 analyzer.getClusterName();
-                result = "testCluster";
+                result = "default_cluster";
             }
         };
         CreateUserStmt stmt = new CreateUserStmt(new UserDesc(new UserIdentity("", "%"), "passwd", false));
@@ -169,7 +169,7 @@ public class CreateUserStmtTest {
         new Expectations() {
             {
                 analyzer.getClusterName();
-                result = "testCluster";
+                result = "default_cluster";
             }
         };
         CreateUserStmt stmt =
