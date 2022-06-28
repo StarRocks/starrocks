@@ -1680,7 +1680,7 @@ public class GlobalStateMgr {
         listener.setMetaContext(metaContext);
     }
 
-    public synchronized boolean replayJournal(long toJournalId) {
+    public synchronized boolean replayJournal(long toJournalId) throws JournalException {
         long newToJournalId = toJournalId;
         if (newToJournalId == -1) {
             newToJournalId = getMaxJournalId();
@@ -1704,8 +1704,8 @@ public class GlobalStateMgr {
             JournalEntity entity = null;
             try {
                 entity = cursor.next();
-            } catch (InterruptedException | JournalException | JournalInconsistentException e) {
-                LOG.warn("got exception when get next, will exit, ", e);
+            } catch (InterruptedException | JournalInconsistentException e) {
+                LOG.warn("got interrupt exception or inconsistent exception when get next, will exit, ", e);
                 // TODO exit gracefully
                 Util.stdoutWithTime(e.getMessage());
                 System.exit(-1);
