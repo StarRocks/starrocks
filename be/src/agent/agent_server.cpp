@@ -25,21 +25,17 @@
 
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include "agent/master_info.h"
-#include "agent/status.h"
 #include "agent/task_worker_pool.h"
 #include "common/logging.h"
 #include "common/status.h"
-#include "gen_cpp/MasterService_types.h"
+#include "gen_cpp/AgentService_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
 #include "util/phmap/phmap.h"
-
-using std::string;
-using std::vector;
 
 namespace starrocks {
 
@@ -48,12 +44,58 @@ const uint32_t REPORT_DISK_STATE_WORKER_COUNT = 1;
 const uint32_t REPORT_OLAP_TABLE_WORKER_COUNT = 1;
 const uint32_t REPORT_WORKGROUP_WORKER_COUNT = 1;
 
-FrontendServiceClientCache g_master_service_client_cache;
+class AgentServer::Impl {
+public:
+    explicit Impl(ExecEnv* exec_env);
 
-AgentServer::AgentServer(ExecEnv* exec_env) : _exec_env(exec_env) {
+    ~Impl();
+
+    // Receive agent task from FE master
+    void submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks);
+
+    // TODO(lingbin): make the agent_result to be a pointer, because it will be modified.
+    void make_snapshot(TAgentResult& agent_result, const TSnapshotRequest& snapshot_request);
+
+    void release_snapshot(TAgentResult& agent_result, const std::string& snapshot_path);
+
+    void publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request);
+
+    DISALLOW_COPY_AND_MOVE(Impl);
+
+private:
+    // Not Owned
+    ExecEnv* _exec_env;
+
+    std::unique_ptr<TaskWorkerPool> _create_tablet_workers;
+    std::unique_ptr<TaskWorkerPool> _drop_tablet_workers;
+    std::unique_ptr<TaskWorkerPool> _push_workers;
+    std::unique_ptr<TaskWorkerPool> _publish_version_workers;
+    std::unique_ptr<TaskWorkerPool> _clear_transaction_task_workers;
+    std::unique_ptr<TaskWorkerPool> _delete_workers;
+    std::unique_ptr<TaskWorkerPool> _alter_tablet_workers;
+    std::unique_ptr<TaskWorkerPool> _clone_workers;
+    std::unique_ptr<TaskWorkerPool> _storage_medium_migrate_workers;
+    std::unique_ptr<TaskWorkerPool> _check_consistency_workers;
+
+    // These 3 worker-pool do not accept tasks from FE.
+    // It is self triggered periodically and reports to Fe master
+    std::unique_ptr<TaskWorkerPool> _report_task_workers;
+    std::unique_ptr<TaskWorkerPool> _report_disk_state_workers;
+    std::unique_ptr<TaskWorkerPool> _report_tablet_workers;
+    std::unique_ptr<TaskWorkerPool> _report_workgroup_workers;
+
+    std::unique_ptr<TaskWorkerPool> _upload_workers;
+    std::unique_ptr<TaskWorkerPool> _download_workers;
+    std::unique_ptr<TaskWorkerPool> _make_snapshot_workers;
+    std::unique_ptr<TaskWorkerPool> _release_snapshot_workers;
+    std::unique_ptr<TaskWorkerPool> _move_dir_workers;
+    std::unique_ptr<TaskWorkerPool> _update_tablet_meta_info_workers;
+};
+
+AgentServer::Impl::Impl(ExecEnv* exec_env) : _exec_env(exec_env) {
     for (auto& path : exec_env->store_paths()) {
         try {
-            string dpp_download_path_str = path.path + DPP_PREFIX;
+            std::string dpp_download_path_str = path.path + DPP_PREFIX;
             std::filesystem::path dpp_download_path(dpp_download_path_str);
             if (std::filesystem::exists(dpp_download_path)) {
                 std::filesystem::remove_all(dpp_download_path);
@@ -103,7 +145,7 @@ AgentServer::AgentServer(ExecEnv* exec_env) : _exec_env(exec_env) {
 #undef CREATE_AND_START_POOL
 }
 
-AgentServer::~AgentServer() {
+AgentServer::Impl::~Impl() {
 #ifndef STOP_POOL
 #define STOP_POOL(type, pool_name) pool_name->stop();
 #endif
@@ -134,7 +176,7 @@ AgentServer::~AgentServer() {
 
 // TODO(lingbin): each task in the batch may have it own status or FE must check and
 // resend request when something is wrong(BE may need some logic to guarantee idempotence.
-void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks) {
+void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks) {
     Status ret_st;
     auto master_address = get_master_address();
     if (master_address.hostname.empty() || master_address.port == 0) {
@@ -179,7 +221,6 @@ void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAg
                         update_tablet_meta_info_req);
 
         case TTaskType::REALTIME_PUSH:
-        case TTaskType::PUSH:
             if (!task.__isset.push_req) {
                 ret_st = Status::InvalidArgument(
                         strings::Substitute("task(signature=$0) has wrong request member", signature));
@@ -310,8 +351,8 @@ void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAg
     ret_st.to_thrift(&agent_result.status);
 }
 
-void AgentServer::make_snapshot(TAgentResult& t_agent_result, const TSnapshotRequest& snapshot_request) {
-    string snapshot_path;
+void AgentServer::Impl::make_snapshot(TAgentResult& t_agent_result, const TSnapshotRequest& snapshot_request) {
+    std::string snapshot_path;
     auto st = SnapshotManager::instance()->make_snapshot(snapshot_request, &snapshot_path);
     if (!st.ok()) {
         LOG(WARNING) << "fail to make_snapshot. tablet_id:" << snapshot_request.tablet_id << " msg:" << st.to_string();
@@ -325,7 +366,7 @@ void AgentServer::make_snapshot(TAgentResult& t_agent_result, const TSnapshotReq
     t_agent_result.__set_allow_incremental_clone(true);
 }
 
-void AgentServer::release_snapshot(TAgentResult& t_agent_result, const std::string& snapshot_path) {
+void AgentServer::Impl::release_snapshot(TAgentResult& t_agent_result, const std::string& snapshot_path) {
     Status ret_st = SnapshotManager::instance()->release_snapshot(snapshot_path);
     if (!ret_st.ok()) {
         LOG(WARNING) << "Fail to release_snapshot. snapshot_path:" << snapshot_path;
@@ -335,9 +376,29 @@ void AgentServer::release_snapshot(TAgentResult& t_agent_result, const std::stri
     ret_st.to_thrift(&t_agent_result.status);
 }
 
-void AgentServer::publish_cluster_state(TAgentResult& t_agent_result, const TAgentPublishRequest& request) {
+void AgentServer::Impl::publish_cluster_state(TAgentResult& t_agent_result, const TAgentPublishRequest& request) {
     Status status = Status::NotSupported("deprecated method(publish_cluster_state) was invoked");
     status.to_thrift(&t_agent_result.status);
+}
+
+AgentServer::AgentServer(ExecEnv* exec_env) : _impl(std::make_unique<AgentServer::Impl>(exec_env)) {}
+
+AgentServer::~AgentServer() = default;
+
+void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks) {
+    _impl->submit_tasks(agent_result, tasks);
+}
+
+void AgentServer::make_snapshot(TAgentResult& agent_result, const TSnapshotRequest& snapshot_request) {
+    _impl->make_snapshot(agent_result, snapshot_request);
+}
+
+void AgentServer::release_snapshot(TAgentResult& agent_result, const std::string& snapshot_path) {
+    _impl->release_snapshot(agent_result, snapshot_path);
+}
+
+void AgentServer::publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request) {
+    _impl->publish_cluster_state(agent_result, request);
 }
 
 } // namespace starrocks

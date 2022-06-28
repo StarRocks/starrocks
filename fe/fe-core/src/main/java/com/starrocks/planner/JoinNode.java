@@ -438,8 +438,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         String distrModeStr =
                 (distrMode != DistributionMode.NONE) ? (" (" + distrMode.toString() + ")") : "";
         StringBuilder output = new StringBuilder().append(
-                detailPrefix + "join op: " + joinOp.toString() + distrModeStr + "\n").append(
-                detailPrefix + "hash predicates:\n");
+                detailPrefix + "join op: " + joinOp.toString() + distrModeStr + "\n");
 
         output.append(detailPrefix).append("colocate: ").append(isColocate)
                 .append(isColocate ? "" : ", reason: " + colocateReason).append("\n");

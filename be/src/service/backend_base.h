@@ -29,8 +29,6 @@
 
 #include "common/status.h"
 #include "gen_cpp/BackendService.h"
-#include "gen_cpp/StarrocksExternalService_types.h"
-#include "gen_cpp/TStarrocksExternalService.h"
 
 namespace starrocks {
 
@@ -43,17 +41,12 @@ class TMiniLoadEtlTaskRequest;
 class TMiniLoadEtlStatusResult;
 class TMiniLoadEtlStatusRequest;
 class TDeleteEtlFilesRequest;
-class TPlanExecRequest;
-class TPlanExecParams;
 class TExecPlanFragmentParams;
 class TExecPlanFragmentResult;
 class TInsertResult;
-class TReportExecStatusArgs;
 class TReportExecStatusParams;
 class TReportExecStatusResult;
-class TCancelPlanFragmentArgs;
 class TCancelPlanFragmentResult;
-class TTransmitDataArgs;
 class TTransmitDataResult;
 class TNetworkAddress;
 class TClientRequest;

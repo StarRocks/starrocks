@@ -91,7 +91,6 @@ public class CTEPlanTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  3:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 7: v4 = 10: v1"));
         Assert.assertFalse(plan.contains("MultiCastDataSinks"));

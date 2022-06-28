@@ -1734,7 +1734,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (ctx.varType() != null) {
             return new SetVar(getVariableType(ctx.varType()), variable, expr);
         }
-        return visitChildren(ctx);
+        return new SetVar(variable, expr);
     }
 
     @Override
