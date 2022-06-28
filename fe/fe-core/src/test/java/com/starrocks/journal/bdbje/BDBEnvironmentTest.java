@@ -325,6 +325,8 @@ public class BDBEnvironmentTest {
             Assert.assertEquals(DB_INDEX_OLD, followerEnvironment.getDatabaseNames().get(0));
         }
 
+        // set retry times = 1 to ensure no recovery
+        BDBEnvironment.RETRY_TIME = 1;
         // start master will get rollback exception
         BDBEnvironment maserEnvironment = new BDBEnvironment(
                 masterPath,
