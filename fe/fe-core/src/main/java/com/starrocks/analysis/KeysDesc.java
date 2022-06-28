@@ -78,6 +78,9 @@ public class KeysDesc implements Writable {
         for (int i = 0; i < keysColumnNames.size(); ++i) {
             String name = cols.get(i).getName();
             if (!keysColumnNames.get(i).equalsIgnoreCase(name)) {
+                if (!cols.contains(keysColumnNames.get(i))) {
+                    throw new SemanticException("Key column[%s] does not exist.", keysColumnNames.get(i));
+                }
                 throw new SemanticException("Key columns should be a ordered prefix of the schema.");
             }
 
