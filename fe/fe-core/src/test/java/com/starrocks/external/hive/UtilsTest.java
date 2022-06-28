@@ -222,7 +222,7 @@ public class UtilsTest {
     }
 
     @Test
-    public void testArraySchema(Schema schema) throws DdlException {
+    public void testArraySchema() throws DdlException {
         Schema unionSchema = Schema.createUnion(Schema.create(Schema.Type.INT));
         Schema arraySchema = Schema.createArray(unionSchema);
         Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(arraySchema),
