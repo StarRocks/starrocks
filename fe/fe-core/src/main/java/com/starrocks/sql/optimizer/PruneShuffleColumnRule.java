@@ -138,25 +138,13 @@ public class PruneShuffleColumnRule implements PhysicalOperatorTreeRewriteRule {
                 return optExpression;
             }
 
-            if (canPrune(lc) && canPrune(rc)) {
+            if (lc.isShuffle() && rc.isBroadcast()) {
+                context.add(lc);
+            } else if (lc.isShuffle() && rc.isShuffle()) {
                 context.add(lc);
                 context.add(rc);
             }
             return optExpression;
-        }
-
-        private boolean canPrune(DistributionContext context) {
-            for (PhysicalDistributionOperator d : context.distributionList) {
-                if (d.getDistributionSpec().getType() != DistributionSpec.DistributionType.SHUFFLE) {
-                    return false;
-                }
-
-                HashDistributionDesc desc = ((HashDistributionSpec) d.getDistributionSpec()).getHashDistributionDesc();
-                if (!desc.isShuffle() && !desc.isShuffleEnforce()) {
-                    return false;
-                }
-            }
-            return true;
         }
 
         @Override
@@ -193,5 +181,35 @@ public class PruneShuffleColumnRule implements PhysicalOperatorTreeRewriteRule {
             this.statistics.addAll(other.statistics);
         }
 
+        private boolean isShuffle() {
+            if (distributionList.size() < 1) {
+                return false;
+            }
+
+            for (PhysicalDistributionOperator d : distributionList) {
+                if (d.getDistributionSpec().getType() != DistributionSpec.DistributionType.SHUFFLE) {
+                    return false;
+                }
+
+                HashDistributionDesc desc = ((HashDistributionSpec) d.getDistributionSpec()).getHashDistributionDesc();
+                if (!desc.isShuffle() && !desc.isShuffleEnforce()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private boolean isBroadcast() {
+            if (distributionList.size() < 1) {
+                return false;
+            }
+
+            for (PhysicalDistributionOperator d : distributionList) {
+                if (d.getDistributionSpec().getType() != DistributionSpec.DistributionType.BROADCAST) {
+                    return false;
+                }
+            }
+            return true;
+        }
     }
 }

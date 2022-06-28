@@ -1045,5 +1045,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         assertContains(plan, "STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 03\n" +
                 "    HASH_PARTITIONED: 6: v6");
+
+        sql = "select * from t0 join[shuffle] t1 on t0.v2 = t1.v5 and t0.v3 = t1.v6 " +
+                "               join[broadcast] t2 on t0.v2 = t2.v8";
+
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    HASH_PARTITIONED: 3: v3");
+
+        assertContains(plan, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    HASH_PARTITIONED: 6: v6");
     }
 }

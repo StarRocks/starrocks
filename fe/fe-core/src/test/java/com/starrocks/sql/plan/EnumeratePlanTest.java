@@ -96,24 +96,6 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
-    public void test() throws Exception {
-        String sql = "select SUM(l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity) as amount\n" +
-                "from\n" +
-                "    part,\n" +
-                "    partsupp,\n" +
-                "    lineitem\n" +
-                "where\n" +
-                "    p_partkey = cast(l_partkey as bigint)\n" +
-                "    and ps_suppkey = l_suppkey\n" +
-                "    and ps_partkey = l_partkey\n" +
-                "    and p_name like '%peru%';\n";
-
-        // @haiu du
-        String plan = getFragmentPlan(sql);
-        System.out.println(plan);
-    }
-
-    @Test
     public void testTPCHQ6EnumPlan() {
         runFileUnitTest("enumerate-plan/tpch-q6");
     }
