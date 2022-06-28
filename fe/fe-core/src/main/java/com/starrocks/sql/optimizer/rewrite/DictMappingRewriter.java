@@ -163,7 +163,8 @@ public class DictMappingRewriter {
 
         @Override
         public ScalarOperator visitCastOperator(CastOperator operator, RewriterContext context) {
-            return operator.getChild(0).accept(this, context);
+            operator.setChild(0, operator.getChild(0).accept(this, context));
+            return operator;
         }
 
         @Override

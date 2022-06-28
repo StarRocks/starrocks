@@ -580,12 +580,11 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select case when S_ADDRESS = 'key' then 1 when S_ADDRESS = '2' then 2 else 0 end from supplier";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("     dict_col=S_ADDRESS"));
-        // test case when output variable, shouldn't use low cardinality optimization
+        // test case when output variable
         sql =
                 "select case when S_ADDRESS = 'key' then 1 when S_ADDRESS = '2' then 2 else S_NATIONKEY end from supplier";
         plan = getVerboseExplain(sql);
-        System.out.println("plan = " + plan);
-//        Assert.assertFalse(plan.contains("     dict_col=S_ADDRESS"));
+        Assert.assertTrue(plan.contains("     dict_col=S_ADDRESS"));
         // test case when with common expression 1
         sql =
                 "select S_ADDRESS = 'key' , case when S_ADDRESS = 'key' then 1 when S_ADDRESS = '2' then 2 else 3 end from supplier";
@@ -606,7 +605,7 @@ public class LowCardinalityTest extends PlanTestBase {
         sql =
                 "select case when S_ADDRESS = 'key' then rand() when S_ADDRESS = '2' then 'key2' else 'key3' end from supplier";
         plan = getVerboseExplain(sql);
-//        Assert.assertFalse(plan.contains("Decode"));
+        Assert.assertTrue(plan.contains("Decode"));
     }
 
     @Test
