@@ -143,9 +143,15 @@ public class ThriftServer {
         serverThread = new Thread(new Runnable() {
             @Override
             public void run() {
-                server.serve();
+                try {
+                    server.serve();
+                } catch (Throwable t) {
+                    LOG.error("thrift server accept daemon failed, will exit", t);
+                    System.exit(-1);
+                }
             }
         });
+        serverThread.setName("thrift-server-accept");
         serverThread.setDaemon(true);
         serverThread.start();
     }
