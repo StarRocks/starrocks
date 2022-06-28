@@ -1,22 +1,24 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
 package com.starrocks.catalog.lake;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.persist.gson.GsonUtils;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.DropReplicaTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import com.google.gson.annotations.SerializedName;
-
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
@@ -50,17 +52,22 @@ public class ShardDelete extends MasterDaemon implements Writable {
             }
 
             // 2. drop tablet
+            HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
             try {
                 LakeTablet tablet = entry.getValue();
-                long backendId = ((LakeTablet) tablet).getPrimaryBackendId();
+                long backendId = tablet.getPrimaryBackendId();
                 DropReplicaTask dropTask = new DropReplicaTask(backendId, shardId, -1, true);
-                AgentBatchTask batchTask = new AgentBatchTask();
-                batchTask.addTask(dropTask);
+                AgentBatchTask batchTask = batchTaskMap.get(backendId);
+                if (batchTask == null) {
+                    batchTask = new AgentBatchTask();
+                    batchTask.addTask(dropTask);
+                }
+                batchTaskMap.put(backendId, batchTask);
             } catch (UserException e) {
                 LOG.warn("failed to get primary backendId");
-                break;
             }
 
+            GlobalStateMgr.getCurrentState().sendDropTabletTasks(batchTaskMap);
             // 3.succ both, remove from the map
             iterator.remove();
         }

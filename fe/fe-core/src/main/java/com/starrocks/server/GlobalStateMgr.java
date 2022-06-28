@@ -221,6 +221,7 @@ import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.catalog.lake.ShardDelete;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
@@ -412,6 +413,8 @@ public class GlobalStateMgr {
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
 
+    private ShardDelete shardDelete;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -571,6 +574,7 @@ public class GlobalStateMgr {
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
+        this.shardDelete = new ShardDelete();
     }
 
     public static void destroyCheckpoint() {
@@ -722,6 +726,10 @@ public class GlobalStateMgr {
 
     public MetadataMgr getMetadataMgr() {
         return metadataMgr;
+    }
+
+    public ShardDelete getShardDelete() {
+        return shardDelete;
     }
 
     @VisibleForTesting
@@ -1392,7 +1400,6 @@ public class GlobalStateMgr {
             checksum = saveInsertOverwriteJobs(dos, checksum);
             checksum = nodeMgr.saveComputeNodes(dos, checksum);
             dos.writeLong(checksum);
-            checksum = shardDelete.
         }
 
         long saveImageEndTime = System.currentTimeMillis();

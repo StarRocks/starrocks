@@ -43,7 +43,7 @@ import java.util.Map.Entry;
 /**
  * The OlapTraditional table is a materialized table which stored as rowcolumnar file or columnar file
  */
-public class MaterializedIndex extends MetaObject implements Writable, GsonPostProcessable {
+public class MaterializedIndex extends akeMetaObject implements Writable, GsonPostProcessable {
     public enum IndexState {
         NORMAL,
         @Deprecated
