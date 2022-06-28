@@ -1495,15 +1495,6 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
-    public void testAvgCountDistinctWithMultiColumns() throws Exception {
-        // expectedException.expect(StarRocksPlannerException.class);
-        // expectedException.expectMessage(
-        // "The query contains multi count distinct or sum distinct, each can't have multi columns");
-        String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal,s_nationkey) from supplier;";
-        getFragmentPlan(sql);
-    }
-
-    @Test
     public void testAvgCountDistinctWithHaving() throws Exception {
         String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal) " +
                 "from supplier having avg(distinct s_suppkey) > 3 ;";
