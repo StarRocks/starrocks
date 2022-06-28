@@ -80,6 +80,17 @@ public class StarOSAgent {
         serviceId = id;
     }
 
+    public void getServiceId() {
+        try {
+            ServiceInfo serviceInfo = client.getServiceInfo(SERVICE_NAME);
+            serviceId = serviceInfo.getServiceId();
+        } catch (StarClientException e) {
+            LOG.warn(e);
+            return;
+        }
+        LOG.info("get serviceId {} from starMgr", serviceId);
+    }
+
     public void registerAndBootstrapService() {
         try {
             client.registerService("starrocks");
@@ -105,17 +116,6 @@ public class StarOSAgent {
         }
     }
 
-    public void getServiceId() {
-        try {
-            ServiceInfo serviceInfo = client.getServiceInfo(SERVICE_NAME);
-            serviceId = serviceInfo.getServiceId();
-        } catch (StarClientException e) {
-            LOG.warn(e);
-            return;
-        }
-        LOG.info("get serviceId {} from starMgr", serviceId);
-    }
-
     public String getServiceStorageUri() {
         // TODO: get from StarMgr
         return String.format("s3://bucket/%d/", serviceId);
@@ -126,6 +126,31 @@ public class StarOSAgent {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return workerToId.get(workerIpPort);
         }
+    }
+
+    private long getWorker(String workerIpPort) throws DdlException {
+        long workerId = -1;
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            if (workerToId.containsKey(workerIpPort)) {
+                workerId = workerToId.get(workerIpPort);
+            } else {
+                // When FE && staros restart, workerToId is Empty, but staros already persisted
+                // worker infos, so we need to get workerId from starMgr
+                try {
+                    WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
+                    workerId = workerInfo.getWorkerId();
+                } catch (StarClientException e) {
+                    if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
+                        throw new DdlException("Failed to get worker id from starMgr. error: "
+                                + e.getMessage());
+                    }
+
+                    LOG.info("worker {} not exist.", workerIpPort);
+                }
+            }
+        }
+
+        return workerId;
     }
 
     public void addWorker(long backendId, String workerIpPort) {
@@ -163,31 +188,6 @@ public class StarOSAgent {
             workerToBackend.put(workerId, backendId);
             LOG.info("add worker {} success, backendId is {}", workerId, backendId);
         }
-    }
-
-    private long getWorker(String workerIpPort) throws DdlException {
-        long workerId = -1;
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            if (workerToId.containsKey(workerIpPort)) {
-                workerId = workerToId.get(workerIpPort);
-            } else {
-                // When FE && staros restart, workerToId is Empty, but staros already persisted
-                // worker infos, so we need to get workerId from starMgr
-                try {
-                    WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
-                    workerId = workerInfo.getWorkerId();
-                } catch (StarClientException e) {
-                    if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
-                        throw new DdlException("Failed to get worker id from starMgr. error: "
-                                + e.getMessage());
-                    }
-
-                    LOG.info("worker {} not exist.", workerIpPort);
-                }
-            }
-        }
-
-        return workerId;
     }
 
     public void removeWorker(String workerIpPort) throws DdlException {
