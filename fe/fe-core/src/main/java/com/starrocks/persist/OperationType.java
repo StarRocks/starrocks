@@ -243,7 +243,4 @@ public class OperationType {
     // manage compute node 10201 ~ 10220
     public static final short OP_ADD_COMPUTE_NODE = 10201;
     public static final short OP_DROP_COMPUTE_NODE = 10202;
-
-    // intergrate with starmgr
-    public static final short OP_STARMGR = 11000;
 }
