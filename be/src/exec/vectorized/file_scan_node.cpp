@@ -113,6 +113,7 @@ Status FileScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         }
         if (!_process_status.ok()) {
             // Some scanner process failed.
+            _runtime_state->set_scanner_failure();
             return _process_status;
         }
         if (_runtime_state->is_cancelled()) {

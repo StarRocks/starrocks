@@ -111,6 +111,8 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                     ctx->error_url = to_load_error_http_path(executor->runtime_state()->get_error_log_file_path());
                 }
 
+                ctx->need_pause_routine_load = executor->runtime_state()->get_scanner_failure();
+
                 if (ctx->unref()) {
                     delete ctx;
                 }
@@ -285,6 +287,7 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         rl_attach.__set_receivedBytes(ctx->receive_bytes);
         rl_attach.__set_loadedBytes(ctx->loaded_bytes);
         rl_attach.__set_loadCostMs(ctx->load_cost_nanos / 1000 / 1000);
+        rl_attach.__set_needPauseJob(ctx->need_pause_routine_load);
 
         attach->rlTaskTxnCommitAttachment = rl_attach;
         attach->__isset.rlTaskTxnCommitAttachment = true;
