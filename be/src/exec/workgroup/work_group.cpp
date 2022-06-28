@@ -39,7 +39,7 @@ WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
     if (twg.__isset.concurrency_limit) {
         _concurrency_limit = twg.concurrency_limit;
     } else {
-        _concurrency_limit = -1;
+        _concurrency_limit = 0;
     }
     if (twg.__isset.workgroup_type) {
         _type = twg.workgroup_type;
@@ -212,11 +212,21 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg) {
     _wg_metrics[wg->name()] = wg->unique_id();
 }
 
+void WorkGroup::copy_metrics(const WorkGroup& rhs) {
+    _mem_tracker->update_consumption(rhs.mem_tracker()->consumption());
+    _cpu_actual_use_ratio = rhs.get_cpu_expected_use_ratio();
+    _num_total_queries = rhs.num_total_queries();
+    _concurrency_overflow_count = rhs.concurrency_overflow_count();
+    _bigquery_count = rhs.bigquery_count();
+}
+
 void WorkGroupManager::update_metrics_unlocked() {
     for (auto& wg_metric : _wg_metrics) {
         auto wg = _workgroups.find(wg_metric.second);
         auto& name = wg_metric.first;
         if (wg != _workgroups.end()) {
+            VLOG(2) << "workgroup update_metrics " << name;
+
             _wg_cpu_limit_metrics.find(wg_metric.first)->second->set_value(wg->second->get_cpu_expected_use_ratio());
             _wg_cpu_metrics.find(wg_metric.first)->second->set_value(wg->second->get_cpu_actual_use_ratio());
             _wg_mem_limit_metrics.find(wg_metric.first)->second->set_value(wg->second->mem_limit());
@@ -226,6 +236,8 @@ void WorkGroupManager::update_metrics_unlocked() {
             _wg_concurrency_overflow_count[name]->set_value(wg->second->concurrency_overflow_count());
             _wg_bigquery_count[name]->set_value(wg->second->bigquery_count());
         } else {
+            VLOG(2) << "workgroup update_metrics " << name << ", workgroup not exists so cleanup metrics";
+
             _wg_cpu_limit_metrics[name]->set_value(0);
             _wg_cpu_metrics[name]->set_value(0);
             _wg_mem_limit_metrics[name]->set_value(0);
@@ -415,6 +427,10 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg) {
             _workgroups[old_unique_id]->mark_del();
             _workgroup_expired_versions.push_back(old_unique_id);
             LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << stale_version << ")";
+
+            // Copy metrics from old version work-group
+            auto& old_wg = _workgroups[old_unique_id];
+            wg->copy_metrics(*old_wg);
         }
     }
     // install new version
