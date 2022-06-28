@@ -61,6 +61,8 @@ public:
 
     const std::string& name() const { return _name; }
 
+    std::string to_string() const;
+
     size_t cpu_limit() const { return _cpu_limit; }
 
     int64_t vruntime_ns() const { return _vruntime_ns; }

@@ -94,6 +94,16 @@ void WorkGroup::init() {
     _scan_task_queue = std::make_unique<FifoScanTaskQueue>();
 }
 
+std::string WorkGroup::to_string() const {
+    return fmt::format(
+            "(id:{}, name:{}, version:{}, "
+            "cpu_limit:{}, mem_limit:{}, concurrency_limit:{}, "
+            "bigquery: (cpu_second_limit:{}, mem_limit:{}, scan_rows_limit:{})"
+            ")",
+            _id, _name, _version, _cpu_limit, _memory_limit_bytes, _concurrency_limit, _big_query_cpu_second_limit,
+            _big_query_mem_limit, _big_query_scan_rows_limit);
+}
+
 double WorkGroup::get_cpu_expected_use_ratio() const {
     return static_cast<double>(_cpu_limit) / WorkGroupManager::instance()->sum_cpu_limit();
 }
@@ -351,10 +361,12 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
     while (it != _workgroup_expired_versions.end()) {
         auto wg_it = _workgroups.find(*it);
         DCHECK(wg_it != _workgroups.end());
+        int128_t wg_id = *it;
         if (wg_it->second->is_removable()) {
             _sum_cpu_limit -= wg_it->second->cpu_limit();
             _workgroups.erase(wg_it);
             _workgroup_expired_versions.erase(it++);
+            LOG(INFO) << "cleanup expired workgroup version:  " << (int64_t)(wg_id >> 64) << "," << (int64_t)wg_id;
         } else {
             ++it;
         }
@@ -369,12 +381,15 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
         switch (op_type) {
         case TWorkGroupOpType::WORKGROUP_OP_CREATE:
             create_workgroup_unlocked(wg);
+            LOG(INFO) << "create workgroup " << wg->to_string();
             break;
         case TWorkGroupOpType::WORKGROUP_OP_ALTER:
             alter_workgroup_unlocked(wg);
+            LOG(INFO) << "alter workgroup " << wg->to_string();
             break;
         case TWorkGroupOpType::WORKGROUP_OP_DELETE:
             delete_workgroup_unlocked(wg);
+            LOG(INFO) << "delete workgroup " << wg->name();
             break;
         }
     }
@@ -399,10 +414,13 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg) {
         if (_workgroups.count(old_unique_id)) {
             _workgroups[old_unique_id]->mark_del();
             _workgroup_expired_versions.push_back(old_unique_id);
+            LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << stale_version << ")";
         }
     }
     // install new version
     _workgroup_versions[wg->id()] = wg->version();
+    
+    // Update metrics
     add_metrics_unlocked(wg);
 }
 
