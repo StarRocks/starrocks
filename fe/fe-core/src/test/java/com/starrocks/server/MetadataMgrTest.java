@@ -3,6 +3,7 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.DdlException;
 import com.starrocks.external.hive.HiveMetaStoreThriftClient;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;
@@ -35,7 +36,7 @@ public class MetadataMgrTest {
     }
 
     @Test
-    public void testListDbNames(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws TException {
+    public void testListDbNames(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws TException, DdlException {
         new Expectations() {
             {
                 metaStoreThriftClient.getAllDatabases();
@@ -53,7 +54,7 @@ public class MetadataMgrTest {
     }
 
     @Test
-    public void testListTblNames(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws TException {
+    public void testListTblNames(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws TException, DdlException {
         new Expectations() {
             {
                 metaStoreThriftClient.getAllTables("db2");
@@ -66,7 +67,13 @@ public class MetadataMgrTest {
 
         List<String> internalTables = metadataMgr.listTableNames("default_catalog", "default_cluster:db1");
         Assert.assertTrue(internalTables.contains("tbl1"));
-        Assert.assertTrue(metadataMgr.listTableNames("default_catalog", "default_cluster:db2").isEmpty());
+        try {
+            metadataMgr.listTableNames("default_catalog", "default_cluster:db2");
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Database default_cluster:db2 doesn't exist"));
+        }
+
 
         List<String> externalTables = metadataMgr.listTableNames("hive_catalog", "db2");
         Assert.assertTrue(externalTables.contains("tbl2"));

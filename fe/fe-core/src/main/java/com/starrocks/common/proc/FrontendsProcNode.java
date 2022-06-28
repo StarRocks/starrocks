@@ -44,7 +44,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
     private static final Logger LOG = LogManager.getLogger(FrontendsProcNode.class);
 
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("Name").add("Host").add("EditLogPort").add("HttpPort").add("QueryPort").add("RpcPort")
+            .add("Name").add("IP").add("EditLogPort").add("HttpPort").add("QueryPort").add("RpcPort")
             .add("Role").add("IsMaster").add("ClusterId").add("Join").add("Alive").add("ReplayedJournalId")
             .add("LastHeartbeat").add("IsHelper").add("ErrMsg").add("StartTime").add("Version")
             .build();
@@ -107,7 +107,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
 
             if (fe.getHost().equals(globalStateMgr.getSelfNode().first)) {
                 info.add("true");
-                info.add(Long.toString(globalStateMgr.getEditLog().getMaxJournalId()));
+                info.add(Long.toString(globalStateMgr.getMaxJournalId()));
             } else {
                 info.add(String.valueOf(fe.isAlive()));
                 info.add(Long.toString(fe.getReplayedJournalId()));

@@ -246,9 +246,9 @@ public:
         MonotonicStopWatch timer;
         timer.start();
         if (cfg.algorithm == VERTICAL_COMPACTION) {
-            int64_t max_columns_per_group = config::vertical_compaction_max_columns_per_group;
             CompactionUtils::split_column_into_groups(tablet.num_columns(), tablet.num_key_columns(),
-                                                      max_columns_per_group, &column_groups);
+                                                      config::vertical_compaction_max_columns_per_group,
+                                                      &column_groups);
             RETURN_IF_ERROR(_do_merge_vertically(tablet, version, rowsets, writer, cfg, column_groups,
                                                  &total_input_size, &total_rows, &total_chunk, &stats));
         } else {
@@ -286,14 +286,12 @@ private:
         }
 
         uint16_t order = 0;
-        for (const auto& i : rowsets) {
-            *total_input_size += i->data_disk_size();
+        for (const auto& rowset : rowsets) {
+            *total_input_size += rowset->data_disk_size();
             _entries.emplace_back(new MergeEntry<T>());
             MergeEntry<T>& entry = *_entries.back();
-            entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(i);
-            auto rowset = i.get();
-            auto beta_rowset = down_cast<BetaRowset*>(rowset);
-            auto res = beta_rowset->get_segment_iterators2(schema, tablet.data_dir()->get_meta(), version, stats);
+            entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
+            auto res = rowset->get_segment_iterators2(schema, tablet.data_dir()->get_meta(), version, stats);
             if (!res.ok()) {
                 return res.status();
             }
@@ -427,9 +425,8 @@ private:
                 _entries.emplace_back(new MergeEntry<T>());
                 MergeEntry<T>& entry = *_entries.back();
                 entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
-                auto beta_rowset = down_cast<BetaRowset*>(rowset.get());
-                auto res = beta_rowset->get_segment_iterators2(schema, tablet.data_dir()->get_meta(), version,
-                                                               &non_key_stats);
+                auto res =
+                        rowset->get_segment_iterators2(schema, tablet.data_dir()->get_meta(), version, &non_key_stats);
                 if (!res.ok()) {
                     return res.status();
                 }

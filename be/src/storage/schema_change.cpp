@@ -1506,7 +1506,6 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         writer_context.tablet_id = new_tablet->tablet_id();
         writer_context.partition_id = new_tablet->partition_id();
         writer_context.tablet_schema_hash = new_tablet->schema_hash();
-        writer_context.rowset_type = sc_params.new_tablet->tablet_meta()->preferred_rowset_type();
         writer_context.rowset_path_prefix = new_tablet->schema_hash_path();
         writer_context.tablet_schema = &new_tablet->tablet_schema();
         writer_context.rowset_state = VISIBLE;
@@ -1514,7 +1513,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         writer_context.segments_overlap = sc_params.rowsets_to_change[i]->rowset_meta()->segments_overlap();
 
         if (sc_params.sc_sorting) {
-            writer_context.write_tmp = true;
+            writer_context.schema_change_sorting = true;
         }
 
         std::unique_ptr<RowsetWriter> rowset_writer;
@@ -1726,11 +1725,6 @@ Status SchemaChangeHandler::_parse_request(
 
     if (!base_tablet->delete_predicates().empty()) {
         // there exists delete condition in header, can't do linked schema change
-        *sc_directly = true;
-    }
-
-    if (base_tablet->tablet_meta()->preferred_rowset_type() != new_tablet->tablet_meta()->preferred_rowset_type()) {
-        // If the base_tablet and new_tablet rowset types are different, just use directly type
         *sc_directly = true;
     }
 

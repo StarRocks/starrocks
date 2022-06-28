@@ -83,15 +83,8 @@ public class StatisticAutoCollector extends MasterDaemon {
             return;
         }
 
-        AnalyzeJob analyzeJob = new AnalyzeJob();
-        // all databases
-        analyzeJob.setDbId(AnalyzeJob.DEFAULT_ALL_ID);
-        analyzeJob.setTableId(AnalyzeJob.DEFAULT_ALL_ID);
-        analyzeJob.setColumns(Collections.emptyList());
-        analyzeJob.setScheduleType(ScheduleType.SCHEDULE);
-        analyzeJob.setType(AnalyzeType.SAMPLE);
-        analyzeJob.setStatus(ScheduleStatus.PENDING);
-        analyzeJob.setWorkTime(LocalDateTime.MIN);
+        AnalyzeJob analyzeJob = new AnalyzeJob(AnalyzeJob.DEFAULT_ALL_ID, AnalyzeJob.DEFAULT_ALL_ID, Collections.emptyList(),
+                AnalyzeType.SAMPLE, ScheduleType.SCHEDULE, Maps.newHashMap(), ScheduleStatus.PENDING, LocalDateTime.MIN);
 
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeJob(analyzeJob);
     }

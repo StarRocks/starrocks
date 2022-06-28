@@ -545,7 +545,6 @@ public class RestoreJob extends AbstractJob {
                                     // this partition can be added to this table, set ids
                                     Partition restorePart = resetPartitionForRestore(localOlapTbl, remoteOlapTbl,
                                             backupPartInfo.name,
-                                            db.getClusterName(),
                                             restoreReplicationNum);
                                     if (restorePart == null) {
                                         return;
@@ -799,7 +798,7 @@ public class RestoreJob extends AbstractJob {
     // reset remote partition.
     // reset all id in remote partition, but DO NOT modify any exist globalStateMgr objects.
     private Partition resetPartitionForRestore(OlapTable localTbl, OlapTable remoteTbl, String partName,
-                                               String clusterName, int restoreReplicationNum) {
+                                               int restoreReplicationNum) {
         Preconditions.checkState(localTbl.getPartition(partName) == null);
         Partition remotePart = remoteTbl.getPartition(partName);
         Preconditions.checkNotNull(remotePart);
@@ -843,7 +842,7 @@ public class RestoreJob extends AbstractJob {
                 // replicas
                 List<Long> beIds =
                         GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(restoreReplicationNum, true,
-                                true, clusterName);
+                                true);
                 if (beIds == null) {
                     status = new Status(ErrCode.COMMON_ERROR,
                             "failed to get enough backends for creating replica of tablet "

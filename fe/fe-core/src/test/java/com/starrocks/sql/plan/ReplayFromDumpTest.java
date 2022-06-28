@@ -132,6 +132,7 @@ public class ReplayFromDumpTest {
             queryDumpInfo.setSessionVariable(sessionVariable);
         }
         queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000);
+        queryDumpInfo.getSessionVariable().setCboCteReuse(false);
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
                         getExplainString(level));
@@ -174,6 +175,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds02"));
         SessionVariable replaySessionVariable = replayPair.first.getSessionVariable();
         Assert.assertEquals(replaySessionVariable.getParallelExecInstanceNum(), 4);
+        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("  |----24:EXCHANGE\n" +
                 "  |       cardinality: 73049\n" +
                 "  |    \n" +
@@ -432,8 +434,16 @@ public class ReplayFromDumpTest {
     public void testJoinReOrderPruneColumns() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null, TExplainLevel.NORMAL);
-        System.out.println(replayPair.second);
         // check without exception
         Assert.assertTrue(replayPair.second.contains("<slot 19> : 19: id_tinyint"));
+    }
+
+    @Test
+    public void testMultiViewCrossJoin() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_cross_join"), null, TExplainLevel.NORMAL);
+        // check without exception
+        Assert.assertTrue(replayPair.second.contains(" 38:Project\n" +
+                "  |  <slot 1> : 1: c_0_0"));
     }
 }

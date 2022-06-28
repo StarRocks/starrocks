@@ -28,12 +28,9 @@ import com.google.common.collect.Sets;
 import com.starrocks.alter.DecommissionBackendJob.DecommissionType;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.HeartbeatResponse.HbStatus;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
@@ -52,7 +49,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * This class extends the primary identifier of a Backend with ephemeral state,
  * eg usage information, current administrative state etc.
  */
-public class Backend implements Writable {
+public class Backend extends ComputeNode {
 
     public enum BackendState {
         using, /* backend is belong to a cluster*/
@@ -62,242 +59,61 @@ public class Backend implements Writable {
 
     private static final Logger LOG = LogManager.getLogger(Backend.class);
 
-    private long id;
-    private String host;
-    private String version;
-
-    private int heartbeatPort; // heartbeat
-    private volatile int bePort; // be
-    private volatile int httpPort; // web service
-    private volatile int beRpcPort; // be rpc port
-    private volatile int brpcPort = -1;
-    private volatile int cpuCores = 0; // Cpu cores of backend
-
-    private volatile long lastUpdateMs;
-    private volatile long lastStartTime;
-    private AtomicBoolean isAlive;
-
-    private AtomicBoolean isDecommissioned;
-    private volatile int decommissionType;
-    private volatile String ownerClusterName;
-    // to index the state in some cluster
-    private volatile int backendState;
-    // private BackendState backendState;
-
     // rootPath -> DiskInfo
     private volatile ImmutableMap<String, DiskInfo> disksRef;
-
-    private String heartbeatErrMsg = "";
 
     // This is used for the first time we init pathHashToDishInfo in SystemInfoService.
     // after init it, this variable is set to true.
     private boolean initPathInfo = false;
 
-    private long lastMissingHeartbeatTime = -1;
     // the max tablet compaction score of this backend.
     // this field is set by tablet report, and just for metric monitor, no need to persist.
     private volatile long tabletMaxCompactionScore = 0;
 
-    private int heartbeatRetryTimes = 0;
-
     // additional backendStatus information for BE, display in JSON format
     private BackendStatus backendStatus = new BackendStatus();
 
-    // port of starlet on BE
-    private volatile int starletPort;
-
     public Backend() {
-        this.host = "";
-        this.version = "";
-        this.lastUpdateMs = 0;
-        this.lastStartTime = 0;
-        this.isAlive = new AtomicBoolean();
-        this.isDecommissioned = new AtomicBoolean(false);
+        setHost("");
+        setVersion("");
+        setLastUpdateMs(0);
+        setLastStartTime(0);
+        setIsAlive(new AtomicBoolean());
+        setIsDecommissioned(new AtomicBoolean(false));
 
-        this.bePort = 0;
-        this.httpPort = 0;
-        this.beRpcPort = 0;
-        this.starletPort = 0;
+        setBePort(0);
+        setHttpPort(0);
+        setBeRpcPort(0);
         this.disksRef = ImmutableMap.of();
 
-        this.ownerClusterName = "";
-        this.backendState = BackendState.free.ordinal();
+        setOwnerClusterName("");
+        setBackendState(BackendState.free.ordinal());
 
-        this.decommissionType = DecommissionType.SystemDecommission.ordinal();
+        setDecommissionType(DecommissionType.SystemDecommission.ordinal());
     }
 
     public Backend(long id, String host, int heartbeatPort) {
-        this.id = id;
-        this.host = host;
-        this.version = "";
-        this.heartbeatPort = heartbeatPort;
-        this.bePort = -1;
-        this.httpPort = -1;
-        this.beRpcPort = -1;
-        this.lastUpdateMs = -1L;
-        this.lastStartTime = -1L;
+        setId(id);
+        setHost(host);
+        setVersion("");
+        setHeartbeatPort(heartbeatPort);
+        setBePort(-1);
+        setHttpPort(-1);
+        setBeRpcPort(-1);
+        setLastUpdateMs(-1L);
+        setLastStartTime(-1L);
         this.disksRef = ImmutableMap.of();
 
-        this.isAlive = new AtomicBoolean(false);
-        this.isDecommissioned = new AtomicBoolean(false);
+        setIsAlive(new AtomicBoolean(false));
+        setIsDecommissioned(new AtomicBoolean(false));
 
-        this.ownerClusterName = "";
-        this.backendState = BackendState.free.ordinal();
-        this.decommissionType = DecommissionType.SystemDecommission.ordinal();
-    }
-
-    public long getId() {
-        return id;
-    }
-
-    public String getHost() {
-        return host;
-    }
-
-    public String getVersion() {
-        return version;
-    }
-
-    public int getBePort() {
-        return bePort;
-    }
-
-    public int getHeartbeatPort() {
-        return heartbeatPort;
-    }
-
-    public int getHttpPort() {
-        return httpPort;
-    }
-
-    public int getBeRpcPort() {
-        return beRpcPort;
-    }
-
-    public int getBrpcPort() {
-        return brpcPort;
-    }
-
-    public int getStarletPort() {
-        return starletPort;
-    }
-
-    public String getHeartbeatErrMsg() {
-        return heartbeatErrMsg;
-    }
-
-    // for test only
-    public void updateOnce(int bePort, int httpPort, int beRpcPort) {
-        if (this.bePort != bePort) {
-            this.bePort = bePort;
-        }
-
-        if (this.httpPort != httpPort) {
-            this.httpPort = httpPort;
-        }
-
-        if (this.beRpcPort != beRpcPort) {
-            this.beRpcPort = beRpcPort;
-        }
-
-        long currentTime = System.currentTimeMillis();
-        this.lastUpdateMs = currentTime;
-        if (!isAlive.get()) {
-            this.lastStartTime = currentTime;
-            LOG.info("{} is alive,", this.toString());
-            this.isAlive.set(true);
-        }
-
-        heartbeatErrMsg = "";
-    }
-
-    // for test only
-    public void setStarletPort(int starletPort) {
-        this.starletPort = starletPort;
-    }
-
-    public boolean setDecommissioned(boolean isDecommissioned) {
-        if (this.isDecommissioned.compareAndSet(!isDecommissioned, isDecommissioned)) {
-            LOG.warn("{} set decommission: {}", this.toString(), isDecommissioned);
-            return true;
-        }
-        return false;
-    }
-
-    public void setId(long id) {
-        this.id = id;
-    }
-
-    public void setHost(String host) {
-        this.host = host;
-    }
-
-    public void setBackendState(BackendState state) {
-        this.backendState = state.ordinal();
-    }
-
-    public void setAlive(boolean isAlive) {
-        this.isAlive.set(isAlive);
-    }
-
-    public void setBePort(int agentPort) {
-        this.bePort = agentPort;
-    }
-
-    public void setHttpPort(int httpPort) {
-        this.httpPort = httpPort;
-    }
-
-    public void setBeRpcPort(int beRpcPort) {
-        this.beRpcPort = beRpcPort;
-    }
-
-    public void setBrpcPort(int brpcPort) {
-        this.brpcPort = brpcPort;
-    }
-
-    public void setHeartbeatPort(int heartbeatPort) {
-        this.heartbeatPort = heartbeatPort;
-    }
-
-    public long getLastUpdateMs() {
-        return this.lastUpdateMs;
-    }
-
-    public void setLastUpdateMs(long currentTime) {
-        this.lastUpdateMs = currentTime;
-    }
-
-    public long getLastStartTime() {
-        return this.lastStartTime;
-    }
-
-    public void setLastStartTime(long currentTime) {
-        this.lastStartTime = currentTime;
-    }
-
-    public long getLastMissingHeartbeatTime() {
-        return lastMissingHeartbeatTime;
-    }
-
-    public boolean isAlive() {
-        return this.isAlive.get();
-    }
-
-    public boolean isDecommissioned() {
-        return this.isDecommissioned.get();
-    }
-
-    public boolean isAvailable() {
-        return this.isAlive.get() && !this.isDecommissioned.get();
+        setOwnerClusterName("");
+        setBackendState(BackendState.free.ordinal());
+        setDecommissionType(DecommissionType.SystemDecommission.ordinal());
     }
 
     public void setDisks(ImmutableMap<String, DiskInfo> disks) {
         this.disksRef = disks;
-    }
-
-    public BackendStatus getBackendStatus() {
-        return backendStatus;
     }
 
     public ImmutableMap<String, DiskInfo> getDisks() {
@@ -446,7 +262,7 @@ public class Backend implements Writable {
                 diskInfo = new DiskInfo(rootPath);
                 addedDisks.add(diskInfo);
                 isChanged = true;
-                LOG.info("add new disk info. backendId: {}, rootPath: {}", id, rootPath);
+                LOG.info("add new disk info. backendId: {}, rootPath: {}", getId(), rootPath);
             }
             newDiskInfos.put(rootPath, diskInfo);
 
@@ -470,7 +286,7 @@ public class Backend implements Writable {
                     isChanged = true;
                 }
             }
-            LOG.debug("update disk info. backendId: {}, diskInfo: {}", id, diskInfo.toString());
+            LOG.debug("update disk info. backendId: {}, diskInfo: {}", getId(), diskInfo.toString());
         }
 
         // remove not exist rootPath in backend
@@ -479,7 +295,7 @@ public class Backend implements Writable {
             if (!backendDisks.containsKey(rootPath)) {
                 removedDisks.add(diskInfo);
                 isChanged = true;
-                LOG.warn("remove not exist rootPath. backendId: {}, rootPath: {}", id, rootPath);
+                LOG.warn("remove not exist rootPath. backendId: {}, rootPath: {}", getId(), rootPath);
             }
         }
 
@@ -492,6 +308,10 @@ public class Backend implements Writable {
         }
     }
 
+    public BackendStatus getBackendStatus() {
+        return backendStatus;
+    }
+
     public static Backend read(DataInput in) throws IOException {
         Backend backend = new Backend();
         backend.readFields(in);
@@ -500,17 +320,17 @@ public class Backend implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        out.writeLong(id);
-        Text.writeString(out, host);
-        out.writeInt(heartbeatPort);
-        out.writeInt(bePort);
-        out.writeInt(httpPort);
-        out.writeInt(beRpcPort);
-        out.writeBoolean(isAlive.get());
-        out.writeBoolean(isDecommissioned.get());
-        out.writeLong(lastUpdateMs);
+        out.writeLong(getId());
+        Text.writeString(out, getHost());
+        out.writeInt(getHeartbeatPort());
+        out.writeInt(getBePort());
+        out.writeInt(getHttpPort());
+        out.writeInt(getBeRpcPort());
+        out.writeBoolean(getIsAlive().get());
+        out.writeBoolean(getIsDecommissioned().get());
+        out.writeLong(getLastUpdateMs());
 
-        out.writeLong(lastStartTime);
+        out.writeLong(getLastStartTime());
 
         ImmutableMap<String, DiskInfo> disks = disksRef;
         out.writeInt(disks.size());
@@ -519,32 +339,32 @@ public class Backend implements Writable {
             entry.getValue().write(out);
         }
 
-        Text.writeString(out, ownerClusterName);
-        out.writeInt(backendState);
-        out.writeInt(decommissionType);
+        Text.writeString(out, getOwnerClusterName());
+        out.writeInt(getBackendState().ordinal());
+        out.writeInt(getDecommissionType().ordinal());
 
-        out.writeInt(brpcPort);
+        out.writeInt(getBrpcPort());
     }
 
     public void readFields(DataInput in) throws IOException {
-        id = in.readLong();
-        host = Text.readString(in);
-        heartbeatPort = in.readInt();
-        bePort = in.readInt();
-        httpPort = in.readInt();
+        setId(in.readLong());
+        setHost(Text.readString(in));
+        setHeartbeatPort(in.readInt());
+        setBePort(in.readInt());
+        setHttpPort(in.readInt());
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_31) {
-            beRpcPort = in.readInt();
+            setBeRpcPort(in.readInt());
         }
-        isAlive.set(in.readBoolean());
+        setAlive(in.readBoolean());
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= 5) {
-            isDecommissioned.set(in.readBoolean());
+            setDecommissioned(in.readBoolean());
         }
 
-        lastUpdateMs = in.readLong();
+        setLastUpdateMs(in.readLong());
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= 2) {
-            lastStartTime = in.readLong();
+            setLastStartTime(in.readLong());
 
             Map<String, DiskInfo> disks = Maps.newHashMap();
             int size = in.readInt();
@@ -557,17 +377,17 @@ public class Backend implements Writable {
             disksRef = ImmutableMap.copyOf(disks);
         }
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
-            ownerClusterName = Text.readString(in);
-            backendState = in.readInt();
-            decommissionType = in.readInt();
+            setOwnerClusterName(Text.readString(in));
+            setBackendState(in.readInt());
+            setDecommissionType(in.readInt());
         } else {
-            ownerClusterName = SystemInfoService.DEFAULT_CLUSTER;
-            backendState = BackendState.using.ordinal();
-            decommissionType = DecommissionType.SystemDecommission.ordinal();
+            setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
+            setBackendState(BackendState.using.ordinal());
+            setDecommissionType(DecommissionType.SystemDecommission.ordinal());
         }
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_40) {
-            brpcPort = in.readInt();
+            setBrpcPort(in.readInt());
         }
     }
 
@@ -582,115 +402,15 @@ public class Backend implements Writable {
 
         Backend backend = (Backend) obj;
 
-        return (id == backend.id) && (host.equals(backend.host)) && (heartbeatPort == backend.heartbeatPort)
-                && (bePort == backend.bePort) && (isAlive.get() == backend.isAlive.get());
+        return (getId() == backend.getId()) && (getHost().equals(backend.getHost()))
+                && (getHeartbeatPort() == backend.getHeartbeatPort())
+                && (getBePort() == backend.getBePort()) && (getIsAlive().get() == backend.getIsAlive().get());
     }
 
     @Override
     public String toString() {
-        return "Backend [id=" + id + ", host=" + host + ", heartbeatPort=" + heartbeatPort + ", alive=" +
-                isAlive.get() + "]";
-    }
-
-    public String getOwnerClusterName() {
-        return ownerClusterName;
-    }
-
-    public void setOwnerClusterName(String name) {
-        ownerClusterName = name;
-    }
-
-    public void clearClusterName() {
-        ownerClusterName = "";
-    }
-
-    public BackendState getBackendState() {
-        switch (backendState) {
-            case 0:
-                return BackendState.using;
-            case 1:
-                return BackendState.offline;
-            default:
-                return BackendState.free;
-        }
-    }
-
-    public void setDecommissionType(DecommissionType type) {
-        decommissionType = type.ordinal();
-    }
-
-    public DecommissionType getDecommissionType() {
-        if (decommissionType == DecommissionType.ClusterDecommission.ordinal()) {
-            return DecommissionType.ClusterDecommission;
-        }
-        return DecommissionType.SystemDecommission;
-    }
-
-    /**
-     * handle Backend's heartbeat response.
-     * return true if any port changed, or alive state is changed.
-     */
-    public boolean handleHbResponse(BackendHbResponse hbResponse) {
-        boolean isChanged = false;
-        if (hbResponse.getStatus() == HbStatus.OK) {
-            if (!this.version.equals(hbResponse.getVersion())) {
-                isChanged = true;
-                this.version = hbResponse.getVersion();
-            }
-
-            if (this.bePort != hbResponse.getBePort()) {
-                isChanged = true;
-                this.bePort = hbResponse.getBePort();
-            }
-
-            if (this.httpPort != hbResponse.getHttpPort()) {
-                isChanged = true;
-                this.httpPort = hbResponse.getHttpPort();
-            }
-
-            if (this.brpcPort != hbResponse.getBrpcPort()) {
-                isChanged = true;
-                this.brpcPort = hbResponse.getBrpcPort();
-            }
-
-            if (Config.integrate_starmgr && this.starletPort != hbResponse.getStarletPort()) {
-                isChanged = true;
-                this.starletPort = hbResponse.getStarletPort();
-            }
-
-            this.lastUpdateMs = hbResponse.getHbTime();
-            if (!isAlive.get()) {
-                isChanged = true;
-                this.lastStartTime = hbResponse.getHbTime();
-                LOG.info("{} is alive, last start time: {}", this.toString(), hbResponse.getHbTime());
-                this.isAlive.set(true);
-            } else if (this.lastStartTime <= 0) {
-                this.lastStartTime = hbResponse.getHbTime();
-            }
-
-            if (this.cpuCores != hbResponse.getCpuCores()) {
-                isChanged = true;
-                this.cpuCores = hbResponse.getCpuCores();
-                BackendCoreStat.setNumOfHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
-            }
-
-            heartbeatErrMsg = "";
-            this.heartbeatRetryTimes = 0;
-        } else {
-            if (this.heartbeatRetryTimes < Config.heartbeat_retry_times) {
-                this.heartbeatRetryTimes++;
-            } else {
-                if (isAlive.compareAndSet(true, false)) {
-                    isChanged = true;
-                    LOG.info("{} is dead,", this.toString());
-                }
-
-                heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
-                lastMissingHeartbeatTime = System.currentTimeMillis();
-            }
-        }
-
-        return isChanged;
+        return "Backend [id=" + getId() + ", host=" + getHost() + ", heartbeatPort=" + getHeartbeatPort()
+                + ", alive=" + getIsAlive().get() + "]";
     }
 
     public void setTabletMaxCompactionScore(long compactionScore) {
@@ -706,7 +426,7 @@ public class Backend implements Writable {
     }
 
     public int getAvailableBackendStorageTypeCnt() {
-        if (!this.isAlive.get()) {
+        if (!getIsAlive().get()) {
             return 0;
         }
         ImmutableMap<String, DiskInfo> disks = this.getDisks();

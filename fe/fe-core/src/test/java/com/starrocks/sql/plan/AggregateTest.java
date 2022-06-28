@@ -686,8 +686,12 @@ public class AggregateTest extends PlanTestBase {
         Assert.assertTrue(explainString.contains("multi_distinct_count(1: k1)"));
 
         queryStr = "select count(distinct k1, k2),  count(distinct k4) from baseall group by k3";
-        starRocksAssert.query(queryStr).analysisError(
-                "The query contains multi count distinct or sum distinct, each can't have multi columns.");
+        explainString = getFragmentPlan(queryStr);
+        Assert.assertTrue(explainString.contains("13:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 16: k3 <=> 17: k3"));
     }
 
     @Test
@@ -1315,7 +1319,8 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 12> : 12: count\n" +
                 "  |  <slot 13> : 13: sum");
 
-        sql = "select avg(distinct t1b + 1), count(distinct t1b+1), sum(distinct t1b + 1), count(t1b) from test_all_type";
+        sql =
+                "select avg(distinct t1b + 1), count(distinct t1b+1), sum(distinct t1b + 1), count(t1b) from test_all_type";
         plan = getFragmentPlan(sql);
         assertContains(plan, " 27:Project\n" +
                 "  |  <slot 12> : CAST(14: sum AS DOUBLE) / CAST(13: count AS DOUBLE)\n" +
@@ -1323,7 +1328,8 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 14> : 14: sum\n" +
                 "  |  <slot 15> : 15: count");
 
-        sql = "select avg(distinct t1b + 1), count(distinct t1b), sum(distinct t1c), count(t1c), sum(t1c) from test_all_type";
+        sql =
+                "select avg(distinct t1b + 1), count(distinct t1b), sum(distinct t1c), count(t1c), sum(t1c) from test_all_type";
         plan = getFragmentPlan(sql);
         assertContains(plan, "47:Project\n" +
                 "  |  <slot 12> : CAST(19: sum AS DOUBLE) / CAST(21: count AS DOUBLE)\n" +
@@ -1331,6 +1337,102 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 14> : 14: sum\n" +
                 "  |  <slot 15> : 15: count\n" +
                 "  |  <slot 16> : 16: sum");
+
+        sql = "select avg(distinct 1), count(distinct null), count(distinct 1) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "15:AGGREGATE (update serialize)\n" +
+                "  |  output: multi_distinct_sum(1)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  14:Project\n" +
+                "  |  <slot 17> : 2: t1b\n" +
+                "  |  ");
+
+        sql =
+                "select avg(distinct 1), count(distinct null), count(distinct 1), count(distinct (t1a + t1c)), sum(t1c) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 4:AGGREGATE (update serialize)\n" +
+                "  |  output: multi_distinct_sum(1)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  3:Project\n" +
+                "  |  <slot 21> : 3: t1c");
+        assertContains(plan, " 9:AGGREGATE (update serialize)\n" +
+                "  |  output: multi_distinct_count(NULL)");
+        connectContext.getSessionVariable().setCboCteReuse(false);
+    }
+
+    @Test
+    public void testMultiDistinctAggregate() throws Exception {
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        String sql =  "select count(distinct t1b), count(distinct t1b, t1c) from test_all_type";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 09\n" +
+                "    RANDOM");
+        assertContains(plan, "18:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.");
+
+        sql =  "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 13:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 15: t1a <=> 13: t1a");
+
+        sql =  "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a,t1b,t1c";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "13:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 13: t1a <=> 16: t1a\n" +
+                "  |  equal join conjunct: 14: t1b <=> 17: t1b\n" +
+                "  |  equal join conjunct: 15: t1c <=> 18: t1c");
+
+        sql =  "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "13:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 20: t1c <=> 15: t1c");
+        assertContains(plan, "21:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 15: t1c <=> 17: t1c");
+
+        sql =  "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  <slot 3> : 3: t1c\n" +
+                "  |  <slot 11> : CAST(2: t1b AS INT) + 1");
+        assertContains(plan, "22:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 16: t1c <=> 19: t1c\n" +
+                "  |  equal join conjunct: 17: expr <=> 20: expr");
+
+        sql =  "select avg(distinct t1b) as cn_t1b, sum(t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: sum(26: t1b)\n" +
+                "  |  group by: 27: t1c, 28: expr\n" +
+                "  |  \n" +
+                "  3:Project\n" +
+                "  |  <slot 26> : 2: t1b\n" +
+                "  |  <slot 27> : 3: t1c\n" +
+                "  |  <slot 28> : 11: expr");
         connectContext.getSessionVariable().setCboCteReuse(false);
     }
 
@@ -1405,8 +1507,19 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testAvgCountDistinctWithMultiColumns() throws Exception {
         expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage("The query contains multi count distinct or sum distinct, each can't have multi columns");
+        expectedException.expectMessage(
+                "The query contains multi count distinct or sum distinct, each can't have multi columns");
         String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal,s_nationkey) from supplier;";
         getFragmentPlan(sql);
+    }
+
+    @Test
+    public void testAvgCountDistinctWithHaving() throws Exception {
+        String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal) " +
+                "from supplier having avg(distinct s_suppkey) > 3 ;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  16:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0");
     }
 }

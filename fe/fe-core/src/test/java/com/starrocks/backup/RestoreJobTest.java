@@ -159,7 +159,7 @@ public class RestoreJobTest {
 
         new Expectations() {
             {
-                systemInfoService.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, anyString);
+                systemInfoService.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean);
                 minTimes = 0;
                 result = new Delegate() {
                     public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAlive,

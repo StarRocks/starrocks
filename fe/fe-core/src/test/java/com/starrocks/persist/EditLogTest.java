@@ -36,7 +36,7 @@ public class EditLogTest {
             allThreads.add(new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    EditLog editLog = new EditLog(null, logQueue);
+                    EditLog editLog = new EditLog(logQueue);
                     editLog.logEdit(n, new Text("111"));
                 }
             }));
@@ -74,7 +74,7 @@ public class EditLogTest {
         Thread t1 = new Thread(new Runnable() {
             @Override
             public void run() {
-                EditLog editLog = new EditLog(null, journalQueue);
+                EditLog editLog = new EditLog(journalQueue);
                 editLog.logEdit((short) 1, new Text("111"));
             }
         });
@@ -90,7 +90,7 @@ public class EditLogTest {
         Thread t2 = new Thread(new Runnable() {
             @Override
             public void run() {
-                EditLog editLog = new EditLog(null, journalQueue);
+                EditLog editLog = new EditLog(journalQueue);
                 editLog.logEdit((short) 2, new Text("222"));
             }
         });

@@ -14,6 +14,8 @@
 #include "common/status.h"
 #include "exprs/vectorized/jsonpath.h"
 #include "glog/logging.h"
+#include "gutil/strings/escaping.h"
+#include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "udf/udf.h"
 #include "util/json.h"
@@ -219,6 +221,21 @@ ColumnPtr JsonFunctions::get_json_string(FunctionContext* context, const Columns
     auto paths = columns[1];
 
     jsons = json_query(context, Columns{jsons, paths});
+    return _json_string_unescaped(context, Columns{jsons});
+}
+
+ColumnPtr JsonFunctions::get_native_json_int(FunctionContext* context, const Columns& columns) {
+    auto jsons = json_query(context, columns);
+    return _json_int(context, Columns{jsons});
+}
+
+ColumnPtr JsonFunctions::get_native_json_double(FunctionContext* context, const Columns& columns) {
+    auto jsons = json_query(context, columns);
+    return _json_double(context, Columns{jsons});
+}
+
+ColumnPtr JsonFunctions::get_native_json_string(FunctionContext* context, const Columns& columns) {
+    auto jsons = json_query(context, columns);
     return json_string(context, Columns{jsons});
 }
 
@@ -322,6 +339,44 @@ ColumnPtr JsonFunctions::_string_json(FunctionContext* context, const Columns& c
             } else {
                 result.append(std::move(json_value));
             }
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr JsonFunctions::_json_string_unescaped(FunctionContext* context, const Columns& columns) {
+    ColumnViewer<TYPE_JSON> viewer(columns[0]);
+    ColumnBuilder<TYPE_VARCHAR> result(columns[0]->size());
+
+    for (int row = 0; row < columns[0]->size(); row++) {
+        if (viewer.is_null(row)) {
+            result.append_null();
+        } else {
+            JsonValue* json = viewer.value(row);
+            auto json_str = json->to_string();
+            if (!json_str.ok()) {
+                result.append_null();
+                continue;
+            }
+            auto str = json_str.value();
+
+            // Since the string extract from json may be escaped, unescaping is needed.
+            // The src and dest of strings::CUnescape could be the same.
+            if (!strings::CUnescape(StringPiece{str}, &str, nullptr)) {
+                result.append_null();
+                continue;
+            }
+
+            if (str.length() < 2) {
+                result.append(std::move(str));
+                continue;
+            }
+
+            // Try to trim the first/last quote.
+            if (str[0] == '"') str = str.substr(1, str.size() - 1);
+            if (str[str.size() - 1] == '"') str = str.substr(0, str.size() - 1);
+
+            result.append(std::move(str));
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));

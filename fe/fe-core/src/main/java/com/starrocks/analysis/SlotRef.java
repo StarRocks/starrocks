@@ -79,11 +79,10 @@ public class SlotRef extends Expr {
     public SlotRef(SlotDescriptor desc) {
         super();
         this.tblName = null;
-        this.col = null;
+        this.col = desc.getLabel();
         this.desc = desc;
         this.type = desc.getType();
         this.originType = desc.getOriginType();
-        // TODO(zc): label is meaningful
         this.label = null;
         if (this.type.isChar()) {
             this.type = Type.VARCHAR;
@@ -129,8 +128,6 @@ public class SlotRef extends Expr {
         }
     }
 
-    // NOTE: this is used to set tblName to null,
-    // so we can to get the only column name when calling toSql
     public void setTblName(TableName name) {
         this.tblName = name;
     }
@@ -250,8 +247,14 @@ public class SlotRef extends Expr {
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.SLOT_REF;
         if (desc != null) {
-            msg.slot_ref = new TSlotRef(desc.getId().asInt(), desc.getParent().getId().asInt());
+            if (desc.getParent() != null) {
+                msg.slot_ref = new TSlotRef(desc.getId().asInt(), desc.getParent().getId().asInt());
+            } else {
+                // tuple id is meaningless here
+                msg.slot_ref = new TSlotRef(desc.getId().asInt(), 0);
+            }
         } else {
+            // slot id and tuple id are meaningless here
             msg.slot_ref = new TSlotRef(0,0);
         }
 
@@ -341,6 +344,10 @@ public class SlotRef extends Expr {
 
     public String getColumnName() {
         return col;
+    }
+
+    public void setColumnName(String columnName) {
+        this.col = columnName;
     }
 
     public void setCol(String col) {

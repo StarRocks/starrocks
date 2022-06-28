@@ -375,6 +375,37 @@ public class CTEPlanTest extends PlanTestBase {
                 "  ) t1";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  33:Project\n" +
-                "  |  <slot 12> : CAST((7: expr) AND (CASE WHEN (16: countRows IS NULL) OR (16: countRows = 0) THEN FALSE WHEN CAST(CAST(1: v4 AS FLOAT) AS DOUBLE) IS NULL THEN NULL WHEN 14: cast IS NOT NULL THEN TRUE WHEN 17: countNulls < 16: countRows THEN NULL ELSE FALSE END) AS INT)\n");
+                "  |  <slot 12> : CAST((7: expr) AND (CASE WHEN (16: countRows IS NULL) OR (16: countRows = 0) THEN FALSE WHEN CAST(CAST(1: v4 AS FLOAT) AS DOUBLE) IS NULL THEN NULL WHEN 14: cast IS NOT NULL THEN TRUE WHEN 17: countNotNulls < 16: countRows THEN NULL ELSE FALSE END) AS INT)\n");
+    }
+
+    @Test
+    public void testEmptyPredicate() throws Exception {
+        String sql = "WITH w_t0 as (SELECT * FROM t0) \n" +
+                "SELECT v1, v2, v3 FROM  w_t0 x0 where false union select v1, v2, v3 from w_t0 x1 where abs(1) = 2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  2:AGGREGATE (update finalize)");
+    }
+
+    @Test
+    public void testEmptyCTE() throws Exception {
+        String sql = "WITH w_t0 as (SELECT * FROM t0), " +
+                "          w_t1 as (select * from t1)\n" +
+                "SELECT v1, v2, v3 FROM  w_t0 x0 where false " +
+                "union " +
+                "select v1, v2, v3 from w_t0 x1 where abs(1) = 2 " +
+                "union " +
+                "select v4, v5, v6 from w_t1 x2 where 1 > 2 " +
+                "union " +
+                "select v4, v5, v6 from w_t1 x2 where not null ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  2:AGGREGATE (update finalize)\n");
     }
 }

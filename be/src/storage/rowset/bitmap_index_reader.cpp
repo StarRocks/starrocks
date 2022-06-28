@@ -53,7 +53,7 @@ StatusOr<bool> BitmapIndexReader::load(FileSystem* fs, const std::string& filena
         }
         if (curr_state == kLoading) {
             int r = bthread::futex_wait_private(&_state, curr_state, nullptr);
-            PLOG_IF(ERROR, r != 0) << " bthread::futex_wait_private";
+            PLOG_IF(ERROR, r != 0 && errno != EAGAIN) << " bthread::futex_wait_private";
         }
     }
 }

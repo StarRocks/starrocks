@@ -10,7 +10,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/primary_key_encoder.h"
-#include "storage/rowset/beta_rowset.h"
+#include "storage/rowset/rowset.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
@@ -657,7 +657,10 @@ public:
             const auto& key = fkeys[replace_idxes[i]];
             const auto v = values[replace_idxes[i]];
             uint64_t hash = FixedKeyHash<KeySize>()(key);
-            _map.emplace_with_hash(hash, key, v);
+            auto p = _map.emplace_with_hash(hash, key, v);
+            if (!p.second) {
+                p.first->second = v;
+            }
         }
         return Status::OK();
     }
@@ -1160,9 +1163,7 @@ Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetShared
     auto chunk = chunk_shared_ptr.get();
     for (auto& rowset : rowsets) {
         RowsetReleaseGuard guard(rowset);
-        auto beta_rowset = down_cast<BetaRowset*>(rowset.get());
-        auto res =
-                beta_rowset->get_segment_iterators2(pkey_schema, tablet->data_dir()->get_meta(), apply_version, &stats);
+        auto res = rowset->get_segment_iterators2(pkey_schema, tablet->data_dir()->get_meta(), apply_version, &stats);
         if (!res.ok()) {
             return res.status();
         }
@@ -1538,7 +1539,7 @@ Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue
     uint32_t rowid_start = (uint32_t)(values[0] & 0xFFFFFFFF);
     std::vector<size_t> replace_idxes;
     for (size_t i = 0; i < n; ++i) {
-        if (values[i] != NullIndexValue && ((uint32_t)(found_values[i] >> 32)) == src_rssid[i]) {
+        if (found_values[i] != NullIndexValue && ((uint32_t)(found_values[i] >> 32)) == src_rssid[i]) {
             replace_idxes.emplace_back(i);
         } else {
             failed->emplace_back(rowid_start + i);

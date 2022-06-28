@@ -83,6 +83,11 @@ public class ExpressionAnalyzer {
         bottomUpAnalyze(visitor, expression, scope);
     }
 
+    public void analyzeIgnoreSlot(Expr expression, AnalyzeState analyzeState, Scope scope) {
+        IgnoreSlotVisitor visitor = new IgnoreSlotVisitor(analyzeState, session);
+        bottomUpAnalyze(visitor, expression, scope);
+    }
+
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
         for (Expr expr : expression.getChildren()) {
             bottomUpAnalyze(visitor, expr, scope);
@@ -91,7 +96,7 @@ public class ExpressionAnalyzer {
         visitor.visit(expression, scope);
     }
 
-    private class Visitor extends AstVisitor<Void, Scope> {
+    static class Visitor extends AstVisitor<Void, Scope> {
         private final AnalyzeState analyzeState;
         private final ConnectContext session;
 
@@ -855,9 +860,26 @@ public class ExpressionAnalyzer {
         }
     }
 
+    static class IgnoreSlotVisitor extends Visitor {
+        public IgnoreSlotVisitor(AnalyzeState analyzeState, ConnectContext session) {
+            super(analyzeState, session);
+        }
+
+        @Override
+        public Void visitSlot(SlotRef node, Scope scope) {
+            return null;
+        }
+    }
+
     public static void analyzeExpression(Expr expression, AnalyzeState state, Scope scope, ConnectContext session) {
         ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
         expressionAnalyzer.analyze(expression, state, scope);
+    }
+
+    public static void analyzeExpressionIgnoreSlot(Expr expression, ConnectContext session) {
+        ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
+        expressionAnalyzer.analyzeIgnoreSlot(expression, new AnalyzeState(),
+                new Scope(RelationId.anonymous(), new RelationFields()));
     }
 
 }

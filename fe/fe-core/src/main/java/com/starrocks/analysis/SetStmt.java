@@ -17,8 +17,9 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 
@@ -47,11 +48,14 @@ public class SetStmt extends StatementBase {
 
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
+    }
+
+    public void analyze()  {
         if (setVars == null || setVars.isEmpty()) {
-            throw new AnalysisException("Empty set statement.");
+            throw new SemanticException("Empty set statement.");
         }
         for (SetVar var : setVars) {
-            var.analyze(analyzer);
+            var.analyze();
         }
     }
 
@@ -88,6 +92,16 @@ public class SetStmt extends StatementBase {
             }
         }
         return RedirectStatus.NO_FORWARD;
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitSetStatement(this, context);
     }
 }
 

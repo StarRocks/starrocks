@@ -44,7 +44,7 @@ public class ShowVariablesStmt extends ShowStmt {
                     .build();
 
     private SetType type;
-    private String pattern;
+    private final String pattern;
     private Expr where;
 
     public ShowVariablesStmt(SetType type, String pattern) {
@@ -132,5 +132,10 @@ public class ShowVariablesStmt extends ShowStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowVariablesStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

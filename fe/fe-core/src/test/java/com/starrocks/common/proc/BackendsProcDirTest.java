@@ -32,6 +32,7 @@ import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class BackendsProcDirTest {
@@ -121,14 +122,6 @@ public class BackendsProcDirTest {
         // systemInfoService = null;
     }
 
-    @Test
-    public void testRegister() {
-        BackendsProcDir dir;
-
-        dir = new BackendsProcDir(systemInfoService);
-        Assert.assertFalse(dir.register("100000", new BaseProcDir()));
-    }
-
     @Test(expected = AnalysisException.class)
     public void testLookupNormal() throws AnalysisException {
         BackendsProcDir dir;
@@ -188,4 +181,8 @@ public class BackendsProcDirTest {
         Assert.assertTrue(result instanceof BaseProcResult);
     }
 
+    @Test    
+    public void testIPTitle() {
+        Assert.assertTrue(BackendsProcDir.TITLE_NAMES.get(2).equals("IP"));
+    }
 }

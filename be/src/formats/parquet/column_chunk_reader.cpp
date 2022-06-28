@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "exec/vectorized/hdfs_scanner.h"
+#include "formats/parquet/column_reader.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/encoding_dict.h"
 #include "formats/parquet/page_reader.h"
@@ -17,44 +18,13 @@
 
 namespace starrocks::parquet {
 
-class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
-public:
-    explicit CountedSeekableInputStream(std::shared_ptr<io::SeekableInputStream> stream,
-                                        vectorized::HdfsScanStats* stats)
-            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(stream), _stats(stats) {}
-
-    ~CountedSeekableInputStream() override = default;
-
-    StatusOr<int64_t> read(void* data, int64_t size) override {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
-        ASSIGN_OR_RETURN(auto nread, _stream->read(data, size));
-        _stats->bytes_read += nread;
-        return nread;
-    }
-
-    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) override {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
-        ASSIGN_OR_RETURN(auto nread, _stream->read_at(offset, data, size));
-        _stats->bytes_read += nread;
-        return nread;
-    }
-
-private:
-    std::shared_ptr<io::SeekableInputStream> _stream;
-    vectorized::HdfsScanStats* _stats;
-};
-
 ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_level, int32_t type_length,
-                                     const tparquet::ColumnChunk* column_chunk, RandomAccessFile* file,
-                                     const ColumnChunkReaderOptions& opts)
+                                     const tparquet::ColumnChunk* column_chunk, const ColumnReaderOptions& opts)
         : _max_def_level(max_def_level),
           _max_rep_level(max_rep_level),
           _type_length(type_length),
           _chunk_metadata(column_chunk),
-          _opts(opts),
-          _file(std::make_shared<CountedSeekableInputStream>(file->stream(), opts.stats), file->filename()) {}
+          _opts(opts) {}
 
 ColumnChunkReader::~ColumnChunkReader() = default;
 
@@ -65,8 +35,14 @@ Status ColumnChunkReader::init(int chunk_size) {
     } else {
         start_offset = metadata().data_page_offset;
     }
-
-    _page_reader = std::make_unique<PageReader>(&_file, start_offset, metadata().total_compressed_size);
+    size_t size = metadata().total_compressed_size;
+    IBufferedInputStream* stream = _opts.sb_stream;
+    if (!_opts.use_sb_stream) {
+        _default_stream = std::make_unique<DefaultBufferedInputStream>(_opts.file, start_offset, size);
+        _default_stream->reserve(config::parquet_buffer_stream_reserve_size);
+        stream = _default_stream.get();
+    }
+    _page_reader = std::make_unique<PageReader>(stream, start_offset, size);
 
     // seek to the first page
     _page_reader->seek_to_offset(start_offset);
@@ -129,7 +105,7 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
         RETURN_IF_ERROR(_compress_codec->decompress(com_slice, &_data));
     } else {
         _data.size = uncompressed_size;
-        _page_reader->read_bytes((const uint8_t**)&_data.data, _data.size);
+        RETURN_IF_ERROR(_page_reader->read_bytes((const uint8_t**)&_data.data, _data.size));
     }
 
     return Status::OK();

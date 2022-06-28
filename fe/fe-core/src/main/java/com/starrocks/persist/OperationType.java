@@ -200,6 +200,9 @@ public class OperationType {
     // statistic 10010 ~ 10020
     public static final short OP_ADD_ANALYZER_JOB = 10010;
     public static final short OP_REMOVE_ANALYZER_JOB = 10011;
+    public static final short OP_ADD_ANALYZE_STATUS = 10012;
+    public static final short OP_ADD_BASIC_STATS_META = 10013;
+    public static final short OP_ADD_HISTOGRAM_STATS_META = 10014;
 
     // workgroup 10021 ~ 10030
     public static final short OP_WORKGROUP = 10021;
@@ -213,7 +216,7 @@ public class OperationType {
     // create external catalog
     public static final short OP_CREATE_CATALOG = 10051;
 
-    // drop external catalog
+    // drop catalog
     public static final short OP_DROP_CATALOG = 10061;
     // grant & revoke impersonate
     public static final short OP_GRANT_IMPERSONATE = 10062;
@@ -226,10 +229,18 @@ public class OperationType {
     public static final short OP_UPDATE_TASK_RUN = 10082;
     public static final short OP_DROP_TASK_RUNS = 10083;
 
+    // materialized view
+    public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
+    public static final short OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME = 10092;
+
     public static final short OP_CREATE_MATERIALIZED_VIEW = 10094;
     public static final short OP_CREATE_INSERT_OVERWRITE = 10095;
     public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10096;
 
     // manage system node info 10100 ~ 10120
     public static final short OP_UPDATE_FRONTEND = 10101;
+
+    // manage compute node 10201 ~ 10220
+    public static final short OP_ADD_COMPUTE_NODE = 10201;
+    public static final short OP_DROP_COMPUTE_NODE = 10202;
 }

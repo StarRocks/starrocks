@@ -2,14 +2,29 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
+import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
+import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
+import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.Constants;
+import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.time.LocalDateTime;
+
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
@@ -50,11 +65,49 @@ public class AnalyzeStmtTest {
     @Test
     public void testProperties() {
         String sql = "analyze full table db.tbl properties('expire_sec' = '30')";
-        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        analyzeFail(sql, "Property 'expire_sec' is not valid");
+    }
 
-        Assert.assertFalse(analyzeStmt.isSample());
-        Assert.assertEquals(1, analyzeStmt.getProperties().size());
-        Assert.assertEquals("30", analyzeStmt.getProperties().getOrDefault("expire_sec", "2"));
+    @Test
+    public void testShow() throws MetaNotFoundException {
+        String sql = "show analyze";
+        ShowAnalyzeJobStmt showAnalyzeJobStmt = (ShowAnalyzeJobStmt) analyzeSuccess(sql);
+
+        AnalyzeJob analyzeJob = new AnalyzeJob(10002, 10004, Lists.newArrayList(), Constants.AnalyzeType.FULL,
+                Constants.ScheduleType.ONCE, Maps.newHashMap(), Constants.ScheduleStatus.FINISH, LocalDateTime.MIN);
+        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, {}, FINISH, None, ]",
+                ShowAnalyzeJobStmt.showAnalyzeJobs(analyzeJob).toString());
+
+        sql = "show analyze job";
+        showAnalyzeJobStmt = (ShowAnalyzeJobStmt) analyzeSuccess(sql);
+
+        sql = "show analyze status";
+        ShowAnalyzeStatusStmt showAnalyzeStatusStatement = (ShowAnalyzeStatusStmt) analyzeSuccess(sql);
+
+        AnalyzeStatus analyzeStatus = new AnalyzeStatus(-1, 10002, 10004, Lists.newArrayList(), Constants.AnalyzeType.FULL,
+                Constants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(2020, 1, 1, 1, 1));
+        analyzeStatus.setEndTime(LocalDateTime.of(2020, 1, 1, 1, 1));
+        analyzeStatus.setStatus(Constants.ScheduleStatus.FAILED);
+        analyzeStatus.setReason("Test Failed");
+        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, {}, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00, Test Failed]",
+                ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
+
+        sql = "show stats meta";
+        ShowBasicStatsMetaStmt showAnalyzeMetaStmt = (ShowBasicStatsMetaStmt) analyzeSuccess(sql);
+
+        BasicStatsMeta basicStatsMeta = new BasicStatsMeta(10002, 10004, Constants.AnalyzeType.FULL,
+                LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
+        basicStatsMeta.setHealthy(0.5);
+        Assert.assertEquals("[test, t0, FULL, 2020-01-01 01:01:00, {}, 50%]",
+                ShowBasicStatsMetaStmt.showBasicStatsMeta(basicStatsMeta).toString());
+
+        sql = "show histogram meta";
+        ShowHistogramStatsMetaStmt showHistogramStatsMetaStmt = (ShowHistogramStatsMetaStmt) analyzeSuccess(sql);
+        HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(10002, 10004, "v1",
+                Constants.AnalyzeType.HISTOGRAM, LocalDateTime.of(2020, 1, 1, 1, 1),
+                Maps.newHashMap());
+        Assert.assertEquals("[test, t0, v1, HISTOGRAM, 2020-01-01 01:01:00, {}]",
+                ShowHistogramStatsMetaStmt.showHistogramStatsMeta(histogramStatsMeta).toString());
     }
 
     @Test

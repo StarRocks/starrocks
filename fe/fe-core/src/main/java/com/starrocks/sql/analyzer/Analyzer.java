@@ -19,12 +19,14 @@ import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
@@ -36,6 +38,7 @@ import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
@@ -151,6 +154,12 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitSetStatement(SetStmt stmt, ConnectContext session) {
+            stmt.analyze();
+            return null;
+        }
+
+        @Override
         public Void visitAdminShowConfigStatement(AdminShowConfigStmt adminShowConfigStmt, ConnectContext session) {
             AdminStmtAnalyzer.analyze(adminShowConfigStmt, session);
             return null;
@@ -219,6 +228,18 @@ public class Analyzer {
 
         @Override
         public Void visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, ConnectContext context) {
+            MaterializedViewAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStatement statement, ConnectContext context) {
+            MaterializedViewAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement, ConnectContext context) {
             MaterializedViewAnalyzer.analyze(statement, context);
             return null;
         }

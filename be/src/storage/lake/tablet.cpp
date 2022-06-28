@@ -58,8 +58,26 @@ StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer() {
 }
 
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
-    ASSIGN_OR_RETURN(auto metadata, get_metadata(1));
-    return GlobalTabletSchemaMap::Instance()->emplace(metadata->schema()).first;
+    auto tablet_schema_key = _mgr->tablet_schema_cache_key(_id);
+    auto ptr = _mgr->lookup_tablet_schema(tablet_schema_key);
+    RETURN_IF(ptr != nullptr, ptr);
+
+    ASSIGN_OR_RETURN(TabletMetadataIter metadata_iter, _mgr->list_tablet_metadata(_group, _id));
+    if (!metadata_iter.has_next()) {
+        return Status::NotFound(fmt::format("tablet {} metadata not found", _id));
+    }
+    ASSIGN_OR_RETURN(auto metadata, metadata_iter.next());
+    auto result = GlobalTabletSchemaMap::Instance()->emplace(metadata->schema());
+    if (result.first == nullptr) {
+        return Status::InternalError(fmt::format("tablet schema {} failed to emplace in TabletSchemaMap", _id));
+    }
+    auto value_ptr = new std::shared_ptr<const TabletSchema>(result.first);
+    if (result.second == true) {
+        (void)_mgr->fill_metacache(tablet_schema_key, static_cast<void*>(value_ptr), result.first->mem_usage());
+    } else {
+        (void)_mgr->fill_metacache(tablet_schema_key, static_cast<void*>(value_ptr), 0);
+    }
+    return result.first;
 }
 
 std::string Tablet::metadata_path(int64_t version) const {

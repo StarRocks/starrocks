@@ -42,7 +42,6 @@ public:
         writer_context.tablet_id = _tablet->tablet_id();
         writer_context.tablet_schema_hash = _tablet->schema_hash();
         writer_context.partition_id = 0;
-        writer_context.rowset_type = BETA_ROWSET;
         writer_context.rowset_path_prefix = _tablet->schema_hash_path();
         writer_context.rowset_state = COMMITTED;
         writer_context.tablet_schema = &_tablet->tablet_schema();

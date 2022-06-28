@@ -33,6 +33,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -106,28 +107,28 @@ public class VariableMgrTest {
 
         // Set global variable
         SetVar setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(1234L));
-        setVar.analyze(null);
+        setVar.analyze();
         VariableMgr.setVar(var, setVar, false);
         Assert.assertEquals(1234L, var.getMaxExecMemByte());
         var = VariableMgr.newSessionVariable();
         Assert.assertEquals(1234L, var.getMaxExecMemByte());
 
         SetVar setVar2 = new SetVar(SetType.GLOBAL, "parallel_fragment_exec_instance_num", new IntLiteral(5L));
-        setVar2.analyze(null);
+        setVar2.analyze();
         VariableMgr.setVar(var, setVar2, false);
         Assert.assertEquals(5L, var.getParallelExecInstanceNum());
         var = VariableMgr.newSessionVariable();
         Assert.assertEquals(5L, var.getParallelExecInstanceNum());
 
         SetVar setVar3 = new SetVar(SetType.GLOBAL, "time_zone", new StringLiteral("Asia/Shanghai"));
-        setVar3.analyze(null);
+        setVar3.analyze();
         VariableMgr.setVar(var, setVar3, false);
         Assert.assertEquals("Asia/Shanghai", var.getTimeZone());
         var = VariableMgr.newSessionVariable();
         Assert.assertEquals("Asia/Shanghai", var.getTimeZone());
 
         setVar3 = new SetVar(SetType.GLOBAL, "time_zone", new StringLiteral("CST"));
-        setVar3.analyze(null);
+        setVar3.analyze();
         VariableMgr.setVar(var, setVar3, false);
         Assert.assertEquals("CST", var.getTimeZone());
         var = VariableMgr.newSessionVariable();
@@ -135,20 +136,20 @@ public class VariableMgrTest {
 
         // Set session variable
         setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(1234L));
-        setVar.analyze(null);
+        setVar.analyze();
         VariableMgr.setVar(var, setVar, false);
         Assert.assertEquals(1234L, var.getMaxExecMemByte());
 
         // onlySessionVar
         setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(4321L));
-        setVar.analyze(null);
+        setVar.analyze();
         VariableMgr.setVar(var, setVar, true);
         Assert.assertEquals(4321L, var.getMaxExecMemByte());
         var = VariableMgr.newSessionVariable();
         Assert.assertEquals(1234L, var.getMaxExecMemByte());
 
         setVar3 = new SetVar(SetType.SESSION, "time_zone", new StringLiteral("Asia/Jakarta"));
-        setVar3.analyze(null);
+        setVar3.analyze();
         VariableMgr.setVar(var, setVar3, false);
         Assert.assertEquals("Asia/Jakarta", var.getTimeZone());
 
@@ -158,58 +159,58 @@ public class VariableMgrTest {
 
         SetVar setVar4 = new SetVar(SetType.SESSION, "sql_mode", new StringLiteral(
                 SqlModeHelper.encode("PIPES_AS_CONCAT").toString()));
-        setVar4.analyze(null);
+        setVar4.analyze();
         VariableMgr.setVar(var, setVar4, false);
         Assert.assertEquals(2L, var.getSqlMode());
 
         // Test checkTimeZoneValidAndStandardize
         SetVar setVar5 = new SetVar(SetType.GLOBAL, "time_zone", new StringLiteral("+8:00"));
-        setVar5.analyze(null);
+        setVar5.analyze();
         VariableMgr.setVar(var, setVar5, false);
         Assert.assertEquals("+08:00", VariableMgr.newSessionVariable().getTimeZone());
 
         SetVar setVar6 = new SetVar(SetType.GLOBAL, "time_zone", new StringLiteral("8:00"));
-        setVar6.analyze(null);
+        setVar6.analyze();
         VariableMgr.setVar(var, setVar6, false);
         Assert.assertEquals("+08:00", VariableMgr.newSessionVariable().getTimeZone());
 
         SetVar setVar7 = new SetVar(SetType.GLOBAL, "time_zone", new StringLiteral("-8:00"));
-        setVar7.analyze(null);
+        setVar7.analyze();
         VariableMgr.setVar(var, setVar7, false);
         Assert.assertEquals("-08:00", VariableMgr.newSessionVariable().getTimeZone());
     }
 
-    @Test(expected = UserException.class)
-    public void testInvalidType() throws UserException {
+    @Test(expected = SemanticException.class)
+    public void testInvalidType() {
         // Set global variable
         SetVar setVar = new SetVar(SetType.SESSION, "exec_mem_limit", new StringLiteral("abc"));
         try {
-            setVar.analyze(null);
+            setVar.analyze();
         } catch (Exception e) {
             throw e;
         }
         Assert.fail("No exception throws.");
     }
 
-    @Test(expected = UserException.class)
-    public void testInvalidTimeZoneRegion() throws UserException {
+    @Test(expected = SemanticException.class)
+    public void testInvalidTimeZoneRegion() {
         // Set global variable
         // utc should be upper case (UTC)
         SetVar setVar = new SetVar(SetType.SESSION, "time_zone", new StringLiteral("utc"));
         try {
-            setVar.analyze(null);
+            setVar.analyze();
         } catch (Exception e) {
             throw e;
         }
         Assert.fail("No exception throws.");
     }
 
-    @Test(expected = UserException.class)
-    public void testInvalidTimeZoneOffset() throws UserException {
+    @Test(expected = SemanticException.class)
+    public void testInvalidTimeZoneOffset() {
         // Set global variable
         SetVar setVar = new SetVar(SetType.SESSION, "time_zone", new StringLiteral("+15:00"));
         try {
-            setVar.analyze(null);
+            setVar.analyze();
         } catch (Exception e) {
             throw e;
         }
@@ -225,6 +226,18 @@ public class VariableMgrTest {
         SetVar setVar = new SetVar(SetType.SESSION, "version_comment", null);
         VariableMgr.setVar(null, setVar, false);
         Assert.fail("No exception throws.");
+    }
+
+    @Test
+    public void testDumpInvisible() {
+        SessionVariable sv = new SessionVariable();
+        List<List<String>> vars = VariableMgr.dump(SetType.DEFAULT, sv, null);
+        Assert.assertFalse(vars.toString().contains("enable_show_all_variables"));
+        Assert.assertFalse(vars.toString().contains("cbo_use_correlated_join_estimate"));
+
+        sv.setEnableShowAllVariables(true);
+        vars = VariableMgr.dump(SetType.DEFAULT, sv, null);
+        Assert.assertTrue(vars.toString().contains("cbo_use_correlated_join_estimate"));
     }
 }
 

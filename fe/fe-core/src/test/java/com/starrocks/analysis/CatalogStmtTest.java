@@ -3,7 +3,9 @@
 package com.starrocks.analysis;
 
 import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.qe.DdlExecutor;
+import com.starrocks.execution.DataDefinitionExecutorFactory;
+import com.starrocks.mysql.nio.NConnectContext;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -57,18 +59,18 @@ public class CatalogStmtTest {
 
     @Test
     public void testDropCatalogParserAndAnalyzer() {
-        // test drop ddl DROP EXTERNAL CATALOG catalog_name
-        String sql_1 = "DROP EXTERNAL CATALOG catalog_1";
+        // test drop ddl DROP CATALOG catalog_name
+        String sql_1 = "DROP CATALOG catalog_1";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
         Assert.assertTrue(stmt instanceof DropCatalogStmt);
-        String sql_2 = "DROP EXTERNAL CATALOG";
+        String sql_2 = "DROP CATALOG";
         AnalyzeTestUtil.analyzeFail(sql_2);
-        String sql_3 = "DROP EXTERNAL CATALOG default";
+        String sql_3 = "DROP CATALOG default";
         AnalyzeTestUtil.analyzeFail(sql_3);
-        Assert.assertEquals("DROP EXTERNAL CATALOG 'catalog_1'", stmt.toSql());
+        Assert.assertEquals("DROP CATALOG 'catalog_1'", stmt.toSql());
 
-        // test drop ddl DROP EXTERNAL CATALOG 'catalog_name'
-        String sql_4 = "DROP EXTERNAL CATALOG 'catalog_1'";
+        // test drop ddl DROP CATALOG 'catalog_name'
+        String sql_4 = "DROP CATALOG 'catalog_1'";
         StatementBase stmt2 = AnalyzeTestUtil.analyzeSuccess(sql_4);
         Assert.assertTrue(stmt2 instanceof DropCatalogStmt);
     }
@@ -78,8 +80,10 @@ public class CatalogStmtTest {
         String sql = "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof CreateCatalogStmt);
+        ConnectContext connectCtx = new ConnectContext();
+        connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         CreateCatalogStmt statement = (CreateCatalogStmt) stmt;
-        DdlExecutor.execute(GlobalStateMgr.getCurrentState(), statement);
+        DataDefinitionExecutorFactory.execute(statement, connectCtx);
         CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
         ConnectorMgr connectorMgr = GlobalStateMgr.getCurrentState().getConnectorMgr();
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
@@ -88,7 +92,7 @@ public class CatalogStmtTest {
         Assert.assertTrue(metadataMgr.connectorMetadataExists("hive_catalog"));
 
         try {
-            DdlExecutor.execute(GlobalStateMgr.getCurrentState(), statement);
+            DataDefinitionExecutorFactory.execute(statement, connectCtx);
         } catch (IllegalStateException e) {
             Assert.assertTrue(e.getMessage().contains("exists"));
         }
@@ -101,9 +105,9 @@ public class CatalogStmtTest {
 
     @Test
     public void testDropCatalog() throws Exception {
-        // test drop ddl DROP EXTERNAL CATALOG catalog_name
+        // test drop ddl DROP CATALOG catalog_name
         String createSql = "CREATE EXTERNAL CATALOG hive_catalog PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
-        String dropSql = "DROP EXTERNAL CATALOG hive_catalog";
+        String dropSql = "DROP CATALOG hive_catalog";
 
 
         CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
@@ -112,8 +116,10 @@ public class CatalogStmtTest {
 
         StatementBase createStmtBase = AnalyzeTestUtil.analyzeSuccess(createSql);
         Assert.assertTrue(createStmtBase instanceof CreateCatalogStmt);
+        ConnectContext connectCtx = new ConnectContext();
+        connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         CreateCatalogStmt createCatalogStmt = (CreateCatalogStmt) createStmtBase;
-        DdlExecutor.execute(GlobalStateMgr.getCurrentState(), createCatalogStmt);
+        DataDefinitionExecutorFactory.execute(createCatalogStmt, connectCtx);
         Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
         Assert.assertTrue(connectorMgr.connectorExists("hive_catalog"));
         Assert.assertTrue(metadataMgr.connectorMetadataExists("hive_catalog"));
@@ -121,15 +127,15 @@ public class CatalogStmtTest {
         StatementBase dropStmtBase = AnalyzeTestUtil.analyzeSuccess(dropSql);
         Assert.assertTrue(dropStmtBase instanceof DropCatalogStmt);
         DropCatalogStmt dropCatalogStmt = (DropCatalogStmt) dropStmtBase;
-        DdlExecutor.execute(GlobalStateMgr.getCurrentState(), dropCatalogStmt);
+        DataDefinitionExecutorFactory.execute(dropCatalogStmt, connectCtx);
         Assert.assertFalse(catalogMgr.catalogExists("hive_catalog"));
         Assert.assertFalse(connectorMgr.connectorExists("hive_catalog"));
         Assert.assertFalse(metadataMgr.connectorMetadataExists("hive_catalog"));
 
-        // test drop ddl DROP EXTERNAL CATALOG 'catalog_name'
-        String dropSql_2 = "DROP EXTERNAL CATALOG 'hive_catalog'";
+        // test drop ddl DROP CATALOG 'catalog_name'
+        String dropSql_2 = "DROP CATALOG 'hive_catalog'";
 
-        DdlExecutor.execute(GlobalStateMgr.getCurrentState(), createCatalogStmt);
+        DataDefinitionExecutorFactory.execute(createCatalogStmt, connectCtx);
         Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
         Assert.assertTrue(connectorMgr.connectorExists("hive_catalog"));
         Assert.assertTrue(metadataMgr.connectorMetadataExists("hive_catalog"));
@@ -137,7 +143,7 @@ public class CatalogStmtTest {
         StatementBase dropStmtBase_2 = AnalyzeTestUtil.analyzeSuccess(dropSql_2);
         Assert.assertTrue(dropStmtBase_2 instanceof DropCatalogStmt);
         DropCatalogStmt dropCatalogStmt_2 = (DropCatalogStmt) dropStmtBase;
-        DdlExecutor.execute(GlobalStateMgr.getCurrentState(), dropCatalogStmt_2);
+        DataDefinitionExecutorFactory.execute(dropCatalogStmt_2, connectCtx);
         Assert.assertFalse(catalogMgr.catalogExists("hive_catalog"));
         Assert.assertFalse(connectorMgr.connectorExists("hive_catalog"));
         Assert.assertFalse(metadataMgr.connectorMetadataExists("hive_catalog"));

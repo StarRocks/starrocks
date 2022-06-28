@@ -1,0 +1,62 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
+syntax="proto2";
+
+package starrocks.lake;
+option java_package = "com.starrocks.lake.proto";
+
+import "status.proto";
+import "tablet_schema.proto";
+
+option cc_generic_services = true;
+
+message RowsetMetadataPB {
+    optional uint32 id = 1;
+    optional bool overlapped = 2;
+    repeated string segments = 3; 
+    repeated string del_vectors = 4;
+    optional int64 num_rows = 5;
+    optional int64 data_size = 6;
+}
+
+message PrimaryIndexMetadataPB {
+    optional uint64 key_size = 1;
+    optional uint64 size = 2;
+    optional string l0 = 3;
+    optional string l1 = 4;
+}
+
+message TabletMetadataPB {
+    optional int64 id = 1;
+    optional int64 version = 2;
+    optional int64 flags = 3; 
+    optional TabletSchemaPB schema = 4;
+    repeated RowsetMetadataPB rowsets = 5;
+    optional PrimaryIndexMetadataPB primary_index = 6;
+    optional uint32 next_rowset_id = 7;
+}
+
+message TxnLogPB {
+    message OpWrite {
+        optional RowsetMetadataPB rowset = 1;
+        repeated string deletes = 2; 
+        repeated uint32 partial_column_ids = 3;
+    }
+    
+    message OpCompaction {
+        repeated uint32 input_rowsets = 1;
+        optional RowsetMetadataPB output_rowset = 2;
+        repeated string rssids = 3;
+    }
+    
+    message OpSchemaChange {
+        repeated RowsetMetadataPB rowsets = 1; 
+    }
+    
+    optional int64 tablet_id = 1;
+    optional int64 txn_id = 2;
+    optional OpWrite op_write = 3;
+    optional OpCompaction op_compaction = 4;
+    optional OpSchemaChange op_schema_change = 5;
+}
+

@@ -56,7 +56,6 @@ public abstract class RoutineLoadTaskInfo {
     protected UUID id;
     protected long txnId = -1L;
     protected long jobId;
-    protected String clusterName;
 
     private final long createTimeMs;
     // The time when the task is actually executed
@@ -84,20 +83,19 @@ public abstract class RoutineLoadTaskInfo {
     // record task schedule info
     protected String msg;
 
-    public RoutineLoadTaskInfo(UUID id, long jobId, String clusterName, long taskScheduleIntervalMs,
+    public RoutineLoadTaskInfo(UUID id, long jobId, long taskScheduleIntervalMs,
                                long timeToExecuteMs) {
         this.id = id;
         this.jobId = jobId;
-        this.clusterName = clusterName;
         this.createTimeMs = System.currentTimeMillis();
         this.taskScheduleIntervalMs = taskScheduleIntervalMs;
         this.timeoutMs = 1000 * Config.routine_load_task_timeout_second;
         this.timeToExecuteMs = timeToExecuteMs;
     }
 
-    public RoutineLoadTaskInfo(UUID id, long jobId, String clusterName, long taskSchedulerIntervalMs,
+    public RoutineLoadTaskInfo(UUID id, long jobId, long taskSchedulerIntervalMs,
                                long timeToExecuteMs, long previousBeId) {
-        this(id, jobId, clusterName, taskSchedulerIntervalMs, timeToExecuteMs);
+        this(id, jobId, taskSchedulerIntervalMs, timeToExecuteMs);
         this.previousBeId = previousBeId;
     }
 
@@ -107,10 +105,6 @@ public abstract class RoutineLoadTaskInfo {
 
     public long getJobId() {
         return jobId;
-    }
-
-    public String getClusterName() {
-        return clusterName;
     }
 
     public void setExecuteStartTimeMs(long executeStartTimeMs) {

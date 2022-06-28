@@ -2,6 +2,7 @@
 
 #include "service/service_be/lake_service.h"
 
+#include <brpc/controller.h>
 #include <gtest/gtest.h>
 
 #include "runtime/exec_env.h"
@@ -78,47 +79,51 @@ protected:
 };
 
 TEST_F(LakeServiceTest, test_publish_version_missing_tablet_ids) {
+    brpc::Controller cntl;
     lake::PublishVersionRequest request;
     lake::PublishVersionResponse response;
     request.set_base_version(1);
     request.set_new_version(2);
     request.add_txn_ids(1000);
-    _lake_service.publish_version(nullptr, &request, &response, nullptr);
-    ASSERT_NE(TStatusCode::OK, response.status().status_code());
-    ASSERT_EQ("missing tablet_ids", response.status().error_msgs(0));
+    _lake_service.publish_version(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("missing tablet_ids", cntl.ErrorText());
 }
 
 TEST_F(LakeServiceTest, test_publish_version_missing_txn_ids) {
+    brpc::Controller cntl;
     lake::PublishVersionRequest request;
     lake::PublishVersionResponse response;
     request.set_base_version(1);
     request.set_new_version(2);
     request.add_tablet_ids(_tablet_id);
-    _lake_service.publish_version(nullptr, &request, &response, nullptr);
-    ASSERT_NE(TStatusCode::OK, response.status().status_code());
-    ASSERT_EQ("missing txn_ids", response.status().error_msgs(0));
+    _lake_service.publish_version(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("missing txn_ids", cntl.ErrorText());
 }
 
 TEST_F(LakeServiceTest, test_publish_version_missing_base_version) {
+    brpc::Controller cntl;
     lake::PublishVersionRequest request;
     lake::PublishVersionResponse response;
     request.set_new_version(2);
     request.add_tablet_ids(_tablet_id);
     request.add_txn_ids(1000);
-    _lake_service.publish_version(nullptr, &request, &response, nullptr);
-    ASSERT_NE(TStatusCode::OK, response.status().status_code());
-    ASSERT_EQ("missing base version", response.status().error_msgs(0));
+    _lake_service.publish_version(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("missing base version", cntl.ErrorText());
 }
 
 TEST_F(LakeServiceTest, test_publish_version_missing_new_version) {
+    brpc::Controller cntl;
     lake::PublishVersionRequest request;
     lake::PublishVersionResponse response;
     request.set_base_version(1);
     request.add_tablet_ids(_tablet_id);
     request.add_txn_ids(1000);
-    _lake_service.publish_version(nullptr, &request, &response, nullptr);
-    ASSERT_NE(TStatusCode::OK, response.status().status_code());
-    ASSERT_EQ("missing new version", response.status().error_msgs(0));
+    _lake_service.publish_version(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("missing new version", cntl.ErrorText());
 }
 
 TEST_F(LakeServiceTest, test_publish_version_for_write) {
@@ -154,7 +159,6 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         request.add_tablet_ids(_tablet_id);
         request.add_txn_ids(1000);
         _lake_service.publish_version(nullptr, &request, &response, nullptr);
-        ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().error_msgs(0);
         ASSERT_EQ(0, response.failed_tablets_size());
     }
     // Publish txn 1001
@@ -166,7 +170,6 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         request.add_tablet_ids(_tablet_id);
         request.add_txn_ids(1001);
         _lake_service.publish_version(nullptr, &request, &response, nullptr);
-        ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().error_msgs(0);
         ASSERT_EQ(0, response.failed_tablets_size());
     }
 
@@ -197,7 +200,6 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         request.add_tablet_ids(_tablet_id);
         request.add_txn_ids(1001);
         _lake_service.publish_version(nullptr, &request, &response, nullptr);
-        ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().error_msgs(0);
         ASSERT_EQ(0, response.failed_tablets_size());
     }
     // Send publish version request again with an non-exist tablet
@@ -210,7 +212,6 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         request.add_tablet_ids(9999);
         request.add_txn_ids(1001);
         _lake_service.publish_version(nullptr, &request, &response, nullptr);
-        ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().error_msgs(0);
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(9999, response.failed_tablets(0));
     }
@@ -223,7 +224,6 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         request.add_tablet_ids(_tablet_id);
         request.add_txn_ids(1111);
         _lake_service.publish_version(nullptr, &request, &response, nullptr);
-        ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().error_msgs(0);
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(_tablet_id, response.failed_tablets(0));
     }
@@ -238,7 +238,6 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         request.add_tablet_ids(_tablet_id);
         request.add_txn_ids(1001);
         _lake_service.publish_version(nullptr, &request, &response, nullptr);
-        ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().error_msgs(0);
         ASSERT_EQ(0, response.failed_tablets_size());
     }
 }
@@ -274,9 +273,6 @@ TEST_F(LakeServiceTest, test_abort) {
         request.add_txn_ids(1000);
         request.add_txn_ids(1001);
         _lake_service.abort_txn(nullptr, &request, &response, nullptr);
-        ASSERT_TRUE(response.has_status());
-        ASSERT_TRUE(response.status().has_status_code());
-        ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().error_msgs(0);
     }
 
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));

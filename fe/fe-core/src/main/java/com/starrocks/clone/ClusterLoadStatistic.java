@@ -49,8 +49,6 @@ public class ClusterLoadStatistic {
     private SystemInfoService infoService;
     private TabletInvertedIndex invertedIndex;
 
-    private String clusterName;
-
     private Map<TStorageMedium, Long> totalCapacityMap = Maps.newHashMap();
     private Map<TStorageMedium, Long> totalUsedCapacityMap = Maps.newHashMap();
     private Map<TStorageMedium, Long> totalReplicaNumMap = Maps.newHashMap();
@@ -61,15 +59,13 @@ public class ClusterLoadStatistic {
     private Map<TStorageMedium, Integer> backendNumMap = Maps.newHashMap();
     private List<BackendLoadStatistic> beLoadStatistics = Lists.newArrayList();
 
-    public ClusterLoadStatistic(String clusterName, SystemInfoService infoService,
-                                TabletInvertedIndex invertedIndex) {
-        this.clusterName = clusterName;
+    public ClusterLoadStatistic(SystemInfoService infoService, TabletInvertedIndex invertedIndex) {
         this.infoService = infoService;
         this.invertedIndex = invertedIndex;
     }
 
     public void init() {
-        ImmutableMap<Long, Backend> backends = infoService.getBackendsInCluster(clusterName);
+        ImmutableMap<Long, Backend> backends = infoService.getIdToBackend();
         for (Backend backend : backends.values()) {
             BackendLoadStatistic beStatistic = new BackendLoadStatistic(backend.getId(),
                     backend.getOwnerClusterName(), infoService, invertedIndex);
@@ -308,8 +304,8 @@ public class ClusterLoadStatistic {
         sortBeStats(mid, medium);
         sortBeStats(high, medium);
 
-        LOG.debug("after adjust, cluster {} backend classification low/mid/high: {}/{}/{}, medium: {}",
-                clusterName, low.size(), mid.size(), high.size(), medium);
+        LOG.debug("after adjust, backend classification low/mid/high: {}/{}/{}, medium: {}",
+                low.size(), mid.size(), high.size(), medium);
     }
 
     public List<BackendLoadStatistic> getSortedBeLoadStats(TStorageMedium medium) {

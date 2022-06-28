@@ -15,8 +15,8 @@ namespace starrocks::vectorized {
 class ORCHdfsFileStream : public orc::InputStream {
 public:
     // |file| must outlive ORCHdfsFileStream
-    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, HdfsScanStats* stats)
-            : _file(std::move(file)), _length(length), _stats(stats), _cache_buffer(0), _cache_offset(0) {}
+    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length)
+            : _file(std::move(file)), _length(length), _cache_buffer(0), _cache_offset(0) {}
 
     ~ORCHdfsFileStream() override = default;
 
@@ -75,8 +75,6 @@ public:
     }
 
     void doRead(void* buf, uint64_t length, uint64_t offset) {
-        SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
         if (buf == nullptr) {
             throw orc::ParseError("Buffer is null");
         }
@@ -86,7 +84,6 @@ public:
             auto msg = strings::Substitute("Failed to read $0: $1", _file->filename(), status.to_string());
             throw orc::ParseError(msg);
         }
-        _stats->bytes_read += length;
     }
 
     const std::string& getName() const override { return _file->filename(); }
@@ -94,7 +91,6 @@ public:
 private:
     RandomAccessFile* _file;
     uint64_t _length;
-    HdfsScanStats* _stats;
     std::vector<char> _cache_buffer;
     uint64_t _cache_offset;
 };
@@ -375,8 +371,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
 }
 
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
-    auto input_stream =
-            std::make_unique<ORCHdfsFileStream>(_file.get(), _scanner_params.scan_ranges[0]->file_length, &_stats);
+    auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _scanner_params.scan_ranges[0]->file_length);
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     std::unique_ptr<orc::Reader> reader;
     try {
@@ -455,17 +450,22 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         return Status::EndOfFile("");
     }
 
-    ChunkPtr ck = std::make_shared<vectorized::Chunk>();
+    ChunkPtr temp_chunk = std::make_shared<vectorized::Chunk>();
+    ChunkPtr result_chunk = *chunk;
     // The column order of chunk is required to be invariable. When a table performs schema change,
-    // says we want to add a new column to table A, the reader of old files of table A will append new
+    // say we want to add a new column to table A, the reader of old files of table A will append new
     // column to the tail of the chunk, while the reader of new files of table A will put the new column
     // in the chunk according to the order it's stored. This will lead two chunk from different file to
     // different column order, so we need to adjust the column order according to the input chunk to make
     // sure every chunk has same column order
-    auto convert_to_output = [chunk, &ck]() {
-        const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
+    auto output_result_chunk = [&result_chunk, &temp_chunk]() {
+        const auto& slot_id_to_index_map = result_chunk->get_slot_id_to_index_map();
         for (auto iter = slot_id_to_index_map.begin(); iter != slot_id_to_index_map.end(); iter++) {
-            (*chunk)->get_column_by_slot_id(iter->first)->swap_column(*ck->get_column_by_slot_id(iter->first));
+            auto ck_iter = temp_chunk->get_slot_id_to_index_map().find(iter->first);
+            if (ck_iter == temp_chunk->get_slot_id_to_index_map().end()) {
+                continue;
+            }
+            result_chunk->columns()[iter->second]->swap_column(*temp_chunk->columns()[ck_iter->second]);
         }
     };
 
@@ -497,14 +497,14 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                     ret = _orc_reader->get_active_chunk();
                 }
                 RETURN_IF_ERROR(ret);
-                ck = std::move(ret.value());
+                temp_chunk = std::move(ret.value());
             }
 
             // important to add columns before evaluation
             // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
-            _scanner_ctx.append_not_existed_columns_to_chunk(&ck, ck->num_rows());
-            _scanner_ctx.append_partition_column_to_chunk(&ck, ck->num_rows());
-            chunk_size = ck->num_rows();
+            _scanner_ctx.append_not_existed_columns_to_chunk(&temp_chunk, temp_chunk->num_rows());
+            _scanner_ctx.append_partition_column_to_chunk(&temp_chunk, temp_chunk->num_rows());
+            chunk_size = temp_chunk->num_rows();
             // do stats before we filter rows which does not match.
             _stats.raw_rows_read += chunk_size;
             _chunk_filter.assign(chunk_size, 1);
@@ -516,20 +516,20 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                         continue;
                     }
                     ASSIGN_OR_RETURN(chunk_size,
-                                     ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &_chunk_filter));
+                                     ExecNode::eval_conjuncts_into_filter(it.second, temp_chunk.get(), &_chunk_filter));
                     if (chunk_size == 0) {
                         break;
                     }
                 }
             }
-            if (chunk_size != 0 && chunk_size != ck->num_rows()) {
-                ck->filter(_chunk_filter);
+            if (chunk_size != 0 && chunk_size != temp_chunk->num_rows()) {
+                temp_chunk->filter(_chunk_filter);
             }
         }
-        ck->set_num_rows(chunk_size);
+        temp_chunk->set_num_rows(chunk_size);
 
         if (!_orc_reader->has_lazy_load_context()) {
-            convert_to_output();
+            output_result_chunk();
             return Status::OK();
         }
 
@@ -551,9 +551,9 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
             StatusOr<ChunkPtr> ret = _orc_reader->get_lazy_chunk();
             RETURN_IF_ERROR(ret);
             Chunk& ret_ck = *(ret.value());
-            ck->merge(std::move(ret_ck));
+            temp_chunk->merge(std::move(ret_ck));
         }
-        convert_to_output();
+        output_result_chunk();
         return Status::OK();
     }
     __builtin_unreachable();

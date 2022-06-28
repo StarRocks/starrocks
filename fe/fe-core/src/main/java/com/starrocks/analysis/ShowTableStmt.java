@@ -136,4 +136,9 @@ public class ShowTableStmt extends ShowStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowTableStmt(this, context);
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

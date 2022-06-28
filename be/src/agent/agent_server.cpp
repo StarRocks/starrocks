@@ -26,10 +26,14 @@
 #include <filesystem>
 #include <string>
 
+#include "agent/master_info.h"
+#include "agent/status.h"
 #include "agent/task_worker_pool.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "gen_cpp/MasterService_types.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
 #include "util/phmap/phmap.h"
@@ -44,8 +48,9 @@ const uint32_t REPORT_DISK_STATE_WORKER_COUNT = 1;
 const uint32_t REPORT_OLAP_TABLE_WORKER_COUNT = 1;
 const uint32_t REPORT_WORKGROUP_WORKER_COUNT = 1;
 
-AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
-        : _exec_env(exec_env), _master_info(master_info) {
+FrontendServiceClientCache g_master_service_client_cache;
+
+AgentServer::AgentServer(ExecEnv* exec_env) : _exec_env(exec_env) {
     for (auto& path : exec_env->store_paths()) {
         try {
             string dpp_download_path_str = path.path + DPP_PREFIX;
@@ -62,8 +67,8 @@ AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
     // to make code to be more readable.
 
 #ifndef BE_TEST
-#define CREATE_AND_START_POOL(type, pool_name, worker_num)                                                         \
-    pool_name.reset(new TaskWorkerPool(TaskWorkerPool::TaskWorkerType::type, _exec_env, master_info, worker_num)); \
+#define CREATE_AND_START_POOL(type, pool_name, worker_num)                                            \
+    pool_name.reset(new TaskWorkerPool(TaskWorkerPool::TaskWorkerType::type, _exec_env, worker_num)); \
     pool_name->start();
 
 #else
@@ -131,10 +136,9 @@ AgentServer::~AgentServer() {
 // resend request when something is wrong(BE may need some logic to guarantee idempotence.
 void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks) {
     Status ret_st;
-
-    // TODO check master_info here if it is the same with that of heartbeat rpc
-    if (_master_info.network_address.hostname == "" || _master_info.network_address.port == 0) {
-        Status ret_st = Status::Cancelled("Have not get FE Master heartbeat yet");
+    auto master_address = get_master_address();
+    if (master_address.hostname.empty() || master_address.port == 0) {
+        ret_st = Status::Cancelled("Have not get FE Master heartbeat yet");
         ret_st.to_thrift(&agent_result.status);
         return;
     }

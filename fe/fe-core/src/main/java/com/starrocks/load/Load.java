@@ -565,15 +565,17 @@ public class Load {
                     throw new UserException("unknown reference column, column=" + entry.getKey()
                             + ", reference=" + slot.getColumnName());
                 }
-                // set slot desc IsMaterialized true
                 if (useVectorizedLoad) {
                     slotDesc.setIsMaterialized(true);
                 }
                 smap.getLhs().add(slot);
-                smap.getRhs().add(new SlotRef(slotDesc));
+                SlotRef slotRef = new SlotRef(slotDesc);
+                slotRef.setColumnName(slot.getColumnName());
+                smap.getRhs().add(slotRef);
             }
             Expr expr = entry.getValue().clone(smap);
-            expr.analyze(analyzer);
+
+            expr = Expr.analyzeAndCastFold(expr);
 
             // check if contain aggregation
             List<FunctionCallExpr> funcs = Lists.newArrayList();
@@ -593,13 +595,14 @@ public class Load {
             for (SlotRef slot : slots) {
                 SlotDescriptor slotDesc = slotDescByName.get(slot.getColumnName());
                 if (slotDesc != null) {
-                    // set slot desc IsMaterialized true
                     if (useVectorizedLoad) {
                         slotDesc.setIsMaterialized(true);
                     }
                     smap.getLhs().add(slot);
+                    SlotRef slotRef = new SlotRef(slotDesc);
+                    slotRef.setColumnName(slot.getColumnName());
                     smap.getRhs().add(new CastExpr(tbl.getColumn(slot.getColumnName()).getType(),
-                            new SlotRef(slotDesc)));
+                            slotRef));
                 } else if (exprsByName.get(slot.getColumnName()) != null) {
                     smap.getLhs().add(slot);
                     smap.getRhs().add(new CastExpr(tbl.getColumn(slot.getColumnName()).getType(),
@@ -610,7 +613,7 @@ public class Load {
                 }
             }
             Expr expr = entry.getValue().clone(smap);
-            expr.analyze(analyzer);
+            expr = Expr.analyzeAndCastFold(expr);
 
             exprsByName.put(entry.getKey(), expr);
         }
@@ -775,6 +778,13 @@ public class Load {
                 return newFunc;
             } else if (funcName.equalsIgnoreCase(FunctionSet.SUBSTITUTE)) {
                 return funcExpr.getChild(0);
+            } else if (funcName.equalsIgnoreCase(FunctionSet.GET_JSON_INT) ||
+                    funcName.equalsIgnoreCase(FunctionSet.GET_JSON_STRING) ||
+                    funcName.equalsIgnoreCase(FunctionSet.GET_JSON_DOUBLE)) {
+                FunctionName jsonFunctionName = new FunctionName(funcName.toLowerCase());
+                List<Expr> getJsonArgs = Lists.newArrayList(funcExpr.getChild(0), funcExpr.getChild(1));
+                return new FunctionCallExpr(
+                        jsonFunctionName, new FunctionParams(false, getJsonArgs));
             }
         }
         return originExpr;

@@ -3,11 +3,9 @@ package com.starrocks.sql.ast;
 
 public class AnalyzeHistogramDesc implements AnalyzeTypeDesc {
     private long buckets;
-    private long mcv;
 
-    public AnalyzeHistogramDesc(long buckets, long mcv) {
+    public AnalyzeHistogramDesc(long buckets) {
         this.buckets = buckets;
-        this.mcv = mcv;
     }
 
     public long getBuckets() {
@@ -16,13 +14,5 @@ public class AnalyzeHistogramDesc implements AnalyzeTypeDesc {
 
     public void setBuckets(long buckets) {
         this.buckets = buckets;
-    }
-
-    public long getMcv() {
-        return mcv;
-    }
-
-    public void setMcv(long mcv) {
-        this.mcv = mcv;
     }
 }

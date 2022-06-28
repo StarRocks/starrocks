@@ -42,7 +42,6 @@ import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.ColumnRenameClause;
-import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
@@ -114,6 +113,7 @@ import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -156,6 +156,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -320,35 +321,25 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public void createDb(CreateDbStmt stmt) throws DdlException {
-        final String clusterName = stmt.getClusterName();
-        String fullDbName = stmt.getFullDbName();
+    public void createDb(String dbName) throws DdlException, AlreadyExistsException {
         long id = 0L;
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            if (!nameToCluster.containsKey(clusterName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER, clusterName);
-            }
-            if (fullNameToDb.containsKey(fullDbName)) {
-                if (stmt.isSetIfNotExists()) {
-                    LOG.info("create database[{}] which already exists", fullDbName);
-                    return;
-                } else {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_CREATE_EXISTS, fullDbName);
-                }
+            if (fullNameToDb.containsKey(dbName)) {
+                throw new AlreadyExistsException("Database Already Exists");
             } else {
                 id = getNextId();
-                Database db = new Database(id, fullDbName);
-                db.setClusterName(clusterName);
+                Database db = new Database(id, dbName);
+                db.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
                 unprotectCreateDb(db);
                 editLog.logCreateDb(db);
             }
         } finally {
             unlock();
         }
-        LOG.info("createDb dbName = " + fullDbName + ", id = " + id);
+        LOG.info("createDb dbName = " + dbName + ", id = " + id);
     }
 
     // For replay edit log, needn't lock metadata
@@ -358,12 +349,6 @@ public class LocalMetastore implements ConnectorMetadata {
         final Cluster cluster = nameToCluster.get(db.getClusterName());
         cluster.addDb(db.getFullName(), db.getId());
         stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-    }
-
-    // for test
-    public void addCluster(Cluster cluster) {
-        nameToCluster.put(cluster.getName(), cluster);
-        idToCluster.put(cluster.getId(), cluster);
     }
 
     public ConcurrentHashMap<Long, Database> getIdToDb() {
@@ -2370,7 +2355,7 @@ public class LocalMetastore implements ConnectorMetadata {
     private List<Long> chosenBackendIdBySeq(int replicationNum, String clusterName, TStorageMedium storageMedium)
             throws DdlException {
         List<Long> chosenBackendIds = systemInfoService.seqChooseBackendIdsByStorageMedium(replicationNum,
-                true, true, clusterName, storageMedium);
+                true, true, storageMedium);
         if (chosenBackendIds == null) {
             throw new DdlException(
                     "Failed to find enough host with storage medium is " + storageMedium + " in all backends. need: " +
@@ -2381,7 +2366,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private List<Long> chosenBackendIdBySeq(int replicationNum, String clusterName) throws DdlException {
         List<Long> chosenBackendIds =
-                systemInfoService.seqChooseBackendIds(replicationNum, true, true, clusterName);
+                systemInfoService.seqChooseBackendIds(replicationNum, true, true);
         if (chosenBackendIds == null) {
             List<Long> backendIds = systemInfoService.getBackendIds(true);
             throw new DdlException("Failed to find enough host in all backends. need: " + replicationNum +
@@ -2644,14 +2629,6 @@ public class LocalMetastore implements ConnectorMetadata {
         } else {
             throw new DdlException("Database " + dbName + " doesn't exist");
         }
-    }
-
-    public List<String> getClusterDbNames(String clusterName) throws AnalysisException {
-        final Cluster cluster = nameToCluster.get(clusterName);
-        if (cluster == null) {
-            throw new AnalysisException("No cluster selected");
-        }
-        return Lists.newArrayList(cluster.getDbNames());
     }
 
     @Override
@@ -2988,11 +2965,52 @@ public class LocalMetastore implements ConnectorMetadata {
         } finally {
             db.readUnlock();
         }
-        if (table != null && table instanceof MaterializedView) {
+        if (table instanceof MaterializedView) {
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
+            Set<Long> baseTableIds = ((MaterializedView) table).getBaseTableIds();
+            for (Long baseTableId : baseTableIds) {
+                OlapTable baseTable = ((OlapTable) db.getTable(baseTableId));
+                if (baseTable != null) {
+                    baseTable.removeRelatedMaterializedView(table.getId());
+                }
+            }
         } else {
             stateMgr.getAlterInstance().processDropMaterializedView(stmt);
         }
+    }
+
+    @Override
+    public void alterMaterializedView(AlterMaterializedViewStatement stmt) throws DdlException, MetaNotFoundException {
+        stateMgr.getAlterInstance().processAlterMaterializedView(stmt);
+    }
+
+    @Override
+    public void refreshMaterializedView(String dbName, String mvName) throws DdlException, MetaNotFoundException {
+        Database db = this.getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        MaterializedView materializedView = null;
+        db.readLock();
+        try {
+            final Table table = db.getTable(mvName);
+            if (table instanceof MaterializedView) {
+                materializedView = (MaterializedView) table;
+            }
+        } finally {
+            db.readUnlock();
+        }
+        if (materializedView == null) {
+            throw new MetaNotFoundException(mvName + " is not a materialized view");
+        }
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
+        if (!taskManager.containTask(mvTaskName)) {
+            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+            taskManager.createTask(task, true);
+        }
+        // run task
+        taskManager.executeTask(mvTaskName);
     }
 
     /*
@@ -3530,24 +3548,21 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private void unprotectCreateCluster(Cluster cluster) {
-        for (Long id : cluster.getBackendIdList()) {
-            final Backend backend = stateMgr.getClusterInfo().getBackend(id);
-            backend.setOwnerClusterName(cluster.getName());
-            backend.setBackendState(Backend.BackendState.using);
-        }
+        // This is only used for initDefaultCluster and in that case the backendIdList is empty.
+        // So ASSERT the cluster's backend list size.
+        Preconditions.checkState(cluster.isDefaultCluster(), "Cluster must be default cluster");
+        Preconditions.checkState(cluster.isEmpty(), "Cluster backendIdList must be 0");
 
         idToCluster.put(cluster.getId(), cluster);
-        nameToCluster.put(cluster.getName(), cluster);
+        nameToCluster.put(SystemInfoService.DEFAULT_CLUSTER, cluster);
 
         // create info schema db
-        final InfoSchemaDb infoDb = new InfoSchemaDb(cluster.getName());
-        infoDb.setClusterName(cluster.getName());
+        final InfoSchemaDb infoDb = new InfoSchemaDb(SystemInfoService.DEFAULT_CLUSTER);
+        infoDb.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         unprotectCreateDb(infoDb);
 
         // only need to create default cluster once.
-        if (cluster.getName().equalsIgnoreCase(SystemInfoService.DEFAULT_CLUSTER)) {
-            stateMgr.setIsDefaultClusterCreated(true);
-        }
+        stateMgr.setIsDefaultClusterCreated(true);
     }
 
     public Cluster getCluster(String clusterName) {
@@ -3562,26 +3577,23 @@ public class LocalMetastore implements ConnectorMetadata {
                 final Cluster cluster = Cluster.read(dis);
                 checksum ^= cluster.getId();
 
-                List<Long> latestBackendIds = stateMgr.getClusterInfo().getClusterBackendIds(cluster.getName());
-                if (latestBackendIds.size() != cluster.getBackendIdList().size()) {
-                    LOG.warn("Cluster:" + cluster.getName() + ", backends in Cluster is "
-                            + cluster.getBackendIdList().size() + ", backends in SystemInfoService is "
-                            + cluster.getBackendIdList().size());
-                }
+                Preconditions.checkState(cluster.isDefaultCluster(), "Cluster must be default_cluster");
+                List<Long> latestBackendIds = stateMgr.getClusterInfo().getBackendIds();
+
                 // The number of BE in cluster is not same as in SystemInfoService, when perform 'ALTER
                 // SYSTEM ADD BACKEND TO ...' or 'ALTER SYSTEM ADD BACKEND ...', because both of them are
                 // for adding BE to some Cluster, but loadCluster is after loadBackend.
                 cluster.setBackendIdList(latestBackendIds);
 
-                String dbName = InfoSchemaDb.getFullInfoSchemaDbName(cluster.getName());
+                String dbName = InfoSchemaDb.getFullInfoSchemaDbName(SystemInfoService.DEFAULT_CLUSTER);
                 InfoSchemaDb db;
                 // Use real GlobalStateMgr instance to avoid InfoSchemaDb id continuously increment
                 // when checkpoint thread load image.
                 if (getFullNameToDb().containsKey(dbName)) {
                     db = (InfoSchemaDb) GlobalStateMgr.getCurrentState().getFullNameToDb().get(dbName);
                 } else {
-                    db = new InfoSchemaDb(cluster.getName());
-                    db.setClusterName(cluster.getName());
+                    db = new InfoSchemaDb(SystemInfoService.DEFAULT_CLUSTER);
+                    db.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
                 }
                 String errMsg = "InfoSchemaDb id shouldn't larger than 10000, please restart your FE server";
                 // Every time we construct the InfoSchemaDb, which id will increment.
@@ -3593,7 +3605,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 fullNameToDb.put(db.getFullName(), db);
                 cluster.addDb(dbName, db.getId());
                 idToCluster.put(cluster.getId(), cluster);
-                nameToCluster.put(cluster.getName(), cluster);
+                nameToCluster.put(SystemInfoService.DEFAULT_CLUSTER, cluster);
             }
         }
         LOG.info("finished replay cluster from image");
@@ -3602,8 +3614,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void initDefaultCluster() {
         final List<Long> backendList = Lists.newArrayList();
-        final List<Backend> defaultClusterBackends =
-                systemInfoService.getClusterBackends(SystemInfoService.DEFAULT_CLUSTER);
+        final List<Backend> defaultClusterBackends = systemInfoService.getBackends();
         for (Backend backend : defaultClusterBackends) {
             backendList.add(backend.getId());
         }

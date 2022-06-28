@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AddBackendClause;
+import com.starrocks.analysis.AddComputeNodeClause;
 import com.starrocks.analysis.AddFollowerClause;
 import com.starrocks.analysis.AddObserverClause;
 import com.starrocks.analysis.AddRollupClause;
@@ -46,6 +47,7 @@ import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropBackendClause;
+import com.starrocks.analysis.DropComputeNodeClause;
 import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -92,7 +94,9 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
+import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
@@ -133,6 +137,7 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AnalyzeBasicDesc;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
@@ -158,14 +163,19 @@ import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.ShowAnalyzeStmt;
+import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
+import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
+import com.starrocks.sql.ast.ShowComputeNodesStmt;
+import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
@@ -400,6 +410,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 createTableStmt,
                 columns == null ? null : columns.stream().map(Identifier::getValue).collect(toList()),
                 (QueryStatement) visit(context.queryStatement()));
+    }
+
+    @Override
+    public ParseNode visitAddComputeNodeClause(StarRocksParser.AddComputeNodeClauseContext context) {
+        List<String> hostPorts =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        return new AddComputeNodeClause(hostPorts);
+    }
+
+    @Override
+    public ParseNode visitDropComputeNodeClause(StarRocksParser.DropComputeNodeClauseContext context) {
+        List<String> hostPorts =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        return new DropComputeNodeClause(hostPorts);
+    }
+
+    @Override
+    public ParseNode visitShowComputeNodes(StarRocksParser.ShowComputeNodesContext context) {
+        return new ShowComputeNodesStmt();
     }
 
     @Override
@@ -707,6 +736,31 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new DropMaterializedViewStmt(context.IF() != null, mvName);
     }
 
+    @Override
+    public ParseNode visitAlterMaterializedViewStatement(
+            StarRocksParser.AlterMaterializedViewStatementContext context) {
+        QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
+        TableName mvName = qualifiedNameToTableName(mvQualifiedName);
+        String newMvName = null;
+        if (context.tableRenameClause() != null) {
+            newMvName = ((Identifier) visit(context.tableRenameClause().identifier())).getValue();
+        }
+        //process refresh
+        RefreshSchemeDesc refreshSchemeDesc = null;
+        if (context.refreshSchemeDesc() != null) {
+            refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
+        }
+        return new AlterMaterializedViewStatement(mvName, newMvName, refreshSchemeDesc);
+    }
+
+    @Override
+    public ParseNode visitRefreshMaterializedViewStatement(
+            StarRocksParser.RefreshMaterializedViewStatementContext context) {
+        QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
+        TableName mvName = qualifiedNameToTableName(mvQualifiedName);
+        return new RefreshMaterializedViewStatement(mvName);
+    }
+
     // ------------------------------------------- Cluster Management Statement -----------------------------------------
 
     @Override
@@ -987,7 +1041,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowAnalyzeStatement(StarRocksParser.ShowAnalyzeStatementContext context) {
-        return new ShowAnalyzeStmt();
+        if (context.STATUS() != null) {
+            return new ShowAnalyzeStatusStmt();
+        } else if (context.JOB() != null) {
+            return new ShowAnalyzeJobStmt();
+        } else {
+            return new ShowAnalyzeJobStmt();
+        }
+    }
+
+    @Override
+    public ParseNode visitShowStatsMetaStatement(StarRocksParser.ShowStatsMetaStatementContext context) {
+        return new ShowBasicStatsMetaStmt();
+    }
+
+    @Override
+    public ParseNode visitShowHistogramMetaStatement(StarRocksParser.ShowHistogramMetaStatementContext context) {
+        return new ShowHistogramStatsMetaStmt();
     }
 
     @Override
@@ -1015,9 +1085,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             bucket = Config.histogram_buckets_size;
         }
-        long mcv = Config.histogram_topn_size;
 
-        return new AnalyzeStmt(tableName, columnNames, properties, true, new AnalyzeHistogramDesc(bucket, mcv));
+        return new AnalyzeStmt(tableName, columnNames, properties, true, new AnalyzeHistogramDesc(bucket));
     }
 
     // ------------------------------------------- Work Group Statement -------------------------------------------------
@@ -1657,6 +1726,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String configValue = property.getValue();
         configs.put(configKey, configValue);
         return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs);
+    }
+
+    @Override public ParseNode visitSetVar(StarRocksParser.SetVarContext ctx) {
+        Expr expr = (Expr) visit(ctx.expression());
+        String variable = ctx.IDENTIFIER().getText();
+        if (ctx.varType() != null) {
+            return new SetVar(getVariableType(ctx.varType()), variable, expr);
+        }
+        return visitChildren(ctx);
+    }
+
+    @Override
+    public ParseNode visitSetStmt(StarRocksParser.SetStmtContext ctx) {
+        List<SetVar> propertyList = visit(ctx.setVarList().setVar(), SetVar.class);
+        return new SetStmt(propertyList);
     }
 
     @Override
@@ -2612,6 +2696,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         LocalDateTime startTime = LocalDateTime.now();
         IntervalLiteral intervalLiteral = null;
         if (context.ASYNC() != null) {
+            if (context.START() != null && context.interval() == null) {
+                throw new SemanticException("Please input interval clause");
+            }
             if (context.START() != null) {
                 StringLiteral stringLiteral = (StringLiteral) visit(context.string());
                 DateTimeFormatter dateTimeFormatter = null;
@@ -2629,10 +2716,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                                     stringLiteral.getStringValue() + " is incorrect");
                 }
             }
-            intervalLiteral = (IntervalLiteral) visit(context.interval());
-            if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
-                throw new IllegalArgumentException(
-                        "Refresh every " + intervalLiteral.getValue() + " must be IntLiteral");
+
+            if (context.interval() != null) {
+                intervalLiteral = (IntervalLiteral) visit(context.interval());
+                if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
+                    throw new IllegalArgumentException(
+                            "Refresh every " + intervalLiteral.getValue() + " must be IntLiteral");
+                }
             }
             return new AsyncRefreshSchemeDesc(startTime, intervalLiteral);
         } else if (context.SYNC() != null) {

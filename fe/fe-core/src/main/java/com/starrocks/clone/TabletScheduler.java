@@ -183,7 +183,7 @@ public class TabletScheduler extends MasterDaemon {
      * update working slots at the beginning of each round
      */
     private boolean updateWorkingSlots() {
-        ImmutableMap<Long, Backend> backends = infoService.getBackendsInCluster(null);
+        ImmutableMap<Long, Backend> backends = infoService.getIdToBackend();
         for (Backend backend : backends.values()) {
             if (!backend.hasPathHash() && backend.isAlive()) {
                 // when upgrading, backend may not get path info yet. so return false and wait for next round.
@@ -233,10 +233,17 @@ public class TabletScheduler extends MasterDaemon {
 
     /**
      * add a ready-to-be-scheduled tablet to pendingTablets, if it has not being added before.
-     * if force is true, do not check if tablet is already added before.
      */
     public synchronized AddResult addTablet(TabletSchedCtx tablet, boolean force) {
-        if (!force && containsTablet(tablet.getTabletId())) {
+        // Under no circumstance should we repeatedly add a tablet to pending queue
+        // to schedule, because this will break the scheduling logic. Besides, with current design,
+        // we have to maintain the constraint that `allTabletIds = runningTablets + pendingTablets`.
+        // `allTabletIds` and `runningTablets` are defined as unique container, if we schedule a
+        // tablet with different `TabletSchedCtx` at the same time, the reference in `runningTablets`
+        // can be messed up.
+        // `force` here should only mean that we can exceed the size limit of
+        // `pendingTablets` and `runningTablets` if there is too many tablets to schedule.
+        if (containsTablet(tablet.getTabletId())) {
             return AddResult.ALREADY_IN;
         }
 
@@ -346,14 +353,11 @@ public class TabletScheduler extends MasterDaemon {
      */
     private void updateClusterLoadStatistic() {
         Map<String, ClusterLoadStatistic> newStatisticMap = Maps.newConcurrentMap();
-        Set<String> clusterNames = infoService.getClusterNames();
-        for (String clusterName : clusterNames) {
-            ClusterLoadStatistic clusterLoadStatistic = new ClusterLoadStatistic(clusterName,
-                    infoService, invertedIndex);
-            clusterLoadStatistic.init();
-            newStatisticMap.put(clusterName, clusterLoadStatistic);
-            LOG.info("update cluster {} load statistic:\n{}", clusterName, clusterLoadStatistic.getBrief());
-        }
+        String clusterName = SystemInfoService.DEFAULT_CLUSTER;
+        ClusterLoadStatistic clusterLoadStatistic = new ClusterLoadStatistic(infoService, invertedIndex);
+        clusterLoadStatistic.init();
+        newStatisticMap.put(clusterName, clusterLoadStatistic);
+        LOG.info("update cluster {} load statistic:\n{}", clusterName, clusterLoadStatistic.getBrief());
 
         this.statisticMap = newStatisticMap;
     }
@@ -384,6 +388,16 @@ public class TabletScheduler extends MasterDaemon {
         LOG.info("adjust priority for all tablets. changed: {}, total: {}", changedNum, size);
     }
 
+    private void debugLogPendingTabletsStats() {
+        StringBuilder sb = new StringBuilder();
+        for (Priority prio : Priority.values()) {
+            sb.append(String.format("%s priority tablets count: %d\n",
+                    prio.name(),
+                    pendingTablets.stream().filter(t -> t.getDynamicPriority() == prio).count()));
+        }
+        LOG.debug("pending tablets current count: {}\n{}", pendingTablets.size(), sb);
+    }
+
     /**
      * get at most BATCH_NUM tablets from queue, and try to schedule them.
      * After handle, the tablet info should be
@@ -396,7 +410,10 @@ public class TabletScheduler extends MasterDaemon {
     private void schedulePendingTablets() {
         long start = System.currentTimeMillis();
         List<TabletSchedCtx> currentBatch = getNextTabletCtxBatch();
-        LOG.debug("get {} tablets to schedule", currentBatch.size());
+        if (LOG.isDebugEnabled()) {
+            debugLogPendingTabletsStats();
+            LOG.debug("get {} tablets to schedule", currentBatch.size());
+        }
 
         AgentBatchTask batchTask = new AgentBatchTask();
         for (TabletSchedCtx tabletCtx : currentBatch) {
@@ -410,6 +427,8 @@ public class TabletScheduler extends MasterDaemon {
                 tabletCtx.setErrMsg(e.getMessage());
 
                 if (e.getStatus() == Status.SCHEDULE_FAILED) {
+                    LOG.debug("scheduling for tablet[{}] failed, type: {}, reason: {}",
+                            tabletCtx.getTabletId(), tabletCtx.getType().name(), e.getMessage());
                     if (tabletCtx.getType() == Type.BALANCE) {
                         // if balance is disabled, remove this tablet
                         if (Config.disable_balance) {
@@ -563,7 +582,7 @@ public class TabletScheduler extends MasterDaemon {
                 statusPair = Pair.create(st, Priority.HIGH);
                 tabletCtx.setColocateGroupBackendIds(backendsSet);
             } else {
-                List<Long> aliveBeIdsInCluster = infoService.getClusterBackendIds(db.getClusterName(), true);
+                List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
                 statusPair = tablet.getHealthStatusWithPriority(
                         infoService, tabletCtx.getCluster(),
                         partition.getVisibleVersion(),
@@ -1199,6 +1218,16 @@ public class TabletScheduler extends MasterDaemon {
         throw new SchedException(Status.SCHEDULE_FAILED, "unable to find dest path which can be fit in");
     }
 
+    private synchronized void addBackToPendingTablets(TabletSchedCtx tabletCtx) {
+        // Since we know it's add back, corresponding tablet id is still recorded in `allTabletIds`,
+        // so we explicitly remove the id from `allTabletIds`, otherwise `addTablet()` may fail.
+        // And when adding back, we don't want it to be failed because of exceeding limit of
+        // `Config.max_scheduling_tablets` since it's already got scheduled before, we just adjusted
+        // its priority and want it to be scheduled again, so we set force to be true here.
+        allTabletIds.remove(tabletCtx.getTabletId());
+        addTablet(tabletCtx, true /* force */);
+    }
+
     /**
      * For some reason, a tablet info failed to be scheduled this time,
      * So we dynamically change its priority and add back to queue, waiting for next round.
@@ -1206,7 +1235,7 @@ public class TabletScheduler extends MasterDaemon {
     private void dynamicAdjustPrioAndAddBackToPendingTablets(TabletSchedCtx tabletCtx, String message) {
         Preconditions.checkState(tabletCtx.getState() == TabletSchedCtx.State.PENDING);
         tabletCtx.adjustPriority(stat);
-        addTablet(tabletCtx, true /* force */);
+        addBackToPendingTablets(tabletCtx);
     }
 
     private void finalizeTabletCtx(TabletSchedCtx tabletCtx, TabletSchedCtx.State state, String reason) {

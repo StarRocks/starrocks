@@ -516,7 +516,7 @@ under the License.
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
-            <version>3.3.0</version>
+            <version>3.3.2</version>
             <exclusions>
                 <exclusion>
                     <artifactId>zookeeper</artifactId>
@@ -797,6 +797,26 @@ under the License.
                                 </argument>
                                 <argument>--java_out=${basedir}/target/generated-sources/proto</argument>
                                 <argument>${starrocks.home}/gensrc/proto/internal_service.proto</argument>
+                            </arguments>
+                            <skip>${skip.plugin}</skip>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>gen_proto_starlake</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <!-- DO NOT use goal 'java', it will terminate the VM after done -->
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>${java.home}/bin/java</executable>
+                            <arguments>
+                                <argument>-jar</argument>
+                                <argument>
+                                    ${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar
+                                </argument>
+                                <argument>--java_out=${basedir}/target/generated-sources/proto</argument>
+                                <argument>${starrocks.home}/gensrc/proto/lake_service.proto</argument>
                             </arguments>
                             <skip>${skip.plugin}</skip>
                         </configuration>

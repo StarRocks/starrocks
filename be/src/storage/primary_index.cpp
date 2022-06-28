@@ -8,7 +8,6 @@
 #include "runtime/large_int_value.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
-#include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/tablet.h"
@@ -159,7 +158,7 @@ public:
             uint32_t prefetch_i = i + PREFETCHN;
             if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
             auto p = _map.find(keys[i]);
-            if (p != _map.end() && ((uint32_t)(p->second.value >> 32) == src_rssid[i])) {
+            if (p != _map.end() && (uint32_t)(p->second.value >> 32) == src_rssid[i]) {
                 // matched, can replace
                 p->second = RowIdPack4(base + i);
             } else {
@@ -360,7 +359,7 @@ public:
             for (uint32_t i = idx_begin; i < idx_end; i++) {
                 uint32_t pslot = (i - idx_begin) % PREFETCHN;
                 auto p = _map.find(prefetch_keys[pslot], prefetch_hashes[pslot]);
-                if (p != _map.end() && ((uint32_t)(p->second.value >> 32) == src_rssid[i])) {
+                if (p != _map.end() && (uint32_t)(p->second.value >> 32) == src_rssid[i]) {
                     // matched, can replace
                     p->second.value = base + i;
                 } else {
@@ -377,7 +376,7 @@ public:
         } else {
             for (uint32_t i = idx_begin; i < idx_end; i++) {
                 auto p = _map.find(FixSlice<S>(keys[i]));
-                if (p != _map.end() && ((uint32_t)(p->second.value >> 32) == src_rssid[i])) {
+                if (p != _map.end() && (uint32_t)(p->second.value >> 32) == src_rssid[i]) {
                     // matched, can replace
                     p->second.value = base + i;
                 } else {
@@ -541,7 +540,7 @@ public:
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
             auto p = _map.find(keys[i].to_string());
-            if (p != _map.end() && ((uint32_t)(p->second >> 32) == src_rssid[i])) {
+            if (p != _map.end() && (uint32_t)(p->second >> 32) == src_rssid[i]) {
                 // matched, can replace
                 p->second = base + i;
             } else {
@@ -982,9 +981,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     auto chunk = chunk_shared_ptr.get();
     for (auto& rowset : rowsets) {
         RowsetReleaseGuard guard(rowset);
-        auto beta_rowset = down_cast<BetaRowset*>(rowset.get());
-        auto res =
-                beta_rowset->get_segment_iterators2(pkey_schema, tablet->data_dir()->get_meta(), apply_version, &stats);
+        auto res = rowset->get_segment_iterators2(pkey_schema, tablet->data_dir()->get_meta(), apply_version, &stats);
         if (!res.ok()) {
             return res.status();
         }

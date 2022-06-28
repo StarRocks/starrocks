@@ -21,7 +21,6 @@
 
 package com.starrocks.persist;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.alter.DecommissionBackendJob;
@@ -47,10 +46,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.ha.MasterInfo;
-import com.starrocks.journal.Journal;
-import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
-import com.starrocks.journal.JournalFactory;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
@@ -74,7 +70,11 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
@@ -82,7 +82,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -95,51 +94,10 @@ public class EditLog {
     public static final Logger LOG = LogManager.getLogger(EditLog.class);
     private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
-    private final Journal journal;
-
     private BlockingQueue<JournalTask> journalQueue;
 
-    @VisibleForTesting
-    public EditLog(Journal journal, BlockingQueue<JournalTask> journalQueue) {
-        this.journal = journal;
+    public EditLog(BlockingQueue<JournalTask> journalQueue) {
         this.journalQueue = journalQueue;
-    }
-
-    public EditLog(String nodeName) {
-        journal = JournalFactory.create(nodeName);
-        journalQueue = new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
-    }
-
-    public BlockingQueue<JournalTask> getJournalQueue() {
-        return journalQueue;
-    }
-
-    public long getMaxJournalId() {
-        return journal.getMaxJournalId();
-    }
-
-    public JournalCursor read(long fromId, long toId) {
-        return journal.read(fromId, toId);
-    }
-
-    public long getFinalizedJournalId() {
-        return journal.getFinalizedJournalId();
-    }
-
-    public void deleteJournals(long deleteToJournalId) {
-        journal.deleteJournals(deleteToJournalId);
-    }
-
-    public List<Long> getDatabaseNames() {
-        return journal.getDatabaseNames();
-    }
-
-    public synchronized int getNumEditStreams() {
-        return journal == null ? 0 : 1;
-    }
-
-    public Journal getJournal() {
-        return journal;
     }
 
     public static void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal) {
@@ -290,6 +248,17 @@ public class EditLog {
                     globalStateMgr.replayRenameTable(info);
                     break;
                 }
+                case OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME: {
+                    ChangeMaterializedViewRefreshSchemeLog log =
+                            (ChangeMaterializedViewRefreshSchemeLog) journal.getData();
+                    globalStateMgr.replayChangeMaterializedViewRefreshScheme(log);
+                    break;
+                }
+                case OperationType.OP_RENAME_MATERIALIZED_VIEW: {
+                    RenameMaterializedViewLog log = (RenameMaterializedViewLog) journal.getData();
+                    globalStateMgr.replayRenameMaterializedView(log);
+                    break;
+                }
                 case OperationType.OP_MODIFY_VIEW_DEF: {
                     AlterViewInfo info = (AlterViewInfo) journal.getData();
                     globalStateMgr.getAlterInstance().replayModifyViewDef(info);
@@ -422,6 +391,16 @@ public class EditLog {
                 case OperationType.OP_DELETE_REPLICA: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
                     globalStateMgr.replayDeleteReplica(info);
+                    break;
+                }
+                case OperationType.OP_ADD_COMPUTE_NODE: {
+                    ComputeNode computeNode = (ComputeNode) journal.getData();
+                    GlobalStateMgr.getCurrentSystemInfo().replayAddComputeNode(computeNode);
+                    break;
+                }
+                case OperationType.OP_DROP_COMPUTE_NODE: {
+                    DropComputeNodeLog dropComputeNodeLog = (DropComputeNodeLog) journal.getData();
+                    GlobalStateMgr.getCurrentSystemInfo().replayDropComputeNode(dropComputeNodeLog.getComputeNodeId());
                     break;
                 }
                 case OperationType.OP_ADD_BACKEND: {
@@ -846,6 +825,21 @@ public class EditLog {
                     globalStateMgr.getAnalyzeManager().replayRemoveAnalyzeJob(analyzeJob);
                     break;
                 }
+                case OperationType.OP_ADD_ANALYZE_STATUS: {
+                    AnalyzeStatus analyzeStatus = (AnalyzeStatus) journal.getData();
+                    globalStateMgr.getAnalyzeManager().replayAddAnalyzeStatus(analyzeStatus);
+                    break;
+                }
+                case OperationType.OP_ADD_BASIC_STATS_META: {
+                    BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeManager().replayAddBasicStatsMeta(basicStatsMeta);
+                    break;
+                }
+                case OperationType.OP_ADD_HISTOGRAM_STATS_META: {
+                    HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeManager().replayAddHistogramStatsMeta(histogramStatsMeta);
+                    break;
+                }
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
                     ModifyTableColumnOperationLog modifyTableColumnOperationLog =
                             (ModifyTableColumnOperationLog) journal.getData();
@@ -895,17 +889,6 @@ public class EditLog {
             LOG.error("Operation Type {}", opCode, e);
             System.exit(-1);
         }
-    }
-
-    /**
-     * Shutdown the file store.
-     */
-    public synchronized void close() throws IOException {
-        journal.close();
-    }
-
-    public void open() {
-        journal.open();
     }
 
     /**
@@ -1116,8 +1099,16 @@ public class EditLog {
         logEdit(OperationType.OP_FINISH_CONSISTENCY_CHECK, info);
     }
 
+    public void logAddComputeNode(ComputeNode computeNode) {
+        logEdit(OperationType.OP_ADD_COMPUTE_NODE, computeNode);
+    }
+
     public void logAddBackend(Backend be) {
         logEdit(OperationType.OP_ADD_BACKEND, be);
+    }
+
+    public void logDropComputeNode(DropComputeNodeLog log) {
+        logEdit(OperationType.OP_DROP_COMPUTE_NODE, log);
     }
 
     public void logDropBackend(Backend be) {
@@ -1454,6 +1445,18 @@ public class EditLog {
         logEdit(OperationType.OP_REMOVE_ANALYZER_JOB, job);
     }
 
+    public void logAddAnalyzeStatus(AnalyzeStatus status) {
+        logEdit(OperationType.OP_ADD_ANALYZE_STATUS, status);
+    }
+
+    public void logAddBasicStatsMeta(BasicStatsMeta meta) {
+        logEdit(OperationType.OP_ADD_BASIC_STATS_META, meta);
+    }
+
+    public void logAddHistogramMeta(HistogramStatsMeta meta) {
+        logEdit(OperationType.OP_ADD_HISTOGRAM_STATS_META, meta);
+    }
+
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
         logEdit(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
     }
@@ -1472,5 +1475,13 @@ public class EditLog {
 
     public void logInsertOverwriteStateChange(InsertOverwriteStateChangeInfo info) {
         logEdit(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, info);
+    }
+
+    public void logMvRename(RenameMaterializedViewLog log) {
+        logEdit(OperationType.OP_RENAME_MATERIALIZED_VIEW, log);
+    }
+
+    public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
+        logEdit(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log);
     }
 }

@@ -24,19 +24,22 @@
 #include <string>
 #include <vector>
 
+#include "agent/status.h"
 #include "gen_cpp/AgentService_types.h"
 
 namespace starrocks {
 
 class ExecEnv;
-class MultiWorkerPool;
+class MasterServerClient;
 class TaskWorkerPool;
-class TMasterInfo;
+class TFinishTaskRequest;
+class TMasterResult;
+class TReportRequest;
 
 // Each method corresponds to one RPC from FE Master, see BackendService.
 class AgentServer {
 public:
-    explicit AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info);
+    explicit AgentServer(ExecEnv* exec_env);
     ~AgentServer();
 
     // Receive agent task from FE master
@@ -50,14 +53,12 @@ public:
     // TODO(lingbin): This method is deprecated, should be removed later.
     void publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request);
 
-private:
     AgentServer(const AgentServer&) = delete;
     const AgentServer& operator=(const AgentServer&) = delete;
 
+private:
     // Not Owned
     ExecEnv* _exec_env;
-    // Reference to the ExecEnv::_master_info
-    const TMasterInfo& _master_info;
 
     std::unique_ptr<TaskWorkerPool> _create_tablet_workers;
     std::unique_ptr<TaskWorkerPool> _drop_tablet_workers;

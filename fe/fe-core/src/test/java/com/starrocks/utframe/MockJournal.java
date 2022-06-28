@@ -5,7 +5,6 @@ package com.starrocks.utframe;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.io.DataOutputBuffer;
-import com.starrocks.common.io.Writable;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
@@ -31,8 +30,7 @@ public class MockJournal implements Journal {
     }
 
     @Override
-    public void open() {
-        GlobalStateMgr.getCurrentState().setHaProtocol(new MockProtocol());
+    public void open() throws InterruptedException, JournalException {
     }
 
     @Override
@@ -54,26 +52,18 @@ public class MockJournal implements Journal {
     public void close() {
     }
 
-    @Override
-    public JournalEntity read(long journalId) {
+    // only for MockedJournal
+    protected JournalEntity read(long journalId) {
         return values.get(journalId);
     }
 
     @Override
-    public JournalCursor read(long fromKey, long toKey) {
+    public JournalCursor read(long fromKey, long toKey) throws JournalException {
         if (toKey < fromKey || fromKey < 0) {
             return null;
         }
 
         return new MockJournalCursor(this, fromKey, toKey);
-    }
-
-    @Override
-    public void write(short op, Writable writable) {
-        JournalEntity je = new JournalEntity();
-        je.setData(writable);
-        je.setOpCode(op);
-        values.put(nextJournalId.getAndIncrement(), je);
     }
 
     @Override
@@ -122,11 +112,11 @@ public class MockJournal implements Journal {
     }
 
     private static class MockJournalCursor implements JournalCursor {
-        private final Journal instance;
+        private final MockJournal instance;
         private long start;
         private final long end;
 
-        public MockJournalCursor(Journal instance, long start, long end) {
+        public MockJournalCursor(MockJournal instance, long start, long end) {
             this.instance = instance;
             this.start = start;
             this.end = end;
@@ -147,7 +137,7 @@ public class MockJournal implements Journal {
         }
     }
 
-    private static class MockProtocol implements HAProtocol {
+    public static class MockProtocol implements HAProtocol {
 
         @Override
         public long getEpochNumber() {

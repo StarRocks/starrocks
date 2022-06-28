@@ -263,6 +263,10 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         this.lastAdjustPrioTime = 0;
     }
 
+    public Priority getDynamicPriority() {
+        return dynamicPriority;
+    }
+
     public void increaseFailedSchedCounter() {
         ++failedSchedCounter;
     }
@@ -495,13 +499,15 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         return this.destPathResourceHold;
     }
 
-    // database lock should be held.
-    public void chooseSrcReplica(Map<Long, PathSlot> backendsWorkingSlots) throws SchedException {
-        /*
-         * get all candidate source replicas
-         * 1. source replica should be healthy.
-         * 2. slot of this source replica is available.
-         */
+    public boolean needCloneFromSource() {
+        return tabletStatus == TabletStatus.REPLICA_MISSING ||
+                tabletStatus == TabletStatus.VERSION_INCOMPLETE ||
+                tabletStatus == TabletStatus.REPLICA_RELOCATING ||
+                tabletStatus == TabletStatus.COLOCATE_MISMATCH ||
+                tabletStatus == TabletStatus.NEED_FURTHER_REPAIR;
+    }
+
+    public List<Replica> getHealthyReplicas() {
         List<Replica> candidates = Lists.newArrayList();
         for (Replica replica : tablet.getReplicas()) {
             if (replica.isBad()) {
@@ -525,6 +531,17 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             candidates.add(replica);
         }
 
+        return candidates;
+    }
+
+    // database lock should be held.
+    public void chooseSrcReplica(Map<Long, PathSlot> backendsWorkingSlots) throws SchedException {
+        /*
+         * get all candidate source replicas
+         * 1. source replica should be healthy.
+         * 2. slot of this source replica is available.
+         */
+        List<Replica> candidates = getHealthyReplicas();
         if (candidates.isEmpty()) {
             throw new SchedException(Status.UNRECOVERABLE, "unable to find source replica");
         }
@@ -960,7 +977,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     private void unprotectedFinishClone(TFinishTaskRequest request, Database db, Partition partition,
                                         short replicationNum) throws SchedException {
-        List<Long> aliveBeIdsInCluster = infoService.getClusterBackendIds(db.getClusterName(), true);
+        List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
         Pair<TabletStatus, TabletSchedCtx.Priority> pair = tablet.getHealthStatusWithPriority(
                 infoService, db.getClusterName(), visibleVersion, replicationNum,
                 aliveBeIdsInCluster);

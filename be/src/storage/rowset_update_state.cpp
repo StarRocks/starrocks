@@ -7,7 +7,6 @@
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
-#include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_rewriter.h"
@@ -66,7 +65,7 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
     // always one file for now.
     for (auto i = 0; i < rowset->num_delete_files(); i++) {
-        auto path = BetaRowset::segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), i);
+        auto path = Rowset::segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), i);
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(path));
         ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
         std::vector<uint8_t> read_buffer(file_size);
@@ -80,8 +79,7 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
 
     RowsetReleaseGuard guard(rowset->shared_from_this());
     OlapReaderStatistics stats;
-    auto beta_rowset = down_cast<BetaRowset*>(rowset);
-    auto res = beta_rowset->get_segment_iterators2(pkey_schema, nullptr, 0, &stats);
+    auto res = rowset->get_segment_iterators2(pkey_schema, nullptr, 0, &stats);
     if (!res.ok()) {
         return res.status();
     }
@@ -97,7 +95,7 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
         auto col = pk_column->clone();
         auto itr = itrs[i].get();
         if (itr != nullptr) {
-            auto num_rows = beta_rowset->segments()[i]->num_rows();
+            auto num_rows = rowset->segments()[i]->num_rows();
             col->reserve(num_rows);
             while (true) {
                 chunk->reset();
@@ -121,11 +119,9 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     for (const auto& one_delete : _deletes) {
         _memory_usage += one_delete != nullptr ? one_delete->memory_usage() : 0;
     }
-    const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
-    if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0) {
+    if (!rowset->rowset_meta()->get_meta_pb().has_txn_meta() || rowset->num_segments() == 0) {
         return Status::OK();
     }
-
     return _prepare_partial_update_states(tablet, rowset);
 }
 
@@ -385,8 +381,8 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
             _check_and_resolve_conflict(tablet, rowset, rowset_id, latest_applied_version, read_column_ids, index));
 
     for (size_t i = 0; i < num_segments; i++) {
-        auto src_path = BetaRowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
-        auto dest_path = BetaRowset::segment_temp_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
+        auto src_path = Rowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
+        auto dest_path = Rowset::segment_temp_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
         rewrite_files.emplace_back(src_path, dest_path);
 
         int64_t t_rewrite_start = MonotonicMillis();
@@ -414,8 +410,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     }
     // clean this to prevent DeferOp clean files
     rewrite_files.clear();
-    auto beta_rowset = down_cast<BetaRowset*>(rowset);
-    RETURN_IF_ERROR(beta_rowset->reload());
+    RETURN_IF_ERROR(rowset->reload());
     // Be may crash during the rewrite or after the rewrite
     // So the data at the end of the segment_file may be illegal
     // We use partial_rowset_footers to locate the partial_footer so that

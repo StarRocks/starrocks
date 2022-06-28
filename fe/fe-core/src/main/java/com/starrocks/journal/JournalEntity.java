@@ -59,12 +59,14 @@ import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDropInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
+import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropCatalogLog;
+import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.DropPartitionInfo;
@@ -82,6 +84,7 @@ import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
+import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -99,7 +102,11 @@ import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
@@ -258,6 +265,14 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME:
+                data = ChangeMaterializedViewRefreshSchemeLog.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_RENAME_MATERIALIZED_VIEW:
+                data = RenameMaterializedViewLog.read(in);
+                isRead = true;
+                break;
             case OperationType.OP_BACKUP_JOB: {
                 data = BackupJob.read(in);
                 isRead = true;
@@ -307,6 +322,16 @@ public class JournalEntity implements Writable {
             case OperationType.OP_BACKEND_STATE_CHANGE: {
                 data = new Backend();
                 ((Backend) data).readFields(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_COMPUTE_NODE: {
+                data = ComputeNode.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DROP_COMPUTE_NODE: {
+                data = DropComputeNodeLog.read(in);
                 isRead = true;
                 break;
             }
@@ -582,6 +607,21 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_REMOVE_ANALYZER_JOB: {
                 data = AnalyzeJob.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_ANALYZE_STATUS: {
+                data = AnalyzeStatus.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_BASIC_STATS_META: {
+                data = BasicStatsMeta.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_HISTOGRAM_STATS_META: {
+                data = HistogramStatsMeta.read(in);
                 isRead = true;
                 break;
             }

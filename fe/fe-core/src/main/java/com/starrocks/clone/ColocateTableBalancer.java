@@ -521,7 +521,7 @@ public class ColocateTableBalancer extends MasterDaemon {
     private List<Long> getAvailableBeIds(String cluster, SystemInfoService infoService) {
         // get all backends to allBackendIds, and check be availability using checkBackendAvailable
         // backend stopped for a short period of time is still considered available
-        List<Long> allBackendIds = infoService.getClusterBackendIds(cluster, false);
+        List<Long> allBackendIds = infoService.getBackendIds(false);
         List<Long> availableBeIds = Lists.newArrayList();
         for (Long backendId : allBackendIds) {
             if (checkBackendAvailable(backendId, infoService)) {

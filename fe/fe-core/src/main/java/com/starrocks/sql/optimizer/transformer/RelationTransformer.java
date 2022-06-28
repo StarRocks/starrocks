@@ -394,7 +394,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
         List<ColumnRefOperator> outputVariables = outputVariablesBuilder.build();
         LogicalScanOperator scanOperator;
-        if (node.getTable().getType().equals(Table.TableType.OLAP)) {
+        if (node.getTable().isNativeTable()) {
             DistributionInfo distributionInfo = ((OlapTable) node.getTable()).getDefaultDistributionInfo();
             Preconditions.checkState(distributionInfo instanceof HashDistributionInfo);
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;

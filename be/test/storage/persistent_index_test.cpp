@@ -7,7 +7,7 @@
 #include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
-#include "storage/rowset/beta_rowset.h"
+#include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -309,7 +309,6 @@ RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_
     writer_context.tablet_id = tablet->tablet_id();
     writer_context.tablet_schema_hash = tablet->schema_hash();
     writer_context.partition_id = 0;
-    writer_context.rowset_type = BETA_ROWSET;
     writer_context.rowset_path_prefix = tablet->schema_hash_path();
     writer_context.rowset_state = COMMITTED;
     writer_context.tablet_schema = &tablet->tablet_schema();

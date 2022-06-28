@@ -23,12 +23,14 @@ package com.starrocks.system;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableCollection;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
-import com.google.common.collect.Sets;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.catalog.Column;
@@ -46,8 +48,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.DropComputeNodeLog;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -61,6 +66,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -70,7 +76,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -82,6 +87,8 @@ public class SystemInfoService {
 
     private volatile ImmutableMap<Long, Backend> idToBackendRef;
     private volatile ImmutableMap<Long, AtomicLong> idToReportVersionRef;
+
+    private volatile ImmutableMap<Long, ComputeNode> idToComputeNodeRef;
 
     // last backend id used by round robin for sequential choosing backends for
     // tablet creation
@@ -99,9 +106,61 @@ public class SystemInfoService {
         idToBackendRef = ImmutableMap.<Long, Backend>of();
         idToReportVersionRef = ImmutableMap.<Long, AtomicLong>of();
 
+        idToComputeNodeRef = ImmutableMap.<Long, ComputeNode>of();
+
         lastBackendIdForCreationMap = new ConcurrentHashMap<String, Long>();
         lastBackendIdForOtherMap = new ConcurrentHashMap<String, Long>();
         pathHashToDishInfoRef = ImmutableMap.<Long, DiskInfo>of();
+    }
+
+    public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs)
+            throws DdlException {
+        for (Pair<String, Integer> pair : hostPortPairs) {
+            // check is already exist
+            if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
+                throw new DdlException("Same backend already exists[" + pair.first + ":" + pair.second + "]");
+            }
+            if (getComputeNodeWithHeartbeatPort(pair.first, pair.second) != null) {
+                throw new DdlException("Same compute node already exists[" + pair.first + ":" + pair.second + "]");
+            }
+        }
+
+        for (Pair<String, Integer> pair : hostPortPairs) {
+            addComputeNode(pair.first, pair.second);
+        }
+    }
+
+    private ComputeNode getComputeNodeWithHeartbeatPort(String host, Integer heartPort) {
+        ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
+        for (ComputeNode computeNode : idToComputeNode.values()) {
+            if (computeNode.getHost().equals(host) && computeNode.getHeartbeatPort() == heartPort) {
+                return computeNode;
+            }
+        }
+        return null;
+    }
+
+    // Final entry of adding compute node
+    private void addComputeNode(String host, int heartbeatPort) throws DdlException {
+        ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
+        // update idToComputor
+        Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
+        copiedComputeNodes.put(newComputeNode.getId(), newComputeNode);
+        idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
+
+        setComputeNodeOwner(newComputeNode);
+
+        // log
+        GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
+        LOG.info("finished to add {} ", newComputeNode);
+    }
+
+    private void setComputeNodeOwner(ComputeNode computeNode) {
+        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(DEFAULT_CLUSTER);
+        Preconditions.checkState(cluster != null);
+        cluster.addComputeNode(computeNode.getId());
+        computeNode.setOwnerClusterName(DEFAULT_CLUSTER);
+        computeNode.setBackendState(BackendState.using);
     }
 
     // for deploy manager
@@ -185,7 +244,7 @@ public class SystemInfoService {
         if (null == candidateBackends || candidateBackends.size() == 0) {
             throw new DdlException(String.format("backend [%s] not found", willBeModifiedHost));
         }
-        
+
         // update idToBackend
         Backend preUpdateBackend = candidateBackends.get(0);
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
@@ -207,7 +266,7 @@ public class SystemInfoService {
                 formatSb.append(be.getHost() + ":" + be.getHeartbeatPort() + "\n");
             }
             opMessage = String.format(
-                formatSb.toString(), willBeModifiedHost, 
+                formatSb.toString(), willBeModifiedHost,
                 updateBackend.getHeartbeatPort(), fqdn, candidateBackends.size() - 1);
         } else {
             opMessage = String.format(formatSb.toString(), willBeModifiedHost, updateBackend.getHeartbeatPort(), fqdn);
@@ -217,6 +276,44 @@ public class SystemInfoService {
         List<List<String>> messageResult = new ArrayList<>();
         messageResult.add(Arrays.asList(opMessage));
         return new ShowResultSet(builder.build(), messageResult);
+    }
+
+    public void dropComputeNodes(List<Pair<String, Integer>> hostPortPairs) throws DdlException {
+        for (Pair<String, Integer> pair : hostPortPairs) {
+            // check is already exist
+            if (getComputeNodeWithHeartbeatPort(pair.first, pair.second) == null) {
+                throw new DdlException("compute node does not exists[" + pair.first + ":" + pair.second + "]");
+            }
+        }
+
+        for (Pair<String, Integer> pair : hostPortPairs) {
+            dropComputeNode(pair.first, pair.second);
+        }
+    }
+
+    public void dropComputeNode(String host, int heartbeatPort)
+            throws DdlException {
+        ComputeNode dropComputeNode = getComputeNodeWithHeartbeatPort(host, heartbeatPort);
+        if (dropComputeNode == null) {
+            throw new DdlException("compute node does not exists[" + host + ":" + heartbeatPort + "]");
+        }
+
+        // update idToComputeNode
+        Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
+        copiedComputeNodes.remove(dropComputeNode.getId());
+        idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
+
+        // update cluster
+        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(dropComputeNode.getOwnerClusterName());
+        if (null != cluster) {
+            cluster.removeComputeNode(dropComputeNode.getId());
+        } else {
+            LOG.error("Cluster " + dropComputeNode.getOwnerClusterName() + " no exist.");
+        }
+        // log
+        GlobalStateMgr.getCurrentState().getEditLog()
+                .logDropComputeNode(new DropComputeNodeLog(dropComputeNode.getId()));
+        LOG.info("finished to drop {}", dropComputeNode);
     }
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
@@ -346,6 +443,10 @@ public class SystemInfoService {
         return idToBackendRef.get(backendId);
     }
 
+    public ComputeNode getComputeNode(long computeNodeId) {
+        return idToComputeNodeRef.get(computeNodeId);
+    }
+
     public boolean checkBackendAvailable(long backendId) {
         Backend backend = idToBackendRef.get(backendId);
         return backend != null && backend.isAvailable();
@@ -354,6 +455,16 @@ public class SystemInfoService {
     public boolean checkBackendAlive(long backendId) {
         Backend backend = idToBackendRef.get(backendId);
         return backend != null && backend.isAlive();
+    }
+
+    public ComputeNode getComputeNodeWithHeartbeatPort(String host, int heartPort) {
+        ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
+        for (ComputeNode computeNode : idToComputeNode.values()) {
+            if (computeNode.getHost().equals(host) && computeNode.getHeartbeatPort() == heartPort) {
+                return computeNode;
+            }
+        }
+        return null;
     }
 
     public Backend getBackendWithHeartbeatPort(String host, int heartPort) {
@@ -422,6 +533,37 @@ public class SystemInfoService {
         return resultBackends;
     }
 
+    public List<Long> getBackendIds() {
+        return getBackendIds(false);
+    }
+
+    public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
+        ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
+        for (ComputeNode computeNode : idToComputeNode.values()) {
+            if (computeNode.getHost().equals(host) && computeNode.getBePort() == bePort) {
+                return computeNode;
+            }
+        }
+        return null;
+    }
+
+    public List<Long> getComputeNodeIds(boolean needAlive) {
+        ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
+        List<Long> computeNodeIds = Lists.newArrayList(idToComputeNode.keySet());
+        if (!needAlive) {
+            return computeNodeIds;
+        } else {
+            Iterator<Long> iter = computeNodeIds.iterator();
+            while (iter.hasNext()) {
+                ComputeNode computeNode = this.getComputeNode(iter.next());
+                if (computeNode == null || !computeNode.isAlive()) {
+                    iter.remove();
+                }
+            }
+            return computeNodeIds;
+        }
+    }
+
     public List<Long> getBackendIds(boolean needAlive) {
         ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
         List<Long> backendIds = Lists.newArrayList(idToBackend.keySet());
@@ -457,126 +599,35 @@ public class SystemInfoService {
         return backendIds;
     }
 
-    /**
-     * get cluster's backend id list
-     *
-     * @param name
-     * @return
-     */
-    public List<Backend> getClusterBackends(String name) {
-        final Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
-        final List<Backend> ret = Lists.newArrayList();
-
-        if (Strings.isNullOrEmpty(name)) {
-            return ret;
-        }
-
-        for (Backend backend : copiedBackends.values()) {
-            if (name.equals(backend.getOwnerClusterName())) {
-                ret.add(backend);
-            }
-        }
-        return ret;
-    }
-
-    /**
-     * get cluster's backend id list
-     *
-     * @param clusterName
-     * @return
-     */
-    public List<Long> getClusterBackendIds(String clusterName) {
-        if (Strings.isNullOrEmpty(clusterName)) {
-            return null;
-        }
-
-        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
-        final List<Long> beIds = Lists.newArrayList();
-
-        for (Backend backend : idToBackend.values()) {
-            if (clusterName.equals(backend.getOwnerClusterName())) {
-                beIds.add(backend.getId());
-            }
-        }
-        return beIds;
-    }
-
-    /**
-     * get cluster's backend id list
-     *
-     * @param clusterName
-     * @return
-     */
-    public List<Long> getClusterBackendIds(String clusterName, boolean needAlive) {
-        final Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
-        final List<Long> ret = new ArrayList<Long>();
-
-        if (Strings.isNullOrEmpty(clusterName)) {
-            return null;
-        }
-
-        if (needAlive) {
-            for (Backend backend : copiedBackends.values()) {
-                if (backend != null && clusterName.equals(backend.getOwnerClusterName())
-                        && backend.isAlive()) {
-                    ret.add(backend.getId());
-                }
-            }
-        } else {
-            for (Backend backend : copiedBackends.values()) {
-                if (clusterName.equals(backend.getOwnerClusterName())) {
-                    ret.add(backend.getId());
-                }
-            }
-        }
-
-        return ret;
+    public List<Backend> getBackends() {
+        return idToBackendRef.values().asList();
     }
 
     public List<Long> seqChooseBackendIdsByStorageMedium(int backendNum, boolean needAlive, boolean isCreate,
-                                                         String clusterName, TStorageMedium storageMedium) {
+                                                         TStorageMedium storageMedium) {
         final List<Backend> backends =
-                getClusterBackends(clusterName).stream().filter(v -> !v.diskExceedLimitByStorageMedium(storageMedium))
+                getBackends().stream().filter(v -> !v.diskExceedLimitByStorageMedium(storageMedium))
                         .collect(Collectors.toList());
-        return seqChooseBackendIds(backendNum, needAlive, isCreate, clusterName, backends);
+        return seqChooseBackendIds(backendNum, needAlive, isCreate, backends);
     }
 
-    public List<Long> seqChooseBackendIds(int backendNum, boolean needAlive, boolean isCreate,
-                                          String clusterName) {
+    public List<Long> seqChooseBackendIds(int backendNum, boolean needAlive, boolean isCreate) {
         final List<Backend> backends =
-                getClusterBackends(clusterName).stream().filter(v -> !v.diskExceedLimit()).collect(Collectors.toList());
-        return seqChooseBackendIds(backendNum, needAlive, isCreate, clusterName, backends);
+                getBackends().stream().filter(v -> !v.diskExceedLimit()).collect(Collectors.toList());
+        return seqChooseBackendIds(backendNum, needAlive, isCreate, backends);
     }
 
     // choose backends by round-robin
     // return null if not enough backend
     // use synchronized to run serially
     public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAlive, boolean isCreate,
-                                                       String clusterName, final List<Backend> srcBackends) {
+                                                       final List<Backend> srcBackends) {
         long lastBackendId;
 
-        if (clusterName.equals(DEFAULT_CLUSTER)) {
-            if (isCreate) {
-                lastBackendId = lastBackendIdForCreation;
-            } else {
-                lastBackendId = lastBackendIdForOther;
-            }
+        if (isCreate) {
+            lastBackendId = lastBackendIdForCreation;
         } else {
-            if (isCreate) {
-                if (lastBackendIdForCreationMap.containsKey(clusterName)) {
-                    lastBackendId = lastBackendIdForCreationMap.get(clusterName);
-                } else {
-                    lastBackendId = -1;
-                    lastBackendIdForCreationMap.put(clusterName, lastBackendId);
-                }
-            } else {
-                if (lastBackendIdForOtherMap.containsKey(clusterName)) {
-                    lastBackendId = lastBackendIdForOtherMap.get(clusterName);
-                } else {
-                    lastBackendId = -1;
-                    lastBackendIdForOtherMap.put(clusterName, lastBackendId);
-                }
-            }
+            lastBackendId = lastBackendIdForOther;
         }
 
         // host -> BE list
@@ -642,19 +693,10 @@ public class SystemInfoService {
             }
         }
 
-        if (clusterName.equals(DEFAULT_CLUSTER)) {
-            if (isCreate) {
-                lastBackendIdForCreation = lastBackendId;
-            } else {
-                lastBackendIdForOther = lastBackendId;
-            }
+        if (isCreate) {
+            lastBackendIdForCreation = lastBackendId;
         } else {
-            // update last backendId
-            if (isCreate) {
-                lastBackendIdForCreationMap.put(clusterName, lastBackendId);
-            } else {
-                lastBackendIdForOtherMap.put(clusterName, lastBackendId);
-            }
+            lastBackendIdForOther = lastBackendId;
         }
         if (backendIds.size() != backendNum) {
             failed = true;
@@ -674,6 +716,39 @@ public class SystemInfoService {
 
     public ImmutableMap<Long, Backend> getIdToBackend() {
         return idToBackendRef;
+    }
+
+    public ImmutableMap<Long, ComputeNode> getIdComputeNode() {
+        return idToComputeNodeRef;
+    }
+
+    public ImmutableCollection<ComputeNode> getComputeNodes() {
+        List<Long> computeNodeIds = getComputeNodeIds(true);
+        if (computeNodeIds != null && computeNodeIds.size() > 0) {
+            return getComputeNodes(true);
+        } else {
+            return getBackends(true);
+        }
+    }
+
+    public ImmutableCollection<ComputeNode> getComputeNodes(boolean needAlive) {
+        ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
+        List<Long> computeNodeIds = getComputeNodeIds(needAlive);
+        List<ComputeNode> computeNodes = new ArrayList<>();
+        for (Long computeNodeId : computeNodeIds) {
+            computeNodes.add(idToComputeNode.get(computeNodeId));
+        }
+        return ImmutableList.copyOf(computeNodes);
+    }
+
+    public ImmutableCollection<ComputeNode> getBackends(boolean needAlive) {
+        ImmutableMap<Long, Backend> idToComputeNode = idToBackendRef;
+        List<Long> backendIds = getBackendIds(needAlive);
+        List<ComputeNode> backends = new ArrayList<>();
+        for (Long backendId : backendIds) {
+            backends.add(idToComputeNode.get(backendId));
+        }
+        return ImmutableList.copyOf(backends);
     }
 
     public ImmutableMap<Long, Backend> getBackendsInCluster(String cluster) {
@@ -733,6 +808,21 @@ public class SystemInfoService {
         return checksum;
     }
 
+    public long saveComputeNodes(DataOutputStream dos, long checksum) throws IOException {
+        SystemInfoService.SerializeData data = new SystemInfoService.SerializeData();
+        data.computeNodes = idToComputeNodeRef.values().asList();
+        checksum ^= data.computeNodes.size();
+        String s = GsonUtils.GSON.toJson(data);
+        Text.writeString(dos, s);
+        return checksum;
+    }
+
+    private static class SerializeData {
+        @SerializedName("computeNodes")
+        public List<ComputeNode> computeNodes;
+
+    }
+
     public long loadBackends(DataInputStream dis, long checksum) throws IOException {
         int count = dis.readInt();
         checksum ^= count;
@@ -741,6 +831,27 @@ public class SystemInfoService {
             checksum ^= key;
             Backend backend = Backend.read(dis);
             replayAddBackend(backend);
+        }
+        return checksum;
+    }
+
+    public long loadComputeNodes(DataInputStream dis, long checksum) throws IOException {
+        int computeNodeSize = 0;
+        try {
+            String s = Text.readString(dis);
+            SystemInfoService.SerializeData data = GsonUtils.GSON.fromJson(s, SystemInfoService.SerializeData.class);
+            if (data != null) {
+                if (data.computeNodes != null) {
+                    for (ComputeNode computeNode : data.computeNodes) {
+                        replayAddComputeNode(computeNode);
+                    }
+                    computeNodeSize = data.computeNodes.size();
+                }
+            }
+            checksum ^= computeNodeSize;
+            LOG.info("finished replaying compute node from image");
+        } catch (EOFException e) {
+            LOG.info("no compute node to replay.");
         }
         return checksum;
     }
@@ -793,6 +904,27 @@ public class SystemInfoService {
         }
     }
 
+    public void replayAddComputeNode(ComputeNode newComputeNode) {
+        // update idToComputeNode
+        newComputeNode.setOwnerClusterName(DEFAULT_CLUSTER);
+        newComputeNode.setBackendState(BackendState.using);
+        Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
+        copiedComputeNodes.put(newComputeNode.getId(), newComputeNode);
+        idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
+
+        // to add compute to DEFAULT_CLUSTER
+        if (newComputeNode.getBackendState() == BackendState.using) {
+            final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(DEFAULT_CLUSTER);
+            if (null != cluster) {
+                // replay log
+                cluster.addComputeNode(newComputeNode.getId());
+            } else {
+                // This happens in loading image when fe is restarted, because loadCluster is after loadComputeNode,
+                // cluster is not created. CN in cluster will be updated in loadCluster.
+            }
+        }
+    }
+
     public void replayAddBackend(Backend newBackend) {
         // update idToBackend
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
@@ -818,6 +950,22 @@ public class SystemInfoService {
                 // This happens in loading image when fe is restarted, because loadCluster is after loadBackend,
                 // cluster is not created. Be in cluster will be updated in loadCluster.
             }
+        }
+    }
+
+    public void replayDropComputeNode(long computeNodeId) {
+        LOG.debug("replayDropComputeNode: {}", computeNodeId);
+        // update idToComputeNode
+        Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
+        copiedComputeNodes.remove(computeNodeId);
+        idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
+
+        // update cluster
+        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(DEFAULT_CLUSTER);
+        if (null != cluster) {
+            cluster.removeComputeNode(computeNodeId);
+        } else {
+            LOG.error("Cluster DEFAULT_CLUSTER " + DEFAULT_CLUSTER + " no exist.");
         }
     }
 
@@ -878,7 +1026,7 @@ public class SystemInfoService {
     }
 
     private long getClusterAvailableCapacityB(String clusterName) {
-        List<Backend> clusterBackends = getClusterBackends(clusterName);
+        List<Backend> clusterBackends = getBackends();
         long capacity = 0L;
         for (Backend backend : clusterBackends) {
             // Here we do not check if backend is alive,
@@ -919,17 +1067,6 @@ public class SystemInfoService {
 
         Collections.shuffle(selectedBackends);
         return selectedBackends.get(0).getId();
-    }
-
-    public Set<String> getClusterNames() {
-        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
-        Set<String> clusterNames = Sets.newHashSet();
-        for (Backend backend : idToBackend.values()) {
-            if (!Strings.isNullOrEmpty(backend.getOwnerClusterName())) {
-                clusterNames.add(backend.getOwnerClusterName());
-            }
-        }
-        return clusterNames;
     }
 
     /*

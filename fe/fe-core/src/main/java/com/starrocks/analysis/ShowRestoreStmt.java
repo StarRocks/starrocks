@@ -107,7 +107,7 @@ public class ShowRestoreStmt extends ShowStmt {
 
     @Override
     public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
+        return RedirectStatus.NO_FORWARD;
     }
 }
 

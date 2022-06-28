@@ -105,6 +105,12 @@ public class HeartbeatMgr extends MasterDaemon {
             hbResponses.add(executor.submit(handler));
         }
 
+        // send compute node heartbeat
+        for (ComputeNode computeNode : nodeMgr.getIdComputeNode().values()) {
+            BackendHeartbeatHandler handler = new BackendHeartbeatHandler(computeNode);
+            hbResponses.add(executor.submit(handler));
+        }
+
         // send frontend heartbeat
         List<Frontend> frontends = GlobalStateMgr.getCurrentState().getFrontends(null);
         String masterFeNodeName = "";
@@ -154,7 +160,7 @@ public class HeartbeatMgr extends MasterDaemon {
 
         // we also add a 'mocked' master Frontends heartbeat response to synchronize master info to other Frontends.
         hbPackage.addHbResponse(new FrontendHbResponse(masterFeNodeName, Config.query_port, Config.rpc_port,
-                GlobalStateMgr.getCurrentState().getEditLog().getMaxJournalId(),
+                GlobalStateMgr.getCurrentState().getMaxJournalId(),
                 System.currentTimeMillis(), GlobalStateMgr.getCurrentState().getFeStartTime(),
                 Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH));
 
@@ -174,20 +180,23 @@ public class HeartbeatMgr extends MasterDaemon {
             }
             case BACKEND: {
                 BackendHbResponse hbResponse = (BackendHbResponse) response;
-                Backend be = nodeMgr.getBackend(hbResponse.getBeId());
-                if (be != null) {
-                    boolean isChanged = be.handleHbResponse(hbResponse);
+                ComputeNode computeNode = nodeMgr.getBackend(hbResponse.getBeId());
+                if (computeNode == null) {
+                    computeNode = nodeMgr.getComputeNode(hbResponse.getBeId());
+                }
+                if (computeNode != null) {
+                    boolean isChanged = computeNode.handleHbResponse(hbResponse);
                     if (hbResponse.getStatus() != HbStatus.OK) {
                         // invalid all connections cached in ClientPool
-                        ClientPool.backendPool.clearPool(new TNetworkAddress(be.getHost(), be.getBePort()));
+                        ClientPool.backendPool.clearPool(new TNetworkAddress(computeNode.getHost(), computeNode.getBePort()));
                         if (!isReplay) {
                             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                                    .abortTxnWhenCoordinateBeDown(be.getHost(), 100);
+                                    .abortTxnWhenCoordinateBeDown(computeNode.getHost(), 100);
                         }
                     } else {
                         if (Config.integrate_starmgr && !isReplay) {
                             // addWorker
-                            int starletPort = be.getStarletPort();
+                            int starletPort = computeNode.getStarletPort();
                             if (starletPort != 0) {
                                 String workerAddr = be.getHost() + ":" + starletPort;
                                 GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(be.getId(), workerAddr);
@@ -220,26 +229,26 @@ public class HeartbeatMgr extends MasterDaemon {
 
     // backend heartbeat
     private class BackendHeartbeatHandler implements Callable<HeartbeatResponse> {
-        private Backend backend;
+        private ComputeNode computeNode;
 
-        public BackendHeartbeatHandler(Backend backend) {
-            this.backend = backend;
+        public BackendHeartbeatHandler(ComputeNode computeNode) {
+            this.computeNode = computeNode;
         }
 
         @Override
         public HeartbeatResponse call() {
-            long backendId = backend.getId();
+            long computeNodeId = computeNode.getId();
             HeartbeatService.Client client = null;
-            TNetworkAddress beAddr = new TNetworkAddress(backend.getHost(), backend.getHeartbeatPort());
+            TNetworkAddress beAddr = new TNetworkAddress(computeNode.getHost(), computeNode.getHeartbeatPort());
             boolean ok = false;
             try {
                 client = ClientPool.heartbeatPool.borrowObject(beAddr);
 
                 TMasterInfo copiedMasterInfo = new TMasterInfo(masterInfo.get());
-                copiedMasterInfo.setBackend_ip(backend.getHost());
+                copiedMasterInfo.setBackend_ip(computeNode.getHost());
                 long flags = heartbeatFlags.getHeartbeatFlags();
                 copiedMasterInfo.setHeartbeat_flags(flags);
-                copiedMasterInfo.setBackend_id(backendId);
+                copiedMasterInfo.setBackend_id(computeNodeId);
                 THeartbeatResult result = client.heartbeat(copiedMasterInfo);
 
                 ok = true;
@@ -263,20 +272,20 @@ public class HeartbeatMgr extends MasterDaemon {
                     // Update number of hardare of cores of corresponding backend.
                     int cpuCores = tBackendInfo.isSetNum_hardware_cores() ? tBackendInfo.getNum_hardware_cores() : 0;
                     if (tBackendInfo.isSetNum_hardware_cores()) {
-                        BackendCoreStat.setNumOfHardwareCoresOfBe(backendId, cpuCores);
+                        BackendCoreStat.setNumOfHardwareCoresOfBe(computeNodeId, cpuCores);
                     }
 
                     // backend.updateOnce(bePort, httpPort, beRpcPort, brpcPort);
-                    return new BackendHbResponse(backendId, bePort, httpPort, brpcPort, starletPort,
+                    return new BackendHbResponse(computeNodeId, bePort, httpPort, brpcPort, starletPort,
                             System.currentTimeMillis(), version, cpuCores);
                 } else {
-                    return new BackendHbResponse(backendId,
+                    return new BackendHbResponse(computeNodeId,
                             result.getStatus().getError_msgs().isEmpty() ? "Unknown error"
                                     : result.getStatus().getError_msgs().get(0));
                 }
             } catch (Exception e) {
                 LOG.warn("backend heartbeat got exception", e);
-                return new BackendHbResponse(backendId,
+                return new BackendHbResponse(computeNodeId,
                         Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
             } finally {
                 if (ok) {

@@ -124,4 +124,9 @@ public class ShowDbStmt extends ShowStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowDatabasesStmt(this, context);
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

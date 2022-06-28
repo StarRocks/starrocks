@@ -23,6 +23,7 @@
 
 #include <thread>
 
+#include "agent/master_info.h"
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/logging.h"
@@ -216,7 +217,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _wg_driver_executor->initialize(_max_executor_threads);
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
-    _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
     _broker_mgr = new BrokerMgr(this);
     _bfd_parser = BfdParser::create();
@@ -277,8 +277,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     return Status::OK();
 }
 
-const std::string& ExecEnv::token() const {
-    return _master_info->token;
+std::string ExecEnv::token() const {
+    return get_master_token();
 }
 
 void ExecEnv::add_rf_event(const RfTracePoint& pt) {
@@ -419,10 +419,6 @@ void ExecEnv::_destroy() {
         delete _load_path_mgr;
         _load_path_mgr = nullptr;
     }
-    if (_master_info) {
-        delete _master_info;
-        _master_info = nullptr;
-    }
     if (_driver_executor) {
         delete _driver_executor;
         _driver_executor = nullptr;
@@ -503,6 +499,9 @@ void ExecEnv::_destroy() {
         delete _compaction_mem_tracker;
         _compaction_mem_tracker = nullptr;
     }
+
+    _lake_tablet_manager->prune_metacache();
+
     if (_tablet_meta_mem_tracker) {
         delete _tablet_meta_mem_tracker;
         _tablet_meta_mem_tracker = nullptr;

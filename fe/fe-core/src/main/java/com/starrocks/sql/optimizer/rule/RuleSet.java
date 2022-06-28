@@ -107,8 +107,8 @@ import com.starrocks.sql.optimizer.rule.transformation.RemoteScanPartitionPruneR
 import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
-import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctWithoutGroupByRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
@@ -259,12 +259,15 @@ public class RuleSet {
                 new PruneAssertOneRowRule()
         ));
 
-        rewriteRules.put(RuleSetType.MULTI_DISTINCT_REWRITE, ImmutableList.of(
+        rewriteRules.put(RuleSetType.AGGREGATE_REWRITE, ImmutableList.of(
                 new RewriteBitmapCountDistinctRule(),
                 new RewriteHllCountDistinctRule(),
-                new RewriteMultiDistinctRule(),
-                new RewriteMultiDistinctWithoutGroupByRule(),
                 new RewriteDuplicateAggregateFnRule()
+        ));
+
+        rewriteRules.put(RuleSetType.MULTI_DISTINCT_REWRITE, ImmutableList.of(
+                new RewriteMultiDistinctRule(),
+                new RewriteMultiDistinctByCTERule()
         ));
 
         rewriteRules.put(RuleSetType.PRUNE_SET_OPERATOR, ImmutableList.of(

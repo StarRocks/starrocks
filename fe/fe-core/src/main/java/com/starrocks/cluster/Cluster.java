@@ -28,22 +28,21 @@ import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.LinkDbInfo;
+import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
-/**
- * cluster only save db and user's id and name
- */
+// Now Cluster don't have read interface, in order to be back compatible.
+// We will remove the persistent format later.
 public class Cluster implements Writable {
     private static final Logger LOG = LogManager.getLogger(Cluster.class);
 
@@ -51,6 +50,8 @@ public class Cluster implements Writable {
     private String name;
     // backend which cluster own
     private Set<Long> backendIdSet = ConcurrentHashMap.newKeySet();
+    // compute node which cluster own
+    private Set<Long> computeNodeIdSet = ConcurrentHashMap.newKeySet();
 
     private ConcurrentHashMap<String, LinkDbInfo> linkDbNames = new ConcurrentHashMap<>();
     private ConcurrentHashMap<Long, LinkDbInfo> linkDbIds = new ConcurrentHashMap<>();
@@ -83,21 +84,6 @@ public class Cluster implements Writable {
         return id;
     }
 
-    public String getName() {
-        return name;
-    }
-
-    public void removeLinkDb(BaseParam param) {
-        lock();
-        try {
-            linkDbNames.remove(param.getStringParam());
-            linkDbIds.remove(param.getLongParam());
-        } finally {
-            unlock();
-        }
-
-    }
-
     public void addDb(String name, long id) {
         if (Strings.isNullOrEmpty(name)) {
             return;
@@ -112,18 +98,6 @@ public class Cluster implements Writable {
         }
     }
 
-    public List<String> getDbNames() {
-        final ArrayList<String> ret = new ArrayList<String>();
-        lock();
-        try {
-            ret.addAll(dbNames);
-            ret.addAll(linkDbNames.keySet());
-        } finally {
-            unlock();
-        }
-        return ret;
-    }
-
     public void removeDb(String name, long id) {
         lock();
         try {
@@ -134,8 +108,16 @@ public class Cluster implements Writable {
         }
     }
 
-    public List<Long> getBackendIdList() {
-        return Lists.newArrayList(backendIdSet);
+    // Just for check
+    public boolean isEmpty() {
+        return backendIdSet == null || backendIdSet.isEmpty();
+    }
+    public boolean isDefaultCluster() {
+        return SystemInfoService.DEFAULT_CLUSTER.equalsIgnoreCase(name);
+    }
+
+    public List<Long> getComputeNodeIdList() {
+        return Lists.newArrayList(computeNodeIdSet);
     }
 
     public void setBackendIdList(List<Long> backendIdList) {
@@ -146,8 +128,16 @@ public class Cluster implements Writable {
         backendIdSet.addAll(backendIdList);
     }
 
+    public void addComputeNode(long computeNodeId) {
+        computeNodeIdSet.add(computeNodeId);
+    }
+
     public void addBackend(long backendId) {
         backendIdSet.add(backendId);
+    }
+
+    public void removeComputeNode(long removedComputeNodeId) {
+        computeNodeIdSet.remove((Long) removedComputeNodeId);
     }
 
     public void removeBackend(long removedBackendId) {

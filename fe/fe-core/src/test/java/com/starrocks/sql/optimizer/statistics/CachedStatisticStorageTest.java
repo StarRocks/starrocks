@@ -59,7 +59,7 @@ public class CachedStatisticStorageTest {
         CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
-            GlobalStateMgr.getCurrentState().createDb(dbStmt);
+            GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
         } catch (DdlException e) {
             return;
         }
@@ -171,7 +171,7 @@ public class CachedStatisticStorageTest {
     public void testConvert2ColumnStatistics() {
         Database db = connectContext.getGlobalStateMgr().getDb("default_cluster:test");
         OlapTable table = (OlapTable) db.getTable("t0");
-        CachedStatisticStorage cachedStatisticStorage = Deencapsulation.newInstance(CachedStatisticStorage.class);
+        ColumnBasicStatsCacheLoader cachedStatisticStorage = Deencapsulation.newInstance(ColumnBasicStatsCacheLoader.class);
 
         TStatisticData statisticData = new TStatisticData();
         statisticData.setDbId(db.getId());
