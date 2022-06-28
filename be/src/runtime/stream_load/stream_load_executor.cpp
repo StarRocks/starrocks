@@ -81,10 +81,6 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                     } else if (ctx->number_loaded_rows == 0) {
                         status = Status::InternalError("all partitions have no load data");
                     }
-                    if (ctx->number_filtered_rows > 0 &&
-                        !executor->runtime_state()->get_error_log_file_path().empty()) {
-                        ctx->error_url = to_load_error_http_path(executor->runtime_state()->get_error_log_file_path());
-                    }
 
                     if (status.ok()) {
                         StarRocksMetrics::instance()->stream_receive_bytes_total.increment(ctx->receive_bytes);
@@ -110,6 +106,10 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                 }
                 ctx->write_data_cost_nanos = MonotonicNanos() - ctx->start_write_data_nanos;
                 ctx->promise.set_value(status);
+
+                if (!executor->runtime_state()->get_error_log_file_path().empty()) {
+                    ctx->error_url = to_load_error_http_path(executor->runtime_state()->get_error_log_file_path());
+                }
 
                 if (ctx->unref()) {
                     delete ctx;
