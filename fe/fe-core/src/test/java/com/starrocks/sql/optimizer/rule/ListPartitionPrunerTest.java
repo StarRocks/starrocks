@@ -24,10 +24,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
+import java.util.*;
 
 public class ListPartitionPrunerTest {
     private Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap;
@@ -367,5 +364,33 @@ public class ListPartitionPrunerTest {
                 ConstantOperator.createDatetime(LocalDateTime.of(2021, 1, 4, 0, 0, 0)))));
         Assert.assertEquals(Lists.newArrayList(), pruner.prune());
 
+    }
+
+    @Test
+    public void testBinaryPredicateWithEmptyPartition() throws AnalysisException {
+        ColumnRefOperator operator = new ColumnRefOperator(5, Type.VARCHAR, "ds", true);
+        columnToPartitionValuesMap = Maps.newHashMap();
+        columnToPartitionValuesMap.put(operator, new TreeMap<>());
+        columnToNullPartitions = new HashMap<>();
+        columnToNullPartitions.put(operator, new HashSet<>());
+        conjuncts = Lists.newArrayList();
+        conjuncts.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT, intColumn,
+                ConstantOperator.createInt(1000)));
+        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts);
+        Assert.assertNull(pruner.prune());
+    }
+
+    @Test
+    public void testInPredicateWithEmptyPartition() throws AnalysisException {
+        ColumnRefOperator operator = new ColumnRefOperator(5, Type.VARCHAR, "ds", true);
+        columnToPartitionValuesMap = Maps.newHashMap();
+        columnToPartitionValuesMap.put(operator, new TreeMap<>());
+        columnToNullPartitions = new HashMap<>();
+        columnToNullPartitions.put(operator, new HashSet<>());
+        conjuncts = Lists.newArrayList();
+        conjuncts.add(new InPredicateOperator(false,
+                Lists.newArrayList(intColumn, ConstantOperator.createInt(1000), ConstantOperator.createInt(2000))));
+        pruner = new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions, conjuncts);
+        Assert.assertNull(pruner.prune());
     }
 }
