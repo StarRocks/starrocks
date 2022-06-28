@@ -45,7 +45,9 @@ private:
 };
 
 Rowset::Rowset(std::string group, TabletSchemaPtr tablet_schema, RowsetMetadataPtr rowset_metadata)
-        : _group(std::move(group)), _tablet_schema(tablet_schema), _rowset_metadata(rowset_metadata) {}
+        : _group(std::move(group)),
+          _tablet_schema(std::move(tablet_schema)),
+          _rowset_metadata(std::move(rowset_metadata)) {}
 
 Rowset::~Rowset() { _segments.clear(); }
 
