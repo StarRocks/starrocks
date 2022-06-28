@@ -66,14 +66,12 @@ import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.task.DropReplicaTask;
 import com.starrocks.task.MasterTask;
 import com.starrocks.task.PublishVersionTask;
-import com.starrocks.task.PushTask;
 import com.starrocks.task.StorageMediaMigrationTask;
 import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TPartitionVersionInfo;
-import com.starrocks.thrift.TPushType;
 import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -411,10 +409,7 @@ public class ReportHandler extends Daemon {
             // 1. CREATE
             // 2. SYNC DELETE
             // 3. CHECK_CONSISTENCY
-            if (task.getTaskType() == TTaskType.CREATE
-                    || (task.getTaskType() == TTaskType.PUSH && ((PushTask) task).getPushType() == TPushType.DELETE
-                    && ((PushTask) task).isSyncDelete())
-                    || task.getTaskType() == TTaskType.CHECK_CONSISTENCY) {
+            if (task.getTaskType() == TTaskType.CREATE || task.getTaskType() == TTaskType.CHECK_CONSISTENCY) {
                 continue;
             }
 

@@ -221,7 +221,6 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
                         update_tablet_meta_info_req);
 
         case TTaskType::REALTIME_PUSH:
-        case TTaskType::PUSH:
             if (!task.__isset.push_req) {
                 ret_st = Status::InvalidArgument(
                         strings::Substitute("task(signature=$0) has wrong request member", signature));
