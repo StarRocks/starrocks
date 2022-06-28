@@ -458,8 +458,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
      */
     private ColumnStatistic adjustPartitionStatistic(Collection<Long> selectedPartitionId, OlapTable olapTable) {
         int selectedPartitionsSize = selectedPartitionId.size();
-        int allPartitionsSize = olapTable.getPartitions().size();
-        if (selectedPartitionsSize != allPartitionsSize) {
+        int allNoEmptyPartitionsSize = (int) olapTable.getPartitions().stream().filter(Partition::hasData).count();
+        if (selectedPartitionsSize != allNoEmptyPartitionsSize) {
             if (olapTable.getPartitionColumnNames().size() != 1) {
                 return null;
             }
@@ -500,7 +500,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 }
                 double distinctValues =
                         partitionColumnStatistic.getDistinctValuesCount() * 1.0 * selectedPartitionsSize /
-                                allPartitionsSize;
+                                allNoEmptyPartitionsSize;
                 return buildFrom(partitionColumnStatistic).
                         setMinValue(min).setMaxValue(max).setDistinctValuesCount(max(distinctValues, 1)).build();
             }
