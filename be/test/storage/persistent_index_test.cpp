@@ -526,18 +526,12 @@ PARALLEL_TEST(PersistentIndexTest, test_get_move_buckets) {
         sum += bucket_packs_in_page[i];
     }
 
-    std::vector<int32_t> res;
     for (int32_t i = 0; i < 100; ++i) {
-        res.clear();
         int32_t target = rand() % sum;
-        Status st = index.test_get_move_buckets(target, bucket_packs_in_page.data(), &res);
-        if (!st.ok()) {
-            LOG(WARNING) << "get move bucket failed: " << st.to_string();
-            ASSERT_TRUE(false);
-        }
+        auto ret = index.test_get_move_buckets(target, bucket_packs_in_page.data());
         int32_t find_target = 0;
-        for (int32_t i = 0; i < res.size(); ++i) {
-            find_target += bucket_packs_in_page[res[i]];
+        for (int32_t i = 0; i < ret.size(); ++i) {
+            find_target += bucket_packs_in_page[ret[i]];
         }
         ASSERT_TRUE(find_target >= target);
     }
