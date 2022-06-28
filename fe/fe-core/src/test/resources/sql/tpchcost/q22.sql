@@ -67,7 +67,6 @@ UNPARTITIONED
 |
 12:NESTLOOP JOIN
 |  join op: CROSS JOIN
-|  hash predicates:
 |  colocate: false, reason:
 |  other predicates: 6: C_ACCTBAL > 19: avg
 |
@@ -93,7 +92,6 @@ UNPARTITIONED
 |
 9:HASH JOIN
 |  join op: RIGHT ANTI JOIN (PARTITIONED)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 22: O_CUSTKEY = 1: C_CUSTKEY
 |

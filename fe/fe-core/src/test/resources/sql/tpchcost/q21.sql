@@ -80,7 +80,6 @@ HASH_PARTITIONED: 2: S_NAME
 |
 22:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 26: O_ORDERKEY = 9: L_ORDERKEY
 |
@@ -115,7 +114,6 @@ UNPARTITIONED
 |
 19:HASH JOIN
 |  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 41: L_ORDERKEY = 9: L_ORDERKEY
 |  other join predicates: 43: L_SUPPKEY != 11: L_SUPPKEY
@@ -148,7 +146,6 @@ BUCKET_SHUFFLE_HASH_PARTITIONED: 9: L_ORDERKEY
 |
 16:HASH JOIN
 |  join op: RIGHT ANTI JOIN (COLOCATE)
-|  hash predicates:
 |  colocate: true
 |  equal join conjunct: 59: L_ORDERKEY = 9: L_ORDERKEY
 |  other join predicates: 61: L_SUPPKEY != 11: L_SUPPKEY
@@ -160,7 +157,6 @@ BUCKET_SHUFFLE_HASH_PARTITIONED: 9: L_ORDERKEY
 |    |
 |    14:HASH JOIN
 |    |  join op: INNER JOIN (BROADCAST)
-|    |  hash predicates:
 |    |  colocate: false, reason:
 |    |  equal join conjunct: 11: L_SUPPKEY = 1: S_SUPPKEY
 |    |
@@ -212,7 +208,6 @@ UNPARTITIONED
 |
 11:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 4: S_NATIONKEY = 36: N_NATIONKEY
 |

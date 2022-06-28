@@ -340,7 +340,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  4:HASH JOIN\n"
                 + "  |  join op: INNER JOIN (PARTITIONED)\n"
-                + "  |  hash predicates:\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 2: v2 = 7: t1d\n"
                 + "  |  \n"
@@ -366,7 +365,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  3:HASH JOIN\n"
                 + "  |  join op: INNER JOIN (BROADCAST)\n"
-                + "  |  hash predicates:\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 2: v2 = 7: t1d\n"
                 + "  |  \n"
@@ -385,7 +383,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  3:HASH JOIN\n"
                 + "  |  join op: INNER JOIN (BROADCAST)\n"
-                + "  |  hash predicates:\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 7: t1d = 1: v1\n"
                 + "  |  \n"
@@ -497,12 +494,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  11:HASH JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN (REPLICATED)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 14: PS_PARTKEY = 20: P_PARTKEY"));
         Assert.assertTrue(plan.contains("  14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 32: L_PARTKEY = 14: PS_PARTKEY\n" +
                 "  |  equal join conjunct: 33: L_SUPPKEY = 15: PS_SUPPKEY\n" +

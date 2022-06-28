@@ -73,7 +73,6 @@ public class LimitTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("3:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 4: v4 = 2: v2\n" +
                 "  |  limit: 2"));
@@ -297,7 +296,6 @@ public class LimitTest extends PlanTestBase {
         sql = "select * from t0 inner join t1 on t0.v1 = t1.v4 limit 10";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  |  join op: INNER JOIN (BROADCAST)\n"
-                + "  |  hash predicates:\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 1: v1 = 4: v4\n"
                 + "  |  limit: 10\n"
@@ -310,7 +308,6 @@ public class LimitTest extends PlanTestBase {
         sql = "select * from t0 left anti join t1 on t0.v1 = t1.v4 limit 10";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  |  join op: LEFT ANTI JOIN (BROADCAST)\n"
-                + "  |  hash predicates:\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 1: v1 = 4: v4\n"
                 + "  |  limit: 10\n"
@@ -323,7 +320,6 @@ public class LimitTest extends PlanTestBase {
         sql = "select * from t0 right semi join t1 on t0.v1 = t1.v4 limit 10";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  |  join op: LEFT SEMI JOIN (BROADCAST)\n"
-                + "  |  hash predicates:\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 4: v4 = 1: v1\n"
                 + "  |  limit: 10\n"
@@ -339,7 +335,6 @@ public class LimitTest extends PlanTestBase {
         String sql = "select * from t0 left outer join t1 on t0.v1 = t1.v4 limit 10";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
                 "  |  limit: 10\n" +
@@ -367,7 +362,6 @@ public class LimitTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  4:HASH JOIN\n"
                 + "  |  join op: FULL OUTER JOIN (PARTITIONED)\n"
-                + "  |  hash predicates:\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 1: v1 = 4: v4\n"
                 + "  |  limit: 10\n"
@@ -382,7 +376,6 @@ public class LimitTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan, plan.contains("3:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
@@ -434,7 +427,6 @@ public class LimitTest extends PlanTestBase {
         String sql = "select v1 from t0 right outer join t1 on t0.v1 = t1.v4 limit 100";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
                 "  |  limit: 100"));
@@ -452,7 +444,6 @@ public class LimitTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains(" 5:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
                 "  |  \n" +
@@ -465,7 +456,6 @@ public class LimitTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  3:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
                 "  |  limit: 1\n" +
@@ -489,7 +479,6 @@ public class LimitTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "5:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
                 "  |  limit: 100\n" +
@@ -514,7 +503,6 @@ public class LimitTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("5:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 4: v4 = 1: v1\n" +
                 "  |  limit: 7\n" +
@@ -542,7 +530,6 @@ public class LimitTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan, plan.contains("  3:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other predicates: 2: v2 != 5: v5\n" +
                 "  |  limit: 10\n" +
@@ -555,7 +542,6 @@ public class LimitTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan, plan.contains("3:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other predicates: 2: v2 != 5: v5\n" +
                 "  |  limit: 10\n" +
@@ -585,7 +571,6 @@ public class LimitTest extends PlanTestBase {
         String sql = "select * from t0 left join[shuffle] t1 on t0.v2 = t1.v5 where t1.v6 is null limit 2";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 2: v2 = 5: v5\n" +
                 "  |  other predicates: 6: v6 IS NULL\n" +
