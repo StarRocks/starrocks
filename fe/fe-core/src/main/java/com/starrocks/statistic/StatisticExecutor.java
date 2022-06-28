@@ -65,7 +65,7 @@ public class StatisticExecutor {
         if (Config.enable_collect_full_statistics) {
             BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
             if (meta != null && meta.getType().equals(Constants.AnalyzeType.FULL)) {
-                sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(dbId, tableId, columnNames);
+                sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNames);
             } else {
                 sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
             }

@@ -93,7 +93,7 @@ public abstract class StatisticsCollectJob {
         return sw.toString();
     }
 
-    protected String getSampleTableHint(OlapTable table, long rows) {
+    protected String getSampleTabletHint(OlapTable table, long rows) {
         Set<String> randomTablets = Sets.newHashSet();
         rows = Math.max(rows, 1);
 
@@ -121,7 +121,6 @@ public abstract class StatisticsCollectJob {
             }
         }
 
-        // all hit, direct full
         return " Tablet(" + String.join(", ", randomTablets) + ")";
     }
 }

@@ -67,7 +67,7 @@ public class StatisticSQLBuilder {
         return build(context, QUERY_SAMPLE_STATISTIC_TEMPLATE);
     }
 
-    public static String buildQueryFullStatisticsSQL(Long dbId, Long tableId, List<String> columnNames) {
+    public static String buildQueryFullStatisticsSQL(Long tableId, List<String> columnNames) {
         VelocityContext context = new VelocityContext();
         context.put("updateTime", "now()");
 
