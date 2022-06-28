@@ -211,7 +211,7 @@ public class UtilsTest {
         varcharType = ScalarType.createVarcharType();
         typeStr = "varchar(-1)";
         resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
-        Assert.assertNotEquals(resType, varcharType);
+        Assert.assertEquals(resType, varcharType);
 
         Type stringType = ScalarType.createDefaultString();
         typeStr = "string";
