@@ -133,7 +133,6 @@ import org.apache.thrift.TException;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.RejectedExecutionException;
@@ -222,11 +221,6 @@ public class MasterImpl {
                 case CREATE:
                     Preconditions.checkState(request.isSetReport_version());
                     finishCreateReplica(task, request);
-                    break;
-                case PUSH:
-                    checkHasTabletInfo(request);
-                    Preconditions.checkState(request.isSetReport_version());
-                    finishPush(task, request);
                     break;
                 case REALTIME_PUSH:
                     checkHasTabletInfo(request);
@@ -561,120 +555,6 @@ public class MasterImpl {
                     backendId, tabletId, indexId);
         }
         return replica;
-    }
-
-    private void finishPush(AgentTask task, TFinishTaskRequest request) {
-        List<TTabletInfo> finishTabletInfos = request.getFinish_tablet_infos();
-        Preconditions.checkState(finishTabletInfos != null && !finishTabletInfos.isEmpty());
-
-        PushTask pushTask = (PushTask) task;
-        // if replica report already update replica version and load checker add new version push task,
-        // we might get new version push task, so check task version first
-        // all tablets in tablet infos should have same version
-        long finishVersion = finishTabletInfos.get(0).getVersion();
-        long taskVersion = pushTask.getVersion();
-        if (finishVersion != taskVersion) {
-            LOG.debug("finish tablet version is not consistent with task. "
-                            + "finish version: {}, task: {}",
-                    finishVersion, pushTask);
-            return;
-        }
-
-        long dbId = pushTask.getDbId();
-        long backendId = pushTask.getBackendId();
-        long signature = task.getSignature();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            AgentTaskQueue.removePushTask(backendId, signature, finishVersion,
-                    pushTask.getPushType(), pushTask.getTaskType());
-            return;
-        }
-
-        long tableId = pushTask.getTableId();
-        long partitionId = pushTask.getPartitionId();
-        long pushIndexId = pushTask.getIndexId();
-        long pushTabletId = pushTask.getTabletId();
-
-        // push finish type:
-        //                  numOfFinishTabletInfos  tabletId schemaHash
-        // Normal:                     1                   /          /
-        // SchemaChangeHandler         2                 same      diff
-        // RollupHandler               2                 diff      diff
-        // 
-        // reuse enum 'PartitionState' here as 'push finish type'
-        PartitionState pushState = null;
-        if (finishTabletInfos.size() == 1) {
-            pushState = PartitionState.NORMAL;
-        } else if (finishTabletInfos.size() == 2) {
-            if (finishTabletInfos.get(0).getTablet_id() == finishTabletInfos.get(1).getTablet_id()) {
-                pushState = PartitionState.SCHEMA_CHANGE;
-            } else {
-                pushState = PartitionState.ROLLUP;
-            }
-        } else {
-            LOG.warn("invalid push report infos. finishTabletInfos' size: " + finishTabletInfos.size());
-            return;
-        }
-
-        LOG.debug("push report state: {}", pushState.name());
-
-        db.writeLock();
-        try {
-            OlapTable olapTable = (OlapTable) db.getTable(tableId);
-            if (olapTable == null) {
-                throw new MetaNotFoundException("cannot find table[" + tableId + "] when push finished");
-            }
-
-            Partition partition = olapTable.getPartition(partitionId);
-            if (partition == null) {
-                throw new MetaNotFoundException("cannot find partition[" + partitionId + "] when push finished");
-            }
-
-            // update replica version
-            List<ReplicaPersistInfo> infos = new LinkedList<ReplicaPersistInfo>();
-            List<Long> tabletIds = finishTabletInfos.stream().map(
-                    finishTabletInfo -> finishTabletInfo.getTablet_id()).collect(Collectors.toList());
-            List<TabletMeta> tabletMetaList = GlobalStateMgr.getCurrentInvertedIndex().getTabletMetaList(tabletIds);
-            for (int i = 0; i < tabletMetaList.size(); i++) {
-                TabletMeta tabletMeta = tabletMetaList.get(i);
-                TTabletInfo tTabletInfo = finishTabletInfos.get(i);
-                long indexId = tabletMeta.getIndexId();
-                ReplicaPersistInfo info = updateReplicaInfo(olapTable, partition,
-                        backendId, pushIndexId, indexId,
-                        tTabletInfo, pushState);
-                if (info != null) {
-                    infos.add(info);
-                }
-            }
-
-            // should be done before addReplicaPersistInfos and countDownLatch
-            long reportVersion = request.getReport_version();
-            GlobalStateMgr.getCurrentSystemInfo().updateBackendReportVersion(task.getBackendId(), reportVersion,
-                    task.getDbId());
-
-            if (pushTask.getPushType() == TPushType.LOAD || pushTask.getPushType() == TPushType.LOAD_DELETE) {
-                Preconditions.checkArgument(false, "LOAD and LOAD_DELETE not supported");
-            } else if (pushTask.getPushType() == TPushType.DELETE) {
-                // report delete task must match version
-                if (pushTask.getVersion() != request.getRequest_version()) {
-                    throw new MetaNotFoundException("delete task is not match. [" + pushTask.getVersion() + "-"
-                            + request.getRequest_version() + "]");
-                }
-
-                Preconditions.checkArgument(pushTask.isSyncDelete(), "Async DELETE not supported");
-                pushTask.countDownLatch(backendId, signature);
-            }
-
-            AgentTaskQueue.removePushTask(backendId, signature, finishVersion,
-                    pushTask.getPushType(), pushTask.getTaskType());
-            LOG.debug("finish push replica. tabletId: {}, backendId: {}", pushTabletId, backendId);
-        } catch (MetaNotFoundException e) {
-            AgentTaskQueue.removePushTask(backendId, signature, finishVersion,
-                    pushTask.getPushType(), pushTask.getTaskType());
-            LOG.warn("finish push replica error", e);
-        } finally {
-            db.writeUnlock();
-        }
     }
 
     private void finishClearAlterTask(AgentTask task, TFinishTaskRequest request) {

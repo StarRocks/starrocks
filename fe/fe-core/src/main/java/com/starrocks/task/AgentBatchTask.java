@@ -215,8 +215,7 @@ public class AgentBatchTask implements Runnable {
                 tAgentTaskRequest.setDrop_tablet_req(request);
                 return tAgentTaskRequest;
             }
-            case REALTIME_PUSH:
-            case PUSH: {
+            case REALTIME_PUSH: {
                 PushTask pushTask = (PushTask) task;
                 TPushReq request = pushTask.toThrift();
                 if (LOG.isDebugEnabled()) {
