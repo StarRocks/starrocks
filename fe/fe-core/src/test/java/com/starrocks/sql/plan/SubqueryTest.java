@@ -61,16 +61,18 @@ public class SubqueryTest extends PlanTestBase {
         assertContains(plan, "  15:Project\n" +
                 "  |  <slot 19> : if(8: expr > 74219, 13: expr, 17: avg)\n" +
                 "  |  \n" +
-                "  14:CROSS JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
+                "  14:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----13:EXCHANGE\n" +
                 "  |    \n" +
                 "  1:AGGREGATE (update finalize)");
-        assertContains(plan, "  11:CROSS JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
+        assertContains(plan, "  11:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----10:EXCHANGE\n" +
                 "  |    \n" +
@@ -207,8 +209,8 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  18:Project\n" +
                     "  |  <slot 15> : 1\n" +
                     "  |  \n" +
-                    "  17:CROSS JOIN\n" +
-                    "  |  cross join:");
+                    "  17:NESTLOOP JOIN\n" +
+                    "  |  join op: CROSS JOIN");
         }
         {
             String sql = "SELECT DISTINCT 1\n" +
@@ -224,8 +226,8 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  18:Project\n" +
                     "  |  <slot 15> : 1\n" +
                     "  |  \n" +
-                    "  17:CROSS JOIN\n" +
-                    "  |  cross join:");
+                    "  17:NESTLOOP JOIN\n" +
+                    "  |  join op: CROSS JOIN");
         }
         {
             String sql = "SELECT DISTINCT(t1d)\n" +
@@ -241,8 +243,8 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  18:Project\n" +
                     "  |  <slot 4> : 4: t1d\n" +
                     "  |  \n" +
-                    "  17:CROSS JOIN\n" +
-                    "  |  cross join:");
+                    "  17:NESTLOOP JOIN\n" +
+                    "  |  join op: CROSS JOIN");
         }
         FeConstants.runningUnitTest = false;
     }

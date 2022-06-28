@@ -380,9 +380,10 @@ public class LimitTest extends PlanTestBase {
 
         sql = "select * from t0, t1 limit 10";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:CROSS JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
+        Assert.assertTrue(plan, plan.contains("3:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n" +
@@ -539,9 +540,11 @@ public class LimitTest extends PlanTestBase {
     public void testCrossJoinPushLimit() throws Exception {
         String sql = "select * from t0 cross join t1 on t0.v2 != t1.v5 limit 10";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:CROSS JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates: 2: v2 != 5: v5\n" +
+        Assert.assertTrue(plan, plan.contains("  3:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other predicates: 2: v2 != 5: v5\n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n" +
@@ -550,9 +553,11 @@ public class LimitTest extends PlanTestBase {
 
         sql = "select * from t0 inner join t1 on t0.v2 != t1.v5 limit 10";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:CROSS JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates: 2: v2 != 5: v5\n" +
+        Assert.assertTrue(plan, plan.contains("3:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other predicates: 2: v2 != 5: v5\n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n" +
