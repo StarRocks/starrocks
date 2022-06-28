@@ -167,7 +167,6 @@ Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_
 Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* queue, int64_t max_running_time_ms) {
     _last_visit_time = time(nullptr);
     int64_t left_time = max_running_time_ms;
-    int64_t consume_timeout = std::min<int64_t>(max_running_time_ms, config::routine_load_kafka_timeout_second * 1000);
     LOG(INFO) << "start kafka consumer: " << _id << ", grp: " << _grp_id << ", max running time(ms): " << left_time;
 
     int64_t received_rows = 0;
@@ -191,6 +190,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
         bool done = false;
         // consume 1 message at a time
         consumer_watch.start();
+        int64_t consume_timeout = std::min<int64_t>(left_time, config::routine_load_kafka_timeout_second * 1000);
         std::unique_ptr<RdKafka::Message> msg(_k_consumer->consume(consume_timeout /* timeout, ms */));
         consumer_watch.stop();
         switch (msg->err()) {
