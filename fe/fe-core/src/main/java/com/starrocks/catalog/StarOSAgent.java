@@ -84,7 +84,7 @@ public class StarOSAgent {
             ServiceInfo serviceInfo = client.getServiceInfo(SERVICE_NAME);
             serviceId = serviceInfo.getServiceId();
         } catch (StarClientException e) {
-            LOG.warn(e);
+            LOG.warn("Failed to get serviceId from starMgr. Error: {}", e);
             return;
         }
         LOG.info("get serviceId {} from starMgr", serviceId);
@@ -95,7 +95,7 @@ public class StarOSAgent {
             client.registerService("starrocks");
         } catch (StarClientException e) {
             if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
-                LOG.warn(e);
+                LOG.warn("Failed to register service from starMgr. Error: {}", e);
                 System.exit(-1);
             }
         }
@@ -106,7 +106,7 @@ public class StarOSAgent {
                 LOG.info("get serviceId: {} by bootstrapService to starMgr", serviceId);
             } catch (StarClientException e) {
                 if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
-                    LOG.warn(e);
+                    LOG.warn("Failed to bootstrap service from starMgr. Error: {}", e);
                     System.exit(-1);
                 } else {
                     getServiceId();
