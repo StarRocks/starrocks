@@ -50,6 +50,7 @@ import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.ListPartitionDesc;
 import com.starrocks.analysis.MultiRangePartitionDesc;
@@ -156,8 +157,10 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -2801,11 +2804,19 @@ public class LocalMetastore implements ConnectorMetadata {
         Preconditions.checkNotNull(distributionDesc);
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
         // create refresh scheme
-        MaterializedView.MvRefreshScheme mvRefreshScheme = null;
-        new MaterializedView.MvRefreshScheme();
+        MaterializedView.MvRefreshScheme mvRefreshScheme;
         RefreshSchemeDesc refreshSchemeDesc = stmt.getRefreshSchemeDesc();
         if (refreshSchemeDesc.getType() == RefreshType.ASYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+            MaterializedView.AsyncRefreshContext asyncRefreshContext = mvRefreshScheme.getAsyncRefreshContext();
+            asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
+            if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
+                asyncRefreshContext.setStep(
+                        ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue());
+                asyncRefreshContext.setTimeUnit(
+                        asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
+            }
         } else if (refreshSchemeDesc.getType() == RefreshType.SYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             mvRefreshScheme.setType(MaterializedView.RefreshType.SYNC);

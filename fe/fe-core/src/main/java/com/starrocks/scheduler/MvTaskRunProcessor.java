@@ -41,8 +41,10 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.ExpressionPartitionUtil;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.parser.SqlParser;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -323,10 +325,10 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
     }
 
     private void refreshMv(TaskRunContext context, MaterializedView materializedView) {
-        String insertIntoSql = "insert into " +
+        String insertIntoSql = "insert overwrite " +
                 materializedView.getName() + " " +
                 context.getDefinition();
-        execInsertStmt(insertIntoSql, context);
+        execInsertStmt(insertIntoSql, context, materializedView);
     }
 
     private void refreshMv(TaskRunContext context, MaterializedView materializedView, OlapTable olapTable,
@@ -356,16 +358,16 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             tableRelation.setPartitionNames(
                     new PartitionNames(false, new ArrayList<>(tablePartitionNames)));
             // e.g. insert into mv partition(p1,p2) select * from table partition(p3)
-            String insertIntoSql = "insert into " +
+            String insertIntoSql = "insert overwrite " +
                     materializedView.getName() +
                     " partition(" + mvPartitionName + ") " +
                     AST2SQL.toString(queryStatement);
-            execInsertStmt(insertIntoSql, context);
+            execInsertStmt(insertIntoSql, context, materializedView);
             ctx.setQueryId(UUIDUtil.genUUID());
         }
     }
 
-    private void execInsertStmt(String insertSql, TaskRunContext context) {
+    private void execInsertStmt(String insertSql, TaskRunContext context, MaterializedView materializedView) {
         ConnectContext ctx = context.getCtx();
         InsertStmt insertStmt = ((InsertStmt) SqlParser.parse(insertSql, ctx.getSessionVariable().getSqlMode()).get(0));
         insertStmt.setSystem(true);
@@ -378,6 +380,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         } catch (Exception e) {
             throw new SemanticException("Refresh materialized view failed:" + insertSql, e);
         } finally {
+            materializedView.getRefreshScheme().setLastRefreshTime(Utils.getLongFromDateTime(LocalDateTime.now()));
             auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
         }
     }
