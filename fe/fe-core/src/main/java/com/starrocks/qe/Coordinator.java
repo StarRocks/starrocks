@@ -2218,7 +2218,7 @@ public class Coordinator {
             }
 
             WorkGroup workgroup = null;
-            if (connectContext != null) {
+            if (connectContext != null && connectContext.getSessionVariable().isEnableResourceGroup()) {
                 SessionVariable sessionVariable = connectContext.getSessionVariable();
 
                 // First try to use the resource group specified by the variable
@@ -2232,6 +2232,9 @@ public class Coordinator {
                     workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                             connectContext, WorkGroupClassifier.QueryType.SELECT, dbIds);
                 }
+
+                connectContext.getAuditEventBuilder().setResourceGroup(workgroup.getName());
+                connectContext.setWorkGroup(workgroup);
             }
             setBucketSeqToInstanceForRuntimeFilters();
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
