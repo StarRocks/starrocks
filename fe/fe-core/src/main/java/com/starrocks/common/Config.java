@@ -1536,6 +1536,8 @@ public class Config extends ConfigBase {
     public static String starmgr_address = "127.0.0.1:6090";
     @ConfField
     public static boolean integrate_starmgr = false;
+    @ConfField
+    public static String starmgr_s3_bucket = "";
 
     /**
      * default bucket number when create OLAP table without buckets info
