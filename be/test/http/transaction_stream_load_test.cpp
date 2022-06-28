@@ -45,7 +45,6 @@ public:
         config::streaming_load_max_mb = 1;
 
         _env._thread_mgr = new ThreadResourceMgr();
-        _env._master_info = new TMasterInfo();
         _env._load_stream_mgr = new LoadStreamMgr();
         _env._brpc_stub_cache = new BrpcStubCache();
         _env._stream_load_executor = new StreamLoadExecutor(&_env);
@@ -63,8 +62,6 @@ public:
         _env._brpc_stub_cache = nullptr;
         delete _env._load_stream_mgr;
         _env._load_stream_mgr = nullptr;
-        delete _env._master_info;
-        _env._master_info = nullptr;
         delete _env._thread_mgr;
         _env._thread_mgr = nullptr;
         delete _env._stream_load_executor;

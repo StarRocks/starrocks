@@ -11,7 +11,7 @@ import org.apache.velocity.VelocityContext;
 
 import java.util.List;
 
-public class FullStatisticsCollectJob extends BaseCollectJob {
+public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
     private static final String COLLECT_FULL_STATISTIC_TEMPLATE =
             " SELECT $tableId, $partitionId, '$columnName', $dbId," +

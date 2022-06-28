@@ -121,8 +121,8 @@ public class StatisticsMetaManager extends MasterDaemon {
         CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
-            GlobalStateMgr.getCurrentState().createDb(dbStmt);
-        } catch (DdlException e) {
+            GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
+        } catch (UserException e) {
             LOG.warn("Failed to create database " + e.getMessage());
             return false;
         }

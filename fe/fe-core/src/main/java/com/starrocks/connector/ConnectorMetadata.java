@@ -6,7 +6,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
-import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
@@ -20,6 +19,7 @@ import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
@@ -60,7 +60,7 @@ public interface ConnectorMetadata {
         return null;
     }
 
-    default void createDb(CreateDbStmt stmt) throws DdlException {}
+    default void createDb(String dbName) throws  DdlException, AlreadyExistsException {}
 
     default void dropDb(DropDbStmt stmt) throws DdlException {}
 
@@ -104,6 +104,8 @@ public interface ConnectorMetadata {
 
     default void alterMaterializedView(AlterMaterializedViewStatement stmt)
             throws DdlException, MetaNotFoundException, AnalysisException {}
+
+    default void refreshMaterializedView(String dbName, String mvName) throws DdlException, MetaNotFoundException {}
 
     default void createView(CreateViewStmt stmt) throws DdlException {}
 

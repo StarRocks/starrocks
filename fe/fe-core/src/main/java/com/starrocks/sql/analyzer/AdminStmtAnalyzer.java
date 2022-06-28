@@ -47,13 +47,13 @@ public class AdminStmtAnalyzer {
 
                 if (key.equalsIgnoreCase(AdminSetReplicaStatusStmt.TABLET_ID)) {
                     try {
-                        tabletId = Long.valueOf(val);
+                        tabletId = Long.parseLong(val);
                     } catch (NumberFormatException e) {
                         throw new SemanticException("Invalid tablet id format: " + val);
                     }
                 } else if (key.equalsIgnoreCase(AdminSetReplicaStatusStmt.BACKEND_ID)) {
                     try {
-                        backendId = Long.valueOf(val);
+                        backendId = Long.parseLong(val);
                     } catch (NumberFormatException e) {
                         throw new SemanticException("Invalid backend id format: " + val);
                     }
@@ -160,16 +160,12 @@ public class AdminStmtAnalyzer {
             Expr leftChild = binaryPredicate.getChild(0);
             Expr rightChild = binaryPredicate.getChild(1);
             String leftKey = ((SlotRef) leftChild).getColumnName();
-            if (!(leftChild instanceof SlotRef) || !(rightChild instanceof StringLiteral)
-                    || !leftKey.equalsIgnoreCase("status")) {
+            if (!(rightChild instanceof StringLiteral) || !leftKey.equalsIgnoreCase("status")) {
                 return false;
             }
 
             try {
                 statusFilter = Replica.ReplicaStatus.valueOf(((StringLiteral) rightChild).getStringValue().toUpperCase());
-                if (statusFilter == null) {
-                    return false;
-                }
                 adminShowReplicaStatusStmt.setStatusFilter(statusFilter);
             } catch (Exception e) {
                 return false;

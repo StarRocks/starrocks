@@ -8,8 +8,8 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
-#include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/tablet_reader.h"
 #include "util/defer_op.h"
@@ -239,8 +239,7 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
         int64_t total_mem_footprint = 0;
         for (auto& rowset : _input_rowsets) {
             total_num_rows += rowset->num_rows();
-            auto* beta_rowset = down_cast<BetaRowset*>(rowset.get());
-            for (auto& segment : beta_rowset->segments()) {
+            for (auto& segment : rowset->segments()) {
                 for (uint32_t column_index : _column_groups[i]) {
                     const auto* column_reader = segment->column(column_index);
                     if (column_reader == nullptr) {

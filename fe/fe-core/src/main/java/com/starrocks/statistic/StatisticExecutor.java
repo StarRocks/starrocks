@@ -191,7 +191,7 @@ public class StatisticExecutor {
         return statistics;
     }
 
-    public void collectStatistics(BaseCollectJob tcj) {
+    public void collectStatistics(StatisticsCollectJob tcj) {
         AnalyzeJob analyzeJob = tcj.getAnalyzeJob();
         Database db = tcj.getDb();
         Table table = tcj.getTable();
@@ -234,26 +234,6 @@ public class StatisticExecutor {
             analyzeJob.setStatus(Constants.ScheduleStatus.PENDING);
             analyzeJob.setWorkTime(LocalDateTime.now());
             GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(analyzeJob);
-        }
-
-        analyzeStatus.setStatus(Constants.ScheduleStatus.FINISH);
-        analyzeStatus.setEndTime(LocalDateTime.now());
-
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
-        if (analyzeJob.getType().equals(Constants.AnalyzeType.HISTOGRAM)) {
-            for (String columnName : analyzeJob.getColumns()) {
-                GlobalStateMgr.getCurrentAnalyzeMgr().addHistogramStatsMeta(
-                        new HistogramStatsMeta(db.getId(), table.getId(), columnName,
-                                analyzeJob.getType(),
-                                analyzeStatus.getEndTime(),
-                                analyzeJob.getProperties()));
-            }
-        } else {
-            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(
-                    new BasicStatsMeta(db.getId(), table.getId(),
-                            analyzeJob.getType(),
-                            analyzeStatus.getEndTime(),
-                            analyzeJob.getProperties()));
         }
     }
 

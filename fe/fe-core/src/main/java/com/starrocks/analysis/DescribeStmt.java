@@ -181,7 +181,7 @@ public class DescribeStmt extends ShowStmt {
 
                 node = ProcService.getInstance().open(procString);
             } else {
-                if (table.getType() == TableType.OLAP) {
+                if (table.isNativeTable()) {
                     isOlapTable = true;
                     OlapTable olapTable = (OlapTable) table;
                     Set<String> bfColumns = olapTable.getCopiedBfColumns();

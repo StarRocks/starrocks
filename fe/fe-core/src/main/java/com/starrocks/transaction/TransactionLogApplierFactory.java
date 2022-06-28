@@ -11,7 +11,7 @@ public class TransactionLogApplierFactory {
         if (table.isLakeTable()) {
             return new LakeTableTxnLogApplier((LakeTable) table);
         }
-        if (table.isOlapTable()) {
+        if (table.isNativeTable()) {
             return new OlapTableTxnLogApplier((OlapTable) table);
         }
         return null;

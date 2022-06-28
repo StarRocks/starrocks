@@ -20,13 +20,13 @@ import java.io.StringWriter;
 import java.util.List;
 import java.util.Set;
 
-public abstract class BaseCollectJob {
+public abstract class StatisticsCollectJob {
     protected final AnalyzeJob analyzeJob;
     protected final Database db;
     protected final OlapTable table;
     protected final List<String> columns;
 
-    public BaseCollectJob(AnalyzeJob analyzeJob, Database db, OlapTable table, List<String> columns) {
+    public StatisticsCollectJob(AnalyzeJob analyzeJob, Database db, OlapTable table, List<String> columns) {
         this.analyzeJob = analyzeJob;
         this.db = db;
         this.table = table;

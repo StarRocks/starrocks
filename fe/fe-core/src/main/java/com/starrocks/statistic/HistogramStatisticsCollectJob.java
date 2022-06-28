@@ -16,7 +16,7 @@ import java.util.List;
 import static com.starrocks.sql.parser.SqlParser.parseFirstStatement;
 import static com.starrocks.statistic.Constants.HistogramStatisticsTableName;
 
-public class HistogramStatisticsCollectJob extends BaseCollectJob {
+public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private static final String COLLECT_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT $tableId, '$columnName', '$dbName.$tableName', histogram($columnName, $totalRows, $sampleRows, $bucketNum)"
                     + " FROM (SELECT * FROM $dbName.$tableName $sampleTableHint ORDER BY $columnName LIMIT $totalRows) t";

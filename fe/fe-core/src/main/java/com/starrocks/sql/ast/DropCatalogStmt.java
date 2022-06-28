@@ -29,4 +29,9 @@ public class DropCatalogStmt extends DdlStmt {
         sb.append("\'" + name + "\'");
         return sb.toString();
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

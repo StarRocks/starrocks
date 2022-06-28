@@ -41,6 +41,7 @@ statement
     | showMaterializedViewStatement                                                         #showMaterializedView
     | dropMaterializedViewStatement                                                         #dropMaterializedView
     | alterMaterializedViewStatement                                                        #alterMaterializedView
+    | refreshMaterializedViewStatement                                                      #refreshMaterializedView
 
     // Catalog Statement
     | createExternalCatalogStatement                                                        #createCatalog
@@ -59,9 +60,11 @@ statement
     | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
     | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
             (WHERE where=expression)?                                                       #adminShowReplicaStatus
+    | SET setVarList                                                                        #setStmt
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
+    | showNodesStatement                                                                    #showNodes
 
     // Analyze Statement
     | analyzeStatement                                                                      #analyze
@@ -268,6 +271,10 @@ alterMaterializedViewStatement
     : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause)
     ;
 
+refreshMaterializedViewStatement
+    : REFRESH MATERIALIZED VIEW mvName=qualifiedName
+    ;
+
 // ------------------------------------------- Cluster Mangement Statement ---------------------------------------------
 
 alterSystemStatement
@@ -302,6 +309,8 @@ alterClause
     | addFrontendClause
     | dropFrontendClause
     | modifyFrontendHostClause
+    | addComputeNodeClause
+    | dropComputeNodeClause
     ;
 
 createIndexClause
@@ -338,6 +347,14 @@ dropFrontendClause
 
 modifyFrontendHostClause
    : MODIFY FRONTEND HOST string TO string
+   ;
+
+addComputeNodeClause
+   : ADD COMPUTE NODE string (',' string)*
+   ;
+
+dropComputeNodeClause
+   : DROP COMPUTE NODE string (',' string)*
    ;
 
 // ------------------------------------------- DML Statement -----------------------------------------------------------
@@ -431,10 +448,22 @@ showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
     ;
 
+showNodesStatement
+    : SHOW COMPUTE NODES                                                       #showComputeNodes
+    ;
+
 varType
     : GLOBAL
     | LOCAL
     | SESSION
+    ;
+
+setVar
+    : varType? IDENTIFIER '=' expression
+    ;
+
+setVarList
+    : setVar (',' setVar)*
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -984,7 +1013,7 @@ nonReserved
     : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
     | CAST | CATALOG | CATALOGS | CHAIN | CHARSET | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
-    | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
+    | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
     | DATA | DATE | DATETIME | DAY | DISTRIBUTION | DUPLICATE | DYNAMIC
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FILE | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
@@ -994,7 +1023,7 @@ nonReserved
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
     | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODIFY | MONTH | MERGE
-    | NAME | NAMES | NEGATIVE | NO | NULLS
+    | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
     | OBSERVER | OFFSET | ONLY | OPEN | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY

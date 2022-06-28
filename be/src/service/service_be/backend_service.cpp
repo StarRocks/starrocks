@@ -49,7 +49,7 @@ using apache::thrift::TProcessor;
 using apache::thrift::concurrency::ThreadFactory;
 
 BackendService::BackendService(ExecEnv* exec_env)
-        : BackendServiceBase(exec_env), _agent_server(new AgentServer(exec_env, *exec_env->master_info())) {}
+        : BackendServiceBase(exec_env), _agent_server(new AgentServer(exec_env)) {}
 
 Status BackendService::create_service(ExecEnv* exec_env, int port, ThriftServer** server) {
     std::shared_ptr<BackendService> handler(new BackendService(exec_env));

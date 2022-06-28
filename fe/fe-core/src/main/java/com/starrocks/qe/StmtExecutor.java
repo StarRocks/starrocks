@@ -108,13 +108,13 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeJob;
-import com.starrocks.statistic.BaseCollectJob;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.Constants;
 import com.starrocks.statistic.FullStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
 import com.starrocks.statistic.SampleStatisticsCollectJob;
 import com.starrocks.statistic.StatisticExecutor;
+import com.starrocks.statistic.StatisticsCollectJob;
 import com.starrocks.statistic.TableCollectJob;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
@@ -788,7 +788,7 @@ public class StmtExecutor {
                 Constants.ScheduleStatus.RUNNING,
                 LocalDateTime.MIN);
 
-        BaseCollectJob collectJob;
+        StatisticsCollectJob collectJob;
         if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
             analyzeJob.setType(Constants.AnalyzeType.HISTOGRAM);
             collectJob = new HistogramStatisticsCollectJob(analyzeJob, db, table, analyzeStmt.getColumnNames());
@@ -1147,6 +1147,9 @@ public class StmtExecutor {
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
         try {
             if (execPlan.getFragments().get(0).getSink() instanceof OlapTableSink) {
+                //if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
+                context.getSessionVariable().setPreferComputeNode(false);
+                context.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink dataSink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
                 dataSink.init(context.getExecutionId(), transactionId, database.getId(),
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS());

@@ -4,7 +4,6 @@
 
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
-#include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
@@ -60,7 +59,7 @@ Status CompactionState::_do_load(Rowset* rowset) {
     auto tracker = update_manager->compaction_state_mem_tracker();
     segment_states.resize(rowset->num_segments());
     for (auto i = 0; i < rowset->num_segments(); i++) {
-        std::string rssid_file = BetaRowset::segment_srcrssid_file_path(rowset->rowset_path(), rowset->rowset_id(), i);
+        std::string rssid_file = Rowset::segment_srcrssid_file_path(rowset->rowset_path(), rowset->rowset_id(), i);
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(rssid_file));
         ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
         std::vector<uint32_t>& src_rssids = segment_states[i].src_rssids;
@@ -79,8 +78,7 @@ Status CompactionState::_do_load(Rowset* rowset) {
 
     RowsetReleaseGuard guard(rowset->shared_from_this());
     OlapReaderStatistics stats;
-    auto beta_rowset = down_cast<BetaRowset*>(rowset);
-    auto res = beta_rowset->get_segment_iterators2(pkey_schema, nullptr, 0, &stats);
+    auto res = rowset->get_segment_iterators2(pkey_schema, nullptr, 0, &stats);
     if (!res.ok()) {
         return res.status();
     }
@@ -99,7 +97,7 @@ Status CompactionState::_do_load(Rowset* rowset) {
         }
         auto& dest = segment_states[i].pkeys;
         auto col = pk_column->clone();
-        auto num_rows = beta_rowset->segments()[i]->num_rows();
+        auto num_rows = rowset->segments()[i]->num_rows();
         col->reserve(num_rows);
         while (true) {
             chunk->reset();

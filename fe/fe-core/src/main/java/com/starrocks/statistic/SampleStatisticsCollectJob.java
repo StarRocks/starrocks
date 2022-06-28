@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class SampleStatisticsCollectJob extends BaseCollectJob {
+public class SampleStatisticsCollectJob extends StatisticsCollectJob {
 
     private static final String INSERT_SELECT_METRIC_SAMPLE_TEMPLATE =
             "SELECT $tableId, '$columnName', $dbId, '$tableName', '$dbName', COUNT(1) * $ratio, "

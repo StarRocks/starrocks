@@ -40,4 +40,9 @@ public class RefreshTableStmt extends DdlStmt {
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.NO_FORWARD;
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

@@ -33,14 +33,13 @@ class ExecEnv;
 class MasterServerClient;
 class TaskWorkerPool;
 class TFinishTaskRequest;
-class TMasterInfo;
 class TMasterResult;
 class TReportRequest;
 
 // Each method corresponds to one RPC from FE Master, see BackendService.
 class AgentServer {
 public:
-    explicit AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info);
+    explicit AgentServer(ExecEnv* exec_env);
     ~AgentServer();
 
     // Receive agent task from FE master
@@ -54,21 +53,12 @@ public:
     // TODO(lingbin): This method is deprecated, should be removed later.
     void publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request);
 
-    void finish_task(const TFinishTaskRequest& finish_task_request);
-
-    AgentStatus report_task(const TReportRequest& request, TMasterResult* result);
-
-    const TMasterInfo& master_info() const { return _master_info; }
-
     AgentServer(const AgentServer&) = delete;
     const AgentServer& operator=(const AgentServer&) = delete;
 
 private:
     // Not Owned
     ExecEnv* _exec_env;
-    // Reference to the ExecEnv::_master_info
-    const TMasterInfo& _master_info;
-    std::unique_ptr<MasterServerClient> _master_client;
 
     std::unique_ptr<TaskWorkerPool> _create_tablet_workers;
     std::unique_ptr<TaskWorkerPool> _drop_tablet_workers;

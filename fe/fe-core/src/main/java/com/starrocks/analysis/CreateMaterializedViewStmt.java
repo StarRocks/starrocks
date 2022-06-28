@@ -618,4 +618,9 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             }
         }
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

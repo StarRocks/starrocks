@@ -5,8 +5,8 @@
 #include "exec/olap_utils.h"
 #include "storage/chunk_helper.h"
 #include "storage/range.h"
-#include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/rowid_range_option.h"
+#include "storage/rowset/rowset.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader.h"
@@ -161,8 +161,8 @@ ScanMorsel* PhysicalSplitMorselQueue::_cur_scan_morsel() {
     return down_cast<ScanMorsel*>(_morsels[_tablet_idx].get());
 }
 
-BetaRowset* PhysicalSplitMorselQueue::_cur_rowset() {
-    return down_cast<BetaRowset*>(_tablet_rowsets[_tablet_idx][_rowset_idx].get());
+Rowset* PhysicalSplitMorselQueue::_cur_rowset() {
+    return _tablet_rowsets[_tablet_idx][_rowset_idx].get();
 }
 
 Segment* PhysicalSplitMorselQueue::_cur_segment() {
@@ -456,8 +456,7 @@ Rowset* LogicalSplitMorselQueue::_find_largest_rowset(const std::vector<RowsetSh
 }
 
 SegmentSharedPtr LogicalSplitMorselQueue::_find_largest_segment(Rowset* rowset) const {
-    auto* beta_rowset = down_cast<BetaRowset*>(rowset);
-    const auto& segments = beta_rowset->segments();
+    const auto& segments = rowset->segments();
     if (segments.empty()) {
         return nullptr;
     }
@@ -477,8 +476,7 @@ StatusOr<SegmentGroupPtr> LogicalSplitMorselQueue::_create_segment_group(Rowset*
     if (rowset->rowset_meta()->is_segments_overlapping()) {
         segments.emplace_back(_find_largest_segment(rowset));
     } else {
-        auto* beta_rowset = down_cast<BetaRowset*>(rowset);
-        segments = beta_rowset->segments();
+        segments = rowset->segments();
     }
 
     for (const auto& segment : segments) {

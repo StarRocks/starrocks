@@ -39,6 +39,7 @@ Status ColumnChunkReader::init(int chunk_size) {
     IBufferedInputStream* stream = _opts.sb_stream;
     if (!_opts.use_sb_stream) {
         _default_stream = std::make_unique<DefaultBufferedInputStream>(_opts.file, start_offset, size);
+        _default_stream->reserve(config::parquet_buffer_stream_reserve_size);
         stream = _default_stream.get();
     }
     _page_reader = std::make_unique<PageReader>(stream, start_offset, size);

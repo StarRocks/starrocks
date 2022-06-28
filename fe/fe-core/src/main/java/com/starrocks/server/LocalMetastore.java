@@ -42,7 +42,6 @@ import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.ColumnRenameClause;
-import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
@@ -114,6 +113,7 @@ import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -321,35 +321,25 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public void createDb(CreateDbStmt stmt) throws DdlException {
-        final String clusterName = stmt.getClusterName();
-        String fullDbName = stmt.getFullDbName();
+    public void createDb(String dbName) throws DdlException, AlreadyExistsException {
         long id = 0L;
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            if (!nameToCluster.containsKey(clusterName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER, clusterName);
-            }
-            if (fullNameToDb.containsKey(fullDbName)) {
-                if (stmt.isSetIfNotExists()) {
-                    LOG.info("create database[{}] which already exists", fullDbName);
-                    return;
-                } else {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_CREATE_EXISTS, fullDbName);
-                }
+            if (fullNameToDb.containsKey(dbName)) {
+                throw new AlreadyExistsException("Database Already Exists");
             } else {
                 id = getNextId();
-                Database db = new Database(id, fullDbName);
-                db.setClusterName(clusterName);
+                Database db = new Database(id, dbName);
+                db.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
                 unprotectCreateDb(db);
                 editLog.logCreateDb(db);
             }
         } finally {
             unlock();
         }
-        LOG.info("createDb dbName = " + fullDbName + ", id = " + id);
+        LOG.info("createDb dbName = " + dbName + ", id = " + id);
     }
 
     // For replay edit log, needn't lock metadata
@@ -2992,6 +2982,35 @@ public class LocalMetastore implements ConnectorMetadata {
     @Override
     public void alterMaterializedView(AlterMaterializedViewStatement stmt) throws DdlException, MetaNotFoundException {
         stateMgr.getAlterInstance().processAlterMaterializedView(stmt);
+    }
+
+    @Override
+    public void refreshMaterializedView(String dbName, String mvName) throws DdlException, MetaNotFoundException {
+        Database db = this.getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        MaterializedView materializedView = null;
+        db.readLock();
+        try {
+            final Table table = db.getTable(mvName);
+            if (table instanceof MaterializedView) {
+                materializedView = (MaterializedView) table;
+            }
+        } finally {
+            db.readUnlock();
+        }
+        if (materializedView == null) {
+            throw new MetaNotFoundException(mvName + " is not a materialized view");
+        }
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
+        if (!taskManager.containTask(mvTaskName)) {
+            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+            taskManager.createTask(task, true);
+        }
+        // run task
+        taskManager.executeTask(mvTaskName);
     }
 
     /*

@@ -33,7 +33,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
-#include "storage/rowset/beta_rowset.h"
+#include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/rowset/rowset_writer.h"
@@ -631,13 +631,13 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
         LOG(INFO) << "Replacing rowset id " << rowset_meta_pb.rowset_id() << " with " << new_rowset_id;
 
         for (int seg_id = 0; seg_id < rowset_meta_pb.num_segments(); seg_id++) {
-            auto old_path = BetaRowset::segment_file_path(clone_dir, old_rowset_id, seg_id);
-            auto new_path = BetaRowset::segment_file_path(clone_dir, new_rowset_id, seg_id);
+            auto old_path = Rowset::segment_file_path(clone_dir, old_rowset_id, seg_id);
+            auto new_path = Rowset::segment_file_path(clone_dir, new_rowset_id, seg_id);
             RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
         }
         for (int del_id = 0; del_id < rowset_meta_pb.num_delete_files(); del_id++) {
-            auto old_path = BetaRowset::segment_del_file_path(clone_dir, old_rowset_id, del_id);
-            auto new_path = BetaRowset::segment_del_file_path(clone_dir, new_rowset_id, del_id);
+            auto old_path = Rowset::segment_del_file_path(clone_dir, old_rowset_id, del_id);
+            auto new_path = Rowset::segment_del_file_path(clone_dir, new_rowset_id, del_id);
             RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
         }
         rowset_meta_pb.set_rowset_id(new_rowset_id.to_string());

@@ -6,6 +6,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 
 import java.util.Map;
@@ -32,15 +33,20 @@ public class TaskBuilder {
 
     public static Task buildMvTask(MaterializedView materializedView, String dbName) {
         Task task = new Task();
-        task.setName("mv-" + materializedView.getId());
+        task.setName(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setCreateTime(System.currentTimeMillis());
         task.setDbName(dbName);
         Map<String, String> taskProperties = Maps.newHashMap();
         taskProperties.put(MvTaskRunProcessor.MV_ID, String.valueOf(materializedView.getId()));
+        taskProperties.put(SessionVariable.ENABLE_INSERT_STRICT, "false");
         task.setProperties(taskProperties);
         task.setDefinition(materializedView.getViewDefineSql());
         task.setExpireTime(0L);
         return task;
+    }
+
+    public static String getMvTaskName(long mvId) {
+        return "mv-" + mvId;
     }
 }

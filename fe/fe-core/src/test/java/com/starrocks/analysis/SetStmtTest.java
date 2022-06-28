@@ -22,12 +22,13 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.analyzer.SemanticException;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -38,7 +39,6 @@ import org.junit.rules.ExpectedException;
 import java.util.List;
 
 public class SetStmtTest {
-    private Analyzer analyzer;
 
     @Mocked
     private Auth auth;
@@ -47,7 +47,6 @@ public class SetStmtTest {
 
     @Before
     public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
         MockedAuth.mockedAuth(auth);
         MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
     }
@@ -58,7 +57,7 @@ public class SetStmtTest {
                 new SetVar(SetType.GLOBAL, "names", new StringLiteral("utf-8")));
         SetStmt stmt = new SetStmt(vars);
 
-        stmt.analyze(analyzer);
+        stmt.analyze();
 
         Assert.assertEquals("SET DEFAULT times = 100, GLOBAL names = 'utf-8'", stmt.toString());
         Assert.assertEquals(vars, stmt.getSetVars());
@@ -67,7 +66,7 @@ public class SetStmtTest {
     @Test
     public void testNormal2() throws UserException {
         SetVar var = new SetVar(SetType.DEFAULT, "names", new StringLiteral("utf-8"));
-        var.analyze(analyzer);
+        var.analyze();
 
         Assert.assertEquals(SetType.DEFAULT, var.getType());
         var.setType(SetType.GLOBAL);
@@ -78,30 +77,30 @@ public class SetStmtTest {
         Assert.assertEquals("GLOBAL names = 'utf-8'", var.toString());
 
         var = new SetVar("times", new IntLiteral(100L));
-        var.analyze(analyzer);
+        var.analyze();
         Assert.assertEquals("DEFAULT times = 100", var.toString());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoVar() throws UserException {
+    @Test(expected = SemanticException.class)
+    public void testNoVar() {
         SetStmt stmt = new SetStmt(Lists.<SetVar>newArrayList());
 
-        stmt.analyze(analyzer);
+        stmt.analyze();
         Assert.fail("No exception throws.");
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNullVar() throws UserException {
+    @Test(expected = SemanticException.class)
+    public void testNullVar() {
         SetStmt stmt = new SetStmt(null);
 
-        stmt.analyze(analyzer);
+        stmt.analyze();
         Assert.fail("No exception throws.");
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoVariable() throws UserException {
+    @Test(expected = SemanticException.class)
+    public void testNoVariable() {
         SetVar var = new SetVar(SetType.DEFAULT, "", new StringLiteral("utf-8"));
-        var.analyze(analyzer);
+        var.analyze();
         Assert.fail("No exception throws.");
     }
 
@@ -110,26 +109,28 @@ public class SetStmtTest {
 
     @Test
     public void testNonConstantExpr() throws UserException {
-        Expr lhsExpr = new SlotRef(new TableName("xx", "xx"), "xx");
+        SlotDescriptor descriptor = new SlotDescriptor(new SlotId(1), "x",
+                Type.INT, false);
+        Expr lhsExpr = new SlotRef(descriptor);
         Expr rhsExpr = new IntLiteral(100L);
         ArithmeticExpr addExpr = new ArithmeticExpr(
                 ArithmeticExpr.Operator.ADD, lhsExpr, rhsExpr);
         SetVar var = new SetVar(SetType.DEFAULT, SessionVariable.SQL_SELECT_LIMIT, addExpr);
-        expectedEx.expect(AnalysisException.class);
+        expectedEx.expect(SemanticException.class);
         expectedEx.expectMessage("Set statement only support constant expr.");
-        var.analyze(analyzer);
+        var.analyze();
     }
 
     @Test
     public void setResourceGroup() throws UserException {
         SetVar setEmpty = new SetVar(SetType.DEFAULT, SessionVariable.RESOURCE_GROUP, new StringLiteral(""));
-        setEmpty.analyze(analyzer);
+        setEmpty.analyze();
 
         SetVar setVar = new SetVar(SetType.DEFAULT, SessionVariable.RESOURCE_GROUP, new StringLiteral("not_exists"));
         try {
-            setVar.analyze(analyzer);
+            setVar.analyze();
             Assert.fail("should fail");
-        } catch (UserException e) {
+        } catch (SemanticException e) {
             Assert.assertEquals("resource group not exists: not_exists", e.getMessage());
         }
     }
@@ -142,30 +143,30 @@ public class SetStmtTest {
                 SessionVariable.SQL_SELECT_LIMIT);
 
         for (String field : fields) {
-            Assert.assertThrows("is not a number", AnalysisException.class, () -> {
+            Assert.assertThrows("is not a number", SemanticException.class, () -> {
                 SetVar setVar = new SetVar(SetType.DEFAULT, field, new StringLiteral("non_number"));
-                setVar.analyze(analyzer);
+                setVar.analyze();
             });
 
-            Assert.assertThrows("must be equal or greater than 0", AnalysisException.class, () -> {
+            Assert.assertThrows("must be equal or greater than 0", SemanticException.class, () -> {
                 SetVar setVar = new SetVar(SetType.DEFAULT, field, new StringLiteral("-1"));
-                setVar.analyze(analyzer);
+                setVar.analyze();
             });
 
             SetVar var = new SetVar(SetType.DEFAULT, field, new StringLiteral("0"));
-            var.analyze(analyzer);
+            var.analyze();
             Assert.assertEquals(String.format("DEFAULT %s = '0'", field), var.toString());
 
             var = new SetVar(SetType.DEFAULT, field, new StringLiteral("10"));
-            var.analyze(analyzer);
+            var.analyze();
             Assert.assertEquals(String.format("DEFAULT %s = '10'", field), var.toString());
 
             var = new SetVar(SetType.DEFAULT, field, new IntLiteral(0));
-            var.analyze(analyzer);
+            var.analyze();
             Assert.assertEquals(String.format("DEFAULT %s = 0", field), var.toString());
 
             var = new SetVar(SetType.DEFAULT, field, new IntLiteral(10));
-            var.analyze(analyzer);
+            var.analyze();
             Assert.assertEquals(String.format("DEFAULT %s = 10", field), var.toString());
         }
     }
