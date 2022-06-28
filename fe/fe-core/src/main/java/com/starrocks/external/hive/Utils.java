@@ -26,6 +26,8 @@ import java.util.regex.Pattern;
 public class Utils {
     public static final String DECIMAL_PATTERN = "^decimal\\((\\d+),(\\d+)\\)";
     public static final String ARRAY_PATTERN = "^array<([0-9a-z<>(),]+)>";
+    public static final String CHAR_PATTERN = "^char\\(([0-9]+)\\)";
+    public static final String VARCHAR_PATTERN = "^varchar\\(([0-9,-1]+)\\)";
 
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
         return createPartitionKey(values, columns, false);
@@ -171,5 +173,23 @@ public class Utils {
             itemType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
         }
         return itemType;
+    }
+
+    // Char string like char(100)
+    public static int getCharLength(String typeStr) throws DdlException {
+        Matcher matcher = Pattern.compile(CHAR_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
+        if (matcher.find()) {
+            return Integer.parseInt(matcher.group(1));
+        }
+        throw new DdlException("Failed to get char length at " + typeStr);
+    }
+
+    // Varchar string like varchar(100)
+    public static int getVarcharLength(String typeStr) throws DdlException {
+        Matcher matcher = Pattern.compile(VARCHAR_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
+        if (matcher.find()) {
+            return Integer.parseInt(matcher.group(1));
+        }
+        throw new DdlException("Failed to get varchar length at " + typeStr);
     }
 }
