@@ -213,7 +213,6 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg) {
 }
 
 void WorkGroup::copy_metrics(const WorkGroup& rhs) {
-    _mem_tracker->update_consumption(rhs.mem_tracker()->consumption());
     _cpu_actual_use_ratio = rhs.get_cpu_expected_use_ratio();
     _num_total_queries = rhs.num_total_queries();
     _concurrency_overflow_count = rhs.concurrency_overflow_count();

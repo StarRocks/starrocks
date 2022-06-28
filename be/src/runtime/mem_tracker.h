@@ -250,8 +250,6 @@ public:
 
     int64_t peak_consumption() const { return _consumption->value(); }
 
-    void update_consumption(int64_t value) { _consumption->set(value); }
-
     MemTracker* parent() const { return _parent; }
 
     Status check_mem_limit(const std::string& msg) const;
