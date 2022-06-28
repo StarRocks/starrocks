@@ -26,7 +26,6 @@ public class NestLoopJoinTest extends PlanTestBase {
         System.err.println(planFragment);
         Assert.assertTrue(planFragment, planFragment.contains(" 3:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 3: v3 = 6: v3\n" +
                 "  |  \n" +

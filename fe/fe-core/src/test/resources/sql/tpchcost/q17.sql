@@ -49,7 +49,6 @@ UNPARTITIONED
 |
 11:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 2: L_PARTKEY = 18: P_PARTKEY
 |  other join predicates: 5: L_QUANTITY < 0.2 * 45: avg
@@ -81,7 +80,6 @@ UNPARTITIONED
 |
 8:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE(S))
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 29: L_PARTKEY = 18: P_PARTKEY
 |
