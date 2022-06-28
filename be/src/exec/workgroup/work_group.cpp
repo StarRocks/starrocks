@@ -393,15 +393,12 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
         switch (op_type) {
         case TWorkGroupOpType::WORKGROUP_OP_CREATE:
             create_workgroup_unlocked(wg);
-            LOG(INFO) << "create workgroup " << wg->to_string();
             break;
         case TWorkGroupOpType::WORKGROUP_OP_ALTER:
             alter_workgroup_unlocked(wg);
-            LOG(INFO) << "alter workgroup " << wg->to_string();
             break;
         case TWorkGroupOpType::WORKGROUP_OP_DELETE:
             delete_workgroup_unlocked(wg);
-            LOG(INFO) << "delete workgroup " << wg->name();
             break;
         }
     }
@@ -442,6 +439,7 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg) {
 
 void WorkGroupManager::alter_workgroup_unlocked(const WorkGroupPtr& wg) {
     create_workgroup_unlocked(wg);
+    LOG(INFO) << "alter workgroup " << wg->to_string();
 }
 
 void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
@@ -457,14 +455,14 @@ void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
     if (wg_it != _workgroups.end()) {
         wg_it->second->mark_del();
     }
+    LOG(INFO) << "delete workgroup " << wg->name();
 }
 
 std::vector<TWorkGroup> WorkGroupManager::list_workgroups() {
     std::shared_lock read_lock(_mutex);
     std::vector<TWorkGroup> alive_workgroups;
-    for (auto it = _workgroups.begin(); it != _workgroups.end(); ++it) {
-        const auto& wg = it->second;
-        if (!wg->is_marked_del() && wg->version() != WorkGroup::DEFAULT_VERSION) {
+    for (auto& [_, wg] : _workgroups) {
+        if (wg->version() != WorkGroup::DEFAULT_VERSION) {
             alive_workgroups.push_back(wg->to_thrift());
         }
     }
