@@ -318,11 +318,6 @@ public class StarOSAgent {
                 }
             }
         }
-
-        if (backendIds.isEmpty()) {
-            throw new UserException("Failed to get backendId by shard, shardId is " + shardId);
-        }
-
         return backendIds;
     }
 }
