@@ -25,6 +25,7 @@ template <PrimitiveType PT, typename = guard::Guard>
 struct PercentileContState {
     using CppType = RunTimeCppType<PT>;
     void update(CppType item) { items.emplace_back(item); }
+    void sort() { std::stable_sort(std::begin(items), std::end(items)); }
 
     std::vector<CppType> items;
     double rate = 0.0;
