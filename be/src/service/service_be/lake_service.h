@@ -29,6 +29,12 @@ public:
     void abort_txn(::google::protobuf::RpcController* controller, const ::starrocks::lake::AbortTxnRequest* request,
                    ::starrocks::lake::AbortTxnResponse* response, ::google::protobuf::Closure* done) override;
 
+
+    void drop_tablet(::google::protobuf::RpcController* controller,
+                         const ::starrocks::lake::DropTabletRequest* request,
+                         ::starrocks::lake::DropTabletResponse* response,
+                         ::google::protobuf::Closure* done) override;
+
 private:
     Status publish(lake::Tablet* tablet, const ::starrocks::lake::PublishVersionRequest* request);
 

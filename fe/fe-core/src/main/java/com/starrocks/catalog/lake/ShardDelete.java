@@ -2,27 +2,29 @@
 
 package com.starrocks.catalog.lake;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.persist.gson.GsonUtils;
-import com.google.gson.annotations.SerializedName;
+import com.starrocks.rpc.BackendServiceProxy;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.task.AgentBatchTask;
-import com.starrocks.task.DropReplicaTask;
+import com.starrocks.system.Backend;
+import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 
 public class ShardDelete extends MasterDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(ShardDelete.class);
@@ -52,28 +54,40 @@ public class ShardDelete extends MasterDaemon implements Writable {
             }
 
             // 2. drop tablet
-            HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
+            boolean finished = true;
             try {
+                TNetworkAddress address = new TNetworkAddress();
                 LakeTablet tablet = entry.getValue();
                 long backendId = tablet.getPrimaryBackendId();
-                DropReplicaTask dropTask = new DropReplicaTask(backendId, shardId, -1, true);
-                AgentBatchTask batchTask = batchTaskMap.get(backendId);
-                if (batchTask == null) {
-                    batchTask = new AgentBatchTask();
-                    batchTask.addTask(dropTask);
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                address.setHostname(backend.getHost());
+                address.setPort(backend.getBrpcPort());
+                LakeService lakeService = BackendServiceProxy.getInstance().getLakeService(address);
+
+                DropTabletRequest request = new DropTabletRequest();
+                request.tabletIds = entry.getValue();
+
+                Future<DropTabletResponse> responseFuture = lakeService.dropTablet(request);
+                try {
+                    DropTabletResponse response = responseFuture.get();
+                    if (!response.failedTablets.isEmpty()) {
+                        finished = false;
+                    }
+                } catch (ExecutionException | InterruptedException e) {
+                    LOG.error(e);
+                    finished = false;
                 }
-                batchTaskMap.put(backendId, batchTask);
+
             } catch (UserException e) {
                 LOG.warn("failed to get primary backendId");
             }
 
-            GlobalStateMgr.getCurrentState().sendDropTabletTasks(batchTaskMap);
             // 3.succ both, remove from the map
-            iterator.remove();
+            if (finished == true) {
+                iterator.remove();
+            }
         }
-
     }
-
 
     @Override
     public void write(DataOutput out) throws IOException {
