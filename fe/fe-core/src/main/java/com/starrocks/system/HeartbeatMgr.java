@@ -198,8 +198,8 @@ public class HeartbeatMgr extends MasterDaemon {
                             // addWorker
                             int starletPort = computeNode.getStarletPort();
                             if (starletPort != 0) {
-                                String workerAddr = be.getHost() + ":" + starletPort;
-                                GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(be.getId(), workerAddr);
+                                String workerAddr = computeNode.getHost() + ":" + starletPort;
+                                GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(computeNode.getId(), workerAddr);
                             }
                         }
                     }
