@@ -10,7 +10,6 @@ import com.staros.client.StarClientException;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ShardInfo;
-import com.staros.proto.StatusCode;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
 import com.starrocks.common.DdlException;
@@ -60,7 +59,7 @@ public class StarOSAgentTest {
             {
                 client.registerService("starrocks");
                 minTimes = 0;
-                result = new StarClientException(StatusCode.ALREADY_EXIST,
+                result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
                         "service already exists!");
 
                 client.bootstrapService("starrocks", "starrocks");
@@ -78,7 +77,7 @@ public class StarOSAgentTest {
             {
                 client.bootstrapService("starrocks", "starrocks");
                 minTimes = 0;
-                result = new StarClientException(StatusCode.ALREADY_EXIST,
+                result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
                         "service already exists!");
 
                 client.getServiceInfo("123").getServiceId();
@@ -133,7 +132,7 @@ public class StarOSAgentTest {
             {
                 client.addWorker(1, "127.0.0.1:8090");
                 minTimes = 0;
-                result = new StarClientException(StatusCode.ALREADY_EXIST,
+                result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
                         "worker already exists");
 
                 client.getWorkerInfo(1, "127.0.0.1:8090").getWorkerId();
@@ -155,7 +154,7 @@ public class StarOSAgentTest {
             {
                 client.getWorkerInfo(1, "127.0.0.1:8090").getWorkerId();
                 minTimes = 0;
-                result = new StarClientException(StatusCode.GRPC,
+                result = new StarClientException(StarClientException.ExceptionCode.GRPC,
                         "network error");
             }
         };
@@ -173,7 +172,7 @@ public class StarOSAgentTest {
 
                 client.removeWorker(1, 10);
                 minTimes = 0;
-                result = new StarClientException(StatusCode.GRPC,
+                result = new StarClientException(StarClientException.ExceptionCode.GRPC,
                         "network error");
             }
         };
@@ -185,7 +184,7 @@ public class StarOSAgentTest {
     public void testCreateShards() throws StarClientException, DdlException {
         new Expectations() {
             {
-                client.createShard(1L, 2, 1, null);
+                client.createShard(1L, 2);
                 minTimes = 0;
                 result = Lists.newArrayList(ShardInfo.newBuilder().setShardId(10L).build(),
                         ShardInfo.newBuilder().setShardId(11L).build());
