@@ -236,7 +236,6 @@ import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
-import com.starrocks.catalog.lake.ShardDelete;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -413,8 +412,6 @@ public class GlobalStateMgr {
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
 
-    private ShardDelete shardDelete;
-
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -574,8 +571,6 @@ public class GlobalStateMgr {
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
-        
-        this.shardDelete = new ShardDelete();
     }
 
     public static void destroyCheckpoint() {
@@ -740,10 +735,6 @@ public class GlobalStateMgr {
 
     public InsertOverwriteJobManager getInsertOverwriteJobManager() {
         return insertOverwriteJobManager;
-    }
-    
-    public ShardDelete getShardDelete() {
-        return shardDelete;
     }
 
     // Use tryLock to avoid potential dead lock
