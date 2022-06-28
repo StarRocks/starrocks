@@ -173,7 +173,7 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg) {
                                                                  resource_group_mem_limit_bytes.get());
         //mem concurrent
         auto resource_group_mem_allocated_bytes = std::make_unique<starrocks::IntGauge>(MetricUnit::BYTES);
-        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_mem_allocated_bytes",
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_mem_inuse_bytes",
                                                                  MetricLabels().add("name", wg->name()),
                                                                  resource_group_mem_allocated_bytes.get());
         // running queries
