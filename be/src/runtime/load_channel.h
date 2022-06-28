@@ -85,7 +85,7 @@ public:
 
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
 
-    std::string get_span() { return Tracer::to_trace_parent(_span->GetContext()); }
+    Span get_span() { return _span; }
 
 private:
     friend class RefCountedThreadSafe<LoadChannel>;
