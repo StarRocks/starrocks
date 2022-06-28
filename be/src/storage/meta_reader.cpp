@@ -11,9 +11,9 @@
 #include "common/status.h"
 #include "runtime/global_dict/config.h"
 #include "storage/chunk_helper.h"
-#include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/rowset/rowset.h"
 #include "storage/tablet.h"
 
 namespace starrocks::vectorized {
@@ -145,10 +145,9 @@ Status MetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& v
     }
     Rowset::acquire_readers(_rowsets);
 
-    for (auto& rs : _rowsets) {
-        RETURN_IF_ERROR(rs->load());
-        auto beta_rowset = down_cast<BetaRowset*>(rs.get());
-        for (auto seg : beta_rowset->segments()) {
+    for (auto& rowset : _rowsets) {
+        RETURN_IF_ERROR(rowset->load());
+        for (auto seg : rowset->segments()) {
             segments->emplace_back(seg);
         }
     }

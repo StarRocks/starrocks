@@ -27,6 +27,7 @@
 
 #include <memory>
 
+#include "agent/agent_server.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
@@ -49,9 +50,11 @@ using apache::thrift::TProcessor;
 using apache::thrift::concurrency::ThreadFactory;
 
 BackendService::BackendService(ExecEnv* exec_env)
-        : BackendServiceBase(exec_env), _agent_server(new AgentServer(exec_env, *exec_env->master_info())) {}
+        : BackendServiceBase(exec_env), _agent_server(std::make_unique<AgentServer>(exec_env)) {}
 
-Status BackendService::create_service(ExecEnv* exec_env, int port, ThriftServer** server) {
+BackendService::~BackendService() = default;
+
+std::unique_ptr<ThriftServer> BackendService::create(ExecEnv* exec_env, int port) {
     std::shared_ptr<BackendService> handler(new BackendService(exec_env));
     // TODO: do we want a BoostThreadFactory?
     // TODO: we want separate thread factories here, so that fe requests can't starve
@@ -60,15 +63,29 @@ Status BackendService::create_service(ExecEnv* exec_env, int port, ThriftServer*
 
     std::shared_ptr<TProcessor> be_processor(new BackendServiceProcessor(handler));
 
-    *server = new ThriftServer("backend", be_processor, port, exec_env->metrics(), config::be_service_threads);
-
     LOG(INFO) << "StarRocksInternalService listening on " << port;
-
-    return Status::OK();
+    return std::make_unique<ThriftServer>("backend", be_processor, port, exec_env->metrics(),
+                                          config::be_service_threads);
 }
 
 void BackendService::get_tablet_stat(TTabletStatResult& result) {
     StorageEngine::instance()->tablet_manager()->get_tablet_stat(&result);
+}
+
+void BackendService::submit_tasks(TAgentResult& return_value, const std::vector<TAgentTaskRequest>& tasks) {
+    _agent_server->submit_tasks(return_value, tasks);
+}
+
+void BackendService::make_snapshot(TAgentResult& return_value, const TSnapshotRequest& snapshot_request) {
+    _agent_server->make_snapshot(return_value, snapshot_request);
+}
+
+void BackendService::release_snapshot(TAgentResult& return_value, const std::string& snapshot_path) {
+    _agent_server->release_snapshot(return_value, snapshot_path);
+}
+
+void BackendService::publish_cluster_state(TAgentResult& result, const TAgentPublishRequest& request) {
+    _agent_server->publish_cluster_state(result, request);
 }
 
 } // namespace starrocks

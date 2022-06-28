@@ -121,8 +121,8 @@ public class StatisticsMetaManager extends MasterDaemon {
         CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
-            GlobalStateMgr.getCurrentState().createDb(dbStmt);
-        } catch (DdlException e) {
+            GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
+        } catch (UserException e) {
             LOG.warn("Failed to create database " + e.getMessage());
             return false;
         }
@@ -320,9 +320,11 @@ public class StatisticsMetaManager extends MasterDaemon {
 
     private void refreshStatisticsTable(String tableName) {
         while (checkTableExist(tableName) && !checkReplicateNormal(tableName)) {
+            LOG.info("statistics table " + tableName + " replicate is not normal, will drop table and rebuild");
             if (dropTable(tableName)) {
                 break;
             }
+            LOG.warn("drop statistics table " + tableName + " failed");
             trySleep(10000);
         }
 
@@ -330,6 +332,7 @@ public class StatisticsMetaManager extends MasterDaemon {
             if (createTable(tableName)) {
                 break;
             }
+            LOG.warn("create statistics table " + tableName + " failed");
             trySleep(10000);
         }
     }

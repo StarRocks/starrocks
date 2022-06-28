@@ -57,14 +57,14 @@ public class StatisticAutoCollector extends MasterDaemon {
 
         updateHealthy();
 
-        List<BaseCollectJob> allJobs;
+        List<StatisticsCollectJob> allJobs;
         if (Config.enable_collect_full_statistics) {
             allJobs = generateFullAnalyzeJobs();
         } else {
             allJobs = generateAllJobs();
         }
 
-        for (BaseCollectJob tcj : allJobs) {
+        for (StatisticsCollectJob tcj : allJobs) {
             statisticExecutor.collectStatistics(tcj);
         }
 
@@ -120,8 +120,8 @@ public class StatisticAutoCollector extends MasterDaemon {
         }
     }
 
-    private List<BaseCollectJob> generateFullAnalyzeJobs() {
-        List<BaseCollectJob> collectJobs = new ArrayList<>();
+    private List<StatisticsCollectJob> generateFullAnalyzeJobs() {
+        List<StatisticsCollectJob> collectJobs = new ArrayList<>();
 
         // all database
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
@@ -178,7 +178,7 @@ public class StatisticAutoCollector extends MasterDaemon {
         return collectJobs;
     }
 
-    private List<BaseCollectJob> generateAllJobs() {
+    private List<StatisticsCollectJob> generateAllJobs() {
         List<AnalyzeJob> allAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList();
         // The jobs need to be sorted in order of execution to avoid duplicate collections
         allAnalyzeJobs.sort(Comparator.comparing(AnalyzeJob::getId));

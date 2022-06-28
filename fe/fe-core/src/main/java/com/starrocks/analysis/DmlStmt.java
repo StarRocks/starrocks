@@ -8,4 +8,9 @@ public abstract class DmlStmt extends StatementBase {
     }
 
     public abstract TableName getTableName();
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

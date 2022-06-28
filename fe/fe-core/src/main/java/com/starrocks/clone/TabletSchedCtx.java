@@ -263,6 +263,10 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         this.lastAdjustPrioTime = 0;
     }
 
+    public Priority getDynamicPriority() {
+        return dynamicPriority;
+    }
+
     public void increaseFailedSchedCounter() {
         ++failedSchedCounter;
     }

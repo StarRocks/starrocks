@@ -175,4 +175,9 @@ public class ShowTableStatusStmt extends ShowStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowTableStatusStmt(this, context);
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

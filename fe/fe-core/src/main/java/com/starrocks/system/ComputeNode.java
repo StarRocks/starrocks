@@ -1,0 +1,453 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
+package com.starrocks.system;
+
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.DecommissionBackendJob;
+import com.starrocks.common.Config;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+/**
+ * This class extends the primary identifier of a compute node with computing capabilities
+ * and no storage capacity。
+ */
+public class ComputeNode implements IComputable, Writable {
+
+    public enum BackendState {
+        using, /* backend is belong to a cluster*/
+        offline,
+        free /* backend is not belong to any clusters */
+    }
+
+    private static final Logger LOG = LogManager.getLogger(ComputeNode.class);
+
+    @SerializedName("id")
+    private long id;
+    @SerializedName("host")
+    private String host;
+    @SerializedName("version")
+    private String version;
+
+    @SerializedName("heartbeatPort")
+    private int heartbeatPort; // heartbeat
+    @SerializedName("bePort")
+    private volatile int bePort; // be
+    @SerializedName("httpPort")
+    private volatile int httpPort; // web service
+    @SerializedName("beRpcPort")
+    private volatile int beRpcPort; // be rpc port
+    @SerializedName("brpcPort")
+    private volatile int brpcPort = -1;
+    @SerializedName("cpuCores")
+    private volatile int cpuCores = 0; // Cpu cores of node
+
+    @SerializedName("lastUpdateMs")
+    private volatile long lastUpdateMs;
+    @SerializedName("lastStartTime")
+    private volatile long lastStartTime;
+    @SerializedName("isAlive")
+    private AtomicBoolean isAlive;
+
+    @SerializedName("isDecommissioned")
+    private AtomicBoolean isDecommissioned;
+    @SerializedName("decommissionType")
+    private volatile int decommissionType;
+    @SerializedName("ownerClusterName")
+    private volatile String ownerClusterName;
+    // to index the state in some cluster
+    @SerializedName("backendState")
+    private volatile int backendState;
+    // private BackendState backendState;
+
+    @SerializedName("heartbeatErrMsg")
+    private String heartbeatErrMsg = "";
+
+    @SerializedName("lastMissingHeartbeatTime")
+    private long lastMissingHeartbeatTime = -1;
+
+    @SerializedName("heartbeatRetryTimes")
+    private int heartbeatRetryTimes = 0;
+
+    // port of starlet on BE
+    private volatile int starletPort;
+
+    public ComputeNode() {
+        this.host = "";
+        this.version = "";
+        this.lastUpdateMs = 0;
+        this.lastStartTime = 0;
+        this.isAlive = new AtomicBoolean();
+        this.isDecommissioned = new AtomicBoolean(false);
+
+        this.bePort = 0;
+        this.httpPort = 0;
+        this.beRpcPort = 0;
+
+        this.ownerClusterName = "";
+        this.backendState = Backend.BackendState.free.ordinal();
+
+        this.decommissionType = DecommissionBackendJob.DecommissionType.SystemDecommission.ordinal();
+    }
+
+    public ComputeNode(long id, String host, int heartbeatPort) {
+        this.id = id;
+        this.host = host;
+        this.version = "";
+        this.heartbeatPort = heartbeatPort;
+        this.bePort = -1;
+        this.httpPort = -1;
+        this.beRpcPort = -1;
+        this.lastUpdateMs = -1L;
+        this.lastStartTime = -1L;
+
+        this.isAlive = new AtomicBoolean(false);
+        this.isDecommissioned = new AtomicBoolean(false);
+
+        this.ownerClusterName = "";
+        this.backendState = Backend.BackendState.free.ordinal();
+        this.decommissionType = DecommissionBackendJob.DecommissionType.SystemDecommission.ordinal();
+    }
+
+    public int getStarletPort() {
+        return starletPort;
+    }
+
+    // for test only
+    public void setStarletPort(int starletPort) {
+        this.starletPort = starletPort;
+    }
+
+    public long getId() {
+        return id;
+    }
+
+    public String getHost() {
+        return host;
+    }
+
+    public String getVersion() {
+        return version;
+    }
+
+    public int getBePort() {
+        return bePort;
+    }
+
+    public int getHeartbeatPort() {
+        return heartbeatPort;
+    }
+
+    public int getHttpPort() {
+        return httpPort;
+    }
+
+    public int getBeRpcPort() {
+        return beRpcPort;
+    }
+
+    public int getBrpcPort() {
+        return brpcPort;
+    }
+
+    public String getHeartbeatErrMsg() {
+        return heartbeatErrMsg;
+    }
+
+    // for test only
+    public void updateOnce(int bePort, int httpPort, int beRpcPort) {
+        if (this.bePort != bePort) {
+            this.bePort = bePort;
+        }
+
+        if (this.httpPort != httpPort) {
+            this.httpPort = httpPort;
+        }
+
+        if (this.beRpcPort != beRpcPort) {
+            this.beRpcPort = beRpcPort;
+        }
+
+        long currentTime = System.currentTimeMillis();
+        this.lastUpdateMs = currentTime;
+        if (!isAlive.get()) {
+            this.lastStartTime = currentTime;
+            LOG.info("{} is alive,", this.toString());
+            this.isAlive.set(true);
+        }
+
+        heartbeatErrMsg = "";
+    }
+
+    public boolean setDecommissioned(boolean isDecommissioned) {
+        if (this.isDecommissioned.compareAndSet(!isDecommissioned, isDecommissioned)) {
+            LOG.warn("{} set decommission: {}", this.toString(), isDecommissioned);
+            return true;
+        }
+        return false;
+    }
+
+    public void setId(long id) {
+        this.id = id;
+    }
+
+    public void setHost(String host) {
+        this.host = host;
+    }
+
+    public void setBackendState(Backend.BackendState state) {
+        this.backendState = state.ordinal();
+    }
+
+    protected void setBackendStateVlaue(int state) {
+        this.backendState = state;
+    }
+
+    protected void setHeartbeatPort(int heartbeatPort) {
+        this.heartbeatPort = heartbeatPort;
+    }
+
+    public void setAlive(boolean isAlive) {
+        this.isAlive.set(isAlive);
+    }
+
+    public void setBePort(int agentPort) {
+        this.bePort = agentPort;
+    }
+
+    public void setHttpPort(int httpPort) {
+        this.httpPort = httpPort;
+    }
+
+    public void setBeRpcPort(int beRpcPort) {
+        this.beRpcPort = beRpcPort;
+    }
+
+    public void setBrpcPort(int brpcPort) {
+        this.brpcPort = brpcPort;
+    }
+
+    public long getLastUpdateMs() {
+        return this.lastUpdateMs;
+    }
+
+    public void setLastUpdateMs(long currentTime) {
+        this.lastUpdateMs = currentTime;
+    }
+
+    public long getLastStartTime() {
+        return this.lastStartTime;
+    }
+
+    public void setLastStartTime(long currentTime) {
+        this.lastStartTime = currentTime;
+    }
+
+    public long getLastMissingHeartbeatTime() {
+        return lastMissingHeartbeatTime;
+    }
+
+    public boolean isAlive() {
+        return this.isAlive.get();
+    }
+
+    public boolean isDecommissioned() {
+        return this.isDecommissioned.get();
+    }
+
+    public boolean isAvailable() {
+        return this.isAlive.get() && !this.isDecommissioned.get();
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        String s = GsonUtils.GSON.toJson(this);
+        Text.writeString(out, s);
+    }
+
+    public static ComputeNode read(DataInput in) throws IOException {
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, ComputeNode.class);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (!(obj instanceof ComputeNode)) {
+            return false;
+        }
+
+        ComputeNode computeNode = (ComputeNode) obj;
+
+        return (id == computeNode.id) && (host.equals(computeNode.host)) && (heartbeatPort == computeNode.heartbeatPort)
+                && (bePort == computeNode.bePort) && (isAlive.get() == computeNode.isAlive.get());
+    }
+
+    @Override
+    public String toString() {
+        return "ComputeNode [id=" + id + ", host=" + host + ", heartbeatPort=" + heartbeatPort + ", alive=" +
+                isAlive.get() + "]";
+    }
+
+    public String getOwnerClusterName() {
+        return ownerClusterName;
+    }
+
+    public void setOwnerClusterName(String name) {
+        ownerClusterName = name;
+    }
+
+    public void clearClusterName() {
+        ownerClusterName = "";
+    }
+
+    public Backend.BackendState getBackendState() {
+        switch (backendState) {
+            case 0:
+                return Backend.BackendState.using;
+            case 1:
+                return Backend.BackendState.offline;
+            default:
+                return Backend.BackendState.free;
+        }
+    }
+
+    public void setDecommissionType(DecommissionBackendJob.DecommissionType type) {
+        decommissionType = type.ordinal();
+    }
+
+    public void setVersion(String version) {
+        this.version = version;
+    }
+
+    public int getCpuCores() {
+        return cpuCores;
+    }
+
+    public void setCpuCores(int cpuCores) {
+        this.cpuCores = cpuCores;
+    }
+
+    public AtomicBoolean getIsAlive() {
+        return isAlive;
+    }
+
+    public void setIsAlive(AtomicBoolean isAlive) {
+        this.isAlive = isAlive;
+    }
+
+    public AtomicBoolean getIsDecommissioned() {
+        return isDecommissioned;
+    }
+
+    public void setIsDecommissioned(AtomicBoolean isDecommissioned) {
+        this.isDecommissioned = isDecommissioned;
+    }
+
+    public void setDecommissionType(int decommissionType) {
+        this.decommissionType = decommissionType;
+    }
+
+    public void setBackendState(int backendState) {
+        this.backendState = backendState;
+    }
+
+    public void setHeartbeatErrMsg(String heartbeatErrMsg) {
+        this.heartbeatErrMsg = heartbeatErrMsg;
+    }
+
+    public void setLastMissingHeartbeatTime(long lastMissingHeartbeatTime) {
+        this.lastMissingHeartbeatTime = lastMissingHeartbeatTime;
+    }
+
+    public int getHeartbeatRetryTimes() {
+        return heartbeatRetryTimes;
+    }
+
+    public void setHeartbeatRetryTimes(int heartbeatRetryTimes) {
+        this.heartbeatRetryTimes = heartbeatRetryTimes;
+    }
+
+    public DecommissionBackendJob.DecommissionType getDecommissionType() {
+        if (decommissionType == DecommissionBackendJob.DecommissionType.ClusterDecommission.ordinal()) {
+            return DecommissionBackendJob.DecommissionType.ClusterDecommission;
+        }
+        return DecommissionBackendJob.DecommissionType.SystemDecommission;
+    }
+
+    protected int getDecommissionTypeValue() {
+        return decommissionType;
+    }
+
+    /**
+     * handle Compute node's heartbeat response.
+     * return true if any port changed, or alive state is changed.
+     */
+    public boolean handleHbResponse(BackendHbResponse hbResponse) {
+        boolean isChanged = false;
+        if (hbResponse.getStatus() == HeartbeatResponse.HbStatus.OK) {
+            if (!this.version.equals(hbResponse.getVersion())) {
+                isChanged = true;
+                this.version = hbResponse.getVersion();
+            }
+
+            if (this.bePort != hbResponse.getBePort()) {
+                isChanged = true;
+                this.bePort = hbResponse.getBePort();
+            }
+
+            if (this.httpPort != hbResponse.getHttpPort()) {
+                isChanged = true;
+                this.httpPort = hbResponse.getHttpPort();
+            }
+
+            if (this.brpcPort != hbResponse.getBrpcPort()) {
+                isChanged = true;
+                this.brpcPort = hbResponse.getBrpcPort();
+            }
+
+            this.lastUpdateMs = hbResponse.getHbTime();
+            if (!isAlive.get()) {
+                isChanged = true;
+                this.lastStartTime = hbResponse.getHbTime();
+                LOG.info("{} is alive, last start time: {}", this.toString(), hbResponse.getHbTime());
+                this.isAlive.set(true);
+            } else if (this.lastStartTime <= 0) {
+                this.lastStartTime = hbResponse.getHbTime();
+            }
+
+            if (this.cpuCores != hbResponse.getCpuCores()) {
+                isChanged = true;
+                this.cpuCores = hbResponse.getCpuCores();
+                BackendCoreStat.setNumOfHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
+            }
+
+            heartbeatErrMsg = "";
+            this.heartbeatRetryTimes = 0;
+        } else {
+            if (this.heartbeatRetryTimes < Config.heartbeat_retry_times) {
+                this.heartbeatRetryTimes++;
+            } else {
+                if (isAlive.compareAndSet(true, false)) {
+                    isChanged = true;
+                    LOG.info("{} is dead,", this.toString());
+                }
+
+                heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
+                lastMissingHeartbeatTime = System.currentTimeMillis();
+            }
+        }
+
+        return isChanged;
+    }
+}

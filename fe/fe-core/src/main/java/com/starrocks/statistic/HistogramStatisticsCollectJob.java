@@ -16,10 +16,10 @@ import java.util.List;
 import static com.starrocks.sql.parser.SqlParser.parseFirstStatement;
 import static com.starrocks.statistic.Constants.HistogramStatisticsTableName;
 
-public class HistogramStatisticsCollectJob extends BaseCollectJob {
+public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private static final String COLLECT_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT $tableId, '$columnName', '$dbName.$tableName', histogram($columnName, $totalRows, $sampleRows, $bucketNum)"
-                    + " FROM (SELECT * FROM $dbName.$tableName $sampleTableHint ORDER BY $columnName LIMIT $totalRows) t";
+                    + " FROM (SELECT * FROM $dbName.$tableName $sampleTabletHint ORDER BY $columnName LIMIT $totalRows) t";
 
     public HistogramStatisticsCollectJob(AnalyzeJob analyzeJob, Database db, OlapTable table, List<String> columns) {
         super(analyzeJob, db, table, columns);
@@ -62,9 +62,9 @@ public class HistogramStatisticsCollectJob extends BaseCollectJob {
         context.put("bucketNum", bucketNum);
 
         if (sampleRows >= totalRows) {
-            context.put("sampleTableHint", "");
+            context.put("sampleTabletHint", "");
         } else {
-            context.put("sampleTableHint", getSampleTableHint(table, sampleRows));
+            context.put("sampleTabletHint", getSampleTabletHint(table, sampleRows));
         }
 
         builder.append(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));

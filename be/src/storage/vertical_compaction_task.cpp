@@ -10,7 +10,6 @@
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
 #include "storage/row_source_mask.h"
-#include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
@@ -153,8 +152,7 @@ StatusOr<int32_t> VerticalCompactionTask::_calculate_chunk_size_for_column_group
     int64_t total_mem_footprint = 0;
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
-        auto* beta_rowset = down_cast<BetaRowset*>(rowset.get());
-        for (auto& segment : beta_rowset->segments()) {
+        for (auto& segment : rowset->segments()) {
             for (uint32_t column_index : column_group) {
                 const auto* column_reader = segment->column(column_index);
                 if (column_reader == nullptr) {

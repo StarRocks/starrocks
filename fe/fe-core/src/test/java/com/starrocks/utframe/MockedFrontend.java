@@ -29,7 +29,9 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.Journal;
+import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalFactory;
+import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
@@ -214,7 +216,7 @@ public class MockedFrontend {
 
                 // check it after Config is initialized, otherwise the config 'check_java_version' won't work.
                 if (!JdkUtils.checkJavaVersion()) {
-                    throw new IllegalArgumentException("Java version doesn't match");
+//                    throw new IllegalArgumentException("Java version doesn't match");
                 }
 
                 // set dns cache ttl
@@ -227,9 +229,11 @@ public class MockedFrontend {
                     // init globalStateMgr and wait it be ready
                     new MockUp<JournalFactory>() {
                         @Mock
-                        public Journal create(String name) {
+                        public Journal create(String name) throws JournalException {
+                            GlobalStateMgr.getCurrentState().setHaProtocol(new MockJournal.MockProtocol());
                             return new MockJournal();
                         }
+
                     };
                 }
 

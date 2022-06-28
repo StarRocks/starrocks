@@ -30,6 +30,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.StmtExecutor;
@@ -125,10 +126,15 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             if (baseTableId == partitionTable.getId()) {
                 continue;
             }
+            // check with no partition expression related table
             OlapTable olapTable = olapTables.get(baseTableId);
             if (checkNeedRefreshPartitions(materializedView, olapTable)) {
                 refreshAllPartitions = true;
             }
+        }
+        // if all partition need refresh
+        if (needRefreshPartitionIds.size() == materializedView.getPartitions().size()) {
+            refreshAllPartitions = true;
         }
         // 4. refresh mv
         if (refreshAllPartitions) {
@@ -359,6 +365,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             insertSqlBuilder.append(AST2SQL.toString(queryStatement));
             String insertIntoSql = insertSqlBuilder.toString();
             execInsertStmt(insertIntoSql, context);
+            ctx.setQueryId(UUIDUtil.genUUID());
         }
     }
 

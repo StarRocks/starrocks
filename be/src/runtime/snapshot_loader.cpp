@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <filesystem>
 
+#include "agent/master_info.h"
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
@@ -723,7 +724,7 @@ Status SnapshotLoader::_report_every(int report_threshold, int* counter, int32_t
     LOG(INFO) << "report to frontend. job id: " << _job_id << ", task id: " << _task_id
               << ", finished num: " << finished_num << ", total num:" << total_num;
 
-    TNetworkAddress master_addr = _env->master_info()->network_address;
+    TNetworkAddress master_addr = get_master_address();
 
     TSnapshotLoaderReportRequest request;
     request.job_id = _job_id;

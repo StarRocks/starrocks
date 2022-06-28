@@ -48,6 +48,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
@@ -204,6 +205,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitPhysicalMergeJoin(PhysicalMergeJoinOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator node, C context) {
         return visitOperator(node, context);
     }
 

@@ -91,7 +91,7 @@ public class PredicateStatisticsCalculator {
 
             ScalarOperator firstChild = getChildForCastOperator(predicate.getChild(0));
             List<ScalarOperator> otherChildrenList =
-                    predicate.getChildren().stream().skip(1).map(this::getChildForCastOperator)
+                    predicate.getChildren().stream().skip(1).map(this::getChildForCastOperator).distinct()
                             .collect(Collectors.toList());
             // 1. compute the inPredicate children column statistics
             ColumnStatistic inColumnStatistic = getExpressionStatistic(firstChild);

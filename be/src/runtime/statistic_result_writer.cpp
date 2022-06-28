@@ -138,7 +138,6 @@ Status StatisticResultWriter::_fill_statistic_data_v1(int version, const vectori
 
     auto& countDistincts = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[7])->get_data();
     auto& nullCounts = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[8])->get_data();
-
     BinaryColumn* maxColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[9].get()));
     BinaryColumn* minColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[10].get()));
 

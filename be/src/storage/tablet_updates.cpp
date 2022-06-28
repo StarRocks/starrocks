@@ -1157,7 +1157,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
         if (std::find(ors.begin(), ors.end(), rowset_id) == ors.end()) {
             // This may happen after a full clone.
             _compaction_state.reset();
-            auto msg = Substitute("compaction input rowset($0) not found $2", rowset_id, _debug_string(false, false));
+            auto msg = Substitute("compaction input rowset($0) not found $1", rowset_id, _debug_string(false, false));
             LOG(WARNING) << msg;
             return Status::Cancelled(msg);
         }
@@ -2238,9 +2238,8 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         const auto& src_rowset = src_rowsets[i];
 
         RowsetReleaseGuard guard(src_rowset->shared_from_this());
-        auto beta_rowset = down_cast<BetaRowset*>(src_rowset.get());
-        auto res = beta_rowset->get_segment_iterators2(base_schema, base_tablet->data_dir()->get_meta(),
-                                                       version.major(), &stats);
+        auto res = src_rowset->get_segment_iterators2(base_schema, base_tablet->data_dir()->get_meta(), version.major(),
+                                                      &stats);
         if (!res.ok()) {
             return res.status();
         }
@@ -2501,7 +2500,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         for (int seg_id = 0; seg_id < rowset.num_segments(); seg_id++) {
             RowsetId rowset_id;
             rowset_id.init(rowset.rowset_id());
-            auto path = BetaRowset::segment_file_path(_tablet.schema_hash_path(), rowset_id, seg_id);
+            auto path = Rowset::segment_file_path(_tablet.schema_hash_path(), rowset_id, seg_id);
             auto st = FileSystem::Default()->path_exists(path);
             if (!st.ok()) {
                 return Status::InternalError("segment file does not exist: " + st.to_string());
@@ -2510,7 +2509,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         for (int del_id = 0; del_id < rowset.num_delete_files(); del_id++) {
             RowsetId rowset_id;
             rowset_id.init(rowset.rowset_id());
-            auto path = BetaRowset::segment_del_file_path(_tablet.schema_hash_path(), rowset_id, del_id);
+            auto path = Rowset::segment_del_file_path(_tablet.schema_hash_path(), rowset_id, del_id);
             auto st = FileSystem::Default()->path_exists(path);
             if (!st.ok()) {
                 return Status::InternalError("delete file does not exist: " + st.to_string());
@@ -2802,7 +2801,7 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
             ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
         }
         std::string seg_path =
-                BetaRowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
+                Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
         auto segment = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path,
                                      rssid - iter->first, &rowset->schema());
         if (!segment.ok()) {

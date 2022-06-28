@@ -39,7 +39,6 @@
 
 namespace starrocks {
 
-class AgentServer;
 class ExecEnv;
 
 class TaskWorkerPool {
@@ -73,7 +72,7 @@ public:
 
     typedef void* (*CALLBACK_FUNCTION)(void*);
 
-    TaskWorkerPool(AgentServer* agent_server, TaskWorkerType task_worker_type, ExecEnv* env, int worker_num);
+    TaskWorkerPool(TaskWorkerType task_worker_type, ExecEnv* env, int worker_num);
     ~TaskWorkerPool();
 
     // start the task worker callback thread
@@ -133,9 +132,6 @@ private:
     AgentStatus _move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::string& src, int64_t job_id,
                           bool overwrite, std::vector<std::string>* error_msgs);
 
-    const TMasterInfo& master_info();
-
-    AgentServer* _agent_server;
     TBackend _backend;
     ExecEnv* _env;
 

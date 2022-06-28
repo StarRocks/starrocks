@@ -28,6 +28,32 @@ struct FrameRange {
     int64_t end;
 };
 
+class PartitionStatistics {
+private:
+    // We will not perform loop search until processing enough partitions
+    static constexpr int64_t MIN_PARTITION_NUM = 16;
+
+    // Overhead of binary search is O(N/S logN), where S denote the average size of partition
+    // Overhead of loop search is O(N)
+    // The default chunk_size is 4096, then logN turns out to be log(4096) = 12
+    // Considering the error of estimation, we set the threshold to 8
+    static constexpr int64_t AVERAGE_SIZE_THRESHOLD = 8;
+
+public:
+    void update(int64_t partition_size) {
+        _num++;
+        _cumulative_size += partition_size;
+        _average_size = _cumulative_size / _num;
+    }
+
+    bool is_high_cardinality() { return _num > MIN_PARTITION_NUM && _average_size < AVERAGE_SIZE_THRESHOLD; }
+
+private:
+    int64_t _num = 0;
+    int64_t _cumulative_size = 0;
+    int64_t _average_size = 0;
+};
+
 class Analytor;
 using AnalytorPtr = std::shared_ptr<Analytor>;
 using Analytors = std::vector<AnalytorPtr>;
@@ -145,7 +171,8 @@ private:
     RuntimeProfile::Counter* _rows_returned_counter = nullptr;
     RuntimeProfile::Counter* _column_resize_timer = nullptr;
     RuntimeProfile::Counter* _compute_timer = nullptr;
-    RuntimeProfile::Counter* _binary_search_timer = nullptr;
+    RuntimeProfile::Counter* _partition_search_timer = nullptr;
+    RuntimeProfile::Counter* _peer_group_search_timer = nullptr;
 
     int64_t _num_rows_returned = 0;
     int64_t _limit; // -1: no limit
@@ -172,6 +199,8 @@ private:
     // Used to record the first position of the latest Chunk that is not equal to the PartitionKey.
     // If not found, it points to the last position + 1.
     int64_t _found_partition_end = 0;
+    PartitionStatistics _partition_statistics;
+    std::queue<int64_t> _candidate_partition_ends;
 
     // A peer group is all of the rows that are peers within the specified ordering.
     // Record the start pos of current peer group.
@@ -229,6 +258,7 @@ private:
                                        int64_t frame_end);
 
     int64_t _find_first_not_equal(vectorized::Column* column, int64_t target, int64_t start, int64_t end);
+    void _find_candidate_partition_ends();
 };
 
 // Helper class that properly invokes destructor when state goes out of scope.

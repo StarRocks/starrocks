@@ -100,7 +100,7 @@ public class ShowMetaInfoAction extends RestBaseAction {
         feInfo.put("role", GlobalStateMgr.getCurrentState().getFeType().toString());
         if (GlobalStateMgr.getCurrentState().isMaster()) {
             feInfo.put("current_journal_id",
-                    String.valueOf(GlobalStateMgr.getCurrentState().getEditLog().getMaxJournalId()));
+                    String.valueOf(GlobalStateMgr.getCurrentState().getMaxJournalId()));
         } else {
             feInfo.put("current_journal_id",
                     String.valueOf(GlobalStateMgr.getCurrentState().getReplayedJournalId()));

@@ -11,7 +11,7 @@ import org.apache.velocity.VelocityContext;
 import java.io.StringWriter;
 import java.util.List;
 
-public class TableCollectJob extends BaseCollectJob {
+public class TableCollectJob extends StatisticsCollectJob {
     private static final String INSERT_SELECT_FULL_TEMPLATE =
             "SELECT $tableId, '$columnName', $dbId, '$tableName', '$dbName', COUNT(1), "
                     + "$dataSize, $countDistinctFunction, $countNullFunction, $maxFunction, $minFunction, NOW() "

@@ -317,7 +317,8 @@ public class StarRocksFE {
             System.out.println("Java compile version: " + Version.STARROCKS_JAVA_COMPILE_VERSION);
             System.exit(0);
         } else if (cmdLineOpts.runBdbTools()) {
-            BDBTool bdbTool = new BDBTool(GlobalStateMgr.getCurrentState().getBdbDir(), cmdLineOpts.getBdbToolOpts());
+            
+            BDBTool bdbTool = new BDBTool(BDBEnvironment.getBdbDir(), cmdLineOpts.getBdbToolOpts());
             if (bdbTool.run()) {
                 System.exit(0);
             } else {
@@ -364,7 +365,7 @@ public class StarRocksFE {
             try {
                 Thread t = new Thread(() -> {
                     try {
-                        Journal journal = GlobalStateMgr.getCurrentState().getEditLog().getJournal();
+                        Journal journal = GlobalStateMgr.getCurrentState().getJournal();
                         if (journal instanceof BDBJEJournal) {
                             BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
                             if (bdbEnvironment != null) {

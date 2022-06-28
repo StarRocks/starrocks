@@ -59,4 +59,9 @@ public class CreateCatalogStmt extends DdlStmt {
         sb.append("PROPERTIES(").append(new PrintableMap<>(properties, " = ", true, false)).append(")");
         return sb.toString();
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

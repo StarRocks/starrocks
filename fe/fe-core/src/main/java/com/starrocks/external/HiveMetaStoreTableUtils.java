@@ -203,13 +203,12 @@ public class HiveMetaStoreTableUtils {
                 primitiveType = PrimitiveType.DATE;
                 break;
             case "STRING":
-            case "VARCHAR":
             case "BINARY":
-                primitiveType = PrimitiveType.VARCHAR;
-                break;
+                return ScalarType.createDefaultString();
+            case "VARCHAR":
+                return ScalarType.createVarcharType(Utils.getVarcharLength(hiveType));
             case "CHAR":
-                primitiveType = PrimitiveType.CHAR;
-                break;
+                return ScalarType.createCharType(Utils.getCharLength(hiveType));
             case "BOOLEAN":
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;

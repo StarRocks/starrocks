@@ -26,6 +26,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJob.JobState;
 import com.starrocks.analysis.AddBackendClause;
+import com.starrocks.analysis.AddComputeNodeClause;
 import com.starrocks.analysis.AddFollowerClause;
 import com.starrocks.analysis.AddObserverClause;
 import com.starrocks.analysis.AlterClause;
@@ -34,6 +35,7 @@ import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelStmt;
 import com.starrocks.analysis.DecommissionBackendClause;
 import com.starrocks.analysis.DropBackendClause;
+import com.starrocks.analysis.DropComputeNodeClause;
 import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.ModifyBackendAddressClause;
@@ -197,6 +199,12 @@ public class SystemHandler extends AlterHandler {
         } else if (alterClause instanceof AlterLoadErrorUrlClause) {
             AlterLoadErrorUrlClause clause = (AlterLoadErrorUrlClause) alterClause;
             GlobalStateMgr.getCurrentState().getLoadInstance().setLoadErrorHubInfo(clause.getProperties());
+        } else if (alterClause instanceof AddComputeNodeClause) {
+            AddComputeNodeClause addComputeNodeClause = (AddComputeNodeClause) alterClause;
+            GlobalStateMgr.getCurrentSystemInfo().addComputeNodes(addComputeNodeClause.getHostPortPairs());
+        } else if (alterClause instanceof DropComputeNodeClause) {
+            DropComputeNodeClause dropComputeNodeClause = (DropComputeNodeClause) alterClause;
+            GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(dropComputeNodeClause.getHostPortPairs());
         } else {
             Preconditions.checkState(false, alterClause.getClass());
         }

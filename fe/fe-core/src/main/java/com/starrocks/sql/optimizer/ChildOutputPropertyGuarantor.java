@@ -18,6 +18,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.List;
@@ -111,6 +112,17 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         }
 
         return true;
+    }
+
+    private void enforceChildBroadcastDistribution(GroupExpression child, PhysicalPropertySet childOutputProperty,
+                                                   int childIndex) {
+        DistributionSpec enforceDistributionSpec = DistributionSpec.createReplicatedDistributionSpec();
+
+        enforceChildDistribution(enforceDistributionSpec, child, childOutputProperty);
+
+        PhysicalPropertySet newChildInputProperty = createPropertySetByDistribution(enforceDistributionSpec);
+        requiredChildrenProperties.set(childIndex, newChildInputProperty);
+        childrenOutputProperties.set(childIndex, newChildInputProperty);
     }
 
     // enforce child SHUFFLE type distribution
@@ -241,6 +253,11 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
 
     @Override
     public Void visitPhysicalMergeJoin(PhysicalMergeJoinOperator node, ExpressionContext context) {
+        return visitPhysicalJoin(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator node, ExpressionContext context) {
         return visitPhysicalJoin(node, context);
     }
 

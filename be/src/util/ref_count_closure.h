@@ -31,6 +31,8 @@ public:
     RefCountClosure() : _refs(0) {}
     ~RefCountClosure() override = default;
 
+    int count() { return _refs.load(); }
+
     void ref() { _refs.fetch_add(1); }
 
     // If unref() returns true, this object should be delete

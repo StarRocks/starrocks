@@ -38,6 +38,7 @@ import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
@@ -145,7 +146,7 @@ public class MaterializedViewAnalyzer {
                 analyzeExp(statement.getPartitionExpDesc().getExpr(), statement.getQueryStatement(), context);
             }
             // check and analyze distribution
-            checkDistribution(statement);
+            checkDistribution(statement, tableNameTableMap);
             // convert queryStatement to sql and set
             statement.setInlineViewDef(ViewDefBuilder.build(queryStatement));
             return null;
@@ -308,17 +309,30 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-
-        private void checkDistribution(CreateMaterializedViewStatement statement) {
+        private void checkDistribution(CreateMaterializedViewStatement statement,
+                                       Map<TableName, Table> tableNameTableMap) {
             DistributionDesc distributionDesc = statement.getDistributionDesc();
             Map<String, String> properties = statement.getProperties();
             List<Column> mvColumnItems = statement.getMvColumnItems();
+
+            // For replication_num, we select the maximum value of all tables replication_num
+            int defaultReplicationNum = 1;
+            for (Table table : tableNameTableMap.values()) {
+                if (table instanceof OlapTable) {
+                    OlapTable olapTable = (OlapTable) table;
+                    Short replicationNum = olapTable.getDefaultReplicationNum();
+                    if (replicationNum > defaultReplicationNum) {
+                        defaultReplicationNum = replicationNum;
+                    }
+                }
+            }
+            if (properties == null) {
+                properties = Maps.newHashMap();
+            }
+            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(defaultReplicationNum));
+
             if (distributionDesc == null) {
                 if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
-                    if (properties == null) {
-                        properties = Maps.newHashMap();
-                        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
-                    }
                     distributionDesc = new HashDistributionDesc(Config.default_bucket_num,
                             Lists.newArrayList(mvColumnItems.get(0).getName()));
                     statement.setDistributionDesc(distributionDesc);
@@ -327,7 +341,7 @@ public class MaterializedViewAnalyzer {
                 }
             }
             distributionDesc.analyze(
-                    mvColumnItems.stream().map(column -> column.getName()).collect(Collectors.toSet()));
+                    mvColumnItems.stream().map(Column::getName).collect(Collectors.toSet()));
         }
 
         @Override
@@ -371,6 +385,13 @@ public class MaterializedViewAnalyzer {
             } else {
                 throw new SemanticException("Unsupported modification for materialized view");
             }
+            return null;
+        }
+
+        @Override
+        public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement,
+                                                          ConnectContext context) {
+            statement.getMvName().normalization(context);
             return null;
         }
     }

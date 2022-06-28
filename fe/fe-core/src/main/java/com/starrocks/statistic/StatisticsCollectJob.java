@@ -12,6 +12,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.parser.SqlParser;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 
@@ -19,15 +20,13 @@ import java.io.StringWriter;
 import java.util.List;
 import java.util.Set;
 
-import static com.starrocks.sql.parser.SqlParser.parseFirstStatement;
-
-public abstract class BaseCollectJob {
+public abstract class StatisticsCollectJob {
     protected final AnalyzeJob analyzeJob;
     protected final Database db;
     protected final OlapTable table;
     protected final List<String> columns;
 
-    public BaseCollectJob(AnalyzeJob analyzeJob, Database db, OlapTable table, List<String> columns) {
+    public StatisticsCollectJob(AnalyzeJob analyzeJob, Database db, OlapTable table, List<String> columns) {
         this.analyzeJob = analyzeJob;
         this.db = db;
         this.table = table;
@@ -63,7 +62,7 @@ public abstract class BaseCollectJob {
 
     public void collectStatisticSync(String sql) throws Exception {
         ConnectContext context = StatisticUtils.buildConnectContext();
-        StatementBase parsedStmt = parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+        StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
         executor.execute();
 
@@ -94,7 +93,7 @@ public abstract class BaseCollectJob {
         return sw.toString();
     }
 
-    protected String getSampleTableHint(OlapTable table, long rows) {
+    protected String getSampleTabletHint(OlapTable table, long rows) {
         Set<String> randomTablets = Sets.newHashSet();
         rows = Math.max(rows, 1);
 
@@ -122,7 +121,6 @@ public abstract class BaseCollectJob {
             }
         }
 
-        // all hit, direct full
         return " Tablet(" + String.join(", ", randomTablets) + ")";
     }
 }
