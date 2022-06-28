@@ -1522,11 +1522,17 @@ TEST_F(VectorizedCastExprTest, sqlToJson) {
 
     // string
     {
-        std::string str = "star";
-        EXPECT_EQ(R"("star")", evaluateCastToJson<TYPE_CHAR>(cast_expr, str));
-        EXPECT_EQ(R"("star")", evaluateCastToJson<TYPE_VARCHAR>(cast_expr, str));
+        EXPECT_EQ(R"("star")", evaluateCastToJson<TYPE_CHAR>(cast_expr, "star"));
+        EXPECT_EQ(R"(" star")", evaluateCastToJson<TYPE_VARCHAR>(cast_expr, " star"));
 
-        str = "上海";
+        EXPECT_EQ(R"(1)", evaluateCastToJson<TYPE_CHAR>(cast_expr, " 1"));
+        EXPECT_EQ(R"("1")", evaluateCastToJson<TYPE_CHAR>(cast_expr, "\"1\""));
+        EXPECT_EQ(R"({})", evaluateCastToJson<TYPE_CHAR>(cast_expr, "{}"));
+        EXPECT_EQ(R"({})", evaluateCastToJson<TYPE_CHAR>(cast_expr, "   {}"));
+        EXPECT_EQ(R"({"star": "rocks"})", evaluateCastToJson<TYPE_CHAR>(cast_expr, R"({"star": "rocks"})"));
+        EXPECT_EQ(R"([])", evaluateCastToJson<TYPE_CHAR>(cast_expr, "[]"));
+
+        std::string str = "上海";
         EXPECT_EQ(R"("上海")", evaluateCastToJson<TYPE_CHAR>(cast_expr, str));
         EXPECT_EQ(R"("上海")", evaluateCastToJson<TYPE_VARCHAR>(cast_expr, str));
     }
