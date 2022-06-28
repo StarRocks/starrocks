@@ -68,7 +68,7 @@ public class MetaUtils {
                 throw new SemanticException("No cluster name");
             }
             if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-                tableName.setDb(ClusterNamespace.getFullName(connectContext.getClusterName(), tableName.getDb()));
+                tableName.setDb(ClusterNamespace.getFullName(tableName.getDb()));
             }
         }
 

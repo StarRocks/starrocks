@@ -2771,12 +2771,12 @@ public class GlobalStateMgr {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
         } else if (parts.length == 1) {
             dbName = CatalogMgr.isInternalCatalog(currentCatalogName) ?
-                    ClusterNamespace.getFullName(ctx.getClusterName(), identifier) : identifier;
+                    ClusterNamespace.getFullName(identifier) : identifier;
         } else {
             String newCatalogName = parts[0];
             if (catalogMgr.catalogExists(newCatalogName)) {
                 dbName = CatalogMgr.isInternalCatalog(newCatalogName) ?
-                        ClusterNamespace.getFullName(ctx.getClusterName(), parts[1]) : parts[1];
+                        ClusterNamespace.getFullName(parts[1]) : parts[1];
             } else {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
             }

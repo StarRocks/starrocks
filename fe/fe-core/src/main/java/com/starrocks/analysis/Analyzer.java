@@ -479,7 +479,7 @@ public class Analyzer {
         if (Strings.isNullOrEmpty(dbName)) {
             dbName = getDefaultDb();
         } else {
-            dbName = ClusterNamespace.getFullName(getClusterName(), tableName.getDb());
+            dbName = ClusterNamespace.getFullName(tableName.getDb());
         }
         if (Strings.isNullOrEmpty(dbName)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);

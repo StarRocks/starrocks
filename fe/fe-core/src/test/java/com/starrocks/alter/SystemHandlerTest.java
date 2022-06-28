@@ -34,7 +34,7 @@ public class SystemHandlerTest {
         ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.1", "sandbox-fqdn");
         List<AlterClause> clauses = new ArrayList<>();
         clauses.add(clause);
-        systemHandler.process(clauses, null, null, null);
+        systemHandler.process(clauses, null, null);
     }
 
     @Test(expected = NullPointerException.class)
@@ -42,6 +42,6 @@ public class SystemHandlerTest {
         ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.1", "sandbox-fqdn");
         List<AlterClause> clauses = new ArrayList<>();
         clauses.add(clause);
-        systemHandler.process(clauses, null, null, null);
+        systemHandler.process(clauses, null, null);
     }
 }

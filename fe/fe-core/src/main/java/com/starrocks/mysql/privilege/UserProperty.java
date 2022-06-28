@@ -37,7 +37,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.DppConfig;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -358,7 +357,7 @@ public class UserProperty implements Writable {
 
         // user name
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            qualifiedUser = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, Text.readString(in));
+            qualifiedUser = ClusterNamespace.getFullName(Text.readString(in));
         } else {
             qualifiedUser = Text.readString(in);
         }
@@ -382,7 +381,7 @@ public class UserProperty implements Writable {
             for (int i = 0; i < numPriv; ++i) {
                 String dbName = null;
                 if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-                    dbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, Text.readString(in));
+                    dbName = ClusterNamespace.getFullName(Text.readString(in));
                 } else {
                     dbName = Text.readString(in);
                 }

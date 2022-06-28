@@ -63,7 +63,7 @@ public class ShowCreateDbStmt extends ShowStmt {
         if (Strings.isNullOrEmpty(db)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_DB_NAME, db);
         }
-        db = ClusterNamespace.getFullName(getClusterName(), db);
+        db = ClusterNamespace.getFullName(db);
 
         if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), db,
                 PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,

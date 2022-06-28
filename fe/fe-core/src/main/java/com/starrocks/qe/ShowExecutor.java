@@ -290,7 +290,7 @@ public class ShowExecutor {
 
     private void handleShowComputeNodes() {
         final ShowComputeNodesStmt showStmt = (ShowComputeNodesStmt) stmt;
-        List<List<String>> computeNodesInfos = ComputeNodeProcDir.getClusterComputeNodesInfos(showStmt.getClusterName());
+        List<List<String>> computeNodesInfos = ComputeNodeProcDir.getClusterComputeNodesInfos();
         resultSet = new ShowResultSet(showStmt.getMetaData(), computeNodesInfos);
     }
 
