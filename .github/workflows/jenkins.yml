@@ -15,7 +15,6 @@ jobs:
     #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
     - name: trigger jenkins job
-      shell: bash
 #      if: ${{ steps.approved.outputs.approved == 'true' }}
       env:
         JENKINS_PW: ${{ secrets.JENKINS_PW }}
