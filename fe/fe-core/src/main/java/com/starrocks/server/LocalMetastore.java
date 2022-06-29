@@ -47,7 +47,6 @@ import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DistributionDesc;
-import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
@@ -366,21 +365,14 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public void dropDb(DropDbStmt stmt) throws DdlException {
-        String dbName = stmt.getDbName();
-
+    public void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
         // 1. check if database exists
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
             if (!fullNameToDb.containsKey(dbName)) {
-                if (stmt.isSetIfExists()) {
-                    LOG.info("drop database[{}] which does not exist", dbName);
-                    return;
-                } else {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_DROP_EXISTS, dbName);
-                }
+                throw new MetaNotFoundException("Database not found");
             }
 
             // 2. drop tables in db
@@ -388,7 +380,7 @@ public class LocalMetastore implements ConnectorMetadata {
             HashMap<Long, AgentBatchTask> batchTaskMap;
             db.writeLock();
             try {
-                if (!stmt.isForceDrop()) {
+                if (!isForceDrop) {
                     if (stateMgr.getGlobalTransactionMgr()
                             .existCommittedTxns(db.getId(), null, null)) {
                         throw new DdlException(
@@ -401,8 +393,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
                 // save table names for recycling
                 Set<String> tableNames = db.getTableNamesWithLock();
-                batchTaskMap = unprotectDropDb(db, stmt.isForceDrop(), false);
-                if (!stmt.isForceDrop()) {
+                batchTaskMap = unprotectDropDb(db, isForceDrop, false);
+                if (!isForceDrop) {
                     recycleBin.recycleDatabase(db, tableNames);
                 } else {
                     stateMgr.onEraseDatabase(db.getId());
@@ -417,10 +409,10 @@ public class LocalMetastore implements ConnectorMetadata {
             fullNameToDb.remove(db.getFullName());
             final Cluster cluster = nameToCluster.get(db.getClusterName());
             cluster.removeDb(dbName, db.getId());
-            DropDbInfo info = new DropDbInfo(dbName, stmt.isForceDrop());
+            DropDbInfo info = new DropDbInfo(dbName, isForceDrop);
             editLog.logDropDb(info);
 
-            LOG.info("finish drop database[{}], id: {}, is force : {}", dbName, db.getId(), stmt.isForceDrop());
+            LOG.info("finish drop database[{}], id: {}, is force : {}", dbName, db.getId(), isForceDrop);
         } finally {
             unlock();
         }
