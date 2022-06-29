@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "column/field.h"
+#include "column/vectorized_fwd.h"
 #include "gen_cpp/olap_file.pb.h"
 
 namespace starrocks::vectorized {

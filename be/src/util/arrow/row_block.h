@@ -23,6 +23,7 @@
 
 #include <memory>
 
+#include "column/schema.h"
 #include "common/status.h"
 
 // Convert StarRocks RowBlockV2 to/from Arrow RecordBatch.
@@ -41,9 +42,9 @@ namespace starrocks {
 class Schema;
 
 // Convert StarRocks Schema to Arrow Schema.
-Status convert_to_arrow_schema(const Schema& row_desc, std::shared_ptr<arrow::Schema>* result);
+Status convert_to_arrow_schema(const vectorized::Schema& row_desc, std::shared_ptr<arrow::Schema>* result);
 
 // Convert Arrow Schema to StarRocks Schema.
-Status convert_to_starrocks_schema(const arrow::Schema& schema, std::shared_ptr<Schema>* result);
+Status convert_to_starrocks_schema(const arrow::Schema& schema, std::shared_ptr<vectorized::Schema>* result);
 
 } // namespace starrocks

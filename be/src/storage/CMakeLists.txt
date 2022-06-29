@@ -49,7 +49,6 @@ add_library(Storage STATIC
     rowset_update_state.cpp
     update_compaction_state.cpp
     version_graph.cpp
-    schema.cpp
     storage_engine.cpp
     data_dir.cpp
     short_key_index.cpp

@@ -4,9 +4,13 @@
 
 #include <memory>
 
+#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "runtime/descriptors.h"
+#include "storage/field.h"
 #include "storage/olap_type_infra.h"
-#include "storage/schema.h"
+#include "storage/tablet_schema.h"
+#include "storage/types.h"
 
 namespace starrocks {
 

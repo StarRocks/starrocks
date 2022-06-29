@@ -33,7 +33,6 @@
 #include "gutil/strings/substitute.h"
 #include "storage/field.h"
 #include "storage/olap_common.h"
-#include "storage/schema.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
@@ -66,20 +65,19 @@ Status convert_to_arrow_type(FieldType type, std::shared_ptr<arrow::DataType>* r
     return Status::OK();
 }
 
-Status convert_to_arrow_field(uint32_t cid, const Field* field, std::shared_ptr<arrow::Field>* result) {
+Status convert_to_arrow_field(uint32_t cid, const vectorized::Field* field, std::shared_ptr<arrow::Field>* result) {
     std::shared_ptr<arrow::DataType> type;
-    RETURN_IF_ERROR(convert_to_arrow_type(field->type(), &type));
+    RETURN_IF_ERROR(convert_to_arrow_type(field->type()->type(), &type));
     *result = arrow::field(strings::Substitute("Col$0", cid), type, field->is_nullable());
     return Status::OK();
 }
 
-Status convert_to_arrow_schema(const Schema& schema, std::shared_ptr<arrow::Schema>* result) {
+Status convert_to_arrow_schema(const vectorized::Schema& schema, std::shared_ptr<arrow::Schema>* result) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
-    size_t num_fields = schema.num_column_ids();
+    size_t num_fields = schema.num_fields();
     fields.resize(num_fields);
     for (int i = 0; i < num_fields; ++i) {
-        auto cid = schema.column_ids()[i];
-        RETURN_IF_ERROR(convert_to_arrow_field(cid, schema.column(cid), &fields[i]));
+        RETURN_IF_ERROR(convert_to_arrow_field(i, schema.field(i).get(), &fields[i]));
     }
     *result = arrow::schema(std::move(fields));
     return Status::OK();
@@ -111,30 +109,25 @@ Status convert_to_type_name(const arrow::DataType& type, std::string* name) {
     return Status::OK();
 }
 
-Status convert_to_tablet_column(const arrow::Field& field, int32_t cid, TabletColumn* output) {
-    ColumnPB column_pb;
+Status convert_to_field(const arrow::Field& field, int32_t cid, std::shared_ptr<vectorized::Field>& output) {
     std::string type_name;
     RETURN_IF_ERROR(convert_to_type_name(*field.type(), &type_name));
-
-    column_pb.set_unique_id(cid);
-    column_pb.set_name(field.name());
-    column_pb.set_type(type_name);
-    column_pb.set_is_key(true);
-    column_pb.set_is_nullable(field.nullable());
-
-    output->init_from_pb(column_pb);
+    TypeInfoPtr type_info = nullptr;
+    type_info = get_type_info(TabletColumn::get_field_type_by_string(type_name));
+    output.reset(new vectorized::Field(cid, field.name(), type_info, field.nullable()));
+    output->set_is_key(true);
     return Status::OK();
 }
 
-Status convert_to_starrocks_schema(const arrow::Schema& schema, std::shared_ptr<Schema>* result) {
+Status convert_to_starrocks_schema(const arrow::Schema& schema, std::shared_ptr<vectorized::Schema>* result) {
     auto num_fields = schema.num_fields();
-    std::vector<TabletColumn> columns(num_fields);
+    vectorized::Fields columns(num_fields);
     std::vector<ColumnId> col_ids(num_fields);
     for (int i = 0; i < num_fields; ++i) {
-        RETURN_IF_ERROR(convert_to_tablet_column(*schema.field(i), i, &columns[i]));
-        col_ids[i] = i;
+        RETURN_IF_ERROR(convert_to_field(*schema.field(i), i, columns[i]));
     }
-    result->reset(new Schema(columns, col_ids));
+    // The KeysType::DUP_KEYS here meaningless, it is just a default value
+    result->reset(new vectorized::Schema(columns, KeysType::DUP_KEYS));
     return Status::OK();
 }
 

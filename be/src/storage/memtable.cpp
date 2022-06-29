@@ -12,7 +12,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
-#include "storage/schema.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 

@@ -17,7 +17,6 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
-#include "storage/schema.h"
 #include "testutil/assert.h"
 
 namespace starrocks::vectorized {
