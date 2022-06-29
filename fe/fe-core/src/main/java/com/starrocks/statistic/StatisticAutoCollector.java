@@ -55,8 +55,6 @@ public class StatisticAutoCollector extends MasterDaemon {
 
         initDefaultJob();
 
-        updateHealthy();
-
         List<StatisticsCollectJob> allJobs;
         if (Config.enable_collect_full_statistics) {
             allJobs = generateFullAnalyzeJobs();
@@ -81,43 +79,6 @@ public class StatisticAutoCollector extends MasterDaemon {
         AnalyzeJob analyzeJob = new AnalyzeJob(AnalyzeJob.DEFAULT_ALL_ID, AnalyzeJob.DEFAULT_ALL_ID, Collections.emptyList(),
                 AnalyzeType.SAMPLE, ScheduleType.SCHEDULE, Maps.newHashMap(), ScheduleStatus.PENDING, LocalDateTime.MIN);
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeJob(analyzeJob);
-    }
-
-    private void updateHealthy() {
-        Map<Long, BasicStatsMeta> analyzeMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap();
-        for (Map.Entry<Long, BasicStatsMeta> meta : analyzeMeta.entrySet()) {
-            Database database = GlobalStateMgr.getCurrentState().getDb(meta.getValue().getDbId());
-            OlapTable table = (OlapTable) database.getTable(meta.getValue().getTableId());
-
-            long totalLoadRows = meta.getValue().getUpdateRows();
-
-            long minRowCount = Long.MAX_VALUE;
-            for (Partition partition : table.getPartitions()) {
-                if (partition.getRowCount() < minRowCount) {
-                    minRowCount = partition.getRowCount();
-                }
-            }
-
-            /*
-             * health = totalLoadRows / totalRowCount.
-             * The ratio of the number of modified lines to the total number of lines.
-             * Because we cannot obtain complete table-level information, we use the row count of
-             * the partition with the smallest row count as totalRowCount.
-             * It can be understood that we assume an extreme case where all imported and modified lines
-             * are concentrated in only one partition
-             */
-            double healthy;
-            if (minRowCount == 0) {
-                healthy = 1;
-            } else if (totalLoadRows > minRowCount) {
-                healthy = 0;
-            } else {
-                healthy = 1 - (double) totalLoadRows / (double) minRowCount;
-            }
-
-            meta.getValue().setHealthy(healthy);
-            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(meta.getValue());
-        }
     }
 
     private List<StatisticsCollectJob> generateFullAnalyzeJobs() {
