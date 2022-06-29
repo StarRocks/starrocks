@@ -401,7 +401,15 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
                                         starrocks::ExecNode** node) {
     switch (tnode.node_type) {
     case TPlanNodeType::OLAP_SCAN_NODE:
-        *node = pool->add(new vectorized::OlapScanNode(pool, tnode, descs));
+        if (tnode.olap_scan_node.__isset.is_lake_table && tnode.olap_scan_node.is_lake_table) {
+            TPlanNode new_node = tnode;
+            TConnectorScanNode connector_scan_node;
+            connector_scan_node.connector_name = connector::Connector::LAKE;
+            new_node.connector_scan_node = connector_scan_node;
+            *node = pool->add(new vectorized::ConnectorScanNode(pool, new_node, descs));
+        } else {
+            *node = pool->add(new vectorized::OlapScanNode(pool, tnode, descs));
+        }
         return Status::OK();
     case TPlanNodeType::META_SCAN_NODE:
         *node = pool->add(new vectorized::OlapMetaScanNode(pool, tnode, descs));
