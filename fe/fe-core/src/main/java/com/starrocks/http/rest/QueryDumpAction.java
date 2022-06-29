@@ -48,7 +48,7 @@ public class QueryDumpAction extends RestBaseAction {
         ConnectContext context = ConnectContext.get();
         String dbName = request.getSingleParameter(DB);
         if (!Strings.isNullOrEmpty(dbName)) {
-            String fullDbName = ClusterNamespace.getFullName(context.getClusterName(), dbName);
+            String fullDbName = ClusterNamespace.getFullName(dbName);
             Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
             if (db == null) {
                 response.getContent().append("Database [" + fullDbName + "] does not exists");

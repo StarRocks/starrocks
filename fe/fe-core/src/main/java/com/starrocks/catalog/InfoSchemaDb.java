@@ -38,7 +38,7 @@ public class InfoSchemaDb extends Database {
     }
 
     public InfoSchemaDb(String cluster) {
-        super(SystemIdGenerator.getNextId(), ClusterNamespace.getFullName(cluster, DATABASE_NAME));
+        super(SystemIdGenerator.getNextId(), ClusterNamespace.getFullName(DATABASE_NAME));
         initTables();
     }
 
@@ -84,7 +84,7 @@ public class InfoSchemaDb extends Database {
     }
 
     public static String getFullInfoSchemaDbName(String cluster) {
-        return ClusterNamespace.getFullName(cluster, DATABASE_NAME);
+        return ClusterNamespace.getFullName(DATABASE_NAME);
     }
 
     public static boolean isInfoSchemaDb(String dbName) {

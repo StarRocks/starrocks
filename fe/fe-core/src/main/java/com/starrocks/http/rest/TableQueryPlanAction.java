@@ -126,7 +126,7 @@ public class TableQueryPlanAction extends RestBaseAction {
             LOG.info("receive SQL statement [{}] from external service [ user [{}]] for database [{}] table [{}]",
                     sql, ConnectContext.get().getCurrentUserIdentity(), dbName, tableName);
 
-            String fullDbName = ClusterNamespace.getFullName(ConnectContext.get().getClusterName(), dbName);
+            String fullDbName = ClusterNamespace.getFullName(dbName);
             // check privilege for select, otherwise return HTTP 401
             checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), fullDbName, tableName, PrivPredicate.SELECT);
             Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);

@@ -18,13 +18,13 @@ public class ShowCreateMaterializedViewStmtTest {
     @Test
     public void testNormal() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
-        ctx.setCluster("testCluster");
+        ctx.setCluster("default_cluster");
         ctx.setDatabase("testDb");
         ShowCreateTableStmt stmt =
                 new ShowCreateTableStmt(new TableName("testDb", "testTbl"), ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW CREATE MATERIALIZED VIEW testCluster:testDb.testTbl", stmt.toString());
-        Assert.assertEquals("testCluster:testDb", stmt.getDb());
+        Assert.assertEquals("SHOW CREATE MATERIALIZED VIEW default_cluster:testDb.testTbl", stmt.toString());
+        Assert.assertEquals("default_cluster:testDb", stmt.getDb());
         Assert.assertEquals("testTbl", stmt.getTable());
         Assert.assertEquals(2, ShowCreateTableStmt.getMaterializedViewMetaData().getColumnCount());
         Assert.assertEquals("Materialized View",

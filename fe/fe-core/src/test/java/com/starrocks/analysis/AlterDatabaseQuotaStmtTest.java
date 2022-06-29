@@ -60,7 +60,7 @@ public class AlterDatabaseQuotaStmtTest {
             throws AnalysisException, UserException {
         AlterDatabaseQuotaStmt stmt = new AlterDatabaseQuotaStmt(dbName, QuotaType.DATA, quotaQuantity);
         stmt.analyze(analyzer);
-        String expectedSql = "ALTER DATABASE testCluster:testDb SET DATA QUOTA " + quotaQuantity;
+        String expectedSql = "ALTER DATABASE default_cluster:testDb SET DATA QUOTA " + quotaQuantity;
         Assert.assertEquals(expectedSql, stmt.toSql());
         Assert.assertEquals(quotaSize, stmt.getQuota());
     }
@@ -134,7 +134,7 @@ public class AlterDatabaseQuotaStmtTest {
         AlterDatabaseQuotaStmt stmt =
                 new AlterDatabaseQuotaStmt("testDb", QuotaType.REPLICA, String.valueOf(quotaSize));
         stmt.analyze(analyzer);
-        String expectedSql = "ALTER DATABASE testCluster:testDb SET REPLICA QUOTA 1000";
+        String expectedSql = "ALTER DATABASE default_cluster:testDb SET REPLICA QUOTA 1000";
         Assert.assertEquals(expectedSql, stmt.toSql());
         Assert.assertEquals(quotaSize, stmt.getQuota());
     }

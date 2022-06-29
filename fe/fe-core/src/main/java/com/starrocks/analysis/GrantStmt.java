@@ -127,7 +127,7 @@ public class GrantStmt extends DdlStmt {
             userIdent.analyze(analyzer.getClusterName());
         } else {
             FeNameFormat.checkRoleName(role, false /* can not be admin */, "Can not grant to role");
-            role = ClusterNamespace.getFullName(analyzer.getClusterName(), role);
+            role = ClusterNamespace.getFullName(role);
         }
 
         if (tblPattern != null) {

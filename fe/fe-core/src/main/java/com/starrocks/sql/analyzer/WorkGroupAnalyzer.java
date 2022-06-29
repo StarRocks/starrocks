@@ -74,7 +74,7 @@ public class WorkGroupAnalyzer {
 
                     List<Long> databaseIds = new ArrayList<>();
                     for (String name : databases) {
-                        String fullName = ClusterNamespace.getFullName(clusterName, name);
+                        String fullName = ClusterNamespace.getFullName(name);
                         Database db = GlobalStateMgr.getCurrentState().getDb(fullName);
                         if (db == null) {
                             throw new SemanticException(String.format("Specified database not exists: %s", fullName));

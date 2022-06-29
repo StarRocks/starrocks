@@ -1440,7 +1440,7 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     @Override
-    public ShowResultSet process(List<AlterClause> alterClauses, String clusterName, Database db, OlapTable olapTable)
+    public ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
             throws UserException {
         // index id -> index schema
         Map<Long, LinkedList<Column>> indexSchemaMap = new HashMap<>();

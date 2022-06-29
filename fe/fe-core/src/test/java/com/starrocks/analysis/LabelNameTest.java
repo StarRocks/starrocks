@@ -34,7 +34,7 @@ public class LabelNameTest {
             {
                 analyzer.getClusterName();
                 minTimes = 0;
-                result = "testCluster";
+                result = "default_cluster";
             }
         };
     }
@@ -51,12 +51,12 @@ public class LabelNameTest {
 
         LabelName label = new LabelName("testDb", "testLabel");
         label.analyze(analyzer);
-        Assert.assertEquals("`testCluster:testDb`.`testLabel`", label.toString());
+        Assert.assertEquals("`default_cluster:testDb`.`testLabel`", label.toString());
 
         label = new LabelName("", "testLabel");
         label.analyze(analyzer);
-        Assert.assertEquals("`testCluster:testDb`.`testLabel`", label.toString());
-        Assert.assertEquals("testCluster:testDb", label.getDbName());
+        Assert.assertEquals("`default_cluster:testDb`.`testLabel`", label.toString());
+        Assert.assertEquals("default_cluster:testDb", label.getDbName());
         Assert.assertEquals("testLabel", label.getLabelName());
     }
 

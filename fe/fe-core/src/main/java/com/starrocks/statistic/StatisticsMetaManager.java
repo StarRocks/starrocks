@@ -29,7 +29,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -119,7 +118,6 @@ public class StatisticsMetaManager extends MasterDaemon {
     private boolean createDatabase() {
         LOG.info("create statistics db start");
         CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
-        dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
             GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
         } catch (UserException e) {

@@ -62,7 +62,7 @@ public class GetStreamLoadState extends RestBaseAction {
             throw new DdlException("No database selected.");
         }
 
-        String fullDbName = ClusterNamespace.getFullName(clusterName, dbName);
+        String fullDbName = ClusterNamespace.getFullName(dbName);
 
         String label = request.getSingleParameter(LABEL_KEY);
         if (Strings.isNullOrEmpty(label)) {

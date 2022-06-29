@@ -44,7 +44,6 @@ public class CTASAnalyzerTest {
 
         // create statistic
         CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
-        dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
             GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
         } catch (DdlException e) {
