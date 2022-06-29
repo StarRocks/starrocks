@@ -86,7 +86,7 @@ public class TableProcDir implements ProcDirInterface {
         }
 
         if (entryName.equals(PARTITIONS)) {
-            if (table.getType() == TableType.OLAP) {
+            if (table.isNativeTable()) {
                 return new PartitionsProcDir(db, (OlapTable) table, false);
             } else if (table.getType() == TableType.ELASTICSEARCH) {
                 return new EsPartitionsProcDir(db, (EsTable) table);
@@ -94,7 +94,7 @@ public class TableProcDir implements ProcDirInterface {
                 return new HMSTablePartitionsProcDir((HiveMetaStoreTable) table);
             } else {
                 throw new AnalysisException(
-                        "Table[" + table.getName() + "] is not a OLAP/ELASTICSEARCH/HIVE/HUDI table");
+                        "Table[" + table.getName() + "] is not a OLAP/MATERIALIZED_VIEW/ELASTICSEARCH/HIVE/HUDI table");
             }
         } else if (entryName.equals(TEMP_PARTITIONS)) {
             if (table.getType() == TableType.OLAP) {

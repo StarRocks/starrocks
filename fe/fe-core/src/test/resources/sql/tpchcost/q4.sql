@@ -65,7 +65,6 @@ HASH_PARTITIONED: 6: O_ORDERPRIORITY
 |
 5:HASH JOIN
 |  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 11: L_ORDERKEY = 1: O_ORDERKEY
 |

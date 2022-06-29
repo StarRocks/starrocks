@@ -39,12 +39,8 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.thrift.THashJoinNode;
 import com.starrocks.thrift.TJoinDistributionMode;
-import com.starrocks.thrift.TPlanNode;
-import com.starrocks.thrift.TPlanNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -126,7 +122,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     public JoinNode(String planNodename, PlanNodeId id, PlanNode outer, PlanNode inner, JoinOperator joinOp,
                     List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
         super(id, planNodename);
-        Preconditions.checkArgument(eqJoinConjuncts != null && !eqJoinConjuncts.isEmpty());
+//        Preconditions.checkArgument(eqJoinConjuncts != null && !eqJoinConjuncts.isEmpty());
         Preconditions.checkArgument(otherJoinConjuncts != null);
         tupleIds.addAll(outer.getTupleIds());
         tupleIds.addAll(inner.getTupleIds());
@@ -162,7 +158,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         JoinOperator joinOp = getJoinOp();
         PlanNode inner = getChild(1);
-        if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin()) {
+        if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin() && !joinOp.isCrossJoin()) {
             return;
         }
 
@@ -180,8 +176,8 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             BinaryPredicate joinConjunct = eqJoinConjuncts.get(i);
             Preconditions.checkArgument(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct) ||
                     BinaryPredicate.IS_EQ_PREDICATE.apply(joinConjunct));
+
             RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
-            rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
             rf.setBuildPlanNodeId(this.id.asInt());
             rf.setExprOrder(i);
             rf.setJoinMode(distrMode);
@@ -191,20 +187,37 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
             Expr left = joinConjunct.getChild(0);
             Expr right = joinConjunct.getChild(1);
-            ArrayList<TupleId> buildTupleIds = inner.getTupleIds();
-            // swap left and right if necessary, and always push down right.
-            if (!left.isBoundByTupleIds(buildTupleIds)) {
-                Expr temp = left;
-                left = right;
-                right = temp;
-            }
+            if (!joinOp.isCrossJoin()) {
+                rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
+                ArrayList<TupleId> buildTupleIds = inner.getTupleIds();
+                // swap left and right if necessary, and always push down right.
+                if (!left.isBoundByTupleIds(buildTupleIds)) {
+                    Expr temp = left;
+                    left = right;
+                    right = temp;
+                }
 
-            // push down rf to left child node, and build it only when it
-            // can be accepted by left child node.
-            rf.setBuildExpr(left);
-            boolean accept = getChild(0).pushDownRuntimeFilters(rf, right);
-            if (accept) {
-                buildRuntimeFilters.add(rf);
+                // push down rf to left child node, and build it only when it
+                // can be accepted by left child node.
+                rf.setBuildExpr(left);
+                if (getChild(0).pushDownRuntimeFilters(rf, right)) {
+                    buildRuntimeFilters.add(rf);
+                }
+            } else {
+                // For cross-join, the filter could only be pushdown to left side
+                if (!(left instanceof SlotRef)) {
+                    continue;
+                }
+                if (!right.isBoundByTupleIds(getChild(1).getTupleIds())) {
+                    continue;
+                }
+
+                rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
+                rf.setBuildExpr(right);
+                rf.setOnlyLocal(true);
+                if (getChild(0).pushDownRuntimeFilters(rf, left)) {
+                    this.getBuildRuntimeFilters().add(rf);
+                }
             }
         }
     }
@@ -425,8 +438,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         String distrModeStr =
                 (distrMode != DistributionMode.NONE) ? (" (" + distrMode.toString() + ")") : "";
         StringBuilder output = new StringBuilder().append(
-                detailPrefix + "join op: " + joinOp.toString() + distrModeStr + "\n").append(
-                detailPrefix + "hash predicates:\n");
+                detailPrefix + "join op: " + joinOp.toString() + distrModeStr + "\n");
 
         output.append(detailPrefix).append("colocate: ").append(isColocate)
                 .append(isColocate ? "" : ", reason: " + colocateReason).append("\n");

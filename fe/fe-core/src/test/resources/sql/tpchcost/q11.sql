@@ -51,9 +51,10 @@ UNPARTITIONED
 |  <slot 1> : 1: PS_PARTKEY
 |  <slot 21> : 21: sum
 |
-26:CROSS JOIN
-|  cross join:
-|  predicates: 21: sum > 43: expr
+26:NESTLOOP JOIN
+|  join op: CROSS JOIN
+|  colocate: false, reason:
+|  other predicates: 21: sum > 43: expr
 |
 |----25:EXCHANGE
 |
@@ -67,7 +68,6 @@ UNPARTITIONED
 |
 8:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 2: PS_SUPPKEY = 7: S_SUPPKEY
 |
@@ -118,7 +118,6 @@ UNPARTITIONED
 |
 19:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 23: PS_SUPPKEY = 28: S_SUPPKEY
 |
@@ -148,7 +147,6 @@ UNPARTITIONED
 |
 16:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 31: S_NATIONKEY = 36: N_NATIONKEY
 |
@@ -201,7 +199,6 @@ UNPARTITIONED
 |
 5:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 10: S_NATIONKEY = 15: N_NATIONKEY
 |

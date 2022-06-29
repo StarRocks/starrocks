@@ -11,6 +11,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+import com.starrocks.external.HiveMetaStoreTableUtils;
 import org.apache.hadoop.hive.common.StatsSetupConst;
 import org.junit.Assert;
 import org.junit.Test;
@@ -157,7 +158,7 @@ public class UtilsTest {
         Type resType = Utils.convertToArrayType(typeStr);
         Assert.assertEquals(arrayType, resType);
 
-        itemType = ScalarType.createType(PrimitiveType.VARCHAR);
+        itemType = ScalarType.createDefaultString();
         arrayType = new ArrayType(itemType);
         typeStr = "Array<string>";
         resType = Utils.convertToArrayType(typeStr);
@@ -182,5 +183,39 @@ public class UtilsTest {
         } catch (InternalError e) {
             Assert.assertTrue(e.getMessage().contains("Decimal32/64/128"));
         }
+    }
+
+    @Test
+    public void testCharString() throws DdlException {
+        Type charType = ScalarType.createCharType(100);
+        String typeStr = "char(100)";
+        Type resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
+        Assert.assertEquals(resType, charType);
+
+        typeStr = "char(50)";
+        resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
+        Assert.assertNotEquals(resType, charType);
+    }
+
+    @Test
+    public void testVarcharString() throws DdlException {
+        Type varcharType = ScalarType.createVarcharType(100);
+        String typeStr = "varchar(100)";
+        Type resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
+        Assert.assertEquals(resType, varcharType);
+
+        typeStr = "varchar(50)";
+        resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
+        Assert.assertNotEquals(resType, varcharType);
+
+        varcharType = ScalarType.createVarcharType();
+        typeStr = "varchar(-1)";
+        resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
+        Assert.assertEquals(resType, varcharType);
+
+        Type stringType = ScalarType.createDefaultString();
+        typeStr = "string";
+        resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
+        Assert.assertEquals(resType, stringType);
     }
 }

@@ -43,7 +43,6 @@ UNPARTITIONED
 |
 4:HASH JOIN
 |  join op: RIGHT SEMI JOIN (PARTITIONED)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 2: v2 = 5: v5
 |

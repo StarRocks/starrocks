@@ -82,7 +82,6 @@ HASH_PARTITIONED: 1: C_CUSTKEY
 |
 5:HASH JOIN
 |  join op: RIGHT OUTER JOIN (PARTITIONED)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 11: O_CUSTKEY = 1: C_CUSTKEY
 |
