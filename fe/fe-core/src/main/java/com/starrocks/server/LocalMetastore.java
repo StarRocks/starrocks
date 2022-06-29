@@ -248,7 +248,7 @@ public class LocalMetastore implements ConnectorMetadata {
         for (Database db : this.fullNameToDb.values()) {
             long dbId = db.getId();
             for (Table table : db.getTables()) {
-                if (table.getType() != Table.TableType.OLAP) {
+                if (!table.isOlapOrLakeTable()) {
                     continue;
                 }
 
@@ -259,7 +259,6 @@ public class LocalMetastore implements ConnectorMetadata {
                     long partitionId = partition.getId();
                     TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
                             partitionId).getStorageMedium();
-                    boolean useStarOS = partition.isUseStarOS();
                     for (MaterializedIndex index : partition
                             .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                         long indexId = index.getId();
@@ -268,7 +267,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         for (Tablet tablet : index.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
-                            if (!useStarOS) {
+                            if (table.isOlapTable()) {
                                 for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                     invertedIndex.addReplica(tabletId, replica);
                                     if (MetaContext.get().getMetaVersion() < FeMetaVersion.VERSION_48) {
@@ -443,8 +442,6 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         return batchTaskMap;
     }
-
-
 
     public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {
         tryLock(true);
@@ -2183,7 +2180,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         if (!isCheckpointThread()) {
             // add to inverted index
-            if (table.getType() == Table.TableType.OLAP) {
+            if (table.isOlapOrLakeTable()) {
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
                 OlapTable olapTable = (OlapTable) table;
                 long dbId = db.getId();
@@ -2192,7 +2189,6 @@ public class LocalMetastore implements ConnectorMetadata {
                     long partitionId = partition.getId();
                     TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
                             partitionId).getStorageMedium();
-                    boolean useStarOS = partition.isUseStarOS();
                     for (MaterializedIndex mIndex : partition
                             .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                         long indexId = mIndex.getId();
@@ -2201,7 +2197,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         for (Tablet tablet : mIndex.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
-                            if (!useStarOS) {
+                            if (table.isOlapTable()) {
                                 for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                     invertedIndex.addReplica(tabletId, replica);
                                 }
@@ -2227,7 +2223,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 long partitionId = partition.getId();
                 TStorageMedium medium = materializedView.getPartitionInfo().getDataProperty(
                         partitionId).getStorageMedium();
-                boolean useStarOS = partition.isUseStarOS();
                 for (MaterializedIndex mIndex : partition.getMaterializedIndices(
                         MaterializedIndex.IndexExtState.ALL)) {
                     long indexId = mIndex.getId();
@@ -2236,7 +2231,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     for (Tablet tablet : mIndex.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
-                        if (!useStarOS) {
+                        if (tablet instanceof LocalTablet) {
                             for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                 invertedIndex.addReplica(tabletId, replica);
                             }

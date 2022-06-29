@@ -12,9 +12,9 @@ import java.util.concurrent.Future;
 
 public interface LakeService {
     @ProtobufRPC(serviceName = "LakeService", methodName = "publish_version", onceTalkTimeout = 5000)
-    Future<PublishVersionResponse> publishVersion(PublishVersionRequest request);
+    Future<PublishVersionResponse> publishVersionAsync(PublishVersionRequest request);
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "abort_txn", onceTalkTimeout = 5000)
-    Future<AbortTxnResponse> abortTxn(AbortTxnRequest request);
+    Future<AbortTxnResponse> abortTxnAsync(AbortTxnRequest request);
 }
 
