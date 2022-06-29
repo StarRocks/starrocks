@@ -386,7 +386,7 @@ public class BDBEnvironment {
             } catch (RestartRequiredException e) {
                 String errMsg = String.format(
                         "catch a RestartRequiredException when checking if helper in local after retried %d times, " +
-                        "refresh and setup again",
+                        "refresh and check again",
                         i + 1);
                 LOG.warn(errMsg, e);
                 exception = new JournalException(errMsg);
@@ -403,7 +403,7 @@ public class BDBEnvironment {
                     LOG.warn(
                             "failed to check if helper in local because of UnknowMasterException for the first time, ignore it.");
                 } else {
-                    String errMsg = String.format("failed to setup environment after retried %d times", i + 1);
+                    String errMsg = String.format("failed to check if helper in local after retried %d times", i + 1);
                     LOG.error(errMsg, e);
                     exception = new JournalException(errMsg);
                     exception.initCause(e);
