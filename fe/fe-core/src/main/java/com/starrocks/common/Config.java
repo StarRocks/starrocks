@@ -1496,6 +1496,14 @@ public class Config extends ConfigBase {
     public static boolean integrate_starmgr = false;
     @ConfField
     public static String starmgr_s3_bucket = "";
+    @ConfField
+    public static String starmgr_s3_region = "";
+    @ConfField
+    public static String starmgr_s3_endpoint = "";
+    @ConfField
+    public static String starmgr_s3_ak = "";
+    @ConfField
+    public static String starmgr_s3_sk = "";
 
     /**
      * default bucket number when create OLAP table without buckets info
