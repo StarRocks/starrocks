@@ -16,14 +16,15 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.Future;
+import java.util.concurrent.PriorityBlockingQueue;
 
 public class TaskRunManager {
 
     private static final Logger LOG = LogManager.getLogger(TaskRunManager.class);
 
     // taskId -> pending TaskRun Queue, for each Task only support 1 running taskRun currently,
-    // so the map value is FIFO queue
-    private final Map<Long, Queue<TaskRun>> pendingTaskRunMap = Maps.newConcurrentMap();
+    // so the map value is FIFO queue need to be sorted by priority from large to small
+    private final Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = Maps.newConcurrentMap();
 
     // taskId -> running TaskRun, for each Task only support 1 running taskRun currently,
     // so the map value is not queue
@@ -35,7 +36,7 @@ public class TaskRunManager {
     // Use to execute actual TaskRun
     private final TaskRunExecutor taskRunExecutor = new TaskRunExecutor();
 
-    public SubmitResult submitTaskRun(TaskRun taskRun) {
+    public SubmitResult submitTaskRun(TaskRun taskRun, int priority) {
         // duplicate submit
         if (taskRun.getStatus() != null) {
             return new SubmitResult(taskRun.getStatus().getQueryId(), SubmitResult.SubmitStatus.FAILED);
@@ -56,10 +57,12 @@ public class TaskRunManager {
 
         String queryId = UUIDUtil.genUUID().toString();
         TaskRunStatus status = taskRun.initStatus(queryId, System.currentTimeMillis());
+        status.setPriority(priority);
         GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(status);
         long taskId = taskRun.getTaskId();
 
-        Queue<TaskRun> taskRuns = pendingTaskRunMap.computeIfAbsent(taskId, u -> Queues.newConcurrentLinkedQueue());
+        PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.computeIfAbsent(taskId,
+                u -> Queues.newPriorityBlockingQueue());
         taskRuns.offer(taskRun);
         return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED);
     }
@@ -115,7 +118,7 @@ public class TaskRunManager {
         }
     }
 
-    public Map<Long, Queue<TaskRun>> getPendingTaskRunMap() {
+    public Map<Long, PriorityBlockingQueue<TaskRun>> getPendingTaskRunMap() {
         return pendingTaskRunMap;
     }
 
