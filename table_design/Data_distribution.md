@@ -1,36 +1,36 @@
 # 数据分布
 
-## 名词解释
-
-* **数据分布**：数据分布是将数据划分为子集, 按一定规则, 均衡地分布在不同节点上，以期最大限度地利用集群的并发性能。
-* **短查询**：short-scan query，指扫描数据量不大，单机就能完成扫描的查询。
-* **长查询**：long-scan query，指扫描数据量大，多机并行扫描能显著提升性能的查询。
+建表时，您需要合理设置分区和分桶，实现数据均匀的分布。数据分布是指数据划分为子集，并按一定规则均衡地分布在不同节点上，能够有效裁剪数据扫描量，最大限度地利用集群的并发性能，从而提升查询性能。
 
 ## 数据分布概览
 
-常见的四种数据分布方式有：(a) Round-Robin、(b) Range、(c) List和(d) Hash (DeWitt and Gray, 1992)。如下图所示:
+### 常见的数据分布方式
+
+现代分布式数据库中，常见的数据分布方式有如下四种：Round-Robin、Range、List 和 Hash。如下图所示:
 
 ![数据分布方式](../assets/3.3.2-1.png)
 
-* **Round-Robin** : 以轮转的方式把数据逐个放置在相邻节点上。
-* **Range** : 按区间进行数据分布，图中区间\[1-3\]，\[4-6\]分别对应不同Range。
-* **List** : 直接基于离散的各个取值做数据分布，性别、省份等数据就满足这种离散的特性。每个离散值会映射到一个节点上，不同的多个取值可能也会映射到相同节点上。
-* **Hash** : 按哈希函数把数据映射到不同节点上。  
+- Round-Robin：以轮询的方式把数据逐个放置在相邻节点上。
 
-为了更灵活地划分数据，现代分布式数据库除了单独采用上述四种数据分布方式之外，也会视情况采用组合数据分布。常见的组合方式有Hash-Hash、Range-Hash、Hash-List。
+- Range：按区间进行数据分布。如上图所示，区间 [1-3]、[4-6] 分别对应不同的范围 (Range)。
 
-## StarRocks数据分布
+- List：直接基于离散的各个取值做数据分布，性别、省份等数据就满足这种离散的特性。每个离散值会映射到一个节点上，多个不同的取值可能也会映射到相同节点上。
 
-### 1 数据分布方式
+- Hash：通过哈希函数把数据映射到不同节点上。
 
-StarRocks使用先分区后分桶的方式, 可灵活地支持两种分布方式:
+为了更灵活地划分数据，除了单独采用上述四种数据分布方式之一以外，您还可以根据具体的业务场景需求组合使用这些数据分布方式。常见的组合方式有 Hash+Hash、Range+Hash、Hash+List。
 
-* Hash分布:  不采用分区方式, 整个table作为一个分区, 指定分桶的数量。
-* Range-Hash的组合数据分布: 即指定分区数量, 指定每个分区的分桶数量。
+### StarRocks 的数据分布方式
 
-1.采用Hash分布的建表语句
+StarRocks 支持如下两种数据分布方式：
 
-~~~ SQL
+- Hash 数据分布方式：一张表为一个分区，分区按照分桶键和分桶数量进一步进行数据划分。
+
+- Range+Hash 数据分布方式：一张表拆分成多个分区，每个分区按照分桶键和分桶数量进一步进行数据划分。
+
+采用 Hash 分布的建表语句如下，其中分桶键为 `site_id`：
+
+```SQL
 CREATE TABLE site_access(
 site_id INT DEFAULT '10',
 city_code SMALLINT,
@@ -39,11 +39,11 @@ pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(site_id, city_code, user_name)
 DISTRIBUTED BY HASH(site_id) BUCKETS 10;
-~~~
+```
 
-2.采用Range-Hash组合分布的建表语句
+采用Range+Hash组合分布的建表语句如下，其中分区键为 `event_day`，分桶键为 `site_id`：
 
-~~~ SQL
+```SQL
 CREATE TABLE site_access(
 event_day DATE,
 site_id INT DEFAULT '10',
@@ -54,77 +54,70 @@ pv BIGINT SUM DEFAULT '0'
 AGGREGATE KEY(event_day, site_id, city_code, user_name)
 PARTITION BY RANGE(event_day)
 (
-PARTITION p1 VALUES LESS THAN ('2020-01-31'),
-PARTITION p2 VALUES LESS THAN ('2020-02-29'),
-PARTITION p3 VALUES LESS THAN ('2020-03-31')
+PARTITION p1 VALUES LESS THAN ("2020-01-31"),
+PARTITION p2 VALUES LESS THAN ("2020-02-29"),
+PARTITION p3 VALUES LESS THAN ("2020-03-31")
 )
 DISTRIBUTED BY HASH(site_id) BUCKETS 10;
-~~~
+```
 
-StarRocks中Range分布，被称之为分区，用于分布的列也被称之为分区列，'采用Range-Hash组合分布的建表语句' 示例中的event\_day就是分区列。
+#### 分区
 
-Hash分布，则被称之为分桶，用于分布的列也被称之为分桶列，上述两个例子中分桶列都是site\_id。
+分区⽤于将数据划分成不同的区间。分区的主要作⽤是将⼀张表按照分区键拆分成不同的管理单元，针对每⼀个管理单元选择相应的存储策略，⽐如副本数、冷热策略和存储介质等等。StarRocks 支持在一个集群内使用多种存储介质，您可以将新数据所在分区放在 SSD 盘上，利用 SSD 的优秀的随机读写性能来提高查询性能，将旧数据存放在 SATA 盘上，以节省数据存储的成本。
 
-Range分区可动态添加和删减，'采用Range-Hash组合分布的建表语句' 示例中如果新来了隶属于新月份的数据，就可以添加新分区。
+业务系统中⼀般会选择根据时间进⾏分区，以优化⼤量删除过期数据带来的性能问题，同时也⽅便冷热数据分级存储。
 
-Hash分桶一旦确定，分桶数也就随之固定，不能再进行调整，只有未创建的分区才能设置新的分桶数。
+StarRocks 支持动态分区。您可以按需为新数据动态创建分区，同时 StarRocks 会⾃动删除过期分区，从而确保数据的实效性，实现对分区的⽣命周期管理（Time to Life，简称 “TTL”），⼤幅减少运维管理的成本。
 
-采用Range-Hash组合分布方式的时候，新增Range分区，默认分桶数和原分区相同；用户可根据新分区的数据规模调整分桶数量。下面是一个在上表中添加分区，并使用新的分桶数的例子。
+StarRocks 还支持批量创建分区。
 
-3.在site_access表中添加新的分区，并使用新的分桶数
+#### 分桶
 
-~~~ SQL
-ALTER TABLE site_access
-ADD PARTITION p4 VALUES LESS THAN ("2020-04-31")
-DISTRIBUTED BY HASH(site_id) BUCKETS 20;
-~~~
+分区的下⼀级是分桶，StarRocks 采⽤ Hash 算法作为分桶算法。在同⼀分区内，分桶键哈希值相同的数据形成 Tablet，Tablet 以多副本冗余的形式存储，是数据均衡和恢复的最⼩单位。Tablet 的副本由⼀个单独的本地存储引擎管理，数据导⼊和查询最终都下沉到所涉及的⼦表副本上。
 
-### 2 如何分区
+## 设置分区和分桶
 
-分区的主要作用是允许用户将整个分区作为管理单位，从而选择存储策略，比如副本数，冷热策略和存储介质等等。大多数情况下，新数据被查询的可能性更大，因此将新数据存储在同一个分区后，用户可以通过StarRocks的分区裁剪功能，最大限度地减少扫描数据量，从而提高查询性能。同时，StarRocks支持在一个集群内使用多种存储介质(SATA/SSD)。用户可以将新数据所在的分区放在SSD上，利用SSD的优秀的随机读写性能来提高查询性能。而通过将旧数据存放在SATA盘上，用户可以节省数据存储的成本。
+### 选择分区键
 
-所以，在实际应用中，用户一般选取时间列作为分区键，具体划分的粒度视数据量而定，单个分区原始数据量建议维持在100GB以内。
+选择合理的分区键可以有效的裁剪扫描的数据量。**目前仅支持分区键的数据类型为日期和整数类型。**在实际业务场景中，一般从数据管理的角度选择分区键，常见的分区键为时间或者区域。按照分区键划分数据后，单个分区原始数据量建议不要超过 100 GB。
 
-#### 2.1 分区列选择
+### 选择分桶键
 
-* 通过合理的分区可以有效的裁剪scan的数据量。我们一般从数据的管理角度来选择分区键，选用**时间**或者区域作为分区键。
-* 使用动态分区可以定期自动创建分区，比如每天创建出新的分区等。
-动态分区可参考下方文档动态分区管理。
+选择高基数的列（例如唯一 ID）来作为分桶键，可以保证数据在各个分桶中尽可能均衡。如果数据倾斜情况严重，您可以使用多个列作为数据的分桶键，但是不建议超过 3 个列。
 
-### 3 如何分桶
+还是以上述 Range+Hash 组合分布的建表语句为例：
 
-StarRocks采用Hash算法作为分桶算法，同一分区内, 分桶键的哈希值相同的数据形成(Tablet)子表, 子表多副本冗余存储, 子表副本在物理上由一个单独的本地存储引擎管理, 数据导入和查询最终都下沉到所涉及的子表副本上, 同时子表也是数据均衡和恢复的基本单位。
+```SQL
+CREATE TABLE site_access(
+event_day DATE,
+site_id INT DEFAULT '10',
+city_code VARCHAR(100),
+user_name VARCHAR(32) DEFAULT '',
+pv BIGINT SUM DEFAULT '0'
+)
+AGGREGATE KEY(event_day, site_id, city_code, user_name)
+PARTITION BY RANGE(event_day)
+(
+PARTITION p1 VALUES LESS THAN ("2020-01-31"),
+PARTITION p2 VALUES LESS THAN ("2020-02-29"),
+PARTITION p3 VALUES LESS THAN ("2020-03-31")
+)
+DISTRIBUTED BY HASH(site_id) BUCKETS 10;
+```
 
-#### 3.1 分桶列选择
+如上示例中，`site_access` 表采用 `site_id` 作为分桶键，其原因在于，针对 `site_access` 表的查询请求，基本上都以站点（高基数列）作为查询过滤条件。采用 `site_id` 作为分桶键，可以在查询时裁剪掉大量无关分桶。
 
-* 选择高基数的列（例如唯一ID）来作为分桶键，可以保证数据在各个bucket中尽可能均衡。如果数据倾斜情况严重，用户可以使用多个列作为数据的分桶键，但是不建议使用过多列。
-* 分桶的数量影响查询的并行度，最佳实践是计算一下数据存储量，将每个tablet设置成 100MB ~ 1GB 之间。
-* 在机器资源不足的情况下，用户如果想充分利用机器资源，可以通过 BE数量 \* cpu core / 2的计算方式来设置bucket数量。例如，在将 100GB 未压缩的 CSV 文件导入 StarRocks 时，用户使用 4 台 BE，每台包含 64 核心，仅建立一个分区，通过以上计算方式可得出 bucket 数量为 4 \* 64 /2 = 128。此时每个 tablet 的数据为 781MB，能够充分利用CPU资源。
+如下查询中，10 个分桶中的 9 个分桶被裁减，因而系统只需要扫描 `site_access` 表中 1/10 的数据：
 
-#### 3.2 分桶数如何确定
-
-在StarRocks系统中，分桶是实际物理文件组织的单元。数据在写入磁盘后，就会涉及磁盘文件的管理。
-
-分桶的数据的压缩方式使用的是Lz4。建议压缩后磁盘上每个分桶数据文件大小在 100MB-1GB 左右。这种模式在多数情况下足以满足业务需求。
-
-建议用户根据集群规模的变化，建表时调整分桶的数量。集群规模变化，主要指节点数目的变化。假设现有20G原始数据，依照上述标准，可以建10个分桶（压缩前每个 tablet 大小2GB，压缩后可能在 200MB-500MB）。但是如果用户有20台机器，那么可以适当再缩小每个分桶的数据量，加大分桶数。比如分成40个分桶，大概每个 tablet 500MB（保持压缩后一般不小于 100MB）。
-
-#### 3.3 分桶数选择举例
-
-在 '采用Range-Hash组合分布的建表语句' 示例中，site_access 采用 site_id 作为分桶键，其原因在于，针对site_access表的查询请求，基本上都以站点作为查询过滤条件。采用site_id作为分桶键，可以在查询时裁剪掉大量无关分桶。如下案例中的查询，10个bucket中的9个被裁减，因而系统只需要扫描site_access表的1/10的数据。
-
-~~~ 案例SQL
-select
-city_code, sum(pv)
+```SQL
+select sum(pv)
 from site_access
 where site_id = 54321;
-~~~
+```
 
-但假如site_id分布十分不均匀，大量的访问数据是关于少数网站的（幂律分布, 二八规则），如果用户依然采用上述分桶方式，数据分布会出现严重的倾斜，进而导致系统局部的性能瓶颈。这个时候，用户需要适当调整分桶的字段，以将数据打散，避免性能问题。如下案例中，可以采用site\_id、city\_code组合作为分桶键，将数据划分得更加均匀。
+但是如果 `site_id` 分布十分不均匀，大量的访问数据是关于少数网站的（幂律分布, 二八规则），那么采用上述分桶方式会造成数据分布出现严重的倾斜，进而导致系统局部的性能瓶颈。此时，您需要适当调整分桶的字段，以将数据打散，避免性能问题。例如，可以采用 `site_id`、`city_code` 组合作为分桶键，将数据划分得更加均匀。相关建表语句如下：
 
-采用site\_id、city\_code作为组合分桶键：
-
-~~~ SQL
+```SQL
 CREATE TABLE site_access
 (
 site_id INT DEFAULT '10',
@@ -134,29 +127,91 @@ pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(site_id, city_code, user_name)
 DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 10;
-~~~
+```
 
-上面两种模式的选取是建表过程中经常需要面对的问题，采用site\_id的分桶方式对于短查询十分有利，能够减少节点之间的数据交换，提供集群整体性能；采用site\_id、city\_code组合做分桶键的模式对于长查询有利，能够利用分布式集群的整体并发性能，提高吞吐。用户在实际使用中，可以依据自身的业务特点进行相应模式的选择。
+在实际使用中，您可以依据自身的业务特点选择以上两种分桶方式。采用 `site_id` 的分桶方式对于短查询十分有利，能够减少节点之间的数据交换，提高集群整体性能；采用 `site_id`、`city_code` 的组合分桶方式对于长查询有利，能够利用分布式集群的整体并发性能。
 
-### 4 最佳实践
+> 说明：
+>
+> - 短查询是指扫描数据量不大、单机就能完成扫描的查询。
+>
+> - 长查询是指扫描数据量大、多机并行扫描能显著提升性能的查询。
 
-对于StarRocks而言，分区和分桶的选择是非常关键的。在建表时选择好的分区分桶列，可以有效提高集群整体性能。当然，在使用过程中，也需考虑业务情况，根据业务情况进行调整。
+### 确定分桶数量
 
-以下是针对特殊应用场景下，对分区和分桶选择的一些建议：
+在 StarRocks 中，分桶是实际物理文件组织的单元，分桶数量会影响查询的并行度。您需要设置合理的分桶数量，确保分桶数据压缩（压缩方式 LZ4）写入磁盘后，占用合理的磁盘资源。建议压缩后磁盘上每个分桶数据文件大小在 100 MB 至 1 GB 左右。
 
-* **数据倾斜**：业务方如果确定数据有很大程度的倾斜，那么建议采用多列组合的方式进行数据分桶，而不是只单独采用倾斜度大的列做分桶。
-* **高并发**：分区和分桶应该尽量覆盖查询语句所带的条件，这样可以有效减少扫描数据，提高并发。
-* **高吞吐**：尽量把数据打散，让集群以更高的并发扫描数据，完成相应计算。
+> 注意：不支持修改已创建的分区的分桶数量，支持在增加分区时为新增分区设置新的分桶数量。
 
-### 动态分区管理
+此外，建议根据集群规模的变化，建表时调整分桶数量。集群规模变化，主要指节点数目的变化。假设您有 1 台机器，20 GB 原始数据，那么可以建 10 个分桶（压缩前每个 Tablet 大小 2 GB，压缩后可能在 200 MB - 500 MB）。但是如果您有20台机器，那么可以适当再缩小每个分桶的数据量，加大分桶数量。比如分成 40 个分桶，每个 Tablet 的大小压缩前大约为 500 MB，压缩后一般不小于 100 MB。
 
-在很多实际应用场景中，数据的时效性很重要，需要为新到达的数据创建新分区, 删除过期分区。 StarRocks的动态分区机制可以实现分区rollover:  对分区实现生命周期管理(TTL)，自动增删分区，减少用户的使用心智负担。
+在机器资源不足的情况下，如果想充分利用机器资源，可以通过如下公式来计算合适的分桶数量：
 
-#### 4.1 创建支持动态分区的表
+**分桶数量 = BE节点数量 \* CPU 核数/2**
 
-下面以一个实际的例子来介绍动态分区功能。
+例如，在将 100 GB 未压缩的 CSV 文件导入 StarRocks 时，使用 4 个 BE 节点，每个 BE 节点所在机器的 CPU 核数为 64，建立一个分区。通过以上公式可以计算出桶数数量为 128。此时，每个 Tablet 的大小为 781 MB，能够充分利用 CPU 资源。
 
-~~~ SQL
+### 管理分区
+
+#### 增加分区
+
+增加新的分区，用于存储新的数据。新增分区的默认分桶数量和原分区相同。您也可以根据新分区的数据规模调整分桶数量。
+
+如下示例中，在 `site_access` 表添加新的分区，用于存储新月份的数据，并且调整分桶数量为 20：
+
+```SQL
+ALTER TABLE site_access
+ADD PARTITION p4 VALUES LESS THAN ("2020-04-30")
+DISTRIBUTED BY HASH(site_id) BUCKETS 20;
+```
+
+#### 删除分区
+
+执行如下语句，删除 `site_access` 表中分区 p1 及数据：
+
+> 说明：分区中的数据不会立即删除，会在 Trash 中保留一段时间（默认为一天）。如果误删分区，可以通过 RECOVER 命令恢复分区及数据。
+
+```SQL
+ALTER TABLE site_access
+DROP PARTITION p1;
+```
+
+#### 恢复分区
+
+执行如下语句，恢复 `site_access` 表中分区 `p1` 及数据：
+
+```SQL
+RECOVER PARTITION p1 FROM site_access;
+```
+
+#### 查看分区
+
+执行如下语句，查看 `site_access` 表中分区情况：
+
+```SQL
+SHOW PARTITIONS FROM site_access;
+```
+
+### 最佳实践
+
+对于 StarRocks 而言，分区和分桶的选择是非常关键的。在建表时选择合理的分区键和分桶键，可以有效提高集群整体性能。因此建议在选择分区键和分桶键时，根据业务情况进行调整。
+
+- 数据倾斜
+  - 如果业务场景中单独采用倾斜度大的列做分桶，很大程度会导致访问数据倾斜，那么建议采用多列组合的方式进行数据分桶。
+
+- 高并发
+  - 分区和分桶应该尽量覆盖查询语句所带的条件，这样可以有效减少扫描数据，提高并发。
+
+- 高吞吐
+  - 尽量把数据打散，让集群以更高的并发扫描数据，完成相应计算。
+
+## 管理动态分区
+
+### 创建支持动态分区的表
+
+如下示例，创建一张支持动态分区的表，表名为 `site_access`，动态分区通过 `PEROPERTIES` 进行配置。分区的区间为当前时间的前后 3 天，总共 6 天。
+
+```SQL
 CREATE TABLE site_access(
 event_day DATE,
 site_id INT DEFAULT '10',
@@ -180,29 +235,47 @@ PROPERTIES(
     "dynamic_partition.prefix" = "p",
     "dynamic_partition.buckets" = "32"
 );
-~~~
+```
 
-通过指定PEROPERTIES可以完成动态分区策略的配置。配置项描述如下：
+`PROPERTIES` 配置项如下：
 
-* dynamic\_partition.enable : 是否开启动态分区特性，可指定为 TRUE 或 FALSE。如果不填写，默认为 TRUE。
-* dynamic\_partition.time\_unit : 动态分区调度的粒度，可指定为 DAY/WEEK/MONTH。
+- `dynamic_partition.enable`：是否开启动态分区特性，取值为 `TRUE` 或 `FALSE`。默认值为 `TRUE`。
 
-  * 指定为 DAY 时，分区名后缀需为yyyyMMdd，例如20200325。图1 就是一个按天分区的例子，分区名的后缀满足yyyyMMdd。  
-    PARTITION p20200321 VALUES LESS THAN ("2020-03-22"),  
-    PARTITION p20200322 VALUES LESS THAN ("2020-03-23"),  
-    PARTITION p20200323 VALUES LESS THAN ("2020-03-24"),  
+- `dynamic_partition.time_unit`：必填，调度动态分区特性的时间粒度，取值为 `DAY`、`WEEK` 或 `MONTH`，表示按天、周或月调度动态分区特性。并且，时间粒度必须对应分区名后缀格式。具体对应规则如下：
+  - 取值为 `DAY` 时，分区名后缀的格式应该为 yyyyMMdd，例如 `20200321`。
+  
+    ```SQL
+
+    PARTITION BY RANGE(event_day)(
+    PARTITION p20200321 VALUES LESS THAN ("2020-03-22"),
+    PARTITION p20200322 VALUES LESS THAN ("2020-03-23"),
+    PARTITION p20200323 VALUES LESS THAN ("2020-03-24"),
     PARTITION p20200324 VALUES LESS THAN ("2020-03-25")
-  * 指定为 WEEK 时，分区名后缀需为yyyy\_ww，例如2020\_13代表2020年第13周。
-  * 指定为 MONTH 时，动态创建的分区名后缀格式为 yyyyMM，例如 202003。
+    )
+    ```
 
-* dynamic\_partition.start: 动态分区的开始时间。以当天为基准，超过该时间范围的分区将会被删除。如果不填写，则默认为Integer.MIN\_VALUE 即 -2147483648。**取值范围为小于 0 的负整数，最大值为 -1**。
-* dynamic\_partition.end: 动态分区的结束时间。 以当天为基准，会提前创建N个单位的分区范围。**取值范围为大于 0 的正整数，最小值为 1**。
-* dynamic\_partition.prefix : 动态创建的分区名前缀。
-* dynamic\_partition.buckets : 动态创建的分区所对应的分桶数量。
+  - 取值为 `WEEK` 时，分区名后缀的格式应该为 yyyy_ww，例如 `2020_13` 代表 2020 年第 13 周。
+  - 取值为 `MONTH` 时，分区名后缀的格式应该为 yyyyMM，例如 `202003`。
 
-以上述中创建的表为例子，并同步开启动态分区特性。分区的区间为当前时间的前后3天，总共6天。假设当前时间为2020-03-25为例，在每次调度时，会删除分区上界小于 2020-03-22 的分区，同时在调度时会创建今后3天的分区。调度完成之后，新的分区会是下列列表。
+- `dynamic_partition.start`：必填，动态分区的开始时间。以当天为基准，超过该时间范围的分区将会被删除。取值范围为小于 0 的负整数，最大值为 **-1**。默认值为 **Integer.MIN_VALUE**，即 -2147483648。
 
-~~~ SQL
+- `dynamic_partition.end`：必填，动态分区的结束时间。 以当天为基准，提前创建指定数量的分区。取值范围为大于 0 的正整数，最小值为 **1**。
+
+- `dynamic_partition.prefix`: 动态分区的前缀名，默认值为 **p**。
+
+- `dynamic_partition.buckets`: 动态分区的分桶数量，默认与 BUCKETS 关键词指定的分桶数量保持一致。
+
+### 查看表当前的分区情况
+
+开启动态分区特性后，会不断地自动增减分区。您可以执行如下语句，查看表当前的分区情况：
+
+```SQL
+SHOW PARTITIONS FROM site_access;
+```
+
+假设当前时间为 2020-03-25，在调度动态分区时，会删除分区上界小于 2020-03-22 的分区，同时在调度时会创建今后 3 天的分区。则如上语句的返回结果中，`Range` 列显示当前分区的信息如下：
+
+```SQL
 [types: [DATE]; keys: [2020-03-22]; ‥types: [DATE]; keys: [2020-03-23]; )
 [types: [DATE]; keys: [2020-03-23]; ‥types: [DATE]; keys: [2020-03-24]; )
 [types: [DATE]; keys: [2020-03-24]; ‥types: [DATE]; keys: [2020-03-25]; )
@@ -210,48 +283,55 @@ PROPERTIES(
 [types: [DATE]; keys: [2020-03-26]; ‥types: [DATE]; keys: [2020-03-27]; )
 [types: [DATE]; keys: [2020-03-27]; ‥types: [DATE]; keys: [2020-03-28]; )
 [types: [DATE]; keys: [2020-03-28]; ‥types: [DATE]; keys: [2020-03-29]; )
-~~~
+```
 
-#### 4.2 查看表当前的分区
+### 修改表的动态分区属性
 
-动态分区表运行过程中，会不断地自动增减分区，可以通过下列命令查看当前的分区情况，
+执行 ALTER TABLE，修改动态分区的属性，例如暂停或者开启动态分区特性。
 
-~~~ SQL
-SHOW PARTITIONS FROM site_access;
-~~~
-
-#### 4.3 修改表的分区属性
-
-动态分区的属性可以修改，例如需要起/停动态分区的功能，可以通过ALTER TABLE来完成。
-
-~~~ SQL
+```SQL
 ALTER TABLE site_access SET("dynamic_partition.enable"="false");
 ALTER TABLE site_access SET("dynamic_partition.enable"="true");
-~~~
+```
 
-注意：依照相同语句，也可以相应的修改其他属性。
+> 说明：
+>
+> - 可以执行 SHOW CREATE TABLE 命令，查看表的动态分区属性。
+>
+> - ALTER TABLE 也适用于修改 `PEROPERTIES` 中的其他配置项。
 
-#### 4.4 注意事项
+### 使用说明
 
-动态分区的方式相当于把建分区的判断逻辑交由StarRocks来完成，在配置的过程中一定要保证分区名称满足规范，否则会创建失败。具体规范可以描述如下：
+开启动态分区特性，相当于将创建分区的判断逻辑交由 StarRocks 完成。因此创建表时，必须保证动态分区配置项 `dynamic_partition.time_unit` 指定的时间粒度与分区名后缀格式对应，否则创建表会失败。具体对应规则如下：
 
-* 指定为 DAY 时，分区名后缀需为yyyyMMdd，例如20200325。
-* 指定为 WEEK 时，分区名后缀需为yyyy\_ww，例如 2020\_13, 代表2020年第13周。
-* 指定为 MONTH 时，动态创建的分区名后缀格式为 yyyyMM，例如 202003。
+- `dynamic_partition.time_unit` 指定为 `DAY` 时，分区名后缀的格式应该为 yyyyMMdd，例如 `20200325`。
 
-### 批量创建和修改分区
+```SQL
+PARTITION BY RANGE(event_day)(
+PARTITION p20200321 VALUES LESS THAN ("2020-03-22"),
+PARTITION p20200322 VALUES LESS THAN ("2020-03-23"),
+PARTITION p20200323 VALUES LESS THAN ("2020-03-24"),
+PARTITION p20200324 VALUES LESS THAN ("2020-03-25")
+)
+```
 
-> 该功能在1.16后的版本中添加
+- `dynamic_partition.time_unit`指定为 `WEEK` 时，分区名后缀的格式应该为 yyyy_ww，例如 `2020_13`，代表 2020 年第 13 周。
 
-#### 4.5 建表时批量创建日期分区
+- `dynamic_partition.time_unit`指定为 `MONTH` 时，分区名后缀的格式应该为 yyyyMM，例如 `202003`。
 
-用户可以通过给出一个START值、一个END值以及一个定义分区增量值的EVERY子句批量产生分区。
+## 批量创建分区
 
-其中START值将被包括在内而END值将排除在外。
+> StarRocks 1.16 及以后支持该功能。
 
-例如：
+建表时和建表后，支持批量创建分区，通过 START、END 指定批量分区的开始和结束，EVERY 子句指定分区增量值。其中，批量分区包含 START 的值，但是不包含 END 的值。分区的命名规则同动态分区一样。
 
-~~~ SQL
+### 建表时批量创建日期分区
+
+当分区键为日期类型时，建表时通过 START、END 指定批量分区的开始日期和结束日期，EVERY 子句指定分区增量值。并且 EVERY 子句中用 INTERVAL 关键字表示日期间隔，目前仅支持日期间隔的单位为 DAY、WEEK、MONTH、YEAR。
+
+如下示例中，批量分区的开始日期为 `2021-01-01` 和结束日期为 `2021-01-04`，增量值为一天：
+
+```SQL
 CREATE TABLE site_access (
     datekey DATE,
     site_id INT,
@@ -262,63 +342,29 @@ CREATE TABLE site_access (
 ENGINE=olap
 DUPLICATE KEY(datekey, site_id, city_code, user_name)
 PARTITION BY RANGE (datekey) (
-    START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 day)
+    START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 DAY)
 )
 DISTRIBUTED BY HASH(site_id) BUCKETS 10
 PROPERTIES (
     "replication_num" = "1" 
 );
-~~~
+```
 
-这样StarRocks便会自动创建如下等价的分区
+则相当于在建表语句中使用如下 PARTITION BY 子句：
 
-~~~ TEXT
+```SQL
+PARTITION BY RANGE (datekey) (
 PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02')),
 PARTITION p20210102 VALUES [('2021-01-02'), ('2021-01-03')),
 PARTITION p20210103 VALUES [('2021-01-03'), ('2021-01-04'))
-~~~
-
-当前分区键仅支持日期类型和整数类型，分区类型需要与EVERY里的表达式匹配。
-
-当分区键为日期类型的时候需要指定INTERVAL关键字来表示日期间隔，目前日期仅支持day、week、month、year，分区的命名规则同动态分区一样。
-
-#### 4.6 建表时批量创建数字分区
-
-当分区键为整数类型时直接使用数字进行分区，注意分区值需要使用引号引用，而EVERY则不用引号，如下：
-
-~~~ SQL
-CREATE TABLE site_access (
-    datekey INT,
-    site_id INT,
-    city_code SMALLINT,
-    user_name VARCHAR(32),
-    pv BIGINT DEFAULT '0'
 )
-ENGINE=olap
-DUPLICATE KEY(datekey, site_id, city_code, user_name)
-PARTITION BY RANGE (datekey) (
-    START ("1") END ("5") EVERY (1)
-)
-DISTRIBUTED BY HASH(site_id) BUCKETS 10
-PROPERTIES (
-    "replication_num" = "1"
-);
-~~~
+```
 
-上面的语句将产生如下分区：
+### 建表时批量创建不同日期间隔的日期分区
 
-~~~ SQL
-PARTITION p1 VALUES [("1"), ("2")),
-PARTITION p2 VALUES [("2"), ("3")),
-PARTITION p3 VALUES [("3"), ("4")),
-PARTITION p4 VALUES [("4"), ("5"))
-~~~
+建表时批量创建日期分区时，支持针对不同的日期分区区间（日期分区区间不能相重合），使用不同的 EVERY 子句指定日期间隔。一个日期分区区间，按照对应 EVERY 子句定义的日期间隔，批量创建分区，例如：
 
-#### 4.7 建表时批量创建不同类型的日期分区
-
-StarRocks也支持建表时同时定义不同类型的分区，只要求这些分区不相交，例如：
-
-~~~ SQL
+```SQL
 CREATE TABLE site_access (
     datekey DATE,
     site_id INT,
@@ -337,12 +383,12 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10
 PROPERTIES (
     "replication_num" = "1"
 );
+```
 
-~~~
+则相当于在建表语句中使用如下 PARTITION BY 子句：
 
-上面的语句将会产生如下分区：
-
-~~~ TEXT
+```SQL
+PARTITION BY RANGE (datekey) (
 PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01')),
 PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01')),
 PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01')),
@@ -352,13 +398,52 @@ PARTITION p202104 VALUES [('2021-04-01'), ('2021-05-01')),
 PARTITION p20210501 VALUES [('2021-05-01'), ('2021-05-02')),
 PARTITION p20210502 VALUES [('2021-05-02'), ('2021-05-03')),
 PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
-~~~
+)
+```
 
-#### 4.8 建表后批量创建分区
+### 建表时批量创建数字分区
 
-与建表时批量创建分区类似，StarRocks也支持通过ALTER语句批量创建分区。通过指定ADD PARTITIONS关键字，配合START和END以及EVERY的值来创建分区。
+当分区键为整数类型时，建表时通过 START、END 指定批量分区的开始值和结束值，EVERY 子句指定分区增量值。
 
-~~~ SQL
-ALTER TABLE site_access ADD
-PARTITIONS START ("2014-01-01") END ("2014-01-06") EVERY (interval 1 day);
-~~~
+> 说明：分区键的值需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
+
+如下示例中，批量分区的开始值为 `1` 和结束值为 `5`，分区增量值为 `1`：
+
+```SQL
+CREATE TABLE site_access (
+    datekey INT,
+    site_id INT,
+    city_code SMALLINT,
+    user_name VARCHAR(32),
+    pv BIGINT DEFAULT '0'
+)
+ENGINE=olap
+DUPLICATE KEY(datekey, site_id, city_code, user_name)
+PARTITION BY RANGE (datekey) (
+    START ("1") END ("5") EVERY (1)
+)
+DISTRIBUTED BY HASH(site_id) BUCKETS 10
+PROPERTIES (
+    "replication_num" = "1"
+);
+```
+
+则相当于在建表语句中使用如下 PARTITION BY 子句：
+
+```SQL
+PARTITION BY RANGE (datekey) (
+PARTITION p1 VALUES [("1"), ("2")),
+PARTITION p2 VALUES [("2"), ("3")),
+PARTITION p3 VALUES [("3"), ("4")),
+PARTITION p4 VALUES [("4"), ("5"))
+)
+```
+
+### 建表后批量创建分区
+
+建表后，支持通过ALTER TABLE 语句批量创建分区。相关语法与建表时批量创建分区类似，通过指定 ADD PARTITIONS 关键字，以及 START、END 以及 EVERY 子句来批量创建分区。示例如下：
+
+```SQL
+ALTER TABLE site_access 
+ADD PARTITIONS START ("2021-01-04") END ("2021-01-06") EVERY (INTERVAL 1 DAY);
+```
