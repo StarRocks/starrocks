@@ -16,7 +16,7 @@ jobs:
       
     - name: trigger jenkins job
       shell: bash
-      if: ${{ steps.approved.outputs.approved == 'true' }}
+#      if: ${{ steps.approved.outputs.approved == 'true' }}
       env:
         JENKINS_PW: ${{ secrets.JENKINS_PW }}
         JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
