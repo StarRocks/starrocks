@@ -48,21 +48,4 @@ public class HudiConnector implements Connector {
         return metadata;
     }
 
-
-    public void onCreate() {
-        //TODO(zhuodong): left for hudi meta incremental sync
-        //if (Config.enable_hms_events_incremental_sync) {
-        //    GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
-        //            .registerExternalCatalogResource(resourceName);
-        //}
-    }
-
-    @Override
-    public void shutdown() {
-        //TODO(zhuodong): left for hudi meta incremental sync
-        //if (Config.enable_hms_events_incremental_sync) {
-        //    GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
-        //            .unregisterExternalCatalogResource(resourceName);
-        //}
-    }
 }
