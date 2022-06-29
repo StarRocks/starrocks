@@ -14,9 +14,20 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
+        
+    - name: Trigger jenkins job
+      uses: jabbukka/jenkins-trigger@main
+      with:
+        url: http://39.101.206.100:8090
+        job_name: starrocks_admit_test
+        user_name: starrocks
+        api_token: 112bc1b04f326123e6668f931a7d26f7dd
+        parameter: '{GITHUB_PR_NUMBER:8047, GITHUB_PR_TARGET_BRANCH:main}'
+        wait: "true"
+        timeout: "1000"
       
-    - name: trigger jenkins job
-      if: ${{ steps.approved.outputs.approved == 'true' }}     
-      run: |
-        curl --fail -w %{http_code} -I -u starrocks:starrocks@test http://39.101.206.100:8090/job/starrocks_admit_test/buildWithParameters?token=112bc1b04f326123e6668f931a7d26f7dd&GITHUB_PR_NUMBER=8048&GITHUB_PR_TARGET_BRANCH=branch2.2
+#    - name: trigger jenkins job
+#      if: ${{ steps.approved.outputs.approved == 'true' }}     
+#      run: |
+#        curl --fail -w %{http_code} -I -u starrocks:starrocks@test http://39.101.206.100:8090/job/starrocks_admit_test/buildWithParameters?token=112bc1b04f326123e6668f931a7d26f7dd&GITHUB_PR_NUMBER=8048&GITHUB_PR_TARGET_BRANCH=branch2.2
 
