@@ -1,52 +1,22 @@
 name: Trigger Jobs
 
 on: 
-  pull_request_review:
-  workflow_call:
-    secrets:
-      JENKINS_USER:
-        required: true
-      JENKINS_PW:
-        required: true
-      JENKINS_TOKEN:
-        required: true
-      JENKINS_URL:
-        required: true
+  pull_request_review
 
 jobs:
   Trigger-A-Jenkins-Job-With-2-Approval:
     runs-on: ubuntu-latest
-#    env:
-#      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#      JENKINS_PW: ${{ secrets.JENKINS_PW }}
-#      JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
-#      JENKINS_URL: ${{ secrets.JENKINS_URL }}
     steps:
     - uses: taichi/approved-event-action@master
       id: approved
       with:
         approvals: '2'
-#    check_changes_requested: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
       
     - name: trigger jenkins job
-      if: ${{ steps.approved.outputs.approved == 'true' }}
-      uses: sbitio/trigger-jenkins-job@master
-      with:
-        JENKINS_USER: ${{ env.JENKINS_USER }}
-        JENKINS_TOKEN: ${{ env.JENKINS_PW }}
-        JENKINS_HOST: ${{ env.JENKINS_URL }}
-        JENKINS_JOB: ${{ env.JENKINS_JOB }}
-        JENKINS_PARAMS: ${{ env.JENKINS_TOKEN }}
-      env:
-        JENKINS_JOB: starrocks_admit_test
-        JENKINS_USER: ${{ secrets.JENKINS_USER }}
-        JENKINS_PW: ${{ secrets.JENKINS_PW }}
-        JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
-        JENKINS_URL: ${{ secrets.JENKINS_URL }}
-        
-#      run: |
-#        curl --fail -w %{http_code} -I -u starrocks:${{ env.JENKINS_PW }} ${{ env.JENKINS_URL }}/job/starrocks_admit_test/buildWithParameters?token=${{ env.JENKINS_TOKEN }}
+      if: ${{ steps.approved.outputs.approved == 'true' }}     
+      run: |
+        curl --fail -w %{http_code} -I -u starrocks:starrocks@test http://39.101.206.100:8090/job/starrocks_admit_test/buildWithParameters?token=112bc1b04f326123e6668f931a7d26f7dd
 
