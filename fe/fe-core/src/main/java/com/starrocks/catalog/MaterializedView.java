@@ -48,10 +48,40 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         MANUAL
     }
 
+    public static class BasePartitionInfo {
+
+        @SerializedName(value = "id")
+        private Long id;
+
+        @SerializedName(value = "version")
+        private Long version;
+
+        public BasePartitionInfo(Long id, Long version) {
+            this.id = id;
+            this.version = version;
+        }
+
+        public Long getId() {
+            return id;
+        }
+
+        public void setId(Long id) {
+            this.id = id;
+        }
+
+        public Long getVersion() {
+            return version;
+        }
+
+        public void setVersion(Long version) {
+            this.version = version;
+        }
+    }
+
     public static class AsyncRefreshContext {
-        // base table id -> (partitionid -> visible version)
+        // base table id -> (partition name -> partition info (id, version))
         @SerializedName(value = "baseTableVisibleVersionMap")
-        private Map<Long, Map<Long, Long>> baseTableVisibleVersionMap;
+        private Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap;
 
         @SerializedName(value = "starTime")
         private long startTime;
@@ -69,15 +99,15 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             this.timeUnit = null;
         }
 
-        public AsyncRefreshContext(Map<Long, Map<Long, Long>> baseTableVisibleVersionMap) {
+        public AsyncRefreshContext(Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap) {
             this.baseTableVisibleVersionMap = baseTableVisibleVersionMap;
         }
 
-        public Map<Long, Map<Long, Long>> getBaseTableVisibleVersionMap() {
+        public Map<Long, Map<String, BasePartitionInfo>> getBaseTableVisibleVersionMap() {
             return baseTableVisibleVersionMap;
         }
 
-        Map<Long, Long> getPartitionVisibleVersionMapForTable(long tableId) {
+        Map<String, BasePartitionInfo> getPartitionVisibleVersionMapForTable(long tableId) {
             return baseTableVisibleVersionMap.get(tableId);
         }
 
@@ -169,11 +199,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     // for show create mv, constructing refresh job(insert into select)
     @SerializedName(value = "viewDefineSql")
     private String viewDefineSql;
-
-    // table partition id <-> mv partition ids
-    // mv partition id <->  table partition ids
-    @SerializedName(value = "partitionRefMap")
-    private Map<Long, Set<Long>> partitionIdRefMap = new HashMap<>();
+    // table partition name <-> mv partition names
+    @SerializedName(value = "tableMvPartitionNameRefMap")
+    private Map<String, Set<String>> tableMvPartitionNameRefMap = new HashMap<>();
+    // mv partition name <->  table partition names
+    @SerializedName(value = "mvTablePartitionNameRefMap")
+    private Map<String, Set<String>> mvTablePartitionNameRefMap = new HashMap<>();
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -213,8 +244,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.viewDefineSql = viewDefineSql;
     }
 
-    public Map<Long, Set<Long>> getPartitionIdRefMap() {
-        return partitionIdRefMap;
+    public Map<String, Set<String>> getTableMvPartitionNameRefMap() {
+        return tableMvPartitionNameRefMap;
+    }
+
+    public Map<String, Set<String>> getMvTablePartitionNameRefMap() {
+        return mvTablePartitionNameRefMap;
     }
 
     public Set<Long> getBaseTableIds() {

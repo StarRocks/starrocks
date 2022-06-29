@@ -153,9 +153,11 @@ import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -2930,6 +2932,16 @@ public class LocalMetastore implements ConnectorMetadata {
             if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC) {
                 // create task
                 Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+                MaterializedView.AsyncRefreshContext asyncRefreshContext =
+                        materializedView.getRefreshScheme().getAsyncRefreshContext();
+                if (asyncRefreshContext.getTimeUnit() != null) {
+                    long startTime = asyncRefreshContext.getStartTime();
+                    TaskSchedule taskSchedule = new TaskSchedule(startTime,
+                            asyncRefreshContext.getStep(),
+                            TimeUtils.convertUnitIdentifierToTimeUnit(asyncRefreshContext.getTimeUnit()));
+                    task.setSchedule(taskSchedule);
+                    task.setType(Constants.TaskType.PERIODICAL);
+                }
                 TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
                 taskManager.createTask(task, false);
                 // run task
@@ -2962,6 +2974,11 @@ public class LocalMetastore implements ConnectorMetadata {
                 if (baseTable != null) {
                     baseTable.removeRelatedMaterializedView(table.getId());
                 }
+            }
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(table.getId()));
+            if (refreshTask != null) {
+                taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
             }
         } else {
             stateMgr.getAlterInstance().processDropMaterializedView(stmt);

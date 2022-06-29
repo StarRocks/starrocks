@@ -12,17 +12,21 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+import mockit.Mocked;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -178,7 +182,11 @@ public class TaskManagerTest {
     }
 
     @Test
-    public void periodicalTaskRegularTest() throws DdlException {
+    public void periodicalTaskRegularTest(@Mocked RowBatch rowBatch) throws DdlException {
+        new MockUp<Coordinator>() {
+            @Mock
+            public void exec() throws Exception {}
+        };
 
         LocalDateTime now = LocalDateTime.now();
 
@@ -188,7 +196,7 @@ public class TaskManagerTest {
         task.setDbName("test");
         task.setDefinition("select 1");
         task.setExpireTime(0L);
-        long startTime = now.plusSeconds(3).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        long startTime = Utils.getLongFromDateTime(LocalDateTime.now().plusSeconds(3));
         TaskSchedule taskSchedule = new TaskSchedule(startTime, 5, TimeUnit.SECONDS);
         task.setSchedule(taskSchedule);
         task.setType(Constants.TaskType.PERIODICAL);
