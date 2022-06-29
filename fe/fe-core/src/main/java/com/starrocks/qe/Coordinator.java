@@ -1622,6 +1622,13 @@ public class Coordinator {
         // and returned_all_results_ is true.
         // (UpdateStatus() initiates cancellation, if it hasn't already been initiated)
         if (!(returnedAllResults && status.isCancelled()) && !status.ok()) {
+<<<<<<< HEAD
+=======
+            ConnectContext ctx = connectContext;
+            if (ctx != null) {
+                ctx.setErrorCodeOnce(Optional.ofNullable(status.getErrorCode()).map(Enum::toString).orElse("UNKNOWN"));
+            }
+>>>>>>> 1d5201013 ([BugFix] fix resource group metrics (#6953))
             LOG.warn("one instance report fail {}, query_id={} instance_id={}",
                     status, DebugUtil.printId(queryId), DebugUtil.printId(params.getFragment_instance_id()));
             updateStatus(status, params.getFragment_instance_id());

@@ -328,6 +328,23 @@ public class ConnectContext {
         this.state = state;
     }
 
+<<<<<<< HEAD
+=======
+    public String getErrorCode() {
+        return errorCode;
+    }
+
+    public void setErrorCode(String errorCode) {
+        this.errorCode = errorCode;
+    }
+
+    public void setErrorCodeOnce(String errorCode) {
+        if (this.errorCode == null || this.errorCode.isEmpty()) {
+            this.errorCode = errorCode;
+        }
+    }
+
+>>>>>>> 1d5201013 ([BugFix] fix resource group metrics (#6953))
     public MysqlCapability getCapability() {
         return capability;
     }

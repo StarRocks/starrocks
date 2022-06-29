@@ -40,7 +40,10 @@ void ScanTaskQueueWithWorkGroup::_cal_wg_cpu_real_use_ratio() {
 
     int i = 0;
     for (auto& wg : _ready_wgs) {
-        double cpu_actual_use_ratio = ((double)growth_times[i] / (total_run_time));
+        double cpu_actual_use_ratio = 0.0;
+        if (total_run_time != 0) {
+            cpu_actual_use_ratio = ((double)growth_times[i] / (total_run_time));
+        }
         wg->set_cpu_actual_use_ratio(cpu_actual_use_ratio);
         i++;
     }

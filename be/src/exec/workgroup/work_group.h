@@ -244,6 +244,25 @@ private:
 
     std::unique_ptr<WorkerOwnerManager> _driver_worker_owner_manager;
     std::unique_ptr<WorkerOwnerManager> _scan_worker_owner_manager;
+<<<<<<< HEAD
+=======
+    std::unique_ptr<WorkerOwnerManager> _hdfs_scan_worker_owner_manager;
+
+    std::once_flag init_metrics_once_flag;
+    std::unordered_map<std::string, int128_t> _wg_metrics;
+
+    std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_limit_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::DoubleGauge>> _wg_cpu_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_limit_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_mem_metrics;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_running_queries;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_total_queries;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_concurrency_overflow_count;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_bigquery_count;
+
+    void add_metrics_unlocked(const WorkGroupPtr& wg);
+    void update_metrics_unlocked();
+>>>>>>> 1d5201013 ([BugFix] fix resource group metrics (#6953))
 };
 
 class DefaultWorkGroupInitialization {

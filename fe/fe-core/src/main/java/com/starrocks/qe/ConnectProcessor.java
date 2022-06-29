@@ -161,6 +161,7 @@ public class ConnectProcessor {
                 // ok query
                 MetricRepo.COUNTER_QUERY_SUCCESS.increase(1L);
                 MetricRepo.HISTO_QUERY_LATENCY.update(elapseMs);
+                ResourceGroupMetricMgr.updateQueryLatency(ctx, elapseMs);
                 if (elapseMs > Config.qe_slow_log_ms || ctx.getSessionVariable().isEnableSQLDigest()) {
                     MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
                     ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
@@ -420,6 +421,11 @@ public class ConnectProcessor {
         }
         ctx.setCommand(command);
         ctx.setStartTime();
+<<<<<<< HEAD
+=======
+        ctx.setWorkGroup(null);
+        ctx.setErrorCodeOnce("");
+>>>>>>> 1d5201013 ([BugFix] fix resource group metrics (#6953))
 
         switch (command) {
             case COM_INIT_DB:
