@@ -22,7 +22,7 @@ jobs:
         job_name: starrocks_admit_test
         user_name: starrocks
         api_token: 112bc1b04f326123e6668f931a7d26f7dd
-        parameter: '{GITHUB_PR_NUMBER:8047, GITHUB_PR_TARGET_BRANCH:main}'
+        parameter: '{"GITHUB_PR_NUMBER":"8047", "GITHUB_PR_TARGET_BRANCH":"main"}'
         wait: "true"
         timeout: "1000"
       
