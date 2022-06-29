@@ -62,7 +62,7 @@ public class ShowDynamicPartitionStmt extends ShowStmt {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
             }
         } else {
-            db = ClusterNamespace.getFullName(analyzer.getClusterName(), db);
+            db = ClusterNamespace.getFullName(db);
         }
 
         // we do not check db privs here. because user may not have any db privs,

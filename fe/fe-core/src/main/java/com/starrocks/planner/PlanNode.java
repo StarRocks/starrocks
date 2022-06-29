@@ -66,9 +66,6 @@ import java.util.TreeMap;
  * this node, ie, they only reference tuples materialized by this node or one of
  * its children (= are bound by tupleIds).
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 abstract public class PlanNode extends TreeNode<PlanNode> {
     private static final Logger LOG = LogManager.getLogger(PlanNode.class);
 
@@ -106,9 +103,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     protected int numInstances;
 
     protected Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
-
-    // use vectorized flag
-    protected boolean useVectorized = true;
 
     // For vector query engine
     // case 1: If agg node hash outer join child
@@ -297,11 +291,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     public void setReplicated(boolean replicated) {
         isReplicated = replicated;
-    }
-
-    public void transferConjuncts(PlanNode recipient) {
-        recipient.conjuncts.addAll(conjuncts);
-        conjuncts.clear();
     }
 
     /**
@@ -513,7 +502,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         msg.node_id = id.asInt();
         msg.num_children = children.size();
         msg.limit = limit;
-        msg.setUse_vectorized(useVectorized);
+        msg.setUse_vectorized(true);
         for (TupleId tid : tupleIds) {
             msg.addToRow_tuples(tid.asInt());
             msg.addToNullable_tuples(nullableTupleIds.contains(tid));
@@ -592,22 +581,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return outputSmap;
     }
 
-    public void setOutputSmap(ExprSubstitutionMap smap) {
-        outputSmap = smap;
-    }
-
     public ExprSubstitutionMap getWithoutTupleIsNullOutputSmap() {
         return withoutTupleIsNullOutputSmap == null ? outputSmap : withoutTupleIsNullOutputSmap;
     }
 
-    public void setWithoutTupleIsNullOutputSmap(ExprSubstitutionMap smap) {
-        withoutTupleIsNullOutputSmap = smap;
-    }
-
     public void init(Analyzer analyzer) throws UserException {
-        assignConjuncts(analyzer);
-        computeStats(analyzer);
-        createDefaultSmap(analyzer);
     }
 
     /**
@@ -636,25 +614,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
         for (int i = 2; i < getChildren().size(); ++i) {
             result = ExprSubstitutionMap.combine(result, getChild(i).getOutputSmap());
-        }
-
-        return result;
-    }
-
-    protected ExprSubstitutionMap getCombinedChildWithoutTupleIsNullSmap() {
-        if (getChildren().size() == 0) {
-            return new ExprSubstitutionMap();
-        }
-        if (getChildren().size() == 1) {
-            return getChild(0).getWithoutTupleIsNullOutputSmap();
-        }
-        ExprSubstitutionMap result = ExprSubstitutionMap.combine(
-                getChild(0).getWithoutTupleIsNullOutputSmap(),
-                getChild(1).getWithoutTupleIsNullOutputSmap());
-
-        for (int i = 2; i < getChildren().size(); ++i) {
-            result = ExprSubstitutionMap.combine(
-                    result, getChild(i).getWithoutTupleIsNullOutputSmap());
         }
 
         return result;
@@ -750,12 +709,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return getVerboseExplain(exprs, TExplainLevel.VERBOSE);
     }
 
-    /**
-     * Returns true if stats-related variables are valid.
-     */
-    protected boolean hasValidStats() {
-        return (numNodes == -1 || numNodes >= 0) && (cardinality == -1 || cardinality >= 0);
-    }
 
     public int getNumInstances() {
         return numInstances;

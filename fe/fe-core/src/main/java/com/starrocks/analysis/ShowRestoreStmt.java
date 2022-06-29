@@ -69,7 +69,7 @@ public class ShowRestoreStmt extends ShowStmt {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
             }
         } else {
-            dbName = ClusterNamespace.getFullName(getClusterName(), dbName);
+            dbName = ClusterNamespace.getFullName(dbName);
         }
 
         // check auth

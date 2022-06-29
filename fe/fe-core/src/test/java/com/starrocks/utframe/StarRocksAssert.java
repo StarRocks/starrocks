@@ -111,7 +111,6 @@ public class StarRocksAssert {
 
     public StarRocksAssert withDatabaseWithoutAnalyze(String dbName) throws Exception {
         CreateDbStmt dbStmt = new CreateDbStmt(false, dbName);
-        dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
         return this;
     }
@@ -122,7 +121,7 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert useDatabase(String dbName) {
-        ctx.setDatabase(ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName));
+        ctx.setDatabase(ClusterNamespace.getFullName(dbName));
         return this;
     }
 

@@ -57,6 +57,10 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
     meta->set_type(column.type());
     meta->set_length(column.length());
     meta->set_encoding(DEFAULT_ENCODING);
+    // For column_writer, data_page_body includes two slices: `encoded values` + `nullmap`.
+    // However, LZ4 doesn't support compressing multiple slices. In order to use LZ4, one solution is to
+    // copy the contents of the slice `nullmap` into the slice `encoded values`, but the cost of copying is still not small.
+    // So here we use LZ4_FRAME, it can compression multiple slices conveniently.
     meta->set_compression(LZ4_FRAME);
     meta->set_is_nullable(column.is_nullable());
 

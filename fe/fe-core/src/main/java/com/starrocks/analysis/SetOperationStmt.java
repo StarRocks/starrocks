@@ -445,40 +445,7 @@ public class SetOperationStmt extends QueryStmt {
      * Calls materializeRequiredSlots() on the operands themselves.
      */
     @Override
-    public void materializeRequiredSlots(Analyzer analyzer) throws AnalysisException {
-        TupleDescriptor tupleDesc = analyzer.getDescTbl().getTupleDesc(tupleId);
-        // to keep things simple we materialize all grouping exprs = output slots,
-        // regardless of what's being referenced externally
-        if (!distinctOperands_.isEmpty()) {
-            tupleDesc.materializeSlots();
-        }
-
-        if (evaluateOrderBy) {
-            sortInfo.materializeRequiredSlots(analyzer, null);
-        }
-
-        // collect operands' result exprs
-        List<SlotDescriptor> outputSlots = tupleDesc.getSlots();
-        List<Expr> exprs = Lists.newArrayList();
-        for (int i = 0; i < outputSlots.size(); ++i) {
-            SlotDescriptor slotDesc = outputSlots.get(i);
-            if (!slotDesc.isMaterialized()) {
-                continue;
-            }
-            for (SetOperand operand : operands) {
-                exprs.add(operand.getQueryStmt().getBaseTblResultExprs().get(i));
-            }
-            if (distinctAggInfo != null) {
-                // also mark the corresponding slot in the distinct agg tuple as being
-                // materialized
-                distinctAggInfo.getOutputTupleDesc().getSlots().get(i).setIsMaterialized(true);
-            }
-        }
-        materializeSlots(analyzer, exprs);
-
-        for (SetOperand op : operands) {
-            op.getQueryStmt().materializeRequiredSlots(analyzer);
-        }
+    public void materializeRequiredSlots(Analyzer analyzer) {
     }
 
     @Override

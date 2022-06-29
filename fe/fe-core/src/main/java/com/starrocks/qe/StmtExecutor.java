@@ -53,6 +53,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.WorkGroup;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -108,7 +109,6 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeJob;
-import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.Constants;
 import com.starrocks.statistic.FullStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
@@ -122,6 +122,7 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
@@ -136,6 +137,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -999,8 +1001,7 @@ public class StmtExecutor {
                 context.getDatabase(),
                 sql,
                 context.getQualifiedUser(),
-                context.getWorkGroup() != null ?
-                        context.getWorkGroup().getName() : "");
+                Optional.ofNullable(context.getWorkGroup()).map(WorkGroup::getName).orElse(""));
         context.setQueryDetail(queryDetail);
         //copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
@@ -1239,7 +1240,8 @@ public class StmtExecutor {
                         database,
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
-                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000)) {
+                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
+                        new InsertTxnCommitAttachment(loadedRows))) {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
                     // collect table-level metrics
@@ -1250,11 +1252,6 @@ public class StmtExecutor {
                         entity.counterInsertLoadRowsTotal.increase(loadedRows);
                         entity.counterInsertLoadBytesTotal
                                 .increase(Long.valueOf(coord.getLoadCounters().get(LoadJob.LOADED_BYTES)));
-                        BasicStatsMeta basicStatsMeta =
-                                GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(targetTable.getId());
-                        if (basicStatsMeta != null) {
-                            basicStatsMeta.increase(loadedRows);
-                        }
                     }
                 } else {
                     txnStatus = TransactionStatus.COMMITTED;

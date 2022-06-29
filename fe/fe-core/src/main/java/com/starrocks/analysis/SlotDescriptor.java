@@ -34,9 +34,6 @@ import com.starrocks.thrift.TSlotDescriptor;
 import java.util.Collections;
 import java.util.List;
 
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class SlotDescriptor {
     private final SlotId id;
     private final TupleDescriptor parent;
@@ -66,8 +63,6 @@ public class SlotDescriptor {
     private int slotOffset;       // index within slot array list
 
     private ColumnStats stats;  // only set if 'column' isn't set
-    private boolean isAgg;
-    private boolean isMultiRef;
     // used for load to get more information of varchar and decimal
     // and for query result set metadata
     private Type originType;
@@ -78,8 +73,6 @@ public class SlotDescriptor {
         this.byteOffset = -1;  // invalid
         this.isMaterialized = false;
         this.isNullable = true;
-        this.isAgg = false;
-        this.isMultiRef = false;
     }
 
     public SlotDescriptor(SlotId id, String name, Type type, boolean isNullable) {
@@ -101,13 +94,11 @@ public class SlotDescriptor {
         this.column = src.column;
         this.isNullable = src.isNullable;
         this.byteSize = src.byteSize;
-        this.isAgg = false;
         this.stats = src.stats;
         this.type = src.type;
     }
 
     public void setMultiRef(boolean isMultiRef) {
-        this.isMultiRef = isMultiRef;
     }
 
     public int getNullIndicatorByte() {

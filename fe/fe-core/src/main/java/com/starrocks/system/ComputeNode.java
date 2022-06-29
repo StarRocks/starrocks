@@ -416,6 +416,11 @@ public class ComputeNode implements IComputable, Writable {
                 this.brpcPort = hbResponse.getBrpcPort();
             }
 
+            if (Config.integrate_starmgr && this.starletPort != hbResponse.getStarletPort()) {
+                isChanged = true;
+                this.starletPort = hbResponse.getStarletPort();
+            }
+
             this.lastUpdateMs = hbResponse.getHbTime();
             if (!isAlive.get()) {
                 isChanged = true;

@@ -44,6 +44,9 @@ compile_commands.json
 .classpath
 .vimspector.json
 
+# ignore generated files
+StarRocksLex.tokens
+
 
 #ignore eclipse project file & idea project file
 .cproject

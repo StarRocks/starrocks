@@ -78,6 +78,9 @@ int64_t ESDataSource::raw_rows_read() const {
 int64_t ESDataSource::num_rows_read() const {
     return _rows_return_number;
 }
+int64_t ESDataSource::num_bytes_read() const {
+    return _bytes_read;
+}
 
 Status ESDataSource::_build_conjuncts() {
     Status status = Status::OK();
@@ -224,6 +227,7 @@ Status ESDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) 
             int64_t before = ck->num_rows();
             COUNTER_UPDATE(_rows_read_counter, before);
             _rows_read_number += before;
+            _bytes_read += ck->bytes_usage();
 
             ExecNode::eval_conjuncts(_conjunct_ctxs, ck);
 

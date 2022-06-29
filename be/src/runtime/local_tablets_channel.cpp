@@ -36,7 +36,7 @@ DIAGNOSTIC_POP
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
-#include "util/block_compression.h"
+#include "util/compression/block_compression.h"
 #include "util/countdown_latch.h"
 #include "util/faststring.h"
 #include "util/starrocks_metrics.h"
@@ -475,6 +475,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         options.tuple_desc = _tuple_desc;
         options.slots = index_slots;
         options.global_dicts = &_global_dicts;
+        options.parent_span = _load_channel->get_span();
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
         RETURN_IF_ERROR(res.status());

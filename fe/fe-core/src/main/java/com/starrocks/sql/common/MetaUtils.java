@@ -68,21 +68,12 @@ public class MetaUtils {
                 throw new SemanticException("No cluster name");
             }
             if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-                tableName.setDb(ClusterNamespace.getFullName(connectContext.getClusterName(), tableName.getDb()));
+                tableName.setDb(ClusterNamespace.getFullName(tableName.getDb()));
             }
         }
 
         if (Strings.isNullOrEmpty(tableName.getTbl())) {
             throw new SemanticException("Table name is null");
-        }
-    }
-
-    public static String getNoClusterDatabaseName(String databaseName) {
-        String nameWithoutCluster = ClusterNamespace.getNameFromFullName(databaseName);
-        if (nameWithoutCluster == null) {
-            return databaseName;
-        } else {
-            return nameWithoutCluster;
         }
     }
 }

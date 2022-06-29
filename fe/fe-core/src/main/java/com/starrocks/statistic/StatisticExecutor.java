@@ -242,18 +242,13 @@ public class StatisticExecutor {
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         if (analyzeJob.getType().equals(Constants.AnalyzeType.HISTOGRAM)) {
             for (String columnName : analyzeJob.getColumns()) {
-                GlobalStateMgr.getCurrentAnalyzeMgr().addHistogramStatsMeta(
-                        new HistogramStatsMeta(db.getId(), table.getId(), columnName,
-                                analyzeJob.getType(),
-                                analyzeStatus.getEndTime(),
-                                analyzeJob.getProperties()));
+                GlobalStateMgr.getCurrentAnalyzeMgr().addHistogramStatsMeta(new HistogramStatsMeta(db.getId(),
+                        table.getId(), columnName, analyzeJob.getType(), analyzeStatus.getEndTime(),
+                        analyzeJob.getProperties()));
             }
         } else {
-            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(
-                    new BasicStatsMeta(db.getId(), table.getId(),
-                            analyzeJob.getType(),
-                            analyzeStatus.getEndTime(),
-                            analyzeJob.getProperties()));
+            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), table.getId(),
+                    analyzeJob.getType(), analyzeStatus.getEndTime(), analyzeJob.getProperties()));
         }
     }
 

@@ -181,10 +181,18 @@ Status ConnectorChunkSource::_read_chunk(vectorized::ChunkPtr* chunk) {
         return Status::EndOfFile("limit reach");
     }
 
+    int64_t before_rows_read = _data_source->raw_rows_read();
     do {
         RETURN_IF_ERROR(_data_source->get_next(state, chunk));
     } while ((*chunk)->num_rows() == 0);
+
+    int64_t raw_rows_read = _data_source->raw_rows_read() - before_rows_read;
+    DCHECK_GE(raw_rows_read, 0);
     _rows_read += (*chunk)->num_rows();
+    _last_scan_rows_num += raw_rows_read;
+
+    _last_scan_bytes += _data_source->num_bytes_read() - _bytes_read;
+    _bytes_read = _data_source->num_bytes_read();
 
     return Status::OK();
 }

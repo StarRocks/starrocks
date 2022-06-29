@@ -459,7 +459,7 @@ public class LoadManager implements Writable {
     }
 
     public void getLoadJobInfo(Load.JobInfo info) throws DdlException {
-        String fullDbName = ClusterNamespace.getFullName(info.clusterName, info.dbName);
+        String fullDbName = ClusterNamespace.getFullName(info.dbName);
         info.dbName = fullDbName;
         Database database = checkDb(info.dbName);
         readLock();

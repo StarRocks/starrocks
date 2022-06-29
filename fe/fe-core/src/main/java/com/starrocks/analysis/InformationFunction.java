@@ -21,18 +21,12 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Type;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TInfoFunc;
 
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class InformationFunction extends Expr {
     private final String funcType;
     private long intValue;
@@ -63,20 +57,6 @@ public class InformationFunction extends Expr {
 
     @Override
     protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        if (funcType.equalsIgnoreCase("DATABASE") || funcType.equalsIgnoreCase("SCHEMA")) {
-            type = Type.VARCHAR;
-            strValue = ClusterNamespace.getNameFromFullName(analyzer.getDefaultDb());
-        } else if (funcType.equalsIgnoreCase("USER")) {
-            type = Type.VARCHAR;
-            strValue = ConnectContext.get().getUserIdentity().toString();
-        } else if (funcType.equalsIgnoreCase("CURRENT_USER")) {
-            type = Type.VARCHAR;
-            strValue = ConnectContext.get().getCurrentUserIdentity().toString();
-        } else if (funcType.equalsIgnoreCase("CONNECTION_ID")) {
-            type = Type.BIGINT;
-            intValue = analyzer.getConnectId();
-            strValue = "";
-        }
     }
 
     public String getFuncType() {

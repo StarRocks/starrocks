@@ -32,7 +32,7 @@
 // So please consider use forward declaraion as much as possible.
 
 namespace starrocks {
-
+class AgentServer;
 class BfdParser;
 class BrokerMgr;
 class BrpcStubCache;
@@ -185,6 +185,8 @@ public:
 
     lake::GroupAssigner* lake_group_assigner() const { return _lake_group_assigner; }
 
+    AgentServer* agent_server() const { return _agent_server; }
+
 private:
     Status _init(const std::vector<StorePath>& store_paths);
     void _destroy();
@@ -272,6 +274,8 @@ private:
 
     lake::TabletManager* _lake_tablet_manager = nullptr;
     lake::GroupAssigner* _lake_group_assigner = nullptr;
+
+    AgentServer* _agent_server = nullptr;
 };
 
 template <>

@@ -23,7 +23,6 @@
 
 namespace starrocks {
 namespace vectorized {
-
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
                                const std::string& symbol, starrocks_udf::FunctionContext* context);
 } // namespace vectorized
@@ -224,8 +223,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 
     _compute_timer = ADD_TIMER(_runtime_profile, "ComputeTime");
     _column_resize_timer = ADD_TIMER(_runtime_profile, "ColumnResizeTime");
-    _partition_search_timer = ADD_TIMER(_runtime_profile, "PartitionSearchTime");
-    _peer_group_search_timer = ADD_TIMER(_runtime_profile, "PeerGroupSearchTime");
+    _binary_search_timer = ADD_TIMER(_runtime_profile, "BinarySearchTime");
 
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());
 
@@ -515,7 +513,7 @@ int64_t Analytor::get_total_position(int64_t local_position) {
 bool Analytor::find_and_check_partition_end() {
     // current partition data don't consume finished
     if (_current_row_position < _partition_end) {
-        DCHECK_EQ(_found_partition_end, _partition_end);
+        _found_partition_end = _partition_end;
         return false;
     }
 
@@ -524,26 +522,13 @@ bool Analytor::find_and_check_partition_end() {
         return _input_eos;
     }
 
-    while (!_candidate_partition_ends.empty()) {
-        int64_t peek = _candidate_partition_ends.front();
-        _candidate_partition_ends.pop();
-        if (peek > _found_partition_end) {
-            _found_partition_end = peek;
-            return true;
-        }
-    }
-
     int64_t start = _found_partition_end;
     _found_partition_end = static_cast<int64_t>(_partition_columns[0]->size());
-    {
-        SCOPED_TIMER(_partition_search_timer);
-        for (auto& column : _partition_columns) {
-            _found_partition_end = _find_first_not_equal(column.get(), _partition_end, start, _found_partition_end);
-        }
+    for (auto& column : _partition_columns) {
+        _found_partition_end = _find_first_not_equal(column.get(), _partition_end, start, _found_partition_end);
     }
 
     if (_found_partition_end < static_cast<int64_t>(_partition_columns[0]->size())) {
-        _find_candidate_partition_ends();
         return true;
     }
 
@@ -562,12 +547,9 @@ bool Analytor::find_and_check_peer_group_end(bool is_found_partition_end_genuine
     _found_peer_group_end = _found_partition_end;
     DCHECK(!_order_columns.empty());
 
-    {
-        SCOPED_TIMER(_peer_group_search_timer);
-        for (auto& column : _order_columns) {
-            _found_peer_group_end =
-                    _find_first_not_equal(column.get(), _peer_group_start, _peer_group_start, _found_peer_group_end);
-        }
+    for (auto& column : _order_columns) {
+        _found_peer_group_end =
+                _find_first_not_equal(column.get(), _peer_group_start, _peer_group_start, _found_peer_group_end);
     }
 
     if (_found_peer_group_end < _found_partition_end) {
@@ -586,8 +568,6 @@ bool Analytor::find_and_check_peer_group_end(bool is_found_partition_end_genuine
 }
 
 void Analytor::reset_state_for_cur_partition() {
-    _partition_statistics.update(_found_partition_end - _partition_end);
-
     _partition_start = _partition_end;
     _partition_end = _found_partition_end;
     _current_row_position = _partition_start;
@@ -596,8 +576,6 @@ void Analytor::reset_state_for_cur_partition() {
 }
 
 void Analytor::reset_state_for_next_partition() {
-    _partition_statistics.update(_found_partition_end - _partition_end);
-
     _partition_end = _found_partition_end;
     _partition_start = _partition_end;
     _current_row_position = _partition_start;
@@ -673,6 +651,7 @@ void Analytor::_update_window_batch_normal(int64_t peer_group_start, int64_t pee
 }
 
 int64_t Analytor::_find_first_not_equal(vectorized::Column* column, int64_t target, int64_t start, int64_t end) {
+    SCOPED_TIMER(_binary_search_timer);
     while (start + 1 < end) {
         int64_t mid = start + (end - start) / 2;
         if (column->compare_at(target, mid, *column, 1) == 0) {
@@ -685,23 +664,6 @@ int64_t Analytor::_find_first_not_equal(vectorized::Column* column, int64_t targ
         return end;
     }
     return end - 1;
-}
-
-void Analytor::_find_candidate_partition_ends() {
-    if (!_partition_statistics.is_high_cardinality()) {
-        return;
-    }
-
-    SCOPED_TIMER(_partition_search_timer);
-    for (size_t i = _found_partition_end + 1; i < _partition_columns[0]->size(); ++i) {
-        for (auto& column : _partition_columns) {
-            auto cmp = column->compare_at(i - 1, i, *column, 1);
-            if (cmp != 0) {
-                _candidate_partition_ends.push(i);
-                break;
-            }
-        }
-    }
 }
 
 AnalytorPtr AnalytorFactory::create(int i) {

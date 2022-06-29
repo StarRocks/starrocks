@@ -52,7 +52,7 @@ public class CancelLoadStmt extends DdlStmt {
                 throw new AnalysisException("No database selected");
             }
         } else {
-            dbName = ClusterNamespace.getFullName(getClusterName(), dbName);
+            dbName = ClusterNamespace.getFullName(dbName);
         }
 
         // check auth after we get real load job
