@@ -24,16 +24,15 @@ public:
 
     explicit Schema(Schema* schema, const std::vector<ColumnId>& cids);
 
+    Schema(const Schema& schema);
+
+    Schema& operator=(const Schema& other);
+
     size_t num_fields() const { return _fields.size(); }
 
     size_t num_key_fields() const { return _num_keys; }
 
-    void reserve(size_t size) {
-        _fields.reserve(size);
-        if (_name_to_index != nullptr) {
-            _name_to_index->reserve(size);
-        }
-    }
+    void reserve(size_t size) { _fields.reserve(size); }
 
     void append(const FieldPtr& field);
     void insert(size_t idx, const FieldPtr& field);

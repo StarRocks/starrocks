@@ -45,8 +45,48 @@ Schema::Schema(Schema* schema)
     for (int i = 0; i < schema->_fields.size(); i++) {
         _fields[i] = schema->_fields[i];
     }
-    // share the name_to_index with schema*, lator append fields will be added to _name_to_index_append_buffer
-    _name_to_index = schema->_name_to_index;
+    if (schema->_name_to_index_append_buffer == nullptr) {
+        // share the name_to_index with schema*, lator append fields will be added to _name_to_index_append_buffer
+        _name_to_index = schema->_name_to_index;
+    } else {
+        _build_index_map(_fields);
+    }
+}
+
+// if we use the constructor, we must make sure that input (Schema* schema) is read_only
+Schema::Schema(const Schema& schema)
+        : _num_keys(schema._num_keys),
+          _name_to_index_append_buffer(nullptr),
+          _read_append_only(true),
+          _keys_type(schema._keys_type) {
+    _fields.resize(schema.num_fields());
+    for (int i = 0; i < schema._fields.size(); i++) {
+        _fields[i] = schema._fields[i];
+    }
+    if (schema._name_to_index_append_buffer == nullptr) {
+        // share the name_to_index with schema*, lator append fields will be added to _name_to_index_append_buffer
+        _name_to_index = schema._name_to_index;
+    } else {
+        _build_index_map(_fields);
+    }
+}
+
+Schema& Schema::operator=(const Schema& other) {
+    this->_num_keys = other._num_keys;
+    this->_name_to_index_append_buffer = nullptr;
+    this->_read_append_only = true;
+    this->_keys_type = other._keys_type;
+    this->_fields.resize(other.num_fields());
+    for (int i = 0; i < this->_fields.size(); i++) {
+        this->_fields[i] = other._fields[i];
+    }
+    if (other._name_to_index_append_buffer == nullptr) {
+        // share the name_to_index with schema*, lator append fields will be added to _name_to_index_append_buffer
+        _name_to_index = other._name_to_index;
+    } else {
+        _build_index_map(this->_fields);
+    }
+    return *this;
 }
 
 void Schema::append(const FieldPtr& field) {
