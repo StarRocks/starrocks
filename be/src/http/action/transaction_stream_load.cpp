@@ -433,8 +433,8 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
                 // buffer capacity is not enough, so we try to expand the buffer.
                 auto data_sz = ctx->buffer->pos + len;
                 if (data_sz >= ctx->kJSONMaxBufferSize) {
-                    auto err_msg = fmt::format("payload size [{}] of single write beyond the JSON payload limit [{}]", data_sz,
-                                               ctx->kJSONMaxBufferSize);
+                    auto err_msg = fmt::format("payload size [{}] of single write beyond the JSON payload limit [{}]",
+                                               data_sz, ctx->kJSONMaxBufferSize);
                     LOG(WARNING) << err_msg;
                     ctx->status = Status::MemoryLimitExceeded(err_msg);
                     return;

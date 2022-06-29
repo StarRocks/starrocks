@@ -200,7 +200,7 @@ public:
     // buffer for reading data from ev_buffer
     static constexpr size_t kDefaultBufferSize = 64 * 1024;
     // max buffer size for JSON format is 4GB.
-    static constexpr size_t kJSONMaxBufferSize = 4 * 1024 * 1024 * 1024;
+    static constexpr int64_t kJSONMaxBufferSize = 4 * 1024 * 1024 * 1024;
     ByteBufferPtr buffer = nullptr;
 
 public:
