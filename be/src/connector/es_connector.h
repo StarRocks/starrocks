@@ -50,6 +50,7 @@ public:
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
+    int64_t num_bytes_read() const override;
 
 private:
     const ESDataSourceProvider* _provider;
@@ -74,6 +75,7 @@ private:
     bool _batch_eof = false;
     int64_t _rows_read_number = 0;
     int64_t _rows_return_number = 0;
+    int64_t _bytes_read = 0;
 
     ESScanReader* _es_reader = nullptr;
     std::unique_ptr<vectorized::ScrollParser> _es_scroll_parser;
@@ -82,7 +84,6 @@ private:
     RuntimeProfile::Counter* _read_timer = nullptr;
     RuntimeProfile::Counter* _materialize_timer = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
-
     // =========================
 
     Status _build_conjuncts();
