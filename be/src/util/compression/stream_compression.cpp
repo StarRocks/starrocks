@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "exec/decompressor.h"
+#include "util/compression/stream_compression.h"
 
 #include <memory>
 
@@ -27,25 +27,26 @@
 
 namespace starrocks {
 
-Status Decompressor::create_decompressor(CompressionTypePB type, std::unique_ptr<Decompressor>* decompressor) {
+Status StreamCompression::create_decompressor(CompressionTypePB type,
+                                              std::unique_ptr<StreamCompression>* decompressor) {
     switch (type) {
     case CompressionTypePB::NO_COMPRESSION:
         *decompressor = nullptr;
         break;
     case CompressionTypePB::GZIP:
-        *decompressor = std::make_unique<GzipDecompressor>(false);
+        *decompressor = std::make_unique<GzipStreamCompression>(false);
         break;
     case CompressionTypePB::DEFLATE:
-        *decompressor = std::make_unique<GzipDecompressor>(true);
+        *decompressor = std::make_unique<GzipStreamCompression>(true);
         break;
     case CompressionTypePB::BZIP2:
-        *decompressor = std::make_unique<Bzip2Decompressor>();
+        *decompressor = std::make_unique<Bzip2StreamCompression>();
         break;
     case CompressionTypePB::LZ4_FRAME:
-        *decompressor = std::make_unique<Lz4FrameDecompressor>();
+        *decompressor = std::make_unique<Lz4FrameStreamCompression>();
         break;
     case CompressionTypePB::ZSTD:
-        *decompressor = std::make_unique<ZstandardDecompressor>();
+        *decompressor = std::make_unique<ZstandardStreamCompression>();
         break;
     default:
         return Status::InternalError(fmt::format("Unknown compress type: {}", type));
@@ -59,19 +60,20 @@ Status Decompressor::create_decompressor(CompressionTypePB type, std::unique_ptr
     return st;
 }
 
-std::string Decompressor::debug_info() {
-    return "Decompressor";
+std::string StreamCompression::debug_info() {
+    return "StreamCompression";
 }
 
 // Gzip
-GzipDecompressor::GzipDecompressor(bool is_deflate)
-        : Decompressor(is_deflate ? CompressionTypePB::DEFLATE : CompressionTypePB::GZIP), _is_deflate(is_deflate) {}
+GzipStreamCompression::GzipStreamCompression(bool is_deflate)
+        : StreamCompression(is_deflate ? CompressionTypePB::DEFLATE : CompressionTypePB::GZIP),
+          _is_deflate(is_deflate) {}
 
-GzipDecompressor::~GzipDecompressor() {
+GzipStreamCompression::~GzipStreamCompression() {
     (void)inflateEnd(&_z_strm);
 }
 
-Status GzipDecompressor::init() {
+Status GzipStreamCompression::init() {
     _z_strm = {nullptr};
     _z_strm.zalloc = Z_NULL;
     _z_strm.zfree = Z_NULL;
@@ -88,8 +90,8 @@ Status GzipDecompressor::init() {
     return Status::OK();
 }
 
-Status GzipDecompressor::decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
-                                    size_t output_len, size_t* output_bytes_written, bool* stream_end) {
+Status GzipStreamCompression::decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
+                                         size_t output_len, size_t* output_bytes_written, bool* stream_end) {
     // 1. set input and output
     _z_strm.next_in = input;
     _z_strm.avail_in = input_len;
@@ -99,12 +101,14 @@ Status GzipDecompressor::decompress(uint8_t* input, size_t input_len, size_t* in
     while (_z_strm.avail_out > 0 && _z_strm.avail_in > 0) {
         *stream_end = false;
         // inflate() performs one or both of the following actions:
-        //   Decompress more input starting at next_in and update next_in and avail_in
+        //   Decompress more input starting at next_in and update next_in and
+        //   avail_in
         //       accordingly.
-        //   Provide more output starting at next_out and update next_out and avail_out
+        //   Provide more output starting at next_out and update next_out and
+        //   avail_out
         //       accordingly.
-        // inflate() returns Z_OK if some progress has been made (more input processed
-        // or more output produced)
+        // inflate() returns Z_OK if some progress has been made (more input
+        // processed or more output produced)
 
         int ret = inflate(&_z_strm, Z_NO_FLUSH);
         *input_bytes_read = input_len - _z_strm.avail_in;
@@ -114,10 +118,10 @@ Status GzipDecompressor::decompress(uint8_t* input, size_t input_len, size_t* in
                  << " output_bytes_written: " << *output_bytes_written;
 
         if (ret == Z_BUF_ERROR) {
-            // Z_BUF_ERROR indicates that inflate() could not consume more input or
-            // produce more output. inflate() can be called again with more output space
-            // or more available input
-            // ATTN: even if ret == Z_OK, output_bytes_written may also be zero
+            // Z_BUF_ERROR indicates that inflate() could not consume more input
+            // or produce more output. inflate() can be called again with more
+            // output space or more available input ATTN: even if ret == Z_OK,
+            // output_bytes_written may also be zero
             return Status::OK();
         } else if (ret == Z_STREAM_END) {
             *stream_end = true;
@@ -142,19 +146,19 @@ Status GzipDecompressor::decompress(uint8_t* input, size_t input_len, size_t* in
     return Status::OK();
 }
 
-std::string GzipDecompressor::debug_info() {
+std::string GzipStreamCompression::debug_info() {
     std::stringstream ss;
-    ss << "GzipDecompressor."
+    ss << "GzipStreamCompression."
        << " is_deflate: " << _is_deflate;
     return ss.str();
 }
 
 // Bzip2
-Bzip2Decompressor::~Bzip2Decompressor() {
+Bzip2StreamCompression::~Bzip2StreamCompression() {
     BZ2_bzDecompressEnd(&_bz_strm);
 }
 
-Status Bzip2Decompressor::init() {
+Status Bzip2StreamCompression::init() {
     bzero(&_bz_strm, sizeof(_bz_strm));
     int ret = BZ2_bzDecompressInit(&_bz_strm, 0, 0);
     if (ret != BZ_OK) {
@@ -166,8 +170,8 @@ Status Bzip2Decompressor::init() {
     return Status::OK();
 }
 
-Status Bzip2Decompressor::decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
-                                     size_t output_len, size_t* output_bytes_written, bool* stream_end) {
+Status Bzip2StreamCompression::decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
+                                          size_t output_len, size_t* output_bytes_written, bool* stream_end) {
     // 1. set input and output
     _bz_strm.next_in = const_cast<char*>(reinterpret_cast<const char*>(input));
     _bz_strm.avail_in = input_len;
@@ -192,14 +196,18 @@ Status Bzip2Decompressor::decompress(uint8_t* input, size_t input_len, size_t* i
             ret = BZ2_bzDecompressEnd(&_bz_strm);
             if (ret != BZ_OK) {
                 std::stringstream ss;
-                ss << "Failed to end bz2 after meet BZ_STREAM_END. status code: " << ret;
+                ss << "Failed to end bz2 after meet BZ_STREAM_END. status "
+                      "code: "
+                   << ret;
                 return Status::InternalError(ss.str());
             }
 
             ret = BZ2_bzDecompressInit(&_bz_strm, 0, 0);
             if (ret != BZ_OK) {
                 std::stringstream ss;
-                ss << "Failed to init bz2 after meet BZ_STREAM_END. status code: " << ret;
+                ss << "Failed to init bz2 after meet BZ_STREAM_END. status "
+                      "code: "
+                   << ret;
                 return Status::InternalError(ss.str());
             }
         } else if (ret != BZ_OK) {
@@ -214,47 +222,45 @@ Status Bzip2Decompressor::decompress(uint8_t* input, size_t input_len, size_t* i
     return Status::OK();
 }
 
-std::string Bzip2Decompressor::debug_info() {
+std::string Bzip2StreamCompression::debug_info() {
     std::stringstream ss;
-    ss << "Bzip2Decompressor.";
+    ss << "Bzip2StreamCompression.";
     return ss.str();
 }
 
-// Lz4Frame
-// Lz4 version: 1.7.5
-// define LZ4F_VERSION = 100
-const unsigned Lz4FrameDecompressor::STARROCKS_LZ4F_VERSION = 100;
-
-Lz4FrameDecompressor::~Lz4FrameDecompressor() {
-    LZ4F_freeDecompressionContext(_dctx);
+Lz4FrameStreamCompression::~Lz4FrameStreamCompression() {
+    _decompress_context.reset();
 }
 
-Status Lz4FrameDecompressor::init() {
-    size_t ret = LZ4F_createDecompressionContext(&_dctx, STARROCKS_LZ4F_VERSION);
-    if (LZ4F_isError(ret)) {
-        std::stringstream ss;
-        ss << "LZ4F_dctx creation error: " << std::string(LZ4F_getErrorName(ret));
-        return Status::InternalError(ss.str());
+Status Lz4FrameStreamCompression::init() {
+    StatusOr<compression::LZ4F_DCtx_Pool::Ref> maybe_decompress_context = compression::getLZ4F_DCtx();
+    Status status = maybe_decompress_context.status();
+    if (!status.ok()) {
+        return status;
     }
-
+    _decompress_context = std::move(maybe_decompress_context).value();
     // init as -1
     _expect_dec_buf_size = -1;
 
     return Status::OK();
 }
 
-Status Lz4FrameDecompressor::decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
-                                        size_t output_len, size_t* output_bytes_written, bool* stream_end) {
+Status Lz4FrameStreamCompression::decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read,
+                                             uint8_t* output, size_t output_len, size_t* output_bytes_written,
+                                             bool* stream_end) {
+    LZ4F_decompressionContext_t ctx = _decompress_context->ctx;
+
     uint8_t* src = input;
     size_t src_size = input_len;
     size_t ret = 1;
     *input_bytes_read = 0;
 
     if (_expect_dec_buf_size == -1) {
-        // init expected decompress buf size, and check if output_len is large enough
-        // ATTN: _expect_dec_buf_size is uninit, which means this is the first time to call
-        //       decompress(), so *input* should point to the head of the compressed file,
-        //       where lz4 header section is there.
+        // init expected decompress buf size, and check if output_len is large
+        // enough ATTN: _expect_dec_buf_size is uninit, which means this is the
+        // first time to call
+        //       decompress(), so *input* should point to the head of the
+        //       compressed file, where lz4 header section is there.
 
         if (input_len < 15) {
             std::stringstream ss;
@@ -264,7 +270,7 @@ Status Lz4FrameDecompressor::decompress(uint8_t* input, size_t input_len, size_t
         }
 
         LZ4F_frameInfo_t info;
-        ret = LZ4F_getFrameInfo(_dctx, &info, (void*)src, &src_size);
+        ret = LZ4F_getFrameInfo(ctx, &info, (void*)src, &src_size);
         if (LZ4F_isError(ret)) {
             std::stringstream ss;
             ss << "LZ4F_getFrameInfo error: " << std::string(LZ4F_getErrorName(ret));
@@ -274,7 +280,8 @@ Status Lz4FrameDecompressor::decompress(uint8_t* input, size_t input_len, size_t
         _expect_dec_buf_size = get_block_size(&info);
         if (_expect_dec_buf_size == -1) {
             std::stringstream ss;
-            ss << "Impossible lz4 block size unless more block sizes are allowed"
+            ss << "Impossible lz4 block size unless more block sizes are "
+                  "allowed"
                << std::string(LZ4F_getErrorName(ret));
             return Status::InternalError(ss.str());
         }
@@ -287,7 +294,7 @@ Status Lz4FrameDecompressor::decompress(uint8_t* input, size_t input_len, size_t
 
     // decompress
     size_t dst_size = output_len;
-    ret = LZ4F_decompress(_dctx, (void*)output, &dst_size, (void*)src, &src_size,
+    ret = LZ4F_decompress(ctx, (void*)output, &dst_size, (void*)src, &src_size,
                           /* LZ4F_decompressOptions_t */ nullptr);
     if (LZ4F_isError(ret)) {
         std::stringstream ss;
@@ -307,14 +314,14 @@ Status Lz4FrameDecompressor::decompress(uint8_t* input, size_t input_len, size_t
     return Status::OK();
 }
 
-std::string Lz4FrameDecompressor::debug_info() {
+std::string Lz4FrameStreamCompression::debug_info() {
     std::stringstream ss;
-    ss << "Lz4FrameDecompressor."
-       << " expect dec buf size: " << _expect_dec_buf_size << " Lz4 Frame Version: " << STARROCKS_LZ4F_VERSION;
+    ss << "Lz4FrameStreamCompression."
+       << " expect dec buf size: " << _expect_dec_buf_size;
     return ss.str();
 }
 
-size_t Lz4FrameDecompressor::get_block_size(const LZ4F_frameInfo_t* info) {
+size_t Lz4FrameStreamCompression::get_block_size(const LZ4F_frameInfo_t* info) {
     switch (info->blockSizeID) {
     case LZ4F_default:
     case LZ4F_max64KB:
@@ -331,27 +338,33 @@ size_t Lz4FrameDecompressor::get_block_size(const LZ4F_frameInfo_t* info) {
     }
 }
 
-ZstandardDecompressor::~ZstandardDecompressor() {
-    if (_stream != nullptr) {
-        static_cast<void>(ZSTD_freeDCtx(_stream));
-    }
+ZstandardStreamCompression::~ZstandardStreamCompression() {
+    _decompress_context.reset();
 }
 
-Status ZstandardDecompressor::decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
-                                         size_t output_len, size_t* output_bytes_written, bool* stream_end) {
-    if (_stream == nullptr) {
-        _stream = ZSTD_createDCtx();
-        if (_stream == nullptr) {
-            return Status::InternalError(strings::Substitute("ZSTD create ctx failed"));
-        }
+Status ZstandardStreamCompression::init() {
+    StatusOr<compression::ZSTD_DCtx_Pool::Ref> maybe_decompress_context = compression::getZSTD_DCtx();
+    Status status = maybe_decompress_context.status();
+    if (!status.ok()) {
+        return status;
     }
+
+    _decompress_context = std::move(maybe_decompress_context).value();
+    return Status::OK();
+}
+
+Status ZstandardStreamCompression::decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read,
+                                              uint8_t* output, size_t output_len, size_t* output_bytes_written,
+                                              bool* stream_end) {
+    ZSTD_DCtx* ctx = _decompress_context->ctx;
+
     *input_bytes_read = 0;
     *output_bytes_written = 0;
     *stream_end = false;
 
     ZSTD_inBuffer input_buffer{input, static_cast<size_t>(input_len), 0};
     ZSTD_outBuffer output_buffer{output, static_cast<size_t>(output_len), 0};
-    size_t ret = ZSTD_decompressStream(_stream, &output_buffer, &input_buffer);
+    size_t ret = ZSTD_decompressStream(ctx, &output_buffer, &input_buffer);
     if (ZSTD_isError(ret)) {
         *output_bytes_written = 0;
         return Status::InternalError(
@@ -365,8 +378,8 @@ Status ZstandardDecompressor::decompress(uint8_t* input, size_t input_len, size_
     return Status::OK();
 }
 
-std::string ZstandardDecompressor::debug_info() {
-    return "ZstandardDecompressor";
+std::string ZstandardStreamCompression::debug_info() {
+    return "ZstandardStreamCompression";
 }
 
 } // namespace starrocks
