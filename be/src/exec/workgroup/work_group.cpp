@@ -189,11 +189,12 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
     // collect removable workgroups
     while (it != _workgroup_expired_versions.end()) {
         auto wg_it = _workgroups.find(*it);
-        DCHECK(wg_it != _workgroups.end());
-        if (wg_it->second->is_removable()) {
+        if (wg_it != _workgroups.end() && wg_it->second->is_removable()) {
+            int128_t wg_id = *it;
             _sum_cpu_limit -= wg_it->second->cpu_limit();
             _workgroups.erase(wg_it);
             _workgroup_expired_versions.erase(it++);
+            LOG(INFO) << "cleanup expired workgroup version:  " << (int64_t)(wg_id >> 64) << "," << (int64_t)wg_id;
         } else {
             ++it;
         }
@@ -238,6 +239,7 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg) {
         if (_workgroups.count(old_unique_id)) {
             _workgroups[old_unique_id]->mark_del();
             _workgroup_expired_versions.push_back(old_unique_id);
+            LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << stale_version << ")";
         }
     }
     // install new version
@@ -260,15 +262,17 @@ void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
     auto wg_it = _workgroups.find(unique_id);
     if (wg_it != _workgroups.end()) {
         wg_it->second->mark_del();
+        _workgroup_expired_versions.push_back(unique_id);
+        LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << version_id << ")";
     }
+    LOG(INFO) << "delete workgroup " << wg->name();
 }
 
 std::vector<TWorkGroup> WorkGroupManager::list_workgroups() {
     std::shared_lock read_lock(_mutex);
     std::vector<TWorkGroup> alive_workgroups;
-    for (auto it = _workgroups.begin(); it != _workgroups.end(); ++it) {
-        const auto& wg = it->second;
-        if (!wg->is_marked_del() && wg->version() != WorkGroup::DEFAULT_VERSION) {
+    for (auto& [_, wg] : _workgroups) {
+        if (wg->version() != WorkGroup::DEFAULT_VERSION) {
             alive_workgroups.push_back(wg->to_thrift());
         }
     }
