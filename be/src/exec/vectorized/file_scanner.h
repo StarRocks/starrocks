@@ -56,6 +56,8 @@ protected:
     // chunk depicted by dest_slot_descriptors
     ChunkPtr materialize(const starrocks::vectorized::ChunkPtr& src, starrocks::vectorized::ChunkPtr& cast);
 
+    static Status UnrecoverableError(const Status& st) { return st.clone_and_prepend("Unrecoverable error: "); }
+
 protected:
     RuntimeState* _state;
     RuntimeProfile* _profile;
