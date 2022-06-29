@@ -44,6 +44,8 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
     private RoutineLoadProgress progress;
     private String errorLogUrl;
 
+    private boolean needPauseJob;
+
     public RLTaskTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK);
     }
@@ -57,6 +59,7 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
         this.unselectedRows = rlTaskTxnCommitAttachment.getUnselectedRows();
         this.receivedBytes = rlTaskTxnCommitAttachment.getReceivedBytes();
         this.taskExecutionTimeMs = rlTaskTxnCommitAttachment.getLoadCostMs();
+        this.needPauseJob = rlTaskTxnCommitAttachment.isNeedPauseJob();
 
         switch (rlTaskTxnCommitAttachment.getLoadSourceType()) {
             case KAFKA:
