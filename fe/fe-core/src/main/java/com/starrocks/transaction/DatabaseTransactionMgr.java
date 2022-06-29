@@ -1189,6 +1189,8 @@ public class DatabaseTransactionMgr {
             TransactionLogApplier applier = txnLogApplierFactory.create(table);
             applier.applyCommitLog(transactionState, tableCommitInfo);
         }
+
+        GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows(transactionState);
     }
 
     private boolean updateCatalogAfterVisible(TransactionState transactionState, Database db) {
