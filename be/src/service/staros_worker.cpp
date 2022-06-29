@@ -34,6 +34,10 @@ absl::Status StarOSWorker::remove_shard(const ShardId id) {
     return absl::OkStatus();
 }
 
+absl::Status StarOSWorker::update_worker_info(const WorkerInfo& info) {
+     return absl::UnimplementedError("StarOSWorker::update_worker_info");
+ }
+
 StatusOr<staros::starlet::ShardInfo> StarOSWorker::get_shard_info(ShardId id) {
     std::lock_guard l(_mtx);
     auto it = _shards.find(id);
@@ -67,7 +71,7 @@ std::shared_ptr<StarOSWorker> g_worker;
 staros::starlet::Starlet* g_starlet;
 
 void init_staros_worker() {
-    staros::starlet::StarletConfig starlet_config{};
+    staros::starlet::StarletConfig starlet_config;
     starlet_config.rpc_port = config::starlet_port;
     if (g_starlet != nullptr) return;
     g_worker = std::make_shared<StarOSWorker>();

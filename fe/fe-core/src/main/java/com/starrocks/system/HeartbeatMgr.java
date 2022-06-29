@@ -196,10 +196,15 @@ public class HeartbeatMgr extends MasterDaemon {
                     } else {
                         if (Config.integrate_starmgr) {
                             // addWorker
-                            int starletPort = computeNode.getStarletPort();
+                            int starletPort = computeNode.getStarletPort(); 
+                            LOG.info("starletPort is {}", starletPort);
+
                             if (starletPort != 0) {
                                 String starletHost = computeNode.getHost() + ":" + starletPort;
                                 GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(computeNode.getId(), starletHost);
+
+                                // for debug
+                                LOG.info("addWorker in HeartbeatMgr");
                             }
                         }
                     }
