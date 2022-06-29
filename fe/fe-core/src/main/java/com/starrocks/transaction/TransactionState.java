@@ -121,6 +121,9 @@ public class TransactionState implements Writable {
                 if (reasonString.contains(txnStatusChangeReason.toString())) {
                     return txnStatusChangeReason;
                 }
+                if (reasonString.contains("Unrecoverable error: ")) {
+                    return PAUSE;
+                }
             }
             return null;
         }
