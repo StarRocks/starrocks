@@ -1,4 +1,5 @@
 on: pull_request_review
+    push
 name: Trigger Jobs
 jobs:
   myJob:
@@ -18,6 +19,7 @@ jobs:
       env:
         JENKINS_PW: ${{ secrets.JENKINS_PW }}
         JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
+        JENKINS_URL: ${{ secrets.JENKINS_URL }}
       run: |
-        curl --fail -w %{http_code} -I -u starrocks:"$JENKINS_PW" http://39.101.206.100:8090/job/starrocks_admit_test/buildWithParameters?token="$JENKINS_TOKEN"
+        curl --fail -w %{http_code} -I -u starrocks:"$JENKINS_PW" "$JENKINS_URL"/job/starrocks_admit_test/buildWithParameters?token="$JENKINS_TOKEN"
 
