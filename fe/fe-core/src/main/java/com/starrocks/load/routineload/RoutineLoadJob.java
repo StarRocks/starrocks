@@ -925,7 +925,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                                 updateState(JobState.PAUSED,
                                         new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg),
                                         false /* not replay */);
-                                return;
                             default:
                                 break;
                         }
