@@ -74,7 +74,7 @@ public class TableSchemaAction extends RestBaseAction {
                     || Strings.isNullOrEmpty(tableName)) {
                 throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST, "No database or table selected.");
             }
-            String fullDbName = ClusterNamespace.getFullName(ConnectContext.get().getClusterName(), dbName);
+            String fullDbName = ClusterNamespace.getFullName(dbName);
             // check privilege for select, otherwise return 401 HTTP status
             checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), fullDbName, tableName, PrivPredicate.SELECT);
             Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);

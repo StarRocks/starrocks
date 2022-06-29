@@ -90,7 +90,7 @@ public class AnalyzeStmtAnalyzer {
                 TableName tbl = statement.getTableName();
 
                 if (null != tbl.getDb() && null == tbl.getTbl()) {
-                    tbl.setDb(ClusterNamespace.getFullName(statement.getClusterName(), tbl.getDb()));
+                    tbl.setDb(ClusterNamespace.getFullName(tbl.getDb()));
                     Database db = MetaUtils.getDatabase(session, statement.getTableName());
 
                     if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {

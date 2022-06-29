@@ -145,7 +145,7 @@ public class SchemaChangeJobV2Test {
         alterClauses.add(addColumnClause);
         Database db = masterGlobalStateMgr.getDb(GlobalStateMgrTestUtil.testDbId1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTableId1);
-        schemaChangeHandler.process(alterClauses, "default_cluster", db, olapTable);
+        schemaChangeHandler.process(alterClauses, db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assert.assertEquals(1, alterJobsV2.size());
         Assert.assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
@@ -165,7 +165,7 @@ public class SchemaChangeJobV2Test {
         Database db = masterGlobalStateMgr.getDb(GlobalStateMgrTestUtil.testDbId1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTableId1);
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testPartitionId1);
-        schemaChangeHandler.process(alterClauses, "default_cluster", db, olapTable);
+        schemaChangeHandler.process(alterClauses, db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assert.assertEquals(1, alterJobsV2.size());
         SchemaChangeJobV2 schemaChangeJob = (SchemaChangeJobV2) alterJobsV2.values().stream().findAny().get();
@@ -243,7 +243,7 @@ public class SchemaChangeJobV2Test {
         Database db = masterGlobalStateMgr.getDb(GlobalStateMgrTestUtil.testDbId1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTableId1);
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testPartitionId1);
-        schemaChangeHandler.process(alterClauses, "default_cluster", db, olapTable);
+        schemaChangeHandler.process(alterClauses, db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assert.assertEquals(1, alterJobsV2.size());
         SchemaChangeJobV2 schemaChangeJob = (SchemaChangeJobV2) alterJobsV2.values().stream().findAny().get();
@@ -330,7 +330,7 @@ public class SchemaChangeJobV2Test {
         alterClauses.add(new ModifyTablePropertiesClause(properties));
         Database db = CatalogMocker.mockDb();
         OlapTable olapTable = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
-        schemaChangeHandler.process(alterClauses, "default_cluster", db, olapTable);
+        schemaChangeHandler.process(alterClauses, db, olapTable);
         Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().isExist());
         Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().getEnable());
         Assert.assertEquals("day", olapTable.getTableProperty().getDynamicPartitionProperty().getTimeUnit());
@@ -342,31 +342,31 @@ public class SchemaChangeJobV2Test {
         ArrayList<AlterClause> tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.ENABLE, "false");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        schemaChangeHandler.process(tmpAlterClauses, "default_cluster", db, olapTable);
+        schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
         Assert.assertFalse(olapTable.getTableProperty().getDynamicPartitionProperty().getEnable());
         // set dynamic_partition.time_unit = week
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.TIME_UNIT, "week");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        schemaChangeHandler.process(tmpAlterClauses, "default_cluster", db, olapTable);
+        schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
         Assert.assertEquals("week", olapTable.getTableProperty().getDynamicPartitionProperty().getTimeUnit());
         // set dynamic_partition.end = 10
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.END, "10");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        schemaChangeHandler.process(tmpAlterClauses, "default_cluster", db, olapTable);
+        schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
         Assert.assertEquals(10, olapTable.getTableProperty().getDynamicPartitionProperty().getEnd());
         // set dynamic_partition.prefix = p1
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.PREFIX, "p1");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        schemaChangeHandler.process(tmpAlterClauses, "default_cluster", db, olapTable);
+        schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
         Assert.assertEquals("p1", olapTable.getTableProperty().getDynamicPartitionProperty().getPrefix());
         // set dynamic_partition.buckets = 3
         tmpAlterClauses = new ArrayList<>();
         properties.put(DynamicPartitionProperty.BUCKETS, "3");
         tmpAlterClauses.add(new ModifyTablePropertiesClause(properties));
-        schemaChangeHandler.process(tmpAlterClauses, "default_cluster", db, olapTable);
+        schemaChangeHandler.process(tmpAlterClauses, db, olapTable);
         Assert.assertEquals(3, olapTable.getTableProperty().getDynamicPartitionProperty().getBuckets());
     }
 
@@ -388,7 +388,7 @@ public class SchemaChangeJobV2Test {
         expectedEx.expectMessage("Table test_db.test_tbl2 is not a dynamic partition table. " +
                 "Use command `HELP ALTER TABLE` to see how to change a normal table to a dynamic partition table.");
 
-        schemaChangeHandler.process(alterClauses, "default_cluster", db, olapTable);
+        schemaChangeHandler.process(alterClauses, db, olapTable);
     }
 
     @Test

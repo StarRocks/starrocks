@@ -15,7 +15,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -54,7 +53,7 @@ public class CreateLakeTableTest {
     }
 
     private void checkLakeTable(String dbName, String tableName) {
-        String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
+        String fullDbName = ClusterNamespace.getFullName(dbName);
         Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
         Table table = db.getTable(tableName);
         Assert.assertTrue(table.isLakeTable());

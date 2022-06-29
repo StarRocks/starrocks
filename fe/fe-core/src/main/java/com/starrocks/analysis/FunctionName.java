@@ -123,7 +123,7 @@ public class FunctionName implements Writable {
             if (Strings.isNullOrEmpty(analyzer.getClusterName())) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NAME_NULL);
             }
-            db = ClusterNamespace.getFullName(analyzer.getClusterName(), db);
+            db = ClusterNamespace.getFullName(db);
         }
         return db;
     }
@@ -151,7 +151,7 @@ public class FunctionName implements Writable {
             if (Strings.isNullOrEmpty(analyzer.getClusterName())) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NAME_NULL);
             }
-            db_ = ClusterNamespace.getFullName(analyzer.getClusterName(), db_);
+            db_ = ClusterNamespace.getFullName(db_);
         }
     }
 

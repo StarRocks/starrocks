@@ -97,7 +97,7 @@ public class ShowPartitionsStmtTest {
 
                 analyzer.getClusterName();
                 minTimes = 0;
-                result = "testCluster";
+                result = "default_cluster";
 
                 globalStateMgr.getAuth();
                 minTimes = 0;
@@ -119,7 +119,7 @@ public class ShowPartitionsStmtTest {
     public void testNormal() throws UserException {
         ShowPartitionsStmt stmt = new ShowPartitionsStmt(new TableName("testDb", "testTable"), null, null, null, false);
         stmt.analyzeImpl(analyzer);
-        Assert.assertEquals("SHOW PARTITIONS FROM `testCluster:testDb`.`testTable`", stmt.toString());
+        Assert.assertEquals("SHOW PARTITIONS FROM `default_cluster:testDb`.`testTable`", stmt.toString());
     }
 
     @Test
@@ -131,7 +131,7 @@ public class ShowPartitionsStmtTest {
                 new ShowPartitionsStmt(new TableName("testDb", "testTable"), binaryPredicate, null, null, false);
         stmt.analyzeImpl(analyzer);
         Assert.assertEquals(
-                "SHOW PARTITIONS FROM `testCluster:testDb`.`testTable` WHERE `LastConsistencyCheckTime` > '2019-12-22 10:22:11'",
+                "SHOW PARTITIONS FROM `default_cluster:testDb`.`testTable` WHERE `LastConsistencyCheckTime` > '2019-12-22 10:22:11'",
                 stmt.toString());
     }
 
@@ -144,7 +144,7 @@ public class ShowPartitionsStmtTest {
                 new ShowPartitionsStmt(new TableName("testDb", "testTable"), likePredicate, null, null, false);
         stmt.analyzeImpl(analyzer);
         Assert.assertEquals(
-                "SHOW PARTITIONS FROM `testCluster:testDb`.`testTable` WHERE `PartitionName` LIKE '%p2019%'",
+                "SHOW PARTITIONS FROM `default_cluster:testDb`.`testTable` WHERE `PartitionName` LIKE '%p2019%'",
                 stmt.toString());
     }
 
@@ -157,7 +157,7 @@ public class ShowPartitionsStmtTest {
                 new ShowPartitionsStmt(new TableName("testDb", "testTable"), null, Arrays.asList(orderByElement),
                         limitElement, false);
         stmt.analyze(analyzer);
-        Assert.assertEquals("SHOW PARTITIONS FROM `testCluster:testDb`.`testTable` ORDER BY `PartitionId` ASC LIMIT 10",
+        Assert.assertEquals("SHOW PARTITIONS FROM `default_cluster:testDb`.`testTable` ORDER BY `PartitionId` ASC LIMIT 10",
                 stmt.toString());
     }
 

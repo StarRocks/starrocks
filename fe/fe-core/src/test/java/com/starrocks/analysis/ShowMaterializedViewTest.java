@@ -39,14 +39,14 @@ public class ShowMaterializedViewTest {
     @Test
     public void testNormal() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
-        ctx.setCluster("testCluster");
+        ctx.setCluster("default_cluster");
         ctx.setDatabase("testDb");
 
         ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("");
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW MATERIALIZED VIEW FROM testCluster:testDb", stmt.toString());
-        Assert.assertEquals("testCluster:testDb", stmt.getDb());
+        Assert.assertEquals("SHOW MATERIALIZED VIEW FROM default_cluster:testDb", stmt.toString());
+        Assert.assertEquals("default_cluster:testDb", stmt.getDb());
         Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("id", stmt.getMetaData().getColumn(0).getName());
         Assert.assertEquals("name", stmt.getMetaData().getColumn(1).getName());
@@ -56,8 +56,8 @@ public class ShowMaterializedViewTest {
 
         stmt = new ShowMaterializedViewStmt("abc", (String) null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW MATERIALIZED VIEW FROM testCluster:abc", stmt.toString());
-        Assert.assertEquals("testCluster:abc", stmt.getDb());
+        Assert.assertEquals("SHOW MATERIALIZED VIEW FROM default_cluster:abc", stmt.toString());
+        Assert.assertEquals("default_cluster:abc", stmt.getDb());
         Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("id", stmt.getMetaData().getColumn(0).getName());
         Assert.assertEquals("name", stmt.getMetaData().getColumn(1).getName());
@@ -68,8 +68,8 @@ public class ShowMaterializedViewTest {
         stmt = new ShowMaterializedViewStmt("abc", "bcd");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("bcd", stmt.getPattern());
-        Assert.assertEquals("SHOW MATERIALIZED VIEW FROM testCluster:abc LIKE 'bcd'", stmt.toString());
-        Assert.assertEquals("testCluster:abc", stmt.getDb());
+        Assert.assertEquals("SHOW MATERIALIZED VIEW FROM default_cluster:abc LIKE 'bcd'", stmt.toString());
+        Assert.assertEquals("default_cluster:abc", stmt.getDb());
         Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("id", stmt.getMetaData().getColumn(0).getName());
         Assert.assertEquals("name", stmt.getMetaData().getColumn(1).getName());
@@ -79,7 +79,7 @@ public class ShowMaterializedViewTest {
 
         stmt = (ShowMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(
                 "SHOW MATERIALIZED VIEW FROM abc where name = 'mv1';", ctx);
-        Assert.assertEquals("testCluster:abc", stmt.getDb());
+        Assert.assertEquals("default_cluster:abc", stmt.getDb());
         Assert.assertEquals(
                 "SELECT MATERIALIZED_VIEW_ID AS id, TABLE_NAME AS name, TABLE_SCHEMA AS database_name, MATERIALIZED_VIEW_DEFINITION AS text, TABLE_ROWS AS rows FROM information_schema.materialized_views WHERE TABLE_NAME = 'mv1'",
                 AST2SQL.toString(stmt.toSelectStmt()));

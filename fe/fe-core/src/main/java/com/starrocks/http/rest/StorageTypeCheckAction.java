@@ -61,7 +61,7 @@ public class StorageTypeCheckAction extends RestBaseAction {
             throw new DdlException("Parameter db is missing");
         }
 
-        String fullDbName = ClusterNamespace.getFullName(ConnectContext.get().getClusterName(), dbName);
+        String fullDbName = ClusterNamespace.getFullName(dbName);
         Database db = globalStateMgr.getDb(fullDbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");

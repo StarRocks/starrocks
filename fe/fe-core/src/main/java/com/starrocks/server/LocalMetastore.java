@@ -609,7 +609,6 @@ public class LocalMetastore implements ConnectorMetadata {
     public void renameDatabase(AlterDatabaseRename stmt) throws DdlException {
         String fullDbName = stmt.getDbName();
         String newFullDbName = stmt.getNewDbName();
-        String clusterName = stmt.getClusterName();
 
         if (fullDbName.equals(newFullDbName)) {
             throw new DdlException("Same database name");
@@ -621,10 +620,6 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            cluster = nameToCluster.get(clusterName);
-            if (cluster == null) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_EXISTS, clusterName);
-            }
             // check if db exists
             db = fullNameToDb.get(fullDbName);
             if (db == null) {
@@ -705,7 +700,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // only internal table should check quota and cluster capacity
         if (!stmt.isExternal()) {
             // check cluster capacity
-            systemInfoService.checkClusterCapacity(stmt.getClusterName());
+            systemInfoService.checkClusterCapacity();
             // check db quota
             db.checkQuota();
         }
@@ -2540,7 +2535,7 @@ public class LocalMetastore implements ConnectorMetadata {
             String dbName = ClusterNamespace.getNameFromFullName(name);
             if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME)) {
                 String clusterName = ClusterNamespace.getClusterNameFromFullName(name);
-                return fullNameToDb.get(ClusterNamespace.getFullName(clusterName, dbName.toLowerCase()));
+                return fullNameToDb.get(ClusterNamespace.getFullName(dbName.toLowerCase()));
             }
         }
         return null;

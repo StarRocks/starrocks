@@ -58,7 +58,7 @@ public class AdminCancelRepairTableStmt extends DdlStmt {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
             }
         } else {
-            dbName = ClusterNamespace.getFullName(getClusterName(), tblRef.getName().getDb());
+            dbName = ClusterNamespace.getFullName(tblRef.getName().getDb());
         }
 
         tblRef.getName().setDb(dbName);

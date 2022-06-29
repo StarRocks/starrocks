@@ -242,7 +242,7 @@ public class SelectStmt extends QueryStmt {
                 if (Strings.isNullOrEmpty(dbName)) {
                     dbName = context.getDatabase();
                 } else {
-                    dbName = ClusterNamespace.getFullName(context.getClusterName(), tblRef.getName().getDb());
+                    dbName = ClusterNamespace.getFullName(tblRef.getName().getDb());
                 }
                 if (withClause_ != null && isViewTableRef(tblRef)) {
                     continue;

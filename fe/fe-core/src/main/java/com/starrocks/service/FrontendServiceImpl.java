@@ -838,8 +838,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private void checkPasswordAndPrivs(String cluster, String user, String passwd, String db, String tbl,
                                        String clientIp, PrivPredicate predicate) throws AuthenticationException {
 
-        final String fullUserName = ClusterNamespace.getFullName(cluster, user);
-        final String fullDbName = ClusterNamespace.getFullName(cluster, db);
+        final String fullUserName = ClusterNamespace.getFullName(user);
+        final String fullDbName = ClusterNamespace.getFullName(db);
         List<UserIdentity> currentUser = Lists.newArrayList();
         if (!GlobalStateMgr.getCurrentState().getAuth()
                 .checkPlainPassword(fullUserName, clientIp, passwd, currentUser)) {
@@ -910,7 +910,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         // check database
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        String fullDbName = ClusterNamespace.getFullName(cluster, request.getDb());
+        String fullDbName = ClusterNamespace.getFullName(request.getDb());
         Database db = globalStateMgr.getDb(fullDbName);
         if (db == null) {
             String dbName = fullDbName;
@@ -985,7 +985,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         // get database
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        String fullDbName = ClusterNamespace.getFullName(cluster, request.getDb());
+        String fullDbName = ClusterNamespace.getFullName(request.getDb());
         Database db = globalStateMgr.getDb(fullDbName);
         if (db == null) {
             String dbName = fullDbName;
@@ -1103,7 +1103,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             checkPasswordAndPrivs(cluster, request.getUser(), request.getPasswd(), request.getDb(),
                     request.getTbl(), request.getUser_ip(), PrivPredicate.LOAD);
         }
-        String dbName = ClusterNamespace.getFullName(cluster, request.getDb());
+        String dbName = ClusterNamespace.getFullName(request.getDb());
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             throw new MetaNotFoundException("db " + request.getDb() + " does not exist");
@@ -1147,7 +1147,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        String fullDbName = ClusterNamespace.getFullName(cluster, request.getDb());
+        String fullDbName = ClusterNamespace.getFullName(request.getDb());
         Database db = globalStateMgr.getDb(fullDbName);
         if (db == null) {
             String dbName = fullDbName;

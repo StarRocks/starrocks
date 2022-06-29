@@ -71,7 +71,7 @@ public class TableName implements Writable {
             }
 
             if (CatalogMgr.isInternalCatalog(catalog)) {
-                db = ClusterNamespace.getFullName(analyzer.getClusterName(), db);
+                db = ClusterNamespace.getFullName(db);
             }
         }
 
@@ -100,7 +100,7 @@ public class TableName implements Writable {
                 }
 
                 if (CatalogMgr.isInternalCatalog(catalog)) {
-                    db = ClusterNamespace.getFullName(connectContext.getClusterName(), db);
+                    db = ClusterNamespace.getFullName(db);
                 }
             }
 

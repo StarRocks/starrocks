@@ -171,7 +171,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
         ASSERT_TRUE(index.get(keys.size(), keys.data(), get_values.data()).ok());
         ASSERT_EQ(keys.size(), get_values.size());
         for (int i = 0; i < N / 2; i++) {
-            ASSERT_EQ(NullIndexValue, get_values[i]);
+            ASSERT_EQ(NullIndexValue, get_values[i].get_value());
         }
         for (int i = N / 2; i < values.size(); i++) {
             ASSERT_EQ(values[i], get_values[i]);
@@ -188,7 +188,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
         ASSERT_TRUE(new_index.get(keys.size(), keys.data(), get_values.data()).ok());
         ASSERT_EQ(keys.size(), get_values.size());
         for (int i = 0; i < N / 2; i++) {
-            ASSERT_EQ(NullIndexValue, get_values[i]);
+            ASSERT_EQ(NullIndexValue, get_values[i].get_value());
         }
         for (int i = N / 2; i < values.size(); i++) {
             ASSERT_EQ(values[i], get_values[i]);
@@ -395,7 +395,7 @@ void build_persistent_index_from_tablet(size_t N) {
         primary_results.resize(pks.size());
         persistent_results.resize(pks.size());
         primary_index.get(pks, &primary_results);
-        persistent_index.get(pks.size(), pks.raw_data(), persistent_results.data());
+        persistent_index.get(pks.size(), pks.raw_data(), reinterpret_cast<IndexValue*>(persistent_results.data()));
         ASSERT_EQ(primary_results.size(), persistent_results.size());
         for (size_t j = 0; j < primary_results.size(); ++j) {
             ASSERT_EQ(primary_results[i], persistent_results[i]);
@@ -419,7 +419,7 @@ void build_persistent_index_from_tablet(size_t N) {
             primary_results.resize(pks.size());
             persistent_results.resize(pks.size());
             primary_index.get(pks, &primary_results);
-            persistent_index.get(pks.size(), pks.raw_data(), persistent_results.data());
+            persistent_index.get(pks.size(), pks.raw_data(), reinterpret_cast<IndexValue*>(persistent_results.data()));
             ASSERT_EQ(primary_results.size(), persistent_results.size());
             for (size_t j = 0; j < primary_results.size(); ++j) {
                 ASSERT_EQ(primary_results[i], persistent_results[i]);

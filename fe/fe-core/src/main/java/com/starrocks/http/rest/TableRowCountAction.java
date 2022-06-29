@@ -73,7 +73,7 @@ public class TableRowCountAction extends RestBaseAction {
                     || Strings.isNullOrEmpty(tableName)) {
                 throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST, "{database}/{table} must be selected");
             }
-            String fullDbName = ClusterNamespace.getFullName(ConnectContext.get().getClusterName(), dbName);
+            String fullDbName = ClusterNamespace.getFullName(dbName);
             // check privilege for select, otherwise return HTTP 401
             checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), fullDbName, tableName, PrivPredicate.SELECT);
             Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);

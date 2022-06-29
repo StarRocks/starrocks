@@ -57,7 +57,6 @@ import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
-import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -662,15 +661,8 @@ public class Auth implements Writable {
     public void dropUser(DropUserStmt stmt) throws DdlException {
         String user = stmt.getUserIdentity().getQualifiedUser();
         String host = stmt.getUserIdentity().getHost();
-        if (SystemInfoService.DEFAULT_CLUSTER.equals(stmt.getClusterName())
-                && (ROOT_USER.equals(user) || ADMIN_USER.equals(user))
-                && "%".equals(host)) {
+        if ((ROOT_USER.equals(user) || ADMIN_USER.equals(user)) && "%".equals(host)) {
             // Dropping `root@%` and `admin@%` is not allowed for `default_cluster`.
-            throw new DdlException(String.format("User `%s`@`%s` is not allowed to be dropped.", user, host));
-        }
-        if (!SystemInfoService.DEFAULT_CLUSTER.equals(stmt.getClusterName())
-                && "%".equals(host)) {
-            // Allow dropping `superuser@%` when doing `DROP CLUSTER`, but not for `DROP USER`.
             throw new DdlException(String.format("User `%s`@`%s` is not allowed to be dropped.", user, host));
         }
 

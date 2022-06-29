@@ -50,7 +50,6 @@ public class Analyzer {
 
     private static class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         public void analyze(StatementBase statement, ConnectContext session) {
-            statement.setClusterName(session.getClusterName());
             visit(statement, session);
         }
 

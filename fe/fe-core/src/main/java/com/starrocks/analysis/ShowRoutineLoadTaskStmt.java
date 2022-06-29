@@ -89,7 +89,7 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
             }
             dbFullName = analyzer.getDefaultDb();
         } else {
-            dbFullName = ClusterNamespace.getFullName(analyzer.getClusterName(), dbName);
+            dbFullName = ClusterNamespace.getFullName(dbName);
         }
     }
 
