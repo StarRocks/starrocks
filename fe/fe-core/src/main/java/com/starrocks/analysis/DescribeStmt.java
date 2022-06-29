@@ -45,6 +45,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 import org.apache.commons.lang.StringUtils;
 
 import java.util.ArrayList;
@@ -89,7 +90,7 @@ public class DescribeStmt extends ShowStmt {
                     .build();
 
     // empty col num equals to DESC_OLAP_TABLE_ALL_META_DATA.size()
-    private static final List<String> EMPTY_ROW = initEmptyRow();
+    public static final List<String> EMPTY_ROW = initEmptyRow();
 
     private TableName dbTableName;
     private ProcNodeInterface node;
@@ -263,6 +264,33 @@ public class DescribeStmt extends ShowStmt {
     public String getDb() {
         return dbTableName.getDb();
     }
+    public TableName getDbTableName() {
+        return dbTableName;
+    }
+
+    public List<List<String>> getTotalRows() {
+        return totalRows;
+    }
+
+    public void setMaterializedView(boolean materializedView) {
+        isMaterializedView = materializedView;
+    }
+
+    public void setAllTables(boolean allTables) {
+        isAllTables = allTables;
+    }
+
+    public void setNode(ProcNodeInterface node) {
+        this.node = node;
+    }
+
+    public boolean isOlapTable() {
+        return isOlapTable;
+    }
+
+    public void setOlapTable(boolean olapTable) {
+        isOlapTable = olapTable;
+    }
 
     public List<List<String>> getResultRows() throws AnalysisException {
         if (isAllTables || isMaterializedView) {
@@ -318,5 +346,14 @@ public class DescribeStmt extends ShowStmt {
             emptyRow.add("");
         }
         return emptyRow;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDescTableStmt(this, context);
+    }
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

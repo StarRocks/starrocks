@@ -27,6 +27,7 @@ statement
     | createIndexStatement                                                                  #createIndex
     | dropIndexStatement                                                                    #dropIndex
     | refreshTableStatement                                                                 #refreshTable
+    | descTableStatement                                                                    #descTable
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -222,6 +223,9 @@ refreshTableStatement
     : REFRESH EXTERNAL TABLE qualifiedName (PARTITION '(' string (',' string)* ')')?
     ;
 
+descTableStatement
+    : (DESC | DESCRIBE) table=qualifiedName ALL?
+    ;
 // ------------------------------------------- View Statement ----------------------------------------------------------
 
 createViewStatement
