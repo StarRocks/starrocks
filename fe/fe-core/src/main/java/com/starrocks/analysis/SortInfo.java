@@ -22,15 +22,11 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-import com.starrocks.common.TreeNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.Set;
 
 /**
  * Encapsulates all the information needed to compute ORDER BY
@@ -39,9 +35,6 @@ import java.util.Set;
  * should move into planner/ and encapsulate the implementation of the sort of a
  * particular input row (materialize all row slots)
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class SortInfo {
     private static final Logger LOG = LogManager.getLogger(SortInfo.class);
     // All ordering exprs with cost greater than this will be materialized. Since we don't
@@ -129,14 +122,6 @@ public class SortInfo {
         return isAscOrder_;
     }
 
-    public List<Boolean> getNullsFirstParams() {
-        return nullsFirstParams_;
-    }
-
-    public List<Expr> getMaterializedOrderingExprs() {
-        return materializedOrderingExprs_;
-    }
-
     public List<Expr> getSortTupleSlotExprs() {
         return sortTupleSlotExprs_;
     }
@@ -185,112 +170,9 @@ public class SortInfo {
         orderingExprs_ = Expr.substituteList(orderingExprs_, smap, analyzer, false);
     }
 
-    /**
-     * Asserts that all ordering exprs are bound by the sort tuple.
-     */
-    public void checkConsistency() {
-        for (Expr orderingExpr : orderingExprs_) {
-            Preconditions.checkState(orderingExpr.isBound(sortTupleDesc_.getId()));
-        }
-    }
-
     @Override
     public SortInfo clone() {
         return new SortInfo(this);
-    }
-
-    /**
-     * Create a tuple descriptor for the single tuple that is materialized, sorted, and
-     * output by the sort node. Materializes slots required by 'resultExprs' as well as
-     * non-deterministic and expensive order by exprs. The materialized exprs are
-     * substituted with slot refs into the new tuple. This simplifies the sorting logic for
-     * total and top-n sorts. The substitution map is returned.
-     */
-    public ExprSubstitutionMap createSortTupleInfo(
-            List<Expr> resultExprs, Analyzer analyzer) {
-        // The descriptor for the tuples on which the sort operates.
-        TupleDescriptor sortTupleDesc = analyzer.getDescTbl().createTupleDescriptor("sort");
-        sortTupleDesc.setIsMaterialized(true);
-        List<Expr> sortTupleExprs = Lists.newArrayList();
-
-        // substOrderBy is a mapping from exprs evaluated on the sort input that get
-        // materialized into the sort tuple to their corresponding SlotRefs in the sort tuple.
-        // The following exprs are materialized:
-        // 1. Ordering exprs that we chose to materialize
-        // 2. SlotRefs against the sort input contained in the result and ordering exprs after
-        // substituting the materialized ordering exprs.
-
-        // Case 1:
-        ExprSubstitutionMap substOrderBy =
-                createMaterializedOrderExprs(sortTupleDesc, analyzer);
-        sortTupleExprs.addAll(substOrderBy.getLhs());
-
-        // Case 2: SlotRefs in the result and ordering exprs after substituting the
-        // materialized ordering exprs.
-        Set<SlotRef> sourceSlots = Sets.newHashSet();
-        TreeNode.collect(Expr.substituteList(resultExprs, substOrderBy, analyzer, false),
-                Predicates.instanceOf(SlotRef.class), sourceSlots);
-        TreeNode.collect(Expr.substituteList(orderingExprs_, substOrderBy, analyzer, false),
-                Predicates.instanceOf(SlotRef.class), sourceSlots);
-        for (SlotRef origSlotRef : sourceSlots) {
-            // Don't rematerialize slots that are already in the sort tuple.
-            if (origSlotRef.getDesc().getParent().getId() != sortTupleDesc.getId()) {
-                SlotDescriptor origSlotDesc = origSlotRef.getDesc();
-                SlotDescriptor materializedDesc =
-                        analyzer.copySlotDescriptor(origSlotDesc, sortTupleDesc);
-                SlotRef cloneRef = new SlotRef(materializedDesc);
-                substOrderBy.put(origSlotRef, cloneRef);
-                sortTupleExprs.add(origSlotRef);
-            }
-        }
-
-        // The ordering exprs are evaluated against the sort tuple, so they must reflect the
-        // materialization decision above.
-        substituteOrderingExprs(substOrderBy, analyzer);
-
-        // Update the tuple descriptor used to materialize the input of the sort.
-        setMaterializedTupleInfo(sortTupleDesc, sortTupleExprs);
-
-        return substOrderBy;
-    }
-
-    /**
-     * Materialize ordering exprs by creating slots for them in 'sortTupleDesc' if they:
-     * - contain a non-deterministic expr
-     * - contain a UDF (since we don't know if they're deterministic)
-     * - are more expensive than a cost threshold
-     * - don't have a cost set
-     * <p>
-     * Populates 'materializedOrderingExprs_' and returns a mapping from the original
-     * ordering exprs to the new SlotRefs. It is expected that this smap will be passed into
-     * substituteOrderingExprs() by the caller.
-     */
-    public ExprSubstitutionMap createMaterializedOrderExprs(
-            TupleDescriptor sortTupleDesc, Analyzer analyzer) {
-        ExprSubstitutionMap substOrderBy = new ExprSubstitutionMap();
-        for (Expr origOrderingExpr : orderingExprs_) {
-            // TODO(zc): support materialized order exprs
-            // if (!origOrderingExpr.hasCost()
-            //         || origOrderingExpr.getCost() > SORT_MATERIALIZATION_COST_THRESHOLD
-            //         || origOrderingExpr.contains(Expr.IS_NONDETERMINISTIC_BUILTIN_FN_PREDICATE)
-            //         || origOrderingExpr.contains(Expr.IS_UDF_PREDICATE)) {
-            //     SlotDescriptor materializedDesc = analyzer.addSlotDescriptor(sortTupleDesc);
-            //     materializedDesc.initFromExpr(origOrderingExpr);
-            //     materializedDesc.setIsMaterialized(true);
-            //     SlotRef materializedRef = new SlotRef(materializedDesc);
-            //     substOrderBy.put(origOrderingExpr, materializedRef);
-            //     materializedOrderingExprs_.add(origOrderingExpr);
-            // }
-            {
-                SlotDescriptor materializedDesc = analyzer.addSlotDescriptor(sortTupleDesc);
-                materializedDesc.initFromExpr(origOrderingExpr);
-                materializedDesc.setIsMaterialized(true);
-                SlotRef materializedRef = new SlotRef(materializedDesc);
-                substOrderBy.put(origOrderingExpr, materializedRef);
-                materializedOrderingExprs_.add(origOrderingExpr);
-            }
-        }
-        return substOrderBy;
     }
 }
 

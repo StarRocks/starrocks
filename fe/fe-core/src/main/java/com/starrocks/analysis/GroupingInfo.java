@@ -22,7 +22,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 
@@ -30,13 +29,9 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 @Deprecated
 public class GroupingInfo {
     public static final String COL_GROUPING_ID = "GROUPING_ID";
@@ -63,10 +58,6 @@ public class GroupingInfo {
 
     public TupleDescriptor getVirtualTuple() {
         return virtualTuple;
-    }
-
-    public VirtualSlotRef getGroupingIDSlot() {
-        return groupingIDSlot;
     }
 
     public List<BitSet> getGroupingIdList() {
@@ -169,47 +160,5 @@ public class GroupingInfo {
             groupingList.add(glist);
         }
         return groupingList;
-    }
-
-    public void substituteGroupingFn(List<Expr> exprs, Analyzer analyzer) throws AnalysisException {
-        if (groupingType == GroupByClause.GroupingType.GROUP_BY) {
-            throw new AnalysisException("cannot use GROUPING functions without [grouping sets|rollup|cube] a"
-                    + "clause or grouping sets only have one element.");
-        }
-        ListIterator<Expr> i = exprs.listIterator();
-        while (i.hasNext()) {
-            Expr expr = i.next();
-            substituteGroupingFn(expr, analyzer);
-        }
-    }
-
-    public void substituteGroupingFn(Expr expr, Analyzer analyzer) throws AnalysisException {
-        if (expr instanceof GroupingFunctionCallExpr) {
-            // TODO(yangzhengguo) support expression in grouping functions
-            for (Expr child : expr.getChildren()) {
-                if (!(child instanceof SlotRef)) {
-                    throw new AnalysisException("grouping functions only support column in current version.");
-                    // expr from inline view
-                } else if (((SlotRef) child).getDesc().getParent().getTable().getType()
-                        == Table.TableType.INLINE_VIEW) {
-                    InlineViewRef ref = (InlineViewRef) ((SlotRef) child).getDesc().getParent().getRef();
-                    int colIndex = ref.getColLabels().indexOf(((SlotRef) child).getColumnName());
-                    if (colIndex != -1 && !(ref.getViewStmt().getResultExprs().get(colIndex) instanceof SlotRef)) {
-                        throw new AnalysisException("grouping functions only support column in current version.");
-                    }
-                }
-            }
-            // if is substituted skip
-            if (expr.getChildren().size() == 1 && expr.getChild(0) instanceof VirtualSlotRef) {
-                return;
-            }
-            VirtualSlotRef vSlot = addGroupingSlots(((GroupingFunctionCallExpr) expr).getRealSlot(), analyzer);
-            ((GroupingFunctionCallExpr) expr).resetChild(vSlot);
-            expr.analyze(analyzer);
-        } else if (expr.getChildren() != null && expr.getChildren().size() > 0) {
-            for (Expr child : expr.getChildren()) {
-                substituteGroupingFn(child, analyzer);
-            }
-        }
     }
 }

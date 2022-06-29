@@ -23,7 +23,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
@@ -35,18 +34,12 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class ArithmeticExpr extends Expr {
-    private static final Logger LOG = LogManager.getLogger(ArithmeticExpr.class);
     private final Operator op;
 
     public enum OperatorPosition {
@@ -346,46 +339,6 @@ public class ArithmeticExpr extends Expr {
         }
     }
 
-    private void rewriteNonDecimalOperation() throws AnalysisException {
-        Type t1 = getChild(0).getType().getNumResultType();
-        Type t2 = getChild(1).getType().getNumResultType();
-        // Find result type of this operator
-        Type commonType = Type.INVALID;
-        switch (op) {
-            case MULTIPLY:
-            case ADD:
-            case SUBTRACT:
-            case MOD:
-                // numeric ops must be promoted to highest-resolution type
-                // (otherwise we can't guarantee that a <op> b won't overflow/underflow)
-                commonType = getCommonType(t1, t2);
-                break;
-            case DIVIDE:
-                commonType = getCommonType(t1, t2);
-                if (commonType.getPrimitiveType() == PrimitiveType.BIGINT
-                        || commonType.getPrimitiveType() == PrimitiveType.LARGEINT) {
-                    commonType = Type.DOUBLE;
-                }
-                break;
-            case INT_DIVIDE:
-            case BITAND:
-            case BITOR:
-            case BITXOR:
-                // Must be bigint
-                commonType = Type.BIGINT;
-                break;
-            default:
-                // the programmer forgot to deal with a case
-                Preconditions.checkState(false,
-                        "Unknown arithmetic operation " + op.toString() + " in: " + this.toSql());
-                break;
-        }
-        if (getChild(0).getType().isNull() && getChild(1).getType().isNull()) {
-            commonType = Type.NULL;
-        }
-        type = castBinaryOp(commonType);
-    }
-
     @Override
     public String toString() {
         return toSql();
@@ -505,65 +458,6 @@ public class ArithmeticExpr extends Expr {
 
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        // bitnot is the only unary op, deal with it here
-        if (op == Operator.BITNOT) {
-            type = Type.BIGINT;
-            if (getChild(0).getType().getPrimitiveType() != PrimitiveType.BIGINT) {
-                castChild(type, 0);
-            }
-            fn = getBuiltinFunction(
-                    analyzer, op.getName(), collectChildReturnTypes(), Function.CompareMode.IS_SUPERTYPE_OF);
-            if (fn == null) {
-                Preconditions.checkState(false, String.format("No match for op with operand types", toSql()));
-            }
-            return;
-        }
-
-        analyzeSubqueryInChildren();
-        // if children has subquery, it will be rewritten and reanalyzed in the future.
-        if (contains(Subquery.class)) {
-            return;
-        }
-
-        Type t1 = getChild(0).getType();
-        Type t2 = getChild(1).getType();
-        if (t1.isDecimalV3() || t2.isDecimalV3()) {
-            rewriteDecimalOperation();
-        } else {
-            rewriteNonDecimalOperation();
-        }
-        String fnName = op.name;
-        fn = getBuiltinFunction(analyzer, fnName, collectChildReturnTypes(),
-                Function.CompareMode.IS_INDISTINGUISHABLE);
-        if (fn == null) {
-            Preconditions.checkState(false, String.format(
-                    "No match for '%s' with operand types %s and %s", toSql(), t1, t2));
-        }
-    }
-
-    public void analyzeSubqueryInChildren() throws AnalysisException {
-        for (Expr child : children) {
-            if (child instanceof Subquery) {
-                Subquery subquery = (Subquery) child;
-                if (!subquery.returnsScalarColumn()) {
-                    String msg = "Subquery of arithmetic expr must return a single column: " + child.toSql();
-                    throw new AnalysisException(msg);
-                }
-                /**
-                 * Situation: The expr is a binary predicate and the type of subquery is not scalar type.
-                 * Add assert: The stmt of subquery is added an assert condition (return error if row count > 1).
-                 * Input params:
-                 *     expr: 0.9*(select k1 from t2)
-                 *     subquery stmt: select k1 from t2
-                 * Output params:
-                 *     new expr: 0.9 * (select k1 from t2 (assert row count: return error if row count > 1 ))
-                 *     subquery stmt: select k1 from t2 (assert row count: return error if row count > 1 )
-                 */
-                if (!subquery.getType().isScalarType()) {
-                    subquery.getStatement().setAssertNumRowsElement(1, AssertNumRowsElement.Assertion.LE);
-                }
-            }
-        }
     }
 
     @Override
@@ -633,11 +527,6 @@ public class ArithmeticExpr extends Expr {
 
         public TExprOpcode getOpcode() {
             return opcode;
-        }
-
-        public boolean isUnary() {
-            return pos == OperatorPosition.UNARY_PREFIX
-                    || pos == OperatorPosition.UNARY_POSTFIX;
         }
 
         public boolean isBinary() {

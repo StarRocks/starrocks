@@ -55,10 +55,10 @@ public class ExportExportingTask extends MasterTask {
     protected final ExportJob job;
 
     private RuntimeProfile profile = new RuntimeProfile("Export");
-    private List<RuntimeProfile> fragmentProfiles = Lists.newArrayList();
+    private final List<RuntimeProfile> fragmentProfiles = Lists.newArrayList();
 
     // task index -> dummy value
-    private MarkedCountDownLatch<Integer, Integer> subTasksDoneSignal;
+    private final MarkedCountDownLatch<Integer, Integer> subTasksDoneSignal;
 
     public ExportExportingTask(ExportJob job) {
         this.job = job;

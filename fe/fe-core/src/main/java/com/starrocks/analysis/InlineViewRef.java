@@ -28,8 +28,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InlineView;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.rewrite.ExprRewriter;
 import org.apache.logging.log4j.LogManager;
@@ -43,9 +41,6 @@ import java.util.Set;
  * An inline view is a query statement with an alias. Inline views can be parsed directly
  * from a query string or represent a reference to a local or globalStateMgr view.
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class InlineViewRef extends TableRef {
     private static final Logger LOG = LogManager.getLogger(InlineViewRef.class);
 
@@ -136,10 +131,6 @@ public class InlineViewRef extends TableRef {
         baseTblSmap = other.baseTblSmap.clone();
     }
 
-    public List<String> getExplicitColLabels() {
-        return explicitColLabels;
-    }
-
     public List<String> getColLabels() {
         if (explicitColLabels != null) {
             return explicitColLabels;
@@ -173,65 +164,7 @@ public class InlineViewRef extends TableRef {
      * then performs join clause analysis.
      */
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        if (isAnalyzed) {
-            return;
-        }
-
-        if (view == null && !hasExplicitAlias()) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_DERIVED_MUST_HAVE_ALIAS);
-        }
-
-        // Analyze the inline view query statement with its own analyzer
-        inlineViewAnalyzer = new Analyzer(analyzer);
-
-        queryStmt.analyze(inlineViewAnalyzer);
-        correlatedTupleIds_.addAll(queryStmt.getCorrelatedTupleIds(inlineViewAnalyzer));
-
-        queryStmt.getMaterializedTupleIds(materializedTupleIds);
-        if (view != null && !hasExplicitAlias() && !view.isLocalView()) {
-            name = analyzer.getFqTableName(name);
-            aliases_ = new String[] {name.toString(), view.getName()};
-        }
-        //TODO(chenhao16): fix TableName in Db.Table style
-        // name.analyze(analyzer);
-        desc = analyzer.registerTableRef(this);
-        isAnalyzed = true;  // true now that we have assigned desc
-
-        // For constant selects we materialize its exprs into a tuple.
-        if (materializedTupleIds.isEmpty()) {
-            Preconditions.checkState(queryStmt instanceof SelectStmt);
-            Preconditions.checkState(((SelectStmt) queryStmt).getTableRefs().isEmpty());
-            desc.setIsMaterialized(true);
-            materializedTupleIds.add(desc.getId());
-        }
-
-        // create smap_ and baseTblSmap_ and register auxiliary eq predicates between our
-        // tuple descriptor's slots and our *unresolved* select list exprs;
-        // we create these auxiliary predicates so that the analyzer can compute the value
-        // transfer graph through this inline view correctly (ie, predicates can get
-        // propagated through the view);
-        // if the view stmt contains analytic functions, we cannot propagate predicates
-        // into the view, unless the predicates are compatible with the analytic
-        // function's partition by clause, because those extra filters
-        // would alter the results of the analytic functions (see IMPALA-1243)
-        // TODO: relax this a bit by allowing propagation out of the inline view (but
-        // not into it)
-        for (int i = 0; i < getColLabels().size(); ++i) {
-            String colName = getColLabels().get(i);
-            SlotDescriptor slotDesc = analyzer.registerColumnRef(getAliasAsName(), colName);
-            Expr colExpr = queryStmt.getResultExprs().get(i);
-            SlotRef slotRef = new SlotRef(slotDesc);
-            sMap.put(slotRef, colExpr);
-            baseTblSmap.put(slotRef, queryStmt.getBaseTblResultExprs().get(i));
-        }
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("inline view " + getUniqueAlias() + " smap: " + sMap.debugString());
-            LOG.debug("inline view " + getUniqueAlias() + " baseTblSmap: " + baseTblSmap.debugString());
-        }
-
-        // Now do the remaining join analysis
-        analyzeJoin(analyzer);
+    public void analyze(Analyzer analyzer) throws UserException {
     }
 
     /**
@@ -289,10 +222,6 @@ public class InlineViewRef extends TableRef {
         return queryStmt;
     }
 
-    public void setViewStmt(QueryStmt queryStmt) {
-        this.queryStmt = queryStmt;
-    }
-
     public Analyzer getAnalyzer() {
         Preconditions.checkState(isAnalyzed);
         return inlineViewAnalyzer;
@@ -301,11 +230,6 @@ public class InlineViewRef extends TableRef {
     public ExprSubstitutionMap getSmap() {
         Preconditions.checkState(isAnalyzed);
         return sMap;
-    }
-
-    public ExprSubstitutionMap getBaseTblSmap() {
-        Preconditions.checkState(isAnalyzed);
-        return baseTblSmap;
     }
 
     @Override

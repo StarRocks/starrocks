@@ -25,21 +25,13 @@ import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AnalyticWindow.Boundary;
-import com.starrocks.analysis.AnalyticWindow.BoundaryType;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.TreeNode;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -62,12 +54,7 @@ import java.util.Objects;
  * analytic function call might reference the output of an aggregate computation
  * and need to be substituted as such; example: COUNT(COUNT(..)) OVER (..)
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class AnalyticExpr extends Expr {
-    private static final Logger LOG = LoggerFactory.getLogger(AnalyticExpr.class);
-
     private FunctionCallExpr fnCall;
     private final List<Expr> partitionExprs;
     // These elements are modified to point to the corresponding child exprs to keep them
@@ -95,10 +82,6 @@ public class AnalyticExpr extends Expr {
     public static String MAX = "MAX";
     public static String SUM = "SUM";
     public static String COUNT = "COUNT";
-
-    // Internal function used to implement FIRST_VALUE with a window equal and
-    // additional null handling in the backend.
-    public static String FIRST_VALUE_REWRITE = "FIRST_VALUE_REWRITE";
 
     // The function of HLL_UNION_AGG can't be used with a window by now.
     public static String HLL_UNION_AGG = "HLL_UNION_AGG";
@@ -207,14 +190,6 @@ public class AnalyticExpr extends Expr {
                 && ((AggregateFunction) fn).isAnalyticFn();
     }
 
-    public static boolean isAggregateFn(Function fn) {
-        if (fn.functionName().equalsIgnoreCase(SUM) || fn.functionName().equalsIgnoreCase(MIN)
-                || fn.functionName().equalsIgnoreCase(MAX) || fn.functionName().equalsIgnoreCase(COUNT)) {
-            return true;
-        }
-
-        return false;
-    }
 
     public static boolean isOffsetFn(Function fn) {
         if (!isAnalyticFn(fn)) {
@@ -222,14 +197,6 @@ public class AnalyticExpr extends Expr {
         }
 
         return fn.functionName().equalsIgnoreCase(LEAD) || fn.functionName().equalsIgnoreCase(LAG);
-    }
-
-    private static boolean isMinMax(Function fn) {
-        if (!isAnalyticFn(fn)) {
-            return false;
-        }
-
-        return fn.functionName().equalsIgnoreCase(MIN) || fn.functionName().equalsIgnoreCase(MAX);
     }
 
     public static boolean isNtileFn(Function fn) {
@@ -248,48 +215,6 @@ public class AnalyticExpr extends Expr {
         return fn.functionName().equalsIgnoreCase(ROWNUMBER);
     }
 
-    private static boolean isRankingFn(Function fn) {
-        if (!isAnalyticFn(fn)) {
-            return false;
-        }
-
-        return fn.functionName().equalsIgnoreCase(RANK)
-                || fn.functionName().equalsIgnoreCase(DENSERANK)
-                || fn.functionName().equalsIgnoreCase(ROWNUMBER);
-    }
-
-    private static boolean isHllAggFn(Function fn) {
-        if (!isAnalyticFn(fn)) {
-            return false;
-        }
-
-        return fn.functionName().equalsIgnoreCase(HLL_UNION_AGG);
-    }
-
-    /**
-     * Checks that the value expr of an offset boundary of a RANGE window is compatible
-     * with orderingExprs (and that there's only a single ordering expr).
-     */
-    private void checkRangeOffsetBoundaryExpr(AnalyticWindow.Boundary boundary)
-            throws AnalysisException {
-        Preconditions.checkState(boundary.getType().isOffset());
-
-        if (orderByElements.size() > 1) {
-            throw new AnalysisException("Only one ORDER BY expression allowed if used with "
-                    + "a RANGE window with PRECEDING/FOLLOWING: " + toSql());
-        }
-
-        Expr rangeExpr = boundary.getExpr();
-
-        if (!Type.isImplicitlyCastable(
-                rangeExpr.getType(), orderByElements.get(0).getExpr().getType(), false)) {
-            throw new AnalysisException(
-                    "The value expression of a PRECEDING/FOLLOWING clause of a RANGE window must "
-                            + "be implicitly convertable to the ORDER BY expression's type: "
-                            + rangeExpr.toSql() + " cannot be implicitly converted to "
-                            + orderByElements.get(0).getExpr().toSql());
-        }
-    }
 
     /**
      * check the value out of range in lag/lead() function
@@ -343,368 +268,8 @@ public class AnalyticExpr extends Expr {
         }
     }
 
-    /**
-     * Checks offset of lag()/lead().
-     */
-    void checkOffset(Analyzer analyzer) throws AnalysisException {
-        Preconditions.checkState(isOffsetFn(getFnCall().getFn()));
-        Preconditions.checkState(getFnCall().getChildren().size() > 1);
-        Expr offset = getFnCall().getChild(1);
-
-        try {
-            Preconditions.checkState(offset.getType().isFixedPointType());
-        } catch (Exception e) {
-            throw new AnalysisException(
-                    "The offset parameter of LEAD/LAG must be a constant positive integer: "
-                            + getFnCall().toSql());
-        }
-
-        boolean isPosConstant = true;
-
-        if (!offset.isConstant()) {
-            isPosConstant = false;
-        } else {
-            double value = 0;
-
-            if (offset instanceof IntLiteral) {
-                IntLiteral intl = (IntLiteral) offset;
-                value = intl.getDoubleValue();
-            } else if (offset instanceof LargeIntLiteral) {
-                LargeIntLiteral intl = (LargeIntLiteral) offset;
-                value = intl.getDoubleValue();
-            }
-
-            if (value <= 0) {
-                isPosConstant = false;
-            }
-        }
-
-        if (!isPosConstant) {
-            throw new AnalysisException(
-                    "The offset parameter of LEAD/LAG must be a constant positive integer: "
-                            + getFnCall().toSql());
-        }
-    }
-
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        fnCall.analyze(analyzer);
-        type = getFnCall().getType();
-
-        for (Expr e : partitionExprs) {
-            if (e.isConstant()) {
-                throw new AnalysisException(
-                        "Expressions in the PARTITION BY clause must not be constant: "
-                                + e.toSql() + " (in " + toSql() + ")");
-            }
-            if (!e.getType().canPartitionBy()) {
-                throw new AnalysisException(String.format("%s type cannot be partition by column", e.getType()));
-            }
-        }
-
-        for (OrderByElement e : orderByElements) {
-            if (e.getExpr().isConstant()) {
-                throw new AnalysisException(
-                        "Expressions in the ORDER BY clause must not be constant: "
-                                + e.getExpr().toSql() + " (in " + toSql() + ")");
-            }
-            if (!e.getExpr().getType().canOrderBy()) {
-                throw new AnalysisException(String.format("%s type cannot as order by column", e.getExpr().getType()));
-            }
-        }
-
-        if (getFnCall().getParams().isDistinct()) {
-            throw new AnalysisException(
-                    "DISTINCT not allowed in analytic function: " + getFnCall().toSql());
-        }
-
-        // check for correct composition of analytic expr
-        Function fn = getFnCall().getFn();
-
-        if (!(fn instanceof AggregateFunction)) {
-            throw new AnalysisException(
-                    "OVER clause requires aggregate or analytic function: "
-                            + getFnCall().toSql());
-        }
-
-        // check for non-analytic aggregate functions
-        if (!isAnalyticFn(fn)) {
-            throw new AnalysisException(
-                    String.format("Aggregate function '%s' not supported with OVER clause.",
-                            getFnCall().toSql()));
-        }
-
-        if (isAnalyticFn(fn) && !isAggregateFn(fn)) {
-            // if (orderByElements.isEmpty()) {
-            //    throw new AnalysisException(
-            //        "'" + getFnCall().toSql() + "' requires an ORDER BY clause");
-            // }
-            for (Expr e : getFnCall().getChildren()) {
-                if (e.getType().isBitmapType() && !fn.functionName().equalsIgnoreCase(FunctionSet.BITMAP_UNION_COUNT)) {
-                    throw new AnalysisException(
-                            "bitmap type could only used for bitmap_union_count window function");
-                } else if (e.getType().isHllType() && !fn.functionName().equalsIgnoreCase(HLL_UNION_AGG)) {
-                    throw new AnalysisException(
-                            "hll type could only used for hll_union_agg window function");
-                } else if (e.getType().isPercentile()) {
-                    throw new AnalysisException(
-                            "window functions don't support percentile type");
-                }
-            }
-
-            if ((isRankingFn(fn) || isOffsetFn(fn) || isHllAggFn(fn)) && window != null) {
-                throw new AnalysisException(
-                        "Windowing clause not allowed with '" + getFnCall().toSql() + "'");
-            }
-
-            if (isOffsetFn(fn) && getFnCall().getChildren().size() > 1) {
-                checkOffset(analyzer);
-
-                // check the default, which needs to be a constant at the moment
-                // TODO: remove this check when the backend can handle non-constants
-                if (getFnCall().getChildren().size() > 2) {
-                    if (!getFnCall().getChild(2).isConstant()) {
-                        throw new AnalysisException(
-                                "The default parameter (parameter 3) of LEAD/LAG must be a constant: "
-                                        + getFnCall().toSql());
-                    }
-                }
-            }
-        }
-
-        if (window != null) {
-
-            if (orderByElements.isEmpty()) {
-                throw new AnalysisException("Windowing clause requires ORDER BY clause: "
-                        + toSql());
-            }
-
-            window.analyze(analyzer);
-
-            if (!orderByElements.isEmpty()
-                    && window.getType() == AnalyticWindow.Type.RANGE) {
-                // check that preceding/following ranges match ordering
-                if (window.getLeftBoundary().getType().isOffset()) {
-                    checkRangeOffsetBoundaryExpr(window.getLeftBoundary());
-                }
-
-                if (window.getRightBoundary() != null
-                        && window.getRightBoundary().getType().isOffset()) {
-                    checkRangeOffsetBoundaryExpr(window.getRightBoundary());
-                }
-            }
-        }
-
-        // check nesting
-        if (TreeNode.contains(getChildren(), AnalyticExpr.class)) {
-            throw new AnalysisException(
-                    "Nesting of analytic expressions is not allowed: " + toSql());
-        }
-
-        sqlString = toSql();
-
-        standardize(analyzer);
-
-        // min/max is not currently supported on sliding windows (i.e. start bound is not
-        // unbounded).
-        if (window != null && isMinMax(fn) &&
-                window.getLeftBoundary().getType() != BoundaryType.UNBOUNDED_PRECEDING) {
-            throw new AnalysisException(
-                    "'" + getFnCall().toSql() + "' is only supported with an "
-                            + "UNBOUNDED PRECEDING start bound.");
-        }
-
-        setChildren();
-    }
-
-    /**
-     * If necessary, rewrites the analytic function, window, and/or order-by elements into
-     * a standard format for the purpose of simpler backend execution, as follows:
-     * 1. row_number():
-     * Set a window from UNBOUNDED PRECEDING to CURRENT_ROW.
-     * 2. lead()/lag():
-     * Explicitly set the default arguments to for BE simplicity.
-     * Set a window for lead(): UNBOUNDED PRECEDING to OFFSET FOLLOWING.
-     * Set a window for lag(): UNBOUNDED PRECEDING to OFFSET PRECEDING.
-     * 3. UNBOUNDED FOLLOWING windows:
-     * Reverse the ordering and window if the start bound is not UNBOUNDED PRECEDING.
-     * Flip first_value() and last_value().
-     * 4. first_value():
-     * Set the upper boundary to CURRENT_ROW if the lower boundary is
-     * UNBOUNDED_PRECEDING.
-     * 5. Explicitly set the default window if no window was given but there
-     * are order-by elements.
-     * 6. FIRST_VALUE without UNBOUNDED PRECEDING gets rewritten to use a different window
-     * and change the function to return the last value. We either set the fn to be
-     * 'last_value' or 'first_value_rewrite', which simply wraps the 'last_value'
-     * implementation but allows us to handle the first rows in a partition in a special
-     * way in the backend. There are a few cases:
-     * a) Start bound is X FOLLOWING or CURRENT ROW (X=0):
-     * Use 'last_value' with a window where both bounds are X FOLLOWING (or
-     * CURRENT ROW). Setting the start bound to X following is necessary because the
-     * X rows at the end of a partition have no rows in their window. Note that X
-     * FOLLOWING could be rewritten as lead(X) but that would not work for CURRENT
-     * ROW.
-     * b) Start bound is X PRECEDING and end bound is CURRENT ROW or FOLLOWING:
-     * Use 'first_value_rewrite' and a window with an end bound X PRECEDING. An
-     * extra parameter '-1' is added to indicate to the backend that NULLs should
-     * not be added for the first X rows.
-     * c) Start bound is X PRECEDING and end bound is Y PRECEDING:
-     * Use 'first_value_rewrite' and a window with an end bound X PRECEDING. The
-     * first Y rows in a partition have empty windows and should be NULL. An extra
-     * parameter with the integer constant Y is added to indicate to the backend
-     * that NULLs should be added for the first Y rows.
-     */
-    private void standardize(Analyzer analyzer) throws AnalysisException {
-        FunctionName analyticFnName = getFnCall().getFnName();
-
-        // Set a window from UNBOUNDED PRECEDING to CURRENT_ROW for row_number().
-        if (analyticFnName.getFunction().equalsIgnoreCase(ROWNUMBER)) {
-            Preconditions.checkState(window == null, "Unexpected window set for row_numer()");
-            window = new AnalyticWindow(AnalyticWindow.Type.ROWS,
-                    new Boundary(BoundaryType.UNBOUNDED_PRECEDING, null),
-                    new Boundary(BoundaryType.CURRENT_ROW, null));
-            resetWindow = true;
-            return;
-        }
-
-        // Explicitly set the default arguments to lead()/lag() for BE simplicity.
-        // Set a window for lead(): UNBOUNDED PRECEDING to OFFSET FOLLOWING,
-        // Set a window for lag(): UNBOUNDED PRECEDING to OFFSET PRECEDING.
-        if (isOffsetFn(getFnCall().getFn())) {
-            Preconditions.checkState(window == null);
-
-            // If necessary, create a new fn call with the default args explicitly set.
-            List<Expr> newExprParams = null;
-
-            if (getFnCall().getChildren().size() == 1) {
-                newExprParams = Lists.newArrayListWithExpectedSize(3);
-                newExprParams.addAll(getFnCall().getChildren());
-                // Default offset is 1.
-                // newExprParams.add(new DecimalLiteral(BigDecimal.valueOf(1)));
-                newExprParams.add(new IntLiteral("1", Type.BIGINT));
-                // Default default value is NULL.
-                newExprParams.add(new NullLiteral());
-                throw new AnalysisException("Lag/offset must have three paremeters");
-            } else if (getFnCall().getChildren().size() == 2) {
-                newExprParams = Lists.newArrayListWithExpectedSize(3);
-                newExprParams.addAll(getFnCall().getChildren());
-                // Default default value is NULL.
-                newExprParams.add(new NullLiteral());
-                throw new AnalysisException("Lag/offset must have three paremeters");
-            } else {
-                Preconditions.checkState(getFnCall().getChildren().size() == 3);
-            }
-
-            try {
-                getFnCall().uncheckedCastChild(getFnCall().getChildren().get(0).getType(), 2);
-            } catch (Exception e) {
-                LOG.warn("", e);
-                throw new AnalysisException("Convert type error in offset fn(defalut value); old_type="
-                        + getFnCall().getChildren().get(2).getType() + " new_type="
-                        + getFnCall().getChildren().get(0).getType());
-            }
-
-            if (getFnCall().getChildren().get(2) instanceof CastExpr) {
-                throw new AnalysisException("For lead and lag function, the third arg and the first arg must " +
-                        "have the same type");
-            }
-
-            // check the value whether out of range
-            checkDefaultValue(getFnCall());
-
-            try {
-                getFnCall().uncheckedCastChild(Type.BIGINT, 1);
-            } catch (Exception e) {
-                LOG.warn("", e);
-                throw new AnalysisException("Convert type error in offset fn(default offset); type="
-                        + getFnCall().getChildren().get(1).getType());
-            }
-
-            // Set the window.
-            BoundaryType rightBoundaryType = BoundaryType.FOLLOWING;
-            if (analyticFnName.getFunction().equalsIgnoreCase(LAG)) {
-                rightBoundaryType = BoundaryType.PRECEDING;
-            }
-
-            window = new AnalyticWindow(AnalyticWindow.Type.ROWS,
-                    new Boundary(BoundaryType.UNBOUNDED_PRECEDING, null),
-                    new Boundary(rightBoundaryType, getOffsetExpr(getFnCall())));
-
-            try {
-                window.analyze(analyzer);
-            } catch (AnalysisException e) {
-                throw new IllegalStateException(e);
-            }
-
-            resetWindow = true;
-            return;
-        }
-
-        // Reverse the ordering and window for windows ending with UNBOUNDED FOLLOWING,
-        // and and not starting with UNBOUNDED PRECEDING.
-        if (window != null
-                && window.getRightBoundary().getType() == BoundaryType.UNBOUNDED_FOLLOWING
-                && window.getLeftBoundary().getType() != BoundaryType.UNBOUNDED_PRECEDING) {
-            orderByElements = OrderByElement.reverse(orderByElements);
-            window = window.reverse();
-
-            // Also flip first_value()/last_value(). For other analytic functions there is no
-            // need to also change the function.
-            FunctionName reversedFnName = null;
-
-            if (analyticFnName.getFunction().equalsIgnoreCase(FIRSTVALUE)) {
-                reversedFnName = new FunctionName(LASTVALUE);
-            } else if (analyticFnName.getFunction().equalsIgnoreCase(LASTVALUE)) {
-                reversedFnName = new FunctionName(FIRSTVALUE);
-            }
-
-            if (reversedFnName != null) {
-                fnCall = new FunctionCallExpr(reversedFnName, getFnCall().getParams());
-                fnCall.setIsAnalyticFnCall(true);
-                fnCall.analyzeNoThrow(analyzer);
-            }
-
-            analyticFnName = getFnCall().getFnName();
-        }
-
-        // Set the upper boundary to CURRENT_ROW for first_value() if the lower boundary
-        // is UNBOUNDED_PRECEDING.
-        if (window != null
-                && window.getLeftBoundary().getType() == BoundaryType.UNBOUNDED_PRECEDING
-                && window.getRightBoundary().getType() != BoundaryType.PRECEDING
-                && analyticFnName.getFunction().equalsIgnoreCase(FIRSTVALUE)) {
-            window.setRightBoundary(new Boundary(BoundaryType.CURRENT_ROW, null));
-        }
-
-        // Set the default window.
-        if (!orderByElements.isEmpty() && window == null) {
-            window = AnalyticWindow.DEFAULT_WINDOW;
-            resetWindow = true;
-        }
-
-        // Change first_value/last_value RANGE windows to ROWS
-        if ((analyticFnName.getFunction().equalsIgnoreCase(FIRSTVALUE)
-                || analyticFnName.getFunction().equalsIgnoreCase(LASTVALUE))
-                && window != null
-                && window.getType() == AnalyticWindow.Type.RANGE) {
-            window = new AnalyticWindow(AnalyticWindow.Type.ROWS, window.getLeftBoundary(),
-                    window.getRightBoundary());
-        }
-    }
-
-    /**
-     * Returns the explicit or implicit offset of an analytic function call.
-     */
-    private Expr getOffsetExpr(FunctionCallExpr offsetFnCall) {
-        Preconditions.checkState(isOffsetFn(getFnCall().getFn()));
-
-        if (offsetFnCall.getChild(1) != null) {
-            return offsetFnCall.getChild(1);
-        }
-
-        // The default offset is 1.
-        return new DecimalLiteral(BigDecimal.valueOf(1));
     }
 
     /**
