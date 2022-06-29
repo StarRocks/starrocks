@@ -279,9 +279,6 @@ public:
     Status init_query_global_dict(const GlobalDictLists& global_dict_list);
     Status init_load_global_dict(const GlobalDictLists& global_dict_list);
 
-    void set_scanner_failure() { _scanner_failure.store(true); }
-    bool get_scanner_failure() const { return _scanner_failure.load(); }
-
 private:
     Status create_error_log_file();
 
@@ -384,8 +381,6 @@ private:
 
     vectorized::GlobalDictMaps _query_global_dicts;
     vectorized::GlobalDictMaps _load_global_dicts;
-
-    std::atomic<bool> _scanner_failure = false;
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \
