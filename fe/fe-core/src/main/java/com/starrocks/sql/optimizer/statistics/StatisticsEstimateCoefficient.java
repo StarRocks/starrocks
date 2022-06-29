@@ -32,4 +32,6 @@ public class StatisticsEstimateCoefficient {
     // if after aggregate row count < (input row count * DEFAULT_AGGREGATE_EFFECT_COEFFICIENT),
     // the aggregate has good effect.
     public static final double DEFAULT_AGGREGATE_EFFECT_COEFFICIENT = 0.001;
+    // default selectivity for anti jion
+    public static final double DEFAULT_ANTI_JOIN_SELECTIVITY_COEFFICIENT = 0.4;
 }
