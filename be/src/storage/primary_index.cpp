@@ -1064,7 +1064,8 @@ Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<
     std::vector<uint64_t> values;
     values.reserve(pks.size());
     _build_persistent_values(rssid, rowids, 0, pks.size(), &values);
-    RETURN_IF_ERROR(_persistent_index->insert(pks.size(), pks.continuous_data(), values.data(), true));
+    RETURN_IF_ERROR(_persistent_index->insert(pks.size(), pks.continuous_data(),
+                                              reinterpret_cast<IndexValue*>(values.data()), true));
     return Status::OK();
 }
 
@@ -1074,7 +1075,8 @@ void PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_
     values.reserve(pks.size());
     std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
     _build_persistent_values(rssid, rowid_start, 0, pks.size(), &values);
-    _persistent_index->upsert(pks.size(), pks.continuous_data(), values.data(), old_values.data());
+    _persistent_index->upsert(pks.size(), pks.continuous_data(), reinterpret_cast<IndexValue*>(values.data()),
+                              reinterpret_cast<IndexValue*>(old_values.data()));
     for (uint32_t i = 0; i < old_values.size(); ++i) {
         uint64_t old = old_values[i];
         if ((old != NullIndexValue) && (old >> 32) == rssid) {
@@ -1088,7 +1090,8 @@ void PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_
 
 void PrimaryIndex::_erase_persistent_index(const vectorized::Column& key_col, DeletesMap* deletes) {
     std::vector<uint64_t> old_values(key_col.size(), NullIndexValue);
-    Status st = _persistent_index->erase(key_col.size(), key_col.continuous_data(), old_values.data());
+    Status st = _persistent_index->erase(key_col.size(), key_col.continuous_data(),
+                                         reinterpret_cast<IndexValue*>(old_values.data()));
     if (!st.ok()) {
         LOG(WARNING) << "erase persistent index failed";
     }
@@ -1101,7 +1104,8 @@ void PrimaryIndex::_erase_persistent_index(const vectorized::Column& key_col, De
 }
 
 void PrimaryIndex::_get_from_persistent_index(const vectorized::Column& key_col, std::vector<uint64_t>* rowids) const {
-    Status st = _persistent_index->get(key_col.size(), key_col.continuous_data(), rowids->data());
+    Status st = _persistent_index->get(key_col.size(), key_col.continuous_data(),
+                                       reinterpret_cast<IndexValue*>(rowids->data()));
     if (!st.ok()) {
         LOG(WARNING) << "failed get value from persistent index";
     }
@@ -1112,7 +1116,8 @@ void PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_star
     std::vector<uint64_t> values;
     values.reserve(pks.size());
     _build_persistent_values(rssid, rowid_start, 0, pks.size(), &values);
-    Status st = _persistent_index->try_replace(pks.size(), pks.continuous_data(), values.data(), src_rssid, deletes);
+    Status st = _persistent_index->try_replace(pks.size(), pks.continuous_data(),
+                                               reinterpret_cast<IndexValue*>(values.data()), src_rssid, deletes);
     if (!st.ok()) {
         LOG(WARNING) << "try replace persistent index failed";
     }
