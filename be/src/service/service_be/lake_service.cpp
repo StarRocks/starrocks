@@ -166,12 +166,16 @@ void LakeServiceImpl::drop_tablet(::google::protobuf::RpcController* controller,
     }
 
     for (const auto& tablet_id : request->tablet_ids()) {
+        // for debug
+        LOG(INFO) << " tablet_id in LakeServiceImpl::drop_tablet is " << tablet_id;
         auto res = _env->lake_tablet_manager()->drop_tablet(tablet_id);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to drop tablet " << tablet_id << ": " << res.get_error_msg();
             response->add_failed_tablets(tablet_id);
             continue;
         }
+        // for debug
+        LOG(INFO) << "drop tablet " << tablet_id << " succ";
     }
 } 
 

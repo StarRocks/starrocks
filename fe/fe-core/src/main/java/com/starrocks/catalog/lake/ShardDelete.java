@@ -91,6 +91,8 @@ public class ShardDelete extends MasterDaemon implements Writable {
 
             // 3.succ both, remove from the map
             if (finished == true) {
+                // for debug
+                LOG.info("delete shard {} and drop lake tablet succ.", shardId);
                 iterator.remove();
             }
         }
