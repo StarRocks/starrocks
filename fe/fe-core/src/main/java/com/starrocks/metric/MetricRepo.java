@@ -514,6 +514,7 @@ public final class MetricRepo {
         for (Map.Entry<String, Histogram> entry : histograms.entrySet()) {
             visitor.visitHistogram(entry.getKey(), entry.getValue());
         }
+        ResourceGroupMetricMgr.visitQueryLatency();
 
         // collect routine load process metrics
         if (Config.enable_routine_load_lag_metrics) {

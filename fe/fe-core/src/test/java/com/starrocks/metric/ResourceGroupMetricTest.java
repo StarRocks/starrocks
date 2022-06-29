@@ -34,33 +34,17 @@ public class ResourceGroupMetricTest {
         WorkGroup wg2 = new WorkGroup();
         wg2.setName("wg2");
 
-        List<QueryDetail> queryDetails = new ArrayList<>();
-        QueryDetail queryDetail1 = new QueryDetail();
-        queryDetail1.setWorkGroupName(wg1.getName());
-        queryDetail1.setQuery(true);
-        queryDetail1.setState(QueryDetail.QueryMemState.FINISHED);
-        queryDetail1.setLatency(10L);
-
-        QueryDetail queryDetail2 = new QueryDetail();
-        queryDetail2.setWorkGroupName(wg2.getName());
-        queryDetail2.setQuery(true);
-        queryDetail2.setState(QueryDetail.QueryMemState.FINISHED);
-        queryDetail2.setLatency(10L);
-
-        queryDetails.add(queryDetail1);
-        queryDetails.add(queryDetail2);
-
         ctx.setWorkGroup(wg1);
         ctx.getAuditEventBuilder().setResourceGroup(wg1.getName());
         ResourceGroupMetricMgr.increaseQuery(ctx, 1L);
         ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
+        ResourceGroupMetricMgr.updateQueryLatency(ctx, 10L);
 
         ctx.setWorkGroup(wg2);
         ctx.getAuditEventBuilder().setResourceGroup(wg2.getName());
         ResourceGroupMetricMgr.increaseQuery(ctx, 1L);
         ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
-
-        ResourceGroupMetricMgr.updateQueryLatency(queryDetails);
+        ResourceGroupMetricMgr.updateQueryLatency(ctx, 10L);
 
         List<Metric> metricsResourceGroup = MetricRepo.getMetricsByName("query_resource_group");
         List<Metric> metricsResourceGroupErr = MetricRepo.getMetricsByName("query_resource_group_err");
@@ -68,7 +52,7 @@ public class ResourceGroupMetricTest {
 
         Assert.assertEquals(2, metricsResourceGroup.size());
         Assert.assertEquals(2, metricsResourceGroupErr.size());
-        Assert.assertEquals(2*7, metricsResourceGroupLatency.size());
+        Assert.assertEquals(2*6, metricsResourceGroupLatency.size());
 
         for(Metric resourceGroupMetric : metricsResourceGroup){
             LongCounterMetric metric = (LongCounterMetric)resourceGroupMetric;
@@ -91,6 +75,8 @@ public class ResourceGroupMetricTest {
                 Assert.fail();
             }
         }
+
+        ResourceGroupMetricMgr.visitQueryLatency();
 
         for(Metric resourceGroupMetric : metricsResourceGroupLatency){
             GaugeMetricImpl<Double> metric = (GaugeMetricImpl<Double>)resourceGroupMetric;
