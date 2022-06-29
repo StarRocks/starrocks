@@ -3,16 +3,16 @@ on:
     push:
 name: Trigger Jobs
 jobs:
-  myJob:
+  Trigger-A-Jenkins-Job-With-2-Approval:
     runs-on: ubuntu-latest
     steps:
-    - uses: luisrjaeger/approved-event-checker@master
-      id: approved
-      with:
-        approvals: 2
-        check_changes_requested: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    #- uses: luisrjaeger/approved-event-checker@master
+    #  id: approved
+    #  with:
+    #    approvals: 2
+    #    check_changes_requested: false
+    #  env:
+    #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
     - name: trigger jenkins job
       shell: bash
