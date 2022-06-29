@@ -45,7 +45,15 @@ public:
     TWorkGroup to_thrift_verbose() const;
     void init();
 
+    // Copy metrics from the other work group
+    void copy_metrics(const WorkGroup& rhs);
+
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
+<<<<<<< HEAD
+=======
+    const MemTracker* mem_tracker() const { return _mem_tracker.get(); }
+    double get_mem_limit() const { return _memory_limit; }
+>>>>>>> 6204611d5 ([BugFix] fix bunch of bugs of resource group (#7933))
     pipeline::DriverQueue* driver_queue() { return _driver_queue.get(); }
     ScanTaskQueue* scan_task_queue() { return _scan_task_queue.get(); }
 
@@ -54,6 +62,8 @@ public:
     int64_t version() const { return _version; }
 
     const std::string& name() const { return _name; }
+
+    std::string to_string() const;
 
     size_t cpu_limit() const { return _cpu_limit; }
 
@@ -135,8 +145,16 @@ private:
 
     size_t _cpu_limit;
     double _memory_limit;
+<<<<<<< HEAD
     size_t _concurrency;
     WorkGroupType _type;
+=======
+    int64_t _memory_limit_bytes = -1;
+    size_t _concurrency_limit = 0;
+    int64_t _big_query_mem_limit = 0;
+    int64_t _big_query_scan_rows_limit = 0;
+    int64_t _big_query_cpu_second_limit = 0;
+>>>>>>> 6204611d5 ([BugFix] fix bunch of bugs of resource group (#7933))
 
     std::shared_ptr<starrocks::MemTracker> _mem_tracker = nullptr;
 
@@ -160,7 +178,17 @@ private:
     double _select_factor = 0;
     double _cur_select_factor = 0;
 
+<<<<<<< HEAD
     double _cpu_actual_use_ratio = 0;
+=======
+    // Metrics of this workgroup
+    std::atomic<int64_t> _total_cpu_cost = 0;
+    std::atomic<double> _cpu_actual_use_ratio = 0;
+    std::atomic<int64_t> _num_running_queries = 0;
+    std::atomic<int64_t> _num_total_queries = 0;
+    std::atomic<int64_t> _concurrency_overflow_count = 0;
+    std::atomic<int64_t> _bigquery_count = 0;
+>>>>>>> 6204611d5 ([BugFix] fix bunch of bugs of resource group (#7933))
 };
 
 class WorkerOwnerManager {

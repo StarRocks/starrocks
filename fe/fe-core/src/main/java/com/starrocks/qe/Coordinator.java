@@ -848,6 +848,7 @@ public class Coordinator {
 
         resultBatch = receiver.getNext(status);
         if (!status.ok()) {
+            connectContext.setErrorCodeOnce(status.getErrorCodeString());
             LOG.warn("get next fail, need cancel. status {}, query id: {}", status.toString(),
                     DebugUtil.printId(queryId));
         }
@@ -1622,6 +1623,13 @@ public class Coordinator {
         // and returned_all_results_ is true.
         // (UpdateStatus() initiates cancellation, if it hasn't already been initiated)
         if (!(returnedAllResults && status.isCancelled()) && !status.ok()) {
+<<<<<<< HEAD
+=======
+            ConnectContext ctx = connectContext;
+            if (ctx != null) {
+                ctx.setErrorCodeOnce(status.getErrorCodeString());
+            }
+>>>>>>> 6204611d5 ([BugFix] fix bunch of bugs of resource group (#7933))
             LOG.warn("one instance report fail {}, query_id={} instance_id={}",
                     status, DebugUtil.printId(queryId), DebugUtil.printId(params.getFragment_instance_id()));
             updateStatus(status, params.getFragment_instance_id());
@@ -2126,9 +2134,31 @@ public class Coordinator {
             }
 
             WorkGroup workgroup = null;
+<<<<<<< HEAD
             if (ConnectContext.get() != null) {
                 workgroup = Catalog.getCurrentCatalog().getWorkGroupMgr().chooseWorkGroup(
                         ConnectContext.get(), WorkGroupClassifier.QueryType.SELECT);
+=======
+            if (connectContext != null && connectContext.getSessionVariable().isEnableResourceGroup()) {
+                SessionVariable sessionVariable = connectContext.getSessionVariable();
+
+                // First try to use the resource group specified by the variable
+                if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
+                    String rgName = sessionVariable.getResourceGroup();
+                    workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(rgName);
+                }
+
+                // Second if the specified resource group not exist try to use the default one
+                if (workgroup == null) {
+                    workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+                            connectContext, WorkGroupClassifier.QueryType.SELECT, dbIds);
+                }
+
+                if (workgroup != null) {
+                    connectContext.getAuditEventBuilder().setResourceGroup(workgroup.getName());
+                    connectContext.setWorkGroup(workgroup);
+                }
+>>>>>>> 6204611d5 ([BugFix] fix bunch of bugs of resource group (#7933))
             }
             setBucketSeqToInstanceForRuntimeFilters();
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();

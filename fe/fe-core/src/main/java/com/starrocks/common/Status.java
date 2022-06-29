@@ -25,6 +25,8 @@ import com.starrocks.proto.PStatus;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 
+import java.util.Optional;
+
 public class Status {
     public static final Status OK = new Status();
     public static final Status CANCELLED = new Status(TStatusCode.CANCELLED, "Cancelled");
@@ -142,6 +144,10 @@ public class Status {
                 break;
             }
         }
+    }
+
+    public String getErrorCodeString() {
+        return Optional.ofNullable(getErrorCode()).map(Enum::toString).orElse("UNKNOWN");
     }
 
     @Override

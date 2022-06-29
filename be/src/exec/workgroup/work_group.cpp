@@ -33,7 +33,11 @@ WorkGroup::WorkGroup(const TWorkGroup& twg) : _name(twg.name), _id(twg.id) {
     if (twg.__isset.concurrency_limit) {
         _concurrency = twg.concurrency_limit;
     } else {
+<<<<<<< HEAD
         _concurrency = -1;
+=======
+        _concurrency_limit = 0;
+>>>>>>> 6204611d5 ([BugFix] fix bunch of bugs of resource group (#7933))
     }
     if (twg.__isset.workgroup_type) {
         _type = twg.workgroup_type;
@@ -73,6 +77,16 @@ void WorkGroup::init() {
     _scan_task_queue = std::make_unique<FifoScanTaskQueue>();
 }
 
+std::string WorkGroup::to_string() const {
+    return fmt::format(
+            "(id:{}, name:{}, version:{}, "
+            "cpu_limit:{}, mem_limit:{}, concurrency_limit:{}, "
+            "bigquery: (cpu_second_limit:{}, mem_limit:{}, scan_rows_limit:{})"
+            ")",
+            _id, _name, _version, _cpu_limit, _memory_limit_bytes, _concurrency_limit, _big_query_cpu_second_limit,
+            _big_query_mem_limit, _big_query_scan_rows_limit);
+}
+
 double WorkGroup::get_cpu_expected_use_ratio() const {
     return static_cast<double>(_cpu_limit) / WorkGroupManager::instance()->sum_cpu_limit();
 }
@@ -109,6 +123,114 @@ WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
     }
 }
 
+<<<<<<< HEAD
+=======
+void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg) {
+    std::call_once(init_metrics_once_flag, []() {
+        StarRocksMetrics::instance()->metrics()->register_hook("work_group_metrics_hook",
+                                                               [] { WorkGroupManager::instance()->update_metrics(); });
+    });
+
+    if (_wg_metrics.count(wg->name()) == 0) {
+        //cpu limit
+        auto resource_group_cpu_limit_ratio = std::make_unique<starrocks::DoubleGauge>(MetricUnit::PERCENT);
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_cpu_limit_ratio",
+                                                                 MetricLabels().add("name", wg->name()),
+                                                                 resource_group_cpu_limit_ratio.get());
+        //cpu concurrent
+        auto resource_group_cpu_use_ratio = std::make_unique<starrocks::DoubleGauge>(MetricUnit::PERCENT);
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_cpu_use_ratio",
+                                                                 MetricLabels().add("name", wg->name()),
+                                                                 resource_group_cpu_use_ratio.get());
+        //mem limit
+        auto resource_group_mem_limit_bytes = std::make_unique<starrocks::IntGauge>(MetricUnit::BYTES);
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_mem_limit_bytes",
+                                                                 MetricLabels().add("name", wg->name()),
+                                                                 resource_group_mem_limit_bytes.get());
+        //mem concurrent
+        auto resource_group_mem_allocated_bytes = std::make_unique<starrocks::IntGauge>(MetricUnit::BYTES);
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_mem_inuse_bytes",
+                                                                 MetricLabels().add("name", wg->name()),
+                                                                 resource_group_mem_allocated_bytes.get());
+        // running queries
+        auto resource_group_running_queries = std::make_unique<IntGauge>(MetricUnit::NOUNIT);
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_running_queries",
+                                                                 MetricLabels().add("name", wg->name()),
+                                                                 resource_group_running_queries.get());
+
+        // total queries
+        auto resource_group_total_queries = std::make_unique<IntGauge>(MetricUnit::NOUNIT);
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_total_queries",
+                                                                 MetricLabels().add("name", wg->name()),
+                                                                 resource_group_total_queries.get());
+
+        // concurrency overflow
+        auto resource_group_concurrency_overflow = std::make_unique<IntGauge>(MetricUnit::NOUNIT);
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_concurrency_overflow_count",
+                                                                 MetricLabels().add("name", wg->name()),
+                                                                 resource_group_concurrency_overflow.get());
+
+        // bigquery count
+        auto resource_group_bigquery_count = std::make_unique<IntGauge>(MetricUnit::NOUNIT);
+        StarRocksMetrics::instance()->metrics()->register_metric("resource_group_bigquery_count",
+                                                                 MetricLabels().add("name", wg->name()),
+                                                                 resource_group_bigquery_count.get());
+
+        _wg_cpu_limit_metrics.emplace(wg->name(), std::move(resource_group_cpu_limit_ratio));
+        _wg_cpu_metrics.emplace(wg->name(), std::move(resource_group_cpu_use_ratio));
+        _wg_mem_limit_metrics.emplace(wg->name(), std::move(resource_group_mem_limit_bytes));
+        _wg_mem_metrics.emplace(wg->name(), std::move(resource_group_mem_allocated_bytes));
+        _wg_running_queries.emplace(wg->name(), std::move(resource_group_running_queries));
+        _wg_total_queries.emplace(wg->name(), std::move(resource_group_total_queries));
+        _wg_concurrency_overflow_count.emplace(wg->name(), std::move(resource_group_concurrency_overflow));
+        _wg_bigquery_count.emplace(wg->name(), std::move(resource_group_bigquery_count));
+    }
+    _wg_metrics[wg->name()] = wg->unique_id();
+}
+
+void WorkGroup::copy_metrics(const WorkGroup& rhs) {
+    _cpu_actual_use_ratio = rhs.get_cpu_expected_use_ratio();
+    _num_total_queries = rhs.num_total_queries();
+    _concurrency_overflow_count = rhs.concurrency_overflow_count();
+    _bigquery_count = rhs.bigquery_count();
+}
+
+void WorkGroupManager::update_metrics_unlocked() {
+    for (auto& wg_metric : _wg_metrics) {
+        auto wg = _workgroups.find(wg_metric.second);
+        auto& name = wg_metric.first;
+        if (wg != _workgroups.end()) {
+            VLOG(2) << "workgroup update_metrics " << name;
+
+            _wg_cpu_limit_metrics.find(wg_metric.first)->second->set_value(wg->second->get_cpu_expected_use_ratio());
+            _wg_cpu_metrics.find(wg_metric.first)->second->set_value(wg->second->get_cpu_actual_use_ratio());
+            _wg_mem_limit_metrics.find(wg_metric.first)->second->set_value(wg->second->mem_limit());
+            _wg_mem_metrics.find(wg_metric.first)->second->set_value(wg->second->mem_tracker()->consumption());
+            _wg_running_queries[name]->set_value(wg->second->num_running_queries());
+            _wg_total_queries[name]->set_value(wg->second->num_total_queries());
+            _wg_concurrency_overflow_count[name]->set_value(wg->second->concurrency_overflow_count());
+            _wg_bigquery_count[name]->set_value(wg->second->bigquery_count());
+        } else {
+            VLOG(2) << "workgroup update_metrics " << name << ", workgroup not exists so cleanup metrics";
+
+            _wg_cpu_limit_metrics[name]->set_value(0);
+            _wg_cpu_metrics[name]->set_value(0);
+            _wg_mem_limit_metrics[name]->set_value(0);
+            _wg_mem_metrics[name]->set_value(0);
+            _wg_running_queries[name]->set_value(0);
+            _wg_total_queries[name]->set_value(0);
+            _wg_concurrency_overflow_count[name]->set_value(0);
+            _wg_bigquery_count[name]->set_value(0);
+        }
+    }
+}
+
+void WorkGroupManager::update_metrics() {
+    std::unique_lock write_lock(_mutex);
+    update_metrics_unlocked();
+}
+
+>>>>>>> 6204611d5 ([BugFix] fix bunch of bugs of resource group (#7933))
 WorkGroupPtr WorkGroupManager::get_default_workgroup() {
     std::shared_lock read_lock(_mutex);
     auto unique_id = WorkGroup::create_unique_id(WorkGroup::DEFAULT_VERSION, WorkGroup::DEFAULT_WG_ID);
@@ -189,11 +311,12 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
     // collect removable workgroups
     while (it != _workgroup_expired_versions.end()) {
         auto wg_it = _workgroups.find(*it);
-        DCHECK(wg_it != _workgroups.end());
-        if (wg_it->second->is_removable()) {
+        if (wg_it != _workgroups.end() && wg_it->second->is_removable()) {
+            int128_t wg_id = *it;
             _sum_cpu_limit -= wg_it->second->cpu_limit();
             _workgroups.erase(wg_it);
             _workgroup_expired_versions.erase(it++);
+            LOG(INFO) << "cleanup expired workgroup version:  " << (int64_t)(wg_id >> 64) << "," << (int64_t)wg_id;
         } else {
             ++it;
         }
@@ -238,14 +361,26 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg) {
         if (_workgroups.count(old_unique_id)) {
             _workgroups[old_unique_id]->mark_del();
             _workgroup_expired_versions.push_back(old_unique_id);
+            LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << stale_version << ")";
+
+            // Copy metrics from old version work-group
+            auto& old_wg = _workgroups[old_unique_id];
+            wg->copy_metrics(*old_wg);
         }
     }
     // install new version
     _workgroup_versions[wg->id()] = wg->version();
+<<<<<<< HEAD
+=======
+
+    // Update metrics
+    add_metrics_unlocked(wg);
+>>>>>>> 6204611d5 ([BugFix] fix bunch of bugs of resource group (#7933))
 }
 
 void WorkGroupManager::alter_workgroup_unlocked(const WorkGroupPtr& wg) {
     create_workgroup_unlocked(wg);
+    LOG(INFO) << "alter workgroup " << wg->to_string();
 }
 
 void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
@@ -260,15 +395,17 @@ void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
     auto wg_it = _workgroups.find(unique_id);
     if (wg_it != _workgroups.end()) {
         wg_it->second->mark_del();
+        _workgroup_expired_versions.push_back(unique_id);
+        LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << version_id << ")";
     }
+    LOG(INFO) << "delete workgroup " << wg->name();
 }
 
 std::vector<TWorkGroup> WorkGroupManager::list_workgroups() {
     std::shared_lock read_lock(_mutex);
     std::vector<TWorkGroup> alive_workgroups;
-    for (auto it = _workgroups.begin(); it != _workgroups.end(); ++it) {
-        const auto& wg = it->second;
-        if (!wg->is_marked_del() && wg->version() != WorkGroup::DEFAULT_VERSION) {
+    for (auto& [_, wg] : _workgroups) {
+        if (wg->version() != WorkGroup::DEFAULT_VERSION) {
             alive_workgroups.push_back(wg->to_thrift());
         }
     }

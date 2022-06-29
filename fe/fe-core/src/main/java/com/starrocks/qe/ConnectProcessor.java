@@ -420,6 +420,11 @@ public class ConnectProcessor {
         }
         ctx.setCommand(command);
         ctx.setStartTime();
+<<<<<<< HEAD
+=======
+        ctx.setWorkGroup(null);
+        ctx.setErrorCode("");
+>>>>>>> 6204611d5 ([BugFix] fix bunch of bugs of resource group (#7933))
 
         switch (command) {
             case COM_INIT_DB:
