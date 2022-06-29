@@ -80,7 +80,7 @@ public class Optimizer {
         context = new OptimizerContext(memo, columnRefFactory, connectContext);
         context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
         TaskContext rootTaskContext =
-                new TaskContext(context, requiredProperty, (ColumnRefSet) requiredColumns.clone(), Double.MAX_VALUE);
+                new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
 
         // Note: root group of memo maybe change after rewrite,
         // so we should always get root group and root group expression

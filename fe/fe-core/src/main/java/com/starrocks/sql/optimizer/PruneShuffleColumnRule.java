@@ -127,7 +127,7 @@ public class PruneShuffleColumnRule implements PhysicalOperatorTreeRewriteRule {
                             cs.getDistinctValuesCount() / childContext.statistics.get(j).getOutputRowCount();
                     if ((cs.getDistinctValuesCount() <
                             StatisticsEstimateCoefficient.DEFAULT_PRUNE_SHUFFLE_COLUMN_ROWS_LIMIT) ||
-                            (ratio < sessionVariable.getPruneShuffleColumnCardinalityRate())) {
+                            (ratio < sessionVariable.getCboPruneShuffleColumnRate())) {
                         continue;
                     }
 
