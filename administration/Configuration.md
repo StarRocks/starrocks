@@ -341,7 +341,7 @@ BE 配置项暂不支持在线修改，生效需在 be.conf 中修改并重启 b
 |file_descriptor_cache_clean_interval|3600|文件句柄缓存清理的间隔，用于清理长期不用的文件句柄|
 |disk_stat_monitor_interval|5|磁盘状态检测的间隔|
 |unused_rowset_monitor_interval|30|清理过期 Rowset 的时间间隔|
-|storage_root_path|空字符串|存储数据的目录|
+|storage_root_path|空字符串|存储数据的目录，多块盘配置使用分隔符";"间隔，例如：/data1/starrocks;/data2/starrocks|
 |max_percentage_of_error_disk|0|磁盘错误达到一定比例，BE 退出|
 |default_num_rows_per_data_block|1024|每个 block 的数据行数|
 |max_tablet_num_per_shard|1024|每个 shard 的 tablet 数目，用于划分 tablet，防止单个目录下 tablet 子目录过多|
