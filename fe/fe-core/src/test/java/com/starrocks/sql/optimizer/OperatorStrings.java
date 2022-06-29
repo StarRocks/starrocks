@@ -283,6 +283,10 @@ public class OperatorStrings {
             return visitPhysicalJoin(optExpression, step);
         }
 
+        public OperatorStr visitPhysicalNestLoopJoin(OptExpression optExpression, Integer step) {
+            return visitPhysicalJoin(optExpression, step);
+        }
+
         public OperatorStr visitPhysicalJoin(OptExpression optExpression, Integer step) {
             OperatorStr left = visit(optExpression.getInputs().get(0), step + 1);
             OperatorStr right = visit(optExpression.getInputs().get(1), step + 1);

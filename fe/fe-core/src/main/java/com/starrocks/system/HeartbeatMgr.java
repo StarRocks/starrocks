@@ -160,7 +160,7 @@ public class HeartbeatMgr extends MasterDaemon {
 
         // we also add a 'mocked' master Frontends heartbeat response to synchronize master info to other Frontends.
         hbPackage.addHbResponse(new FrontendHbResponse(masterFeNodeName, Config.query_port, Config.rpc_port,
-                GlobalStateMgr.getCurrentState().getEditLog().getMaxJournalId(),
+                GlobalStateMgr.getCurrentState().getMaxJournalId(),
                 System.currentTimeMillis(), GlobalStateMgr.getCurrentState().getFeStartTime(),
                 Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH));
 

@@ -32,20 +32,26 @@ import org.apache.logging.log4j.Logger;
 
 public class BDBStateChangeListener implements StateChangeListener {
     public static final Logger LOG = LogManager.getLogger(EditLog.class);
+    private FrontendNodeType newType = FrontendNodeType.UNKNOWN;
+    private final boolean isElectable;
 
-    public BDBStateChangeListener() {
+    public BDBStateChangeListener(boolean isElectable) {
+        this.isElectable = isElectable;
+    }
+
+    public synchronized FrontendNodeType getNewType() {
+        return newType;
     }
 
     @Override
     public synchronized void stateChange(StateChangeEvent sce) throws RuntimeException {
-        FrontendNodeType newType = null;
         switch (sce.getState()) {
             case MASTER: {
                 newType = FrontendNodeType.MASTER;
                 break;
             }
             case REPLICA: {
-                if (GlobalStateMgr.getCurrentState().isElectable()) {
+                if (isElectable) {
                     newType = FrontendNodeType.FOLLOWER;
                 } else {
                     newType = FrontendNodeType.OBSERVER;

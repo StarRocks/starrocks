@@ -51,7 +51,6 @@ import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.ColumnRenameClause;
-import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
@@ -157,10 +156,13 @@ import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.MasterInfo;
+import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
+import com.starrocks.journal.JournalFactory;
 import com.starrocks.journal.JournalInconsistentException;
+import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
@@ -251,6 +253,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -266,11 +269,9 @@ public class GlobalStateMgr {
     public static final long NEXT_ID_INIT_VALUE = 10000;
     private static final int STATE_CHANGE_CHECK_INTERVAL_MS = 100;
     private static final int REPLAY_INTERVAL_MS = 1;
-    private static final String BDB_DIR = "/bdb";
     private static final String IMAGE_DIR = "/image";
 
     private String metaDir;
-    private String bdbDir;
     private String imageDir;
 
     private MetaContext metaContext;
@@ -327,6 +328,7 @@ public class GlobalStateMgr {
     private CatalogIdGenerator idGenerator = new CatalogIdGenerator(NEXT_ID_INIT_VALUE);
 
     private EditLog editLog;
+    private Journal journal;
     // For checkpoint and observer memory replayed marker
     private AtomicLong replayedJournalId;
 
@@ -721,6 +723,10 @@ public class GlobalStateMgr {
         return metadataMgr;
     }
 
+    public ConnectorMetadata getMetadata() {
+        return localMetastore;
+    }
+
     @VisibleForTesting
     public void setMetadataMgr(MetadataMgr metadataMgr) {
         this.metadataMgr = metadataMgr;
@@ -769,17 +775,12 @@ public class GlobalStateMgr {
         }
     }
 
-    public String getBdbDir() {
-        return bdbDir;
-    }
-
     public String getImageDir() {
         return imageDir;
     }
 
     private void setMetaDir() {
         this.metaDir = Config.meta_dir;
-        this.bdbDir = this.metaDir + BDB_DIR;
         this.imageDir = this.metaDir + IMAGE_DIR;
         nodeMgr.setImageDir(imageDir);
     }
@@ -797,11 +798,6 @@ public class GlobalStateMgr {
 
         // 1. create dirs and files
         if (Config.edit_log_type.equalsIgnoreCase("bdb")) {
-            File bdbDir = new File(this.bdbDir);
-            if (!bdbDir.exists()) {
-                bdbDir.mkdirs();
-            }
-
             File imageDir = new File(this.imageDir);
             if (!imageDir.exists()) {
                 imageDir.mkdirs();
@@ -819,15 +815,9 @@ public class GlobalStateMgr {
         nodeMgr.getClusterIdAndRole();
 
         // 3. Load image first and replay edits
-        this.editLog = new EditLog(nodeMgr.getNodeName());
+        initJournal();
         loadImage(this.imageDir); // load image file
 
-        editLog.open(); // open bdb env
-        this.globalTransactionMgr.setEditLog(editLog);
-        this.idGenerator.setEditLog(editLog);
-        this.localMetastore.setEditLog(editLog);
-        // init journal writer
-        journalWriter = new JournalWriter(this.editLog.getJournal(), this.editLog.getJournalQueue());
 
         // 4. create load and export job label cleaner thread
         createLabelCleaner();
@@ -841,6 +831,17 @@ public class GlobalStateMgr {
         // 7. start state listener thread
         createStateListener();
         listener.start();
+    }
+
+    protected void initJournal() throws JournalException, InterruptedException {
+        BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
+        journal = JournalFactory.create(nodeMgr.getNodeName());
+        journalWriter = new JournalWriter(journal, journalQueue);
+
+        editLog = new EditLog(journalQueue);
+        this.globalTransactionMgr.setEditLog(editLog);
+        this.idGenerator.setEditLog(editLog);
+        this.localMetastore.setEditLog(editLog);
     }
 
     // wait until FE is ready.
@@ -886,22 +887,27 @@ public class GlobalStateMgr {
         isReady.set(false);
         canRead.set(false);
 
-        editLog.open();
+        // setup for journal
+        try {
+            journal.open();
+            if (!haProtocol.fencing()) {
+                throw new Exception("fencing failed. will exit");
+            }
+            long replayStartTime = System.currentTimeMillis();
+            // replay journals. -1 means replay all the journals larger than current journal id.
+            replayJournal(-1);
+            long replayEndTime = System.currentTimeMillis();
+            LOG.info("finish replay in " + (replayEndTime - replayStartTime) + " msec");
 
-        if (!haProtocol.fencing()) {
-            LOG.error("fencing failed. will exit.");
+            nodeMgr.checkCurrentNodeExist();
+
+            journalWriter.init(journal.getMaxJournalId());
+        } catch (Exception e) {
+            // TODO: gracefully exit
+            LOG.error("failed to init journal after transfer to master! will exit", e);
             System.exit(-1);
         }
 
-        long replayStartTime = System.currentTimeMillis();
-        // replay journals. -1 means replay all the journals larger than current journal id.
-        replayJournal(-1);
-        long replayEndTime = System.currentTimeMillis();
-        LOG.info("finish replay in " + (replayEndTime - replayStartTime) + " msec");
-
-        nodeMgr.checkCurrentNodeExist();
-
-        journalWriter.init(editLog.getMaxJournalId());
         journalWriter.startDaemon();
 
         // Set the feType to MASTER before writing edit log, because the feType must be Master when writing edit log.
@@ -961,7 +967,7 @@ public class GlobalStateMgr {
     // start all daemon threads only running on Master
     private void startMasterOnlyDaemonThreads() {
         // start checkpoint thread
-        checkpointer = new Checkpoint(editLog);
+        checkpointer = new Checkpoint(journal);
         checkpointer.setMetaContext(metaContext);
         // set "checkpointThreadId" before the checkpoint thread start, because the thread
         // need to check the "checkpointThreadId" when running.
@@ -1686,7 +1692,7 @@ public class GlobalStateMgr {
         LOG.info("replayed journal id is {}, replay to journal id is {}", replayedJournalId, newToJournalId);
         JournalCursor cursor = null;
         try {
-            cursor = editLog.read(replayedJournalId.get() + 1, newToJournalId);
+            cursor = journal.read(replayedJournalId.get() + 1, newToJournalId);
         } catch (JournalException e) {
             LOG.warn("failed to get cursor from {} to {}", replayedJournalId.get() + 1, newToJournalId, e);
             return false;
@@ -1767,11 +1773,6 @@ public class GlobalStateMgr {
 
     public int getFollowerCnt() {
         return nodeMgr.getFollowerCnt();
-    }
-
-    // The interface which DdlExecutor needs.
-    public void createDb(CreateDbStmt stmt) throws DdlException {
-        localMetastore.createDb(stmt);
     }
 
     // For replay edit log, needn't lock metadata
@@ -2340,6 +2341,10 @@ public class GlobalStateMgr {
         return editLog;
     }
 
+    public Journal getJournal() {
+        return journal;
+    }
+
     // Get the next available, need't lock because of nextId is atomic.
     public long getNextId() {
         return idGenerator.getNextId();
@@ -2430,7 +2435,7 @@ public class GlobalStateMgr {
     }
 
     public Long getMaxJournalId() {
-        return this.editLog.getMaxJournalId();
+        return this.journal.getMaxJournalId();
     }
 
     public long getEpoch() {
@@ -2516,6 +2521,10 @@ public class GlobalStateMgr {
     public void setEditLog(EditLog editLog) {
         this.editLog = editLog;
         localMetastore.setEditLog(editLog);
+    }
+
+    public void setJournal(Journal journal) {
+        this.journal = journal;
     }
 
     public void setNextId(long id) {

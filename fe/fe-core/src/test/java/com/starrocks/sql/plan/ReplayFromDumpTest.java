@@ -259,6 +259,19 @@ public class ReplayFromDumpTest {
     }
 
     @Test
+    public void testTPCDS94() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds94"));
+        // check ANTI JOIN cardinality is not 0
+        Assert.assertTrue(replayPair.second.contains(" 21:HASH JOIN\n" +
+                "  |  join op: RIGHT ANTI JOIN (PARTITIONED)\n" +
+                "  |  equal join conjunct: [138: wr_order_number, INT, false] = [2: ws_order_number, INT, false]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 3, build_expr = (2: ws_order_number), remote = true\n" +
+                "  |  output columns: 2, 17, 29, 34\n" +
+                "  |  cardinality: 880438"));
+    }
+
+    @Test
     public void testTPCDS22() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds22"));
         // check d_date_sk distinct values has adjusted according to the cardinality
@@ -298,10 +311,10 @@ public class ReplayFromDumpTest {
 
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/cross_reorder"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("  14:CROSS JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates: (2: v2 = CAST(8: v2 AS VARCHAR(1048576))) OR (3: v3 = 8: v2), " +
-                "CASE WHEN CAST(6: v3 AS BOOLEAN) THEN CAST(11: v2 AS VARCHAR) WHEN CAST(3: v3 AS BOOLEAN) THEN '123' ELSE CAST(12: v3 AS VARCHAR) END > '1'\n"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("14:NESTLOOP JOIN\n" +
+                "  |  join op: INNER JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other predicates: (2: v2 = CAST(8: v2 AS VARCHAR(1048576))) OR (3: v3 = 8: v2)\n"));
     }
 
     @Test
@@ -389,12 +402,12 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/select_sbuquery_with_multi_join"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("18:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("18:Project\n" +
                 "  |  <slot 33> : bitmap_and(21: expr, 29: bitmap_union)\n" +
                 "  |  \n" +
-                "  17:CROSS JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
+                "  17:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----16:EXCHANGE\n" +
                 "  |    \n" +

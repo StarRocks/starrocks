@@ -126,21 +126,19 @@ public class TaskManagerTest {
         TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
-        taskRunManager.submitTaskRun(taskRun, Constants.TaskRunPriority.LOWEST.value());
-
-        ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-
+        taskRunManager.submitTaskRun(taskRun);
         List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
-
-        Constants.TaskRunState state = taskRuns.get(0).getState();
+        Constants.TaskRunState state = null;
 
         int retryCount = 0, maxRetry = 5;
         while (retryCount < maxRetry) {
+            state = taskRuns.get(0).getState();
             retryCount ++;
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
             if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
                 break;
             }
+            LOG.info("SubmitTaskRegularTest is waiting for TaskRunState retryCount:" + retryCount);
         }
 
         Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
@@ -161,20 +159,18 @@ public class TaskManagerTest {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         taskManager.createTask(task, true);
         taskManager.executeTask(task.getName());
-
-        ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-
         List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
 
-        Constants.TaskRunState state = taskRuns.get(0).getState();
-
+        Constants.TaskRunState state = null;
         int retryCount = 0, maxRetry = 5;
         while (retryCount < maxRetry) {
+            state = taskRuns.get(0).getState();
             retryCount ++;
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
             if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
                 break;
             }
+            LOG.info("SubmitMvTaskTest is waiting for TaskRunState retryCount:" + retryCount);
         }
 
         Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);

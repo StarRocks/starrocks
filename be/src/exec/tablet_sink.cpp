@@ -38,7 +38,7 @@
 #include "simd/simd.h"
 #include "types/hll.h"
 #include "util/brpc_stub_cache.h"
-#include "util/compression_utils.h"
+#include "util/compression/compression_utils.h"
 #include "util/defer_op.h"
 #include "util/thread.h"
 #include "util/uid_util.h"
@@ -135,7 +135,7 @@ Status NodeChannel::init(RuntimeState* state) {
     return Status::OK();
 }
 
-void NodeChannel::open() {
+void NodeChannel::try_open() {
     PTabletWriterOpenRequest request;
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(_index_id);
@@ -183,6 +183,15 @@ void NodeChannel::open() {
     request.release_schema();
 }
 
+bool NodeChannel::is_open_done() {
+    if (_open_closure != nullptr) {
+        // open request already finished
+        return (_open_closure->count() != 2);
+    }
+
+    return true;
+}
+
 Status NodeChannel::open_wait() {
     _open_closure->join();
     if (_open_closure->cntl.Failed()) {
@@ -228,26 +237,44 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
     if (_compress_codec != nullptr && uncompressed_size > 0) {
         SCOPED_TIMER(_parent->_compress_timer);
 
-        // Try compressing data to _compression_scratch, swap if compressed data is smaller
-        int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
+        if (use_compression_pool(_compress_codec->type())) {
+            Slice compressed_slice;
+            Slice input(dst->data());
+            _compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
+                                      &_compression_scratch);
+        } else {
+            int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
 
-        if (_compression_scratch.size() < max_compressed_size) {
-            _compression_scratch.resize(max_compressed_size);
+            if (_compression_scratch.size() < max_compressed_size) {
+                _compression_scratch.resize(max_compressed_size);
+            }
+
+            Slice compressed_slice{_compression_scratch.data(), _compression_scratch.size()};
+
+            Slice input(dst->data());
+            _compress_codec->compress(input, &compressed_slice);
+            _compression_scratch.resize(compressed_slice.size);
         }
 
-        Slice compressed_slice{_compression_scratch.data(), _compression_scratch.size()};
-        _compress_codec->compress(dst->data(), &compressed_slice);
-        double compress_ratio = (static_cast<double>(uncompressed_size)) / compressed_slice.size;
+        double compress_ratio = (static_cast<double>(uncompressed_size)) / _compression_scratch.size();
         if (LIKELY(compress_ratio > config::rpc_compress_ratio_threshold)) {
-            _compression_scratch.resize(compressed_slice.size);
             dst->mutable_data()->swap(reinterpret_cast<std::string&>(_compression_scratch));
             dst->set_compress_type(_compress_type);
         }
 
-        VLOG_ROW << "uncompressed size: " << uncompressed_size << ", compressed size: " << compressed_slice.size;
+        VLOG_ROW << "uncompressed size: " << uncompressed_size << ", compressed size: " << _compression_scratch.size();
     }
 
     return Status::OK();
+}
+
+bool NodeChannel::is_full() {
+    if (_chunk_queue.size() >= _max_chunk_queue_size || _mem_tracker->limit()) {
+        if (!_check_prev_request_done()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 Status NodeChannel::add_chunk(vectorized::Chunk* input, const int64_t* tablet_ids, const uint32_t* indexes,
@@ -260,6 +287,12 @@ Status NodeChannel::add_chunk(vectorized::Chunk* input, const int64_t* tablet_id
         SCOPED_TIMER(_parent->_pack_chunk_timer);
         if (UNLIKELY(_cur_chunk == nullptr)) {
             _cur_chunk = input->clone_empty_with_slot();
+        }
+
+        if (is_full()) {
+            // wait previous request done then we can pop data from queue to send request
+            // and make new space to push data.
+            RETURN_IF_ERROR(_wait_one_prev_request());
         }
 
         // 1. append data
@@ -284,13 +317,8 @@ Status NodeChannel::add_chunk(vectorized::Chunk* input, const int64_t* tablet_id
 
         // 4. check last request
         if (!_check_prev_request_done()) {
-            if (_chunk_queue.size() > _max_chunk_queue_size || _mem_tracker->limit()) {
-                // 4.1 wait if queue full
-                RETURN_IF_ERROR(_wait_one_prev_request());
-            } else {
-                // 4.2 noblock here so that channel cant send data
-                return Status::OK();
-            }
+            // 4.1 noblock here so that other node channel can send data
+            return Status::OK();
         }
 
     } else {
@@ -422,6 +450,20 @@ bool NodeChannel::_check_prev_request_done() {
     return false;
 }
 
+bool NodeChannel::_check_all_prev_request_done() {
+    if (UNLIKELY(_next_packet_seq == 0)) {
+        return true;
+    }
+
+    for (size_t i = 0; i < _max_parallel_request_size; i++) {
+        if (_add_batch_closures[i]->count() != 1) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 Status NodeChannel::_wait_one_prev_request() {
     SCOPED_TIMER(_parent->_wait_response_timer);
     if (_next_packet_seq == 0) {
@@ -450,6 +492,22 @@ Status NodeChannel::_wait_one_prev_request() {
     RETURN_IF_ERROR(_wait_request(_add_batch_closures[_current_request_index]));
 
     return Status::OK();
+}
+
+Status NodeChannel::try_close() {
+    if (_cancelled || _send_finished) {
+        return _err_st;
+    }
+
+    while (_check_prev_request_done()) {
+        RETURN_IF_ERROR(add_chunk(nullptr, nullptr, nullptr, 0, 0, true));
+    }
+
+    return Status::OK();
+}
+
+bool NodeChannel::is_close_done() {
+    return _send_finished && _check_all_prev_request_done();
 }
 
 Status NodeChannel::close_wait(RuntimeState* state) {
@@ -679,14 +737,34 @@ Status OlapTableSink::open(RuntimeState* state) {
     auto open_span = Tracer::Instance().add_span("open", _span);
     SCOPED_TIMER(_profile->total_time_counter());
     SCOPED_TIMER(_open_timer);
+    RETURN_IF_ERROR(try_open(state));
+    RETURN_IF_ERROR(open_wait());
+
+    return Status::OK();
+}
+
+Status OlapTableSink::try_open(RuntimeState* state) {
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
     RETURN_IF_ERROR(_vectorized_partition->open(state));
 
     for (auto& index_channel : _channels) {
-        index_channel->for_each_node_channel([](NodeChannel* ch) { ch->open(); });
+        index_channel->for_each_node_channel([](NodeChannel* ch) { ch->try_open(); });
     }
 
+    return Status::OK();
+}
+
+bool OlapTableSink::is_open_done() {
+    bool open_done = true;
+    for (auto& index_channel : _channels) {
+        index_channel->for_each_node_channel([&open_done](NodeChannel* ch) { open_done &= ch->is_open_done(); });
+    }
+
+    return open_done;
+}
+
+Status OlapTableSink::open_wait() {
     Status err_st = Status::OK();
     for (auto& index_channel : _channels) {
         index_channel->for_each_node_channel([&index_channel, &err_st](NodeChannel* ch) {
@@ -825,6 +903,15 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
     return Status::OK();
 }
 
+bool OlapTableSink::is_full() {
+    bool full = false;
+    for (auto& index_channel : _channels) {
+        index_channel->for_each_node_channel([&full](NodeChannel* ch) { full |= ch->is_full(); });
+    }
+
+    return full;
+}
+
 Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel* channel,
                                           std::vector<uint16_t>& selection_idx) {
     Status err_st = Status::OK();
@@ -856,7 +943,51 @@ Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel
     return Status::OK();
 }
 
+Status OlapTableSink::try_close(RuntimeState* state) {
+    Status err_st = Status::OK();
+    bool intolerable_failure = false;
+    for (auto& index_channel : _channels) {
+        index_channel->for_each_node_channel([&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
+            auto st = ch->try_close();
+            if (!st.ok()) {
+                LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
+                             << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
+                err_st = st;
+                index_channel->mark_as_failed(ch);
+            }
+            if (index_channel->has_intolerable_failure()) {
+                intolerable_failure = true;
+            }
+        });
+    }
+
+    if (intolerable_failure) {
+        return err_st;
+    } else {
+        return Status::OK();
+    }
+}
+
+bool OlapTableSink::is_close_done() {
+    bool close_done = true;
+    for (auto& index_channel : _channels) {
+        index_channel->for_each_node_channel([&close_done](NodeChannel* ch) { close_done &= ch->is_close_done(); });
+    }
+
+    return close_done;
+}
+
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
+    if (close_status.ok()) {
+        do {
+            RETURN_IF_ERROR(try_close(state));
+            SleepFor(MonoDelta::FromMilliseconds(1));
+        } while (!is_close_done());
+    }
+    return close_wait(state, close_status);
+}
+
+Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     DeferOp end_span([&] { _span->End(); });
     _span->AddEvent("close");
     _span->SetAttribute("input_rows", _number_input_rows);

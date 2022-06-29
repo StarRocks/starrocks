@@ -44,6 +44,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
 
 public class GlobalStateMgrTestUtil {
 
@@ -88,7 +89,7 @@ public class GlobalStateMgrTestUtil {
         Constructor<GlobalStateMgr> constructor = GlobalStateMgr.class.getDeclaredConstructor();
         constructor.setAccessible(true);
         GlobalStateMgr globalStateMgr = constructor.newInstance();
-        globalStateMgr.setEditLog(new EditLog("name"));
+        globalStateMgr.setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
         Backend backend1 = createBackend(testBackendId1, "host1", 123, 124, 125);
         Backend backend2 = createBackend(testBackendId2, "host2", 123, 124, 125);

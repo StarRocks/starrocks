@@ -303,7 +303,7 @@ private:
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_concurrency_overflow_count;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_bigquery_count;
 
-    void add_metrics(const WorkGroupPtr& wg);
+    void add_metrics_unlocked(const WorkGroupPtr& wg);
     void update_metrics_unlocked();
 };
 

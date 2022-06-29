@@ -34,7 +34,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.AssertNumRowsNode;
-import com.starrocks.planner.CrossJoinNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DecodeNode;
 import com.starrocks.planner.EmptySetNode;
@@ -52,6 +51,7 @@ import com.starrocks.planner.MergeJoinNode;
 import com.starrocks.planner.MetaScanNode;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.MysqlScanNode;
+import com.starrocks.planner.NestLoopJoinNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
@@ -99,8 +99,10 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
@@ -1536,13 +1538,9 @@ public class PlanFragmentBuilder {
         private void setJoinPushDown(JoinNode node) {
             // Push down the predicates constructed by the right child when the
             // join op is inner join or left semi join or right join(semi, outer, anti)
-            if (ConnectContext.get().getSessionVariable().isHashJoinPushDownRightTable()
+            node.setIsPushDown(ConnectContext.get().getSessionVariable().isHashJoinPushDownRightTable()
                     && (node.getJoinOp().isInnerJoin() || node.getJoinOp().isLeftSemiJoin() ||
-                    node.getJoinOp().isRightJoin())) {
-                node.setIsPushDown(true);
-            } else {
-                node.setIsPushDown(false);
-            }
+                    node.getJoinOp().isRightJoin()));
         }
 
         private boolean isDopAutoEstimate() {
@@ -1610,6 +1608,13 @@ public class PlanFragmentBuilder {
         }
 
         @Override
+        public PlanFragment visitPhysicalNestLoopJoin(OptExpression optExpr, ExecPlan context) {
+            PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
+            PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+            return visitPhysicalJoin(leftFragment, rightFragment, optExpr, context);
+        }
+
+        @Override
         public PlanFragment visitPhysicalMergeJoin(OptExpression optExpr, ExecPlan context) {
             PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
             PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
@@ -1641,7 +1646,6 @@ public class PlanFragmentBuilder {
 
         private PlanFragment visitPhysicalJoin(PlanFragment leftFragment, PlanFragment rightFragment,
                                                OptExpression optExpr, ExecPlan context) {
-
             PhysicalJoinOperator node = (PhysicalJoinOperator) optExpr.getOp();
 
             ColumnRefSet leftChildColumns = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
@@ -1649,29 +1653,29 @@ public class PlanFragmentBuilder {
 
             // 2. Get eqJoinConjuncts
             List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
-                    leftChildColumns,
-                    rightChildColumns,
+                    leftChildColumns, rightChildColumns,
                     Utils.extractConjuncts(node.getOnPredicate()));
 
-            if (node.getJoinType().isCrossJoin() ||
-                    (node.getJoinType().isInnerJoin() && eqOnPredicates.isEmpty())) {
-                CrossJoinNode joinNode = new CrossJoinNode(context.getNextNodeId(),
-                        leftFragment.getPlanRoot(),
-                        rightFragment.getPlanRoot(),
-                        null);
-
-                joinNode.setLimit(node.getLimit());
-                joinNode.computeStatistics(optExpr.getStatistics());
+            if (node.getJoinType().isCrossJoin()
+                    || (node.getJoinType().isInnerJoin() && eqOnPredicates.isEmpty())
+                    || node instanceof PhysicalNestLoopJoinOperator) {
                 List<Expr> conjuncts = Utils.extractConjuncts(node.getPredicate()).stream()
                         .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                                 new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
+                List<Expr> eqJoinConjuncts =
+                        eqOnPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                .collect(Collectors.toList());
+
+                NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
+                        leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
+                        null, node.getJoinType(), eqJoinConjuncts, Lists.newArrayList());
+
+                joinNode.setLimit(node.getLimit());
+                joinNode.computeStatistics(optExpr.getStatistics());
                 joinNode.addConjuncts(conjuncts);
-                List<Expr> onConjuncts = Utils.extractConjuncts(node.getOnPredicate()).stream()
-                        .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                        .collect(Collectors.toList());
-                joinNode.addConjuncts(onConjuncts);
+
                 // Connect parent and child fragment
                 rightFragment.getPlanRoot().setFragment(leftFragment);
 
@@ -1773,19 +1777,17 @@ public class PlanFragmentBuilder {
                                 new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
 
+                List<PlanFragment> nullablePlanFragments = new ArrayList<>();
                 if (joinOperator.isLeftOuterJoin()) {
-                    for (TupleId tupleId : rightFragment.getPlanRoot().getTupleIds()) {
-                        context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
-                    }
+                    nullablePlanFragments.add(rightFragment);
                 } else if (joinOperator.isRightOuterJoin()) {
-                    for (TupleId tupleId : leftFragment.getPlanRoot().getTupleIds()) {
-                        context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
-                    }
+                    nullablePlanFragments.add(leftFragment);
                 } else if (joinOperator.isFullOuterJoin()) {
-                    for (TupleId tupleId : leftFragment.getPlanRoot().getTupleIds()) {
-                        context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
-                    }
-                    for (TupleId tupleId : rightFragment.getPlanRoot().getTupleIds()) {
+                    nullablePlanFragments.add(leftFragment);
+                    nullablePlanFragments.add(rightFragment);
+                }
+                for (PlanFragment planFragment : nullablePlanFragments) {
+                    for (TupleId tupleId : planFragment.getPlanRoot().getTupleIds()) {
                         context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
                     }
                 }
@@ -1796,11 +1798,13 @@ public class PlanFragmentBuilder {
                             context.getNextNodeId(),
                             leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
                             joinOperator, eqJoinConjuncts, otherJoinConjuncts);
-                } else {
+                } else if (node instanceof PhysicalMergeJoinOperator) {
                     joinNode = new MergeJoinNode(
                             context.getNextNodeId(),
                             leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
                             joinOperator, eqJoinConjuncts, otherJoinConjuncts);
+                } else {
+                    throw new StarRocksPlannerException("unknown join operator: " + node, INTERNAL_ERROR);
                 }
 
                 //Build outputColumns
@@ -1814,8 +1818,7 @@ public class PlanFragmentBuilder {
                     }
 
                     outputColumns.except(new ArrayList<>(node.getProjection().getCommonSubOperatorMap().keySet()));
-                    joinNode.setOutputSlots(
-                            outputColumns.getStream().boxed().collect(Collectors.toList()));
+                    joinNode.setOutputSlots(outputColumns.getStream().boxed().collect(Collectors.toList()));
                 }
 
                 joinNode.setDistributionMode(distributionMode);
