@@ -75,6 +75,11 @@ public class DeletePlanner {
         }
         DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds);
         execPlan.getFragments().get(0).setSink(dataSink);
+        // At present, we only support dop=1 for olap table sink.
+        // because tablet writing needs to know the number of senders in advance
+        // and guaranteed order of data writing
+        // It can be parallel only in some scenes, for easy use 1 dop now.
+        execPlan.getFragments().get(0).setPipelineDop(1);;
         return execPlan;
     }
 }

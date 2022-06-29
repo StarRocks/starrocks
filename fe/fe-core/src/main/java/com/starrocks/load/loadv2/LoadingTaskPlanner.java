@@ -176,6 +176,11 @@ public class LoadingTaskPlanner {
         // 3. Plan fragment
         PlanFragment sinkFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
         sinkFragment.setSink(olapTableSink);
+        // At present, we only support dop=1 for olap table sink.
+        // because tablet writing needs to know the number of senders in advance
+        // and guaranteed order of data writing
+        // It can be parallel only in some scenes, for easy use 1 dop now.
+        sinkFragment.setPipelineDop(1);
         sinkFragment.setParallelExecNum(parallelInstanceNum);
         // After data loading, we need to check the global dict for low cardinality string column
         // whether update.
