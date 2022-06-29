@@ -4,7 +4,7 @@ jobs:
   myJob:
     runs-on: ubuntu-latest
     steps:
-    - uses: luisrjaeger/approved-event-checker@v1.0.0
+    - uses: luisrjaeger/approved-event-checker@master
       id: approved
       with:
         approvals: 2
