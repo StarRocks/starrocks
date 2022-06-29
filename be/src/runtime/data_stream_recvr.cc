@@ -38,7 +38,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/sorted_chunks_merger.h"
 #include "serde/protobuf_serde.h"
-#include "util/block_compression.h"
+#include "util/compression/block_compression.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
 #include "util/faststring.h"

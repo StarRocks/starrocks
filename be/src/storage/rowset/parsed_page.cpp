@@ -34,7 +34,7 @@
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_handle.h"
-#include "util/block_compression.h"
+#include "util/compression/block_compression.h"
 #include "util/rle_encoding.h"
 
 namespace starrocks {

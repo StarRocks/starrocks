@@ -38,7 +38,7 @@
 #include "simd/simd.h"
 #include "types/hll.h"
 #include "util/brpc_stub_cache.h"
-#include "util/compression_utils.h"
+#include "util/compression/compression_utils.h"
 #include "util/defer_op.h"
 #include "util/thread.h"
 #include "util/uid_util.h"
@@ -237,23 +237,32 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
     if (_compress_codec != nullptr && uncompressed_size > 0) {
         SCOPED_TIMER(_parent->_compress_timer);
 
-        // Try compressing data to _compression_scratch, swap if compressed data is smaller
-        int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
+        if (use_compression_pool(_compress_codec->type())) {
+            Slice compressed_slice;
+            Slice input(dst->data());
+            _compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
+                                      &_compression_scratch);
+        } else {
+            int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
 
-        if (_compression_scratch.size() < max_compressed_size) {
-            _compression_scratch.resize(max_compressed_size);
+            if (_compression_scratch.size() < max_compressed_size) {
+                _compression_scratch.resize(max_compressed_size);
+            }
+
+            Slice compressed_slice{_compression_scratch.data(), _compression_scratch.size()};
+
+            Slice input(dst->data());
+            _compress_codec->compress(input, &compressed_slice);
+            _compression_scratch.resize(compressed_slice.size);
         }
 
-        Slice compressed_slice{_compression_scratch.data(), _compression_scratch.size()};
-        _compress_codec->compress(dst->data(), &compressed_slice);
-        double compress_ratio = (static_cast<double>(uncompressed_size)) / compressed_slice.size;
+        double compress_ratio = (static_cast<double>(uncompressed_size)) / _compression_scratch.size();
         if (LIKELY(compress_ratio > config::rpc_compress_ratio_threshold)) {
-            _compression_scratch.resize(compressed_slice.size);
             dst->mutable_data()->swap(reinterpret_cast<std::string&>(_compression_scratch));
             dst->set_compress_type(_compress_type);
         }
 
-        VLOG_ROW << "uncompressed size: " << uncompressed_size << ", compressed size: " << compressed_slice.size;
+        VLOG_ROW << "uncompressed size: " << uncompressed_size << ", compressed size: " << _compression_scratch.size();
     }
 
     return Status::OK();
