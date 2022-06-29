@@ -12,10 +12,10 @@ jobs:
     - uses: taichi/approved-event-action@master
       id: approved
       with:
-        approvals: 2
-        check_changes_requested: false
-    #  env:
-    #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        approvals: '2'
+#    check_changes_requested: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
     - name: trigger jenkins job
       if: ${{ steps.approved.outputs.approved == 'true' }}
