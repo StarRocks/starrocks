@@ -16,6 +16,7 @@ jobs:
 #    check_changes_requested: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
       
     - name: trigger jenkins job
       if: ${{ steps.approved.outputs.approved == 'true' }}
