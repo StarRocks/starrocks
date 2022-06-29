@@ -529,7 +529,7 @@ public:
                 not_found->hashes.emplace_back(hash);
             } else {
                 values[i] = iter->second;
-                nfound += (iter->second != NullIndexValue);
+                nfound += (iter->second.get_value() != NullIndexValue);
             }
         }
         *num_found = nfound;
@@ -551,7 +551,7 @@ public:
             } else {
                 auto old_value = p.first->second;
                 old_values[i] = old_value;
-                nfound += (old_value != NullIndexValue);
+                nfound += (old_value.get_value() != NullIndexValue);
                 p.first->second = v;
             }
         }
@@ -574,7 +574,7 @@ public:
             } else {
                 // key exist
                 auto old_value = p.first->second;
-                nfound += (old_value != NullIndexValue);
+                nfound += (old_value.get_value() != NullIndexValue);
                 p.first->second = v;
             }
         }
@@ -620,7 +620,7 @@ public:
         for (size_t i = 0; i < n; i++) {
             const auto& key = fkeys[i];
             uint64_t hash = FixedKeyHash<KeySize>()(key);
-            auto p = _map.emplace_with_hash(hash, key, NullIndexValue);
+            auto p = _map.emplace_with_hash(hash, key, IndexValue(NullIndexValue));
             if (p.second) {
                 // key not exist previously
                 old_values[i] = NullIndexValue;
@@ -629,7 +629,7 @@ public:
             } else {
                 // key exist
                 old_values[i] = p.first->second;
-                nfound += (p.first->second != NullIndexValue);
+                nfound += (p.first->second.get_value() != NullIndexValue);
                 p.first->second = NullIndexValue;
             }
         }
@@ -677,7 +677,7 @@ public:
         }
         auto hasher = FixedKeyHash<KeySize>();
         for (const auto& e : _map) {
-            if (without_null && e.second == NullIndexValue) {
+            if (without_null && e.second.get_value() == NullIndexValue) {
                 continue;
             }
             const auto& k = e.first;
@@ -1076,7 +1076,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
             size_t buf_offset = 0;
             for (size_t j = 0; j < batch_num; ++j) {
                 memcpy(keys + j * key_size, buff.data() + buf_offset, key_size);
-                IndexValue val = UNALIGNED_LOAD64(buff.data() + buf_offset + key_size);
+                uint64_t val = UNALIGNED_LOAD64(buff.data() + buf_offset + key_size);
                 values.emplace_back(val);
                 buf_offset += kv_size;
             }
@@ -1524,13 +1524,13 @@ Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue
     std::vector<IndexValue> found_values;
     found_values.reserve(n);
     RETURN_IF_ERROR(get(n, keys, found_values.data()));
-    uint32_t rowid_start = (uint32_t)(values[0] & 0xFFFFFFFF);
     std::vector<size_t> replace_idxes;
     for (size_t i = 0; i < n; ++i) {
-        if (found_values[i] != NullIndexValue && ((uint32_t)(found_values[i] >> 32)) == src_rssid[i]) {
+        if (values[i].get_value() != NullIndexValue &&
+            ((uint32_t)(found_values[i].get_value() >> 32)) == src_rssid[i]) {
             replace_idxes.emplace_back(i);
         } else {
-            failed->emplace_back(rowid_start + i);
+            failed->emplace_back(values[i].get_value() & 0xFFFFFFFF);
         }
     }
     RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
@@ -1542,7 +1542,7 @@ Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue
         fixed_buf.reserve(replace_idxes.size() * (_key_size + sizeof(IndexValue)));
         for (size_t i = 0; i < replace_idxes.size(); ++i) {
             fixed_buf.append(fkeys + replace_idxes[i] * _key_size, _key_size);
-            put_fixed64_le(&fixed_buf, values[replace_idxes[i]]);
+            put_fixed64_le(&fixed_buf, values[replace_idxes[i]].get_value());
         }
         RETURN_IF_ERROR(_index_file->append(fixed_buf));
         _page_size += fixed_buf.size();
@@ -1555,9 +1555,9 @@ Status PersistentIndex::_append_wal(size_t n, const void* keys, const IndexValue
     faststring fixed_buf;
     fixed_buf.reserve(n * (_key_size + sizeof(IndexValue)));
     for (size_t i = 0; i < n; i++) {
-        const auto v = (values != nullptr) ? values[i] : NullIndexValue;
+        const auto v = (values != nullptr) ? values[i] : IndexValue(NullIndexValue);
         fixed_buf.append(fkeys + i * _key_size, _key_size);
-        put_fixed64_le(&fixed_buf, v);
+        put_fixed64_le(&fixed_buf, v.get_value());
     }
     RETURN_IF_ERROR(_index_file->append(fixed_buf));
     _page_size += fixed_buf.size();
@@ -1695,7 +1695,7 @@ Status merge_shard_kvs_fixed_len(std::vector<KVRef>& l0_kvs, std::vector<KVRef>&
         }
     }
     for (auto& kv : l0_kvs) {
-        IndexValue v = UNALIGNED_LOAD64(kv.kv_pos + KeySize);
+        uint64_t v = UNALIGNED_LOAD64(kv.kv_pos + KeySize);
         if (v == NullIndexValue) {
             // delete
             kvs_set.erase(kv);
