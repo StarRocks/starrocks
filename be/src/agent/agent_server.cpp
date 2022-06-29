@@ -32,10 +32,12 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
+#include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
 #include "util/phmap/phmap.h"
+#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -46,25 +48,28 @@ const uint32_t REPORT_WORKGROUP_WORKER_COUNT = 1;
 
 class AgentServer::Impl {
 public:
-    explicit Impl(ExecEnv* exec_env);
+    explicit Impl(ExecEnv* exec_env) : _exec_env(exec_env) {}
 
     ~Impl();
 
-    // Receive agent task from FE master
+    void init_or_die();
+
     void submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks);
 
-    // TODO(lingbin): make the agent_result to be a pointer, because it will be modified.
     void make_snapshot(TAgentResult& agent_result, const TSnapshotRequest& snapshot_request);
 
     void release_snapshot(TAgentResult& agent_result, const std::string& snapshot_path);
 
     void publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request);
 
+    ThreadPool* get_thread_pool(int type) const;
+
     DISALLOW_COPY_AND_MOVE(Impl);
 
 private:
-    // Not Owned
     ExecEnv* _exec_env;
+
+    std::unique_ptr<ThreadPool> _thread_pool_publish_version;
 
     std::unique_ptr<TaskWorkerPool> _create_tablet_workers;
     std::unique_ptr<TaskWorkerPool> _drop_tablet_workers;
@@ -92,8 +97,8 @@ private:
     std::unique_ptr<TaskWorkerPool> _update_tablet_meta_info_workers;
 };
 
-AgentServer::Impl::Impl(ExecEnv* exec_env) : _exec_env(exec_env) {
-    for (auto& path : exec_env->store_paths()) {
+void AgentServer::Impl::init_or_die() {
+    for (auto& path : _exec_env->store_paths()) {
         try {
             std::string dpp_download_path_str = path.path + DPP_PREFIX;
             std::filesystem::path dpp_download_path(dpp_download_path_str);
@@ -104,6 +109,17 @@ AgentServer::Impl::Impl(ExecEnv* exec_env) : _exec_env(exec_env) {
             LOG(WARNING) << "std exception when remove dpp download path. path=" << path.path;
         }
     }
+
+    auto st =
+            ThreadPoolBuilder("publish_version")
+                    .set_min_threads(config::transaction_publish_version_worker_count)
+                    .set_max_threads(config::transaction_publish_version_worker_count)
+                    // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
+                    // But it seems that there's no limit for the number of tablets of a partition.
+                    // Since a large queue size brings a little overhead, a big one is chosen here.
+                    .set_max_queue_size(2048)
+                    .build(&_thread_pool_publish_version);
+    CHECK(st.ok()) << st;
 
     // It is the same code to create workers of each type, so we use a macro
     // to make code to be more readable.
@@ -146,10 +162,13 @@ AgentServer::Impl::Impl(ExecEnv* exec_env) : _exec_env(exec_env) {
 }
 
 AgentServer::Impl::~Impl() {
-#ifndef STOP_POOL
-#define STOP_POOL(type, pool_name) pool_name->stop();
-#endif
+    _thread_pool_publish_version->shutdown();
 
+#ifndef BE_TEST
+#define STOP_POOL(type, pool_name) pool_name->stop();
+#else
+#define STOP_POOL(type, pool_name)
+#endif // BE_TEST
     STOP_POOL(CREATE_TABLE, _create_tablet_workers);
     STOP_POOL(DROP_TABLE, _drop_tablet_workers);
     // Both PUSH and REALTIME_PUSH type use _push_workers
@@ -172,6 +191,8 @@ AgentServer::Impl::~Impl() {
     STOP_POOL(MOVE, _move_dir_workers);
     STOP_POOL(UPDATE_TABLET_META_INFO, _update_tablet_meta_info_workers);
 #undef STOP_POOL
+
+    _thread_pool_publish_version->wait();
 }
 
 // TODO(lingbin): each task in the batch may have it own status or FE must check and
@@ -381,6 +402,42 @@ void AgentServer::Impl::publish_cluster_state(TAgentResult& t_agent_result, cons
     status.to_thrift(&t_agent_result.status);
 }
 
+ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
+    // TODO: more thread pools.
+    switch (type) {
+    case TTaskType::PUBLISH_VERSION:
+        return _thread_pool_publish_version.get();
+    case TTaskType::CREATE:
+    case TTaskType::DROP:
+    case TTaskType::PUSH:
+    case TTaskType::CLONE:
+    case TTaskType::STORAGE_MEDIUM_MIGRATE:
+    case TTaskType::ROLLUP:
+    case TTaskType::SCHEMA_CHANGE:
+    case TTaskType::CANCEL_DELETE:
+    case TTaskType::MAKE_SNAPSHOT:
+    case TTaskType::RELEASE_SNAPSHOT:
+    case TTaskType::CHECK_CONSISTENCY:
+    case TTaskType::UPLOAD:
+    case TTaskType::DOWNLOAD:
+    case TTaskType::CLEAR_REMOTE_FILE:
+    case TTaskType::MOVE:
+    case TTaskType::REALTIME_PUSH:
+    case TTaskType::CLEAR_ALTER_TASK:
+    case TTaskType::CLEAR_TRANSACTION_TASK:
+    case TTaskType::RECOVER_TABLET:
+    case TTaskType::STREAM_LOAD:
+    case TTaskType::UPDATE_TABLET_META_INFO:
+    case TTaskType::ALTER:
+    case TTaskType::INSTALL_PLUGIN:
+    case TTaskType::UNINSTALL_PLUGIN:
+    case TTaskType::NUM_TASK_TYPE:
+    default:
+        break;
+    }
+    return nullptr;
+}
+
 AgentServer::AgentServer(ExecEnv* exec_env) : _impl(std::make_unique<AgentServer::Impl>(exec_env)) {}
 
 AgentServer::~AgentServer() = default;
@@ -399,6 +456,14 @@ void AgentServer::release_snapshot(TAgentResult& agent_result, const std::string
 
 void AgentServer::publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request) {
     _impl->publish_cluster_state(agent_result, request);
+}
+
+ThreadPool* AgentServer::get_thread_pool(int type) const {
+    return _impl->get_thread_pool(type);
+}
+
+void AgentServer::init_or_die() {
+    return _impl->init_or_die();
 }
 
 } // namespace starrocks

@@ -21,8 +21,6 @@
 
 #pragma once
 
-#include <memory>
-
 #include "service/backend_base.h"
 
 namespace starrocks {
@@ -56,7 +54,7 @@ public:
     void get_tablet_stat(TTabletStatResult& result) override;
 
 private:
-    std::unique_ptr<AgentServer> _agent_server;
+    AgentServer* _agent_server;
 };
 
 } // namespace starrocks
