@@ -5,6 +5,11 @@ name: Trigger Jobs
 jobs:
   Trigger-A-Jenkins-Job-With-2-Approval:
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      JENKINS_PW: ${{ secrets.JENKINS_PW }}
+      JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
+      JENKINS_URL: ${{ secrets.JENKINS_URL }}
     steps:
     #- uses: luisrjaeger/approved-event-checker@master
     #  id: approved
@@ -16,10 +21,10 @@ jobs:
       
     - name: trigger jenkins job
 #      if: ${{ steps.approved.outputs.approved == 'true' }}
-      env:
-        JENKINS_PW: ${{ secrets.JENKINS_PW }}
-        JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
-        JENKINS_URL: ${{ secrets.JENKINS_URL }}
+#      env:
+#        JENKINS_PW: ${{ secrets.JENKINS_PW }}
+#        JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
+#        JENKINS_URL: ${{ secrets.JENKINS_URL }}
       run: |
         curl --fail -w %{http_code} -I -u starrocks:"$JENKINS_PW" "$JENKINS_URL"/job/starrocks_admit_test/buildWithParameters?token="$JENKINS_TOKEN"
 
