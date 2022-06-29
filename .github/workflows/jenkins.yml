@@ -1,5 +1,18 @@
-on: pull_request_review
 name: Trigger Jobs
+
+on: 
+  pull_request_review:
+  workflow_call:
+    secrets:
+      JENKINS_USER:
+        required: true
+      JENKINS_PW:
+        required: true
+      JENKINS_TOKEN:
+        required: true
+      JENKINS_URL:
+        required: true
+
 jobs:
   Trigger-A-Jenkins-Job-With-2-Approval:
     runs-on: ubuntu-latest
@@ -19,7 +32,7 @@ jobs:
         ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
       
     - name: trigger jenkins job
-#      if: ${{ steps.approved.outputs.approved == 'true' }}
+      if: ${{ steps.approved.outputs.approved == 'true' }}
       uses: sbitio/trigger-jenkins-job@master
       with:
         JENKINS_USER: ${{ env.JENKINS_USER }}
