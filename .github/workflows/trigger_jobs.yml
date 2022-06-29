@@ -11,5 +11,12 @@ jobs:
         check_changes_requested: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    - run: echo "Approved !!"
+      
+    - name: trigger multiple Job
       if: ${{ steps.approved.outputs.approved == 'true' }}
+      uses: appleboy/jenkins-action@master
+      with:
+        url: "http://39.101.206.100:8090/"
+        user: "starrocks"
+        token: ${{ secrets.JENKINS_TOKEN }}
+        job: "master_release"
