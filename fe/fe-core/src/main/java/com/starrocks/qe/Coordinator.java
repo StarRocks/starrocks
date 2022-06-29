@@ -1601,7 +1601,7 @@ public class Coordinator {
         if (!(returnedAllResults && status.isCancelled()) && !status.ok()) {
             ConnectContext ctx = connectContext;
             if (ctx != null) {
-                ctx.setErrorCode(Optional.ofNullable(status.getErrorCode()).map(Enum::toString).orElse("UNKNOWN"));
+                ctx.setErrorCodeOnce(Optional.ofNullable(status.getErrorCode()).map(Enum::toString).orElse("UNKNOWN"));
             }
             LOG.warn("one instance report fail {}, query_id={} instance_id={}",
                     status, DebugUtil.printId(queryId), DebugUtil.printId(params.getFragment_instance_id()));
