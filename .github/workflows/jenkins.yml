@@ -24,7 +24,7 @@ jobs:
         api_token: 112bc1b04f326123e6668f931a7d26f7dd
         parameter: '{"GITHUB_PR_NUMBER":"8047", "GITHUB_PR_TARGET_BRANCH":"main"}'
         wait: "true"
-        timeout: "1000"
+        timeout: "3600"
       
 #    - name: trigger jenkins job
 #      if: ${{ steps.approved.outputs.approved == 'true' }}     
