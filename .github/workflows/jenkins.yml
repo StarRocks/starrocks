@@ -19,10 +19,18 @@ jobs:
       
     - name: trigger jenkins job
       if: ${{ steps.approved.outputs.approved == 'true' }}
+#      uses: sbitio/trigger-jenkins-job@master
+#      with:
+#        JENKINS_USER: ${{ secrets.JENKINS_USER }}
+#        JENKINS_TOKEN: ${{ secrets.JENKINS_PW }}
+#        JENKINS_HOST: ${{ env.JENKINS_URL }}
+#        JENKINS_JOB: ${{ env.JENKINS_JOB }}
+#        JENKINS_PARAMS: ${{ env.JENKINS_TOKEN }}
+          
 #      env:
 #        JENKINS_PW: ${{ secrets.JENKINS_PW }}
 #        JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
 #        JENKINS_URL: ${{ secrets.JENKINS_URL }}
       run: |
-        curl --fail -w %{http_code} -I -u starrocks:"$JENKINS_PW" "$JENKINS_URL"/job/starrocks_admit_test/buildWithParameters?token="$JENKINS_TOKEN"
+        curl --fail -w %{http_code} -I -u starrocks:${{ env.JENKINS_PW }} ${{ env.JENKINS_URL }}/job/starrocks_admit_test/buildWithParameters?token=${{ env.JENKINS_TOKEN }}
 
