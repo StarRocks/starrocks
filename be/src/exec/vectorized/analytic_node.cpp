@@ -81,8 +81,10 @@ Status AnalyticNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
     RETURN_IF_CANCELLED(state);
 
-    if (_analytor->reached_limit() || (_analytor->input_eos() && !_analytor->has_output())) {
-        *eos = true;
+    if (_analytor->reached_limit() || !_analytor->has_output()) {
+        if (_analytor->reached_limit() || _analytor->input_eos()) {
+            *eos = true;
+        }
         return Status::OK();
     }
 
@@ -114,8 +116,10 @@ Status AnalyticNode::close(RuntimeState* state) {
 Status AnalyticNode::_get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     while (!_analytor->input_eos() || _analytor->has_output()) {
         RETURN_IF_ERROR(_try_fetch_next_partition_data(state));
-        if (_analytor->input_eos() && !_analytor->has_output()) {
-            *eos = true;
+        if (!_analytor->has_output()) {
+            if (_analytor->input_eos()) {
+                *eos = true;
+            }
             return Status::OK();
         }
         SCOPED_TIMER(_analytor->compute_timer());
@@ -154,8 +158,10 @@ Status AnalyticNode::_get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr
 Status AnalyticNode::_get_next_for_unbounded_preceding_range_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     while (!_analytor->input_eos() || _analytor->has_output()) {
         RETURN_IF_ERROR(_try_fetch_next_partition_data(state));
-        if (_analytor->input_eos() && !_analytor->has_output()) {
-            *eos = true;
+        if (!_analytor->has_output()) {
+            if (_analytor->input_eos()) {
+                *eos = true;
+            }
             return Status::OK();
         }
 
@@ -207,8 +213,10 @@ Status AnalyticNode::_get_next_for_unbounded_preceding_range_frame(RuntimeState*
 Status AnalyticNode::_get_next_for_sliding_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     while (!_analytor->input_eos() || _analytor->has_output()) {
         RETURN_IF_ERROR(_try_fetch_next_partition_data(state));
-        if (_analytor->input_eos() && !_analytor->has_output()) {
-            *eos = true;
+        if (!_analytor->has_output()) {
+            if (_analytor->input_eos()) {
+                *eos = true;
+            }
             return Status::OK();
         }
         SCOPED_TIMER(_analytor->compute_timer());
