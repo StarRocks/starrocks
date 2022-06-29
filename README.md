@@ -9,9 +9,8 @@
 </p>
 <p align="center">
 
- <img src="https://img.shields.io/badge/Made%20with-Java-yellowgreen" alt="JAVA">
+ <img src="https://img.shields.io/badge/Made%20with-JAVA%20%26%20C%2B%2B-red" alt="JAVA&C++">
     </a>
-  <img src="https://img.shields.io/badge/Made%20with-C%2B%2B-red" alt="C++">
     <img src="https://img.shields.io/github/commit-activity/m/StarRocks/starrocks" alt="Commit Activities">
     </a>
    <a href="https://github.com/StarRocks/starrocks/issues">
@@ -35,10 +34,14 @@
 
   </div>
 StarRocks is the next-generation data platform designed to make data-intensive real-time analytics fast and easy. 
-It delivers query speeds 5 to 10 times faster than other popular solutions. StarRocks can perform real-time analytics well while updating historical records. It can also enhance real-time analytics with historical data from data lakes easily. With StarRocks, you can get rid of the de-normalized tables and get the best performance and flexibility.
-
+It delivers query speeds 5 to 10 times faster than other popular solutions. StarRocks can perform real-time analytics well while updating historical records. It can also enhance real-time analytics with historical data from data lakes easily. With StarRocks, you can get rid of the de-normalized tables and get the best performance and flexibility.<br>
 
 <br>
+ <p align="center">
+    <img src="new_banner.png">
+   </a>
+</p>
+</br>
 
 ## Features
 
@@ -48,8 +51,8 @@ It delivers query speeds 5 to 10 times faster than other popular solutions. Star
 * **⚡ Real-time update:** The updated model of StarRocks can perform upsert/delete operations according to the primary key, and achieve efficient query while concurrent updates.
 * **🪟 Intelligent materialized view:** The materialized view of StarRocks can be automatically updated during the data import and automatically selected when the query is executed.
 * **✨ Querying data in data lakes directly**: StarRocks allows direct access to data from Apache Hive™, Apache Iceberg™, and Apache Hudi™ without importing.
+* **🎛️ Resource management**: This feature allows StarRocks to limit resource consumption for queries and implement isolation and efficient use of resources among tenants in the same cluster.
 * **💠 Easy to maintain**: Simple architecture makes StarRocks easy to deploy, maintain and scale out. StarRocks tunes its query plan agilely, balances the resources when the cluster is scaled in or out, and recovers the data replica under node failure automatically.
-
 
 
 
@@ -58,7 +61,7 @@ It delivers query speeds 5 to 10 times faster than other popular solutions. Star
 ## Architecture Overview
 
  <p align="center">
-    <img width="526"  src="https://github.com/kateshaowanjou/starrocks/blob/main/Arch.png">
+    <img src="https://github.com/StarRocks/starrocks/blob/main/Arch.png">
    </a>
 </p>
 
@@ -89,7 +92,7 @@ StarRocks’s streamlined architecture is mainly composed of two modules：Front
 
 We welcome all kinds of contributions from the community, individuals and partners. We owe our success to your active involvement.
 
-1. See [Contributor's Guide](https://github.com/StarRocks/community/tree/main/Contributors/guide) to get started.
+1. See [Contributing.md](https://github.com/StarRocks/starrocks/blob/main/CONTRIBUTING.md) to get started.
 2. Set up StarRocks development environment:
 * [IDEA](https://github.com/StarRocks/community/blob/main/Contributors/guide/IDEA.md) 
 * [Clion](https://github.com/StarRocks/community/blob/main/Contributors/guide/Clion.md) 
@@ -113,7 +116,7 @@ This project is used by the following companies. Learn more about their use case
 
 <br>
 
-## Acknowledgements
+## Acknowledgment
 
 StarRocks is built upon Apache® Doris™ 0.13 in early 2020. We have recreated many important parts of the database including a full vectorized execution engine, a brand new CBO optimizer, a novel real-time update engine, and query federation for data lakes. 
 
