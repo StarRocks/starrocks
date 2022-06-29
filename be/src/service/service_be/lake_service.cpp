@@ -176,7 +176,6 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                       const ::starrocks::lake::PublishVersionRequest* request,
                                       ::starrocks::lake::PublishVersionResponse* response,
                                       ::google::protobuf::Closure* done) {
-    LOG(INFO) << "Publishing version";
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
 
