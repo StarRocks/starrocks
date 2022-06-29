@@ -1812,7 +1812,7 @@ public class AuthTest {
     public void testPasswordReuseNormal() throws Exception {
         String password = "123456AAbb";
         UserIdentity user = new UserIdentity("test_user", "%");
-        user.analyze("test_cluster");
+        user.analyze("default_cluster");
         UserDesc userDesc = new UserDesc(user, password, true);
         // 1. create user with no role
         CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
@@ -1862,7 +1862,7 @@ public class AuthTest {
     public void testPasswordValidationPasswordReuse() throws Exception {
         String password = "123456AAbb";
         UserIdentity user = new UserIdentity("test_user", "%");
-        user.analyze("test_cluster");
+        user.analyze("default_cluster");
         UserDesc userDesc = new UserDesc(user, password, true);
         // 1. create user with no role
         CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
@@ -1955,35 +1955,6 @@ public class AuthTest {
         Assert.assertTrue(auth.checkHasPriv(ctx, PrivPredicate.GRANT, Auth.PrivLevel.GLOBAL));
         Assert.assertFalse(auth.checkHasPriv(ctx, PrivPredicate.ADMIN, Auth.PrivLevel.DATABASE));
         Assert.assertFalse(auth.checkHasPriv(ctx, PrivPredicate.ADMIN, Auth.PrivLevel.TABLE));
-    }
-
-    @Test
-    public void testCanEnterCluster() throws Exception {
-        UserIdentity userIdentity = new UserIdentity("test_user", "%");
-        userIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
-        UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
-        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
-        createUserStmt.analyze(analyzer);
-        auth.createUser(createUserStmt);
-
-        new Expectations(ctx) {
-            {
-                ctx.getCurrentUserIdentity();
-                minTimes = 0;
-                result = userIdentity;
-            }
-        };
-        String newCluster = "another_cluster";
-        Assert.assertFalse(auth.checkCanEnterCluster(ctx, newCluster));
-
-        TablePattern tablePattern = new TablePattern("db1", "test_table");
-        tablePattern.analyze(newCluster);
-        PrivBitSet privileges = AccessPrivilege.SELECT_PRIV.toPrivilege();
-        auth.grantPrivs(userIdentity, tablePattern, privileges, false);
-        Assert.assertTrue(auth.checkCanEnterCluster(ctx, newCluster));
-
-        auth.revokePrivs(userIdentity, tablePattern, privileges, false);
-        Assert.assertFalse(auth.checkCanEnterCluster(ctx, newCluster));
     }
 
     @Test
@@ -2200,7 +2171,7 @@ public class AuthTest {
         List<UserIdentity> userToBeCreated = new ArrayList<>();
         for (String name : names) {
             UserIdentity userIdentity = new UserIdentity(name, "%");
-            userIdentity.analyze("test_cluster");
+            userIdentity.analyze("default_cluster");
             UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
             CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
             createUserStmt.analyze(analyzer);
@@ -2216,35 +2187,35 @@ public class AuthTest {
         Assert.assertEquals(1, infos.size());
         Assert.assertEquals(2, infos.get(0).size());
         Assert.assertEquals(emptyPrivilegeUser.toString(), infos.get(0).get(0));
-        Assert.assertEquals("GRANT Select_priv ON test_cluster:information_schema.* TO 'test_cluster:user1'@'%'", infos.get(0).get(1));
+        Assert.assertEquals("GRANT Select_priv ON default_cluster:information_schema.* TO 'default_cluster:user1'@'%'", infos.get(0).get(1));
 
         // 2. grant table privilege to onePrivilegeUser
         TablePattern table = new TablePattern("testdb", "table1");
-        table.analyze("test_cluster");
+        table.analyze("default_cluster");
         auth.grantPrivs(onePrivilegeUser, table, PrivBitSet.of(Privilege.SELECT_PRIV), false);
         infos = auth.getGrantsSQLs(onePrivilegeUser);
         Assert.assertEquals(1, infos.size());
         Assert.assertEquals(2, infos.get(0).size());
         Assert.assertEquals(onePrivilegeUser.toString(), infos.get(0).get(0));
-        String expectSQL = "GRANT Select_priv ON test_cluster:testdb.table1 TO 'test_cluster:user2'@'%'";
+        String expectSQL = "GRANT Select_priv ON default_cluster:testdb.table1 TO 'default_cluster:user2'@'%'";
         Assert.assertTrue(infos.get(0).get(1).contains(expectSQL));
 
         // 3. grant resource & table & global & impersonate to manyPrivilegeUser
         List<String> expectSQLs = new ArrayList<>();
         TablePattern db = new TablePattern("testdb", "*");
-        db.analyze("test_cluster");
+        db.analyze("default_cluster");
         auth.grantPrivs(manyPrivilegeUser, db, PrivBitSet.of(Privilege.LOAD_PRIV, Privilege.SELECT_PRIV), false);
-        expectSQLs.add("GRANT Select_priv, Load_priv ON test_cluster:testdb.* TO 'test_cluster:user3'@'%'");
+        expectSQLs.add("GRANT Select_priv, Load_priv ON default_cluster:testdb.* TO 'default_cluster:user3'@'%'");
         TablePattern global = new TablePattern("*", "*");
-        global.analyze("test_cluster");
+        global.analyze("default_cluster");
         auth.grantPrivs(manyPrivilegeUser, global, PrivBitSet.of(Privilege.GRANT_PRIV), false);
-        expectSQLs.add("GRANT Grant_priv ON *.* TO 'test_cluster:user3'@'%'");
+        expectSQLs.add("GRANT Grant_priv ON *.* TO 'default_cluster:user3'@'%'");
         ResourcePattern resourcePattern = new ResourcePattern("test_resource");
         resourcePattern.analyze();
         auth.grantPrivs(manyPrivilegeUser, resourcePattern, PrivBitSet.of(Privilege.USAGE_PRIV), false);
-        expectSQLs.add("GRANT Usage_priv ON RESOURCE 'test_resource' TO 'test_cluster:user3'@'%'");
+        expectSQLs.add("GRANT Usage_priv ON RESOURCE 'test_resource' TO 'default_cluster:user3'@'%'");
         auth.grantImpersonate(new GrantImpersonateStmt(manyPrivilegeUser, emptyPrivilegeUser));
-        expectSQLs.add("GRANT IMPERSONATE ON 'test_cluster:user1'@'%' TO 'test_cluster:user3'@'%'");
+        expectSQLs.add("GRANT IMPERSONATE ON 'default_cluster:user1'@'%' TO 'default_cluster:user3'@'%'");
         infos = auth.getGrantsSQLs(manyPrivilegeUser);
         Assert.assertEquals(1, infos.size());
         Assert.assertEquals(2, infos.get(0).size());

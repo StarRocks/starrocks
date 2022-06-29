@@ -22,13 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -44,9 +38,6 @@ import java.util.List;
  * Class representing a subquery. A Subquery consists of a QueryStmt and has
  * its own Analyzer context.
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class Subquery extends Expr {
     private static final Logger LOG = LoggerFactory.getLogger(Subquery.class);
 
@@ -108,35 +99,6 @@ public class Subquery extends Expr {
      */
     @Override
     public void analyzeImpl(Analyzer parentAnalyzer) throws AnalysisException {
-        if (!(stmt instanceof SelectStmt)) {
-            throw new AnalysisException("A subquery must contain a single select block: " +
-                    toSql());
-        }
-        // The subquery is analyzed with its own analyzer.
-        analyzer = new Analyzer(parentAnalyzer);
-        analyzer.setIsSubquery();
-        try {
-            stmt.analyze(analyzer);
-        } catch (UserException e) {
-            throw new AnalysisException(e.getMessage());
-        }
-        // Check whether the stmt_ contains an illegal mix of un/correlated table refs.
-        stmt.getCorrelatedTupleIds(analyzer);
-
-        // Set the subquery type based on the types of the exprs in the
-        // result list of the associated SelectStmt.
-        ArrayList<Expr> stmtResultExprs = stmt.getResultExprs();
-        if (stmtResultExprs.size() == 1) {
-            type = stmtResultExprs.get(0).getType();
-            Preconditions.checkState(!type.isComplexType());
-        } else {
-            type = createStructTypeFromExprList();
-        }
-
-        // If the subquery returns many rows, set its type to ArrayType.
-        if (!((SelectStmt) stmt).returnsSingleRow()) {
-            type = new ArrayType(type, true);
-        }
     }
 
     @Override
@@ -153,43 +115,6 @@ public class Subquery extends Expr {
             return true;
         }
         return false;
-    }
-
-    /**
-     * Create a StrucType from the result expr list of a subquery's SelectStmt.
-     */
-    private StructType createStructTypeFromExprList() {
-        List<Expr> stmtResultExprs = stmt.getResultExprs();
-        ArrayList<StructField> structFields = Lists.newArrayList();
-        // Check if we have unique labels
-        List<String> labels = stmt.getColLabels();
-        boolean hasUniqueLabels = true;
-        if (Sets.newHashSet(labels).size() != labels.size()) {
-            hasUniqueLabels = false;
-        }
-
-        // Construct a StructField from each expr in the select list
-        for (int i = 0; i < stmtResultExprs.size(); ++i) {
-            Expr expr = stmtResultExprs.get(i);
-            String fieldName = null;
-            // Check if the label meets the Metastore's requirements.
-            // TODO(zc)
-            // if (MetastoreShim.validateName(labels.get(i))) {
-            if (false) {
-                fieldName = labels.get(i);
-                // Make sure the field names are unique.
-                if (!hasUniqueLabels) {
-                    fieldName = "_" + Integer.toString(i) + "_" + fieldName;
-                }
-            } else {
-                // Use the expr ordinal to construct a StructField.
-                fieldName = "_" + Integer.toString(i);
-            }
-            Preconditions.checkNotNull(fieldName);
-            structFields.add(new StructField(fieldName, expr.getType(), null));
-        }
-        Preconditions.checkState(structFields.size() != 0);
-        return new StructType(structFields);
     }
 
     @Override

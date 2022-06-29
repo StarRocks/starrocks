@@ -1025,7 +1025,7 @@ public class SystemInfoService {
         memoryBe.setDecommissionType(be.getDecommissionType());
     }
 
-    private long getClusterAvailableCapacityB(String clusterName) {
+    private long getClusterAvailableCapacityB() {
         List<Backend> clusterBackends = getBackends();
         long capacity = 0L;
         for (Backend backend : clusterBackends) {
@@ -1042,9 +1042,9 @@ public class SystemInfoService {
         return capacity;
     }
 
-    public void checkClusterCapacity(String clusterName) throws DdlException {
-        if (getClusterAvailableCapacityB(clusterName) <= 0L) {
-            throw new DdlException("Cluster " + clusterName + " has no available capacity");
+    public void checkClusterCapacity() throws DdlException {
+        if (getClusterAvailableCapacityB() <= 0L) {
+            throw new DdlException("Cluster has no available capacity");
         }
     }
 

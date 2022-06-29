@@ -76,7 +76,7 @@ public class LoadAction extends RestBaseAction {
             throw new DdlException("No table selected.");
         }
 
-        String fullDbName = ClusterNamespace.getFullName(clusterName, dbName);
+        String fullDbName = ClusterNamespace.getFullName(dbName);
 
         String label = request.getRequest().headers().get(LABEL_KEY);
 

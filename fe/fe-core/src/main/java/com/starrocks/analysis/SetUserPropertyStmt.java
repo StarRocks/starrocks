@@ -61,7 +61,7 @@ public class SetUserPropertyStmt extends DdlStmt {
         } else {
             // If param 'user' is set, check if it need to be full-qualified
             if (!user.equals(Auth.ROOT_USER) && !user.equals(Auth.ADMIN_USER)) {
-                user = ClusterNamespace.getFullName(getClusterName(), user);
+                user = ClusterNamespace.getFullName(user);
             }
         }
 

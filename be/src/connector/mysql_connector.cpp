@@ -231,6 +231,7 @@ Status MySQLDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chun
         ++row_num;
         RETURN_IF_ERROR(fill_chunk(chunk, data, length));
         ++_rows_read;
+        _bytes_read += (*chunk)->bytes_usage();
     }
 }
 
@@ -240,6 +241,10 @@ int64_t MySQLDataSource::raw_rows_read() const {
 
 int64_t MySQLDataSource::num_rows_read() const {
     return _rows_read;
+}
+
+int64_t MySQLDataSource::num_bytes_read() const {
+    return _bytes_read;
 }
 
 void MySQLDataSource::close(RuntimeState* state) {

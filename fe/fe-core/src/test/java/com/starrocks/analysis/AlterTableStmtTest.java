@@ -71,7 +71,7 @@ public class AlterTableStmtTest {
         stmt.analyze(analyzer);
         Assert.assertEquals("ALTER TABLE `testDb`.`testTbl` DROP COLUMN `col1`, \nDROP COLUMN `col2`",
                 stmt.toSql());
-        Assert.assertEquals("testCluster:testDb", stmt.getTbl().getDb());
+        Assert.assertEquals("default_cluster:testDb", stmt.getTbl().getDb());
         Assert.assertEquals(2, stmt.getOps().size());
     }
 
@@ -86,7 +86,7 @@ public class AlterTableStmtTest {
                 "ALTER TABLE `testDb`.`testTbl` ADD ROLLUP `index1` (`col1`, `col2`) FROM `testTbl`, \n" +
                         " `index2` (`col2`, `col3`) FROM `testTbl`",
                 stmt.toSql());
-        Assert.assertEquals("testCluster:testDb", stmt.getTbl().getDb());
+        Assert.assertEquals("default_cluster:testDb", stmt.getTbl().getDb());
         Assert.assertEquals(2, stmt.getOps().size());
     }
 

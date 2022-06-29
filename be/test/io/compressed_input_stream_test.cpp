@@ -9,7 +9,7 @@
 #include "exec/decompressor.h"
 #include "io/string_input_stream.h"
 #include "testutil/assert.h"
-#include "util/block_compression.h"
+#include "util/compression/block_compression.h"
 #include "util/random.h"
 
 namespace starrocks::io {

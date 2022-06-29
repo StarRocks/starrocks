@@ -735,18 +735,9 @@ void* TaskWorkerPool::_delete_worker_thread_callback(void* arg_this) {
 
 void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
     auto* worker_pool_this = (TaskWorkerPool*)arg_this;
-
-    std::unique_ptr<ThreadPool> threadpool;
-    auto st =
-            ThreadPoolBuilder("publish_version")
-                    .set_min_threads(config::transaction_publish_version_worker_count)
-                    .set_max_threads(config::transaction_publish_version_worker_count)
-                    // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
-                    // But it seems that there's no limit for the number of tablets of a partition.
-                    // Since a large queue size brings a little overhead, a big one is chosen here.
-                    .set_max_queue_size(2048)
-                    .build(&threadpool);
-    assert(st.ok());
+    auto* agent_server = worker_pool_this->_env->agent_server();
+    auto token =
+            agent_server->get_thread_pool(TTaskType::PUBLISH_VERSION)->new_token(ThreadPool::ExecutionMode::CONCURRENT);
 
     struct VersionCmp {
         bool operator()(const TAgentTaskRequestPtr& lhs, const TAgentTaskRequestPtr& rhs) const {
@@ -789,7 +780,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_backend(BackendOptions::get_localBackend());
         finish_task_request.__set_report_version(_s_report_version.load(std::memory_order_relaxed));
         int64_t start_ts = MonotonicMillis();
-        run_publish_version_task(*threadpool, publish_version_task, finish_task_request, affected_dirs);
+        run_publish_version_task(token.get(), publish_version_task, finish_task_request, affected_dirs);
         batch_publish_latency += MonotonicMillis() - start_ts;
         priority_tasks.pop();
 
@@ -812,7 +803,6 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
             batch_publish_latency = 0;
         }
     }
-    threadpool->shutdown();
     return (void*)nullptr;
 }
 

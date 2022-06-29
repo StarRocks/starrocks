@@ -265,7 +265,7 @@ public class PublishVersionDaemon extends MasterDaemon {
             request.baseVersion = partitionCommitInfo.getVersion() - 1;
             request.newVersion = partitionCommitInfo.getVersion();
             request.tabletIds = entry.getValue();
-            request.txnIds.add(txnId);
+            request.txnIds = Lists.newArrayList(txnId);
 
             Future<PublishVersionResponse> responseFuture = lakeService.publishVersion(request);
             try {

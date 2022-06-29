@@ -20,71 +20,52 @@
 // under the License.
 
 #pragma once
+
 #include <memory>
 #include <string>
 #include <vector>
 
-#include "agent/status.h"
-#include "gen_cpp/AgentService_types.h"
+#include "gutil/macros.h"
 
 namespace starrocks {
 
 class ExecEnv;
-class MasterServerClient;
-class TaskWorkerPool;
-class TFinishTaskRequest;
-class TMasterResult;
-class TReportRequest;
+class Status;
+class TAgentTaskRequest;
+class TAgentResult;
+class TAgentPublishRequest;
+class TSnapshotRequest;
+class ThreadPool;
 
 // Each method corresponds to one RPC from FE Master, see BackendService.
 class AgentServer {
 public:
     explicit AgentServer(ExecEnv* exec_env);
+
     ~AgentServer();
 
-    // Receive agent task from FE master
+    void init_or_die();
+
     void submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks);
 
     // TODO(lingbin): make the agent_result to be a pointer, because it will be modified.
     void make_snapshot(TAgentResult& agent_result, const TSnapshotRequest& snapshot_request);
+
     void release_snapshot(TAgentResult& agent_result, const std::string& snapshot_path);
 
-    // Deprected
-    // TODO(lingbin): This method is deprecated, should be removed later.
     void publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request);
 
-    AgentServer(const AgentServer&) = delete;
-    const AgentServer& operator=(const AgentServer&) = delete;
+    // |type| should be one of `TTaskType::type`, didn't define type as  `TTaskType::type` because
+    // I don't want to include the header file `gen_cpp/Types_types.h` here.
+    //
+    // Returns nullptr if `type` is not a valid value of `TTaskType::type`.
+    ThreadPool* get_thread_pool(int type) const;
+
+    DISALLOW_COPY_AND_MOVE(AgentServer);
 
 private:
-    // Not Owned
-    ExecEnv* _exec_env;
-
-    std::unique_ptr<TaskWorkerPool> _create_tablet_workers;
-    std::unique_ptr<TaskWorkerPool> _drop_tablet_workers;
-    std::unique_ptr<TaskWorkerPool> _push_workers;
-    std::unique_ptr<TaskWorkerPool> _publish_version_workers;
-    std::unique_ptr<TaskWorkerPool> _clear_transaction_task_workers;
-    std::unique_ptr<TaskWorkerPool> _delete_workers;
-    std::unique_ptr<TaskWorkerPool> _alter_tablet_workers;
-    std::unique_ptr<TaskWorkerPool> _clone_workers;
-    std::unique_ptr<TaskWorkerPool> _storage_medium_migrate_workers;
-    std::unique_ptr<TaskWorkerPool> _check_consistency_workers;
-
-    // These 3 worker-pool do not accept tasks from FE.
-    // It is self triggered periodically and reports to Fe master
-    std::unique_ptr<TaskWorkerPool> _report_task_workers;
-    std::unique_ptr<TaskWorkerPool> _report_disk_state_workers;
-    std::unique_ptr<TaskWorkerPool> _report_tablet_workers;
-    std::unique_ptr<TaskWorkerPool> _report_workgroup_workers;
-
-    std::unique_ptr<TaskWorkerPool> _upload_workers;
-    std::unique_ptr<TaskWorkerPool> _download_workers;
-    std::unique_ptr<TaskWorkerPool> _make_snapshot_workers;
-    std::unique_ptr<TaskWorkerPool> _release_snapshot_workers;
-    std::unique_ptr<TaskWorkerPool> _move_dir_workers;
-    std::unique_ptr<TaskWorkerPool> _recover_tablet_workers;
-    std::unique_ptr<TaskWorkerPool> _update_tablet_meta_info_workers;
+    class Impl;
+    std::unique_ptr<Impl> _impl;
 };
 
 } // end namespace starrocks

@@ -13,12 +13,13 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Future;
 
-public class TaskRun {
+public class TaskRun implements Comparable<TaskRun> {
 
     private static final Logger LOG = LogManager.getLogger(TaskRun.class);
 
@@ -147,4 +148,12 @@ public class TaskRun {
         return status;
     }
 
+    @Override
+    public int compareTo(@NotNull TaskRun taskRun) {
+        if (this.getStatus().getPriority() != taskRun.getStatus().getPriority()) {
+            return taskRun.getStatus().getPriority() - this.getStatus().getPriority();
+        } else {
+            return this.getStatus().getCreateTime() > taskRun.getStatus().getCreateTime() ? 1 : -1;
+        }
+    }
 }

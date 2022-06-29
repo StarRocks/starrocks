@@ -46,9 +46,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class SortNode extends PlanNode {
 
     private static final Logger LOG = LogManager.getLogger(SortNode.class);
@@ -69,31 +66,11 @@ public class SortNode extends PlanNode {
     // info_.sortTupleSlotExprs_ substituted with the outputSmap_ for materialized slots in init().
     public List<Expr> resolvedTupleExprs;
 
-    public void setIsAnalyticSort(boolean v) {
-        isAnalyticSort = v;
-    }
-
-    public boolean isAnalyticSort() {
-        return isAnalyticSort;
-    }
-
-    public List<Expr> getAnalyticPartitionExprs() {
-        return this.analyticPartitionExprs;
-    }
-
     public void setAnalyticPartitionExprs(List<Expr> exprs) {
         this.analyticPartitionExprs = exprs;
     }
 
     private DataPartition inputPartition;
-
-    public void setInputPartition(DataPartition inputPartition) {
-        this.inputPartition = inputPartition;
-    }
-
-    public DataPartition getInputPartition() {
-        return inputPartition;
-    }
 
     public SortNode(PlanNodeId id, PlanNode input, SortInfo info, boolean useTopN,
                     boolean isDefaultLimit, long offset) {
@@ -106,19 +83,6 @@ public class SortNode extends PlanNode {
         this.children.add(input);
         this.offset = offset;
         Preconditions.checkArgument(info.getOrderingExprs().size() == info.getIsAscOrder().size());
-    }
-
-    /**
-     * Clone 'inputSortNode' for distributed Top-N
-     */
-    public SortNode(PlanNodeId id, SortNode inputSortNode, PlanNode child) {
-        super(id, inputSortNode, inputSortNode.useTopN ? "TOP-N" :
-                (inputSortNode.info.getPartitionExprs().isEmpty() ? "SORT" : "PARTITION-TOP-N"));
-        this.info = inputSortNode.info;
-        this.useTopN = inputSortNode.useTopN;
-        this.isDefaultLimit = inputSortNode.isDefaultLimit;
-        this.children.add(child);
-        this.offset = inputSortNode.offset;
     }
 
     public TopNType getTopNType() {
@@ -149,16 +113,6 @@ public class SortNode extends PlanNode {
 
     @Override
     protected void computeStats(Analyzer analyzer) {
-        super.computeStats(analyzer);
-        cardinality = getChild(0).cardinality;
-        if (hasLimit()) {
-            if (cardinality == -1) {
-                cardinality = limit;
-            } else {
-                cardinality = Math.min(cardinality, limit);
-            }
-        }
-        LOG.debug("stats Sort: cardinality=" + Long.toString(cardinality));
     }
 
     @Override
@@ -318,9 +272,6 @@ public class SortNode extends PlanNode {
 
     @Override
     public boolean canPushDownRuntimeFilter() {
-        if (useTopN) {
-            return false;
-        }
-        return true;
+        return !useTopN;
     }
 }

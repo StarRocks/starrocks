@@ -91,7 +91,7 @@ public class RevokeStmt extends DdlStmt {
             userIdent.analyze(analyzer.getClusterName());
         } else {
             FeNameFormat.checkRoleName(role, false /* can not be superuser */, "Can not revoke from role");
-            role = ClusterNamespace.getFullName(analyzer.getClusterName(), role);
+            role = ClusterNamespace.getFullName(role);
         }
 
         if (tblPattern != null) {

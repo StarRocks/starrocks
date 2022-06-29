@@ -23,6 +23,7 @@
 
 #include <thread>
 
+#include "agent/agent_server.h"
 #include "agent/master_info.h"
 #include "column/column_pool.h"
 #include "common/config.h"
@@ -274,6 +275,10 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     RETURN_IF_ERROR(_load_channel_mgr->init(_load_mem_tracker));
     _heartbeat_flags = new HeartbeatFlags();
+
+    _agent_server = new AgentServer(this);
+    _agent_server->init_or_die();
+
     return Status::OK();
 }
 
@@ -367,6 +372,10 @@ Status ExecEnv::_init_storage_page_cache() {
 }
 
 void ExecEnv::_destroy() {
+    if (_agent_server) {
+        delete _agent_server;
+        _agent_server = nullptr;
+    }
     if (_runtime_filter_worker) {
         delete _runtime_filter_worker;
         _runtime_filter_worker = nullptr;

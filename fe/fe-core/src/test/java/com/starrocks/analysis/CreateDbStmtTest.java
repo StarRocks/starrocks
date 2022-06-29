@@ -46,8 +46,8 @@ public class CreateDbStmtTest {
     public void testAnalyzeNormal() throws UserException, AnalysisException {
         CreateDbStmt dbStmt = new CreateDbStmt(false, "test");
         dbStmt.analyze(analyzer);
-        Assert.assertEquals("testCluster:test", dbStmt.getFullDbName());
-        Assert.assertEquals("CREATE DATABASE `testCluster:test`", dbStmt.toString());
+        Assert.assertEquals("default_cluster:test", dbStmt.getFullDbName());
+        Assert.assertEquals("CREATE DATABASE `default_cluster:test`", dbStmt.toString());
     }
 
     @Test(expected = AnalysisException.class)

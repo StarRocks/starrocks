@@ -122,6 +122,29 @@ public class Replica implements Writable {
     // we should ensure that all txns on this replicas are finished.
     private long watermarkTxnId = -1;
 
+    /**
+     * In the following situation, a normally cloned replica could be falsely deleted:
+     * <p>
+     * 1. BE X generates tablet report and sends it to FE<p>
+     * 2. FE creates clone task(for balance or repair) and a new replica on BE X,
+     *    so the corresponding tablet is not included in the report sent above.<p>
+     * 3. BE X finishes clone and then FE will receive the message and set the state
+     *    of new replica to NORMAL<p>
+     * 4. FE processes the tablet report from step 1 and finds that BE X doesn't report
+     *    the tablet info corresponding to the newly created replica, so it will delete
+     *    the replica from its meta<p>
+     * 5. On the next tablet report of BE X which will include the tablet info, FE finds
+     *    that the tablet reported by BE X doesn't exist in its meta, so it will send a
+     *    request asking BE X to delete the newly cloned replica physically.
+     *  <p>
+     * The main reason causes this problem is that FE handles tablet report task and clone
+     * task concurrently, with specific timing, this will happen. So we add a new state
+     * `deferReplicaDeleteToNextReport` for `Replica`, default to true. When FE meets a replica
+     * only existed in FE's meta, not in the tablet report, it will check
+     * `deferReplicaDeleteToNextReport` and defer the meta delete till next report of the BE.
+     */
+    private boolean deferReplicaDeleteToNextReport = true;
+
     public Replica() {
     }
 
@@ -251,6 +274,14 @@ public class Replica implements Writable {
         this.furtherRepairSetTime = System.currentTimeMillis();
     }
 
+    public boolean getDeferReplicaDeleteToNextReport() {
+        return deferReplicaDeleteToNextReport;
+    }
+
+    public void setDeferReplicaDeleteToNextReport(boolean defer) {
+        this.deferReplicaDeleteToNextReport = defer;
+    }
+
     // only update data size and row num
     public synchronized void updateStat(long dataSize, long rowNum) {
         this.dataSize = dataSize;
@@ -346,7 +377,7 @@ public class Replica implements Writable {
         if (this.lastSuccessVersion <= this.lastFailedVersion) {
             this.lastSuccessVersion = this.version;
         }
-        
+
         if (lastFailedVersion != this.lastFailedVersion) {
             // Case 2:
             if (lastFailedVersion > this.lastFailedVersion) {

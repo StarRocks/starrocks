@@ -44,7 +44,7 @@
 #include "storage/types.h" // for TypeInfo
 #include "storage/vectorized_column_predicate.h"
 #include "storage/wrapper_field.h"
-#include "util/block_compression.h"
+#include "util/compression/block_compression.h"
 #include "util/json.h"
 #include "util/rle_encoding.h" // for RleDecoder
 
