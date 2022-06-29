@@ -16,8 +16,8 @@ on:
 jobs:
   Trigger-A-Jenkins-Job-With-2-Approval:
     runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#    env:
+#      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 #      JENKINS_PW: ${{ secrets.JENKINS_PW }}
 #      JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
 #      JENKINS_URL: ${{ secrets.JENKINS_URL }}
