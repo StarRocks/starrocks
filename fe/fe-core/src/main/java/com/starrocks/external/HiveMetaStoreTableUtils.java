@@ -234,8 +234,6 @@ public class HiveMetaStoreTableUtils {
     public static Type convertHudiTableColumnType(Schema avroSchema) throws DdlException {
         Schema.Type columnType = avroSchema.getType();
         LogicalType logicalType = avroSchema.getLogicalType();
-        int precision = 0;
-        int scale = 0;
         PrimitiveType primitiveType = null;
         if (columnType == null) {
             return null;
@@ -277,6 +275,8 @@ public class HiveMetaStoreTableUtils {
                 return Utils.convertToArrayType(avroSchema);
             case FIXED:
             case BYTES:
+                int precision = 0;
+                int scale = 0;
                 if (avroSchema.getObjectProp("precision") instanceof Integer) {
                     precision = (int) avroSchema.getObjectProp("precision");
                 }
@@ -294,7 +294,7 @@ public class HiveMetaStoreTableUtils {
                 } else {
                     primitiveType = PrimitiveType.VARCHAR;
                 }
-                break;
+                return ScalarType.createDecimalV3Type(primitiveType, precision, scale);
             case UNION:
                 List<Schema> nonNullMembers = avroSchema.getTypes().stream()
                         .filter(schema -> !Schema.Type.NULL.equals(schema.getType()))
@@ -312,11 +312,7 @@ public class HiveMetaStoreTableUtils {
                 throw new DdlException("hudi table column type [" + avroSchema.getType() + "] transform failed.");
         }
 
-        if (precision != 0 && scale != 0) {
-            return ScalarType.createDecimalV3Type(primitiveType, precision, scale);
-        } else {
-            return ScalarType.createType(primitiveType);
-        }
+        return ScalarType.createType(primitiveType);
     }
     
     // In the first phase of connector, in order to reduce changes, we use `hive.metastore.uris` as resource name
