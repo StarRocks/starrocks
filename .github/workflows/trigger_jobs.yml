@@ -1,31 +1,15 @@
- on: pull_request_review
- 
- name: Trigger jobs when approving pull requests
- 
- jobs:
-   TriggerJobsWhenApproved:
-     name: Label when approved
-     runs-on: ubuntu-latest
-     steps:
-     - name: Label when approved
-       uses: pullreminders/label-when-approved-action@master
-       env:
-         APPROVALS: "2"
-         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-         ADD_LABEL: "approved"
-         REMOVE_LABEL: "awaiting review"
-         
-     - name: Trigger a job when approved
-       run: echo "Approved !!"
-       if: ${{ github.event.label.name == 'approved' }}
-
- #    - id: automerge
- #      name: automerge
- #      uses: pascalgn/automerge-action@v0.15.3
- #      env:
- #        GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-
- #    - name: feedback
- #      if: steps.automerge.outputs.mergeResult == "merged"
- #      run: |
- #        echo "Pull request ${{ steps.automerge.outputs.pullRequestNumber }} merged!"
+on: pull_request_review
+name: Trigger Jobs
+jobs:
+  myJob:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: luisrjaeger/approved-event-checker@v1.0.0
+      id: approved
+      with:
+        approvals: 2
+        check_changes_requested: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - run: echo "Approved !!"
+      if: ${{ steps.approved.outputs.approved == 'true' }}
