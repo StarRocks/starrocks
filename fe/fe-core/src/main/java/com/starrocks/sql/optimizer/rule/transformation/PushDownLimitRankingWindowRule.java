@@ -24,15 +24,31 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-/**
+/*
  * For ranking window functions, such as row_number, rank, dense_rank, if there exists rank related order by clause
  * and limit clause, then we can add a TopN to filter data in order to reduce the amount of data to be exchanged and sorted
  * E.g.
- * select * from (
- * select *, rank() over (order by v2) as rk from t0
- * ) sub_t0
- * order by rk
- * limit 5;
+ *      select * from (
+ *          select *, rank() over (order by v2) as rk from t0
+ *      ) sub_t0
+ *      order by rk
+ *      limit 5;
+ *
+ * Before:
+ *       TopN
+ *         |
+ *       Project
+ *         |
+ *       Window
+ *
+ * After:
+ *       TopN
+ *         |
+ *       Project
+ *         |
+ *       Window
+ *         |
+ *       TopN
  */
 public class PushDownLimitRankingWindowRule extends TransformationRule {
     public PushDownLimitRankingWindowRule() {
@@ -61,8 +77,8 @@ public class PushDownLimitRankingWindowRule extends TransformationRule {
         CallOperator callOperator = windowOperator.getWindowCall().get(windowCol);
 
         // TODO(hcf) we support dense_rank later
-        if (!FunctionSet.ROW_NUMBER.equalsIgnoreCase(callOperator.getFnName()) &&
-                !FunctionSet.RANK.equalsIgnoreCase(callOperator.getFnName())) {
+        if (!FunctionSet.ROW_NUMBER.equals(callOperator.getFnName()) &&
+                !FunctionSet.RANK.equals(callOperator.getFnName())) {
             return false;
         }
 
@@ -130,16 +146,8 @@ public class PushDownLimitRankingWindowRule extends TransformationRule {
                 .setSortPhase(sortPhase)
                 .build(), grandChildExpr.getInputs());
 
-        OptExpression newWindowOptExp =
-                OptExpression.create(new LogicalWindowOperator.Builder().withOperator(windowOperator).build(),
-                        newTopNOptExp);
-
-        OptExpression newProjectOptExp =
-                OptExpression.create(new LogicalProjectOperator.Builder().withOperator(projectOperator).build(),
-                        newWindowOptExp);
-
-        return Collections.singletonList(
-                OptExpression.create(new LogicalTopNOperator.Builder().withOperator(topNOperator).build(),
-                        newProjectOptExp));
+        OptExpression newWindowOptExp = OptExpression.create(windowOperator, newTopNOptExp);
+        OptExpression newProjectOptExp = OptExpression.create(projectOperator, newWindowOptExp);
+        return Collections.singletonList(OptExpression.create(topNOperator, newProjectOptExp));
     }
 }

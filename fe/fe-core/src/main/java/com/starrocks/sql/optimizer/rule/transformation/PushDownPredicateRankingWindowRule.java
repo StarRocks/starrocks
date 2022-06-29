@@ -27,14 +27,25 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-/**
+/*
  * For ranking window functions, such as row_number, rank, dense_rank, if there exists rank related predicate
  * then we can add a TopN to filter data in order to reduce the amount of data to be exchanged and sorted
  * E.g.
- * select * from (
- * select *, rank() over (order by v2) as rk from t0
- * ) sub_t0
- * where rk < 4;
+ *      select * from (
+ *          select *, rank() over (order by v2) as rk from t0
+ *      ) sub_t0
+ *      where rk < 4;
+ * Before:
+ *       Filter
+ *         |
+ *       Window
+ *
+ * After:
+ *       Filter
+ *         |
+ *       Window
+ *         |
+ *       TopN
  */
 public class PushDownPredicateRankingWindowRule extends TransformationRule {
 
@@ -63,8 +74,8 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
         CallOperator callOperator = windowOperator.getWindowCall().get(windowCol);
 
         // TODO(hcf) we support dense_rank later
-        if (!FunctionSet.ROW_NUMBER.equalsIgnoreCase(callOperator.getFnName()) &&
-                !FunctionSet.RANK.equalsIgnoreCase(callOperator.getFnName())) {
+        if (!FunctionSet.ROW_NUMBER.equals(callOperator.getFnName()) &&
+                !FunctionSet.RANK.equals(callOperator.getFnName())) {
             return false;
         }
 
@@ -131,12 +142,7 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
                 .setSortPhase(sortPhase)
                 .build(), childExpr.getInputs());
 
-        OptExpression newWindowOptExp =
-                OptExpression.create(new LogicalWindowOperator.Builder().withOperator(windowOperator).build(),
-                        newTopNOptExp);
-
-        return Collections.singletonList(
-                OptExpression.create(new LogicalFilterOperator.Builder().withOperator(filterOperator).build(),
-                        newWindowOptExp));
+        OptExpression newWindowOptExp = OptExpression.create(windowOperator, newTopNOptExp);
+        return Collections.singletonList(OptExpression.create(filterOperator, newWindowOptExp));
     }
 }
