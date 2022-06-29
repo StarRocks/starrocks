@@ -1,6 +1,4 @@
-on: 
-#pull_request_review
-    push:
+on: pull_request_review
 name: Trigger Jobs
 jobs:
   Trigger-A-Jenkins-Job-With-2-Approval:
@@ -11,16 +9,16 @@ jobs:
       JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
       JENKINS_URL: ${{ secrets.JENKINS_URL }}
     steps:
-    #- uses: luisrjaeger/approved-event-checker@master
-    #  id: approved
-    #  with:
-    #    approvals: 2
-    #    check_changes_requested: false
+    - uses: luisrjaeger/approved-event-checker@master
+      id: approved
+      with:
+        approvals: 2
+        check_changes_requested: false
     #  env:
     #    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
     - name: trigger jenkins job
-#      if: ${{ steps.approved.outputs.approved == 'true' }}
+      if: ${{ steps.approved.outputs.approved == 'true' }}
 #      env:
 #        JENKINS_PW: ${{ secrets.JENKINS_PW }}
 #        JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
