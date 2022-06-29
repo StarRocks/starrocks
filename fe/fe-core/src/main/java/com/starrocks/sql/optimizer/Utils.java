@@ -451,7 +451,7 @@ public class Utils {
         int schemaHash = table.getSchemaHashByIndexId(selectedIndexId);
         for (Long partitionId : selectedPartitionId) {
             Partition partition = table.getPartition(partitionId);
-            if (partition.isUseStarOS()) {
+            if (table.isLakeTable()) {
                 // TODO(wyb): necessary to support?
                 return false;
             }

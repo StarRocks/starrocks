@@ -240,7 +240,7 @@ public class StatisticAutoCollector extends MasterDaemon {
 
     private void createTableJobs(Map<Long, TableCollectJob> tableJobs, AnalyzeJob job,
                                  Database db, Table table) {
-        if (null == table || !Table.TableType.OLAP.equals(table.getType())) {
+        if (null == table || !table.isNativeTable()) {
             return;
         }
 
