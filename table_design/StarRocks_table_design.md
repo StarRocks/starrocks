@@ -2,7 +2,7 @@
 
 ## 列式存储
 
-![img](https://starrocks.feishu.cn/space/api/box/stream/download/asynccode/?code=YzQ1MjQwM2MyZTdiMWQ1YWUyMDUzZTgyYzY5NzlkZTRfVVVQS0dERmpOczV1cWxpUjQ0Tk9vcVkxd05PMDFCYVdfVG9rZW46Ym94Y25XZzc2QjNWU0U2NFl0eEIxOWYyUjhiXzE2NTY0NjkxNDc6MTY1NjQ3Mjc0N19WNA)
+![列式存储](/assets/3.1.1-1.png)
 
 StarRocks 中的表和关系型数据相同，由行和列构成。每行数据对应用户一条记录，每列数据具有相同的数据类型。所有数据行的列数相同，可以动态增删列。在 StarRocks 中，一张表的列可以分为维度列（也称为 Key 列）和指标列（也称为 Value 列）。维度列用于分组和排序，指标列的值可以通过聚合函数 SUM、COUNT、MIN、MAX、REPLACE、HLL_UNION 和 BITMAP_UNION 等累加起来。因此，StarRocks 中的表也可以认为是多维的 Key 到多维指标的映射。
 
@@ -14,7 +14,7 @@ StarRocks 中的表和关系型数据相同，由行和列构成。每行数据�
 
 使用范围查找时，如何快速找到起始的目标行呢？答案是使用前缀索引 (Prefix Index)，如下图所示。
 
-![img](https://starrocks.feishu.cn/space/api/box/stream/download/asynccode/?code=OGZlODJjODk3NjFkYjU0ODFmNDAyZjI0MzdhYjFlODBfb1lERGV5bjJyWHZKZzlhaFJ1N1pyV3dLc3JuSXF3Y25fVG9rZW46Ym94Y25tdWphcHZnV3djSWdSWDExYUdvTE5nXzE2NTY0NjkxNDc6MTY1NjQ3Mjc0N19WNA)
+![稀疏索引](/assets/prefix%20index.jpg)
 
 一张表中的数据组织主要由三部分构成：
 
