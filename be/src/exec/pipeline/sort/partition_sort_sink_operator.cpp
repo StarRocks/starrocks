@@ -30,7 +30,7 @@ void PartitionSortSinkOperator::close(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> PartitionSortSinkOperator::pull_chunk(RuntimeState* state) {
-    CHECK(false) << "Shouldn't pull chunk from result sink operator";
+    return Status::InternalError("Shouldn't pull chunk from partition sort sink operator");
 }
 
 Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {

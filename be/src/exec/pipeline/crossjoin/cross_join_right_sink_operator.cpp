@@ -11,7 +11,7 @@ using namespace starrocks::vectorized;
 namespace starrocks::pipeline {
 
 StatusOr<vectorized::ChunkPtr> CrossJoinRightSinkOperator::pull_chunk(RuntimeState* state) {
-    CHECK(false) << "Shouldn't pull chunk from result sink operator";
+    return Status::InternalError("Shouldn't pull chunk from cross join right sink operator");
 }
 
 Status CrossJoinRightSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
