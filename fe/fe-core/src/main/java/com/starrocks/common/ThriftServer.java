@@ -33,7 +33,6 @@ import org.apache.thrift.transport.TTransportException;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.Set;
 import java.util.concurrent.ThreadPoolExecutor;
 
 public class ThriftServer {
@@ -117,7 +116,7 @@ public class ThriftServer {
         ThreadPoolExecutor threadPoolExecutor = ThreadPoolManager
                 .newDaemonCacheThreadPool(Config.thrift_server_max_worker_threads, "thrift-server-pool", true);
         serverArgs.executorService(threadPoolExecutor);
-        server = new TThreadPoolServer(serverArgs);
+        server = new MyTThreadPoolServer(serverArgs);
     }
 
     public void start() throws IOException {
@@ -143,12 +142,7 @@ public class ThriftServer {
         serverThread = new Thread(new Runnable() {
             @Override
             public void run() {
-                try {
-                    server.serve();
-                } catch (Throwable t) {
-                    LOG.error("thrift server accept daemon failed, will exit", t);
-                    System.exit(-1);
-                }
+                server.serve();
             }
         });
         serverThread.setName("thrift-server-accept");
