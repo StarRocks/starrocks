@@ -91,14 +91,7 @@ public class TaskRun implements Comparable<TaskRun> {
             ctx = new ConnectContext(null);
             ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
             ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            String dbId = task.getProperties() != null ?
-                    task.getProperties().get(Constants.TASK_PROPERTY_DB_ID) : null;
-            if (dbId != null) {
-                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-                if (db != null) {
-                    ctx.setDatabase(db.getFullName());
-                }
-            }
+            ctx.setDatabase(task.getDbName());
             ctx.setQualifiedUser(Auth.ROOT_USER);
             ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         }

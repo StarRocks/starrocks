@@ -39,7 +39,6 @@ public class TaskBuilder {
         task.setDbName(dbName);
         Map<String, String> taskProperties = Maps.newHashMap();
         taskProperties.put(MvTaskRunProcessor.MV_ID, String.valueOf(materializedView.getId()));
-        taskProperties.put(Constants.TASK_PROPERTY_DB_ID, String.valueOf(materializedView.getDbId()));
         taskProperties.put(SessionVariable.ENABLE_INSERT_STRICT, "false");
         task.setProperties(taskProperties);
         task.setDefinition(materializedView.getViewDefineSql());

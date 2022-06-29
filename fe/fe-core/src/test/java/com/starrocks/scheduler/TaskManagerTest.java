@@ -5,6 +5,7 @@ package com.starrocks.scheduler;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Queues;
 import com.starrocks.analysis.DmlStmt;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
@@ -15,9 +16,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ExecPlan;
@@ -40,7 +42,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.PriorityBlockingQueue;
@@ -105,13 +106,7 @@ public class TaskManagerTest {
                 "    PARTITION p2 values less than('2020-03-01')\n" +
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view test.mv1\n" +
-                "partition by date_trunc('month',tbl1.k1)\n" +
-                "distributed by hash(k2)\n" +
-                "refresh manual\n" +
-                "properties('replication_num' = '1')\n" +
-                "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;");
+                "PROPERTIES('replication_num' = '1');");
     }
 
     @Test
@@ -151,34 +146,88 @@ public class TaskManagerTest {
 
     // This test is temporarily removed because it is unstable,
     // and it will be added back when the cause of the problem is found and fixed.
-    public void SubmitMvTaskTest() throws DdlException {
+    public void SubmitMvTaskTest() {
         new MockUp<StmtExecutor>() {
             @Mock
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {}
         };
+        String sql = "create materialized view test.mv1\n" +
+                "partition by date_trunc('month',tbl1.k1)\n" +
+                "distributed by hash(k2)\n" +
+                "refresh manual\n" +
+                "properties('replication_num' = '1')\n" +
+                "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;";
+        Database testDb = null;
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+            MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv1"));
+            Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
 
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
-        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv1"));
-        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            taskManager.createTask(task, true);
+            taskManager.executeTask(task.getName());
+            List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
 
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        taskManager.createTask(task, true);
-        taskManager.executeTask(task.getName());
-        List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
-
-        Constants.TaskRunState state = null;
-        int retryCount = 0, maxRetry = 5;
-        while (retryCount < maxRetry) {
-            state = taskRuns.get(0).getState();
-            retryCount ++;
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-            if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
-                break;
+            Constants.TaskRunState state = null;
+            int retryCount = 0, maxRetry = 5;
+            while (retryCount < maxRetry) {
+                state = taskRuns.get(0).getState();
+                retryCount ++;
+                ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+                if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
+                    break;
+                }
+                LOG.info("SubmitMvTaskTest is waiting for TaskRunState retryCount:" + retryCount);
             }
-            LOG.info("SubmitMvTaskTest is waiting for TaskRunState retryCount:" + retryCount);
+            Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            if (testDb != null) {
+                testDb.dropTable("mv1");
+            }
         }
+    }
 
-        Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
+    @Test
+    public void SubmitMvAsyncTaskTest() {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            }
+        };
+        String sql = "create materialized view test.mv1\n" +
+                "partition by date_trunc('month',tbl1.k1)\n" +
+                "distributed by hash(k2)\n" +
+                "refresh async every(interval 5 second)\n" +
+                "properties('replication_num' = '1')\n" +
+                "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;";
+        Database testDb = null;
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+
+
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
+            //schedule 1 times + execute 1 times
+            Assert.assertEquals(taskRuns.size(),2);
+            for (TaskRunStatus taskRun : taskRuns) {
+                Assert.assertEquals(Constants.TaskRunState.SUCCESS, taskRun.getState());
+            }
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            if (testDb != null) {
+                testDb.dropTable("mv1");
+            }
+        }
     }
 
     @Test
