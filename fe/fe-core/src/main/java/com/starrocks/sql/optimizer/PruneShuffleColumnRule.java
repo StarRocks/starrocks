@@ -21,6 +21,27 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/*
+ * Prune join shuffle columns, only support shuffle join
+ * e.g.
+ *  select * from t1 join[shuffle] t2 on t1.v1 = t2.v1 and t1.v2 = t2.v2
+ * before: join required shuffle by (v1, v2)
+ * after: join required shuffle by (v1) or (v2)
+ *
+ * e.g.
+ *  select * from t1 join[shuffle] t2 on t1.v1 = t2.v1 and t1.v2 = t2.v2
+ *                   join[shuffle] t3 on t1.v1 = t3.v1 and t1.v3 = t3.v3
+ * before: t1 x t2 join required shuffle by (v1, v2)
+ *         t1 x t3 join required shuffle by (v1, v3)
+ * after:  t1 x t2 join required shuffle by (v1) or (v2)
+ *         t1 x t3 join required shuffle by (v1) or (v3)
+ *
+ * e.g.
+ *  select * from t1 join[shuffle] t2 on t1.v1 = t2.v1 and t1.v2 = t2.v2
+ *                   join[bucket_shuffle] t3 on t1.v1 = t3.v1 and t1.v2 = t3.v2
+ * before: t1 x t2 x t3 join required shuffle by (v1, v2)
+ * after:  t1 x t2 x t3 join required shuffle by (v1) or (v2)
+ */
 public class PruneShuffleColumnRule implements PhysicalOperatorTreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
@@ -84,7 +105,7 @@ public class PruneShuffleColumnRule implements PhysicalOperatorTreeRewriteRule {
 
             Preconditions.checkState(descs.stream().mapToInt(d -> d.getColumns().size()).distinct().count() == 1);
 
-            if (descs.stream().mapToInt(d -> d.getColumns().size()).distinct().min().orElse(0) < 2) {
+            if (descs.stream().mapToInt(d -> d.getColumns().size()).min().orElse(0) < 2) {
                 return;
             }
 
@@ -106,7 +127,7 @@ public class PruneShuffleColumnRule implements PhysicalOperatorTreeRewriteRule {
                             cs.getDistinctValuesCount() / childContext.statistics.get(j).getOutputRowCount();
                     if ((cs.getDistinctValuesCount() <
                             StatisticsEstimateCoefficient.DEFAULT_PRUNE_SHUFFLE_COLUMN_ROWS_LIMIT) ||
-                            (ratio < sessionVariable.getCboPruneShuffleColumnCardinality())) {
+                            (ratio < sessionVariable.getPruneShuffleColumnCardinalityRate())) {
                         continue;
                     }
 

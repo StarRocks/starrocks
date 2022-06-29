@@ -12,7 +12,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
         connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
-        connectContext.getSessionVariable().setCboPruneShuffleColumnCardinality(0);
+        connectContext.getSessionVariable().setPruneShuffleColumnCardinalityRate(0);
     }
 
     @After

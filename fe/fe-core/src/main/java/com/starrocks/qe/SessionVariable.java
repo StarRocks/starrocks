@@ -203,7 +203,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
-    public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
+    public static final String PRUNE_SHUFFLE_COLUMN_CARDINALITY_RATE = "prune_shuffle_column_cardinality_rate";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -550,15 +550,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_SHOW_ALL_VARIABLES, flag = VariableMgr.INVISIBLE)
     private boolean enableShowAllVariables = false;
 
-    @VarAttr(name = CBO_PRUNE_SHUFFLE_COLUMN_RATE, flag = VariableMgr.INVISIBLE)
-    private double cboPruneShuffleColumnCardinality = 0.1;
+    @VarAttr(name = PRUNE_SHUFFLE_COLUMN_CARDINALITY_RATE, flag = VariableMgr.INVISIBLE)
+    private double pruneShuffleColumnCardinalityRate = 0.1;
 
-    public double getCboPruneShuffleColumnCardinality() {
-        return cboPruneShuffleColumnCardinality;
+    public double getPruneShuffleColumnCardinalityRate() {
+        return pruneShuffleColumnCardinalityRate;
     }
 
-    public void setCboPruneShuffleColumnCardinality(double cboPruneShuffleColumnCardinality) {
-        this.cboPruneShuffleColumnCardinality = cboPruneShuffleColumnCardinality;
+    public void setPruneShuffleColumnCardinalityRate(double pruneShuffleColumnCardinalityRate) {
+        this.pruneShuffleColumnCardinalityRate = pruneShuffleColumnCardinalityRate;
     }
 
     public boolean isEnableShowAllVariables() {
