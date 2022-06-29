@@ -277,7 +277,6 @@ public class HiveMetaStoreTableUtils {
                 return Utils.convertToArrayType(avroSchema);
             case FIXED:
             case BYTES:
-                //TODO: debug to implement hudi table decimal type
                 if (avroSchema.getObjectProp("precision") instanceof Integer) {
                     precision = (int) avroSchema.getObjectProp("precision");
                 }

@@ -26,7 +26,6 @@ public class HudiConnector implements Connector {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
         validate();
-        onCreate();
     }
 
     public void validate() {
