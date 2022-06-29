@@ -123,7 +123,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentNavigableMap;
@@ -895,6 +894,7 @@ public class Coordinator {
 
         resultBatch = receiver.getNext(status);
         if (!status.ok()) {
+            connectContext.setErrorCodeOnce(status.getErrorCodeString());
             LOG.warn("get next fail, need cancel. status {}, query id: {}", status.toString(),
                     DebugUtil.printId(queryId));
         }
@@ -1709,7 +1709,7 @@ public class Coordinator {
         if (!(returnedAllResults && status.isCancelled()) && !status.ok()) {
             ConnectContext ctx = connectContext;
             if (ctx != null) {
-                ctx.setErrorCodeOnce(Optional.ofNullable(status.getErrorCode()).map(Enum::toString).orElse("UNKNOWN"));
+                ctx.setErrorCodeOnce(status.getErrorCodeString());
             }
             LOG.warn("one instance report fail {}, query_id={} instance_id={}",
                     status, DebugUtil.printId(queryId), DebugUtil.printId(params.getFragment_instance_id()));
