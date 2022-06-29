@@ -126,7 +126,7 @@ public class TaskManagerTest {
         TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
-        taskRunManager.submitTaskRun(taskRun);
+        taskRunManager.submitTaskRun(taskRun, Constants.TaskRunPriority.LOWEST.value());
         List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
         Constants.TaskRunState state = null;
 
