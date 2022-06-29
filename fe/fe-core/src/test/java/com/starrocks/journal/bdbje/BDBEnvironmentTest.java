@@ -24,6 +24,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class BDBEnvironmentTest {
     private static final Logger LOG = LogManager.getLogger(BDBEnvironmentTest.class);
