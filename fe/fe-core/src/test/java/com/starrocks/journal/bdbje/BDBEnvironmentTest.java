@@ -4,6 +4,7 @@ package com.starrocks.journal.bdbje;
 
 import com.sleepycat.je.DatabaseEntry;
 import com.sleepycat.je.LockMode;
+import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.journal.JournalException;
 import org.apache.commons.io.FileUtils;
@@ -314,15 +315,42 @@ public class BDBEnvironmentTest {
 
         // start follower
         for (int i = 0; i < 2; ++ i) {
-            BDBEnvironment followerEnvironment = new BDBEnvironment(
+            followerEnvironments[i] = new BDBEnvironment(
                     followerPaths[i],
                     String.format("follower%d", i),
                     followerNodeHostPorts[i],
-                    followerNodeHostPorts[0],
+                    followerNodeHostPorts[i],
                     true);
-            followerEnvironment.setup();
-            Assert.assertEquals(1, followerEnvironment.getDatabaseNames().size());
-            Assert.assertEquals(DB_INDEX_OLD, followerEnvironment.getDatabaseNames().get(0));
+            followerEnvironments[i].setup();
+            Assert.assertEquals(1, followerEnvironments[i].getDatabaseNames().size());
+            Assert.assertEquals(DB_INDEX_OLD, followerEnvironments[i].getDatabaseNames().get(0));
+        }
+
+        Thread.sleep(1000);
+
+        // wait for state change
+        BDBEnvironment newMasterEnvironment = null;
+        while (newMasterEnvironment == null) {
+            Thread.sleep(1000);
+            for (int i = 0; i < 2; ++ i) {
+                if (followerEnvironments[i].getReplicatedEnvironment().getState() == ReplicatedEnvironment.State.MASTER) {
+                    newMasterEnvironment = followerEnvironments[i];
+                    LOG.warn("=========> new master is {}", newMasterEnvironment.getReplicatedEnvironment().getNodeName());
+                    masterDb = newMasterEnvironment.openDatabase(DB_NAME_OLD);
+                    key = randomEntry();
+                    value = randomEntry();
+                    masterDb.put(null, key, value);
+
+                    Thread.sleep(1000);
+
+                    int followerIndex = 1 - i;
+                    CloseSafeDatabase followerDb = followerEnvironments[followerIndex].openDatabase(DB_NAME_OLD);
+                    DatabaseEntry newvalue = new DatabaseEntry();
+                    followerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
+                    Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
+                    break;
+                }
+            }
         }
 
         // set retry times = 1 to ensure no recovery
@@ -332,7 +360,7 @@ public class BDBEnvironmentTest {
                 masterPath,
                 "master",
                 masterNodeHostPort,
-                followerNodeHostPorts[0],
+                masterNodeHostPort,
                 true);
         Assert.assertTrue(true);
         maserEnvironment.setup();
