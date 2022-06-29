@@ -57,7 +57,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
     public static final String MV_ID = "mvId";
 
     @Override
-    public void processTaskRun(TaskRunContext context) throws Exception {
+    public void processTaskRun(TaskRunContext context) {
         Map<String, String> properties = context.getProperties();
         // NOTE: need set mvId in Task's properties when creating
         long mvId = Long.parseLong(properties.get(MV_ID));
@@ -71,24 +71,24 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             Preconditions.checkState(materializedView.getPartitions().size() != 0);
             Map<Long, Map<Long, Long>> baseTableVisibleVersionMap =
                     materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+            boolean needRefresh = false;
             for (Long baseTableId : baseTableIds) {
                 OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
                 Map<Long, Long> basePartitionVersions =
                         baseTableVisibleVersionMap.computeIfAbsent(baseTableId, k -> Maps.newHashMap());
                 Collection<Partition> partitions = olapTable.getPartitions();
-                boolean needRefresh = false;
                 for (Partition partition : partitions) {
                     long basePartitionId = partition.getId();
                     long basePartitionVersion = partition.getVisibleVersion();
                     Long oldVersion = basePartitionVersions.get(basePartitionId);
-                    if (oldVersion == null || basePartitionVersion > oldVersion.longValue()) {
+                    if (oldVersion == null || basePartitionVersion > oldVersion) {
                         needRefresh = true;
                         basePartitionVersions.put(basePartitionId, basePartitionVersion);
                     }
                 }
-                if (needRefresh) {
-                    refreshMv(context, materializedView);
-                }
+            }
+            if (needRefresh) {
+                refreshMv(context, materializedView);
             }
             return;
         }
@@ -236,7 +236,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             long basePartitionId = basePartition.getId();
             long basePartitionVersion = basePartition.getVisibleVersion();
             Long oldVersion = basePartitionVisionMap.get(basePartitionId);
-            if (oldVersion == null || basePartitionVersion > oldVersion.longValue()) {
+            if (oldVersion == null || basePartitionVersion > oldVersion) {
                 refreshAllPartitions = true;
                 basePartitionVisionMap.put(basePartitionId, basePartitionVersion);
             }
@@ -323,11 +323,9 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
     }
 
     private void refreshMv(TaskRunContext context, MaterializedView materializedView) {
-        StringBuilder insertSqlBuilder = new StringBuilder();
-        insertSqlBuilder.append("insert into ");
-        insertSqlBuilder.append(materializedView.getName() + " ");
-        insertSqlBuilder.append(context.getDefinition());
-        String insertIntoSql = insertSqlBuilder.toString();
+        String insertIntoSql = "insert into " +
+                materializedView.getName() + " " +
+                context.getDefinition();
         execInsertStmt(insertIntoSql, context);
     }
 
@@ -356,14 +354,12 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                     AnalyzerUtils.collectAllTableRelation(queryStatement);
             TableRelation tableRelation = tableRelations.get(olapTable.getName());
             tableRelation.setPartitionNames(
-                    new PartitionNames(false, tablePartitionNames.stream().collect(Collectors.toList())));
+                    new PartitionNames(false, new ArrayList<>(tablePartitionNames)));
             // e.g. insert into mv partition(p1,p2) select * from table partition(p3)
-            StringBuilder insertSqlBuilder = new StringBuilder();
-            insertSqlBuilder.append("insert into ");
-            insertSqlBuilder.append(materializedView.getName());
-            insertSqlBuilder.append(" partition(" + mvPartitionName + ") ");
-            insertSqlBuilder.append(AST2SQL.toString(queryStatement));
-            String insertIntoSql = insertSqlBuilder.toString();
+            String insertIntoSql = "insert into " +
+                    materializedView.getName() +
+                    " partition(" + mvPartitionName + ") " +
+                    AST2SQL.toString(queryStatement);
             execInsertStmt(insertIntoSql, context);
             ctx.setQueryId(UUIDUtil.genUUID());
         }
@@ -382,12 +378,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         } catch (Exception e) {
             throw new SemanticException("Refresh materialized view failed:" + insertSql, e);
         } finally {
-            if (executor != null) {
-                auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
-            } else {
-                // executor can be null if we encounter analysis error.
-                auditAfterExec(context, null, null);
-            }
+            auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
         }
     }
 
