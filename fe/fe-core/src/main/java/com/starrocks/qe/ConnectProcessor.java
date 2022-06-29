@@ -382,7 +382,7 @@ public class ConnectProcessor {
         ctx.setCommand(command);
         ctx.setStartTime();
         ctx.setWorkGroup(null);
-        ctx.setErrorCodeOnce("");
+        ctx.setErrorCode("");
 
         switch (command) {
             case COM_INIT_DB:
