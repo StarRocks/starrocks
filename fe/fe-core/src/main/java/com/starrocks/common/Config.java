@@ -1390,7 +1390,6 @@ public class Config extends ConfigBase {
     @ConfField
     public static int hive_meta_load_concurrency = 4;
 
-
     @ConfField
     public static long hive_meta_cache_refresh_interval_s = 3600L * 2L;
 
