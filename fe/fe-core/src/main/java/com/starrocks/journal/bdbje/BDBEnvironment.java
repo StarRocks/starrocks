@@ -350,6 +350,12 @@ public class BDBEnvironment {
             return;
         }
 
+        // Almost never used, just in case the master can not restart
+        if (Config.metadata_failure_recovery.equals("true")) {
+            LOG.info("skip check local environment because metadata_failure_recovery = true");
+            return;
+        }
+
         LOG.info("start to check if local replica environment from {} contains {}", envHome, helperHostPort);
 
         // 1. init environment as an observer
