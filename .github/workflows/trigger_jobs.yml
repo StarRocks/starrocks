@@ -4,6 +4,9 @@ jobs:
   myJob:
     runs-on: ubuntu-latest
     steps:
+    - name: prepare for job
+      run: mkdir -p /data/jenkins
+      
     - uses: luisrjaeger/approved-event-checker@master
       id: approved
       with:
