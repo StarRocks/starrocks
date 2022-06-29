@@ -32,6 +32,7 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDisk;
@@ -103,7 +104,8 @@ public class GlobalStateMgrTestUtil {
         globalStateMgr.initDefaultCluster();
         Database db = createSimpleDb(testDbId1, testTableId1, testPartitionId1, testIndexId1, testTabletId1,
                 testStartVersion);
-        globalStateMgr.unprotectCreateDb(db);
+        LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
+        metastore.unprotectCreateDb(db);
         return globalStateMgr;
     }
 
