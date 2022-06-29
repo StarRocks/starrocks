@@ -22,7 +22,6 @@
 package com.starrocks.alter;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJob.JobState;
 import com.starrocks.analysis.AddBackendClause;
@@ -46,8 +45,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -139,19 +136,7 @@ public class SystemHandler extends AlterHandler {
         if (alterClause instanceof AddBackendClause) {
             // add backend
             AddBackendClause addBackendClause = (AddBackendClause) alterClause;
-            final String destClusterName = addBackendClause.getDestCluster();
-
-            if ((!Strings.isNullOrEmpty(destClusterName) || addBackendClause.isFree()) &&
-                    Config.disable_cluster_feature) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_OPERATION, "ADD BACKEND TO CLUSTER");
-            }
-
-            if (!Strings.isNullOrEmpty(destClusterName)
-                    && GlobalStateMgr.getCurrentState().getCluster(destClusterName) == null) {
-                throw new DdlException("Cluster: " + destClusterName + " does not exist.");
-            }
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(addBackendClause.getHostPortPairs(),
-                    addBackendClause.isFree(), addBackendClause.getDestCluster());
+            GlobalStateMgr.getCurrentSystemInfo().addBackends(addBackendClause.getHostPortPairs());
         } else if (alterClause instanceof ModifyBackendAddressClause) {
             // update Backend Address
             ModifyBackendAddressClause modifyBackendAddressClause = (ModifyBackendAddressClause) alterClause;

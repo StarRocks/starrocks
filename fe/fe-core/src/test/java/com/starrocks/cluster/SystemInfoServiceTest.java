@@ -211,13 +211,13 @@ public class SystemInfoServiceTest {
         AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
         stmt.analyze(analyzer);
         try {
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs(), true);
+            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs());
         } catch (DdlException e) {
             Assert.fail();
         }
 
         try {
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs(), true);
+            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs());
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("already exists"));
         }
@@ -240,7 +240,7 @@ public class SystemInfoServiceTest {
         AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
         stmt.analyze(analyzer);
         try {
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs(), true);
+            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs());
         } catch (DdlException e) {
             e.printStackTrace();
         }
@@ -285,7 +285,7 @@ public class SystemInfoServiceTest {
         AddBackendClause stmt2 = new AddBackendClause(Lists.newArrayList("192.168.0.1:1235"));
         stmt2.analyze(analyzer);
         try {
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt2.getHostPortPairs(), true);
+            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt2.getHostPortPairs());
         } catch (DdlException e) {
             e.printStackTrace();
         }
