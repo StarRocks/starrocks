@@ -125,7 +125,7 @@ public class UserIdentity implements Writable {
 
         FeNameFormat.checkUserName(user);
         if (!user.equals(Auth.ROOT_USER) && !user.equals(Auth.ADMIN_USER)) {
-            user = ClusterNamespace.getFullName(clusterName, user);
+            user = ClusterNamespace.getFullName(user);
         }
 
         // reuse createMysqlPattern to validate host pattern

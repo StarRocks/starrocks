@@ -72,7 +72,7 @@ public class AlterDatabaseQuotaStmt extends DdlStmt {
         if (Strings.isNullOrEmpty(dbName)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
         }
-        dbName = ClusterNamespace.getFullName(getClusterName(), dbName);
+        dbName = ClusterNamespace.getFullName(dbName);
         if (quotaType == QuotaType.DATA) {
             quota = ParseUtil.analyzeDataVolumn(quotaValue);
         } else if (quotaType == QuotaType.REPLICA) {

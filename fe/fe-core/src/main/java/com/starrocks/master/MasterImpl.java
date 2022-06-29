@@ -68,7 +68,6 @@ import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
@@ -833,7 +832,7 @@ public class MasterImpl {
             return response;
         }
 
-        String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
+        String fullDbName = ClusterNamespace.getFullName(dbName);
         // checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), fullDbName, tableName, PrivPredicate.SELECT);
         Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
         if (db == null) {

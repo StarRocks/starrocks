@@ -83,10 +83,10 @@ public class AdminStmtAnalyzer {
                 if (Strings.isNullOrEmpty(session.getDatabase())) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
                 } else {
-                    dbName = ClusterNamespace.getFullName(session.getClusterName(), session.getDatabase());
+                    dbName = ClusterNamespace.getFullName(session.getDatabase());
                 }
             } else {
-                dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
+                dbName = ClusterNamespace.getFullName(dbName);
             }
             adminShowReplicaDistributionStmt.setDbName(dbName);
 
@@ -107,10 +107,10 @@ public class AdminStmtAnalyzer {
                 if (Strings.isNullOrEmpty(session.getDatabase())) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
                 } else {
-                    dbName = ClusterNamespace.getFullName(session.getClusterName(), session.getDatabase());
+                    dbName = ClusterNamespace.getFullName(session.getDatabase());
                 }
             } else {
-                dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
+                dbName = ClusterNamespace.getFullName(dbName);
             }
             adminShowReplicaStatusStmt.setDbName(dbName);
 

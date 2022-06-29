@@ -72,8 +72,8 @@ public class AlterDatabaseRename extends DdlStmt {
 
         FeNameFormat.checkDbName(newDbName);
 
-        dbName = ClusterNamespace.getFullName(getClusterName(), dbName);
-        newDbName = ClusterNamespace.getFullName(getClusterName(), newDbName);
+        dbName = ClusterNamespace.getFullName(dbName);
+        newDbName = ClusterNamespace.getFullName(newDbName);
     }
 
     @Override

@@ -64,7 +64,7 @@ public class ShowSmallFilesStmt extends ShowStmt {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
             }
         } else {
-            dbName = ClusterNamespace.getFullName(getClusterName(), dbName);
+            dbName = ClusterNamespace.getFullName(dbName);
         }
 
         if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.SHOW)) {

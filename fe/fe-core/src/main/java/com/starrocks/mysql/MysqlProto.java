@@ -83,7 +83,7 @@ public class MysqlProto {
         context.setCluster(clusterName);
 
         LOG.debug("parse cluster: {}", clusterName);
-        String qualifiedUser = ClusterNamespace.getFullName(clusterName, tmpUser);
+        String qualifiedUser = ClusterNamespace.getFullName(tmpUser);
         String remoteIp = context.getMysqlChannel().getRemoteIp();
 
         List<UserIdentity> currentUserIdentity = Lists.newArrayList();

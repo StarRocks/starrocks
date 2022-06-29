@@ -35,8 +35,6 @@ import java.util.List;
 
 public abstract class StatementBase implements ParseNode {
 
-    private String clusterName;
-
     public enum ExplainLevel {
         NORMAL,
         LOGICAL,
@@ -93,7 +91,6 @@ public abstract class StatementBase implements ParseNode {
         if (Strings.isNullOrEmpty(analyzer.getClusterName())) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER);
         }
-        this.clusterName = analyzer.getClusterName();
     }
 
     public Analyzer getAnalyzer() {
@@ -159,14 +156,6 @@ public abstract class StatementBase implements ParseNode {
     public void rewriteExprs(ExprRewriter rewriter) throws AnalysisException {
         throw new IllegalStateException(
                 "rewriteExprs() not implemented for this stmt: " + getClass().getSimpleName());
-    }
-
-    public String getClusterName() {
-        return clusterName;
-    }
-
-    public void setClusterName(String clusterName) {
-        this.clusterName = clusterName;
     }
 
     public void setOrigStmt(OriginStatement origStmt) {

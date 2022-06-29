@@ -99,14 +99,14 @@ public class ShowStmtAnalyzer {
             if (Strings.isNullOrEmpty(db)) {
                 db = session.getDatabase();
                 if (CatalogMgr.isInternalCatalog(catalog)) {
-                    db = ClusterNamespace.getFullName(session.getClusterName(), db);
+                    db = ClusterNamespace.getFullName(db);
                 }
                 if (Strings.isNullOrEmpty(db)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
                 }
             } else {
                 if (CatalogMgr.isInternalCatalog(catalog)) {
-                    db = ClusterNamespace.getFullName(session.getClusterName(), db);
+                    db = ClusterNamespace.getFullName(db);
                 }
             }
             return db;
