@@ -188,6 +188,7 @@ public:
     Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
     void fianlize();
 
+    int64_t num_bytes_read() const { return _stats.bytes_read; }
     int64_t raw_rows_read() const { return _stats.raw_rows_read; }
     int64_t num_rows_read() const { return _stats.num_rows_read; }
     void set_keep_priority(bool v) { _keep_priority = v; }

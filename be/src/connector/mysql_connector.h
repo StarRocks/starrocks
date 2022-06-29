@@ -48,6 +48,7 @@ public:
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
+    int64_t num_bytes_read() const override;
 
 private:
     const MySQLDataSourceProvider* _provider;
@@ -75,6 +76,7 @@ private:
     std::unique_ptr<MysqlScanner> _mysql_scanner;
 
     int64_t _rows_read = 0;
+    int64_t _bytes_read = 0;
 
     Status fill_chunk(vectorized::ChunkPtr* chunk, char** data, size_t* length);
 
