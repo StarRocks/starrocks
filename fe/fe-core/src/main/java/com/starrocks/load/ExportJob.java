@@ -283,7 +283,7 @@ public class ExportJob implements Writable {
                     long dataSize = replica != null ? replica.getDataSize() : 0L;
 
                     Long assignedBytes = bytesPerBe.get(backendId);
-                    if (assignedBytes == null || (assignedBytes != null && assignedBytes < maxBytesPerBe)) {
+                    if (assignedBytes == null || assignedBytes < maxBytesPerBe) {
                         taskTabletLocations.add(scanRangeLocations);
                         bytesPerBe.put(backendId, assignedBytes != null ? assignedBytes + dataSize : dataSize);
                         iter.remove();
@@ -326,13 +326,11 @@ public class ExportJob implements Writable {
     }
 
     private OlapScanNode genOlapScanNodeByLocation(List<TScanRangeLocations> locations) {
-        OlapScanNode olapScanNode = OlapScanNode.createOlapScanNodeByLocation(
+        return OlapScanNode.createOlapScanNodeByLocation(
                 new PlanNodeId(nextId.getAndIncrement()),
                 exportTupleDesc,
                 "OlapScanNodeForExport",
                 locations);
-
-        return olapScanNode;
     }
 
     private PlanFragment genPlanFragment(Table.TableType type, ScanNode scanNode, int taskIdx) throws UserException {

@@ -618,7 +618,7 @@ public class Load {
             exprsByName.put(entry.getKey(), expr);
         }
     }
-
+    
     /**
      * This method is used to transform hadoop function.
      * The hadoop function includes: replace_value, strftime, time_format, alignment_timestamp, default_value, now.
