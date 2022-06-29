@@ -430,7 +430,7 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg) {
     }
     // install new version
     _workgroup_versions[wg->id()] = wg->version();
-    
+
     // Update metrics
     add_metrics_unlocked(wg);
 }
