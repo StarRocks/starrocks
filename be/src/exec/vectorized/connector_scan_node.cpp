@@ -129,7 +129,12 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 }
 
 pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
-    size_t dop = context->degree_of_parallelism();
+    int node_id = id();
+    auto& morsel_queues = context->fragment_context()->morsel_queues();
+    DCHECK_GT(morsel_queues.count(node_id), 0);
+    auto& morsel_queue = morsel_queues[node_id];
+    size_t dop = std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
+
     auto scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this, dop);
 
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));

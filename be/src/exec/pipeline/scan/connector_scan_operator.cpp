@@ -53,17 +53,25 @@ ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int3
 }
 
 void ConnectorScanOperator::attach_chunk_source(int32_t source_index) {
-    DCHECK(!_active_inputs.contains(source_index));
-    _active_inputs.emplace(source_index);
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& active_inputs = factory->get_active_inputs();
+    auto key = std::make_pair(_driver_sequence, source_index);
+    DCHECK(!active_inputs.contains(key));
+    active_inputs.emplace(key);
 }
 
 void ConnectorScanOperator::detach_chunk_source(int32_t source_index) {
-    DCHECK(_active_inputs.contains(source_index));
-    _active_inputs.erase(source_index);
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& active_inputs = factory->get_active_inputs();
+    auto key = std::make_pair(_driver_sequence, source_index);
+    DCHECK(active_inputs.contains(key));
+    active_inputs.erase(key);
 }
 
 bool ConnectorScanOperator::has_shared_chunk_source() const {
-    return !_active_inputs.empty();
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& active_inputs = factory->get_active_inputs();
+    return !active_inputs.empty();
 }
 
 bool ConnectorScanOperator::has_buffer_output() const {

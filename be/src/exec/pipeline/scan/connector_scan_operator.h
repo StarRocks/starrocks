@@ -16,6 +16,11 @@ namespace pipeline {
 
 class ConnectorScanOperatorFactory final : public ScanOperatorFactory {
 public:
+    using ActiveInputKey = std::pair<int32_t, int32_t>;
+    using ActiveInputSet = phmap::parallel_flat_hash_set<
+            ActiveInputKey, typename phmap::Hash<ActiveInputKey>, typename phmap::EqualTo<ActiveInputKey>,
+            typename std::allocator<ActiveInputKey>, NUM_LOCK_SHARD_LOG, std::mutex, true>;
+
     ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop);
 
     ~ConnectorScanOperatorFactory() override = default;
@@ -24,10 +29,12 @@ public:
     void do_close(RuntimeState* state) override;
     OperatorPtr do_create(int32_t dop, int32_t driver_sequence) override;
     BalancedChunkBuffer& get_chunk_buffer() { return _chunk_buffer; }
+    ActiveInputSet& get_active_inputs() { return _active_inputs; }
 
 private:
     // TODO: refactor the OlapScanContext, move them into the context
     BalancedChunkBuffer _chunk_buffer;
+    ActiveInputSet _active_inputs;
 };
 
 class ConnectorScanOperator final : public ScanOperator {
@@ -48,11 +55,6 @@ public:
     bool has_buffer_output() const override;
     bool has_available_buffer() const override;
     ChunkPtr get_chunk_from_buffer() override;
-
-private:
-    using ActiveInputSet = phmap::flat_hash_set<int32_t>;
-
-    ActiveInputSet _active_inputs;
 };
 
 class ConnectorChunkSource final : public ChunkSource {
