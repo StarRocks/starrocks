@@ -43,7 +43,7 @@
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/zone_map_index.h"
-#include "util/block_compression.h"
+#include "util/compression/block_compression.h"
 #include "util/faststring.h"
 #include "util/rle_encoding.h"
 

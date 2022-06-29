@@ -30,8 +30,8 @@
 #include "gutil/strings/substitute.h"
 #include "storage/page_cache.h"
 #include "storage/rowset/storage_page_decoder.h"
-#include "util/block_compression.h"
 #include "util/coding.h"
+#include "util/compression/block_compression.h"
 #include "util/crc32c.h"
 #include "util/faststring.h"
 #include "util/runtime_profile.h"
@@ -50,11 +50,16 @@ Status PageIO::compress_page_body(const BlockCompressionCodec* codec, double min
         return Status::OK();
     }
     if (codec != nullptr && uncompressed_size > 0) {
-        compressed_body->resize(codec->max_compressed_len(uncompressed_size));
-        Slice compressed_slice(*compressed_body);
-        RETURN_IF_ERROR(codec->compress(body, &compressed_slice));
-        compressed_body->resize(compressed_slice.get_size());
-
+        if (use_compression_pool(codec->type())) {
+            Slice compressed_slice;
+            RETURN_IF_ERROR(
+                    codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body, nullptr));
+        } else {
+            compressed_body->resize(codec->max_compressed_len(uncompressed_size));
+            Slice compressed_slice(*compressed_body);
+            RETURN_IF_ERROR(codec->compress(body, &compressed_slice));
+            compressed_body->resize(compressed_slice.get_size());
+        }
         double space_saving = 1.0 - static_cast<double>(compressed_body->size()) / uncompressed_size;
         // return compressed body only when it saves more than min_space_saving
         if (space_saving > 0 && space_saving >= min_space_saving) {

@@ -175,7 +175,7 @@ public:
             options.write_ordinal_index = false;
             options.write_value_index = true;
             options.encoding = EncodingInfo::get_default_encoding(_typeinfo->type(), true);
-            options.compression = CompressionTypePB::LZ4_FRAME;
+            options.compression = CompressionTypePB::LZ4;
 
             IndexedColumnWriter dict_column_writer(options, _typeinfo, wfile);
             RETURN_IF_ERROR(dict_column_writer.init());

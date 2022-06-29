@@ -33,7 +33,8 @@ set(UTIL_FILES
   arrow/utils.cpp
   bfd_parser.cpp
   bitmap.cpp
-  block_compression.cpp
+  compression/block_compression.cpp
+  compression/compression_context_pool_singletons.cpp
   coding.cpp
   cpu_info.cpp
   crc32c.cpp

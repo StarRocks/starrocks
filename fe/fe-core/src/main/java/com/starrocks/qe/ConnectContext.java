@@ -353,6 +353,12 @@ public class ConnectContext {
         this.errorCode = errorCode;
     }
 
+    public void setErrorCodeOnce(String errorCode) {
+        if (this.errorCode == null || this.errorCode.isEmpty()) {
+            this.errorCode = errorCode;
+        }
+    }
+
     public MysqlCapability getCapability() {
         return capability;
     }
