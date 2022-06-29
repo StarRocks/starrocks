@@ -5,7 +5,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.privilege.Auth;
