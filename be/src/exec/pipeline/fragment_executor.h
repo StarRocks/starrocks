@@ -45,8 +45,9 @@ private:
     Status _prepare_global_dict(const TExecPlanFragmentParams& request);
     Status _prepare_pipeline_driver(ExecEnv* exec_env, const TExecPlanFragmentParams& request);
 
-    void _decompose_data_sink_to_operator(RuntimeState* state, PipelineBuilderContext* context,
-                                          const TDataSink& t_datasink, DataSink* datasink);
+    Status _decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
+                                            const TExecPlanFragmentParams& params,
+                                            std::unique_ptr<starrocks::DataSink>& datasink);
 
     QueryContext* _query_ctx = nullptr;
     FragmentContextPtr _fragment_ctx = nullptr;
