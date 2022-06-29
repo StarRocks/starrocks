@@ -54,7 +54,6 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_binary());
 
-        // Slice is a simple structure containing a pointer into some external storage and a size.
         const Slice slice = column->get(row_num).get_slice();
         double rate = *reinterpret_cast<double*>(slice.data);
         size_t items_size = *reinterpret_cast<size_t*>(slice.data + sizeof(double));
@@ -64,46 +63,29 @@ public:
         vector<InputCppType>& vec = this->data(state).items;
         res.resize(vec.size() + items_size);
 
-        int i = 0, j = 0;
-        while (i < vec.size() || j < items_size) {
-            if (i == vec.size() && j < items_size) {
-                memcpy(res.data() + i + j, data_ptr + j * sizeof(InputCppType),
-                       (items_size - j) * sizeof(InputCppType));
-                break;
-            } else if (j == items_size && i < vec.size()) {
-                memcpy(res.data() + i + j, vec.data() + i, (vec.size() - i) * sizeof(InputCppType));
-                break;
-            } else if (i < vec.size() && j < items_size &&
-                       vec[i] > *reinterpret_cast<InputCppType*>(data_ptr + j * sizeof(InputCppType))) {
-                res[i + j] = *reinterpret_cast<InputCppType*>(data_ptr + j * sizeof(InputCppType));
-                j++;
-            } else if (i < vec.size()) {
-                res[i + j] = vec[i];
-                i++;
-            } else
-                break;
-        }
+        std::merge(vec.begin(), vec.end(), reinterpret_cast<InputCppType*>(data_ptr),
+                   reinterpret_cast<InputCppType*>(data_ptr + items_size * sizeof(InputCppType)), res.begin());
         this->data(state).items = std::move(res);
         this->data(state).rate = rate;
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        using CppType = RunTimeCppType<PT>;
-        std::vector<CppType> new_vector = this->data(state).items;
-        std::sort(new_vector.begin(), new_vector.end());
-
         auto* column = down_cast<BinaryColumn*>(to);
         Bytes& bytes = column->get_bytes();
         size_t old_size = bytes.size();
-        size_t items_size = new_vector.size();
+        size_t items_size = this->data(state).items.size();
+
         // should serialize: rate_size, vector_size, all vector element.
         size_t new_size = old_size + sizeof(double) + sizeof(size_t) + items_size * sizeof(InputCppType);
         bytes.resize(new_size);
 
         memcpy(bytes.data() + old_size, &(this->data(state).rate), sizeof(double));
         memcpy(bytes.data() + old_size + sizeof(double), &items_size, sizeof(size_t));
-        memcpy(bytes.data() + old_size + sizeof(double) + sizeof(size_t), new_vector.data(),
+        memcpy(bytes.data() + old_size + sizeof(double) + sizeof(size_t), this->data(state).items.data(),
                items_size * sizeof(InputCppType));
+        std::sort(reinterpret_cast<InputCppType*>(bytes.data() + old_size + sizeof(double) + sizeof(size_t)),
+                  reinterpret_cast<InputCppType*>(bytes.data() + old_size + sizeof(double) + sizeof(size_t) +
+                                                  items_size * sizeof(InputCppType)));
 
         column->get_offset().emplace_back(new_size);
     }
