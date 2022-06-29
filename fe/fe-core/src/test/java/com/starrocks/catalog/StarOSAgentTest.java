@@ -27,6 +27,7 @@ import java.util.Map;
 
 public class StarOSAgentTest {
     private StarOSAgent starosAgent;
+    public static final String SERVICE_NAME = "starrocks";
 
     @Mocked
     StarClient client;
@@ -40,11 +41,11 @@ public class StarOSAgentTest {
     public void testRegisterAndBootstrapService() throws Exception {
         new Expectations() {
             {
-                client.registerService("starrocks");
+                client.registerService(SERVICE_NAME);
                 minTimes = 0;
                 result = null;
 
-                client.bootstrapService("starrocks", "starrocks");
+                client.bootstrapService("starrocks", SERVICE_NAME);
                 minTimes = 0;
                 result = 1;
             }
@@ -57,12 +58,12 @@ public class StarOSAgentTest {
     public void testRegisterServiceException() throws Exception {
         new Expectations() {
             {
-                client.registerService("starrocks");
+                client.registerService(SERVICE_NAME);
                 minTimes = 0;
                 result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
                         "service already exists!");
 
-                client.bootstrapService("starrocks", "starrocks");
+                client.bootstrapService("starrocks", SERVICE_NAME);
                 minTimes = 0;
                 result = 3;
             }
@@ -75,12 +76,12 @@ public class StarOSAgentTest {
     public void testBootstrapServiceException() throws Exception {
         new Expectations() {
             {
-                client.bootstrapService("starrocks", "starrocks");
+                client.bootstrapService("starrocks", SERVICE_NAME);
                 minTimes = 0;
                 result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
                         "service already exists!");
 
-                client.getServiceInfo("123").getServiceId();
+                client.getServiceInfo(SERVICE_NAME).getServiceId();
                 minTimes = 0;
                 result = 4;
             }
@@ -93,7 +94,7 @@ public class StarOSAgentTest {
     public void testGetServiceId() throws Exception {
         new Expectations() {
             {
-                client.getServiceInfo("starrocks").getServiceId();
+                client.getServiceInfo(SERVICE_NAME).getServiceId();
                 minTimes = 0;
                 result = 2;
             }
