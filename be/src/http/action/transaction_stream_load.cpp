@@ -146,6 +146,15 @@ void TransactionStreamLoadAction::handle(HttpRequest* req) {
         }
     }
 
+    // Append buffer to the pipe on every http request finishing.
+    // For CSV, it supports parsing in stream.
+    // For JSON, now the buffer contains a complete json.
+    if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
+        ctx->buffer->flip();
+        ctx->body_sink->append(std::move(ctx->buffer));
+        ctx->buffer = nullptr;
+    }
+
     auto resp = _exec_env->transaction_mgr()->_build_reply(TXN_LOAD, ctx);
     ctx->lock.unlock();
     _send_reply(req, resp);
@@ -422,7 +431,15 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
             if (ctx->format == TFileFormatType::FORMAT_JSON) {
                 // For json format, we need build a complete json before we push the buffer to the pipe.
                 // buffer capacity is not enough, so we try to expand the buffer.
-                ByteBufferPtr buf = ByteBuffer::allocate(BitUtil::RoundUpToPowerOfTwo(ctx->buffer->pos + len));
+                auto data_sz = ctx->buffer->pos + len;
+                if (data_sz >= ctx->kJSONMaxBufferSize) {
+                    auto err_msg = fmt::format("payload size [{}] of single write beyond the JSON payload limit [{}]", data_sz,
+                                               ctx->kJSONMaxBufferSize);
+                    LOG(WARNING) << err_msg;
+                    ctx->status = Status::MemoryLimitExceeded(err_msg);
+                    return;
+                }
+                ByteBufferPtr buf = ByteBuffer::allocate(BitUtil::RoundUpToPowerOfTwo(data_sz));
                 buf->put_bytes(ctx->buffer->ptr, ctx->buffer->pos);
                 std::swap(buf, ctx->buffer);
 
