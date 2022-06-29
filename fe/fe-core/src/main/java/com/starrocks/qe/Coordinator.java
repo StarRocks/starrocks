@@ -118,7 +118,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentNavigableMap;
@@ -847,6 +846,7 @@ public class Coordinator {
 
         resultBatch = receiver.getNext(status);
         if (!status.ok()) {
+            connectContext.setErrorCodeOnce(status.getErrorCodeString());
             LOG.warn("get next fail, need cancel. status {}, query id: {}", status.toString(),
                     DebugUtil.printId(queryId));
         }
@@ -1601,7 +1601,7 @@ public class Coordinator {
         if (!(returnedAllResults && status.isCancelled()) && !status.ok()) {
             ConnectContext ctx = connectContext;
             if (ctx != null) {
-                ctx.setErrorCodeOnce(Optional.ofNullable(status.getErrorCode()).map(Enum::toString).orElse("UNKNOWN"));
+                ctx.setErrorCodeOnce(status.getErrorCodeString());
             }
             LOG.warn("one instance report fail {}, query_id={} instance_id={}",
                     status, DebugUtil.printId(queryId), DebugUtil.printId(params.getFragment_instance_id()));
@@ -2107,22 +2107,24 @@ public class Coordinator {
             }
 
             WorkGroup workgroup = null;
-            if (connectContext != null) {
+            if (connectContext != null && connectContext.getSessionVariable().isEnableResourceGroup()) {
                 SessionVariable sessionVariable = connectContext.getSessionVariable();
 
+                // First try to use the resource group specified by the variable
                 if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
-                    // Specify the resource group through variable
                     String rgName = sessionVariable.getResourceGroup();
-                    WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(rgName);
-                    if (wg == null) {
-                        throw new UserException("Invalid resource_group: " + rgName);
-                    } else {
-                        workgroup = wg;
-                    }
-                } else {
-                    // Specify the resource group through classifier
+                    workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(rgName);
+                }
+
+                // Second if the specified resource group not exist try to use the default one
+                if (workgroup == null) {
                     workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                             connectContext, WorkGroupClassifier.QueryType.SELECT, dbIds);
+                }
+
+                if (workgroup != null) {
+                    connectContext.getAuditEventBuilder().setResourceGroup(workgroup.getName());
+                    connectContext.setWorkGroup(workgroup);
                 }
             }
             setBucketSeqToInstanceForRuntimeFilters();

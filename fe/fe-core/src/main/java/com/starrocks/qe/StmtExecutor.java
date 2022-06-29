@@ -53,6 +53,7 @@ import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.WorkGroup;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -125,6 +126,7 @@ import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -993,8 +995,7 @@ public class StmtExecutor {
                 context.getDatabase(),
                 sql,
                 context.getQualifiedUser(),
-                context.getWorkGroup() != null ?
-                        context.getWorkGroup().getName() : "");
+                Optional.ofNullable(context.getWorkGroup()).map(WorkGroup::getName).orElse(""));
         context.setQueryDetail(queryDetail);
         //copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
