@@ -1,5 +1,6 @@
-on: pull_request_review
-    push
+on: 
+#pull_request_review
+    push:
 name: Trigger Jobs
 jobs:
   myJob:
