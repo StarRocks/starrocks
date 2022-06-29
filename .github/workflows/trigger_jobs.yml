@@ -12,11 +12,11 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-    - name: trigger multiple Job
+    - name: trigger jenkins job
       if: ${{ steps.approved.outputs.approved == 'true' }}
       uses: appleboy/jenkins-action@master
       with:
-        url: "http://39.101.206.100:8090/"
+        url: "39.101.206.100:8090/"
         user: "starrocks"
         token: ${{ secrets.JENKINS_TOKEN }}
-        job: "master_release"
+        job: "starrocks_admit_test"
