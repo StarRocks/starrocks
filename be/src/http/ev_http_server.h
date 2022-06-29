@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include <event2/event.h>
+
 #include <string>
 #include <thread>
 #include <vector>
@@ -79,6 +81,8 @@ private:
     PathTrie<HttpHandler*> _delete_handlers;
     PathTrie<HttpHandler*> _head_handlers;
     PathTrie<HttpHandler*> _options_handlers;
+    std::vector<struct event_base*> _event_bases;
+    std::vector<struct evhttp*> _https;
 };
 
 } // namespace starrocks

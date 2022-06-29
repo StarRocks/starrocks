@@ -94,7 +94,10 @@ public:
         hostname = "http://127.0.0.1:" + std::to_string(real_port);
     }
 
-    static void TearDownTestCase() { delete s_server; }
+    static void TearDownTestCase() {
+        s_server->stop();
+        delete s_server;
+    }
 };
 
 TEST_F(HttpClientTest, get_normal) {
