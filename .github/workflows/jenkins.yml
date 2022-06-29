@@ -9,7 +9,7 @@ jobs:
 #      JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
 #      JENKINS_URL: ${{ secrets.JENKINS_URL }}
     steps:
-    - uses: luisrjaeger/approved-event-checker@master
+    - uses: taichi/approved-event-action@master
       id: approved
       with:
         approvals: 2
