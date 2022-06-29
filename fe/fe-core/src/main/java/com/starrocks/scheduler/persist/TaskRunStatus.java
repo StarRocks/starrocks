@@ -44,6 +44,10 @@ public class TaskRunStatus implements Writable {
     @SerializedName("expireTime")
     private long expireTime;
 
+    // the larger the value, the higher the priority, the default value is 0
+    @SerializedName("priority")
+    private int priority = 0;
+
     public String getQueryId() {
         return queryId;
     }
@@ -124,6 +128,14 @@ public class TaskRunStatus implements Writable {
         this.expireTime = expireTime;
     }
 
+    public int getPriority() {
+        return priority;
+    }
+
+    public void setPriority(int priority) {
+        this.priority = priority;
+    }
+
     public static TaskRunStatus read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
@@ -148,6 +160,7 @@ public class TaskRunStatus implements Writable {
                 ", errorCode=" + errorCode +
                 ", errorMessage='" + errorMessage + '\'' +
                 ", expireTime=" + expireTime +
+                ", priority=" + priority +
                 '}';
     }
 }
