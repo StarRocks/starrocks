@@ -3,6 +3,8 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -21,17 +23,13 @@ public class ArithmeticExprTest {
         rhsExpr.setType(decimal32p9s2);
         ArithmeticExpr addExpr = new ArithmeticExpr(
                 ArithmeticExpr.Operator.ADD, lhsExpr, rhsExpr);
-        try {
-            ScalarType decimal64p10s2 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2);
-            addExpr.analyzeImpl(null);
-            Assert.assertEquals(addExpr.type, decimal64p10s2);
-            Assert.assertTrue(addExpr.getChild(0) instanceof CastExpr);
-            Assert.assertTrue(addExpr.getChild(1) instanceof CastExpr);
-            Assert.assertEquals(addExpr.getChild(0).type, decimal64p10s2);
-            Assert.assertEquals(addExpr.getChild(1).type, decimal64p10s2);
-        } catch (AnalysisException e) {
-            Assert.fail("Should not throw exception");
-        }
+        ScalarType decimal64p10s2 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2);
+        ExpressionAnalyzer.analyzeExpressionIgnoreSlot(addExpr, ConnectContext.get());
+        Assert.assertEquals(addExpr.type, decimal64p10s2);
+        Assert.assertTrue(addExpr.getChild(0) instanceof CastExpr);
+        Assert.assertTrue(addExpr.getChild(1) instanceof CastExpr);
+        Assert.assertEquals(addExpr.getChild(0).type, decimal64p10s2);
+        Assert.assertEquals(addExpr.getChild(1).type, decimal64p10s2);
 
     }
 

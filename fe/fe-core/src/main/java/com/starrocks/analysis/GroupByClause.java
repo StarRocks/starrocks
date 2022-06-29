@@ -23,10 +23,8 @@ package com.starrocks.analysis;
 
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Predicates;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import org.apache.commons.collections.CollectionUtils;
@@ -51,16 +49,8 @@ import java.util.stream.Collectors;
  * GROUPING SETS produce a single result set that is equivalent to a UNION ALL of differently grouped rows.
  * In this class we produce the rule of generating rows base on the group by clause.
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class GroupByClause implements ParseNode {
     private static final Logger LOG = LogManager.getLogger(GroupByClause.class);
-
-    // max num of distinct sets in grouping sets clause
-    private static final int MAX_GROUPING_SETS_NUM = 64;
-    // max num of distinct expressions
-    private boolean analyzed_ = false;
     private boolean exprGenerated = false;
     private GroupingType groupingType;
     private ArrayList<Expr> groupingExprs;
@@ -100,10 +90,6 @@ public class GroupByClause implements ParseNode {
         }
     }
 
-    public void setNeedToSql(boolean needToSql) {
-        this.needToSql = needToSql;
-    }
-
     public List<ArrayList<Expr>> getGroupingSetList() {
         return groupingSetList;
     }
@@ -114,7 +100,6 @@ public class GroupByClause implements ParseNode {
 
     public void reset() {
         groupingExprs = new ArrayList<>();
-        analyzed_ = false;
         exprGenerated = false;
         if (oriGroupingExprs != null) {
             Expr.resetList(oriGroupingExprs);
@@ -186,49 +171,6 @@ public class GroupByClause implements ParseNode {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (analyzed_) {
-            return;
-        }
-        genGroupingExprs();
-
-        // disallow subqueries in the GROUP BY clause
-        for (Expr expr : groupingExprs) {
-            if (expr.contains(Predicates.instanceOf(Subquery.class))) {
-                throw new AnalysisException(
-                        "Subqueries are not supported in the GROUP BY clause.");
-            }
-        }
-        //TODO add the analysis for grouping and grouping_id functions
-        for (Expr groupingExpr : groupingExprs) {
-            groupingExpr.analyze(analyzer);
-            if (groupingExpr.contains(Expr.isAggregatePredicate())) {
-                // reference the original expr in the error msg
-                throw new AnalysisException(
-                        "GROUP BY expression must not contain aggregate functions: "
-                                + groupingExpr.toSql());
-            }
-            if (groupingExpr.contains(AnalyticExpr.class)) {
-                // reference the original expr in the error msg
-                throw new AnalysisException(
-                        "GROUP BY expression must not contain analytic expressions: "
-                                + groupingExpr.toSql());
-            }
-
-            if (!groupingExpr.type.canGroupBy()) {
-                throw new AnalysisException(Type.OnlyMetricTypeErrorMsg);
-            }
-        }
-
-        if (isGroupByExtension() && groupingExprs != null && groupingExprs.size() > MAX_GROUPING_SETS_NUM) {
-            throw new AnalysisException("Too many sets in GROUP BY clause, the max grouping sets item is "
-                    + MAX_GROUPING_SETS_NUM);
-        }
-        analyzed_ = true;
-    }
-
-    // check if group by clause is contain grouping set/rollup/cube
-    public boolean isGroupByExtension() {
-        return groupingType != GroupingType.GROUP_BY;
     }
 
     @Override

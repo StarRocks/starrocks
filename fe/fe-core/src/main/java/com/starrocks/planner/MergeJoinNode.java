@@ -24,15 +24,11 @@ package com.starrocks.planner;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TEqJoinCondition;
-import com.starrocks.thrift.THashJoinNode;
 import com.starrocks.thrift.TMergeJoinNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
@@ -41,18 +37,7 @@ import java.util.List;
  * The right child must be a leaf node, ie, can only materialize
  * a single input tuple.
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class MergeJoinNode extends JoinNode {
-    private static final Logger LOG = LogManager.getLogger(MergeJoinNode.class);
-
-
-    public MergeJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
-                         List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
-        super("MERGE JOIN", id, outer, inner, innerRef, eqJoinConjuncts, otherJoinConjuncts);
-    }
-
     public MergeJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, JoinOperator joinOp,
                          List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
         super("MERGE JOIN", id, outer, inner, joinOp, eqJoinConjuncts, otherJoinConjuncts);

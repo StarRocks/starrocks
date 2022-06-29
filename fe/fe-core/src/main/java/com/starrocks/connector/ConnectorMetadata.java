@@ -105,7 +105,8 @@ public interface ConnectorMetadata {
     default void alterMaterializedView(AlterMaterializedViewStatement stmt)
             throws DdlException, MetaNotFoundException, AnalysisException {}
 
-    default void refreshMaterializedView(String dbName, String mvName) throws DdlException, MetaNotFoundException {}
+    default void refreshMaterializedView(String dbName, String mvName, int priority)
+            throws DdlException, MetaNotFoundException {}
 
     default void createView(CreateViewStmt stmt) throws DdlException {}
 

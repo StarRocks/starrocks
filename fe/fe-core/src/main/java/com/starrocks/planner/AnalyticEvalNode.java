@@ -39,20 +39,10 @@ import com.starrocks.thrift.TAnalyticNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
-/**
- * Computation of analytic exprs.
- */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class AnalyticEvalNode extends PlanNode {
-    private static final Logger LOG = LoggerFactory.getLogger(AnalyticEvalNode.class);
-
     private List<Expr> analyticFnCalls;
 
     // Partitioning exprs from the AnalyticInfo
@@ -112,38 +102,10 @@ public class AnalyticEvalNode extends PlanNode {
 
     @Override
     public void init(Analyzer analyzer) throws UserException {
-        analyzer.getDescTbl().computeMemLayout();
-        intermediateTupleDesc.computeMemLayout();
-        // we add the analyticInfo's smap to the combined smap of our child
-        outputSmap = logicalToPhysicalSmap;
-        createDefaultSmap(analyzer);
-
-        // Do not assign any conjuncts here: the conjuncts out of our SelectStmt's
-        // Where clause have already been assigned, and conjuncts coming out of an
-        // enclosing scope need to be evaluated *after* all analytic computations.
-
-        // do this at the end so it can take all conjuncts into account
-        computeStats(analyzer);
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("desctbl: " + analyzer.getDescTbl().debugString());
-        }
-
-        // point fn calls, partition and ordering exprs at our input
-        ExprSubstitutionMap childSmap = getCombinedChildSmap();
-        analyticFnCalls = Expr.substituteList(analyticFnCalls, childSmap, analyzer, false);
-        substitutedPartitionExprs = Expr.substituteList(partitionExprs, childSmap,
-                analyzer, false);
-        orderByElements = OrderByElement.substitute(orderByElements, childSmap, analyzer);
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("evalnode: " + debugString());
-        }
-        hasNullableGenerateChild = checkHasNullableGenerateChild();
     }
 
     @Override
     protected void computeStats(Analyzer analyzer) {
-        super.computeStats(analyzer);
-        cardinality = getChild(0).cardinality;
     }
 
     @Override

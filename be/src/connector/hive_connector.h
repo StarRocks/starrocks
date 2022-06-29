@@ -43,6 +43,7 @@ public:
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
+    int64_t num_bytes_read() const override;
 
 private:
     const HiveDataSourceProvider* _provider;

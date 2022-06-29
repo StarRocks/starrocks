@@ -100,7 +100,8 @@ public class FileScanNode extends LoadScanNode {
     }
 
     private static final Comparator SCAN_RANGE_LOCATIONS_COMPARATOR =
-            (Comparator<Pair<TScanRangeLocations, Long>>) (o1, o2) -> Long.compare(o1.second, o2.second);
+            Comparator.comparingLong(
+                    (Pair<TScanRangeLocations, Long> o) -> o.second);
 
     private final Random random = new Random(System.currentTimeMillis());
 
@@ -302,7 +303,9 @@ public class FileScanNode extends LoadScanNode {
                 SlotDescriptor srcSlotDesc = slotDescByName.get(destSlotDesc.getColumn().getName());
                 if (srcSlotDesc != null) {
                     destSidToSrcSidWithoutTrans.put(destSlotDesc.getId().asInt(), srcSlotDesc.getId().asInt());
-                    expr = new SlotRef(srcSlotDesc);
+                    SlotRef slotRef = new SlotRef(srcSlotDesc);
+                    slotRef.setColumnName(destSlotDesc.getColumn().getName());
+                    expr = slotRef;
                 } else {
                     Column column = destSlotDesc.getColumn();
                     Column.DefaultValueType defaultValueType = column.getDefaultValueType();
@@ -343,7 +346,7 @@ public class FileScanNode extends LoadScanNode {
             // analyze negative
             if (isNegative && destSlotDesc.getColumn().getAggregationType() == AggregateType.SUM) {
                 expr = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, expr, new IntLiteral(-1));
-                expr.analyze(analyzer);
+                expr = Expr.analyzeAndCastFold(expr);
             }
             expr = castToSlot(destSlotDesc, expr);
             context.params.putToExpr_of_dest_slot(destSlotDesc.getId().asInt(), expr.treeToThrift());

@@ -237,11 +237,15 @@ public class TaskManager {
     }
 
     public SubmitResult executeTask(String taskName) {
+        return executeTask(taskName, Constants.TaskRunPriority.LOWEST.value());
+    }
+
+    public SubmitResult executeTask(String taskName, int priority) {
         Task task = nameToTaskMap.get(taskName);
         if (task == null) {
             return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
-        return taskRunManager.submitTaskRun(TaskRunBuilder.newBuilder(task).build());
+        return taskRunManager.submitTaskRun(TaskRunBuilder.newBuilder(task).build(), priority);
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
@@ -461,7 +465,7 @@ public class TaskManager {
                 TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
                 Queue<TaskRun> taskRuns = taskRunManager.getPendingTaskRunMap().computeIfAbsent(taskRun.getTaskId(),
-                        u -> Queues.newConcurrentLinkedQueue());
+                        u -> Queues.newPriorityBlockingQueue());
                 taskRuns.offer(taskRun);
                 break;
             // this will happen in build image

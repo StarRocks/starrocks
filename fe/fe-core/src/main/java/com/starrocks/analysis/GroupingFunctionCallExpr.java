@@ -21,8 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Function;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 
@@ -33,9 +31,6 @@ import java.util.List;
  * mapping the real slot to virtual slots, grouping(_id) function will use a virtual slot of BIGINT to substitute
  * real slots, and then set real slot to realChildren
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class GroupingFunctionCallExpr extends FunctionCallExpr {
     private boolean childrenReseted = false;
     private List<Expr> realChildren;
@@ -62,21 +57,6 @@ public class GroupingFunctionCallExpr extends FunctionCallExpr {
 
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        if (children.size() < 1) {
-            throw new AnalysisException("GROUPING functions required at least one parameters");
-        }
-
-        for (Expr child : children) {
-            if (!(child instanceof SlotRef)) {
-                throw new AnalysisException("GROUPING functions only support column");
-            }
-        }
-
-        Type[] childTypes = new Type[1];
-        childTypes[0] = Type.BIGINT;
-        fn = getBuiltinFunction(analyzer, getFnName().getFunction(), childTypes,
-                Function.CompareMode.IS_IDENTICAL);
-        this.type = fn.getReturnType();
     }
 
     // set child to virtual slot
