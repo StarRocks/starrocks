@@ -1018,7 +1018,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (txnState == null) {
             return;
         }
-        if (txnState.getTxnCommitAttachment() != null) {
+        if (txnState.getTxnCommitAttachment() instanceof RLTaskTxnCommitAttachment) {
+
             RLTaskTxnCommitAttachment rlTaskTxnCommitAttachment =
                     (RLTaskTxnCommitAttachment) txnState.getTxnCommitAttachment();
             if (rlTaskTxnCommitAttachment == null) {
