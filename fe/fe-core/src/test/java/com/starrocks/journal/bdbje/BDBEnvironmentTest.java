@@ -4,7 +4,11 @@ package com.starrocks.journal.bdbje;
 
 import com.sleepycat.je.DatabaseEntry;
 import com.sleepycat.je.LockMode;
+import com.sleepycat.je.rep.ReplicatedEnvironment;
+import com.sleepycat.je.rep.impl.RepGroupImpl;
 import com.starrocks.common.util.NetUtils;
+import com.starrocks.ha.BDBHA;
+import com.starrocks.ha.HAProtocol;
 import com.starrocks.journal.JournalException;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
@@ -109,17 +113,20 @@ public class BDBEnvironmentTest {
     private String masterNodeHostPort = null;
     private File masterPath = null;
     private BDBEnvironment masterEnvironment = null;
+    private String masterName;
     private BDBEnvironment[] followerEnvironments = new BDBEnvironment[2];
     private String[] followerNodeHostPorts = new String[2];
     private File[] followerPaths = new File[2];
+    private String[] followerNames = new String[2];
 
     private void initClusterMasterFollower() throws Exception {
         // setup master
         masterNodeHostPort = findUnbindHostPort();
         masterPath = createTmpDir();
+        masterName = "master";
         masterEnvironment = new BDBEnvironment(
                 masterPath,
-                "master",
+                masterName,
                 masterNodeHostPort,
                 masterNodeHostPort,
                 true);
@@ -130,9 +137,10 @@ public class BDBEnvironmentTest {
         for (int i = 0; i < 2; i++) {
             followerNodeHostPorts[i] = findUnbindHostPort();
             followerPaths[i] = createTmpDir();
+            followerNames[i] = String.format("follower%d", i);
             BDBEnvironment followerEnvironment = new BDBEnvironment(
                     followerPaths[i],
-                    String.format("follower%d", i),
+                    followerNames[i],
                     followerNodeHostPorts[i],
                     masterNodeHostPort,
                     true);
@@ -337,5 +345,129 @@ public class BDBEnvironmentTest {
         Assert.assertTrue(true);
         maserEnvironment.setup();
         Assert.fail();
+    }
+
+    /**
+     * simulate master failover, return the index of the instance that remains follower
+     */
+    private int masterFailOver() throws Exception {
+        int oldFollowerIndex = 0;
+        // master down
+        masterEnvironment.close();
+        LOG.warn("======> master env is closed");
+        Thread.sleep(1000);
+
+        // find the new master
+        BDBEnvironment newMasterEnvironment = null;
+        while (newMasterEnvironment == null) {
+            Thread.sleep(1000);
+            for (int i = 0; i < 2; ++ i) {
+                if (followerEnvironments[i].getReplicatedEnvironment().getState() == ReplicatedEnvironment.State.MASTER) {
+                    newMasterEnvironment = followerEnvironments[i];
+                    LOG.warn("=========> new master is {}", newMasterEnvironment.getReplicatedEnvironment().getNodeName());
+                    newMasterEnvironment.setup();
+                    oldFollowerIndex = 1 - i;
+                    break;
+                }
+            }
+        }
+
+        // start the old master
+        BDBEnvironment oldMasterEnvironment = new BDBEnvironment(
+                masterPath,
+                "master",
+                masterNodeHostPort,
+                masterNodeHostPort,
+                true);
+        oldMasterEnvironment.setup();
+        LOG.warn("============> old master is setup as follower");
+        Thread.sleep(1000);
+
+        masterEnvironment = newMasterEnvironment;
+        masterNodeHostPort = followerNodeHostPorts[1 - oldFollowerIndex];
+
+        return oldFollowerIndex;
+    }
+
+    private void printHAStatus() {
+        LOG.info("---------------------");
+        LOG.info("{}", masterEnvironment.getReplicatedEnvironment().getGroup().getRepGroupImpl().toString());
+        RepGroupImpl imp = masterEnvironment.getReplicatedEnvironment().getGroup().getRepGroupImpl();
+        LOG.info("---------------------");
+    }
+
+    @Test
+    public void testDropAddNoFailover() throws Exception {
+        testDropAddBase(false);
+    }
+
+    @Test
+    public void testDropAddAfterFailover() throws Exception {
+        testDropAddBase(true);
+    }
+
+    protected void testDropAddBase(boolean failover) throws Exception {
+        initClusterMasterFollower();
+
+        int oldFollowerIndex = 0;
+        if (failover) {
+            oldFollowerIndex = masterFailOver();
+        }
+
+        printHAStatus();
+
+        String oldFollowerName = followerEnvironments[oldFollowerIndex].getReplicatedEnvironment().getNodeName();
+        String groupName = followerEnvironments[oldFollowerIndex].getReplicationGroupAdmin().getGroup().getMember(oldFollowerName).getName();
+        String oldFollowerHostPort = followerNodeHostPorts[oldFollowerIndex];
+
+        // 1. follower1 down
+        followerEnvironments[oldFollowerIndex].close();
+        Thread.sleep(2000);
+        LOG.warn("=============> after {}:{} is down", oldFollowerName, oldFollowerHostPort);
+        printHAStatus();
+
+        // 2. remove old follower1
+        HAProtocol protocol = new BDBHA(masterEnvironment, masterName);
+        protocol.removeElectableNode(groupName);
+        Thread.sleep(2000);
+        LOG.warn("=============> after remove {}:{}", oldFollowerName, oldFollowerHostPort);
+        printHAStatus();
+
+        // 3. bad new follower start for the first time
+        // helper = self, use a new generated name
+        String newFollowerName = "newFollower";
+        File newFollowerPath = createTmpDir();
+        BDBEnvironment newfollowerEnvironment = new BDBEnvironment(
+                newFollowerPath,
+                newFollowerName,
+                oldFollowerHostPort,
+                oldFollowerHostPort,
+                true);
+        LOG.warn("=========> start new follower for the first time");
+        // should set up successfully as a standalone master
+        newfollowerEnvironment.setup();
+        Thread.sleep(10000);
+        newfollowerEnvironment.close();
+
+        // 4. bad new follower start for the second time
+        // helper = master
+        newfollowerEnvironment = new BDBEnvironment(
+                newFollowerPath,
+                newFollowerName,
+                oldFollowerHostPort,
+                masterNodeHostPort,
+                true);
+        LOG.warn("==========> start new follower for the second time");
+        try {
+            newfollowerEnvironment.setup();
+        } catch (Exception e) {
+            LOG.warn("===========> failed for the second time, as expect, ", e);
+        }
+
+        // 5. normally master won't down
+        for (int i = 0; i < 5; ++i) {
+            Thread.sleep(1000);
+            LOG.warn("==============> getDatabasesNames() {}", masterEnvironment.getDatabaseNames());
+        }
     }
 }
