@@ -13,8 +13,8 @@
 #include "formats/parquet/level_codec.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
-#include "util/block_compression.h"
 #include "util/buffered_stream.h"
+#include "util/compression/block_compression.h"
 
 namespace starrocks {
 class BlockCompressionCodec;
