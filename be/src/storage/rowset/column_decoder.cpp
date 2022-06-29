@@ -32,6 +32,9 @@ Status ColumnDecoder::encode_to_global_id(vectorized::Column* datas, vectorized:
                 }
             }
         }
+        // set null info to the the lowcardinality column
+        lowcard_nullcolumn->set_has_null(nullable_column->has_null());
+        lowcard_nullcolumn->null_column()->swap_column(*nullable_column->null_column());
     } else {
         auto* binary_column = down_cast<vectorized::BinaryColumn*>(datas);
         auto* lowcard_column = down_cast<vectorized::LowCardDictColumn*>(codes);
