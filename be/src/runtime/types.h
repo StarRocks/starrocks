@@ -69,8 +69,6 @@ struct TypeDescriptor {
     explicit TypeDescriptor(PrimitiveType type) : type(type), len(-1), precision(-1), scale(-1) {}
 
     static TypeDescriptor create_char_type(int len) {
-        DCHECK_GE(len, 1);
-        DCHECK_LE(len, MAX_CHAR_LENGTH);
         TypeDescriptor ret;
         ret.type = TYPE_CHAR;
         ret.len = len;
@@ -78,8 +76,6 @@ struct TypeDescriptor {
     }
 
     static TypeDescriptor create_varchar_type(int len) {
-        DCHECK_GE(len, 1);
-        DCHECK_LE(len, MAX_VARCHAR_LENGTH);
         TypeDescriptor ret;
         ret.type = TYPE_VARCHAR;
         ret.len = len;
