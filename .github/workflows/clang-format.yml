@@ -14,10 +14,11 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
+
       - name: "Format it!"
         uses: DoozyX/clang-format-lint-action@v0.13
         id: be_clang_format
         with:
           source: 'be/src be/test'
-          clangFormatVersion: 13
+          clangFormatVersion: 10
           inplace: False
