@@ -6,6 +6,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
@@ -65,6 +66,19 @@ public class TaskRunManager {
                 u -> Queues.newPriorityBlockingQueue());
         taskRuns.offer(taskRun);
         return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED);
+    }
+
+    public boolean killTaskRun(Long taskId) {
+        TaskRun taskRun = runningTaskRunMap.get(taskId);
+        if (taskRun == null) {
+            return false;
+        }
+        ConnectContext runCtx = taskRun.getRunCtx();
+        if (runCtx != null) {
+            runCtx.kill(false);
+            return true;
+        }
+        return false;
     }
 
     // check if a running TaskRun is complete and remove it from running TaskRun map

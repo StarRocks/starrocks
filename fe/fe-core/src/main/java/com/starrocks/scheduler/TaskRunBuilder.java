@@ -5,7 +5,7 @@ package com.starrocks.scheduler;
 import com.starrocks.qe.ConnectContext;
 
 public class TaskRunBuilder {
-    private Task task;
+    private final Task task;
 
     public static TaskRunBuilder newBuilder(Task task) {
         return new TaskRunBuilder(task);
@@ -20,7 +20,7 @@ public class TaskRunBuilder {
         TaskRun taskRun = new TaskRun();
         taskRun.setTaskId(task.getId());
         taskRun.setProperties(task.getProperties());
-        taskRun.setCtx(ConnectContext.get());
+        taskRun.setBuildCtx(ConnectContext.get());
         taskRun.setTask(task);
         if (task.getSource().equals(Constants.TaskSource.MV)) {
             taskRun.setProcessor(new MvTaskRunProcessor());

@@ -100,7 +100,7 @@ public class TaskManager {
                     taskRunManager.checkRunningTaskRun();
                     taskRunManager.scheduledPendingTaskRun();
                 } catch (Exception ex) {
-                    LOG.warn("failed to dispatch job.", ex);
+                    LOG.warn("failed to dispatch task.", ex);
                 } finally {
                     taskRunUnlock();
                 }
@@ -210,7 +210,7 @@ public class TaskManager {
         }
     }
 
-    public boolean stopScheduler(String taskName) {
+    private boolean stopScheduler(String taskName) {
         Task task = nameToTaskMap.get(taskName);
         if (task.getType() != Constants.TaskType.PERIODICAL) {
             return false;
@@ -234,6 +234,26 @@ public class TaskManager {
             LOG.warn("fail to cancel scheduler for task [{}]", task.getName());
         }
         return isCancel;
+    }
+
+    public boolean killTask(String taskName, boolean clearPending) {
+        Task task = nameToTaskMap.get(taskName);
+        if (task == null) {
+            return false;
+        }
+        if (clearPending) {
+            if (!tryTaskRunLock()) {
+                return false;
+            }
+            try {
+                taskRunManager.getPendingTaskRunMap().remove(task.getId());
+            } catch (Exception ex) {
+                LOG.warn("failed to kill task.", ex);
+            } finally {
+                taskRunUnlock();
+            }
+        }
+        return taskRunManager.killTaskRun(task.getId());
     }
 
     public SubmitResult executeTask(String taskName) {
@@ -267,6 +287,7 @@ public class TaskManager {
                     }
                     periodFutureMap.remove(task.getId());
                 }
+                killTask(task.getName(), true);
                 idToTaskMap.remove(task.getId());
                 nameToTaskMap.remove(task.getName());
             }

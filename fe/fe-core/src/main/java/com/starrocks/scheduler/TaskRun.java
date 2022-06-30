@@ -31,8 +31,13 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private Task task;
 
-    private ConnectContext ctx;
-
+    // The ConnectCtx brought over when the TaskRun is constructed is usually the task that the user manually
+    // penalizes and executes. For the periodical task, it is triggered by the system,
+    // so typically this value may be NULL.
+    private ConnectContext buildCtx;
+    // The ConnectCtx that actually executes the SQL statement is usually copied or constructed
+    // when TaskRun is executed.
+    private ConnectContext runCtx;
     private TaskRunProcessor processor;
 
     private TaskRunStatus status;
@@ -81,16 +86,16 @@ public class TaskRun implements Comparable<TaskRun> {
         TaskRunContext taskRunContext = new TaskRunContext();
         taskRunContext.setDefinition(status.getDefinition());
         // copy a ConnectContext to avoid concurrency leading to abnormal results.
-        ConnectContext newCtx = new ConnectContext();
-        newCtx.setCluster(ctx.getClusterName());
-        newCtx.setGlobalStateMgr(ctx.getGlobalStateMgr());
-        newCtx.setDatabase(task.getDbName());
-        newCtx.setQualifiedUser(ctx.getQualifiedUser());
-        newCtx.setCurrentUserIdentity(ctx.getCurrentUserIdentity());
-        newCtx.getState().reset();
-        newCtx.setQueryId(UUID.fromString(status.getQueryId()));
+        ConnectContext runCtx = new ConnectContext();
+        runCtx.setCluster(buildCtx.getClusterName());
+        runCtx.setGlobalStateMgr(buildCtx.getGlobalStateMgr());
+        runCtx.setDatabase(task.getDbName());
+        runCtx.setQualifiedUser(buildCtx.getQualifiedUser());
+        runCtx.setCurrentUserIdentity(buildCtx.getCurrentUserIdentity());
+        runCtx.getState().reset();
+        runCtx.setQueryId(UUID.fromString(status.getQueryId()));
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
-        SessionVariable sessionVariable = (SessionVariable) ctx.getSessionVariable().clone();
+        SessionVariable sessionVariable = (SessionVariable) buildCtx.getSessionVariable().clone();
         if (properties != null) {
             for (String key : properties.keySet()) {
                 try {
@@ -102,13 +107,14 @@ public class TaskRun implements Comparable<TaskRun> {
                 }
             }
         }
-        newCtx.setSessionVariable(sessionVariable);
-        taskRunContext.setCtx(newCtx);
-        taskRunContext.setRemoteIp(ctx.getMysqlChannel().getRemoteHostPortString());
+        runCtx.setSessionVariable(sessionVariable);
+        taskRunContext.setCtx(runCtx);
+        taskRunContext.setRemoteIp(buildCtx.getMysqlChannel().getRemoteHostPortString());
         taskRunContext.setProperties(taskRunContextProperties);
+        this.runCtx = runCtx;
         processor.processTaskRun(taskRunContext);
-        QueryState queryState = newCtx.getState();
-        if (newCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+        QueryState queryState = runCtx.getState();
+        if (runCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
             status.setErrorMessage(queryState.getErrorMessage());
             int errorCode = -1;
             if (queryState.getErrorCode() != null) {
@@ -120,12 +126,12 @@ public class TaskRun implements Comparable<TaskRun> {
         return true;
     }
 
-    public ConnectContext getCtx() {
-        return ctx;
+    public void setBuildCtx(ConnectContext buildCtx) {
+        this.buildCtx = buildCtx;
     }
 
-    public void setCtx(ConnectContext ctx) {
-        this.ctx = ctx;
+    public ConnectContext getRunCtx() {
+        return runCtx;
     }
 
     public TaskRunStatus getStatus() {
