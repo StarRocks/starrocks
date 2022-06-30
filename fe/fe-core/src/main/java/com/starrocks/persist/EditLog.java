@@ -45,6 +45,8 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
+import com.starrocks.execution.CreateFunctionExecutor;
+import com.starrocks.execution.DropFunctionExecutor;
 import com.starrocks.ha.MasterInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
@@ -637,12 +639,12 @@ public class EditLog {
                 }
                 case OperationType.OP_ADD_FUNCTION: {
                     final Function function = (Function) journal.getData();
-                    GlobalStateMgr.getCurrentState().replayCreateFunction(function);
+                    CreateFunctionExecutor.replayCreateFunction(function);
                     break;
                 }
                 case OperationType.OP_DROP_FUNCTION: {
                     FunctionSearchDesc function = (FunctionSearchDesc) journal.getData();
-                    GlobalStateMgr.getCurrentState().replayDropFunction(function);
+                    DropFunctionExecutor.replayDropFunction(function);
                     break;
                 }
                 case OperationType.OP_BACKEND_TABLETS_INFO: {
