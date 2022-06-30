@@ -189,16 +189,9 @@ inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
 }
 
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
-<<<<<<< HEAD:be/src/exec/pipeline/scan_operator.cpp
-=======
     if (_chunk_sources[chunk_source_index]->get_buffer_size() >= _buffer_size) {
         return Status::OK();
     }
-    if (!_try_to_increase_committed_scan_tasks()) {
-        return Status::OK();
-    }
-
->>>>>>> d3cdf3b38 ([Enhance] avoid put too much chunk in ChunkSource::chunk_buffer (#8051)):be/src/exec/pipeline/scan/scan_operator.cpp
     _num_running_io_tasks++;
     _is_io_task_running[chunk_source_index] = true;
 
