@@ -2,6 +2,7 @@ name: FE Code Style Checker
 
 on:
   pull_request:
+  push:
   pull_request_review:
 jobs:
   java-checkstyle:
