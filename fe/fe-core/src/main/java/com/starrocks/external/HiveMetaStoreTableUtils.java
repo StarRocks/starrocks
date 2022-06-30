@@ -284,18 +284,7 @@ public class HiveMetaStoreTableUtils {
                 if (avroSchema.getObjectProp("scale") instanceof Integer) {
                     scale = (int) avroSchema.getObjectProp("precision");
                 }
-                if (0 < precision && precision <= PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL32)) {
-                    primitiveType = PrimitiveType.DECIMAL32;
-                } else if (PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL32) < precision
-                        && precision <= PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL64)) {
-                    primitiveType = PrimitiveType.DECIMAL64;
-                } else if (PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL64) < precision
-                        && precision <= PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128)) {
-                    primitiveType = PrimitiveType.DECIMAL128;
-                } else {
-                    primitiveType = PrimitiveType.VARCHAR;
-                }
-                return ScalarType.createDecimalV3Type(primitiveType, precision, scale);
+                return ScalarType.createUnifiedDecimalType(precision, scale);
             case UNION:
                 List<Schema> nonNullMembers = avroSchema.getTypes().stream()
                         .filter(schema -> !Schema.Type.NULL.equals(schema.getType()))
