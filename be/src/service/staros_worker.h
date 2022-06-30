@@ -21,7 +21,7 @@ public:
 
     StarOSWorker() : _service_id(0), _worker_id(0) {}
 
-    virtual ~StarOSWorker() = default;
+    ~StarOSWorker() override = default;
 
     absl::Status add_shard(const ShardInfo& shard) override;
 
