@@ -184,11 +184,7 @@ public class RuntimeFilterDescription {
             return false;
         }
         switch (joinMode) {
-            case BROADCAST: {
-                // Broadcast HJ generates non-shuffle-aware(single-part) rf, so it can be always
-                // pushed down across ExchangeNode.
-                return true;
-            }
+            case BROADCAST:
             case PARTITIONED:
             case LOCAL_HASH_BUCKET:
             case SHUFFLE_HASH_BUCKET:
@@ -197,6 +193,10 @@ public class RuntimeFilterDescription {
             default:
                 return false;
         }
+    }
+
+    public boolean fromBroadcastJoin() {
+        return joinMode == JoinNode.DistributionMode.BROADCAST;
     }
 
     public void addMergeNode(TNetworkAddress addr) {

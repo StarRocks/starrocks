@@ -210,14 +210,14 @@ public class ExchangeNode extends PlanNode {
 
         boolean crossExchange = false;
         if (description.canPushAcrossExchangeNode()) {
-            if (description.getEqualCount() > 1 && dataPartition.getPartitionExprs().size() == 1) {
+            if (description.fromBroadcastJoin() || description.getEqualCount() == 1) {
+                crossExchange = true;
+            } else if (description.getEqualCount() > 1 && dataPartition.getPartitionExprs().size() == 1) {
                 Expr pExpr = dataPartition.getPartitionExprs().get(0);
                 if (probeExpr instanceof SlotRef && pExpr instanceof SlotRef &&
                         ((SlotRef) probeExpr).getSlotId().asInt() == ((SlotRef) pExpr).getSlotId().asInt()) {
                     crossExchange = true;
                 }
-            } else if (description.getEqualCount() == 1) {
-                crossExchange = true;
             }
         }
 
