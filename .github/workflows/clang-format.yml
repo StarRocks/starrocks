@@ -2,7 +2,6 @@ name: BE Code Formatter
 
 on:
   pull_request:
-  pull_request_review:
   push:
   
 jobs:
@@ -17,7 +16,7 @@ jobs:
           submodules: recursive
 
       - name: "Format it!"
-        uses: DoozyX/clang-format-lint-action@v0.13
+        uses: DoozyX/clang-format-lint-action@master
         id: be_clang_format
         with:
           source: 'be/src be/test'
