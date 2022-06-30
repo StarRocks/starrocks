@@ -3,6 +3,7 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.hive.HiveMetaStoreThriftClient;
@@ -38,6 +39,25 @@ public class IcebergMetadataTest {
         List<String> expectResult = Lists.newArrayList("db1", "db2");
         Assert.assertEquals(expectResult, metadata.listDbNames());
     }
+
+    @Test
+    public void testGetDB(@Mocked IcebergHiveCatalog icebergHiveCatalog) throws Exception {
+        String db = "db";
+
+        new Expectations() {
+            {
+                icebergHiveCatalog.getDB(db);
+                result = new Database(0, db);
+                minTimes = 0;
+            }
+        };
+
+        String metastoreUris = "thrift://127.0.0.1:9083";
+        IcebergMetadata metadata = new IcebergMetadata(metastoreUris);
+        Database expectResult = new Database(0, db);
+        Assert.assertEquals(expectResult, metadata.getDb(db));
+    }
+
 
     @Test
     public void testListTableNames(@Mocked IcebergHiveCatalog icebergHiveCatalog) throws Exception {

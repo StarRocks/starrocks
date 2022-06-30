@@ -45,7 +45,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         try {
             return hiveCatalog.getDB(dbName);
         } catch (InterruptedException | TException e) {
-            LOG.error("Failed to get iceberg database {}", dbName);
+            LOG.error("Failed to get iceberg database " + dbName, e);
             return null;
         }
     }
@@ -59,11 +59,11 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public Table getTable(String dbName, String tblName) {
         try {
-            LOG.info("Getting Iceberg table " + IcebergUtil.getIcebergTableIdentifier(dbName, tblName));
             org.apache.iceberg.Table icebergTable = hiveCatalog.loadTable(IcebergUtil.getIcebergTableIdentifier(dbName, tblName));
             return IcebergUtil.convertToSRTable(icebergTable, metastoreURI, dbName, tblName);
         } catch (DdlException e) {
-            throw new RuntimeException(e);
+            LOG.error("Failed to get iceberg table " + IcebergUtil.getIcebergTableIdentifier(dbName, tblName), e);
+            return null;
         }
     }
 }
