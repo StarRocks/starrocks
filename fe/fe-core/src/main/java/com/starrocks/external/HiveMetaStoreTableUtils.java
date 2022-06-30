@@ -238,9 +238,14 @@ public class HiveMetaStoreTableUtils {
         List<FieldSchema> allHiveColumns = getAllColumns(hiveTable);
         List<Column> fullSchema = Lists.newArrayList();
         for (FieldSchema fieldSchema : allHiveColumns) {
-            Type srType = convertColumnType(fieldSchema.getType());
-            Column column = new Column(fieldSchema.getName(), srType, true);
-            fullSchema.add(column);
+            // skip unsupportable `binary` type
+            if (fieldSchema.getType().equals("binary")) {
+                continue;
+            } else {
+                Type srType = convertColumnType(fieldSchema.getType());
+                Column column = new Column(fieldSchema.getName(), srType, true);
+                fullSchema.add(column);
+            }
         }
 
         // Adding some necessary properties to adapt initialization of HiveTable.
