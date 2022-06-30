@@ -72,7 +72,6 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.StreamLoadTask;
@@ -919,8 +918,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return ret;
         }
         TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tbl.getId());
-        BasicStatsMeta basicStatsMeta =
-                GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tbl.getId());
         switch (request.txnCommitAttachment.getLoadType()) {
             case ROUTINE_LOAD:
                 if (!(attachment instanceof RLTaskTxnCommitAttachment)) {
@@ -930,9 +927,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 entity.counterRoutineLoadFinishedTotal.increase(1L);
                 entity.counterRoutineLoadBytesTotal.increase(routineAttachment.getReceivedBytes());
                 entity.counterRoutineLoadRowsTotal.increase(routineAttachment.getLoadedRows());
-                if (basicStatsMeta != null) {
-                    basicStatsMeta.increase(routineAttachment.getLoadedRows());
-                }
 
                 break;
             case MANUAL_LOAD:
@@ -943,9 +937,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 entity.counterStreamLoadFinishedTotal.increase(1L);
                 entity.counterStreamLoadBytesTotal.increase(streamAttachment.getReceivedBytes());
                 entity.counterStreamLoadRowsTotal.increase(streamAttachment.getLoadedRows());
-                if (basicStatsMeta != null) {
-                    basicStatsMeta.increase(streamAttachment.getLoadedRows());
-                }
 
                 break;
             default:

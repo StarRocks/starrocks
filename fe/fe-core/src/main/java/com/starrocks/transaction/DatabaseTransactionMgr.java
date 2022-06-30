@@ -1362,6 +1362,8 @@ public class DatabaseTransactionMgr {
                 partition.setNextVersion(partition.getNextVersion() + 1);
             }
         }
+
+        GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows(transactionState);
     }
 
     private boolean updateCatalogAfterVisible(TransactionState transactionState, Database db) {

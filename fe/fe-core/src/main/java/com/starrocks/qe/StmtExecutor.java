@@ -107,7 +107,6 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeJob;
-import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.Constants;
 import com.starrocks.statistic.FullStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
@@ -121,6 +120,7 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
@@ -1234,7 +1234,8 @@ public class StmtExecutor {
                         database,
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
-                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000)) {
+                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
+                        new InsertTxnCommitAttachment(loadedRows))) {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
                     // collect table-level metrics
@@ -1245,11 +1246,6 @@ public class StmtExecutor {
                         entity.counterInsertLoadRowsTotal.increase(loadedRows);
                         entity.counterInsertLoadBytesTotal
                                 .increase(Long.valueOf(coord.getLoadCounters().get(LoadJob.LOADED_BYTES)));
-                        BasicStatsMeta basicStatsMeta =
-                                GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(targetTable.getId());
-                        if (basicStatsMeta != null) {
-                            basicStatsMeta.increase(loadedRows);
-                        }
                     }
                 } else {
                     txnStatus = TransactionStatus.COMMITTED;

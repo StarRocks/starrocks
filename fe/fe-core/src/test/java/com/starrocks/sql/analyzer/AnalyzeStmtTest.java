@@ -103,8 +103,7 @@ public class AnalyzeStmtTest {
 
         BasicStatsMeta basicStatsMeta = new BasicStatsMeta(10002, 10004, Constants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
-        basicStatsMeta.setHealthy(0.5);
-        Assert.assertEquals("[test, t0, FULL, 2020-01-01 01:01:00, {}, 50%]",
+        Assert.assertEquals("[test, t0, FULL, 2020-01-01 01:01:00, {}, 100%]",
                 ShowBasicStatsMetaStmt.showBasicStatsMeta(basicStatsMeta).toString());
 
         sql = "show histogram meta";

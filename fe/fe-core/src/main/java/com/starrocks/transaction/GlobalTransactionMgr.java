@@ -488,7 +488,6 @@ public class GlobalTransactionMgr implements Writable {
         } catch (AnalysisException e) {
             LOG.warn("replay upsert transaction [" + transactionState.getTransactionId() + "] failed", e);
         }
-
     }
 
     public void replayDeleteTransactionState(TransactionState transactionState) {
