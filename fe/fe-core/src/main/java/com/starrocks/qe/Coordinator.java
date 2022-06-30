@@ -71,7 +71,7 @@ import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
-import com.starrocks.rpc.BackendServiceProxy;
+import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
@@ -2077,7 +2077,7 @@ public class Coordinator {
                 TNetworkAddress brpcAddress = toBrpcHost(address);
 
                 try {
-                    BackendServiceProxy.getInstance().cancelPlanFragmentAsync(brpcAddress,
+                    BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
                             queryId, fragmentInstanceId(), cancelReason, rpcParams.is_pipeline);
                 } catch (RpcException e) {
                     LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
@@ -2119,7 +2119,7 @@ public class Coordinator {
             }
             this.initiated = true;
             try {
-                return BackendServiceProxy.getInstance().execPlanFragmentAsync(brpcAddress, rpcParams);
+                return BackendServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, rpcParams);
             } catch (RpcException e) {
                 // DO NOT throw exception here, return a complete future with error code,
                 // so that the following logic will cancel the fragment.
