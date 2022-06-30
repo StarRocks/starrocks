@@ -4,7 +4,7 @@ on:
   pull_request_review
 
 jobs:
-  Trigger-Admit-With-2-Approval:
+  Trigger-Admit-Test:
     runs-on: ubuntu-latest
     steps:
     - uses: taichi/approved-event-action@master
