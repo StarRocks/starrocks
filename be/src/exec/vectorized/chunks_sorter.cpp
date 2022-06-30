@@ -50,7 +50,7 @@ void DataSegment::init(const std::vector<ExprContext*>* sort_exprs, const ChunkP
 Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, size_t rows_to_sort,
                                      std::vector<std::vector<uint8_t>>& filter_array,
                                      const std::vector<int>& sort_order_flags, const std::vector<int>& null_first_flags,
-                                     uint32_t& least_num, uint32_t& middle_num) {
+                                     uint32_t& before_num, uint32_t& in_num) {
     size_t dats_segment_size = data_segments.size();
     std::vector<CompareVector> compare_results_array(dats_segment_size);
 
@@ -64,7 +64,7 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
     // compare with first row of this DataSegment,
     // then we set BEFORE_LAST_RESULT and IN_LAST_RESULT at filter_array.
     if (rows_to_sort == 1) {
-        least_num = 0, middle_num = 0;
+        before_num = 0, in_num = 0;
         filter_array.resize(dats_segment_size);
         for (size_t i = 0; i < dats_segment_size; ++i) {
             size_t rows = data_segments[i].chunk->num_rows();
@@ -73,10 +73,10 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
             for (size_t j = 0; j < rows; ++j) {
                 if (compare_results_array[i][j] < 0) {
                     filter_array[i][j] = DataSegment::BEFORE_LAST_RESULT;
-                    ++least_num;
+                    ++before_num;
                 } else {
                     filter_array[i][j] = DataSegment::IN_LAST_RESULT;
-                    ++middle_num;
+                    ++in_num;
                 }
             }
         }
@@ -84,23 +84,23 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
         std::vector<size_t> first_size_array;
         first_size_array.resize(dats_segment_size);
 
-        middle_num = 0;
+        in_num = 0;
         filter_array.resize(dats_segment_size);
         for (size_t i = 0; i < dats_segment_size; ++i) {
             DataSegment& segment = data_segments[i];
             size_t rows = segment.chunk->num_rows();
             filter_array[i].resize(rows);
 
-            size_t local_first_size = middle_num;
+            size_t local_first_size = in_num;
             for (size_t j = 0; j < rows; ++j) {
                 if (compare_results_array[i][j] <= 0) {
                     filter_array[i][j] = DataSegment::IN_LAST_RESULT;
-                    ++middle_num;
+                    ++in_num;
                 }
             }
 
             // obtain number of rows for second compare.
-            first_size_array[i] = middle_num - local_first_size;
+            first_size_array[i] = in_num - local_first_size;
         }
 
         // second compare with first row of this chunk, use rows from first compare.
@@ -116,7 +116,7 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
                                         null_first_flags);
         }
 
-        least_num = 0;
+        before_num = 0;
         for (size_t i = 0; i < dats_segment_size; ++i) {
             DataSegment& segment = data_segments[i];
             size_t rows = segment.chunk->num_rows();
@@ -124,11 +124,11 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
             for (size_t j = 0; j < rows; ++j) {
                 if (compare_results_array[i][j] < 0) {
                     filter_array[i][j] = DataSegment::BEFORE_LAST_RESULT;
-                    ++least_num;
+                    ++before_num;
                 }
             }
         }
-        middle_num -= least_num;
+        in_num -= before_num;
     }
 
     return Status::OK();

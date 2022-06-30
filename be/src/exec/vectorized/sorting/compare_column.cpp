@@ -294,4 +294,9 @@ void build_tie_for_column(const ColumnPtr column, Tie* tie) {
     DCHECK(st.ok());
 }
 
+void build_tie_for_columns(const Columns& columns, Tie* tie) {
+    for (auto& column : columns) {
+        build_tie_for_column(column, tie);
+    }
+}
 } // namespace starrocks::vectorized

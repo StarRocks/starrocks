@@ -52,6 +52,7 @@ void compare_columns(const Columns columns, std::vector<int8_t>& cmp_result, con
 // Build tie by comparison of adjacent rows in column.
 // Tie(i) is set to 1 only if row(i-1) is equal to row(i), otherwise is set to 0.
 void build_tie_for_column(const ColumnPtr column, Tie* tie);
+void build_tie_for_columns(const Columns& columns, Tie* tie);
 
 // Append rows from permutation
 void append_by_permutation(Column* dst, const Columns& columns, const Permutation& perm);
