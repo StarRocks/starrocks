@@ -74,7 +74,7 @@ public class HashDistributionDesc {
         return this.columns.equals(item.columns);
     }
 
-    public boolean isLocalShuffle() {
+    public boolean isLocal() {
         return this.sourceType == SourceType.LOCAL;
     }
 
