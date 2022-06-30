@@ -14,14 +14,14 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
- #     - name: Copy checkstyle xml
- #       run: cp blob/main/fe/checkstyle.xml .
+      - name: Copy checkstyle xml
+        run: cp fe/checkstyle.xml .
       
       - name: Run java checkstyle
         uses: dbelyaev/action-checkstyle@v0.6.1
         with:
           workdir: "./fe"
-          checkstyle_config: fe/checkstyle.xml
+          checkstyle_config: checkstyle.xml
           reporter: 'github-pr-check'
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
