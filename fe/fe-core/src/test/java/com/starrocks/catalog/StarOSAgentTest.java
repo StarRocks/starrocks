@@ -135,6 +135,22 @@ public class StarOSAgentTest {
     }
 
     @Test
+    public void testGetServiceStorageUri() throws StarClientException, DdlException {
+        new Expectations() {
+            {
+                client.allocateStorage(1L, (AllocateStorageInfo) any);
+                minTimes = 0;
+                result = ShardStorageInfo.newBuilder().setObjectStorageInfo(
+                        ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build()).build();
+            }
+        };
+
+        starosAgent.setServiceId(1L);
+        Assert.assertEquals("s3://bucket/1/",
+                starosAgent.getServiceShardStorageInfo().getObjectStorageInfo().getObjectUri());
+    }
+
+    @Test
     public void testAddAndRemoveWorker() throws Exception {
          new Expectations() {
              {
