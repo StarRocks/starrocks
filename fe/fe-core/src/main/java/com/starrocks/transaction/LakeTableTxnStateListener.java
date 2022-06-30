@@ -35,7 +35,6 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             throw new TransactionCommitFailedException("Cannot write RESTORE state table \"" + table.getName() + "\"");
         }
         dirtyPartitionSet = Sets.newHashSet();
-
         Set<Long> finishedTabletsOfThisTable = Sets.newHashSet();
 
         TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
