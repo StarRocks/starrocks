@@ -110,6 +110,20 @@ public class StatisticExecutor {
         }
     }
 
+    public void dropHistogram(Long tableId, List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropHistogramSQL(tableId, columnNames);
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        StatementBase parsedStmt;
+        try {
+            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            executor.execute();
+        } catch (Exception e) {
+            LOG.warn("Execute statistic table expire fail.", e);
+        }
+        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(tableId, columnNames);
+    }
+
     // If you call this function, you must ensure that the db lock is added
     public static Pair<List<TStatisticData>, Status> queryDictSync(Long dbId, Long tableId, String column)
             throws Exception {

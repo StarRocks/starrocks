@@ -103,6 +103,11 @@ public class StatisticSQLBuilder {
         return build(context, QUERY_HISTOGRAM_STATISTIC_TEMPLATE);
     }
 
+    public static String buildDropHistogramSQL(Long tableId, List<String> columnNames) {
+        return "delete from " + Constants.HistogramStatisticsTableName + " where table_id = "
+                + tableId + " and column_name in (" + Joiner.on(", ").join(columnNames) + ")";
+    }
+
     private static String build(VelocityContext context, String template) {
         StringWriter sw = new StringWriter();
         DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);
