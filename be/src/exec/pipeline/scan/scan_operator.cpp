@@ -231,7 +231,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     if (!has_available_buffer()) {
         return Status::OK();
     }
-    
+
     // Check if exceed the concurrency limitation
     if (!_try_to_increase_committed_scan_tasks()) {
         return Status::OK();
