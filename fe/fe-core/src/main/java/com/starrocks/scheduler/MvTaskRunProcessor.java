@@ -52,7 +52,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class MvTaskRunProcessor extends BaseTaskRunProcessor {
 
@@ -98,13 +97,13 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         // 1. scan base table, get table id which used in partition
         Map<Long, OlapTable> olapTables = Maps.newHashMap();
         OlapTable partitionTable = null;
+        List<SlotRef> slotRefs = Lists.newArrayList();
+        partitionExpr.collect(SlotRef.class, slotRefs);
+        // if partitionExpr is FunctionCallExpr, get first SlotRef
+        Preconditions.checkState(slotRefs.size() == 1);
+        SlotRef slotRef = slotRefs.get(0);
         for (Long baseTableId : baseTableIds) {
             OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
-            List<SlotRef> slotRefs = Lists.newArrayList();
-            partitionExpr.collect(SlotRef.class, slotRefs);
-            // if partitionExpr is FunctionCallExpr, get first SlotRef
-            Preconditions.checkState(slotRefs.size() == 1);
-            SlotRef slotRef = slotRefs.get(0);
             if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(olapTable.getName())) {
                 partitionTable = olapTable;
             }

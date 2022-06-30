@@ -2975,13 +2975,10 @@ public class LocalMetastore implements ConnectorMetadata {
                     baseTable.removeRelatedMaterializedView(table.getId());
                 }
             }
-            MaterializedView materializedView = (MaterializedView) table;
-            if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC) {
-                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-                Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(table.getId()));
-                if (refreshTask != null) {
-                    taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
-                }
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(table.getId()));
+            if (refreshTask != null) {
+                taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
             }
         } else {
             stateMgr.getAlterInstance().processDropMaterializedView(stmt);
