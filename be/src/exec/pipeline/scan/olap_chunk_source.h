@@ -57,7 +57,6 @@ public:
                                                            size_t* num_read_chunks, int worker_id,
                                                            workgroup::WorkGroupPtr running_wg) override;
 
-
 private:
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
