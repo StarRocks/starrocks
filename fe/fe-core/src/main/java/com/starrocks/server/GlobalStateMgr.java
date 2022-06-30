@@ -56,7 +56,6 @@ import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
@@ -1773,23 +1772,6 @@ public class GlobalStateMgr {
 
     public int getFollowerCnt() {
         return nodeMgr.getFollowerCnt();
-    }
-
-    // For replay edit log, needn't lock metadata
-    public void unprotectCreateDb(Database db) {
-        localMetastore.unprotectCreateDb(db);
-    }
-
-    public void replayCreateDb(Database db) {
-        localMetastore.replayCreateDb(db);
-    }
-
-    public void dropDb(DropDbStmt stmt) throws DdlException {
-        localMetastore.dropDb(stmt);
-    }
-
-    public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {
-        localMetastore.replayDropDb(dbName, isForceDrop);
     }
 
     public void recoverDatabase(RecoverDbStmt recoverStmt) throws DdlException {

@@ -844,16 +844,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAddBackendClause(StarRocksParser.AddBackendClauseContext context) {
-        List<String> clusters =
+        List<String> backends =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
-        if (context.TO() != null) {
-            Identifier identifier = (Identifier) visit(context.identifier());
-            return new AddBackendClause(clusters, identifier.getValue());
-        }
-        if (context.FREE() != null) {
-            return new AddBackendClause(clusters, true);
-        }
-        return new AddBackendClause(clusters, false);
+        return new AddBackendClause(backends);
     }
 
     @Override

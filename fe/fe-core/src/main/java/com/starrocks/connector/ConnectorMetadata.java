@@ -10,7 +10,6 @@ import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
@@ -62,7 +61,7 @@ public interface ConnectorMetadata {
 
     default void createDb(String dbName) throws  DdlException, AlreadyExistsException {}
 
-    default void dropDb(DropDbStmt stmt) throws DdlException {}
+    default void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {}
 
     default List<Long> getDbIds() {
         return Lists.newArrayList();
