@@ -35,7 +35,7 @@ public:
         _group_assigner = std::make_unique<TestGroupAssigner>(kTestGroupPath);
         _tablet_manager = std::make_unique<TabletManager>(_group_assigner.get(), 0);
         _tablet_metadata = std::make_unique<TabletMetadata>();
-        _tablet_metadata->set_id(10086);
+        _tablet_metadata->set_id(20000);
         _tablet_metadata->set_version(1);
         //
         //  | column | type | KEY | NULL |
@@ -43,7 +43,7 @@ public:
         //  |   c0   |  INT | YES |  NO  |
         //  |   c1   |  INT | NO  |  NO  |
         auto schema = _tablet_metadata->mutable_schema();
-        schema->set_id(10);
+        schema->set_id(20000);
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(DUP_KEYS);
         schema->set_num_rows_per_row_block(65535);
@@ -180,7 +180,7 @@ public:
         _group_assigner = std::make_unique<TestGroupAssigner>(kTestGroupPath);
         _tablet_manager = std::make_unique<TabletManager>(_group_assigner.get(), 0);
         _tablet_metadata = std::make_unique<TabletMetadata>();
-        _tablet_metadata->set_id(10087);
+        _tablet_metadata->set_id(20001);
         _tablet_metadata->set_version(1);
         //
         //  | column | type | KEY | NULL |
@@ -188,7 +188,7 @@ public:
         //  |   c0   |  INT | YES |  NO  |
         //  |   c1   |  INT | NO  |  NO  |
         auto schema = _tablet_metadata->mutable_schema();
-        schema->set_id(10);
+        schema->set_id(20001);
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(AGG_KEYS);
         schema->set_num_rows_per_row_block(65535);
