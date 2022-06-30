@@ -4,6 +4,7 @@
 
 #include <fmt/format.h>
 #include <fslib/configuration.h>
+#include <fslib/fslib_all_initializer.h>
 #include <gtest/gtest.h>
 
 #include <fstream>
@@ -20,6 +21,7 @@ public:
     StarletFileSystemTest() = default;
     ~StarletFileSystemTest() override = default;
     void SetUp() override {
+        staros::starlet::fslib::register_builtin_filesystems();
         staros::starlet::ShardInfo shard_info;
         shard_info.id = 10086;
         shard_info.obj_store_info.uri = "";

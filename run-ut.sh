@@ -207,10 +207,6 @@ fi
 
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 
-if [ "${USE_STAROS}" == "ON"  ]; then
-    export LD_LIBRARY_PATH=${STARROCKS_THIRDPARTY}/installed/starlet/starlet_install/lib64/:$LD_LIBRARY_PATH
-fi
-
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
 export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH

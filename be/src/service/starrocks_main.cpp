@@ -28,6 +28,10 @@
 #include <sanitizer/lsan_interface.h>
 #endif
 
+#ifdef USE_STAROS
+#include <fslib/fslib_all_initializer.h>
+#endif
+
 #include <curl/curl.h>
 #include <gperftools/profiler.h>
 #include <thrift/TOutput.h>
@@ -270,6 +274,7 @@ int main(int argc, char** argv) {
     }
 
 #ifdef USE_STAROS
+    staros::starlet::fslib::register_builtin_filesystems();
     starrocks::init_staros_worker();
 #endif
 

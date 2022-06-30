@@ -174,10 +174,42 @@ public:
     StatusOr<Configuration> get_shard_config(int64_t tablet_id) {
         Configuration conf;
         ASSIGN_OR_RETURN(auto shardinfo, g_worker->get_shard_info(tablet_id));
-        conf[kS3AccessKeyId] = shardinfo.properties[kS3AccessKeyId];
-        conf[kS3AccessKeySecret] = shardinfo.properties[kS3AccessKeySecret];
-        conf[kS3OverrideEndpoint] = shardinfo.properties[kS3OverrideEndpoint];
-        conf[kS3Bucket] = shardinfo.properties[kS3Bucket];
+
+        auto iter = shardinfo.properties.find("scheme");
+        if (iter == shardinfo.properties.end()) {
+            // default use starlet s3 filesystem
+            conf.emplace(std::make_pair("scheme", "s3://"));
+        } else {
+            conf.emplace(std::make_pair("scheme", std::move(iter->second)));
+        }
+
+        iter = shardinfo.properties.find(kS3AccessKeyId);
+        if (iter == shardinfo.properties.end()) {
+            return Status::InvalidArgument(
+                    fmt::format("shardinfo {} should contains {} conf", tablet_id, kS3AccessKeyId));
+        }
+        conf.emplace(std::make_pair(kS3AccessKeyId, std::move(iter->second)));
+
+        iter = shardinfo.properties.find(kS3AccessKeySecret);
+        if (iter == shardinfo.properties.end()) {
+            return Status::InvalidArgument(
+                    fmt::format("shardinfo {} should contains {} conf", tablet_id, kS3AccessKeySecret));
+        }
+        conf.emplace(std::make_pair(kS3AccessKeySecret, std::move(iter->second)));
+
+        iter = shardinfo.properties.find(kS3OverrideEndpoint);
+        if (iter == shardinfo.properties.end()) {
+            return Status::InvalidArgument(
+                    fmt::format("shardinfo {} should contains {} conf", tablet_id, kS3OverrideEndpoint));
+        }
+        conf.emplace(std::make_pair(kS3OverrideEndpoint, std::move(iter->second)));
+
+        iter = shardinfo.properties.find(kS3Bucket);
+        if (iter == shardinfo.properties.end()) {
+            return Status::InvalidArgument(fmt::format("shardinfo {} should contains {} conf", tablet_id, kS3Bucket));
+        }
+        conf.emplace(std::make_pair(kS3Bucket, std::move(iter->second)));
+
         return conf;
     }
 
@@ -190,7 +222,7 @@ public:
         ASSIGN_OR_RETURN(auto pair, parse_starlet_path(path));
         ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
 
-        auto fs_st = FileSystemFactory::new_filesystem("s3://", conf);
+        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -208,7 +240,7 @@ public:
         ASSIGN_OR_RETURN(auto pair, parse_starlet_path(path));
         ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
 
-        auto fs_st = FileSystemFactory::new_filesystem("s3://", conf);
+        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -234,7 +266,7 @@ public:
 
         ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
 
-        auto fs_st = FileSystemFactory::new_filesystem("s3://", conf);
+        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -251,7 +283,7 @@ public:
     Status delete_file(const std::string& path) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_path(path));
         ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
-        auto fs_st = FileSystemFactory::new_filesystem("s3://", conf);
+        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -266,7 +298,7 @@ public:
         }
 
         ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
-        auto fs_st = FileSystemFactory::new_filesystem("s3://", conf);
+        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -286,7 +318,7 @@ public:
 
         ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
 
-        auto fs_st = FileSystemFactory::new_filesystem("s3://", conf);
+        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -316,7 +348,7 @@ public:
 
         ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
 
-        auto fs_st = FileSystemFactory::new_filesystem("s3://", conf);
+        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -341,7 +373,7 @@ public:
         ASSIGN_OR_RETURN(auto pair, parse_starlet_path(dirname));
         ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
 
-        auto fs_st = FileSystemFactory::new_filesystem("s3://", conf);
+        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -359,7 +391,7 @@ public:
         ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
         bool dir_empty = true;
 
-        auto fs_st = FileSystemFactory::new_filesystem("s3://", conf);
+        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
