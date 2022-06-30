@@ -2,6 +2,7 @@ name: BE Code Formatter
 
 on:
   pull_request:
+  pull_request_review:
   push:
   
 jobs:
