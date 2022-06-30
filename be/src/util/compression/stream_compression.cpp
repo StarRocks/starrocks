@@ -27,52 +27,38 @@
 
 namespace starrocks {
 
-Status StreamCompression::create_decompressor(CompressionTypePB type,
-                                              std::unique_ptr<StreamCompression>* decompressor) {
-    switch (type) {
-    case CompressionTypePB::NO_COMPRESSION:
-        *decompressor = nullptr;
-        break;
-    case CompressionTypePB::GZIP:
-        *decompressor = std::make_unique<GzipStreamCompression>(false);
-        break;
-    case CompressionTypePB::DEFLATE:
-        *decompressor = std::make_unique<GzipStreamCompression>(true);
-        break;
-    case CompressionTypePB::BZIP2:
-        *decompressor = std::make_unique<Bzip2StreamCompression>();
-        break;
-    case CompressionTypePB::LZ4_FRAME:
-        *decompressor = std::make_unique<Lz4FrameStreamCompression>();
-        break;
-    case CompressionTypePB::ZSTD:
-        *decompressor = std::make_unique<ZstandardStreamCompression>();
-        break;
-    default:
-        return Status::InternalError(fmt::format("Unknown compress type: {}", type));
+class GzipStreamCompression : public StreamCompression {
+public:
+    GzipStreamCompression(bool is_deflate)
+            : StreamCompression(is_deflate ? CompressionTypePB::DEFLATE : CompressionTypePB::GZIP),
+              _is_deflate(is_deflate) {}
+
+    ~GzipStreamCompression() override { (void)inflateEnd(&_z_strm); }
+
+    std::string debug_info() override {
+        std::stringstream ss;
+        ss << "GzipStreamCompression."
+           << " is_deflate: " << _is_deflate;
+        return ss.str();
     }
 
-    Status st = Status::OK();
-    if (*decompressor != nullptr) {
-        st = (*decompressor)->init();
-    }
+    Status init() override;
 
-    return st;
-}
+    Status decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output, size_t output_len,
+                      size_t* output_bytes_written, bool* stream_end) override;
 
-std::string StreamCompression::debug_info() {
-    return "StreamCompression";
-}
+private:
+    bool _is_deflate;
+
+    z_stream _z_strm;
+
+    // These are magic numbers from zlib.h.  Not clear why they are not defined
+    // there.
+    const static int WINDOW_BITS = 15;  // Maximum window size
+    const static int DETECT_CODEC = 32; // Determine if this is libz or gzip from header.
+};
 
 // Gzip
-GzipStreamCompression::GzipStreamCompression(bool is_deflate)
-        : StreamCompression(is_deflate ? CompressionTypePB::DEFLATE : CompressionTypePB::GZIP),
-          _is_deflate(is_deflate) {}
-
-GzipStreamCompression::~GzipStreamCompression() {
-    (void)inflateEnd(&_z_strm);
-}
-
 Status GzipStreamCompression::init() {
     _z_strm = {nullptr};
     _z_strm.zalloc = Z_NULL;
@@ -146,18 +132,28 @@ Status GzipStreamCompression::decompress(uint8_t* input, size_t input_len, size_
     return Status::OK();
 }
 
-std::string GzipStreamCompression::debug_info() {
-    std::stringstream ss;
-    ss << "GzipStreamCompression."
-       << " is_deflate: " << _is_deflate;
-    return ss.str();
-}
+class Bzip2StreamCompression : public StreamCompression {
+public:
+    Bzip2StreamCompression() : StreamCompression(CompressionTypePB::BZIP2) {}
+
+    ~Bzip2StreamCompression() override { BZ2_bzDecompressEnd(&_bz_strm); }
+
+    std::string debug_info() override {
+        std::stringstream ss;
+        ss << "Bzip2StreamCompression.";
+        return ss.str();
+    }
+
+    Status init() override;
+
+    Status decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output, size_t output_len,
+                      size_t* output_bytes_written, bool* stream_end) override;
+
+private:
+    bz_stream _bz_strm;
+};
 
 // Bzip2
-Bzip2StreamCompression::~Bzip2StreamCompression() {
-    BZ2_bzDecompressEnd(&_bz_strm);
-}
-
 Status Bzip2StreamCompression::init() {
     bzero(&_bz_strm, sizeof(_bz_strm));
     int ret = BZ2_bzDecompressInit(&_bz_strm, 0, 0);
@@ -222,15 +218,50 @@ Status Bzip2StreamCompression::decompress(uint8_t* input, size_t input_len, size
     return Status::OK();
 }
 
-std::string Bzip2StreamCompression::debug_info() {
-    std::stringstream ss;
-    ss << "Bzip2StreamCompression.";
-    return ss.str();
-}
+class Lz4FrameStreamCompression : public StreamCompression {
+public:
+    Lz4FrameStreamCompression()
+            : StreamCompression(CompressionTypePB::LZ4_FRAME),
+              _decompress_context(std::move(compression::LZ4F_DCtx_Pool::get_default())),
+              _expect_dec_buf_size(-1) {}
 
-Lz4FrameStreamCompression::~Lz4FrameStreamCompression() {
-    _decompress_context.reset();
-}
+    ~Lz4FrameStreamCompression() override { _decompress_context.reset(); }
+
+    std::string debug_info() override {
+        std::stringstream ss;
+        ss << "Lz4FrameStreamCompression."
+           << " expect dec buf size: " << _expect_dec_buf_size;
+        return ss.str();
+    }
+
+    size_t get_block_size(const LZ4F_frameInfo_t* info) {
+        switch (info->blockSizeID) {
+        case LZ4F_default:
+        case LZ4F_max64KB:
+            return 1 << 16;
+        case LZ4F_max256KB:
+            return 1 << 18;
+        case LZ4F_max1MB:
+            return 1 << 20;
+        case LZ4F_max4MB:
+            return 1 << 22;
+        default:
+            // error
+            return -1;
+        }
+    }
+
+    Status init() override;
+
+    Status decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output, size_t output_len,
+                      size_t* output_bytes_written, bool* stream_end) override;
+
+private:
+    compression::LZ4F_DCtx_Pool::Ref _decompress_context;
+    size_t _expect_dec_buf_size;
+
+    const static unsigned STARROCKS_LZ4F_VERSION;
+};
 
 Status Lz4FrameStreamCompression::init() {
     StatusOr<compression::LZ4F_DCtx_Pool::Ref> maybe_decompress_context = compression::getLZ4F_DCtx();
@@ -314,33 +345,26 @@ Status Lz4FrameStreamCompression::decompress(uint8_t* input, size_t input_len, s
     return Status::OK();
 }
 
-std::string Lz4FrameStreamCompression::debug_info() {
-    std::stringstream ss;
-    ss << "Lz4FrameStreamCompression."
-       << " expect dec buf size: " << _expect_dec_buf_size;
-    return ss.str();
-}
+/// Zstandard is a real-time compression algorithm, providing high compression
+/// ratios. It offers a very wide range of compression/speed trade-off.
+class ZstandardStreamCompression : public StreamCompression {
+public:
+    ZstandardStreamCompression()
+            : StreamCompression(CompressionTypePB::ZSTD),
+              _decompress_context(std::move(compression::ZSTD_DCtx_Pool::get_default())) {}
 
-size_t Lz4FrameStreamCompression::get_block_size(const LZ4F_frameInfo_t* info) {
-    switch (info->blockSizeID) {
-    case LZ4F_default:
-    case LZ4F_max64KB:
-        return 1 << 16;
-    case LZ4F_max256KB:
-        return 1 << 18;
-    case LZ4F_max1MB:
-        return 1 << 20;
-    case LZ4F_max4MB:
-        return 1 << 22;
-    default:
-        // error
-        return -1;
-    }
-}
+    ~ZstandardStreamCompression() override { _decompress_context.reset(); }
 
-ZstandardStreamCompression::~ZstandardStreamCompression() {
-    _decompress_context.reset();
-}
+    std::string debug_info() override { return "ZstandardStreamCompression"; }
+
+    Status decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output, size_t output_len,
+                      size_t* output_bytes_write, bool* stream_end) override;
+
+    Status init() override;
+
+private:
+    compression::ZSTD_DCtx_Pool::Ref _decompress_context;
+};
 
 Status ZstandardStreamCompression::init() {
     StatusOr<compression::ZSTD_DCtx_Pool::Ref> maybe_decompress_context = compression::getZSTD_DCtx();
@@ -378,8 +402,37 @@ Status ZstandardStreamCompression::decompress(uint8_t* input, size_t input_len, 
     return Status::OK();
 }
 
-std::string ZstandardStreamCompression::debug_info() {
-    return "ZstandardStreamCompression";
+Status StreamCompression::create_decompressor(CompressionTypePB type,
+                                              std::unique_ptr<StreamCompression>* decompressor) {
+    switch (type) {
+    case CompressionTypePB::NO_COMPRESSION:
+        *decompressor = nullptr;
+        break;
+    case CompressionTypePB::GZIP:
+        *decompressor = std::make_unique<GzipStreamCompression>(false);
+        break;
+    case CompressionTypePB::DEFLATE:
+        *decompressor = std::make_unique<GzipStreamCompression>(true);
+        break;
+    case CompressionTypePB::BZIP2:
+        *decompressor = std::make_unique<Bzip2StreamCompression>();
+        break;
+    case CompressionTypePB::LZ4_FRAME:
+        *decompressor = std::make_unique<Lz4FrameStreamCompression>();
+        break;
+    case CompressionTypePB::ZSTD:
+        *decompressor = std::make_unique<ZstandardStreamCompression>();
+        break;
+    default:
+        return Status::InternalError(fmt::format("Unknown compress type: {}", type));
+    }
+
+    Status st = Status::OK();
+    if (*decompressor != nullptr) {
+        st = (*decompressor)->init();
+    }
+
+    return st;
 }
 
 } // namespace starrocks
