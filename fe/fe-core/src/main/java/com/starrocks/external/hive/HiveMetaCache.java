@@ -477,23 +477,22 @@ public class HiveMetaCache {
 
     public void refreshPartition(HiveMetaStoreTableInfo hmsTable, List<String> partNames) throws DdlException {
         GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().lock();
-        Map<HivePartitionKey, Future<HivePartition>> hivePartitionFutures = new HashMap();
-        Map<HivePartitionKey, Future<HivePartitionStats>> hivePartitionStatsFutures = new HashMap();
-        try {
+        Map<HivePartitionKey, Future<HivePartition>> hivePartitionFutures = new HashMap();try {
             for (String partName : partNames) {
                 List<String> partValues = client.partitionNameToVals(partName);
                 HivePartitionKey key = new HivePartitionKey(hmsTable.getDb(), hmsTable.getTable(),
                         hmsTable.getTableType(), partValues);
                 Future<HivePartition> partitionFuture = partitionRefreshExecutor.submit(() -> loadPartition(key));
-                Future<HivePartitionStats> partitionStatsFuture = partitionRefreshExecutor.submit(() -> loadPartitionStats(key));
                 hivePartitionFutures.put(key, partitionFuture);
-                hivePartitionStatsFutures.put(key, partitionStatsFuture);
             }
             for (Map.Entry<HivePartitionKey, Future<HivePartition>> entry : hivePartitionFutures.entrySet()) {
                 partitionsCache.put(entry.getKey(), entry.getValue().get());
             }
-            for (Map.Entry<HivePartitionKey, Future<HivePartitionStats>> entry : hivePartitionStatsFutures.entrySet()) {
-                partitionStatsCache.put(entry.getKey(), entry.getValue().get());
+            for (String partName : partNames) {
+                List<String> partValues = client.partitionNameToVals(partName);
+                HivePartitionKey key = new HivePartitionKey(hmsTable.getDb(), hmsTable.getTable(),
+                        hmsTable.getTableType(), partValues);
+                loadPartitionStats(key);
             }
         } catch (Exception e) {
             LOG.warn("refresh partition cache failed", e);
