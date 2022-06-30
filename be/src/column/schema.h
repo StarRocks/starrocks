@@ -43,7 +43,7 @@ public:
         _num_keys = 0;
         _name_to_index.reset();
         _name_to_index_append_buffer.reset();
-        _read_append_only = false;
+        _share_name_to_index = false;
     }
 
     const FieldPtr& field(size_t idx) const;
@@ -78,10 +78,10 @@ private:
     // to allocate a new _name_to_index, so here we saves new append fileds in
     // _name_to_index_append_buffer.
     std::shared_ptr<std::unordered_map<std::string_view, size_t>> _name_to_index_append_buffer;
-    // If _read_append_only is true, it means that we only perform read or
-    // append to the schema, the append field's name will be written to
-    // _name_to_index_append_buffer.
-    bool _read_append_only;
+    // If _share_name_to_index is true, it means that we share the _name_to_index
+    // with another schema, and we only perform read or append to current schema,
+    // the append field's name will be written to _name_to_index_append_buffer.
+    mutable bool _share_name_to_index = false;
 
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
 };

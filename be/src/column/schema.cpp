@@ -15,7 +15,7 @@ Schema::Schema(Fields fields) : Schema(fields, KeysType::DUP_KEYS) {}
 Schema::Schema(Fields fields, KeysType keys_type)
         : _fields(std::move(fields)),
           _name_to_index_append_buffer(nullptr),
-          _read_append_only(false),
+          _share_name_to_index(false),
           _keys_type(static_cast<uint8_t>(keys_type)) {
     auto is_key = [](const FieldPtr& f) { return f->is_key(); };
     _num_keys = std::count_if(_fields.begin(), _fields.end(), is_key);
@@ -23,7 +23,7 @@ Schema::Schema(Fields fields, KeysType keys_type)
 }
 
 Schema::Schema(Schema* schema, const std::vector<ColumnId>& cids)
-        : _name_to_index_append_buffer(nullptr), _read_append_only(false), _keys_type(schema->_keys_type) {
+        : _name_to_index_append_buffer(nullptr), _share_name_to_index(false), _keys_type(schema->_keys_type) {
     _fields.resize(cids.size());
     for (int i = 0; i < cids.size(); i++) {
         DCHECK_LT(cids[i], schema->_fields.size());
@@ -36,54 +36,57 @@ Schema::Schema(Schema* schema, const std::vector<ColumnId>& cids)
 
 // if we use the constructor, we must make sure that input (Schema* schema) is read_only
 Schema::Schema(Schema* schema)
-        : _num_keys(schema->_num_keys),
-          _name_to_index_append_buffer(nullptr),
-          _read_append_only(true),
-          _keys_type(schema->_keys_type) {
+        : _num_keys(schema->_num_keys), _name_to_index_append_buffer(nullptr), _keys_type(schema->_keys_type) {
     DCHECK(schema->_name_to_index_append_buffer == nullptr);
     _fields.resize(schema->num_fields());
     for (int i = 0; i < schema->_fields.size(); i++) {
         _fields[i] = schema->_fields[i];
     }
     if (schema->_name_to_index_append_buffer == nullptr) {
-        // share the name_to_index with schema*, lator append fields will be added to _name_to_index_append_buffer
+        // share the name_to_index with schema&, later append fields will be added to _name_to_index_append_buffer
+        schema->_share_name_to_index = true;
+        _share_name_to_index = true;
         _name_to_index = schema->_name_to_index;
     } else {
+        _share_name_to_index = false;
         _build_index_map(_fields);
     }
 }
 
-// if we use the constructor, we must make sure that input (Schema* schema) is read_only
+// if we use the constructor, we must make sure that input (Schema& schema) is read_only
 Schema::Schema(const Schema& schema)
-        : _num_keys(schema._num_keys),
-          _name_to_index_append_buffer(nullptr),
-          _read_append_only(true),
-          _keys_type(schema._keys_type) {
+        : _num_keys(schema._num_keys), _name_to_index_append_buffer(nullptr), _keys_type(schema._keys_type) {
     _fields.resize(schema.num_fields());
     for (int i = 0; i < schema._fields.size(); i++) {
         _fields[i] = schema._fields[i];
     }
     if (schema._name_to_index_append_buffer == nullptr) {
-        // share the name_to_index with schema*, lator append fields will be added to _name_to_index_append_buffer
+        // share the name_to_index with schema&, later append fields will be added to _name_to_index_append_buffer
+        schema._share_name_to_index = true;
+        _share_name_to_index = true;
         _name_to_index = schema._name_to_index;
     } else {
+        _share_name_to_index = false;
         _build_index_map(_fields);
     }
 }
 
+// if we use the schema, we must make sure that input (Schema& schema) is read_only
 Schema& Schema::operator=(const Schema& other) {
     this->_num_keys = other._num_keys;
     this->_name_to_index_append_buffer = nullptr;
-    this->_read_append_only = true;
     this->_keys_type = other._keys_type;
     this->_fields.resize(other.num_fields());
     for (int i = 0; i < this->_fields.size(); i++) {
         this->_fields[i] = other._fields[i];
     }
     if (other._name_to_index_append_buffer == nullptr) {
-        // share the name_to_index with schema*, lator append fields will be added to _name_to_index_append_buffer
+        // share the name_to_index with schema&, later append fields will be added to _name_to_index_append_buffer
+        other._share_name_to_index = true;
+        this->_share_name_to_index = true;
         _name_to_index = other._name_to_index;
     } else {
+        this->_share_name_to_index = false;
         _build_index_map(this->_fields);
     }
     return *this;
@@ -92,7 +95,7 @@ Schema& Schema::operator=(const Schema& other) {
 void Schema::append(const FieldPtr& field) {
     _fields.emplace_back(field);
     _num_keys += field->is_key();
-    if (!_read_append_only) {
+    if (!_share_name_to_index) {
         if (_name_to_index == nullptr) {
             _name_to_index.reset(new std::unordered_map<std::string_view, size_t>());
         }
@@ -111,10 +114,10 @@ void Schema::insert(size_t idx, const FieldPtr& field) {
     _fields.emplace(_fields.begin() + idx, field);
     _num_keys += field->is_key();
 
-    if (_read_append_only) {
+    if (_share_name_to_index) {
         // release the _name_to_index_append_buffer and rebuild the _name_to_index
         _name_to_index_append_buffer.reset();
-        _read_append_only = false;
+        _share_name_to_index = false;
     }
 
     _name_to_index.reset();
@@ -124,7 +127,7 @@ void Schema::insert(size_t idx, const FieldPtr& field) {
 void Schema::remove(size_t idx) {
     DCHECK_LT(idx, _fields.size());
     _num_keys -= _fields[idx]->is_key();
-    if (_read_append_only && idx == _fields.size() - 1 && _name_to_index_append_buffer != nullptr &&
+    if (_share_name_to_index && idx == _fields.size() - 1 && _name_to_index_append_buffer != nullptr &&
         _name_to_index_append_buffer->size() > 0) {
         // fastpath for the filed we want to remove is at the end of the _name_to_index_append_buffer
         _name_to_index_append_buffer->erase(_fields[idx]->name());
@@ -140,7 +143,7 @@ void Schema::remove(size_t idx) {
             _build_index_map(_fields);
         }
         _name_to_index_append_buffer.reset();
-        _read_append_only = false;
+        _share_name_to_index = false;
     }
 }
 
@@ -176,7 +179,7 @@ size_t Schema::get_field_index_by_name(const std::string& name) const {
     auto p = _name_to_index->find(name);
     if (p == _name_to_index->end()) {
         if (_name_to_index_append_buffer != nullptr) {
-            DCHECK(_read_append_only);
+            DCHECK(_share_name_to_index);
             auto p2 = _name_to_index_append_buffer->find(name);
             if (p2 == _name_to_index_append_buffer->end()) {
                 return -1;
@@ -203,7 +206,7 @@ void Schema::convert_to(Schema* new_schema, const std::vector<FieldType>& new_ty
         }
     }
     new_schema->_num_keys = _num_keys;
-    if (!_read_append_only) {
+    if (!_share_name_to_index) {
         new_schema->_name_to_index = _name_to_index;
     } else {
         new_schema->_build_index_map(new_schema->_fields);
