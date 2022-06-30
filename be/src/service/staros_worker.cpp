@@ -34,6 +34,10 @@ absl::Status StarOSWorker::remove_shard(const ShardId id) {
     return absl::OkStatus();
 }
 
+absl::Status StarOSWorker::update_worker_info(const WorkerInfo& info) {
+    return absl::UnimplementedError("StarOSWorker::update_worker_info");
+}
+
 StatusOr<staros::starlet::ShardInfo> StarOSWorker::get_shard_info(ShardId id) {
     std::lock_guard l(_mtx);
     auto it = _shards.find(id);
