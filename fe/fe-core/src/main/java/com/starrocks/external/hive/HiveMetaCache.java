@@ -13,6 +13,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -331,8 +332,7 @@ public class HiveMetaCache {
         org.apache.hadoop.hive.metastore.api.Table hiveTable = client.getTable(hiveTableName);
         Table table = null;
         if (hiveTable.getSd().getInputFormat().contains("hudi")) {
-            Schema hudiTable = loadHudiTable(hiveTable);
-            table = HiveMetaStoreTableUtils.convertHudiConnTableToSRTable(hudiTable, hiveTable, resourceName);
+            table = HiveMetaStoreTableUtils.convertHudiConnTableToSRTable(hiveTable, resourceName);
         } else {
             table = HiveMetaStoreTableUtils.convertHiveConnTableToSRTable(hiveTable, resourceName);
         }
@@ -342,11 +342,11 @@ public class HiveMetaCache {
         return table;
     }
 
-    private Schema loadHudiTable(org.apache.hadoop.hive.metastore.api.Table hiveTable) throws DdlException {
+    public static Schema loadHudiSchema(org.apache.hadoop.hive.metastore.api.Table hiveTable) throws DdlException {
         Map<String, String> hudiProperties = Maps.newHashMap();
         String hudiBasePath = hiveTable.getSd().getLocation();
         if (!Strings.isNullOrEmpty(hudiBasePath)) {
-            hudiProperties.put("hudi.table.base.path", hudiBasePath);
+            hudiProperties.put(HudiTable.HUDI_BASE_PATH, hudiBasePath);
         }
 
         Configuration conf = new Configuration();
@@ -358,20 +358,20 @@ public class HiveMetaCache {
         if (hudiTableType == HoodieTableType.MERGE_ON_READ) {
             throw new DdlException("MERGE_ON_READ type of hudi table is NOT supported.");
         }
-        hudiProperties.put("hudi.table.type", hudiTableType.name());
+        hudiProperties.put(HudiTable.HUDI_TABLE_TYPE, hudiTableType.name());
 
         Option<String[]> hudiTablePrimaryKey = hudiTableConfig.getRecordKeyFields();
         if (hudiTablePrimaryKey.isPresent()) {
-            hudiProperties.put("hudi.table.primaryKey", hudiTableConfig.getRecordKeyFieldProp());
+            hudiProperties.put(HudiTable.HUDI_TABLE_PRIMARY_KEY, hudiTableConfig.getRecordKeyFieldProp());
         }
 
         String hudiTablePreCombineField = hudiTableConfig.getPreCombineField();
         if (!Strings.isNullOrEmpty(hudiTablePreCombineField)) {
-            hudiProperties.put("hudi.table.preCombineField", hudiTablePreCombineField);
+            hudiProperties.put(HudiTable.HUDI_TABLE_PRE_COMBINE_FIELD, hudiTablePreCombineField);
         }
 
         HoodieFileFormat hudiBaseFileFormat = hudiTableConfig.getBaseFileFormat();
-        hudiProperties.put("hudi.table.base.file.format", hudiBaseFileFormat.name());
+        hudiProperties.put(HudiTable.HUDI_TABLE_BASE_FILE_FORMAT, hudiBaseFileFormat.name());
 
         TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
         Schema hudiTable;

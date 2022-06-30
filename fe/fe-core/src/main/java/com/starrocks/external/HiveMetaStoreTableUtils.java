@@ -19,6 +19,7 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.connector.ConnectorDatabaseId;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.external.hive.HiveColumnStats;
+import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HivePartitionStats;
 import com.starrocks.external.hive.HiveTableStats;
@@ -341,9 +342,10 @@ public class HiveMetaStoreTableUtils {
                 fullSchema, properties, hiveTable);
     }
 
-    public static HudiTable convertHudiConnTableToSRTable(Schema hudiTable, Table hmsTable, String resourceName)
+    public static HudiTable convertHudiConnTableToSRTable(Table hmsTable, String resourceName)
             throws DdlException {
-        List<Schema.Field> allHudiColumns = hudiTable.getFields();
+        Schema hudiSchema = HiveMetaCache.loadHudiSchema(hmsTable);
+        List<Schema.Field> allHudiColumns = hudiSchema.getFields();
         List<Column> fullSchema = Lists.newArrayList();
         for (Schema.Field fieldSchema : allHudiColumns) {
             Type srType = convertHudiTableColumnType(fieldSchema.schema());
@@ -360,7 +362,7 @@ public class HiveMetaStoreTableUtils {
         properties.put(HudiTable.HUDI_TABLE, hmsTable.getTableName());
         properties.put(HudiTable.HUDI_RESOURCE, resourceName);
 
-        return new HudiTable(connectorTableIdIdGenerator.getNextId().asInt(), hudiTable.getName(),
+        return new HudiTable(connectorTableIdIdGenerator.getNextId().asInt(), hudiSchema.getName(),
                 fullSchema, properties);
     }
 

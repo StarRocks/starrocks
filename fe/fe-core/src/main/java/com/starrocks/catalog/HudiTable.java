@@ -68,11 +68,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     private static final String JSON_KEY_DATA_COLUMN_NAMES = "dataColumnNames";
     private static final String JSON_KEY_HUDI_PROPERTIES = "hudiProperties";
 
-    private static final String HUDI_TABLE_TYPE = "hudi.table.type";
-    private static final String HUDI_TABLE_PRIMARY_KEY = "hudi.table.primaryKey";
-    private static final String HUDI_TABLE_PRE_COMBINE_FIELD = "hudi.table.preCombineField";
-    private static final String HUDI_BASE_PATH = "hudi.table.base.path";
-    private static final String HUDI_TABLE_BASE_FILE_FORMAT = "hudi.table.base.file.format";
+    public static final String HUDI_TABLE_TYPE = "hudi.table.type";
+    public static final String HUDI_TABLE_PRIMARY_KEY = "hudi.table.primaryKey";
+    public static final String HUDI_TABLE_PRE_COMBINE_FIELD = "hudi.table.preCombineField";
+    public static final String HUDI_BASE_PATH = "hudi.table.base.path";
+    public static final String HUDI_TABLE_BASE_FILE_FORMAT = "hudi.table.base.file.format";
     public static final String HUDI_DB = "database";
     public static final String HUDI_TABLE = "table";
     public static final String HUDI_RESOURCE = "resource";
