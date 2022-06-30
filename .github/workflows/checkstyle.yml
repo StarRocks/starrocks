@@ -13,7 +13,9 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-          
+      - name: Copy checkstyle xml
+        run: cp blob/main/fe/checkstyle.xml .
+      
       - name: Run java checkstyle
         uses: dbelyaev/action-checkstyle@v0.6.1
         with:
