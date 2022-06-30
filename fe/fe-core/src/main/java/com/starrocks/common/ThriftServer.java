@@ -33,6 +33,7 @@ import org.apache.thrift.transport.TTransportException;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.Set;
 import java.util.concurrent.ThreadPoolExecutor;
 
 public class ThriftServer {
