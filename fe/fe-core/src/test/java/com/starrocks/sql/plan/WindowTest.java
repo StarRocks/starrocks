@@ -219,7 +219,7 @@ public class WindowTest extends PlanTestBase {
     }
 
     @Test
-    public void testRankWithoutPartitionPredicatePushDown() throws Exception {
+    public void testRankingWindowWithoutPartitionPredicatePushDown() throws Exception {
         FeConstants.runningUnitTest = true;
         {
             String sql = "select * from (\n" +
@@ -229,18 +229,13 @@ public class WindowTest extends PlanTestBase {
                     ") sub_t0\n" +
                     "where rk <= 4;";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  4:SELECT\n" +
-                    "  |  predicates: 4: row_number() <= 4\n" +
-                    "  |  \n" +
-                    "  3:ANALYTIC\n" +
-                    "  |  functions: [, row_number(), ]\n" +
-                    "  |  order by: 2: v2 ASC\n" +
-                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
-                    "  |  \n" +
-                    "  2:MERGING-EXCHANGE\n" +
-                    "     limit: 4");
+            assertContains(plan, "  1:TOP-N\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 4");
         }
         {
+            // Two window function share the same sort group cannot be optimized
             String sql = "select * from (\n" +
                     "    select *, " +
                     "        row_number() over (order by v2) as rk, " +
@@ -249,67 +244,102 @@ public class WindowTest extends PlanTestBase {
                     ") sub_t0\n" +
                     "where rk <= 4;";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  5:SELECT\n" +
-                    "  |  predicates: 4: row_number() <= 4\n" +
-                    "  |  \n" +
-                    "  4:ANALYTIC\n" +
-                    "  |  functions: [, row_number(), ]\n" +
-                    "  |  order by: 2: v2 ASC\n" +
-                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
-                    "  |  \n" +
-                    "  3:ANALYTIC\n" +
-                    "  |  functions: [, sum(1: v1), ]\n" +
-                    "  |  order by: 2: v2 ASC\n" +
-                    "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
-                    "  |  \n" +
-                    "  2:MERGING-EXCHANGE");
-        }
-        {
-            String sql = "select * from (\n" +
+            assertContains(plan, "  1:SORT\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+
+            sql = "select * from (\n" +
                     "    select *, " +
                     "        sum(v1) over (order by v2) as sm, " +
                     "        row_number() over (order by v2) as rk " +
                     "    from t0\n" +
                     ") sub_t0\n" +
                     "where rk <= 4;";
-            String plan = getFragmentPlan(sql);
-            assertContains(plan, "  5:SELECT\n" +
-                    "  |  predicates: 5: row_number() <= 4\n" +
-                    "  |  \n" +
-                    "  4:ANALYTIC\n" +
-                    "  |  functions: [, row_number(), ]\n" +
-                    "  |  order by: 2: v2 ASC\n" +
-                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
-                    "  |  \n" +
-                    "  3:ANALYTIC\n" +
-                    "  |  functions: [, sum(1: v1), ]\n" +
-                    "  |  order by: 2: v2 ASC\n" +
-                    "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
-                    "  |  \n" +
-                    "  2:MERGING-EXCHANGE");
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:SORT\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
         }
         {
+            // Two window function do not share the same sort group
             String sql = "select * from (\n" +
                     "    select *, " +
-                    "        sum(v1) over (order by v3) as sm, " +
-                    "        row_number() over (order by v2) as rk " +
+                    "        sum(v1) over (order by v3) as sm," +
+                    "        row_number() over (order by v2) as rk" +
                     "    from t0\n" +
                     ") sub_t0\n" +
                     "where rk <= 4;";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  6:ANALYTIC\n" +
-                    "  |  functions: [, row_number(), ]\n" +
-                    "  |  order by: 2: v2 ASC\n" +
-                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
-                    "  |  \n" +
-                    "  5:MERGING-EXCHANGE\n" +
-                    "     limit: 4");
+            assertContains(plan, "  4:TOP-N\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 4");
         }
         FeConstants.runningUnitTest = false;
     }
 
     @Test
-    public void testRankWithPartitionPredicatePushDown() throws Exception {
+    public void testRankingWindowWithoutPartitionLimitPushDown() throws Exception {
+        FeConstants.runningUnitTest = true;
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 5;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:TOP-N\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 5");
+        }
+        {
+            // Two window function share the same sort group cannot be optimized
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (order by v2) as rk, " +
+                    "        sum(v1) over (order by v2) as sm " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 5";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:SORT\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        sum(v1) over (order by v2) as sm, " +
+                    "        row_number() over (order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 5";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:SORT\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+        }
+        {
+            // Two window function do not share the same sort group
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        sum(v1) over (order by v3) as sm, " +
+                    "        row_number() over (order by v2) as rk" +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk,sm limit 100,1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  7:TOP-N\n" +
+                    "  |  order by: <slot 5> 5: row_number() ASC, <slot 4> 4: sum(1: v1) ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 101");
+        }
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testRankingWindowWithPartitionPredicatePushDown() throws Exception {
         FeConstants.runningUnitTest = true;
         {
             String sql = "select * from (\n" +
@@ -318,20 +348,7 @@ public class WindowTest extends PlanTestBase {
                     "    from t0\n" +
                     ") sub_t0\n" +
                     "where rk <= 4;";
-            System.out.println(sql);
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  4:ANALYTIC\n" +
-                    "  |  functions: [, row_number(), ]\n" +
-                    "  |  partition by: 3: v3\n" +
-                    "  |  order by: 2: v2 ASC\n" +
-                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
-                    "  |  \n" +
-                    "  3:SORT\n" +
-                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
-                    "  |  offset: 0\n" +
-                    "  |  \n" +
-                    "  2:EXCHANGE");
-
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: 3: v3 \n" +
                     "  |  partition limit: 4\n" +
@@ -339,17 +356,158 @@ public class WindowTest extends PlanTestBase {
                     "  |  offset: 0");
         }
         {
-            // TODO(hcf) Do not support multi partition by right now, this test need to be updated when supported
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  type: RANK\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+        }
+        {
+            // Do not support dense_rank by now
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        dense_rank() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:SORT\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE");
+        }
+        {
+            // Do not support multi partition by right now, this test need to be updated when supported
             String sql = "select * from (\n" +
                     "    select *, " +
                     "        row_number() over (partition by v2, v3 order by v1) as rk " +
                     "    from t0\n" +
                     ") sub_t0\n" +
                     "where rk <= 4;";
-            System.out.println(sql);
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  2:SORT\n" +
                     "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE");
+        }
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testRankingWindowWithPartitionLimitPushDown() throws Exception {
+        FeConstants.runningUnitTest = true;
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 5";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 5\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+        }
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 10, 5";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  type: RANK\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 15\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk,v2 limit 10, 5";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  type: RANK\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 15\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+        }
+        {
+            // order by direction mismatch
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk desc limit 10, 5";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:SORT\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk desc,v2 limit 10, 5";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:SORT\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+        }
+        {
+            // Order by column mismatch
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by v2 limit 5";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:SORT\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by v2,rk limit 5";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:SORT\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+        }
+        {
+            // Do not support dense_rank by now
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        dense_rank() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 5";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:SORT\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  1:EXCHANGE");
