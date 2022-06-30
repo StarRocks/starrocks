@@ -79,7 +79,7 @@ private:
                                DataSegments& segments);
 
     Status _merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, const size_t rows_to_keep,
-                              size_t sorted_size, size_t permutation_size, Permutation& new_permutation);
+                              size_t sorted_size, Permutation& new_permutation);
 
     static void _set_permutation_before(Permutation&, size_t size, std::vector<std::vector<uint8_t>>& filter_array);
 
