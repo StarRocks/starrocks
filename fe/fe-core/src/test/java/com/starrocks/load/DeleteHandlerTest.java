@@ -239,6 +239,13 @@ public class DeleteHandlerTest {
             }
         };
 
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows((TransactionState) any);
+                minTimes = 0;
+            }
+        };
+
         try {
             deleteStmt.analyze(analyzer);
         } catch (UserException e) {
@@ -285,6 +292,13 @@ public class DeleteHandlerTest {
                 TransactionState transactionState = new TransactionState();
                 transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
                 return transactionState;
+            }
+        };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows((TransactionState) any);
+                minTimes = 0;
             }
         };
 
@@ -405,6 +419,13 @@ public class DeleteHandlerTest {
 
         new Expectations() {
             {
+                GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows((TransactionState) any);
+                minTimes = 0;
+            }
+        };
+
+        new Expectations() {
+            {
                 AgentTaskExecutor.submit((AgentBatchTask) any);
                 minTimes = 0;
             }
@@ -452,11 +473,15 @@ public class DeleteHandlerTest {
 
         new Expectations() {
             {
-                try {
-                    countDownLatch.await(anyLong, (TimeUnit) any);
-                } catch (InterruptedException e) {
-                }
-                result = false;
+                GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows((TransactionState) any);
+                minTimes = 0;
+            }
+        };
+
+        new Expectations() {
+            {
+                AgentTaskExecutor.submit((AgentBatchTask) any);
+                minTimes = 0;
             }
         };
 
