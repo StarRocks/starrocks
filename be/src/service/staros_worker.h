@@ -19,8 +19,7 @@ public:
     using ShardInfo = staros::starlet::ShardInfo;
     using WorkerInfo = staros::starlet::WorkerInfo;
 
-    StarOSWorker() : _service_id(0),
-                     _worker_id(0) {}
+    StarOSWorker() : _service_id(0), _worker_id(0) {}
 
     virtual ~StarOSWorker() = default;
 
