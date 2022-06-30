@@ -3,6 +3,7 @@
 #include "storage/delta_writer.h"
 
 #include "runtime/current_thread.h"
+#include "runtime/descriptors.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/memtable_rowset_writer_sink.h"

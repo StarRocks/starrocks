@@ -8,6 +8,7 @@
 #include "common/logging.h"
 #include "exec/vectorized/sorting/sorting.h"
 #include "runtime/current_thread.h"
+#include "runtime/descriptors.h"
 #include "runtime/primitive_type_infra.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"

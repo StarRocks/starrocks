@@ -11,6 +11,7 @@
 #include "common/object_pool.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
 #include "util/logging.h"
 
 namespace starrocks {
