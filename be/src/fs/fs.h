@@ -56,6 +56,10 @@ public:
 
     static StatusOr<std::shared_ptr<FileSystem>> CreateSharedFromString(std::string_view uri);
 
+    // TODO(xyz): temporary used by file_scanner, lator we will remove this interface
+    // after we support directly access S3 in file_scanner(to substitute broker access)
+    static bool is_hdfs(std::string_view uri);
+
     // Return a default environment suitable for the current operating
     // system.  Sophisticated users may wish to provide their own FileSystem
     // implementation instead of relying on this default environment.

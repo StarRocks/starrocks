@@ -265,6 +265,21 @@ public class Config extends ConfigBase {
     public static boolean ignore_unknown_log_id = false;
 
     /**
+     *  whether read hdfs through broker
+     *  If read_hdfs_directly is not set, we will read hdfs thourgh broker
+     *  If read_hdfs_directly is set, we will read through lib hdfs directly
+     */
+    @ConfField(mutable = true)
+    public static boolean read_hdfs_directly = false;
+
+    /**
+     * only works when read_hdfs_directly is set true, 
+     * hdfs_read_buffer_size_kb for reading through lib hdfs directly
+     */
+    @ConfField(mutable = true)
+    public static int hdfs_read_buffer_size_kb = 8192;
+
+    /**
      * Non-master FE will stop offering service
      * if meta data delay gap exceeds *meta_delay_toleration_second*
      */

@@ -179,6 +179,11 @@ struct TBrokerScanRangeParams {
     11: optional string multi_column_separator;
     // If multi_row_delimiter is set, row_delimiter will ignore.
     12: optional string multi_row_delimiter;
+    // If read_hdfs_directly is not set, we will read hdfs thourgh broker
+    // If read_hdfs_directly is set, we will read through lib hdfs directly
+    13: optional bool read_hdfs_directly = false;
+    // hdfs_read_buffer_size_kb for reading through lib hdfs directly
+    14: optional i32 hdfs_read_buffer_size_kb = 0;
 }
 
 // Broker scan range

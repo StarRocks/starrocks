@@ -227,6 +227,8 @@ public class FileScanNode extends LoadScanNode {
     private void initParams(ParamCreateContext context)
             throws UserException {
         TBrokerScanRangeParams params = new TBrokerScanRangeParams();
+        params.setRead_hdfs_directly(Config.read_hdfs_directly);
+        params.setHdfs_read_buffer_size_kb(Config.hdfs_read_buffer_size_kb);
         context.params = params;
 
         BrokerFileGroup fileGroup = context.fileGroup;

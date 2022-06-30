@@ -109,7 +109,7 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
 
 class HdfsFileSystem : public FileSystem {
 public:
-    HdfsFileSystem() {}
+    HdfsFileSystem(int read_buffer_size) : _read_buffer_size(read_buffer_size) {}
     ~HdfsFileSystem() override = default;
 
     HdfsFileSystem(const HdfsFileSystem&) = delete;
@@ -124,9 +124,7 @@ public:
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& path) override;
 
-    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override {
-        return Status::NotSupported("HdfsFileSystem::new_sequential_file");
-    }
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override;
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override {
         return Status::NotSupported("HdfsFileSystem::new_writable_file");
@@ -194,7 +192,25 @@ public:
     Status link_file(const std::string& old_path, const std::string& new_path) override {
         return Status::NotSupported("HdfsFileSystem::link_file");
     }
+
+    int _read_buffer_size;
 };
+
+StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(const std::string& path) {
+    std::string namenode;
+    RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
+    HdfsFsHandle handle;
+    RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle));
+    if (handle.type != HdfsFsHandle::Type::HDFS) {
+        return Status::InvalidArgument("invalid hdfs path");
+    }
+    hdfsFile file = hdfsOpenFile(handle.hdfs_fs, path.c_str(), O_RDONLY, _read_buffer_size, 0, 0);
+    if (file == nullptr) {
+        return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
+    }
+    auto stream = std::make_shared<HdfsInputStream>(handle.hdfs_fs, file, path);
+    return std::make_unique<SequentialFile>(std::move(stream), path);
+}
 
 StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_file(const std::string& path) {
     return HdfsFileSystem::new_random_access_file(RandomAccessFileOptions(), path);
@@ -209,7 +225,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_fi
     if (handle.type != HdfsFsHandle::Type::HDFS) {
         return Status::InvalidArgument("invalid hdfs path");
     }
-    hdfsFile file = hdfsOpenFile(handle.hdfs_fs, path.c_str(), O_RDONLY, 0, 0, 0);
+    hdfsFile file = hdfsOpenFile(handle.hdfs_fs, path.c_str(), O_RDONLY, _read_buffer_size, 0, 0);
     if (file == nullptr) {
         return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
     }
@@ -217,8 +233,8 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_fi
     return std::make_unique<RandomAccessFile>(std::move(stream), path);
 }
 
-std::unique_ptr<FileSystem> new_fs_hdfs() {
-    return std::make_unique<HdfsFileSystem>();
+std::unique_ptr<FileSystem> new_fs_hdfs(int read_buffer_size) {
+    return std::make_unique<HdfsFileSystem>(read_buffer_size);
 }
 
 } // namespace starrocks

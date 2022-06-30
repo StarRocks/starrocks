@@ -940,6 +940,8 @@ public class SparkLoadJob extends BulkLoadJob {
                                           List<Column> columns, BrokerDesc brokerDesc) throws AnalysisException {
             // scan range params
             TBrokerScanRangeParams params = new TBrokerScanRangeParams();
+            params.setRead_hdfs_directly(Config.read_hdfs_directly);
+            params.setHdfs_read_buffer_size_kb(Config.hdfs_read_buffer_size_kb);
             params.setStrict_mode(false);
             params.setProperties(brokerDesc.getProperties());
             TupleDescriptor srcTupleDesc = descTable.createTupleDescriptor();

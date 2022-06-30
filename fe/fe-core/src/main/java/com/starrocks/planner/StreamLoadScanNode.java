@@ -40,6 +40,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.load.Load;
 import com.starrocks.task.StreamLoadTask;
@@ -140,6 +141,8 @@ public class StreamLoadScanNode extends LoadScanNode {
         srcTupleDesc = analyzer.getDescTbl().createTupleDescriptor("StreamLoadScanNode");
 
         TBrokerScanRangeParams params = new TBrokerScanRangeParams();
+        params.setRead_hdfs_directly(Config.read_hdfs_directly);
+        params.setHdfs_read_buffer_size_kb(Config.hdfs_read_buffer_size_kb);
         params.setStrict_mode(streamLoadTask.isStrictMode());
 
         Load.initColumns(dstTable, streamLoadTask.getColumnExprDescs(), null /* no hadoop function */,

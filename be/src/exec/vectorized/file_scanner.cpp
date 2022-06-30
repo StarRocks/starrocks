@@ -10,6 +10,7 @@
 #include "exec/decompressor.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
+#include "fs/fs_hdfs.h"
 #include "gutil/strings/substitute.h"
 #include "io/compressed_input_stream.h"
 #include "runtime/descriptors.h"
@@ -256,10 +257,21 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
         break;
     }
     case TFileType::FILE_BROKER: {
-        BrokerFileSystem fs_broker(address, params.properties);
-        ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_sequential_file(range_desc.path));
-        src_file = std::shared_ptr<SequentialFile>(std::move(broker_file));
-        break;
+        if (FileSystem::is_hdfs(range_desc.path) && params.__isset.read_hdfs_directly && params.read_hdfs_directly) {
+            int32_t read_buffer_size = 0;
+            if (params.__isset.hdfs_read_buffer_size_kb) {
+                read_buffer_size = params.hdfs_read_buffer_size_kb;
+            }
+            auto fs = new_fs_hdfs(read_buffer_size);
+            ASSIGN_OR_RETURN(auto hdfs_file, fs->new_sequential_file(range_desc.path));
+            src_file = std::shared_ptr<SequentialFile>(std::move(hdfs_file));
+            break;
+        } else {
+            BrokerFileSystem fs_broker(address, params.properties);
+            ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_sequential_file(range_desc.path));
+            src_file = std::shared_ptr<SequentialFile>(std::move(broker_file));
+            break;
+        }
     }
     }
     if (compression == CompressionTypePB::NO_COMPRESSION) {
@@ -285,10 +297,21 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
         break;
     }
     case TFileType::FILE_BROKER: {
-        BrokerFileSystem fs_broker(address, params.properties);
-        ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_random_access_file(range_desc.path));
-        src_file = std::shared_ptr<RandomAccessFile>(std::move(broker_file));
-        break;
+        if (FileSystem::is_hdfs(range_desc.path) && params.__isset.read_hdfs_directly && params.read_hdfs_directly) {
+            int32_t read_buffer_size = 0;
+            if (params.__isset.hdfs_read_buffer_size_kb) {
+                read_buffer_size = params.hdfs_read_buffer_size_kb;
+            }
+            auto fs = new_fs_hdfs(read_buffer_size);
+            ASSIGN_OR_RETURN(auto hdfs_file, fs->new_random_access_file(range_desc.path));
+            src_file = std::shared_ptr<RandomAccessFile>(std::move(hdfs_file));
+            break;
+        } else {
+            BrokerFileSystem fs_broker(address, params.properties);
+            ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_random_access_file(range_desc.path));
+            src_file = std::shared_ptr<RandomAccessFile>(std::move(broker_file));
+            break;
+        }
     }
     case TFileType::FILE_STREAM:
         return Status::NotSupported("Does not support create random-access file from file stream");

@@ -71,6 +71,10 @@ inline bool is_staros_uri(std::string_view uri) {
     return starts_with(uri, "staros_");
 }
 
+bool FileSystem::is_hdfs(std::string_view uri) {
+    return is_hdfs_uri(uri);
+}
+
 StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::string_view uri) {
     if (is_posix_uri(uri)) {
         return new_fs_posix();
