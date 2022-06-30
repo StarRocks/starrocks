@@ -7,8 +7,6 @@ import com.sleepycat.je.LockMode;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.impl.RepGroupImpl;
 import com.starrocks.common.util.NetUtils;
-import com.starrocks.ha.BDBHA;
-import com.starrocks.ha.HAProtocol;
 import com.starrocks.journal.JournalException;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
@@ -52,8 +50,8 @@ public class BDBEnvironmentTest {
     private String findUnbindHostPort() throws Exception {
         // try to find a port that is not bind
         String selfNodeHostPort = null;
-        int seed = new Random().nextInt() % 1000;
-        for (int port = 9000 + seed; port != 120000; port ++) {
+        int seed = new Random().nextInt() % 4000;
+        for (int port = 8000 + seed; port != 8100 + seed; port ++) {
             if(! NetUtils.isPortUsing("127.0.0.1", port)) {
                 selfNodeHostPort = "127.0.0.1:" + String.valueOf(port);
                 break;
@@ -378,8 +376,7 @@ public class BDBEnvironmentTest {
     /**
      * simulate master failover, return the index of the instance that remains follower
      */
-    private int masterFailOver() throws Exception {
-        int oldFollowerIndex = 0;
+    private void masterFailOver() throws Exception {
         // master down
         masterEnvironment.close();
         LOG.warn("======> master env is closed");
@@ -387,6 +384,7 @@ public class BDBEnvironmentTest {
 
         // find the new master
         BDBEnvironment newMasterEnvironment = null;
+        int newMasterFollowerIndex = 0;
         while (newMasterEnvironment == null) {
             Thread.sleep(1000);
             for (int i = 0; i < 2; ++ i) {
@@ -394,7 +392,7 @@ public class BDBEnvironmentTest {
                     newMasterEnvironment = followerEnvironments[i];
                     LOG.warn("=========> new master is {}", newMasterEnvironment.getReplicatedEnvironment().getNodeName());
                     newMasterEnvironment.setup();
-                    oldFollowerIndex = 1 - i;
+                    newMasterFollowerIndex = i;
                     break;
                 }
             }
@@ -412,9 +410,7 @@ public class BDBEnvironmentTest {
         Thread.sleep(1000);
 
         masterEnvironment = newMasterEnvironment;
-        masterNodeHostPort = followerNodeHostPorts[1 - oldFollowerIndex];
-
-        return oldFollowerIndex;
+        masterNodeHostPort = followerNodeHostPorts[newMasterFollowerIndex];
     }
 
     private void printHAStatus() {
@@ -425,51 +421,34 @@ public class BDBEnvironmentTest {
     }
 
     @Test
-    public void testDropAddNoFailover() throws Exception {
-        testDropAddBase(false);
+    public void testAddBadFollowerNoFailover() throws Exception {
+        testAddBadFollowerBase(false);
     }
 
     @Test
-    public void testDropAddAfterFailover() throws Exception {
-        testDropAddBase(true);
+    public void testAddBadFollowerAfterFailover() throws Exception {
+        testAddBadFollowerBase(true);
     }
 
-    protected void testDropAddBase(boolean failover) throws Exception {
+    protected void testAddBadFollowerBase(boolean failover) throws Exception {
         initClusterMasterFollower();
 
-        int oldFollowerIndex = 0;
         if (failover) {
-            oldFollowerIndex = masterFailOver();
+            masterFailOver();
         }
 
         printHAStatus();
 
-        String oldFollowerName = followerEnvironments[oldFollowerIndex].getReplicatedEnvironment().getNodeName();
-        String groupName = followerEnvironments[oldFollowerIndex].getReplicationGroupAdmin().getGroup().getMember(oldFollowerName).getName();
-        String oldFollowerHostPort = followerNodeHostPorts[oldFollowerIndex];
-
-        // 1. follower1 down
-        followerEnvironments[oldFollowerIndex].close();
-        Thread.sleep(2000);
-        LOG.warn("=============> after {}:{} is down", oldFollowerName, oldFollowerHostPort);
-        printHAStatus();
-
-        // 2. remove old follower1
-        HAProtocol protocol = new BDBHA(masterEnvironment, masterName);
-        protocol.removeElectableNode(groupName);
-        Thread.sleep(2000);
-        LOG.warn("=============> after remove {}:{}", oldFollowerName, oldFollowerHostPort);
-        printHAStatus();
-
-        // 3. bad new follower start for the first time
+        // 1. bad new follower start for the first time
         // helper = self, use a new generated name
+        String newFollowerHostPort = findUnbindHostPort();
         String newFollowerName = "newFollower";
         File newFollowerPath = createTmpDir();
         BDBEnvironment newfollowerEnvironment = new BDBEnvironment(
                 newFollowerPath,
                 newFollowerName,
-                oldFollowerHostPort,
-                oldFollowerHostPort,
+                newFollowerHostPort,
+                newFollowerHostPort,
                 true);
         LOG.warn("=========> start new follower for the first time");
         // should set up successfully as a standalone master
@@ -477,12 +456,12 @@ public class BDBEnvironmentTest {
         Thread.sleep(10000);
         newfollowerEnvironment.close();
 
-        // 4. bad new follower start for the second time
+        // 2. bad new follower start for the second time
         // helper = master
         newfollowerEnvironment = new BDBEnvironment(
                 newFollowerPath,
                 newFollowerName,
-                oldFollowerHostPort,
+                newFollowerHostPort,
                 masterNodeHostPort,
                 true);
         LOG.warn("==========> start new follower for the second time");
