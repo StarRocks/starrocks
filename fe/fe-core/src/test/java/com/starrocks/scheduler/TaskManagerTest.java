@@ -217,7 +217,7 @@ public class TaskManagerTest {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
             // at least 2 times = schedule 1 times + execute 1 times
-            Assert.assertTrue(taskRuns.size() > 2);
+            Assert.assertTrue(taskRuns.size() >= 2);
             for (TaskRunStatus taskRun : taskRuns) {
                 Assert.assertEquals(Constants.TaskRunState.SUCCESS, taskRun.getState());
             }
