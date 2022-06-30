@@ -4819,8 +4819,9 @@ public class PlanFragmentTest extends PlanTestBase {
                 "limit \n" +
                 "  45;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("6:Project\n" +
+        Assert.assertTrue(plan.contains(" 6:Project\n" +
                 "  |  <slot 3> : 3: t1c\n" +
+                "  |  <slot 21> : 37\n" +
                 "  |  <slot 40> : CAST(37 AS INT)"));
     }
 
