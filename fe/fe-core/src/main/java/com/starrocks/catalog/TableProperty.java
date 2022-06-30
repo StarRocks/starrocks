@@ -28,6 +28,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TStorageFormat;
 
@@ -43,7 +44,7 @@ import java.util.Map;
  * Different properties is recognized by prefix such as dynamic_partition
  * If there is different type properties is added.Write a method such as buildDynamicProperty to build it.
  */
-public class TableProperty implements Writable {
+public class TableProperty implements Writable, GsonPostProcessable {
     public static final String DYNAMIC_PARTITION_PROPERTY_PREFIX = "dynamic_partition";
 
     @SerializedName(value = "properties")
@@ -196,11 +197,15 @@ public class TableProperty implements Writable {
     }
 
     public static TableProperty read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), TableProperty.class)
-                .buildDynamicProperty()
-                .buildReplicationNum()
-                .buildInMemory()
-                .buildStorageFormat()
-                .buildEnablePersistentIndex();
+        return GsonUtils.GSON.fromJson(Text.readString(in), TableProperty.class);
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        buildDynamicProperty();
+        buildReplicationNum();
+        buildInMemory();
+        buildStorageFormat();
+        buildEnablePersistentIndex();
     }
 }

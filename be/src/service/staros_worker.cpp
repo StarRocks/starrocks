@@ -34,10 +34,6 @@ absl::Status StarOSWorker::remove_shard(const ShardId id) {
     return absl::OkStatus();
 }
 
-absl::Status StarOSWorker::update_worker_info(const WorkerInfo& info) {
-    return absl::UnimplementedError("StarOSWorker::update_worker_info");
-}
-
 StatusOr<staros::starlet::ShardInfo> StarOSWorker::get_shard_info(ShardId id) {
     std::lock_guard l(_mtx);
     auto it = _shards.find(id);
@@ -58,13 +54,21 @@ std::vector<staros::starlet::ShardInfo> StarOSWorker::shards() {
 
 absl::StatusOr<staros::starlet::WorkerInfo> StarOSWorker::worker_info() {
     staros::starlet::WorkerInfo worker_info;
-    worker_info.worker_id = 1;
-    worker_info.properties["port"] = std::to_string(config::starlet_port);
     std::lock_guard l(_mtx);
+    worker_info.worker_id = _worker_id;
+    worker_info.service_id = _service_id;
+    worker_info.properties["port"] = std::to_string(config::starlet_port);
     for (auto&& [k, _] : _shards) {
         worker_info.shards.insert(k);
     }
     return worker_info;
+}
+
+absl::Status StarOSWorker::update_worker_info(const staros::starlet::WorkerInfo& new_worker_info) {
+    std::lock_guard l(_mtx);
+    _service_id = new_worker_info.service_id;
+    _worker_id = new_worker_info.worker_id;
+    return absl::OkStatus();
 }
 
 std::shared_ptr<StarOSWorker> g_worker;

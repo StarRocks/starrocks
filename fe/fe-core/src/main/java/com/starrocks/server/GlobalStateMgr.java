@@ -1905,7 +1905,7 @@ public class GlobalStateMgr {
             }
             // There MUST BE 2 space in front of each column description line
             // sqlalchemy requires this to parse SHOW CREATE TAEBL stmt.
-            if (table.getType() == TableType.OLAP || table.getType() == TableType.OLAP_EXTERNAL) {
+            if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
                     sb.append("  ").append(column.toSqlWithoutAggregateTypeName());
@@ -1916,7 +1916,7 @@ public class GlobalStateMgr {
                 sb.append("  ").append(column.toSql());
             }
         }
-        if (table.getType() == TableType.OLAP || table.getType() == TableType.OLAP_EXTERNAL) {
+        if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
             if (CollectionUtils.isNotEmpty(olapTable.getIndexes())) {
                 for (Index index : olapTable.getIndexes()) {
@@ -1926,9 +1926,13 @@ public class GlobalStateMgr {
             }
         }
         sb.append("\n) ENGINE=");
-        sb.append(table.getType().name()).append(" ");
+        if (table.isLakeTable()) {
+            sb.append(CreateTableStmt.LAKE_ENGINE_NAME.toUpperCase()).append(" ");
+        } else {
+            sb.append(table.getType().name()).append(" ");
+        }
 
-        if (table.getType() == TableType.OLAP || table.getType() == TableType.OLAP_EXTERNAL) {
+        if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
 
             // keys

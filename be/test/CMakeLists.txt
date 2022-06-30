@@ -155,6 +155,7 @@ set(EXEC_FILES
         ./storage/lake/delta_writer_test.cpp
         ./storage/lake/group_assigner_test.cpp
         ./storage/lake/tablet_manager_test.cpp
+        ./storage/lake/tablet_reader_test.cpp
         ./storage/lake/tablet_writer_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset/rowset_test.cpp
