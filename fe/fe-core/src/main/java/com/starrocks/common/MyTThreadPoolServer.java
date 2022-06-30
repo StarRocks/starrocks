@@ -13,13 +13,17 @@ public class MyTThreadPoolServer extends TThreadPoolServer {
 
     @Override
     protected void execute() {
+        boolean shouldSleep = false;
         while (true) {
             try {
-                super.execute();
+                if (shouldSleep) {
+                    Thread.sleep(5000);
+                }
+                shouldSleep = true;
 
-                Thread.sleep(5000);
+                super.execute();
             } catch (Throwable t) {
-                LOG.error("thrift server accept failed", t);
+                LOG.error("thrift server accept failed, will retry", t);
             }
         }
     }
