@@ -333,6 +333,12 @@ public class AnalyzeSingleTest {
         Assert.assertEquals("'\"\"'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("select \"\"\"\" ");
         Assert.assertEquals("'\"'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        statement = (QueryStatement) analyzeSuccess("select \"7\\\"\\\"\"");
+        Assert.assertEquals("'7\"\"'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        statement = (QueryStatement) analyzeWithoutTestView("select '7'''");
+        Assert.assertEquals("'7''", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        statement = (QueryStatement) analyzeSuccess("SELECT '7\\'\\''");
+        Assert.assertEquals("'7'''", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
 
         analyzeSuccess("select @@`sql_mode`");
     }
