@@ -5,7 +5,7 @@ on:
 
 jobs:
   Trigger-A-Jenkins-Job-With-2-Approval:
-    environment: rocksenv
+    environment: starrocks
     runs-on: ubuntu-latest
     steps:
     - uses: taichi/approved-event-action@master
