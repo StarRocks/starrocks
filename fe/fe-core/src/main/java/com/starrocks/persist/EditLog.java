@@ -69,6 +69,7 @@ import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -122,12 +123,14 @@ public class EditLog {
                 }
                 case OperationType.OP_CREATE_DB: {
                     Database db = (Database) journal.getData();
-                    globalStateMgr.replayCreateDb(db);
+                    LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
+                    metastore.replayCreateDb(db);
                     break;
                 }
                 case OperationType.OP_DROP_DB: {
                     DropDbInfo dropDbInfo = (DropDbInfo) journal.getData();
-                    globalStateMgr.replayDropDb(dropDbInfo.getDbName(), dropDbInfo.isForceDrop());
+                    LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
+                    metastore.replayDropDb(dropDbInfo.getDbName(), dropDbInfo.isForceDrop());
                     break;
                 }
                 case OperationType.OP_ALTER_DB: {
