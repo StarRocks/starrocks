@@ -23,7 +23,7 @@ StatusOr<TabletMetadataPtr> Tablet::get_metadata(int64_t version) {
 }
 
 StatusOr<TabletMetadataIter> Tablet::list_metadata() {
-    return _mgr->list_tablet_metadata(_group, _id);
+    return _mgr->list_tablet_metadata(_id, true);
 }
 
 Status Tablet::delete_metadata(int64_t version) {
@@ -62,7 +62,7 @@ StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
     auto ptr = _mgr->lookup_tablet_schema(tablet_schema_key);
     RETURN_IF(ptr != nullptr, ptr);
 
-    ASSIGN_OR_RETURN(TabletMetadataIter metadata_iter, _mgr->list_tablet_metadata(_group, _id));
+    ASSIGN_OR_RETURN(TabletMetadataIter metadata_iter, _mgr->list_tablet_metadata(_id, true));
     if (!metadata_iter.has_next()) {
         return Status::NotFound(fmt::format("tablet {} metadata not found", _id));
     }

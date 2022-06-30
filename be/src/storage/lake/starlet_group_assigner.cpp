@@ -10,8 +10,12 @@
 
 namespace starrocks::lake {
 
-static const char* const kStarletPrefix = "staros_";
+static const char* const kStarletPrefix = "staros_://";
 static const char* const kGroupKey = "storageGroup";
+
+std::string StarletGroupAssigner::get_fs_prefix() {
+    return kStarletPrefix;
+}
 
 StatusOr<std::string> StarletGroupAssigner::get_group(int64_t tablet_id) {
     if (g_worker == nullptr) {
@@ -22,7 +26,7 @@ StatusOr<std::string> StarletGroupAssigner::get_group(int64_t tablet_id) {
     if (iter == shardinfo.properties.end()) {
         return Status::InternalError(fmt::format("Fail to find {} group path", tablet_id));
     }
-    return fmt::format("{}{}", kStarletPrefix, iter->second);
+    return std::move(iter->second);
 }
 
 Status StarletGroupAssigner::list_group(std::set<std::string>* groups) {
@@ -30,16 +34,20 @@ Status StarletGroupAssigner::list_group(std::set<std::string>* groups) {
         return Status::InternalError("init_staros_worker() must be called before get_shard_info()");
     }
 
+    std::set<std::string> path_groups;
     std::vector<staros::starlet::ShardInfo> shards = g_worker->shards();
     for (const auto& shard : shards) {
         auto iter = shard.properties.find(kGroupKey);
         if (iter == shard.properties.end()) {
             return Status::InternalError(fmt::format("Fail to find {} group path", shard.id));
         }
-        std::string starlet_group = fmt::format("{}{}", kStarletPrefix, iter->second);
-        groups->emplace(std::move(starlet_group));
+        groups->emplace(std::move(iter->second));
     }
     return Status::OK();
+}
+
+std::string StarletGroupAssigner::path_assemble(const std::string& path, int64_t tablet_id) {
+    return fmt::format("{}?ShardId={}", path, tablet_id);
 }
 
 } // namespace starrocks::lake
