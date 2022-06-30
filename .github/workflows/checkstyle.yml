@@ -20,7 +20,7 @@ jobs:
         uses: dbelyaev/action-checkstyle@v0.6.1
         with:
           workdir: "./fe"
-          checkstyle_config: blob/main/fe/checkstyle.xml
+          checkstyle_config: checkstyle.xml
           reporter: 'github-pr-check'
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
