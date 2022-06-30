@@ -14,6 +14,7 @@
 namespace starrocks::vectorized {
 
 const int STATISTIC_DATA_VERSION1 = 1;
+const int STATISTIC_HISTOGRAM_VERSION = 2;
 const int DICT_STATISTIC_DATA_VERSION = 101;
 
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
@@ -73,6 +74,9 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
     } else if (version == DICT_STATISTIC_DATA_VERSION) {
         RETURN_IF_ERROR_WITH_WARN(_fill_dict_statistic_data(version, result_columns, chunk, result.get()),
                                   "Fill dict statistic data failed");
+    } else if (version == STATISTIC_HISTOGRAM_VERSION) {
+        RETURN_IF_ERROR_WITH_WARN(_fill_statistic_histogram(version, result_columns, chunk, result.get()),
+                                  "Fill histogram statistic data failed");
     }
 
     // Step 4: send
@@ -152,6 +156,35 @@ Status StatisticResultWriter::_fill_statistic_data_v1(int version, const vectori
         data_list[i].__set_nullCount(nullCounts[i]);
         data_list[i].__set_max(maxColumn->get_slice(i).to_string());
         data_list[i].__set_min(minColumn->get_slice(i).to_string());
+    }
+
+    result->result_batch.rows.resize(num_rows);
+    result->result_batch.__set_statistic_version(version);
+
+    ThriftSerializer serializer(true, chunk->memory_usage());
+    for (int i = 0; i < num_rows; ++i) {
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
+    }
+    return Status::OK();
+}
+
+Status StatisticResultWriter::_fill_statistic_histogram(int version, const vectorized::Columns& columns,
+                                                        const vectorized::Chunk* chunk, TFetchDataResult* result) {
+    SCOPED_TIMER(_serialize_timer);
+    DCHECK(columns.size() == 4);
+
+    auto& tableIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[1])->get_data();
+    BinaryColumn* nameColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[2].get()));
+    BinaryColumn* histogramColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[3].get()));
+
+    std::vector<TStatisticData> data_list;
+    int num_rows = chunk->num_rows();
+
+    data_list.resize(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        data_list[i].__set_tableId(tableIds[i]);
+        data_list[i].__set_columnName(nameColumn->get_slice(i).to_string());
+        data_list[i].__set_histogram(histogramColumn->get_slice(i).to_string());
     }
 
     result->result_batch.rows.resize(num_rows);
