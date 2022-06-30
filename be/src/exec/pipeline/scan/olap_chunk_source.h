@@ -116,7 +116,6 @@ private:
 
     // The following are profile meatures
     int64_t _num_rows_read = 0;
-    int64_t _compressed_bytes_read = 0;
 
     // Local counters for row-size estimation, will be reset after a batch
     size_t _local_sum_row_bytes = 0;

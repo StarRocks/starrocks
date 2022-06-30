@@ -437,7 +437,6 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
 void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
     auto& stats = _reader->stats();
     _num_rows_read += chunk->num_rows();
-    _compressed_bytes_read = stats.compressed_bytes_read;
     _scan_rows_num = stats.raw_rows_read;
     _scan_bytes = stats.bytes_read;
     _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
