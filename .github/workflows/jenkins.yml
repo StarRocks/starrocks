@@ -29,9 +29,9 @@ jobs:
       env:
         GITHUB_PR_NUMBER: ${{github.event.pull_request.number}}
         GITHUB_PR_TARGET_BRANCH: ${{ github.event.pull_request.base.ref }}
- #       JENKINS_USER: ${{ secrets.JENKINS_USER }}
- #       JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
- #       JENKINS_URL: ${{ secrets.JENKINS_URL }}
+        JENKINS_USER: ${{ secrets.JENKINS_USER }}
+        JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
+        JENKINS_URL: ${{ secrets.JENKINS_URL }}
       
 #    - name: trigger jenkins job
 #      if: ${{ steps.approved.outputs.approved == 'true' }}     
