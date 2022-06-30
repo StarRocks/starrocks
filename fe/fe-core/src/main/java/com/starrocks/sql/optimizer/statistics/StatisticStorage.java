@@ -17,7 +17,8 @@ public interface StatisticStorage {
 
     void expireHistogramStatistics(Long tableId, List<String> columns);
 
-    void expireColumnStatistics(Table table, List<String> columns);
+    default void expireColumnStatistics(Table table, List<String> columns) {
+    }
 
     void addColumnStatistic(Table table, String column, ColumnStatistic columnStatistic);
 }

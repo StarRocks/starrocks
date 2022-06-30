@@ -272,10 +272,6 @@ public class MockTpchStatisticStorage implements StatisticStorage {
     }
 
     @Override
-    public void expireColumnStatistics(Table table, List<String> columns) {
-    }
-
-    @Override
     public void addColumnStatistic(Table table, String column, ColumnStatistic columnStatistic) {
     }
 }
