@@ -220,7 +220,11 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
     {
         SCOPED_RAW_TIMER(&_serialize_batch_ns);
         StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
-        if (!res.ok()) return res.status();
+        if (!res.ok()) {
+            _cancelled = true;
+            _err_st = res.status();
+            return _err_st;
+        }
         res->Swap(dst);
     }
     DCHECK(dst->has_uncompressed_size());
@@ -229,8 +233,10 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
     size_t uncompressed_size = dst->uncompressed_size();
 
     if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(uncompressed_size)) {
-        return Status::InternalError(fmt::format("The input size for compression should be less than {}",
-                                                 _compress_codec->max_input_size()));
+        _cancelled = true;
+        _err_st = Status::InternalError(fmt::format("The input size for compression should be less than {}",
+                                                    _compress_codec->max_input_size()));
+        return _err_st;
     }
 
     // try compress the ChunkPB data
@@ -500,14 +506,19 @@ Status NodeChannel::try_close() {
     }
 
     while (_check_prev_request_done()) {
-        RETURN_IF_ERROR(add_chunk(nullptr, nullptr, nullptr, 0, 0, true));
+        auto st = add_chunk(nullptr, nullptr, nullptr, 0, 0, true);
+        if (!st.ok()) {
+            _cancelled = true;
+            _err_st = st;
+            return _err_st;
+        }
     }
 
     return Status::OK();
 }
 
 bool NodeChannel::is_close_done() {
-    return _send_finished && _check_all_prev_request_done();
+    return (_send_finished && _check_all_prev_request_done()) || _cancelled;
 }
 
 Status NodeChannel::close_wait(RuntimeState* state) {
@@ -628,6 +639,21 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
 
 Status OlapTableSink::prepare(RuntimeState* state) {
     _span->AddEvent("prepare");
+
+    // add all counter
+    _input_rows_counter = ADD_COUNTER(_profile, "RowsRead", TUnit::UNIT);
+    _output_rows_counter = ADD_COUNTER(_profile, "RowsReturned", TUnit::UNIT);
+    _filtered_rows_counter = ADD_COUNTER(_profile, "RowsFiltered", TUnit::UNIT);
+    _send_data_timer = ADD_TIMER(_profile, "SendDataTime");
+    _convert_chunk_timer = ADD_TIMER(_profile, "ConvertChunkTime");
+    _validate_data_timer = ADD_TIMER(_profile, "ValidateDataTime");
+    _open_timer = ADD_TIMER(_profile, "OpenTime");
+    _close_timer = ADD_TIMER(_profile, "CloseWaitTime");
+    _serialize_chunk_timer = ADD_TIMER(_profile, "SerializeChunkTime");
+    _wait_response_timer = ADD_TIMER(_profile, "WaitResponseTime");
+    _compress_timer = ADD_TIMER(_profile, "CompressTime");
+    _pack_chunk_timer = ADD_TIMER(_profile, "PackChunkTime");
+
     RETURN_IF_ERROR(DataSink::prepare(state));
 
     _sender_id = state->per_fragment_instance_idx();
@@ -694,20 +720,6 @@ Status OlapTableSink::prepare(RuntimeState* state) {
             break;
         }
     }
-
-    // add all counter
-    _input_rows_counter = ADD_COUNTER(_profile, "RowsRead", TUnit::UNIT);
-    _output_rows_counter = ADD_COUNTER(_profile, "RowsReturned", TUnit::UNIT);
-    _filtered_rows_counter = ADD_COUNTER(_profile, "RowsFiltered", TUnit::UNIT);
-    _send_data_timer = ADD_TIMER(_profile, "SendDataTime");
-    _convert_chunk_timer = ADD_TIMER(_profile, "ConvertChunkTime");
-    _validate_data_timer = ADD_TIMER(_profile, "ValidateDataTime");
-    _open_timer = ADD_TIMER(_profile, "OpenTime");
-    _close_timer = ADD_TIMER(_profile, "CloseWaitTime");
-    _serialize_chunk_timer = ADD_TIMER(_profile, "SerializeChunkTime");
-    _wait_response_timer = ADD_TIMER(_profile, "WaitResponseTime");
-    _compress_timer = ADD_TIMER(_profile, "CompressTime");
-    _pack_chunk_timer = ADD_TIMER(_profile, "PackChunkTime");
 
     _load_mem_limit = state->get_load_mem_limit();
 

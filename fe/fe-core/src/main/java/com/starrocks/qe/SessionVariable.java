@@ -203,6 +203,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
+    public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -548,6 +549,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SHOW_ALL_VARIABLES, flag = VariableMgr.INVISIBLE)
     private boolean enableShowAllVariables = false;
+
+    @VarAttr(name = CBO_PRUNE_SHUFFLE_COLUMN_RATE, flag = VariableMgr.INVISIBLE)
+    private double cboPruneShuffleColumnRate = 0.1;
+
+    public double getCboPruneShuffleColumnRate() {
+        return cboPruneShuffleColumnRate;
+    }
+
+    public void setCboPruneShuffleColumnRate(double cboPruneShuffleColumnRate) {
+        this.cboPruneShuffleColumnRate = cboPruneShuffleColumnRate;
+    }
 
     public boolean isEnableShowAllVariables() {
         return enableShowAllVariables;

@@ -335,8 +335,7 @@ Status ChunksSorterTopn::_merge_sort_data_as_merged_segment(RuntimeState* state,
 // take rows_to_sort rows from permutation_second merge-sort with _merged_segment.
 // And take result datas into big_chunk.
 Status ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, const size_t rows_to_keep,
-                                            size_t sorted_size, size_t permutation_size,
-                                            Permutation& permutation_second) {
+                                            size_t sorted_size, Permutation& permutation_second) {
     // Assemble the permutated segments into a chunk
     std::vector<ChunkPtr> right_chunks;
     for (auto& segment : segments) {
@@ -372,8 +371,8 @@ Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Perm
                                              DataSegments& segments) {
     const size_t rows_to_sort = _get_number_of_rows_to_sort();
 
-    size_t first_size = new_permutation.first.size();
-    size_t second_size = new_permutation.second.size();
+    const size_t first_size = new_permutation.first.size();
+    const size_t second_size = new_permutation.second.size();
 
     if (first_size == 0 && second_size == 0) {
         return Status::OK();
@@ -399,7 +398,9 @@ Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Perm
         rows_to_keep -= first_size;
     }
 
-    if (rows_to_keep > 0 || _topn_type == TTopNType::RANK) {
+    // If rows_to_keep > 0, then second_size > 0 is always positive
+    // If rows_to_keep == 0 and sort type is rank, then we will process second part only if it's not empty
+    if (rows_to_keep > 0 || (_topn_type == TTopNType::RANK && second_size > 0)) {
         // In case of rows_to_keep == 0, through _merged_segment.get_filter_array,
         // all the rows that equal to the last value of merged segment are stored in the IN_LAST_RESULT,
         // so we also need to consider this part in type rank
@@ -412,8 +413,7 @@ Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Perm
             rows_to_keep = sorted_size + second_size;
         }
 
-        RETURN_IF_ERROR(_merge_sort_common(big_chunk, segments, rows_to_keep, sorted_size, second_size,
-                                           new_permutation.second));
+        RETURN_IF_ERROR(_merge_sort_common(big_chunk, segments, rows_to_keep, sorted_size, new_permutation.second));
     }
     RETURN_IF_ERROR(big_chunk->upgrade_if_overflow());
 
