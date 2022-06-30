@@ -168,7 +168,7 @@ column statistics:
 
 PLAN FRAGMENT 4(F01)
 
-Input Partition: HASH_PARTITIONED: 32: L_PARTKEY, 33: L_SUPPKEY
+Input Partition: HASH_PARTITIONED: 32: L_PARTKEY
 OutPut Partition: HASH_PARTITIONED: 15: PS_SUPPKEY
 OutPut Exchange Id: 14
 
@@ -218,7 +218,7 @@ probe runtime filters:
 PLAN FRAGMENT 5(F02)
 
 Input Partition: RANDOM
-OutPut Partition: HASH_PARTITIONED: 14: PS_PARTKEY, 15: PS_SUPPKEY
+OutPut Partition: HASH_PARTITIONED: 14: PS_PARTKEY
 OutPut Exchange Id: 11
 
 10:Project
@@ -289,7 +289,7 @@ column statistics:
 PLAN FRAGMENT 7(F00)
 
 Input Partition: RANDOM
-OutPut Partition: HASH_PARTITIONED: 32: L_PARTKEY, 33: L_SUPPKEY
+OutPut Partition: HASH_PARTITIONED: 32: L_PARTKEY
 OutPut Exchange Id: 03
 
 2:AGGREGATE (update serialize)
