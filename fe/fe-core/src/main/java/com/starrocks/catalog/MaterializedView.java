@@ -2,6 +2,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
@@ -247,14 +248,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.viewDefineSql = viewDefineSql;
     }
 
-    public Map<String, Set<String>> getTableMvPartitionNameRefMap() {
-        return tableMvPartitionNameRefMap;
-    }
-
-    public Map<String, Set<String>> getMvTablePartitionNameRefMap() {
-        return mvTablePartitionNameRefMap;
-    }
-
     public Set<Long> getBaseTableIds() {
         return baseTableIds;
     }
@@ -269,6 +262,27 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public void setRefreshScheme(MvRefreshScheme refreshScheme) {
         this.refreshScheme = refreshScheme;
+    }
+
+    public void addPartitionIdRef(String basePartitionName, String mvPartitionName) {
+        tableMvPartitionNameRefMap.computeIfAbsent(basePartitionName, k -> Sets.newHashSet()).add(mvPartitionName);
+        mvTablePartitionNameRefMap.computeIfAbsent(mvPartitionName, k -> Sets.newHashSet()).add(basePartitionName);
+    }
+
+    public void dropPartitionIdRef(String mvPartitionName) {
+        Set<String> basePartitionNames = mvTablePartitionNameRefMap.get(mvPartitionName);
+        for (String basePartitionName : basePartitionNames) {
+            tableMvPartitionNameRefMap.get(basePartitionName).remove(mvPartitionName);
+        }
+        mvTablePartitionNameRefMap.remove(mvPartitionName);
+    }
+
+    public Set<String> getMvPartitionNameByTable(String tablePartitionName) {
+        return tableMvPartitionNameRefMap.get(tablePartitionName);
+    }
+
+    public Set<String> getTablePartitionNameByMv(String mvPartitionName) {
+        return mvTablePartitionNameRefMap.get(mvPartitionName);
     }
 
     public Set<String> getExistBasePartitionNames(long baseTableId) {
