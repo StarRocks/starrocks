@@ -580,6 +580,25 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
 }
 
 Status OlapTableSink::prepare(RuntimeState* state) {
+<<<<<<< HEAD
+=======
+    _span->AddEvent("prepare");
+
+    // add all counter
+    _input_rows_counter = ADD_COUNTER(_profile, "RowsRead", TUnit::UNIT);
+    _output_rows_counter = ADD_COUNTER(_profile, "RowsReturned", TUnit::UNIT);
+    _filtered_rows_counter = ADD_COUNTER(_profile, "RowsFiltered", TUnit::UNIT);
+    _send_data_timer = ADD_TIMER(_profile, "SendDataTime");
+    _convert_chunk_timer = ADD_TIMER(_profile, "ConvertChunkTime");
+    _validate_data_timer = ADD_TIMER(_profile, "ValidateDataTime");
+    _open_timer = ADD_TIMER(_profile, "OpenTime");
+    _close_timer = ADD_TIMER(_profile, "CloseWaitTime");
+    _serialize_chunk_timer = ADD_TIMER(_profile, "SerializeChunkTime");
+    _wait_response_timer = ADD_TIMER(_profile, "WaitResponseTime");
+    _compress_timer = ADD_TIMER(_profile, "CompressTime");
+    _pack_chunk_timer = ADD_TIMER(_profile, "PackChunkTime");
+
+>>>>>>> a43a4081c ([BugFix] fix counter set in close before initialize (#8074))
     RETURN_IF_ERROR(DataSink::prepare(state));
 
     _sender_id = state->per_fragment_instance_idx();
@@ -646,6 +665,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
         }
     }
 
+<<<<<<< HEAD
     // add all counter
     _input_rows_counter = ADD_COUNTER(_profile, "RowsRead", TUnit::UNIT);
     _output_rows_counter = ADD_COUNTER(_profile, "RowsReturned", TUnit::UNIT);
@@ -662,6 +682,8 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _mark_tablet_timer = ADD_TIMER(_profile, "MarkTabletTime");
     _pack_chunk_timer = ADD_TIMER(_profile, "PackChunkTime");
 
+=======
+>>>>>>> a43a4081c ([BugFix] fix counter set in close before initialize (#8074))
     _load_mem_limit = state->get_load_mem_limit();
 
     // open all channels
