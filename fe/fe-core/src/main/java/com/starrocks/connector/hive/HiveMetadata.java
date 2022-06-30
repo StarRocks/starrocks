@@ -13,6 +13,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 public class HiveMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(HiveMetadata.class);
@@ -55,13 +56,13 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public Table getTable(String dbName, String tblName) {
+    public Table getTable(String dbName, String tblName) throws ExecutionException, DdlException {
         Table table;
         try {
             table = getCache().getTable(HiveTableName.of(dbName, tblName));
         } catch (DdlException e) {
             LOG.error("Failed to get hive meta cache on {}.{}.{}", resourceName, dbName, tblName);
-            return null;
+            throw e;
         }
 
         return table;

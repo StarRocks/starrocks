@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 public interface ConnectorMetadata {
     /**
@@ -55,7 +56,7 @@ public interface ConnectorMetadata {
      * @param tblName - the string represents the table name
      * @return a Table instance
      */
-    default Table getTable(String dbName, String tblName) {
+    default Table getTable(String dbName, String tblName) throws ExecutionException, DdlException {
         return null;
     }
 
