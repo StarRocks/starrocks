@@ -110,19 +110,22 @@ public class TransactionState implements Writable {
         TIMEOUT,
         OFFSET_OUT_OF_RANGE,
         PAUSE,
-        NO_PARTITIONS;
+        NO_PARTITIONS,
+        UNRECOVERABLE_ERROR;
 
         public static TxnStatusChangeReason fromString(String reasonString) {
             if (Strings.isNullOrEmpty(reasonString)) {
                 return null;
             }
 
+            // Pause on unrecoverable error.
+            if (reasonString.contains(UNRECOVERABLE_ERROR.toString())) {
+                return PAUSE;
+            }
+
             for (TxnStatusChangeReason txnStatusChangeReason : TxnStatusChangeReason.values()) {
                 if (reasonString.contains(txnStatusChangeReason.toString())) {
                     return txnStatusChangeReason;
-                }
-                if (reasonString.contains("Unrecoverable error: ")) {
-                    return PAUSE;
                 }
             }
             return null;
@@ -135,6 +138,8 @@ public class TransactionState implements Writable {
                     return "Offset out of range";
                 case NO_PARTITIONS:
                     return "all partitions have no load data";
+                case UNRECOVERABLE_ERROR:
+                    return "Unrecoverable error";
                 default:
                     return this.name();
             }
