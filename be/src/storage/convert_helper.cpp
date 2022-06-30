@@ -15,7 +15,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_vector.h"
 #include "storage/olap_type_infra.h"
-#include "storage/schema.h"
 #include "storage/tablet_schema.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
@@ -1877,21 +1876,6 @@ Status RowConverter::init(const TabletSchema& in_schema, const TabletSchema& out
     for (int i = 0; i < in_schema.num_columns(); ++i) {
         _cids[i] = i;
         _converters[i] = get_field_converter(in_schema.column(i).type(), out_schema.column(i).type());
-        if (_converters[i] == nullptr) {
-            return Status::NotSupported("Cannot get field converter");
-        }
-    }
-    return Status::OK();
-}
-
-Status RowConverter::init(const ::starrocks::Schema& in_schema, const ::starrocks::Schema& out_schema) {
-    auto num_columns = in_schema.num_column_ids();
-    _converters.resize(num_columns);
-    _cids.resize(num_columns, 0);
-    for (int i = 0; i < num_columns; ++i) {
-        auto cid = in_schema.column_ids()[i];
-        _cids[i] = cid;
-        _converters[i] = get_field_converter(in_schema.column(i)->type(), out_schema.column(i)->type());
         if (_converters[i] == nullptr) {
             return Status::NotSupported("Cannot get field converter");
         }
