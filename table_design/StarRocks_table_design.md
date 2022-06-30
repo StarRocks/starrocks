@@ -14,7 +14,7 @@ StarRocks 中的表和关系型数据相同，由行和列构成。每行数据�
 
 使用范围查找时，如何快速找到起始的目标行呢？答案是使用前缀索引 (Prefix Index)，如下图所示。
 
-![稀疏索引](/assets/prefix%20index.png)
+![稀疏索引](/assets/prefix_index.png)
 
 一张表中的数据组织主要由三部分构成：
 
