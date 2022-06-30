@@ -60,24 +60,6 @@ public class IcebergMetadataTest {
     }
 
     @Test
-    public void testListNoIcebergTable(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws Exception {
-        String db1 = "db1";
-
-        new Expectations() {
-            {
-                metaStoreThriftClient.getAllTables(db1);
-                result = Lists.newArrayList("tbl1", "tbl2");
-                minTimes = 0;
-            }
-        };
-
-        String metastoreUris = "thrift://127.0.0.1:9083";
-        IcebergMetadata metadata = new IcebergMetadata(metastoreUris);
-        List<String> expectResult = Lists.newArrayList();
-        Assert.assertEquals(expectResult, metadata.listTableNames(db1));
-    }
-
-    @Test
     public void testGetTable(@Mocked IcebergHiveCatalog icebergHiveCatalog,
                              @Mocked HiveTableOperations hiveTableOperations) throws Exception {
 
