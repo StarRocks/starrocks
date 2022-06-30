@@ -2,9 +2,13 @@ package com.starrocks.connector.hudi;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
+import com.starrocks.external.HiveMetaStoreTableUtils;
+import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.external.hive.HiveMetaStoreThriftClient;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
+import org.apache.hadoop.hive.metastore.api.Table;
 import org.junit.Assert;
 import org.junit.Test;
 

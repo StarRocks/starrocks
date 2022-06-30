@@ -331,7 +331,7 @@ public class HiveMetaCache {
     private Table loadTable(HiveTableName hiveTableName) throws TException, DdlException {
         org.apache.hadoop.hive.metastore.api.Table hiveTable = client.getTable(hiveTableName);
         Table table = null;
-        if (hiveTable.getSd().getInputFormat().contains("hudi")) {
+        if (HudiTable.fromInputFormat(hiveTable.getSd().getInputFormat()) != HudiTable.HoodieTableType.UNKNOWN) {
             table = HiveMetaStoreTableUtils.convertHudiConnTableToSRTable(hiveTable, resourceName);
         } else {
             table = HiveMetaStoreTableUtils.convertHiveConnTableToSRTable(hiveTable, resourceName);
@@ -355,7 +355,7 @@ public class HiveMetaCache {
         HoodieTableConfig hudiTableConfig = metaClient.getTableConfig();
 
         HoodieTableType hudiTableType = hudiTableConfig.getTableType();
-        if (hudiTableType == HoodieTableType.MERGE_ON_READ) {
+        if (hudiTableType == org.apache.hudi.common.model.HoodieTableType.MERGE_ON_READ) {
             throw new DdlException("MERGE_ON_READ type of hudi table is NOT supported.");
         }
         hudiProperties.put(HudiTable.HUDI_TABLE_TYPE, hudiTableType.name());

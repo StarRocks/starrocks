@@ -27,13 +27,10 @@ import com.starrocks.thrift.THdfsPartitionLocation;
 import com.starrocks.thrift.THudiTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
-import org.apache.avro.LogicalType;
-import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.model.HoodieFileFormat;
-import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.TableSchemaResolver;
@@ -77,6 +74,12 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     public static final String HUDI_TABLE = "table";
     public static final String HUDI_RESOURCE = "resource";
 
+    public enum HoodieTableType {
+        COW,
+        MOR,
+        UNKNOWN
+    }
+
     private String db;
     private String table;
     private String resourceName;
@@ -112,8 +115,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return resourceName;
     }
 
-    public HoodieTableType getTableType() {
-        return HoodieTableType.valueOf(hudiProperties.get(HUDI_TABLE_TYPE));
+    public org.apache.hudi.common.model.HoodieTableType getTableType() {
+        return org.apache.hudi.common.model.HoodieTableType.valueOf(hudiProperties.get(HUDI_TABLE_TYPE));
     }
 
     public String getHudiBasePath() {
@@ -137,6 +140,19 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
     public List<String> getDataColumnNames() {
         return dataColumnNames;
+    }
+
+    public static HoodieTableType fromInputFormat(String inputFormat) {
+        switch (inputFormat) {
+            case "org.apache.hudi.hadoop.HoodieParquetInputFormat":
+            case "com.uber.hoodie.hadoop.HoodieInputFormat":
+                return HoodieTableType.COW;
+            case "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat":
+            case "com.uber.hoodie.hadoop.realtime.HoodieRealtimeInputFormat":
+                return HoodieTableType.MOR;
+            default:
+                return HoodieTableType.UNKNOWN;
+        }
     }
 
     public void initHmsTableInfo() {
@@ -233,8 +249,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                 HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
         HoodieTableConfig hudiTableConfig = metaClient.getTableConfig();
 
-        HoodieTableType hudiTableType = hudiTableConfig.getTableType();
-        if (hudiTableType == HoodieTableType.MERGE_ON_READ) {
+        org.apache.hudi.common.model.HoodieTableType hudiTableType = hudiTableConfig.getTableType();
+        if (hudiTableType == org.apache.hudi.common.model.HoodieTableType.MERGE_ON_READ) {
             throw new DdlException("MERGE_ON_READ type of hudi table is NOT supported.");
         }
         hudiProperties.put(HUDI_TABLE_TYPE, hudiTableType.name());
@@ -297,68 +313,13 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
     }
 
-    private boolean validColumnType(Schema avroSchema, Type srType) {
+    private boolean validColumnType(Schema avroSchema, Type srType) throws DdlException {
         Schema.Type columnType = avroSchema.getType();
         if (columnType == null) {
             return false;
         }
 
-        PrimitiveType primitiveType = srType.getPrimitiveType();
-        LogicalType logicalType = avroSchema.getLogicalType();
-
-        switch (columnType) {
-            case BOOLEAN:
-                return primitiveType == PrimitiveType.BOOLEAN;
-            case INT:
-                if (logicalType instanceof LogicalTypes.Date) {
-                    return primitiveType == PrimitiveType.DATE;
-                } else if (logicalType instanceof LogicalTypes.TimeMillis) {
-                    return primitiveType == PrimitiveType.TIME;
-                } else {
-                    return primitiveType == PrimitiveType.INT;
-                }
-            case LONG:
-                if (logicalType instanceof LogicalTypes.TimeMicros) {
-                    return primitiveType == PrimitiveType.TIME;
-                } else if (logicalType instanceof LogicalTypes.TimestampMillis
-                        || logicalType instanceof LogicalTypes.TimestampMicros) {
-                    return primitiveType == PrimitiveType.DATETIME;
-                } else {
-                    return primitiveType == PrimitiveType.BIGINT;
-                }
-            case FLOAT:
-                return primitiveType == PrimitiveType.FLOAT;
-            case DOUBLE:
-                return primitiveType == PrimitiveType.DOUBLE;
-            case STRING:
-                return primitiveType == PrimitiveType.VARCHAR ||
-                        primitiveType == PrimitiveType.CHAR;
-            case ARRAY:
-                return validColumnType(avroSchema.getElementType(), ((ArrayType) srType).getItemType());
-            case FIXED:
-            case BYTES:
-                if (logicalType instanceof LogicalTypes.Decimal) {
-                    return primitiveType == PrimitiveType.DECIMALV2 || primitiveType == PrimitiveType.DECIMAL32 ||
-                            primitiveType == PrimitiveType.DECIMAL64 || primitiveType == PrimitiveType.DECIMAL128;
-                } else {
-                    return primitiveType == PrimitiveType.VARCHAR;
-                }
-            case UNION:
-                List<Schema> nonNullMembers = avroSchema.getTypes().stream()
-                        .filter(schema -> !Schema.Type.NULL.equals(schema.getType()))
-                        .collect(Collectors.toList());
-
-                if (nonNullMembers.size() == 1) {
-                    return validColumnType(nonNullMembers.get(0), srType);
-                } else {
-                    // UNION type is not supported in Starrocks
-                    return false;
-                }
-            case ENUM:
-            case MAP:
-            default:
-                return false;
-        }
+        return HiveMetaStoreTableUtils.convertHudiTableColumnType(avroSchema).equals(srType);
     }
 
     @Override

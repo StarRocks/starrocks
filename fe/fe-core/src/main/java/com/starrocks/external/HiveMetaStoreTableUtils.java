@@ -236,9 +236,6 @@ public class HiveMetaStoreTableUtils {
         Schema.Type columnType = avroSchema.getType();
         LogicalType logicalType = avroSchema.getLogicalType();
         PrimitiveType primitiveType = null;
-        if (columnType == null) {
-            return null;
-        }
 
         switch (columnType) {
             case BOOLEAN:
