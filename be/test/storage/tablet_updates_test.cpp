@@ -1080,11 +1080,12 @@ TEST_F(TabletUpdatesTest, compaction_score_enough_normal_persistent_index) {
 void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index) {
     config::vertical_compaction_max_columns_per_group = 5;
 
+    int N = 100;
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
     _tablet->set_enable_persistent_index(enable_persistent_index);
     std::vector<int64_t> keys;
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < N; i++) {
         keys.push_back(i);
     }
     ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
@@ -1094,6 +1095,7 @@ void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index)
     ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
     const auto& best_tablet =
             StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
     EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
@@ -1118,11 +1120,12 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index) {
 void TabletUpdatesTest::test_vertical_compaction(bool enable_persistent_index) {
     config::vertical_compaction_max_columns_per_group = 1;
 
+    int N = 100;
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
     _tablet->set_enable_persistent_index(enable_persistent_index);
     std::vector<int64_t> keys;
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < N; i++) {
         keys.push_back(i);
     }
     ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
@@ -1132,6 +1135,7 @@ void TabletUpdatesTest::test_vertical_compaction(bool enable_persistent_index) {
     ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
     const auto& best_tablet =
             StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
     EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
