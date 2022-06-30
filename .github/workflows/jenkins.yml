@@ -19,16 +19,19 @@ jobs:
     - name: Trigger jenkins job
       uses: jabbukka/jenkins-trigger@main
       with:
-        url: ${{ secrets.JENKINS_URL }}
+        url: ${{ env.JENKINS_URL }}
         job_name: starrocks_admit_test
-        user_name: ${{ secrets.JENKINS_USER }}
-        api_token: ${{ secrets.JENKINS_TOKEN }}
+        user_name: ${{ env.JENKINS_USER }}
+        api_token: ${{ env.JENKINS_TOKEN }}
         parameter: '{ "GITHUB_PR_NUMBER": "${{ env.GITHUB_PR_NUMBER }}", "GITHUB_PR_TARGET_BRANCH": "${{ env.GITHUB_PR_TARGET_BRANCH}}" }'
         wait: "true"
         timeout: "3600"
       env:
         GITHUB_PR_NUMBER: ${{github.event.pull_request.number}}
         GITHUB_PR_TARGET_BRANCH: ${{ github.event.pull_request.base.ref }}
+ #       JENKINS_USER: ${{ secrets.JENKINS_USER }}
+ #       JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
+ #       JENKINS_URL: ${{ secrets.JENKINS_URL }}
       
 #    - name: trigger jenkins job
 #      if: ${{ steps.approved.outputs.approved == 'true' }}     
