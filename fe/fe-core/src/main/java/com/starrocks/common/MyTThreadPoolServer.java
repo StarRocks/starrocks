@@ -11,6 +11,9 @@ public class MyTThreadPoolServer extends TThreadPoolServer {
         super(args);
     }
 
+    /**
+     * override the execute method, catch any throwable and retry to avoid the accept thread exit unexpected
+     */
     @Override
     protected void execute() {
         boolean shouldSleep = false;
