@@ -6,7 +6,7 @@
 <NavBoxPart title="StarRocks 入门">
 <NavBoxPartItem title="产品介绍​">
 
-- [产品优势和应用场景](/introduction/StarRocks_intro)
+- [产品优势和应用场景](/introduction/what_is_starrocks)
 - [系统架构](/introduction/system_architecture)
 - [产品特性](/introduction/features)
 - [视频资源](/faq/Video)
