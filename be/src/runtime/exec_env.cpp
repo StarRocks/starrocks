@@ -163,8 +163,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _query_context_mgr = new pipeline::QueryContextManager(6);
     RETURN_IF_ERROR(_query_context_mgr->init());
     _thread_pool = new PriorityThreadPool("table_scan_io", // olap/external table scan thread pool
-                                          config::table_scanner_thread_pool_thread_num,
-                                          config::table_scanner_thread_pool_queue_size);
+                                          config::doris_scanner_thread_pool_thread_num,
+                                          config::doris_scanner_thread_pool_queue_size);
 
     int hdfs_num_io_threads = config::pipeline_hdfs_scan_thread_pool_thread_num;
     CHECK_GT(hdfs_num_io_threads, 0) << "pipeline_hdfs_scan_thread_pool_thread_num should greater than 0";

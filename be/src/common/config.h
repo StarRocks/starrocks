@@ -179,9 +179,9 @@ CONF_mInt32(status_report_interval, "5");
 // Local directory to copy UDF libraries from HDFS into.
 CONF_String(local_library_dir, "${UDF_RUNTIME_DIR}");
 // Number of olap/external scanner thread pool size.
-CONF_mInt32(table_scanner_thread_pool_thread_num, "48");
+CONF_mInt32(doris_scanner_thread_pool_thread_num, "48");
 // Number of olap/external scanner thread pool size.
-CONF_Int32(table_scanner_thread_pool_queue_size, "102400");
+CONF_Int32(doris_scanner_thread_pool_queue_size, "102400");
 CONF_mDouble(scan_use_query_mem_ratio, "0.25");
 // Number of etl thread pool size.
 CONF_Int32(etl_thread_pool_size, "8");
