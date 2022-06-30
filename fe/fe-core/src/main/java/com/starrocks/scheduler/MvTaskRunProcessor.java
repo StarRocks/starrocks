@@ -71,25 +71,14 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         if (partitionInfo instanceof SinglePartitionInfo) {
             // must create partition when creating mv
             Preconditions.checkState(materializedView.getPartitions().size() != 0);
-            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
-                    materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
             boolean needRefresh = false;
             for (Long baseTableId : baseTableIds) {
                 OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
-                Map<String, MaterializedView.BasePartitionInfo> basePartitionVersions =
-                        baseTableVisibleVersionMap.computeIfAbsent(baseTableId, k -> Maps.newHashMap());
                 Collection<Partition> partitions = olapTable.getPartitions();
                 for (Partition partition : partitions) {
-                    long basePartitionId = partition.getId();
-                    String partitionName = partition.getName();
-                    long basePartitionVersion = partition.getVisibleVersion();
-                    MaterializedView.BasePartitionInfo basePartitionInfo = basePartitionVersions.get(partitionName);
-                    if (basePartitionInfo == null
-                            || basePartitionInfo.getId() != basePartitionId
-                            || basePartitionVersion > basePartitionInfo.getVersion()) {
+                    if (materializedView.needRefreshPartition(baseTableId, partition)) {
                         needRefresh = true;
-                        basePartitionVersions.put(partitionName,
-                                new MaterializedView.BasePartitionInfo(basePartitionId, basePartitionVersion));
+                        materializedView.addOrUpdateBasePartition(baseTableId, partition);
                     }
                 }
             }
@@ -155,27 +144,23 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                                                     Column partitionColumn, Map<String, String> partitionProperties,
                                                     DistributionDesc distributionDesc,
                                                     Set<String> needRefreshPartitionNames) {
-        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
-                materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
         // used to get delete table partitions
-        Map<String, Long> newBaseTableVisibleVersionMap = Maps.newHashMap();
+        long baseTableId = olapTable.getId();
+        Set<String> partitionNames = Sets.newHashSet();
         ExpressionRangePartitionInfo expressionRangePartitionInfo =
                 (ExpressionRangePartitionInfo) materializedView.getPartitionInfo();
         RangePartitionInfo baseRangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
-        Map<String, MaterializedView.BasePartitionInfo> basePartitionVisionMap =
-                baseTableVisibleVersionMap.computeIfAbsent(olapTable.getId(), k -> Maps.newHashMap());
         Collection<Partition> basePartitions = olapTable.getPartitions();
         for (Partition basePartition : basePartitions) {
             long basePartitionId = basePartition.getId();
             String basePartitionName = basePartition.getName();
             // record full partitions
-            newBaseTableVisibleVersionMap.put(basePartitionName, Partition.PARTITION_INIT_VERSION);
+            partitionNames.add(basePartitionName);
             // if exists, not check
-            if (basePartitionVisionMap.get(basePartitionName) != null) {
+            if (!materializedView.needAddBasePartition(baseTableId, basePartition)) {
                 continue;
             }
-            basePartitionVisionMap.put(basePartitionName,
-                    new MaterializedView.BasePartitionInfo(basePartitionId, Partition.PARTITION_INIT_VERSION));
+            materializedView.addOrUpdateBasePartition(baseTableId, basePartition);
             Range<PartitionKey> basePartitionRange = baseRangePartitionInfo.getRange(basePartitionId);
             List<Column> basePartitionColumns = baseRangePartitionInfo.getPartitionColumns();
             int basePartitionIndex = -1;
@@ -198,9 +183,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                         mvPartitionKeyRange, partitionProperties, distributionDesc);
             }
         }
-        Set<String> deletedPartitionNames = basePartitionVisionMap.keySet().stream()
-                .filter(partitionName -> newBaseTableVisibleVersionMap.get(partitionName) == null)
-                .collect(Collectors.toSet());
+        Set<String> deletedPartitionNames = materializedView.getNoExistBasePartitionNames(baseTableId, partitionNames);
         // record checked mv and get need refresh partition ids
         Set<String> checkedMvPartitionNames = Sets.newHashSet();
         for (String deletedPartitionName : deletedPartitionNames) {
@@ -218,40 +201,28 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                     needRefreshPartitionNames.add(refMvPartitionName);
                 }
             }
-            basePartitionVisionMap.remove(deletedPartitionName);
+            materializedView.removeBasePartition(baseTableId, deletedPartitionName);
         }
         // merge need refresh mv with comparing other partitions
-        for (String basePartitionName : basePartitionVisionMap.keySet()) {
-            MaterializedView.BasePartitionInfo basePartitionInfo = basePartitionVisionMap.get(basePartitionName);
+        Set<String> existBasePartitionNames = materializedView.getExistBasePartitionNames(baseTableId);
+        for (String basePartitionName : existBasePartitionNames) {
             Partition partition = olapTable.getPartition(basePartitionName);
-            long visibleVersion = partition.getVisibleVersion();
-            long partitionId = partition.getId();
-            if (basePartitionInfo.getId() != partitionId || basePartitionInfo.getVersion() < visibleVersion) {
-                needRefreshPartitionNames.addAll(materializedView.getTableMvPartitionNameRefMap().get(basePartitionName));
-                basePartitionVisionMap.put(basePartitionName,
-                        new MaterializedView.BasePartitionInfo(partitionId, visibleVersion));
+            if (materializedView.needRefreshPartition(baseTableId, partition)) {
+                needRefreshPartitionNames.addAll(
+                        materializedView.getTableMvPartitionNameRefMap().get(basePartitionName));
+                materializedView.addOrUpdateBasePartition(baseTableId, partition);
             }
         }
     }
 
     private boolean checkNeedRefreshPartitions(MaterializedView materializedView, OlapTable olapTable) {
         boolean refreshAllPartitions = false;
-        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap = materializedView
-                .getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
-        Map<String, MaterializedView.BasePartitionInfo> basePartitionVisionMap =
-                baseTableVisibleVersionMap.computeIfAbsent(olapTable.getId(), k -> Maps.newHashMap());
+        long baseTableId = olapTable.getId();
         Collection<Partition> basePartitions = olapTable.getPartitions();
         for (Partition basePartition : basePartitions) {
-            long basePartitionId = basePartition.getId();
-            String basePartitionName = basePartition.getName();
-            long basePartitionVersion = basePartition.getVisibleVersion();
-            MaterializedView.BasePartitionInfo basePartitionInfo = basePartitionVisionMap.get(basePartitionName);
-            if (basePartitionInfo == null
-                    || basePartitionInfo.getId() != basePartitionId
-                    || basePartitionInfo.getVersion() < basePartitionVersion) {
+            if (materializedView.needRefreshPartition(baseTableId, basePartition)) {
                 refreshAllPartitions = true;
-                basePartitionVisionMap.put(basePartitionName,
-                        new MaterializedView.BasePartitionInfo(basePartitionId, basePartitionVersion));
+                materializedView.addOrUpdateBasePartition(baseTableId, basePartition);
             }
         }
         return refreshAllPartitions;
