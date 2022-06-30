@@ -207,14 +207,16 @@ public class TaskManagerTest {
                 "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;";
         Database testDb = null;
         try {
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            TaskRunHistory taskRunHistory = taskManager.getTaskRunManager().getTaskRunHistory();
+            taskRunHistory.getAllHistory().clear();
+
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
             testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
-
             ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
-            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
             // at least 2 times = schedule 1 times + execute 1 times
             Assert.assertTrue(taskRuns.size() >= 2);
