@@ -236,7 +236,7 @@ public class PublishVersionDaemon extends MasterDaemon {
             }
             long currentTime = System.currentTimeMillis();
             long versionTime = partitionCommitInfo.getVersionTime();
-            if (versionTime > 0) { // Last execution succeeded
+            if (versionTime > 0) {
                 continue;
             }
             if (versionTime < 0 && currentTime + RETRY_INTERVAL_MS < Math.abs(versionTime)) {

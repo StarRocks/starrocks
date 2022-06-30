@@ -36,11 +36,7 @@ public class LakeServiceClient {
                 if (++count >= maxRetries) {
                     throw new RpcException(serverAddress.hostname, e.getMessage());
                 }
-                try {
-                    Thread.sleep(retryIntervalMs);
-                } catch (InterruptedException ex) {
-                    // do nothing
-                }
+                sleep(retryIntervalMs);
             } catch (Throwable e) {
                 throw new RpcException(serverAddress.hostname, e.getMessage());
             }
@@ -57,14 +53,18 @@ public class LakeServiceClient {
                 if (++count >= maxRetries) {
                     throw new RpcException(serverAddress.hostname, e.getMessage());
                 }
-                try {
-                    Thread.sleep(retryIntervalMs);
-                } catch (InterruptedException ex) {
-                    // do nothing
-                }
+                sleep(retryIntervalMs);
             } catch (Throwable e) {
                 throw new RpcException(serverAddress.hostname, e.getMessage());
             }
+        }
+    }
+
+    private void sleep(long milliseconds) {
+        try {
+            Thread.sleep(milliseconds);
+        } catch (InterruptedException ex) {
+            // do nothing
         }
     }
 }
