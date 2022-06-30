@@ -1643,13 +1643,8 @@ public class LocalMetastore implements ConnectorMetadata {
             if (stmt.isLakeEngine()) {
                 olapTable = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo,
                         distributionInfo, indexes);
-
-                try {
-                    // get service storage uri from StarMgr
-                    ((LakeTable) olapTable).setStorageGroup(stateMgr.getStarOSAgent().getServiceStorageUri());
-                } catch (Exception e) {
-                    throw new DdlException("Failed to get service storage uri from StarMgr", e);
-                }
+                // get service shard storage info from StarMgr
+                ((LakeTable) olapTable).setShardStorageInfo(stateMgr.getStarOSAgent().getServiceShardStorageInfo());
             } else {
                 Preconditions.checkState(stmt.isOlapEngine());
                 olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
@@ -2246,9 +2241,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         int bucketNum = distributionInfo.getBucketNum();
-        Map<String, String> properties = Maps.newHashMap();
-        properties.put(LakeTable.STORAGE_GROUP, table.getStorageGroup());
-        List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum, properties);
+        List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum, table.getShardStorageInfo());
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
             index.addTablet(tablet, tabletMeta);

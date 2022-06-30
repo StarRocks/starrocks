@@ -8,10 +8,14 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
+import com.staros.proto.AllocateStorageInfo;
+import com.staros.proto.ObjectStorageType;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardInfo;
+import com.staros.proto.ShardStorageInfo;
+import com.staros.proto.StatusCode;
 import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
@@ -76,7 +80,7 @@ public class StarOSAgent {
         try {
             client.registerService("starrocks");
         } catch (StarClientException e) {
-            if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
+            if (e.getCode() != StatusCode.ALREADY_EXIST) {
                 LOG.warn(e);
                 System.exit(-1);
             }
@@ -86,7 +90,7 @@ public class StarOSAgent {
             serviceId = client.bootstrapService("starrocks", serviceName);
             LOG.info("get serviceId: {} by bootstrapService to starMgr", serviceId);
         } catch (StarClientException e) {
-            if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
+            if (e.getCode() != StatusCode.ALREADY_EXIST) {
                 LOG.warn(e);
                 System.exit(-1);
             } else {
@@ -109,9 +113,17 @@ public class StarOSAgent {
         LOG.info("get serviceId {} from starMgr", serviceId);
     }
 
-    public String getServiceStorageUri() {
-        // TODO: get from StarMgr
-        return String.format("s3://bucket/%d/", serviceId);
+    public ShardStorageInfo getServiceShardStorageInfo() throws DdlException {
+        // TODO: support other storage type
+        AllocateStorageInfo requestStorageInfo =
+                AllocateStorageInfo.newBuilder().setObjectStorageType(ObjectStorageType.S3).build();
+        try {
+            ShardStorageInfo responseStorageInfo = client.allocateStorage(serviceId, requestStorageInfo);
+            LOG.debug("Get service shard storage info from StarMgr. storage info: {}", responseStorageInfo);
+            return responseStorageInfo;
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to allocate storage from StarMgr", e);
+        }
     }
 
     // for ut only
@@ -131,7 +143,7 @@ public class StarOSAgent {
         try {
             workerId = client.addWorker(serviceId, workerIpPort);
         } catch (StarClientException e) {
-            if (e.getCode() != StarClientException.ExceptionCode.ALREADY_EXIST) {
+            if (e.getCode() != StatusCode.ALREADY_EXIST) {
                 LOG.warn(e);
                 return;
             } else {
@@ -163,7 +175,7 @@ public class StarOSAgent {
                 WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
                 workerId = workerInfo.getWorkerId();
             } catch (StarClientException e) {
-                if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
+                if (e.getCode() != StatusCode.NOT_EXIST) {
                     throw new DdlException("Failed to get worker id from starMgr. error: "
                             + e.getMessage());
                 }
@@ -179,7 +191,7 @@ public class StarOSAgent {
             // when multi threads remove this worker, maybe we would get "NOT_EXIST"
             // but it is right, so only need to throw exception
             // if code is not StarClientException.ExceptionCode.NOT_EXIST
-            if (e.getCode() != StarClientException.ExceptionCode.NOT_EXIST) {
+            if (e.getCode() != StatusCode.NOT_EXIST) {
                 throw new DdlException("Failed to remove worker. error: " + e.getMessage());
             }
         }
@@ -200,11 +212,11 @@ public class StarOSAgent {
         return workerId;
     }
 
-    public List<Long> createShards(int numShards, Map<String, String> properties) throws DdlException {
+    public List<Long> createShards(int numShards, ShardStorageInfo shardStorageInfo) throws DdlException {
         List<ShardInfo> shardInfos = null;
         try {
-            // TODO: support properties
-            shardInfos = client.createShard(serviceId, numShards);
+            shardInfos = client.createShard(serviceId, numShards, 1, shardStorageInfo, null);
+            LOG.debug("Create shards success. shard infos: {}", shardInfos);
         } catch (StarClientException e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
         }
