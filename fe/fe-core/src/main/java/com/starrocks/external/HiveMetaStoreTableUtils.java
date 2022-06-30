@@ -150,6 +150,7 @@ public class HiveMetaStoreTableUtils {
                 return primitiveType == PrimitiveType.DATE;
             case "STRING":
             case "VARCHAR":
+            case "BINARY":
                 return primitiveType == PrimitiveType.VARCHAR;
             case "CHAR":
                 return primitiveType == PrimitiveType.CHAR ||
@@ -202,6 +203,7 @@ public class HiveMetaStoreTableUtils {
                 primitiveType = PrimitiveType.DATE;
                 break;
             case "STRING":
+            case "BINARY":
                 return ScalarType.createDefaultString();
             case "VARCHAR":
                 return ScalarType.createVarcharType(Utils.getVarcharLength(hiveType));
