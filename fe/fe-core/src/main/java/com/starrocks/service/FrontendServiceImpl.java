@@ -451,8 +451,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TTaskInfo info = new TTaskInfo();
             info.setTask_name(task.getName());
             info.setCreate_time(task.getCreateTime() / 1000);
-            // Now there are only MANUAL types of Tasks
-            info.setSchedule("MANUAL");
+            info.setSchedule(task.getType().name());
             info.setDatabase(ClusterNamespace.getNameFromFullName(task.getDbName()));
             info.setDefinition(task.getDefinition());
             info.setExpire_time(task.getExpireTime() / 1000);
