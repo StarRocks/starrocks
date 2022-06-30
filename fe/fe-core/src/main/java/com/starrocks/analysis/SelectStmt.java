@@ -326,61 +326,6 @@ public class SelectStmt extends QueryStmt {
     }
 
     /**
-     * Marks all unassigned join predicates as well as exprs in aggInfo and sortInfo.
-     */
-    public void materializeRequiredSlots(Analyzer analyzer) throws AnalysisException {
-        // Mark unassigned join predicates. Some predicates that must be evaluated by a join
-        // can also be safely evaluated below the join (picked up by getBoundPredicates()).
-        // Such predicates will be marked twice and that is ok.
-        List<Expr> unassigned =
-                analyzer.getUnassignedConjuncts(getTableRefIds(), true);
-        List<Expr> unassignedJoinConjuncts = Lists.newArrayList();
-        for (Expr e : unassigned) {
-            if (analyzer.evalAfterJoin(e)) {
-                unassignedJoinConjuncts.add(e);
-            }
-        }
-        List<Expr> baseTblJoinConjuncts =
-                Expr.trySubstituteList(unassignedJoinConjuncts, baseTblSmap, analyzer, false);
-        analyzer.materializeSlots(baseTblJoinConjuncts);
-
-        if (evaluateOrderBy) {
-            // mark ordering exprs before marking agg/analytic exprs because they could contain
-            // agg/analytic exprs that are not referenced anywhere but the ORDER BY clause
-            sortInfo.materializeRequiredSlots(analyzer, baseTblSmap);
-        }
-
-        if (hasAnalyticInfo()) {
-            // Mark analytic exprs before marking agg exprs because they could contain agg
-            // exprs that are not referenced anywhere but the analytic expr.
-            // Gather unassigned predicates and mark their slots. It is not desirable
-            // to account for propagated predicates because if an analytic expr is only
-            // referenced by a propagated predicate, then it's better to not materialize the
-            // analytic expr at all.
-            ArrayList<TupleId> tids = Lists.newArrayList();
-            getMaterializedTupleIds(tids); // includes the analytic tuple
-            List<Expr> conjuncts = analyzer.getUnassignedConjuncts(tids);
-            analyzer.materializeSlots(conjuncts);
-            analyticInfo.materializeRequiredSlots(analyzer, baseTblSmap);
-        }
-
-        if (aggInfo != null) {
-            // mark all agg exprs needed for HAVING pred and binding predicates as materialized
-            // before calling AggregateInfo.materializeRequiredSlots(), otherwise they won't
-            // show up in AggregateInfo.getMaterializedAggregateExprs()
-            ArrayList<Expr> havingConjuncts = Lists.newArrayList();
-            if (havingPred != null) {
-                havingConjuncts.add(havingPred);
-            }
-
-            havingConjuncts.addAll(
-                    analyzer.getUnassignedConjuncts(aggInfo.getResultTupleId().asList()));
-            materializeSlots(analyzer, havingConjuncts);
-            aggInfo.materializeRequiredSlots(analyzer, baseTblSmap);
-        }
-    }
-
-    /**
      * Expand "*" select list item.
      */
     private void expandStar(Analyzer analyzer) throws AnalysisException {
@@ -700,38 +645,6 @@ public class SelectStmt extends QueryStmt {
         return strBuilder.toString();
     }
 
-    /**
-     * If the select statement has a sort/top that is evaluated, then the sort tuple
-     * is materialized. Else, if there is aggregation then the aggregate tuple id is
-     * materialized. Otherwise, all referenced tables are materialized as long as they are
-     * not semi-joined. If there are analytics and no sort, then the returned tuple
-     * ids also include the logical analytic output tuple.
-     */
-    @Override
-    public void getMaterializedTupleIds(ArrayList<TupleId> tupleIdList) {
-        // If select statement has an aggregate, then the aggregate tuple id is materialized.
-        // Otherwise, all referenced tables are materialized.
-        if (evaluateOrderBy) {
-            tupleIdList.add(sortInfo.getSortTupleDescriptor().getId());
-        } else if (aggInfo != null) {
-            // Return the tuple id produced in the final aggregation step.
-            if (aggInfo.isDistinctAgg()) {
-                tupleIdList.add(aggInfo.getSecondPhaseDistinctAggInfo().getOutputTupleId());
-            } else {
-                tupleIdList.add(aggInfo.getOutputTupleId());
-            }
-        } else {
-            for (TableRef tblRef : fromClause_) {
-                tupleIdList.addAll(tblRef.getMaterializedTupleIds());
-            }
-        }
-        // Fixme(kks): get tuple id from analyticInfo is wrong, should get from AnalyticEvalNode
-        // We materialize the agg tuple or the table refs together with the analytic tuple.
-        if (hasAnalyticInfo() && isEvaluateOrderBy()) {
-            tupleIdList.add(analyticInfo.getOutputTupleId());
-        }
-    }
-
     @Override
     public void substituteSelectList(Analyzer analyzer, List<String> newColLabels)
             throws AnalysisException, UserException {
@@ -846,19 +759,6 @@ public class SelectStmt extends QueryStmt {
                 tblRefs.add(tblRef);
             }
         }
-    }
-
-    private boolean checkGroupingFn(Expr expr) {
-        if (expr instanceof GroupingFunctionCallExpr) {
-            return true;
-        } else if (expr.getChildren() != null && expr.getChildren().size() > 0) {
-            for (Expr child : expr.getChildren()) {
-                if (checkGroupingFn(child)) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     @Override

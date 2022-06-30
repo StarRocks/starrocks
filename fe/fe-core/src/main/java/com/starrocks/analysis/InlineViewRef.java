@@ -211,13 +211,6 @@ public class InlineViewRef extends TableRef {
         queryStmt.rewriteExprs(rewriter);
     }
 
-    @Override
-    public List<TupleId> getMaterializedTupleIds() {
-        Preconditions.checkState(isAnalyzed);
-        Preconditions.checkState(materializedTupleIds.size() > 0);
-        return materializedTupleIds;
-    }
-
     public QueryStmt getViewStmt() {
         return queryStmt;
     }

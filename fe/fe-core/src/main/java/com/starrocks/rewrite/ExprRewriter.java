@@ -21,7 +21,6 @@
 
 package com.starrocks.rewrite;
 
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.common.AnalysisException;
@@ -40,58 +39,9 @@ import java.util.List;
 @Deprecated
 public class ExprRewriter {
     private int numChanges = 0;
-    private final List<ExprRewriteRule> rules;
-
-    public ExprRewriter(List<ExprRewriteRule> rules) {
-        this.rules = rules;
-    }
-
-    public ExprRewriter(ExprRewriteRule rule) {
-        rules = Lists.newArrayList(rule);
-    }
 
     public Expr rewrite(Expr expr, Analyzer analyzer) throws AnalysisException {
-        // Keep applying the rule list until no rule has made any changes.
-        int oldNumChanges;
-        Expr rewrittenExpr = expr;
-        do {
-            oldNumChanges = numChanges;
-            for (ExprRewriteRule rule : rules) {
-                rewrittenExpr = applyRuleRepeatedly(rewrittenExpr, rule, analyzer);
-            }
-        } while (oldNumChanges != numChanges);
-        return rewrittenExpr;
-    }
-
-    /**
-     * Applies 'rule' on the Expr tree rooted at 'expr' until there are no more changes.
-     * Returns the transformed Expr or 'expr' if there were no changes.
-     */
-    private Expr applyRuleRepeatedly(Expr expr, ExprRewriteRule rule, Analyzer analyzer)
-            throws AnalysisException {
-        int oldNumChanges;
-        Expr rewrittenExpr = expr;
-        do {
-            oldNumChanges = numChanges;
-            rewrittenExpr = applyRuleBottomUp(rewrittenExpr, rule, analyzer);
-        } while (oldNumChanges != numChanges);
-        return rewrittenExpr;
-    }
-
-    /**
-     * Applies 'rule' on 'expr' and all its children in a bottom-up fashion.
-     * Returns the transformed Expr or 'expr' if there were no changes.
-     */
-    private Expr applyRuleBottomUp(Expr expr, ExprRewriteRule rule, Analyzer analyzer)
-            throws AnalysisException {
-        for (int i = 0; i < expr.getChildren().size(); ++i) {
-            expr.setChild(i, applyRuleBottomUp(expr.getChild(i), rule, analyzer));
-        }
-        Expr rewrittenExpr = rule.apply(expr, analyzer);
-        if (rewrittenExpr != expr) {
-            ++numChanges;
-        }
-        return rewrittenExpr;
+        return expr;
     }
 
     public void rewriteList(List<Expr> exprs, Analyzer analyzer) throws AnalysisException {
@@ -106,9 +56,5 @@ public class ExprRewriter {
 
     public boolean changed() {
         return numChanges > 0;
-    }
-
-    public int getNumChanges() {
-        return numChanges;
     }
 }

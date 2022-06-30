@@ -101,16 +101,8 @@ public class SlotDescriptor {
     public void setMultiRef(boolean isMultiRef) {
     }
 
-    public int getNullIndicatorByte() {
-        return nullIndicatorByte;
-    }
-
     public void setNullIndicatorByte(int nullIndicatorByte) {
         this.nullIndicatorByte = nullIndicatorByte;
-    }
-
-    public int getNullIndicatorBit() {
-        return nullIndicatorBit;
     }
 
     public void setNullIndicatorBit(int nullIndicatorBit) {
@@ -178,16 +170,8 @@ public class SlotDescriptor {
         isNullable = value;
     }
 
-    public int getByteSize() {
-        return byteSize;
-    }
-
     public void setByteSize(int byteSize) {
         this.byteSize = byteSize;
-    }
-
-    public int getByteOffset() {
-        return byteOffset;
     }
 
     public void setByteOffset(int byteOffset) {
@@ -253,32 +237,6 @@ public class SlotDescriptor {
         setType(expr.getType());
         // Vector query engine need the nullable info
         setIsNullable(expr.isNullable());
-    }
-
-    /**
-     * Return true if the physical layout of this descriptor matches the physical layout
-     * of the other descriptor, but not necessarily ids.
-     */
-    public boolean LayoutEquals(SlotDescriptor other) {
-        if (!getType().equals(other.getType())) {
-            return false;
-        }
-        if (isNullable != other.isNullable) {
-            return false;
-        }
-        if (getByteSize() != other.getByteSize()) {
-            return false;
-        }
-        if (getByteOffset() != other.getByteOffset()) {
-            return false;
-        }
-        if (getNullIndicatorByte() != other.getNullIndicatorByte()) {
-            return false;
-        }
-        if (getNullIndicatorBit() != other.getNullIndicatorBit()) {
-            return false;
-        }
-        return true;
     }
 
     // TODO
