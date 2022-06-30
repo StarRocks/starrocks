@@ -179,12 +179,16 @@ public class PublishVersionDaemon extends MasterDaemon {
         if (db == null) {
             return false;
         }
-        if (transactionState.getIdToTableCommitInfos().isEmpty()) {
+        if (transactionState.getTableIdList().isEmpty()) {
             return false;
         }
-        long anyTableId = transactionState.getIdToTableCommitInfos().keySet().stream().findFirst().get();
-        Table table = db.getTable(anyTableId);
-        return table.isLakeTable();
+        for (long tableId : transactionState.getTableIdList()) {
+            Table table = db.getTable(tableId);
+            if (table != null) {
+                return table.isLakeTable();
+            }
+        }
+        return false;
     }
 
     // todo: refine performance
@@ -195,6 +199,7 @@ public class PublishVersionDaemon extends MasterDaemon {
             long txnId = txnState.getTransactionId();
             Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
             if (db == null) {
+                LOG.info("the database of transaction {} has been deleted", txnId);
                 globalTransactionMgr.finishTransaction(txnState.getDbId(), txnId, Sets.newHashSet());
                 continue;
             }
@@ -237,8 +242,11 @@ public class PublishVersionDaemon extends MasterDaemon {
     }
 
     boolean publishPartition(TransactionState txnState, LakeTable table, Partition partition,
-                             PartitionCommitInfo partitionCommitInfo) throws UserException {
+                             PartitionCommitInfo partitionCommitInfo)
+            throws UserException {
         if (partition.getVisibleVersion() + 1 != partitionCommitInfo.getVersion()) {
+            LOG.warn("partiton version is " + partition.getVisibleVersion() + " commit version is " +
+                    partitionCommitInfo.getVersion());
             return false;
         }
         boolean finished = true;
@@ -251,31 +259,48 @@ public class PublishVersionDaemon extends MasterDaemon {
                 beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
             }
         }
+        List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
+        List<Backend> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             Backend backend = systemInfoService.getBackend(entry.getKey());
-            // todo: handle backend == null
+            if (backend == null || !backend.isAlive()) {
+                // random choose a backend
+                List<Long> backendIds = systemInfoService.seqChooseBackendIds(1, true, false);
+                if (backendIds.isEmpty()) {
+                    LOG.warn("no alive backend for publish version");
+                    return false;
+                }
+                backend = systemInfoService.getBackend(backendIds.get(0));
+            }
             TNetworkAddress address = new TNetworkAddress();
             address.setHostname(backend.getHost());
             address.setPort(backend.getBrpcPort());
+
+            backendList.add(backend);
+
             LakeService lakeService = BackendServiceProxy.getInstance().getLakeService(address);
 
-            // todo: send tasks in parallel
             PublishVersionRequest request = new PublishVersionRequest();
             request.baseVersion = partitionCommitInfo.getVersion() - 1;
             request.newVersion = partitionCommitInfo.getVersion();
             request.tabletIds = entry.getValue();
             request.txnIds = Lists.newArrayList(txnId);
 
-            Future<PublishVersionResponse> responseFuture = lakeService.publishVersion(request);
+            Future<PublishVersionResponse> responseFuture = lakeService.publishVersionAsync(request);
+            responseList.add(responseFuture);
+        }
+
+        for (int i = 0; i < responseList.size(); i++) {
             try {
-                PublishVersionResponse response = responseFuture.get();
-                if (!response.failedTablets.isEmpty()) {
+                PublishVersionResponse response = responseList.get(i).get();
+                if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
+                    LOG.warn("Fail to publish tablet {} on BE {}", response.failedTablets, backendList.get(i).getHost());
                     finished = false;
                 }
-            } catch (ExecutionException | InterruptedException e) {
-                LOG.error(e);
+            } catch (InterruptedException | ExecutionException e) {
                 finished = false;
+                LOG.warn(e);
             }
         }
         return finished;
