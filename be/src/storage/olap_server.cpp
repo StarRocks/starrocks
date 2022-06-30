@@ -26,6 +26,7 @@
 #include <cmath>
 #include <ctime>
 #include <string>
+#include <unordered_set>
 
 #include "common/status.h"
 #include "storage/compaction.h"
@@ -145,6 +146,8 @@ Status StorageEngine::start_bg_threads() {
         Thread::set_thread_name(_update_compaction_threads.back(), "update_compact");
     }
     LOG(INFO) << "update compaction threads started. number: " << update_compaction_num_threads;
+    _repair_compaction_thread = std::thread([this] { _repair_compaction_thread_callback(nullptr); });
+    LOG(INFO) << "repair compaction thread started";
 
     // tablet checkpoint thread
     for (auto data_dir : data_dirs) {
@@ -255,6 +258,80 @@ void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data
     }
 
     return nullptr;
+}
+
+void* StorageEngine::_repair_compaction_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    Status status = Status::OK();
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        std::pair<int64_t, uint32_t> task(-1, 0);
+        {
+            std::lock_guard lg(_repair_compaction_tasks_lock);
+            if (!_repair_compaction_tasks.empty()) {
+                task = _repair_compaction_tasks.back();
+                _repair_compaction_tasks.pop_back();
+            }
+        }
+        if (task.first != -1) {
+            auto tablet = _tablet_manager->get_tablet(task.first);
+            if (!tablet) {
+                LOG(WARNING) << "repair compaction failed, tablet not found: " << task.first;
+                continue;
+            }
+            if (tablet->updates() == nullptr) {
+                LOG(ERROR) << "repair compaction failed, tablet not primary key tablet found: " << task.first;
+                continue;
+            }
+            auto st = tablet->updates()->compaction(ExecEnv::GetInstance()->compaction_mem_tracker(), {task.second});
+            _executed_repair_compaction_tasks.emplace_back(task.first, task.second, st.to_string());
+            if (!st.ok()) {
+                LOG(WARNING) << "repair compaction failed tablet: " << task.first << " rowset: " << task.second << " "
+                             << st;
+            } else {
+                LOG(INFO) << "repair compaction succeed tablet: " << task.first << " rowset: " << task.second << " "
+                          << st;
+            }
+        }
+        do {
+            // do a compaction per 20min, to reduce potential memory pressure
+            SLEEP_IN_BG_WORKER(20 * 60);
+            if (!_options.compaction_mem_tracker->any_limit_exceeded()) {
+                break;
+            }
+        } while (true);
+    }
+    return nullptr;
+}
+
+struct pair_hash {
+public:
+    template <typename T, typename U>
+    std::size_t operator()(const std::pair<T, U>& x) const {
+        return std::hash<T>()(x.first) ^ std::hash<U>()(x.second);
+    }
+};
+
+void StorageEngine::submit_repair_compaction_tasks(const std::vector<std::pair<int64_t, uint32_t>>& tasks) {
+    std::lock_guard lg(_repair_compaction_tasks_lock);
+    std::unordered_set<std::pair<int64_t, uint32_t>, pair_hash> all_tasks;
+    size_t submitted = 0;
+    all_tasks.insert(_repair_compaction_tasks.begin(), _repair_compaction_tasks.end());
+    for (const auto& task : tasks) {
+        if (all_tasks.find(task) == all_tasks.end()) {
+            all_tasks.insert(task);
+            _repair_compaction_tasks.push_back(task);
+            submitted++;
+            LOG(INFO) << "submit repair compaction task tablet: " << task.first << " rowset:" << task.second
+                      << " current tasks: " << _repair_compaction_tasks.size();
+        }
+    }
+}
+
+std::vector<std::tuple<int64_t, uint32_t, std::string>> StorageEngine::get_executed_repair_compaction_tasks() {
+    std::lock_guard lg(_repair_compaction_tasks_lock);
+    return _executed_repair_compaction_tasks;
 }
 
 void* StorageEngine::_garbage_sweeper_thread_callback(void* arg) {
