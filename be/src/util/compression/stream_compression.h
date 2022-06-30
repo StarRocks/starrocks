@@ -21,18 +21,10 @@
 
 #pragma once
 
-#include <bzlib.h>
-#include <lz4/lz4frame.h>
-#include <zlib.h>
-#include <zstd/zstd.h>
-#include <zstd/zstd_errors.h>
-
 #include <memory>
 
 #include "common/status.h"
 #include "gen_cpp/types.pb.h"
-#include "gutil/strings/substitute.h"
-#include "util/compression/compression_context_pool_singletons.h"
 
 namespace starrocks {
 

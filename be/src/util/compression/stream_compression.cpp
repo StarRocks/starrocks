@@ -21,9 +21,17 @@
 
 #include "util/compression/stream_compression.h"
 
+#include <bzlib.h>
+#include <lz4/lz4frame.h>
+#include <zlib.h>
+#include <zstd/zstd.h>
+#include <zstd/zstd_errors.h>
+
 #include <memory>
 
 #include "fmt/compile.h"
+#include "gutil/strings/substitute.h"
+#include "util/compression/compression_context_pool_singletons.h"
 
 namespace starrocks {
 
