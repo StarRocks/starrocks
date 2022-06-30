@@ -121,6 +121,10 @@ public class ExchangeNode extends PlanNode {
         return mergeInfo != null;
     }
 
+    public void setReceiveColumns(List<Integer> receiveColumns) {
+        this.receiveColumns = receiveColumns;
+    }
+
     public List<Integer> getReceiveColumns() {
         return receiveColumns;
     }

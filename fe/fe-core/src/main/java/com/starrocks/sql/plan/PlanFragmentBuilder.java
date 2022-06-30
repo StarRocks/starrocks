@@ -2318,6 +2318,8 @@ public class PlanFragmentBuilder {
             MultiCastPlanFragment cteFragment = (MultiCastPlanFragment) context.getCteProduceFragments().get(cteId);
             ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
                     cteFragment.getPlanRoot(), false, DistributionSpec.DistributionType.SHUFFLE);
+            exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
+                    .map(ColumnRefOperator::getId).collect(Collectors.toList()));
 
             exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());
 
@@ -2325,7 +2327,7 @@ public class PlanFragmentBuilder {
                     cteFragment.getDataPartition());
 
             Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
-            consume.getCteOutputColumnRefMap().forEach(projectMap::put);
+            projectMap.putAll(consume.getCteOutputColumnRefMap());
             consumeFragment = buildProjectNode(optExpression, new Projection(projectMap), consumeFragment, context);
             consumeFragment.setQueryGlobalDicts(cteFragment.getQueryGlobalDicts());
             consumeFragment.setLoadGlobalDicts(cteFragment.getLoadGlobalDicts());
