@@ -220,7 +220,11 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
     {
         SCOPED_RAW_TIMER(&_serialize_batch_ns);
         StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
-        if (!res.ok()) return res.status();
+        if (!res.ok()) {
+            _cancelled = true;
+            _err_st = res.status();
+            return _err_st;
+        }
         res->Swap(dst);
     }
     DCHECK(dst->has_uncompressed_size());
@@ -229,8 +233,10 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
     size_t uncompressed_size = dst->uncompressed_size();
 
     if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(uncompressed_size)) {
-        return Status::InternalError(fmt::format("The input size for compression should be less than {}",
-                                                 _compress_codec->max_input_size()));
+        _cancelled = true;
+        _err_st = Status::InternalError(fmt::format("The input size for compression should be less than {}",
+                                                    _compress_codec->max_input_size()));
+        return _err_st;
     }
 
     // try compress the ChunkPB data
@@ -500,14 +506,19 @@ Status NodeChannel::try_close() {
     }
 
     while (_check_prev_request_done()) {
-        RETURN_IF_ERROR(add_chunk(nullptr, nullptr, nullptr, 0, 0, true));
+        auto st = add_chunk(nullptr, nullptr, nullptr, 0, 0, true);
+        if (!st.ok()) {
+            _cancelled = true;
+            _err_st = st;
+            return _err_st;
+        }
     }
 
     return Status::OK();
 }
 
 bool NodeChannel::is_close_done() {
-    return _send_finished && _check_all_prev_request_done();
+    return (_send_finished && _check_all_prev_request_done()) || _cancelled;
 }
 
 Status NodeChannel::close_wait(RuntimeState* state) {
