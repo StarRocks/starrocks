@@ -84,21 +84,24 @@ HASH_PARTITIONED: 2: S_NAME
 |  <slot 2> : 2: S_NAME
 |
 22:HASH JOIN
-|  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE)
+|  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  colocate: false, reason:
-|  equal join conjunct: 41: L_ORDERKEY = 9: L_ORDERKEY
-|  other join predicates: 43: L_SUPPKEY != 11: L_SUPPKEY
+|  equal join conjunct: 26: O_ORDERKEY = 9: L_ORDERKEY
 |
 |----21:EXCHANGE
 |
+1:Project
+|  <slot 26> : 26: O_ORDERKEY
+|
 0:OlapScanNode
-TABLE: lineitem
+TABLE: orders
 PREAGGREGATION: ON
+PREDICATES: 28: O_ORDERSTATUS = 'F'
 partitions=1/1
-rollup: lineitem
-tabletRatio=20/20
-cardinality=600000000
-avgRowSize=12.0
+rollup: orders
+tabletRatio=10/10
+cardinality=50000000
+avgRowSize=9.0
 numNodes=0
 
 PLAN FRAGMENT 3
@@ -112,27 +115,23 @@ BUCKET_SHUFFLE_HASH_PARTITIONED: 9: L_ORDERKEY
 20:Project
 |  <slot 2> : 2: S_NAME
 |  <slot 9> : 9: L_ORDERKEY
-|  <slot 11> : 11: L_SUPPKEY
 |
 19:HASH JOIN
-|  join op: INNER JOIN (BUCKET_SHUFFLE)
+|  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE)
 |  colocate: false, reason:
-|  equal join conjunct: 26: O_ORDERKEY = 9: L_ORDERKEY
+|  equal join conjunct: 41: L_ORDERKEY = 9: L_ORDERKEY
+|  other join predicates: 43: L_SUPPKEY != 11: L_SUPPKEY
 |
 |----18:EXCHANGE
 |
-2:Project
-|  <slot 26> : 26: O_ORDERKEY
-|
-1:OlapScanNode
-TABLE: orders
+2:OlapScanNode
+TABLE: lineitem
 PREAGGREGATION: ON
-PREDICATES: 28: O_ORDERSTATUS = 'F'
 partitions=1/1
-rollup: orders
-tabletRatio=10/10
-cardinality=50000000
-avgRowSize=9.0
+rollup: lineitem
+tabletRatio=20/20
+cardinality=600000000
+avgRowSize=12.0
 numNodes=0
 
 PLAN FRAGMENT 4
