@@ -1002,4 +1002,60 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         assertContains(plan, "  |  join op: INNER JOIN (COLOCATE)");
         assertContains(plan, "k3-->[NaN, NaN, 0.0, 4.0, 1.0] ESTIMATE");
     }
+
+    @Test
+    public void testPruneShuffleColumns() throws Exception {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t1");
+
+        StatisticStorage ss = globalStateMgr.getCurrentStatisticStorage();
+        new Expectations(ss) {
+            {
+                ss.getColumnStatistic(t0, "v1");
+                result = new ColumnStatistic(1, 2, 0, 4, 3);
+
+                ss.getColumnStatistic(t0, "v2");
+                result = new ColumnStatistic(1, 4000000, 0, 4, 4000000);
+
+                ss.getColumnStatistic(t0, "v3");
+                result = new ColumnStatistic(1, 2000000, 0, 4, 2000000);
+
+                ss.getColumnStatistic(t1, "v4");
+                result = new ColumnStatistic(1, 2, 0, 4, 3);
+
+                ss.getColumnStatistic(t1, "v5");
+                result = new ColumnStatistic(1, 100000, 0, 4, 100000);
+
+                ss.getColumnStatistic(t1, "v6");
+                result = new ColumnStatistic(1, 200000, 0, 4, 200000);
+            }
+        };
+
+        setTableStatistics(t0, 4000000);
+        setTableStatistics(t1, 100000);
+
+        String sql = "select * from t0 join[shuffle] t1 on t0.v2 = t1.v5 and t0.v3 = t1.v6";
+        String plan = getFragmentPlan(sql);
+
+        assertContains(plan, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    HASH_PARTITIONED: 3: v3");
+
+        assertContains(plan, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    HASH_PARTITIONED: 6: v6");
+
+        sql = "select * from t0 join[shuffle] t1 on t0.v2 = t1.v5 and t0.v3 = t1.v6 " +
+                "               join[broadcast] t2 on t0.v2 = t2.v8";
+
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    HASH_PARTITIONED: 3: v3");
+
+        assertContains(plan, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    HASH_PARTITIONED: 6: v6");
+    }
 }

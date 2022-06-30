@@ -23,6 +23,8 @@ public:
 
     absl::StatusOr<WorkerInfo> worker_info() override;
 
+    absl::Status update_worker_info(const WorkerInfo& info) override;
+
     StatusOr<ShardInfo> get_shard_info(ShardId id);
 
     std::vector<ShardInfo> shards();

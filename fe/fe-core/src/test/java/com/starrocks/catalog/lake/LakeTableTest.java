@@ -3,6 +3,8 @@
 package com.starrocks.catalog.lake;
 
 import com.google.common.collect.Lists;
+import com.staros.proto.ObjectStorageInfo;
+import com.staros.proto.ShardStorageInfo;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
@@ -16,7 +18,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -36,7 +38,7 @@ import java.util.List;
 public class LakeTableTest {
 
     @Test
-    public void testLakeTable() throws IOException, AnalysisException {
+    public void testLakeTable() throws IOException, DdlException {
         new MockUp<GlobalStateMgr>() {
             @Mock
             int getCurrentStateJournalVersion() {
@@ -80,7 +82,10 @@ public class LakeTableTest {
         Deencapsulation.setField(table, "baseIndexId", indexId);
         table.addPartition(partition);
         table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
-        table.setStorageGroup(serviceStorageUri);
+        ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder().setObjectUri(serviceStorageUri).build();
+        ShardStorageInfo shardStorageInfo =
+                ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
+        table.setShardStorageInfo(shardStorageInfo);
 
         // Test serialize and deserialize
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();

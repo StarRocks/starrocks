@@ -247,7 +247,7 @@ public class LocalMetastore implements ConnectorMetadata {
         for (Database db : this.fullNameToDb.values()) {
             long dbId = db.getId();
             for (Table table : db.getTables()) {
-                if (table.getType() != Table.TableType.OLAP) {
+                if (!table.isOlapOrLakeTable()) {
                     continue;
                 }
 
@@ -258,7 +258,6 @@ public class LocalMetastore implements ConnectorMetadata {
                     long partitionId = partition.getId();
                     TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
                             partitionId).getStorageMedium();
-                    boolean useStarOS = partition.isUseStarOS();
                     for (MaterializedIndex index : partition
                             .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                         long indexId = index.getId();
@@ -267,7 +266,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         for (Tablet tablet : index.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
-                            if (!useStarOS) {
+                            if (table.isOlapTable()) {
                                 for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                     invertedIndex.addReplica(tabletId, replica);
                                     if (MetaContext.get().getMetaVersion() < FeMetaVersion.VERSION_48) {
@@ -435,8 +434,6 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         return batchTaskMap;
     }
-
-
 
     public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {
         tryLock(true);
@@ -1646,13 +1643,8 @@ public class LocalMetastore implements ConnectorMetadata {
             if (stmt.isLakeEngine()) {
                 olapTable = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo,
                         distributionInfo, indexes);
-
-                try {
-                    // get service storage uri from StarMgr
-                    ((LakeTable) olapTable).setStorageGroup(stateMgr.getStarOSAgent().getServiceStorageUri());
-                } catch (Exception e) {
-                    throw new DdlException("Failed to get service storage uri from StarMgr", e);
-                }
+                // get service shard storage info from StarMgr
+                ((LakeTable) olapTable).setShardStorageInfo(stateMgr.getStarOSAgent().getServiceShardStorageInfo());
             } else {
                 Preconditions.checkState(stmt.isOlapEngine());
                 olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
@@ -2175,7 +2167,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         if (!isCheckpointThread()) {
             // add to inverted index
-            if (table.getType() == Table.TableType.OLAP) {
+            if (table.isOlapOrLakeTable()) {
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
                 OlapTable olapTable = (OlapTable) table;
                 long dbId = db.getId();
@@ -2184,7 +2176,6 @@ public class LocalMetastore implements ConnectorMetadata {
                     long partitionId = partition.getId();
                     TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
                             partitionId).getStorageMedium();
-                    boolean useStarOS = partition.isUseStarOS();
                     for (MaterializedIndex mIndex : partition
                             .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                         long indexId = mIndex.getId();
@@ -2193,7 +2184,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         for (Tablet tablet : mIndex.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
-                            if (!useStarOS) {
+                            if (table.isOlapTable()) {
                                 for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                     invertedIndex.addReplica(tabletId, replica);
                                 }
@@ -2219,7 +2210,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 long partitionId = partition.getId();
                 TStorageMedium medium = materializedView.getPartitionInfo().getDataProperty(
                         partitionId).getStorageMedium();
-                boolean useStarOS = partition.isUseStarOS();
                 for (MaterializedIndex mIndex : partition.getMaterializedIndices(
                         MaterializedIndex.IndexExtState.ALL)) {
                     long indexId = mIndex.getId();
@@ -2228,7 +2218,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     for (Tablet tablet : mIndex.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
-                        if (!useStarOS) {
+                        if (tablet instanceof LocalTablet) {
                             for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                 invertedIndex.addReplica(tabletId, replica);
                             }
@@ -2251,9 +2241,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         int bucketNum = distributionInfo.getBucketNum();
-        Map<String, String> properties = Maps.newHashMap();
-        properties.put(LakeTable.STORAGE_GROUP, table.getStorageGroup());
-        List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum, properties);
+        List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum, table.getShardStorageInfo());
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
             index.addTablet(tablet, tabletMeta);
@@ -2929,7 +2917,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 // create task
                 Task task = TaskBuilder.buildMvTask(materializedView, dbName);
                 TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-                taskManager.createTask(task, true);
+                taskManager.createTask(task, false);
                 // run task
                 taskManager.executeTask(task.getName());
             }
@@ -2994,7 +2982,7 @@ public class LocalMetastore implements ConnectorMetadata {
         final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
         if (!taskManager.containTask(mvTaskName)) {
             Task task = TaskBuilder.buildMvTask(materializedView, dbName);
-            taskManager.createTask(task, true);
+            taskManager.createTask(task, false);
         }
         taskManager.executeTask(mvTaskName, priority);
     }

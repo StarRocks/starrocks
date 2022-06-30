@@ -7,9 +7,13 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
+import com.staros.proto.AllocateStorageInfo;
+import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ShardInfo;
+import com.staros.proto.ShardStorageInfo;
+import com.staros.proto.StatusCode;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
 import com.starrocks.common.DdlException;
@@ -59,7 +63,7 @@ public class StarOSAgentTest {
             {
                 client.registerService("starrocks");
                 minTimes = 0;
-                result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
+                result = new StarClientException(StatusCode.ALREADY_EXIST,
                         "service already exists!");
 
                 client.bootstrapService("starrocks", "123");
@@ -77,7 +81,7 @@ public class StarOSAgentTest {
             {
                 client.bootstrapService("starrocks", "123");
                 minTimes = 0;
-                result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
+                result = new StarClientException(StatusCode.ALREADY_EXIST,
                         "service already exists!");
 
                 client.getServiceInfo("123").getServiceId();
@@ -101,6 +105,22 @@ public class StarOSAgentTest {
 
         starosAgent.getServiceId("123");
         Assert.assertEquals(2, starosAgent.getServiceId());
+    }
+
+    @Test
+    public void testGetServiceStorageUri() throws StarClientException, DdlException {
+        new Expectations() {
+            {
+                client.allocateStorage(1L, (AllocateStorageInfo) any);
+                minTimes = 0;
+                result = ShardStorageInfo.newBuilder().setObjectStorageInfo(
+                        ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build()).build();
+            }
+        };
+
+        starosAgent.setServiceId(1L);
+        Assert.assertEquals("s3://bucket/1/",
+                starosAgent.getServiceShardStorageInfo().getObjectStorageInfo().getObjectUri());
     }
 
     @Test
@@ -132,8 +152,7 @@ public class StarOSAgentTest {
             {
                 client.addWorker(1, "127.0.0.1:8090");
                 minTimes = 0;
-                result = new StarClientException(StarClientException.ExceptionCode.ALREADY_EXIST,
-                        "worker already exists");
+                result = new StarClientException(StatusCode.ALREADY_EXIST, "worker already exists");
 
                 client.getWorkerInfo(1, "127.0.0.1:8090").getWorkerId();
                 minTimes = 0;
@@ -154,8 +173,7 @@ public class StarOSAgentTest {
             {
                 client.getWorkerInfo(1, "127.0.0.1:8090").getWorkerId();
                 minTimes = 0;
-                result = new StarClientException(StarClientException.ExceptionCode.GRPC,
-                        "network error");
+                result = new StarClientException(StatusCode.GRPC, "network error");
             }
         };
 
@@ -172,8 +190,7 @@ public class StarOSAgentTest {
 
                 client.removeWorker(1, 10);
                 minTimes = 0;
-                result = new StarClientException(StarClientException.ExceptionCode.GRPC,
-                        "network error");
+                result = new StarClientException(StatusCode.GRPC, "network error");
             }
         };
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
@@ -181,10 +198,11 @@ public class StarOSAgentTest {
                 () -> starosAgent.removeWorker("127.0.0.1:8090"));
     }
 
+    @Test
     public void testCreateShards() throws StarClientException, DdlException {
         new Expectations() {
             {
-                client.createShard(1L, 2);
+                client.createShard(1L, 2, 1, null, null);
                 minTimes = 0;
                 result = Lists.newArrayList(ShardInfo.newBuilder().setShardId(10L).build(),
                         ShardInfo.newBuilder().setShardId(11L).build());
