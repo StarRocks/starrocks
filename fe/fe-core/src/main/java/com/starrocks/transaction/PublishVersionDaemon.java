@@ -239,7 +239,7 @@ public class PublishVersionDaemon extends MasterDaemon {
             if (versionTime > 0) {
                 continue;
             }
-            if (versionTime < 0 && currentTime + RETRY_INTERVAL_MS < Math.abs(versionTime)) {
+            if (versionTime < 0 && currentTime < Math.abs(versionTime) + RETRY_INTERVAL_MS) {
                 continue;
             }
             if (publishPartition(txnState, table, partition, partitionCommitInfo)) {
