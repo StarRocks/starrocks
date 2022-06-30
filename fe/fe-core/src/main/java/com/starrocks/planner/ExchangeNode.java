@@ -27,6 +27,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SortInfo;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.UserException;
@@ -65,6 +66,7 @@ public class ExchangeNode extends PlanNode {
     private long offset;
 
     private TPartitionType partitionType;
+    private DataPartition dataPartition;
     private DistributionSpec.DistributionType distributionType;
     // Specify the columns which need to send, work on CTE, and keep empty in other sense
     private List<Integer> receiveColumns;
@@ -74,13 +76,12 @@ public class ExchangeNode extends PlanNode {
      * An ExchangeNode doesn't have an input node as a child, which is why we
      * need to compute the cardinality here.
      */
-    public ExchangeNode(PlanNodeId id, PlanNode inputNode, boolean copyConjuncts) {
+    public ExchangeNode(PlanNodeId id, PlanNode inputNode, DataPartition dataPartition) {
         super(id, inputNode, "EXCHANGE");
         offset = 0;
         children.add(inputNode);
-        if (!copyConjuncts) {
-            this.conjuncts = Lists.newArrayList();
-        }
+        this.conjuncts = Lists.newArrayList();
+        this.dataPartition = dataPartition;
         if (hasLimit()) {
             cardinality = Math.min(limit, inputNode.cardinality);
         } else {
@@ -103,10 +104,13 @@ public class ExchangeNode extends PlanNode {
         computeTupleIds();
     }
 
-    public ExchangeNode(PlanNodeId id, PlanNode inputNode, boolean copyConjuncts,
-                        DistributionSpec.DistributionType type) {
-        this(id, inputNode, copyConjuncts);
+    public ExchangeNode(PlanNodeId id, PlanNode inputNode, DistributionSpec.DistributionType type) {
+        this(id, inputNode, DataPartition.UNPARTITIONED);
         distributionType = type;
+    }
+
+    public void setDataPartition(DataPartition dataPartition) {
+        this.dataPartition = dataPartition;
     }
 
     public void setPartitionType(TPartitionType type) {
@@ -204,8 +208,21 @@ public class ExchangeNode extends PlanNode {
             return false;
         }
 
-        boolean accept = false;
+        boolean crossExchange = false;
         if (description.canPushAcrossExchangeNode()) {
+            if (description.getEqualCount() > 1 && dataPartition.getPartitionExprs().size() == 1) {
+                Expr pExpr = dataPartition.getPartitionExprs().get(0);
+                if (probeExpr instanceof SlotRef && pExpr instanceof SlotRef &&
+                        ((SlotRef) probeExpr).getSlotId().asInt() == ((SlotRef) pExpr).getSlotId().asInt()) {
+                    crossExchange = true;
+                }
+            } else if (description.getEqualCount() == 1) {
+                crossExchange = true;
+            }
+        }
+
+        boolean accept = false;
+        if (crossExchange) {
             description.enterExchangeNode();
             for (PlanNode node : children) {
                 if (node.pushDownRuntimeFilters(description, probeExpr)) {

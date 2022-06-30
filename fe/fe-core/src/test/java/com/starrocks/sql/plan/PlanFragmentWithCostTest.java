@@ -1067,4 +1067,57 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  <slot 18> : datediff(CAST('1981-09-06t03:40:33' AS DATETIME), CAST(11: L_SHIPDATE AS DATETIME))\n" +
                 "  |  ");
     }
+
+    @Test
+    public void testMultiJoinColumnPruneShuffleColumnsAndGRF() throws Exception {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t1");
+
+        StatisticStorage ss = GlobalStateMgr.getCurrentStatisticStorage();
+        new Expectations(ss) {
+            {
+                ss.getColumnStatistic(t0, "v1");
+                result = new ColumnStatistic(1, 2, 0, 4, 3);
+
+                ss.getColumnStatistic(t0, "v2");
+                result = new ColumnStatistic(1, 4000000, 0, 4, 4000000);
+
+                ss.getColumnStatistic(t0, "v3");
+                result = new ColumnStatistic(1, 2000000, 0, 4, 2000000);
+
+                ss.getColumnStatistic(t1, "v4");
+                result = new ColumnStatistic(1, 2, 0, 4, 3);
+
+                ss.getColumnStatistic(t1, "v5");
+                result = new ColumnStatistic(1, 100000, 0, 4, 100000);
+
+                ss.getColumnStatistic(t1, "v6");
+                result = new ColumnStatistic(1, 200000, 0, 4, 200000);
+            }
+        };
+
+        setTableStatistics(t0, 4000000);
+        setTableStatistics(t1, 100000);
+
+        String sql = "select * from t0 join[shuffle] t1 on t0.v2 = t1.v5 and t0.v3 = t1.v6";
+        String plan = getVerboseExplain(sql);
+        System.out.println(plan);
+
+        assertContains(plan, "  Input Partition: RANDOM\n" +
+                "  OutPut Partition: HASH_PARTITIONED: 3: v3\n" +
+                "  OutPut Exchange Id: 01");
+
+        assertContains(plan, "Input Partition: RANDOM\n" +
+                "  OutPut Partition: HASH_PARTITIONED: 6: v6\n" +
+                "  OutPut Exchange Id: 03");
+
+        assertContains(plan, "  |  build runtime filters:\n" +
+                "  |  - filter_id = 1, build_expr = (6: v6), remote = true\n");
+
+        assertContains(plan, "probe runtime filters:\n" +
+                "     - filter_id = 1, probe_expr = (3: v3)");
+    }
+
+>>>>>>> [Enhancement] Support multi join GRF on single column partition
 }
