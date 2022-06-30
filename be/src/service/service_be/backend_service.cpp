@@ -50,7 +50,7 @@ using apache::thrift::TProcessor;
 using apache::thrift::concurrency::ThreadFactory;
 
 BackendService::BackendService(ExecEnv* exec_env)
-        : BackendServiceBase(exec_env), _agent_server(std::make_unique<AgentServer>(exec_env)) {}
+        : BackendServiceBase(exec_env), _agent_server(exec_env->agent_server()) {}
 
 BackendService::~BackendService() = default;
 

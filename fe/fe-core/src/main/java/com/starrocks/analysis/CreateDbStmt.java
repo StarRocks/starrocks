@@ -56,7 +56,7 @@ public class CreateDbStmt extends DdlStmt {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER);
         }
         FeNameFormat.checkDbName(dbName);
-        dbName = ClusterNamespace.getFullName(getClusterName(), dbName);
+        dbName = ClusterNamespace.getFullName(dbName);
 
         if (!GlobalStateMgr.getCurrentState().getAuth()
                 .checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.CREATE)) {

@@ -30,8 +30,6 @@ public:
                    ::starrocks::lake::AbortTxnResponse* response, ::google::protobuf::Closure* done) override;
 
 private:
-    Status publish(lake::Tablet* tablet, const ::starrocks::lake::PublishVersionRequest* request);
-
     ExecEnv* _env;
 };
 

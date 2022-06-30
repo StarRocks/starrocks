@@ -595,7 +595,7 @@ public class Database extends MetaObject implements Writable {
 
         id = in.readLong();
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            fullQualifiedName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, Text.readString(in));
+            fullQualifiedName = ClusterNamespace.getFullName(Text.readString(in));
         } else {
             fullQualifiedName = Text.readString(in);
         }

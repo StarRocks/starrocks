@@ -100,11 +100,11 @@ public class LoadStmtTest {
 
         LoadStmt stmt = new LoadStmt(new LabelName("testDb", "testLabel"), dataDescriptionList, null, null, null);
         stmt.analyze(analyzer);
-        Assert.assertEquals("testCluster:testDb", stmt.getLabel().getDbName());
+        Assert.assertEquals("default_cluster:testDb", stmt.getLabel().getDbName());
         Assert.assertEquals(dataDescriptionList, stmt.getDataDescriptions());
         Assert.assertNull(stmt.getProperties());
 
-        Assert.assertEquals("LOAD LABEL `testCluster:testDb`.`testLabel`\n"
+        Assert.assertEquals("LOAD LABEL `default_cluster:testDb`.`testLabel`\n"
                 + "(XXX)", stmt.toString());
 
         // test ResourceDesc
@@ -112,7 +112,7 @@ public class LoadStmtTest {
                 new ResourceDesc(resourceName, null), null);
         stmt.analyze(analyzer);
         Assert.assertEquals(EtlJobType.SPARK, stmt.getResourceDesc().getEtlJobType());
-        Assert.assertEquals("LOAD LABEL `testCluster:testDb`.`testLabel`\n(XXX)\nWITH RESOURCE 'spark0'",
+        Assert.assertEquals("LOAD LABEL `default_cluster:testDb`.`testLabel`\n(XXX)\nWITH RESOURCE 'spark0'",
                 stmt.toString());
     }
 

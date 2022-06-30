@@ -38,8 +38,6 @@ import com.starrocks.thrift.TMySQLScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,15 +45,10 @@ import java.util.List;
 /**
  * Full scan of an MySQL table.
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class MysqlScanNode extends ScanNode {
-    private static final Logger LOG = LogManager.getLogger(MysqlScanNode.class);
-
     private final List<String> columns = new ArrayList<String>();
     private final List<String> filters = new ArrayList<String>();
-    private String tblName;
+    private final String tblName;
 
     /**
      * Constructs node to scan given data files of table 'tbl'.
@@ -73,10 +66,7 @@ public class MysqlScanNode extends ScanNode {
 
     @Override
     public void finalizeStats(Analyzer analyzer) throws UserException {
-        // Convert predicates to MySQL columns and filters.
-        createMySQLColumns();
-        createMySQLFilters();
-        computeStats(analyzer);
+        computeColumnsAndFilters();
     }
 
     public void computeColumnsAndFilters() {
@@ -86,10 +76,8 @@ public class MysqlScanNode extends ScanNode {
 
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
-        StringBuilder output = new StringBuilder();
-        output.append(prefix).append("TABLE: ").append(tblName).append("\n");
-        output.append(prefix).append("Query: ").append(getMysqlQueryStr()).append("\n");
-        return output.toString();
+        return prefix + "TABLE: " + tblName + "\n" +
+                prefix + "Query: " + getMysqlQueryStr() + "\n";
     }
 
     private String getMysqlQueryStr() {

@@ -88,7 +88,7 @@ public class TablePattern implements Writable {
 
         if (!db.equals("*")) {
             FeNameFormat.checkDbName(db);
-            db = ClusterNamespace.getFullName(clusterName, db);
+            db = ClusterNamespace.getFullName(db);
         }
 
         if (!tbl.equals("*")) {

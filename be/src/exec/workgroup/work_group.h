@@ -50,7 +50,11 @@ public:
     TWorkGroup to_thrift_verbose() const;
     void init();
 
+    // Copy metrics from the other work group
+    void copy_metrics(const WorkGroup& rhs);
+
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
+    const MemTracker* mem_tracker() const { return _mem_tracker.get(); }
     double get_mem_limit() const { return _memory_limit; }
     pipeline::DriverQueue* driver_queue() { return _driver_queue.get(); }
     ScanTaskQueue* scan_task_queue() { return _scan_task_queue.get(); }
@@ -60,6 +64,8 @@ public:
     int64_t version() const { return _version; }
 
     const std::string& name() const { return _name; }
+
+    std::string to_string() const;
 
     size_t cpu_limit() const { return _cpu_limit; }
 
@@ -169,8 +175,6 @@ private:
     double _memory_limit;
     int64_t _memory_limit_bytes = -1;
     size_t _concurrency_limit = 0;
-
-    // Big query metrics, when a query exceeds one of the following metrics, it will likely fail
     int64_t _big_query_mem_limit = 0;
     int64_t _big_query_scan_rows_limit = 0;
     int64_t _big_query_cpu_second_limit = 0;
@@ -197,10 +201,9 @@ private:
     double _select_factor = 0;
     double _cur_select_factor = 0;
 
+    // Metrics of this workgroup
     std::atomic<int64_t> _total_cpu_cost = 0;
-
-    double _cpu_actual_use_ratio = 0;
-
+    std::atomic<double> _cpu_actual_use_ratio = 0;
     std::atomic<int64_t> _num_running_queries = 0;
     std::atomic<int64_t> _num_total_queries = 0;
     std::atomic<int64_t> _concurrency_overflow_count = 0;
@@ -303,7 +306,7 @@ private:
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_concurrency_overflow_count;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_bigquery_count;
 
-    void add_metrics(const WorkGroupPtr& wg);
+    void add_metrics_unlocked(const WorkGroupPtr& wg);
     void update_metrics_unlocked();
 };
 

@@ -78,6 +78,7 @@ public class BackendServiceProxy {
         rpcOptions.setMaxWait(Config.brpc_idle_wait_max_time);
         rpcClient = new RpcClient(rpcOptions);
         backendServiceMap = Maps.newHashMap();
+        lakeServiceMap = Maps.newHashMap();
     }
 
     public static BackendServiceProxy getInstance() {

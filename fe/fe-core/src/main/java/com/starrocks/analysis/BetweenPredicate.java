@@ -25,20 +25,13 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 /**
  * Class describing between predicates. After successful analysis, we equal
  * the between predicate to a conjunctive/disjunctive compound predicate
  * to be handed to the backend.
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class BetweenPredicate extends Predicate {
-    private static final Logger LOG = LogManager.getLogger(BetweenPredicate.class);
-
     private final boolean isNotBetween;
 
     // First child is the comparison expr which should be in [lowerBound, upperBound].
@@ -65,19 +58,6 @@ public class BetweenPredicate extends Predicate {
 
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        super.analyzeImpl(analyzer);
-        if (children.get(0) instanceof Subquery &&
-                (children.get(1) instanceof Subquery || children.get(2) instanceof Subquery)) {
-            throw new AnalysisException("Comparison between subqueries is not " +
-                    "supported in a BETWEEN predicate: " + toSql());
-        }
-        // if children has subquery, it will be written and reanalyzed in the future.
-        if (children.get(0) instanceof Subquery
-                || children.get(1) instanceof Subquery
-                || children.get(2) instanceof Subquery) {
-            return;
-        }
-        analyzer.castAllToCompatibleType(children);
     }
 
     @Override

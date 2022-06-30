@@ -23,20 +23,10 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.ArithmeticExpr.Operator;
-import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TExprOpcode;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -46,12 +36,8 @@ import java.util.Map;
  * Arithmetic expressions on timestamps are syntactic sugar.
  * They are executed as function call exprs in the BE.
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class TimestampArithmeticExpr extends Expr {
-    private static final Logger LOG = LogManager.getLogger(TimestampArithmeticExpr.class);
-    private static Map<String, TimeUnit> TIME_UNITS_MAP = new HashMap<String, TimeUnit>();
+    private static final Map<String, TimeUnit> TIME_UNITS_MAP = new HashMap<String, TimeUnit>();
 
     static {
         for (TimeUnit timeUnit : TimeUnit.values()) {
@@ -106,132 +92,8 @@ public class TimestampArithmeticExpr extends Expr {
         return new TimestampArithmeticExpr(this);
     }
 
-    private Type fixType() {
-        PrimitiveType t1 = getChild(0).getType().getPrimitiveType();
-        if (t1 == PrimitiveType.DATETIME) {
-            return Type.DATETIME;
-        }
-        if (t1 == PrimitiveType.DATE) {
-            return Type.DATETIME;
-        }
-        if (PrimitiveType.isImplicitCast(t1, PrimitiveType.DATETIME)) {
-            return Type.DATETIME;
-        }
-        return Type.INVALID;
-    }
-
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        // Check if name of function call is date_sub or date_add.
-        String funcOpName;
-        if (funcName != null && funcName.equalsIgnoreCase("TIMESTAMPDIFF")) {
-            timeUnit = TIME_UNITS_MAP.get(timeUnitIdent.toUpperCase());
-            if (timeUnit == null) {
-                throw new AnalysisException("Invalid time unit '" + timeUnitIdent
-                        + "' in timestamp arithmetic expression '" + toSql() + "'.");
-            }
-            Type dateType = fixType();
-            if (dateType.isDate() && timeUnit.isDateTime()) {
-                dateType = Type.DATETIME;
-            }
-            // The first child must return a timestamp or null.
-            if (!getChild(0).getType().isDateType() && !getChild(0).getType().isNull()) {
-                if (!dateType.isValid()) {
-                    throw new AnalysisException("Operand '" + getChild(0).toSql()
-                            + "' of timestamp arithmetic expression '" + toSql() + "' returns type '"
-                            + getChild(0).getType() + "'. Expected type 'TIMESTAMP/DATE/DATETIME'.");
-                }
-                castChild(dateType, 0);
-            }
-
-            // The first child must return a timestamp or null.
-            if (!getChild(1).getType().isDateType() && !getChild(1).getType().isNull()) {
-                if (!dateType.isValid()) {
-                    throw new AnalysisException("Operand '" + getChild(1).toSql()
-                            + "' of timestamp arithmetic expression '" + toSql() + "' returns type '"
-                            + getChild(1).getType() + "'. Expected type 'TIMESTAMP/DATE/DATETIME'.");
-                }
-                castChild(dateType, 1);
-            }
-
-            type = Type.BIGINT;
-            opcode = getOpCode();
-            funcOpName = String.format("%sS_%s", timeUnit, "DIFF");
-        } else {
-            if (funcName != null) {
-                if (funcName.equalsIgnoreCase(FunctionSet.DATE_ADD)
-                        || funcName.equalsIgnoreCase(FunctionSet.DAYS_ADD)
-                        || funcName.equalsIgnoreCase(FunctionSet.ADDDATE)
-                        || funcName.equalsIgnoreCase(FunctionSet.TIMESTAMPADD)) {
-                    op = ArithmeticExpr.Operator.ADD;
-                } else if (funcName.equalsIgnoreCase(FunctionSet.DATE_SUB)
-                        || funcName.equalsIgnoreCase(FunctionSet.DAYS_SUB)
-                        || funcName.equalsIgnoreCase(FunctionSet.SUBDATE)) {
-                    op = ArithmeticExpr.Operator.SUBTRACT;
-                } else {
-                    throw new AnalysisException("Encountered function name '" + funcName
-                            + "' in timestamp arithmetic expression '" + toSql() + "'. "
-                            + "Expected function name 'DATE_ADD/DAYS_ADD/ADDDATE/TIMESTAMPADD'"
-                            + "or 'DATE_SUB/DAYS_SUB/SUBDATE");
-                }
-            }
-
-            timeUnit = TIME_UNITS_MAP.get(timeUnitIdent.toUpperCase());
-            if (timeUnit == null) {
-                throw new AnalysisException("Invalid time unit '" + timeUnitIdent
-                        + "' in timestamp arithmetic expression '" + toSql() + "'.");
-            }
-
-            Type dateType = fixType();
-            if (dateType.isDate() && timeUnit.isDateTime()) {
-                dateType = Type.DATETIME;
-            }
-            // The first child must return a timestamp or null.
-            if (!getChild(0).getType().isDateType() && !getChild(0).getType().isNull()) {
-                if (!dateType.isValid()) {
-                    throw new AnalysisException("Operand '" + getChild(0).toSql()
-                            + "' of timestamp arithmetic expression '" + toSql() + "' returns type '"
-                            + getChild(0).getType() + "'. Expected type 'TIMESTAMP/DATE/DATETIME'.");
-                }
-                castChild(dateType, 0);
-            }
-
-            if (!getChild(1).getType().isScalarType()) {
-                throw new AnalysisException("must be a scalar type.");
-            }
-
-            // The second child must be of type 'INT' or castable to it.
-            if (!getChild(1).getType().isInt()) {
-                if (!ScalarType.canCastTo((ScalarType) getChild(1).getType(), Type.INT)) {
-                    throw new AnalysisException("Operand '" + getChild(1).toSql()
-                            + "' of timestamp arithmetic expression '" + toSql() + "' returns type '"
-                            + getChild(1).getType() + "' which is incompatible with expected type 'INT'.");
-                }
-                castChild(Type.INT, 1);
-            }
-
-            type = dateType;
-            opcode = getOpCode();
-            funcOpName = String.format("%sS_%s", timeUnit,
-                    (op == ArithmeticExpr.Operator.ADD) ? "ADD" : "SUB");
-        }
-
-        fn = getBuiltinFunction(funcOpName.toLowerCase(),
-                collectChildReturnTypes(), Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-
-        type = fn.getReturnType();
-        Type[] args = fn.getArgs();
-        if (args.length > 0 && fn.isVectorized()) {
-            for (int i = 0; i < children.size(); i++) {
-                int idx = Math.min(args.length - 1, i);
-
-                if (!children.get(i).getType().matchesType(args[idx])) {
-                    uncheckedCastChild(args[idx], i);
-                }
-            }
-        }
-
-        LOG.debug("fn is {} name is {}", fn, funcOpName);
     }
 
     @Override
@@ -242,65 +104,6 @@ public class TimestampArithmeticExpr extends Expr {
 
     public ArithmeticExpr.Operator getOp() {
         return op;
-    }
-
-    private TExprOpcode getOpCode() throws AnalysisException {
-        // Select appropriate opcode based on op and timeUnit.
-        switch (timeUnit) {
-            case YEAR: {
-                if (op == Operator.ADD) {
-                    return TExprOpcode.TIMESTAMP_YEARS_ADD;
-                } else {
-                    return TExprOpcode.TIMESTAMP_YEARS_SUB;
-                }
-            }
-            case MONTH: {
-                if (op == Operator.ADD) {
-                    return TExprOpcode.TIMESTAMP_MONTHS_ADD;
-                } else {
-                    return TExprOpcode.TIMESTAMP_MONTHS_SUB;
-                }
-            }
-            case WEEK: {
-                if (op == Operator.ADD) {
-                    return TExprOpcode.TIMESTAMP_WEEKS_ADD;
-                } else {
-                    return TExprOpcode.TIMESTAMP_WEEKS_SUB;
-                }
-            }
-            case DAY: {
-                if (op == Operator.ADD) {
-                    return TExprOpcode.TIMESTAMP_DAYS_ADD;
-                } else {
-                    return TExprOpcode.TIMESTAMP_DAYS_SUB;
-                }
-            }
-            case HOUR: {
-                if (op == Operator.ADD) {
-                    return TExprOpcode.TIMESTAMP_HOURS_ADD;
-                } else {
-                    return TExprOpcode.TIMESTAMP_HOURS_SUB;
-                }
-            }
-            case MINUTE: {
-                if (op == Operator.ADD) {
-                    return TExprOpcode.TIMESTAMP_MINUTES_ADD;
-                } else {
-                    return TExprOpcode.TIMESTAMP_MINUTES_SUB;
-                }
-            }
-            case SECOND: {
-                if (op == Operator.ADD) {
-                    return TExprOpcode.TIMESTAMP_SECONDS_ADD;
-                } else {
-                    return TExprOpcode.TIMESTAMP_SECONDS_SUB;
-                }
-            }
-            default: {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TIMEUNIT, timeUnit);
-            }
-        }
-        return null;
     }
 
     public String getFuncName() {
@@ -338,16 +141,16 @@ public class TimestampArithmeticExpr extends Expr {
         if (intervalFirst) {
             // Non-function-call like version with interval as first operand.
             strBuilder.append("INTERVAL ");
-            strBuilder.append(getChild(1).toSql() + " ");
+            strBuilder.append(getChild(1).toSql()).append(" ");
             strBuilder.append(timeUnitIdent);
             strBuilder.append(" ").append(op.toString()).append(" ");
             strBuilder.append(getChild(0).toSql());
         } else {
             // Non-function-call like version with interval as second operand.
             strBuilder.append(getChild(0).toSql());
-            strBuilder.append(" " + op.toString() + " ");
+            strBuilder.append(" ").append(op.toString()).append(" ");
             strBuilder.append("INTERVAL ");
-            strBuilder.append(getChild(1).toSql() + " ");
+            strBuilder.append(getChild(1).toSql()).append(" ");
             strBuilder.append(timeUnitIdent);
         }
         return strBuilder.toString();
@@ -376,16 +179,16 @@ public class TimestampArithmeticExpr extends Expr {
         if (intervalFirst) {
             // Non-function-call like version with interval as first operand.
             strBuilder.append("INTERVAL ");
-            strBuilder.append(getChild(1).toDigest() + " ");
+            strBuilder.append(getChild(1).toDigest()).append(" ");
             strBuilder.append(timeUnitIdent);
             strBuilder.append(" ").append(op.toString()).append(" ");
             strBuilder.append(getChild(0).toDigest());
         } else {
             // Non-function-call like version with interval as second operand.
             strBuilder.append(getChild(0).toDigest());
-            strBuilder.append(" " + op.toString() + " ");
+            strBuilder.append(" ").append(op.toString()).append(" ");
             strBuilder.append("INTERVAL ");
-            strBuilder.append(getChild(1).toDigest() + " ");
+            strBuilder.append(getChild(1).toDigest()).append(" ");
             strBuilder.append(timeUnitIdent);
         }
         return strBuilder.toString();
@@ -417,13 +220,6 @@ public class TimestampArithmeticExpr extends Expr {
 
         TimeUnit(String description) {
             this.description = description;
-        }
-
-        public boolean isDateTime() {
-            if (this == HOUR || this == MINUTE || this == SECOND || this == MICROSECOND) {
-                return true;
-            }
-            return false;
         }
 
         public static TimeUnit fromName(String timeUnitStr) {

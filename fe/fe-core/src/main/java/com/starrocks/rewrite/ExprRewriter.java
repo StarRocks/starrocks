@@ -37,9 +37,6 @@ import java.util.List;
  * - the rules are applied in the order they appear in the rule list
  * Keeps track of how many transformations were applied.
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 @Deprecated
 public class ExprRewriter {
     private int numChanges = 0;

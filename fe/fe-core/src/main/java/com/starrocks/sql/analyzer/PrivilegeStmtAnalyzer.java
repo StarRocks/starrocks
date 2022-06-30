@@ -55,7 +55,7 @@ public class PrivilegeStmtAnalyzer {
                 // Remove it after all old methods migrate to the new framework
                 throw new SemanticException(e.getMessage());
             }
-            String qualifiedRole = ClusterNamespace.getFullName(session.getClusterName(), roleName);
+            String qualifiedRole = ClusterNamespace.getFullName(roleName);
             if (!session.getGlobalStateMgr().getAuth().doesRoleExist(qualifiedRole)) {
                 throw new SemanticException("role " + qualifiedRole + " not exist!");
             }

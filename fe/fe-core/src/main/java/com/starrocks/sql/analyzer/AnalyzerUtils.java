@@ -86,7 +86,7 @@ public class AnalyzerUtils {
         if (StringUtils.isEmpty(dbName)) {
             dbName = session.getDatabase();
         } else {
-            dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
+            dbName = ClusterNamespace.getFullName(dbName);
         }
 
         if (!session.getGlobalStateMgr().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
@@ -202,7 +202,7 @@ public class AnalyzerUtils {
                 dbName = session.getDatabase();
             } else {
                 if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-                    dbName = ClusterNamespace.getFullName(session.getClusterName(), dbName);
+                    dbName = ClusterNamespace.getFullName(dbName);
                 } else {
                     return;
                 }

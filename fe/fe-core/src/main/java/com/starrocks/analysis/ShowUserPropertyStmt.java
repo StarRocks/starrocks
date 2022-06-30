@@ -63,7 +63,7 @@ public class ShowUserPropertyStmt extends ShowStmt {
             user = analyzer.getQualifiedUser();
             // user can see itself's property, no need to check privs
         } else {
-            user = ClusterNamespace.getFullName(getClusterName(), user);
+            user = ClusterNamespace.getFullName(user);
 
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {

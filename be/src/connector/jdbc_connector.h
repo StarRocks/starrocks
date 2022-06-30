@@ -49,6 +49,7 @@ public:
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
+    int64_t num_bytes_read() const override;
 
 private:
     Status _create_scanner(RuntimeState* state);
@@ -60,6 +61,7 @@ private:
     RuntimeState* _runtime_state = nullptr;
     vectorized::JDBCScanner* _scanner = nullptr;
     int64_t _rows_read = 0;
+    int64_t _bytes_read = 0;
 };
 
 } // namespace connector

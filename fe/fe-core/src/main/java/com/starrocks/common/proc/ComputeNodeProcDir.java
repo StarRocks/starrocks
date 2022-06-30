@@ -3,11 +3,9 @@
 package com.starrocks.common.proc;
 
 import com.google.common.base.Stopwatch;
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.DecommissionBackendJob;
-import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
@@ -44,7 +42,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        final List<List<String>> computeNodesInfos = getClusterComputeNodesInfos(null);
+        final List<List<String>> computeNodesInfos = getClusterComputeNodesInfos();
         for (List<String> computeNodesInfo : computeNodesInfos) {
             List<String> oneInfo = new ArrayList<>(computeNodesInfo.size());
             oneInfo.addAll(computeNodesInfo);
@@ -56,25 +54,15 @@ public class ComputeNodeProcDir implements ProcDirInterface {
     /**
      * get compute nodes of cluster
      * copy from getClusterBackendInfos, It is necessary to refactor the two methods later
-     * @param clusterName
      * @return
      */
-    public static List<List<String>> getClusterComputeNodesInfos(String clusterName) {
+    public static List<List<String>> getClusterComputeNodesInfos() {
         final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<List<String>> computeNodesInfos = new LinkedList<>();
         List<Long> computeNodeIds;
-        if (!Strings.isNullOrEmpty(clusterName)) {
-            final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(clusterName);
-            // root not in any cluster
-            if (null == cluster) {
-                return computeNodesInfos;
-            }
-            computeNodeIds = cluster.getComputeNodeIdList();
-        } else {
-            computeNodeIds = clusterInfoService.getComputeNodeIds(false);
-            if (computeNodeIds == null) {
-                return computeNodesInfos;
-            }
+        computeNodeIds = clusterInfoService.getComputeNodeIds(false);
+        if (computeNodeIds == null) {
+            return computeNodesInfos;
         }
 
         long start = System.currentTimeMillis();
