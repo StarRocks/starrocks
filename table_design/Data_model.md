@@ -303,8 +303,7 @@ PARTITION BY RANGE(`dt`) (
     PARTITION p20210929 VALUES [('2021-09-29'), ('2021-09-30')),
     PARTITION p20210930 VALUES [('2021-09-30'), ('2021-10-01'))
 ) DISTRIBUTED BY HASH(order_id) BUCKETS 4
-PROPERTIES("replication_num" = "3",
-"enable_persistent_index" = "true");
+PROPERTIES("replication_num" = "3");
 ```
 
 - 例如，需要实时分析用户情况，则可以将用户 ID `user_id` 作为主键，其余为指标列。建表语句如下：
