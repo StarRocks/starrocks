@@ -189,6 +189,9 @@ inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
 }
 
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
+    if (_chunk_sources[chunk_source_index]->get_buffer_size() >= _buffer_size) {
+        return Status::OK();
+    }
     _num_running_io_tasks++;
     _is_io_task_running[chunk_source_index] = true;
 
