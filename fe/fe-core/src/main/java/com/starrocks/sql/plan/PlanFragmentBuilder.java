@@ -1885,6 +1885,7 @@ public class PlanFragmentBuilder {
                     joinNode.setChild(0, leftFragment.getPlanRoot());
                     joinNode.setChild(1, rightFragment.getPlanRoot());
                     leftFragment.setPlanRoot(joinNode);
+                    leftFragment.addChildren(rightFragment.getChildren());
                     context.getFragments().remove(rightFragment);
 
                     context.getFragments().remove(leftFragment);
@@ -1906,6 +1907,7 @@ public class PlanFragmentBuilder {
                         joinNode.setChild(0, leftFragment.getPlanRoot());
                         joinNode.setChild(1, rightFragment.getPlanRoot());
                         leftFragment.setPlanRoot(joinNode);
+                        leftFragment.addChildren(rightFragment.getChildren());
                         context.getFragments().remove(rightFragment);
 
                         context.getFragments().remove(leftFragment);
