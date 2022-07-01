@@ -45,8 +45,6 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
-import com.starrocks.execution.CreateFunctionExecutor;
-import com.starrocks.execution.DropFunctionExecutor;
 import com.starrocks.ha.MasterInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
@@ -639,12 +637,22 @@ public class EditLog {
                 }
                 case OperationType.OP_ADD_FUNCTION: {
                     final Function function = (Function) journal.getData();
-                    CreateFunctionExecutor.replayCreateFunction(function);
+                    String dbName = function.getFunctionName().getDb();
+                    Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+                    if (db == null) {
+                        throw new Error("unknown database when replay log, db=" + dbName);
+                    }
+                    db.replayAddFunction(function);
                     break;
                 }
                 case OperationType.OP_DROP_FUNCTION: {
                     FunctionSearchDesc function = (FunctionSearchDesc) journal.getData();
-                    DropFunctionExecutor.replayDropFunction(function);
+                    String dbName = function.getName().getDb();
+                    Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+                    if (db == null) {
+                        throw new Error("unknown database when replay log, db=" + dbName);
+                    }
+                    db.replayDropFunction(function);
                     break;
                 }
                 case OperationType.OP_BACKEND_TABLETS_INFO: {
