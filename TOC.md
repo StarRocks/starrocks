@@ -57,6 +57,7 @@
     + [集群管理](/administration/Cluster_administration.md)
     + [DorisDB升级到StarRocks](/administration/update_from_dorisdb.md)
     + [Apache Doris升级到StarRocks](/administration/update_from_doris.md)
+    + [通过StarGo部署StarRocks集群](/administration/stargo.md)
   + 运维操作
     + [扩容缩容](/administration/Scale_up_down.md)
     + [备份恢复](/administration/Backup_and_restore.md)
