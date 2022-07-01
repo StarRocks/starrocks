@@ -97,4 +97,4 @@ echo "script run over-----"
 #    done
 #fi
 cd fe
-mvn verify sonar:sonar -Dsonar.projectKey=dulong41_starrocks -Dsonar.login=23d4ba0aa0f8c547f3db2c329c96546e2e280468
+sudo mvn verify sonar:sonar -Dsonar.projectKey=dulong41_starrocks -Dsonar.login=23d4ba0aa0f8c547f3db2c329c96546e2e280468
