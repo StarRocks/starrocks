@@ -147,6 +147,9 @@ public:
 
     MemTracker* tablet_meta_mem_tracker() { return _mem_tracker; }
 
+    // return map<TabletId, vector<pair<rowsetid, segment file num>>>
+    std::unordered_map<TTabletId, std::vector<std::pair<uint32_t, uint32_t>>> get_tablets_need_repair_compaction();
+
 private:
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;
     using TabletSet = std::unordered_set<int64_t>;

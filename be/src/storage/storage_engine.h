@@ -183,6 +183,11 @@ public:
 
     MemTracker* tablet_meta_mem_tracker() { return _options.tablet_meta_mem_tracker; }
 
+    // submit repair compaction tasks
+    void submit_repair_compaction_tasks(const std::vector<std::pair<int64_t, std::vector<uint32_t>>>& tasks);
+    std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>>
+    get_executed_repair_compaction_tasks();
+
 private:
     // Instance should be inited from `static open()`
     // MUST NOT be called in other circumstances.
@@ -220,6 +225,8 @@ private:
     void* _cumulative_compaction_thread_callback(void* arg, DataDir* data_dir);
     // update compaction function
     void* _update_compaction_thread_callback(void* arg, DataDir* data_dir);
+    // repair compaction function
+    void* _repair_compaction_thread_callback(void* arg);
 
     // garbage sweep thread process function. clear snapshot and trash folder
     void* _garbage_sweeper_thread_callback(void* arg);
@@ -307,6 +314,11 @@ private:
     std::vector<std::thread> _cumulative_compaction_threads;
     // threads to run update compaction
     std::vector<std::thread> _update_compaction_threads;
+    // thread to run repair compactions
+    std::thread _repair_compaction_thread;
+    std::mutex _repair_compaction_tasks_lock;
+    std::vector<std::pair<int64_t, std::vector<uint32_t>>> _repair_compaction_tasks;
+    std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>> _executed_repair_compaction_tasks;
     // threads to clean all file descriptor not actively in use
     std::thread _fd_cache_clean_thread;
     std::vector<std::thread> _path_gc_threads;
