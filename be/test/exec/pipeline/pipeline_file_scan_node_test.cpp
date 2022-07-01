@@ -37,6 +37,8 @@
 // TODO: test runtime filter
 namespace starrocks::pipeline {
 
+static const size_t degree_of_parallelism = 1;
+
 class PipeLineFileScanNodeTest : public ::testing::Test {
 public:
     void SetUp() override {
@@ -74,7 +76,7 @@ public:
         _runtime_state->set_be_number(_request.backend_num);
         _pool = _runtime_state->obj_pool();
 
-        const size_t degree_of_parallelism = 1;
+        
         _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism));
         _builder = _pool->add(new PipelineBuilder(*_context));
     }
@@ -214,7 +216,7 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
     _fragment_ctx->set_pipelines(std::move(_pipelines));
     ASSERT_TRUE(_fragment_ctx->prepare_all_pipelines().ok());
 
-    MorselQueueMap& morsel_queues = _fragment_ctx->morsel_queues();
+    MorselQueueFactoryMap& morsel_queues = _fragment_ctx->morsel_queue_factories();
 
     Drivers drivers;
     size_t driver_id = 0;
@@ -227,14 +229,13 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
         if (pipeline->source_operator_factory()->with_morsels()) {
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
             ASSERT_TRUE(morsel_queues.count(source_id));
-            auto& morsel_queue = morsel_queues[source_id];
-            ASSERT_TRUE(morsel_queue->num_morsels() == 0 || degree_of_parallelism <= morsel_queue->num_morsels());
+            auto& morsel_queue_factory = morsel_queues[source_id];
 
             for (size_t i = 0; i < degree_of_parallelism; ++i) {
                 auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
                 DriverPtr driver =
                         std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, driver_id++);
-                driver->set_morsel_queue(morsel_queue.get());
+                driver->set_morsel_queue(morsel_queue_factory->create(i));
                 if (auto* scan_operator = driver->source_scan_operator()) {
                     if (dynamic_cast<starrocks::pipeline::ConnectorScanOperator*>(scan_operator) != nullptr) {
                         scan_operator->set_io_threads(_exec_env->pipeline_hdfs_scan_io_thread_pool());
@@ -272,13 +273,15 @@ void PipeLineFileScanNodeTest::generate_morse_queue(std::vector<starrocks::vecto
                                                     std::vector<TScanRangeParams> scan_ranges) {
     TExecPlanFragmentParams request;
     std::vector<TScanRangeParams> no_scan_ranges;
-    MorselQueueMap& morsel_queues = _fragment_ctx->morsel_queues();
+    MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
+
+    std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
     for (auto& i : scan_nodes) {
-        StatusOr<MorselQueuePtr> morsel_queue_result =
-                i->convert_scan_range_to_morsel_queue(scan_ranges, i->id(), request);
-        ASSERT_TRUE(morsel_queue_result.ok());
-        MorselQueuePtr morsel_queue = std::move(morsel_queue_result.value());
-        morsel_queues.emplace(i->id(), std::move(morsel_queue));
+        ScanNode* scan_node = (ScanNode*)(i);
+        auto morsel_queue_factory =
+                scan_node->convert_scan_range_to_morsel_queue_factory(scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), request, degree_of_parallelism);
+        DCHECK(morsel_queue_factory.ok());
+        morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory).value());
     }
 }
 
