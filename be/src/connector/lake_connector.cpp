@@ -100,8 +100,6 @@ private:
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
     RuntimeProfile::Counter* _scan_timer = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
-    RuntimeProfile::Counter* _tablet_counter = nullptr;
-    RuntimeProfile::Counter* _reader_init_timer = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _read_compressed_counter = nullptr;
     RuntimeProfile::Counter* _decompress_timer = nullptr;
@@ -144,7 +142,7 @@ public:
 
 protected:
     vectorized::ConnectorScanNode* _scan_node;
-    const TOlapScanNode _t_olap_scan_node;
+    const TLakeScanNode _t_lake_scan_node;
 };
 
 // ================================
@@ -159,17 +157,16 @@ LakeDataSource::~LakeDataSource() {
 
 Status LakeDataSource::open(RuntimeState* state) {
     _runtime_state = state;
-    const TOlapScanNode& thrift_olap_scan_node = _provider->_t_olap_scan_node;
-    const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
+    const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
+    const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_lake_scan_node.tuple_id);
     _slots = &tuple_desc->slots();
 
     _runtime_profile->add_info_string("Table", tuple_desc->table_desc()->name());
-    _runtime_profile->add_info_string("IsLakeTable", "true");
-    if (thrift_olap_scan_node.__isset.rollup_name) {
-        _runtime_profile->add_info_string("Rollup", thrift_olap_scan_node.rollup_name);
+    if (thrift_lake_scan_node.__isset.rollup_name) {
+        _runtime_profile->add_info_string("Rollup", thrift_lake_scan_node.rollup_name);
     }
-    if (thrift_olap_scan_node.__isset.sql_predicates) {
-        _runtime_profile->add_info_string("Predicates", thrift_olap_scan_node.sql_predicates);
+    if (thrift_lake_scan_node.__isset.sql_predicates) {
+        _runtime_profile->add_info_string("Predicates", thrift_lake_scan_node.sql_predicates);
     }
 
     init_counter(state);
@@ -182,7 +179,7 @@ Status LakeDataSource::open(RuntimeState* state) {
     cm.conjunct_ctxs_ptr = &_conjunct_ctxs;
     cm.tuple_desc = tuple_desc;
     cm.obj_pool = &_obj_pool;
-    cm.key_column_names = &thrift_olap_scan_node.key_column_name;
+    cm.key_column_names = &thrift_lake_scan_node.key_column_name;
     cm.runtime_filters = _runtime_filters;
     cm.runtime_state = state;
 
@@ -194,8 +191,8 @@ Status LakeDataSource::open(RuntimeState* state) {
         max_scan_key_num = config::doris_max_scan_key_num;
     }
     bool enable_column_expr_predicate = false;
-    if (thrift_olap_scan_node.__isset.enable_column_expr_predicate) {
-        enable_column_expr_predicate = thrift_olap_scan_node.enable_column_expr_predicate;
+    if (thrift_lake_scan_node.__isset.enable_column_expr_predicate) {
+        enable_column_expr_predicate = thrift_lake_scan_node.enable_column_expr_predicate;
     }
 
     // Parse conjuncts via _conjuncts_manager.
@@ -259,11 +256,11 @@ Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
 
 // mapping a slot-column-id to schema-columnid
 Status LakeDataSource::init_global_dicts(vectorized::TabletReaderParams* params) {
-    const TOlapScanNode& thrift_olap_scan_node = _provider->_t_olap_scan_node;
+    const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
     auto global_dict = _obj_pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
-    const TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
+    const TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(thrift_lake_scan_node.tuple_id);
     for (auto slot : tuple_desc->slots()) {
         if (!slot->is_materialized()) {
             continue;
@@ -336,8 +333,8 @@ void LakeDataSource::decide_chunk_size() {
 Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
                                           const std::vector<uint32_t>& scanner_columns,
                                           std::vector<uint32_t>& reader_columns) {
-    const TOlapScanNode& thrift_olap_scan_node = _provider->_t_olap_scan_node;
-    bool skip_aggregation = thrift_olap_scan_node.is_preaggregation;
+    const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
+    bool skip_aggregation = thrift_lake_scan_node.is_preaggregation;
     _params.is_pipeline = true;
     _params.reader_type = READER_QUERY;
     _params.skip_aggregation = skip_aggregation;
@@ -399,7 +396,7 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
 }
 
 Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
-    const TOlapScanNode& thrift_olap_scan_node = _provider->_t_olap_scan_node;
+    const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     // output columns of `this` OlapScanner, i.e, the final output columns of `get_chunk`.
     std::vector<uint32_t> scanner_columns;
     // columns fetched from |_reader|.
@@ -407,7 +404,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
 
     RETURN_IF_ERROR(get_tablet(_scan_range));
     RETURN_IF_ERROR(init_global_dicts(&_params));
-    RETURN_IF_ERROR(init_unused_output_columns(thrift_olap_scan_node.unused_output_column_name));
+    RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges, scanner_columns, reader_columns));
     starrocks::vectorized::Schema child_schema =
@@ -582,7 +579,7 @@ void LakeDataSource::update_counter() {
 // ================================
 
 LakeDataSourceProvider::LakeDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node)
-        : _scan_node(scan_node), _t_olap_scan_node(plan_node.olap_scan_node) {}
+        : _scan_node(scan_node), _t_lake_scan_node(plan_node.lake_scan_node) {}
 
 DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<LakeDataSource>(this, scan_range);
