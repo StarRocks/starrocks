@@ -303,7 +303,8 @@ PARTITION BY RANGE(`dt`) (
     PARTITION p20210929 VALUES [('2021-09-29'), ('2021-09-30')),
     PARTITION p20210930 VALUES [('2021-09-30'), ('2021-10-01'))
 ) DISTRIBUTED BY HASH(order_id) BUCKETS 4
-PROPERTIES("replication_num" = "3");
+PROPERTIES("replication_num" = "3",
+"enable_persistent_index" = "true");
 ```
 
 - 例如，需要实时分析用户情况，则可以将用户 ID `user_id` 作为主键，其余为指标列。建表语句如下：
@@ -324,7 +325,8 @@ create table users (
     ....
 ) PRIMARY KEY (user_id)
 DISTRIBUTED BY HASH(user_id) BUCKETS 4
-PROPERTIES("replication_num" = "3");
+PROPERTIES("replication_num" = "3",
+"enable_persistent_index" = "true");
 ```
 
 ### 使用说明
@@ -339,10 +341,11 @@ PROPERTIES("replication_num" = "3");
     - 假设存在主键模型，排序键为`dt`、`id`，数据类型为 DATE（4 个字节）、BIGINT（8 个字节）。则排序键占 12 个字节。
     - 假设该表的热数据有 1000 万行，存储为三个副本。
     - 则内存占用的计算方式：`(12 + 9(每行固定开销) ) * 1000W * 3 * 1.5（哈希表平均额外开销) = 945 M`
-
+- `enable_persistent_index`：是否持久化主键索引，同时使用磁盘和内存存储主键索引，避免主键索引占用过大内存空间。取值为 `true` 或者 `false`。如果磁盘为固态硬盘 SSD，则建议设置为 `true`。
+   > 自 2.3.0 版本起，StarRocks 支持配置该参数。
 - 创建表时，支持为指标列创建 BITMAP、Bloom Filter 等索引。
 
-- 主键模型目前还不支持物化视图。
+- 主键模型目前不支持物化视图。
 
 - 暂不支持使用 ALTER TABLE 修改列类型。 ALTER TABLE 的相关语法说明和示例，请参见 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md)。
 
