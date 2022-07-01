@@ -77,6 +77,7 @@ docker exec --privileged $container_name /bin/bash -c "$cmd"
 
 echo "script run over-----"
 
+
 #sudo chmod 755 $ROOT/starrocks/*.jar
 #if [ "$GITHUB_PR_TARGET_BRANCH" == "main" ];then
 #    cd $ROOT/starrocks/fe/fe-core/target
