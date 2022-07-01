@@ -2,21 +2,21 @@
 
 ## 功能
 
-获取最后一条 sql 的 queryid
+返回最近一次执行的查询的 ID。
 
 ## 语法
 
 ```Haskell
-last_query_id();
+VARCHAR last_query_id();
 ```
 
 ## 参数说明
 
-无
+无。
 
 ## 返回值说明
 
-返回值的数据类型为 VARCHAR
+返回 VARCHAR 类型的值。
 
 ## 示例
 
