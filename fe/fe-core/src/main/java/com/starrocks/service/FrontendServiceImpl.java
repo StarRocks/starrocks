@@ -75,9 +75,7 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
-import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.StreamLoadTask;
@@ -456,12 +454,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setCreate_time(task.getCreateTime() / 1000);
             String scheduleStr = task.getType().name();
             if (task.getType() == Constants.TaskType.PERIODICAL) {
-                TaskSchedule schedule = task.getSchedule();
-                scheduleStr += " (START "
-                        + Utils.getDatetimeFromLong(schedule.getStartTime())
-                        + " EVERY("
-                        + schedule.getPeriod() + " " + schedule.getTimeUnit()
-                        + "))";
+                scheduleStr += task.getSchedule();
             }
             info.setSchedule(scheduleStr);
             info.setDatabase(ClusterNamespace.getNameFromFullName(task.getDbName()));
