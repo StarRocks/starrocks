@@ -52,6 +52,7 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -77,7 +78,13 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
     private com.google.common.collect.Table<Long, String, RecycleTableInfo> nameToTableInfo;
     private Map<Long, RecyclePartitionInfo> idToPartition;
 
+    // if enable erase later, the real recycle time is RecycleTime + LATE_RECYCLE_INTERVAL_SECONDS
+    // you can only enable once.
+    // This is useful when tablet scheduler repair a tablet that is about to expire
+    // We can make the db/table/partition infomation stay logger until the asynchronized agent task finish.
+    private static int LATE_RECYCLE_INTERVAL_SECONDS = 10;
     private Map<Long, Long> idToRecycleTime;
+    private Set<Long> enableEraseLater;
 
     public CatalogRecycleBin() {
         super("recycle bin");
@@ -86,6 +93,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         nameToTableInfo = HashBasedTable.create();
         idToPartition = Maps.newHashMap();
         idToRecycleTime = Maps.newHashMap();
+        enableEraseLater = new HashSet<>();
     }
 
     public synchronized boolean recycleDatabase(Database db, Set<String> tableNames) {
@@ -217,9 +225,40 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 .collect(Collectors.toList());
     }
 
-    private synchronized boolean isExpire(long id, long currentTimeMs) {
+    /**
+     * if we can erase this instance, we should check if anyone enable erase later.
+     * Only used by main loop.
+     */
+    private synchronized boolean canErase(long id, long currentTimeMs) {
         long latency = currentTimeMs - idToRecycleTime.get(id);
+        if (enableEraseLater.contains(id)) {
+            latency -= LATE_RECYCLE_INTERVAL_SECONDS * 1000L;
+        }
         return latency > MIN_ERASE_LATENCY && latency > Config.catalog_trash_expire_second * 1000L;
+    }
+
+    /**
+     * if this instance is expire soon and is about to erase
+     */
+    public synchronized boolean aboutToErase(long id, long currentTimeMs) {
+        long latency = currentTimeMs - idToRecycleTime.get(id) + LATE_RECYCLE_INTERVAL_SECONDS;
+        return latency > MIN_ERASE_LATENCY && latency > Config.catalog_trash_expire_second * 1000L;
+    }
+
+    /**
+     * set late expire
+     */
+    public synchronized boolean eraseLater(long id) {
+        // 1. not in idToRecycleTime, maybe already erased
+        if (!idToRecycleTime.containsKey(id)) {
+            return false;
+        }
+        // 2. already set, can't set it twice
+        if (enableEraseLater.contains(id)) {
+            return false;
+        }
+        enableEraseLater.add(id);
+        return true;
     }
 
     private synchronized void eraseDatabase(long currentTimeMs) {
@@ -229,7 +268,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             Map.Entry<Long, RecycleDatabaseInfo> entry = dbIter.next();
             RecycleDatabaseInfo dbInfo = entry.getValue();
             Database db = dbInfo.getDb();
-            if (isExpire(db.getId(), currentTimeMs)) {
+            if (canErase(db.getId(), currentTimeMs)) {
                 // erase db
                 dbIter.remove();
                 idToRecycleTime.remove(entry.getKey());
@@ -279,7 +318,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 Table table = tableInfo.getTable();
                 long tableId = table.getId();
 
-                if (isExpire(tableId, currentTimeMs)) {
+                if (canErase(tableId, currentTimeMs)) {
                     tableToRemove.add(tableInfo);
                     currentEraseOpCnt++;
                     if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
@@ -347,7 +386,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             Partition partition = partitionInfo.getPartition();
 
             long partitionId = entry.getKey();
-            if (isExpire(partitionId, currentTimeMs)) {
+            if (canErase(partitionId, currentTimeMs)) {
                 GlobalStateMgr.getCurrentState().onErasePartition(partition);
                 // erase partition
                 iterator.remove();

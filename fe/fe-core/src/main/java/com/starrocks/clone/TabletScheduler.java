@@ -28,6 +28,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.DataProperty;
@@ -477,16 +478,7 @@ public class TabletScheduler extends MasterDaemon {
             addToRunningTablets(tabletCtx);
         }
 
-        // must send task after adding tablet info to runningTablets.
-        for (AgentTask task : batchTask.getAllTasks()) {
-            if (AgentTaskQueue.addTask(task)) {
-                stat.counterCloneTask.incrementAndGet();
-            }
-            LOG.info("add clone task to agent task queue: {}", task);
-        }
-
-        // send task immediately
-        AgentTaskExecutor.submit(batchTask);
+        submitBatchTask(batchTask);
 
         long cost = System.currentTimeMillis() - start;
         stat.counterTabletScheduleCostMs.addAndGet(cost);
@@ -1446,6 +1438,47 @@ public class TabletScheduler extends MasterDaemon {
     public synchronized long getBalanceTabletsNumber() {
         return pendingTablets.stream().filter(t -> t.getType() == Type.BALANCE).count()
                 + runningTablets.values().stream().filter(t -> t.getType() == Type.BALANCE).count();
+    }
+
+    private void submitBatchTask(AgentBatchTask batchTask) {
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentRecycleBin();
+        long now = System.currentTimeMillis();
+
+        // must send task after adding tablet info to runningTablets.
+        for (AgentTask task : batchTask.getAllTasks()) {
+            // check if about to erase
+            long dbId = task.getDbId();
+            if (recycleBin.getDatabase(dbId) != null
+                    && recycleBin.aboutToErase(dbId, now)
+                    && !recycleBin.eraseLater(dbId)) {
+                LOG.warn(
+                        "discard clone task because db {} is about to erase and cannot erase later anymore: {}",
+                        dbId, task);
+                continue;
+            }
+            long tableId = task.getTableId();
+            if (recycleBin.getTable(dbId, tableId) != null && recycleBin.aboutToErase(tableId, now) && !recycleBin.eraseLater(tableId)) {
+                LOG.warn(
+                        "discard clone task because table {} is about to erase and cannot erase later anymore: {}",
+                        tableId, task);
+                continue;
+            }
+            long partitionId = task.getPartitionId();
+            if (recycleBin.getPartition(partitionId) != null && recycleBin.aboutToErase(partitionId, now) && !recycleBin.eraseLater(partitionId)) {
+                LOG.warn(
+                        "discard clone task because partition {} is about to erase and cannot erase later anymore: {}",
+                        partitionId, task);
+                continue;
+            }
+
+            if (AgentTaskQueue.addTask(task)) {
+                stat.counterCloneTask.incrementAndGet();
+            }
+            LOG.info("add clone task to agent task queue: {}", task);
+        }
+
+        // send task immediately
+        AgentTaskExecutor.submit(batchTask);
     }
 
     /**
