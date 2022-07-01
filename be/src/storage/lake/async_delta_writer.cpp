@@ -101,6 +101,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         if (st.ok() && iter->finish_after_write) {
             st = delta_writer->finish();
         }
+        LOG_IF(WARNING, !st.ok()) << st;
         iter->cb(st);
     }
     return 0;

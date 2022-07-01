@@ -78,7 +78,9 @@ private:
             }
             std::lock_guard l(_mtx);
             if (_response->status().status_code() == TStatusCode::OK) {
-                status.to_protobuf(_response->mutable_status());
+                std::string_view msg = status.detailed_message();
+                _response->mutable_status()->set_status_code(status.code());
+                _response->mutable_status()->add_error_msgs(msg.data(), msg.size());
             }
         }
 
