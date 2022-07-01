@@ -196,8 +196,103 @@ Status MysqlScanNode::open(RuntimeState* state) {
     return Status::OK();
 }
 
+<<<<<<< HEAD:be/src/exec/vectorized/mysql_scan_node.cpp
 Status MysqlScanNode::append_text_to_column(const char* data, const int& len, const SlotDescriptor* slot_desc,
                                             Column* column) {
+=======
+Status MySQLDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
+    VLOG(1) << "MySQLDataSource::GetNext";
+
+    DCHECK(state != nullptr && chunk != nullptr);
+
+    RETURN_IF_CANCELLED(state);
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
+    if (_is_finished) {
+        return Status::EndOfFile("finished!");
+    }
+
+    _init_chunk(chunk, 0);
+    // indicates whether there are more rows to process. Set in _hbase_scanner.next().
+    bool mysql_eos = false;
+    int row_num = 0;
+
+    while (true) {
+        RETURN_IF_CANCELLED(state);
+
+        if (row_num >= state->chunk_size()) {
+            return Status::OK();
+        }
+
+        // read mysql
+        char** data = nullptr;
+        size_t* length = nullptr;
+        RETURN_IF_ERROR(_mysql_scanner->get_next_row(&data, &length, &mysql_eos));
+        if (mysql_eos) {
+            _is_finished = true;
+            return Status::OK();
+        }
+
+        ++row_num;
+        RETURN_IF_ERROR(fill_chunk(chunk, data, length));
+        ++_rows_read;
+        _bytes_read += (*chunk)->bytes_usage();
+    }
+}
+
+int64_t MySQLDataSource::raw_rows_read() const {
+    return _rows_read;
+}
+
+int64_t MySQLDataSource::num_rows_read() const {
+    return _rows_read;
+}
+
+int64_t MySQLDataSource::num_bytes_read() const {
+    return _bytes_read;
+}
+
+int64_t MySQLDataSource::cpu_time_spent() const {
+    return _cpu_time_spent_ns;
+}
+
+void MySQLDataSource::close(RuntimeState* state) {
+    SCOPED_TIMER(_runtime_profile->total_time_counter());
+}
+
+Status MySQLDataSource::fill_chunk(vectorized::ChunkPtr* chunk, char** data, size_t* length) {
+    SCOPED_RAW_TIMER(&_cpu_time_spent_ns);
+
+    int materialized_col_idx = -1;
+    for (size_t col_idx = 0; col_idx < _slot_num; ++col_idx) {
+        SlotDescriptor* slot_desc = _tuple_desc->slots()[col_idx];
+        ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_desc->id());
+
+        // because the fe planner filter the non_materialize column
+        if (!slot_desc->is_materialized()) {
+            continue;
+        }
+
+        ++materialized_col_idx;
+
+        if (data[materialized_col_idx] == nullptr) {
+            if (slot_desc->is_nullable()) {
+                column->append_nulls(1);
+            } else {
+                std::stringstream ss;
+                ss << "nonnull column contains NULL. table=" << _table_name << ", column=" << slot_desc->col_name();
+                return Status::InternalError(ss.str());
+            }
+        } else {
+            RETURN_IF_ERROR(append_text_to_column(data[materialized_col_idx], length[materialized_col_idx], slot_desc,
+                                                  column.get()));
+        }
+    }
+    return Status::OK();
+}
+
+Status MySQLDataSource::append_text_to_column(const char* data, const int& len, const SlotDescriptor* slot_desc,
+                                              Column* column) {
+>>>>>>> 14983c7e1 ([Refactor] refactor and fix the scan counters (#8088)):be/src/connector/mysql_connector.cpp
     // only \N will be treated as NULL
     if (slot_desc->is_nullable()) {
         if (len == 2 && data[0] == '\\' && data[1] == 'N') {

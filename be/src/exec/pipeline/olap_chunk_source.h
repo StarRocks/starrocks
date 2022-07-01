@@ -52,8 +52,6 @@ public:
                                                            size_t* num_read_chunks, int worker_id,
                                                            workgroup::WorkGroupPtr running_wg) override;
 
-    int64_t last_spent_cpu_time_ns() override;
-
 private:
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
@@ -75,8 +73,13 @@ private:
     void _update_realtime_counter(vectorized::Chunk* chunk);
     void _decide_chunk_size();
 
+<<<<<<< HEAD:be/src/exec/pipeline/olap_chunk_source.h
     vectorized::TabletReaderParams _params = {};
 
+=======
+private:
+    vectorized::TabletReaderParams _params{};
+>>>>>>> 14983c7e1 ([Refactor] refactor and fix the scan counters (#8088)):be/src/exec/pipeline/scan/olap_chunk_source.h
     vectorized::OlapScanNode* _scan_node;
     const int64_t _limit; // -1: no limit
     std::vector<ExprContext*> _conjunct_ctxs;
@@ -117,10 +120,15 @@ private:
 
     // The following are profile meatures
     int64_t _num_rows_read = 0;
-    int64_t _raw_rows_read = 0;
-    int64_t _compressed_bytes_read = 0;
-    int64_t _last_spent_cpu_time_ns = 0;
 
+<<<<<<< HEAD:be/src/exec/pipeline/olap_chunk_source.h
+=======
+    // Local counters for row-size estimation, will be reset after a batch
+    size_t _local_sum_row_bytes = 0;
+    size_t _local_num_rows = 0;
+    size_t _local_sum_chunks = 0;
+
+>>>>>>> 14983c7e1 ([Refactor] refactor and fix the scan counters (#8088)):be/src/exec/pipeline/scan/olap_chunk_source.h
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 

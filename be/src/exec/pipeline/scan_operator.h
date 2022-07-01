@@ -42,24 +42,38 @@ public:
     virtual void do_close(RuntimeState* state) = 0;
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
 
-    virtual int64_t get_last_scan_rows_num() {
-        int64_t scan_rows_num = _last_scan_rows_num;
-        _last_scan_rows_num = 0;
-        return scan_rows_num;
-    }
+    int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
+    int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
 
-    virtual int64_t get_last_scan_bytes() {
-        int64_t res = _last_scan_bytes;
-        _last_scan_bytes = 0;
-        return res;
-    }
+<<<<<<< HEAD:be/src/exec/pipeline/scan_operator.h
+=======
+    // It takes effect, only when it is positive.
+    virtual size_t max_scan_concurrency() const { return 0; }
 
+protected:
+    static constexpr int MAX_IO_TASKS_PER_OP = 4;
+    const size_t _buffer_size = config::pipeline_io_buffer_size;
+
+    // Shared scan
+    virtual void attach_chunk_source(int32_t source_index) = 0;
+    virtual void detach_chunk_source(int32_t source_index) {}
+    virtual bool has_shared_chunk_source() const = 0;
+    virtual bool has_buffer_output() const = 0;
+    virtual bool has_available_buffer() const = 0;
+    virtual ChunkPtr get_chunk_from_buffer() = 0;
+
+>>>>>>> 14983c7e1 ([Refactor] refactor and fix the scan counters (#8088)):be/src/exec/pipeline/scan/scan_operator.h
 private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
     Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
+<<<<<<< HEAD:be/src/exec/pipeline/scan_operator.h
+=======
+    void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
+                                   int64_t scan_bytes);
+>>>>>>> 14983c7e1 ([Refactor] refactor and fix the scan counters (#8088)):be/src/exec/pipeline/scan/scan_operator.h
     void _merge_chunk_source_profiles();
 
 protected:
