@@ -39,9 +39,18 @@ message CompactResponse {
     repeated int64 failed_tablets = 1;
 }
 
+message DropTabletRequest {
+    repeated int64 tablet_ids = 1;
+}
+
+message DropTabletResponse {
+    repeated int64 failed_tablets = 2;
+}
+
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc abort_txn(AbortTxnRequest) returns (AbortTxnResponse);
     rpc compact(CompactRequest) returns (CompactResponse);
+    rpc drop_tablet(DropTabletRequest) returns (DropTabletResponse);
 }
 
