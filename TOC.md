@@ -201,12 +201,14 @@
       + [second](/sql-reference/sql-functions/date-time-functions/second.md)
       + [str_to_date](/sql-reference/sql-functions/date-time-functions/str_to_date.md)
       + [timediff](/sql-reference/sql-functions/date-time-functions/timediff.md)
+      + [time_slice](/sql-reference/sql-functions/date-time-functions/time_slice.md)
       + [timestampadd](/sql-reference/sql-functions/date-time-functions/timestampadd.md)
       + [timestampdiff](/sql-reference/sql-functions/date-time-functions/timestampdiff.md)
       + [to_date](/sql-reference/sql-functions/date-time-functions/to_date.md)
       + [to_days](/sql-reference/sql-functions/date-time-functions/to_days.md)
       + [unix_timestamp](/sql-reference/sql-functions/date-time-functions/unix_timestamp.md)
       + [utc_timestamp](/sql-reference/sql-functions/date-time-functions/utc_timestamp.md)
+      + [week](/sql-reference/sql-functions/date-time-functions/week.md)
       + [weekofyear](/sql-reference/sql-functions/date-time-functions/weekofyear.md)
       + [year](/sql-reference/sql-functions/date-time-functions/year.md)
     + Geographic Functions
@@ -283,6 +285,7 @@
       + [variance](/sql-reference/sql-functions/aggregate-functions/variance.md)
       + [square](/sql-reference/sql-functions/aggregate-functions/square.md)
       + [var_samp](/sql-reference/sql-functions/aggregate-functions/var_samp.md)
+      + [window_funnel](/sql-reference/sql-functions/aggregate-functions/window_funnel.md)
     + Bitmap Functions
       + [bitmap_and](/sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](/sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
@@ -298,8 +301,10 @@
       + [bitmap_remove](/sql-reference/sql-functions/bitmap-functions/bitmap_remove.md)
       + [bitmap_to_string](/sql-reference/sql-functions/bitmap-functions/bitmap_to_string.md)
       + [bitmap_union](/sql-reference/sql-functions/bitmap-functions/bitmap_union.md)
+      + [bitmap_union_count](/sql-reference/sql-functions/bitmap-functions/bitmap_union_count.md)
       + [bitmap_xor](/sql-reference/sql-functions/bitmap-functions/bitmap_xor.md)
       + [to_bitmap](/sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
+      + [base64_to_bitmap](/sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
     + Array Functions
       + [array_agg](/sql-reference/sql-functions/array-functions/array_agg.md)
       + [array_append](/sql-reference/sql-functions/array-functions/array_append.md)

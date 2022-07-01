@@ -2,7 +2,7 @@
 
 ## description
 
-### Syntax
+## Syntax
 
 ```Haskell
 INT WEEKOFYEAR(DATETIME date)
