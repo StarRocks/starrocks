@@ -40,6 +40,9 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_REF_NAME: ${GITHUB_ACTION_PATH}
         run: |
-          ./starrocks_fe_unittest.sh ${GITHUB_RUN_NUMBER} ${GITHUB_REF_NAME}
+          docker run --privileged -v "/home/runner"/.m2:/root/.m2 -v $ROOT/starrocks:/root/starrocks -v /etc/timezone:/etc/timezone:ro -v /etc/localtime:/etc/localtime:ro --name temp -d starrocks/dev-env:${GITHUB_REF_NAME} /bin/bash -c "while true;do echo hello;sleep 1;done"
+          sleep 10
+          docker exec --privileged $container_name /bin/bash -c "cd /root/starrocks; sh build.sh --clean --fe;"
+          echo "script run over-----"
           cd fe
-          mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=dulong41_starrocks
+          docker exec --privileged $container_name /bin/bash -c "cd /root/starrocks/fe; mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=dulong41_starrocks"
