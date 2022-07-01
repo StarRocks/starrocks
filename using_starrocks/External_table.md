@@ -44,6 +44,73 @@ PROPERTIES
 
 <br/>
 
+## StarRocks 外部表
+
+1.19 版本开始，StarRocks 支持将数据通过外表方式写入另一个 StarRocks 集群的表中。这可以解决用户的读写分离需求，提供更好的资源隔离。用户需要首先在目标集群上创建一张目标表，然后在源 StarRocks 集群上创建一个 Schema 信息一致的外表，并在属性中指定目标集群和表的信息。
+
+通过 INSERT INTO 写入数据至 StarRocks 外表，可以将源集群的数据写入至目标集群。借助这一能力，可以实现如下目标：
+
+* 集群间的数据同步。
+* 读写分离。向源集群中写入数据，并且源集群的数据变更同步至目标集群，目标集群提供查询服务。
+
+以下是创建目标表和外表的实例：
+
+~~~sql
+# 在目标集群上执行
+CREATE TABLE t
+(
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    k4 VARCHAR(2048),
+    k5 DATETIME
+)
+ENGINE=olap
+DISTRIBUTED BY HASH(k1) BUCKETS 10;
+
+# 在外表集群上执行
+CREATE EXTERNAL TABLE external_t
+(
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    k4 VARCHAR(2048),
+    k5 DATETIME
+)
+ENGINE=olap
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+PROPERTIES
+(
+    "host" = "127.0.0.1",
+    "port" = "9020",
+    "user" = "user",
+    "password" = "passwd",
+    "database" = "db_test",
+    "table" = "t"
+);
+
+# 写入数据至 StarRocks 外表，实现源集群的数据写入至目标集群。推荐生产环境使用第二种方式。
+insert into external_t values ('2020-10-11', 1, 1, 'hello', '2020-10-11 10: 00: 00');
+
+insert into external_t select * from other_table;
+~~~
+
+其中：
+
+* **EXTERNAL**：该关键字指定创建的是 StarRocks 外表.
+* **host**：该属性描述目标表所属 StarRocks 集群 Leader FE 的 IP 地址.
+* **port**：该属性描述目标表所属 StarRocks 集群 Leader FE 的 RPC 访问端口，该值可参考配置 fe/fe.conf 中的 rpc_port 配置取值.
+* **user**：该属性描述目标表所属 StarRocks 集群的访问用户名.
+* **password**：该属性描述目标表所属 StarRocks 集群的访问密码.
+* **database**：该属性描述目标表所属数据库名称.
+* **table**：该属性描述目标表名称.
+
+目前 StarRocks 外表使用上有以下限制：
+
+* 仅可以在外表上执行 insert into 和 show create table 操作，不支持其他数据写入方式，也不支持查询和 DDL.
+* 创建外表语法和创建普通表一致，但其中的列名等信息请保持同其对应的目标表一致.
+* 外表会周期性从目标表同步元信息（同步周期为 10 秒），在目标表执行的 DDL 操作可能会延迟一定时间反应在外表上.
+
 ## Elasticsearch 外部表
 
 StarRocks 与 Elasticsearch 都是目前流行的分析系统，StarRocks 强于大规模分布式计算，Elasticsearch 擅长全文检索。StarRocks 支持 Elasticsearch 访问的目的，就在于将这两种能力结合，提供更完善的一个 OLAP 解决方案。
@@ -73,12 +140,16 @@ PROPERTIES (
 
 参数说明：
 
-* **host**：ES 集群连接地址，可指定一个或多个，StarRocks 通过这个地址获取到 ES 版本号、index 的 shard 分布信息
-* **user**：开启 **basic 认证** 的 ES 集群的用户名，需要确保该用户有访问 /*cluster/state/* nodes/http 等路径权限和对 index 的读权限
-* **password**：对应用户的密码信息
-* **index**：StarRocks 中的表对应的 ES 的 index 名字，可以是 alias
-* **type**：指定 index 的 type，默认是 **doc**
-* **transport**：内部保留，默认为 **http**
+* **hosts**：Elasticsearch 集群连接地址，可指定一个或多个，StarRocks 通过这个地址获取到 Elasticsearch 版本号、索引的分片分布信息。
+* **user**：开启 **basic 认证** 的 Elasticsearch 集群的用户名，需要确保该用户有访问 **/*cluster/state/* nodes/http** 等路径权限和对索引的读权限。
+* **password**：对应用户的密码信息。
+* **index**：StarRocks 中的表对应的 Elasticsearch 的索引名字，可以是索引的别名。
+* **type**：指定索引的类型，默认是 **doc**。
+* **transport**：内部保留，默认为 **http**。
+* **es.nodes.wan.only**：表示 StarRocks 是否仅使用 `hosts` 指定的地址，去访问 Elasticsearch 集群并获取数据。
+  > 自 2.3.0 版本起，StarRocks 支持配置该参数。
+  * true：StarRocks 仅使用 `hosts` 指定的地址去访问 Elasticsearch 集群并获取数据，不会探测 Elasticsearch 集群的索引每个分片所在的数据节点地址。如果 StarRocks 无法访问 Elasticsearch 集群内部数据节点的地址，则需要配置为 `true`。
+  * false：默认值，StarRocks 通过 `host` 中的地址，探测 Elasticsearch 集群索引各个分片所在数据节点的地址。StarRocks 经过查询规划后，相关 BE 节点会直接去请求 Elasticsearch 集群内部的数据节点，获取索引的分片数据。如果 StarRocks 可以访问 Elasticsearch 集群内部数据节点的地址，则建议保持默认值 `false`。
 
 <br/>
 
@@ -175,6 +246,215 @@ select * from es_table where esquery(k4, ' {
 * 一些通过 StarRocks 的查询会比直接请求 ES 会慢很多，比如 count 相关的 query 等。这是因为 ES 内部会直接读取满足条件的文档个数相关的元数据，不需要对真实的数据进行过滤操作，使得 count 的速度非常快。
 
 <br/>
+
+## 更多数据库（支持 JDBC 驱动程序）的外部表
+
+自 2.3.0 版本起，StarRocks 支持通过外部表的方式查询支持 JDBC 驱动程序的数据库，无需将数据导入至 StarRocks，即可实现对这类数据库的极速分析。本文介绍如何在 StarRocks 创建外部表，查询支持 JDBC 驱动程序的数据库中的数据。
+
+### 前提条件
+
+在创建 JDBC 资源以及首次查询 JDBC 外部表时，FE、BE 节点需要下载 JDBC 驱动程序，因此在这两个阶段，FE、BE 节点所在机器必须能够访问 JDBC 驱动程序下载链接地址。下载链接地址由创建 JDBC 资源中的配置项 `driver_url` 指定。
+
+### **创建和**管理**JDBC 资源**
+
+#### 创建 JDBC 资源
+
+您需要提前在 StarRocks 中创建 JDBC 资源，用于管理数据库的相关连接信息。这里的数据库是指支持 JDBC 驱动程序的数据库，以下简称为“目标数据库”。创建资源后，即可使用该资源创建外部表。
+
+执行如下语句，创建一个名为 `jdbc0` 的 JDBC 资源：
+
+~~~SQL
+create external resource jdbc0
+properties (
+    "type"="jdbc",
+    "user"="postgres",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:postgresql://127.0.0.1:5432/jdbc_test",
+    "driver_url"="https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar",
+    "driver_class"="org.postgresql.Driver"
+);
+~~~
+
+`properties` 的必填配置项：
+
+* `type`：资源类型，固定取值为 `jdbc`。
+
+* `user`：目标数据库的用户名。
+
+* `password`：目标数据库用户的登录密码。
+
+* `jdbc_uri`：JDBC 驱动程序连接目标数据库的 URL，需要满足目标数据库 URL 的语法。常见的目标数据库 URL，请参见 [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html)、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html)、[SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) 官网文档。
+
+> 说明：目标数据库 URL 中必须指定具体数据库的名称，如上示例中的`jdbc_test`。
+
+* `driver_url`：目标数据库使用的 JDBC 驱动程序的下载链接地址。
+* `driver_class`：目标数据库使用的 JDBC 驱动程序的类名称。以下列举常见 JDBC 驱动程序的类名称：
+
+  * MySQL：com.mysql.jdbc.Driver（MySQL 5.x 及以下版本）、com.mysql.cj.jdbc.Driver （MySQL 6.x 及以上版本）
+  * SQL Server：com.microsoft.sqlserver.jdbc.SQLServerDriver
+  * Oracle： oracle.jdbc.driver.OracleDriver
+  * PostgreSQL：org.postgresql.Driver
+
+成功创建资源后，在 FE 上通过 `driver_url` 下载 JDBC 驱动程序 JAR 包，生成 checksum 并保存起来，用于校验 BE 节点上下载的 JDBC 驱动程序 JAR 包的正确性。
+
+> 说明：如果下载 JDBC 驱动程序失败，则创建资源也会失败。
+
+BE 节点首次查询 JDBC 外部表时，如果发现所在机器上不存在相应的 JDBC 驱动程序 JAR 包，则会通过 `driver_url` 进行下载，所有的 JDBC 驱动程序 JAR 包都会保存在 **${STARROCKS_HOME}/lib/jdbc_drivers** 目录下。
+
+#### 查看 JDBC 资源
+
+执行如下语句，查看 StarRocks 中的所有 JDBC 资源：
+
+> 说明：`ResourceType` 列为 `jdbc`。
+
+~~~SQL
+SHOW RESOURCES;
+~~~
+
+#### 删除 JDBC 资源
+
+执行如下语句，删除名为 `jdbc0` 的 JDBC 资源：
+
+~~~SQL
+DROP RESOURCE "jdbc0";
+~~~
+
+> 说明：删除 JDBC 资源会导致使用该 JDBC 资源创建的 JDBC 外部表不可用，但目标数据库的数据并不会丢失。如果您仍需要通过 StarRocks 查询目标数据库的数据，可以重新创建 JDBC 资源和 JDBC 外部表。
+
+### **创建数据库**
+
+执行如下语句，在 StarRocks 中创建并进入名为 `jdbc_test` 的数据库：
+
+~~~SQL
+CREATE DATABASE jdbc_test; 
+USE jdbc_test; 
+~~~
+
+> 说明**：**库名无需与目标数据库的名称保持一致。
+
+### **创建 JDBC 外部表**
+
+执行如下语句，在数据库 `jdbc_test` 中，创建一张名为 `jdbc_tbl` 的 JDBC 外部表：
+
+~~~SQL
+create external table jdbc_tbl (
+    `id` bigint NULL, 
+    `data` varchar(200) NULL 
+) ENGINE=jdbc 
+properties (
+    "resource"="jdbc0",
+    "table"="dest_tbl"
+);
+~~~
+
+`properties` 配置项：
+
+* `resource`：所使用 JDBC 资源的名称，必填项。
+
+* `table`：目标数据库的表名，必填项。
+
+支持的数据类型以及与 StarRocks 的数据类型映射关系，请参见[数据类型映射](/数据类型映射.md)。[数据类型映射](./External_table.md##数据类型映射)。
+
+> 说明：
+
+* 不支持索引。
+* 不支持通过 PARTITION BY、DISTRIBUTED BY 来指定数据分布规则。
+
+### **查询 JDBC 外部表**
+
+查询 JDBC 外部表前，必须启用 Pipeline 引擎。
+
+> 说明：如果已经启用 Pipeline 引擎，则可跳过本步骤。
+
+~~~SQL
+set enable_pipeline_engine=true;
+~~~
+
+执行如下语句，通过 JDBC 外部表查询目标数据库的数据：
+
+~~~SQL
+select * from jdbc_tbl;
+~~~
+
+StarRocks 支持对目标表进行谓词下推，把过滤条件推给目标表执行，让执行尽量靠近数据源，进而提高查询性能。目前支持下推运算符，包括二元比较运算符（`>`、`>=`、`=`、`<`、`<=`）、`IN`、`IS NULL` 和 `BETWEEN ... AND ...`，但是不支持下推函数。
+
+### 数据类型映射
+
+目前仅支持查询目标数据库中数字、字符串、时间、日期等基础类型的数据。如果目标数据库中的数据超出 StarRocks 中数据类型的表示范围，则查询会报错。
+
+如下以目标数据库 MySQL、Oracle、PostgreSQL、SQL Server 为例，说明支持查询的数据类型，以及与 StarRocks 数据类型的映射关系。
+
+#### **目标数据库为 MySQL**
+
+| MySQL        | StarRocks |
+| ------------ | --------- |
+| BOOLEAN      | BOOLEAN   |
+| TINYINT      | TINYINT   |
+| SMALLINT     | SMALLINT  |
+| MEDIUMINTINT | INT       |
+| BIGINT       | BIGINT    |
+| FLOAT        | FLOAT     |
+| DOUBLE       | DOUBLE    |
+| DECIMAL      | DECIMAL   |
+| CHAR         | CHAR      |
+| VARCHAR      | VARCHAR   |
+| DATE         | DATE      |
+| DATETIME     | DATETIME  |
+
+#### **目标数据库为 Oracle**
+
+| Oracle          | StarRocks |
+| --------------- | --------- |
+| CHAR            | CHAR      |
+| VARCHARVARCHAR2 | VARCHAR   |
+| DATE            | DATE      |
+| SMALLINT        | SMALLINT  |
+| INT             | INT       |
+| BINARY_FLOAT    | FLOAT     |
+| BINARY_DOUBLE   | DOUBLE    |
+| DATE            | DATE      |
+| DATETIME        | DATETIME  |
+| NUMBER          | DECIMAL   |
+
+#### **目标数据库为 PostgreSQL**
+
+| PostgreSQL          | StarRocks |
+| ------------------- | --------- |
+| SMALLINTSMALLSERIAL | SMALLINT  |
+| INTEGERSERIAL       | INT       |
+| BIGINTBIGSERIAL     | BIGINT    |
+| BOOLEAN             | BOOLEAN   |
+| REAL                | FLOAT     |
+| DOUBLE PRECISION    | DOUBLE    |
+| DECIMAL             | DECIMAL   |
+| TIMESTAMP           | DATETIME  |
+| DATE                | DATE      |
+| CHAR                | CHAR      |
+| VARCHAR             | VARCHAR   |
+| TEXT                | STRING    |
+
+#### **目标数据库为 SQL Server**
+
+| SQL Server        | StarRocks |
+| ----------------- | --------- |
+| BOOLEAN           | BOOLEAN   |
+| TINYINT           | TINYINT   |
+| SMALLINT          | SMALLINT  |
+| INT               | INT       |
+| BIGINT            | BIGINT    |
+| FLOAT             | FLOAT     |
+| REAL              | DOUBLE    |
+| DECIMALNUMERIC    | DECIMAL   |
+| CHAR              | CHAR      |
+| VARCHAR           | VARCHAR   |
+| DATE              | DATE      |
+| DATETIMEDATETIME2 | DATETIME  |
+
+### 使用限制
+
+* 创建 JDBC 外部表时，不支持索引，也不支持通过 PARTITION BY、DISTRIBUTED BY 来指定数据分布规则。
+* 查询 JDBC 外部表时，不支持下推函数。
+* 暂不支持使用 INSERT INTO ... SELECT ... 语句将目标数据库的数据导入至 StarRocks。
 
 ## Hive 外表
 
@@ -464,73 +744,6 @@ Hive Table 的 Partition 统计信息以及 Partition 下面的文件信息可�
   * 当前 Hive 元数据缓存模式为懒加载，即：如果 Hive 新增了分区，StarRocks 只会将新增分区的 partition key 进行缓存，不会立即缓存该分区的文件信息。只有当查询该分区时或者用户手动执行 refresh 分区操作时，该分区的文件信息才会被加载。StarRocks 首次缓存该分区统计信息后，该分区后续的元数据变更就会自动同步到 StarRocks 中。
   * 手动执行缓存方式执行效率较低，相比之下自动增量更新性能开销较小，建议用户开启该功能进行更新缓存。
   * 当前自动更新不支持 add/drop column 等 schema change 操作，Hive 表结构如有更改，需要重新创建 Hive 外表。Hive 外表支持 Schema change 将会在近期推出，敬请期待。
-
-## StarRocks 外部表
-
-1.19 版本开始，StarRocks 支持将数据通过外表方式写入另一个 StarRocks 集群的表中。这可以解决用户的读写分离需求，提供更好的资源隔离。用户需要首先在目标集群上创建一张目标表，然后在源 StarRocks 集群上创建一个 Schema 信息一致的外表，并在属性中指定目标集群和表的信息。
-
-通过 INSERT INTO 写入数据至 StarRocks 外表，可以将源集群的数据写入至目标集群。借助这一能力，可以实现如下目标：
-
-* 集群间的数据同步。
-* 读写分离。向源集群中写入数据，并且源集群的数据变更同步至目标集群，目标集群提供查询服务。
-
-以下是创建目标表和外表的实例：
-
-~~~sql
-# 在目标集群上执行
-CREATE TABLE t
-(
-    k1 DATE,
-    k2 INT,
-    k3 SMALLINT,
-    k4 VARCHAR(2048),
-    k5 DATETIME
-)
-ENGINE=olap
-DISTRIBUTED BY HASH(k1) BUCKETS 10;
-
-# 在外表集群上执行
-CREATE EXTERNAL TABLE external_t
-(
-    k1 DATE,
-    k2 INT,
-    k3 SMALLINT,
-    k4 VARCHAR(2048),
-    k5 DATETIME
-)
-ENGINE=olap
-DISTRIBUTED BY HASH(k1) BUCKETS 10
-PROPERTIES
-(
-    "host" = "127.0.0.1",
-    "port" = "9020",
-    "user" = "user",
-    "password" = "passwd",
-    "database" = "db_test",
-    "table" = "t"
-);
-
-# 写入数据至 StarRocks 外表，实现源集群的数据写入至目标集群。推荐生产环境使用第二种方式。
-insert into external_t values ('2020-10-11', 1, 1, 'hello', '2020-10-11 10: 00: 00');
-
-insert into external_t select * from other_table;
-~~~
-
-其中：
-
-* **EXTERNAL**：该关键字指定创建的是 StarRocks 外表.
-* **host**：该属性描述目标表所属 StarRocks 集群 Leader FE 的 IP 地址.
-* **port**：该属性描述目标表所属 StarRocks 集群 Leader FE 的 RPC 访问端口，该值可参考配置 fe/fe.conf 中的 rpc_port 配置取值.
-* **user**：该属性描述目标表所属 StarRocks 集群的访问用户名.
-* **password**：该属性描述目标表所属 StarRocks 集群的访问密码.
-* **database**：该属性描述目标表所属数据库名称.
-* **table**：该属性描述目标表名称.
-
-目前 StarRocks 外表使用上有以下限制：
-
-* 仅可以在外表上执行 insert into 和 show create table 操作，不支持其他数据写入方式，也不支持查询和 DDL.
-* 创建外表语法和创建普通表一致，但其中的列名等信息请保持同其对应的目标表一致.
-* 外表会周期性从目标表同步元信息（同步周期为 10 秒），在目标表执行的 DDL 操作可能会延迟一定时间反应在外表上.
 
 ## Apache Iceberg 外表
 
