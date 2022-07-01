@@ -71,10 +71,13 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.StreamLoadTask;
@@ -451,7 +454,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TTaskInfo info = new TTaskInfo();
             info.setTask_name(task.getName());
             info.setCreate_time(task.getCreateTime() / 1000);
-            info.setSchedule(task.getType().name());
+            String scheduleStr = task.getType().name();
+            if (task.getType() == Constants.TaskType.PERIODICAL) {
+                TaskSchedule schedule = task.getSchedule();
+                scheduleStr += " (START "
+                        + Utils.getDatetimeFromLong(schedule.getStartTime())
+                        + " EVERY("
+                        + schedule.getPeriod() + " " + schedule.getTimeUnit()
+                        + "))";
+            }
+            info.setSchedule(scheduleStr);
             info.setDatabase(ClusterNamespace.getNameFromFullName(task.getDbName()));
             info.setDefinition(task.getDefinition());
             info.setExpire_time(task.getExpireTime() / 1000);
