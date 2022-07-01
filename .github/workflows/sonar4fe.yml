@@ -42,6 +42,7 @@ jobs:
         run: |
           docker run --privileged -v "/home/runner"/.m2:/root/.m2 -v $ROOT/starrocks:/root/starrocks -v /etc/timezone:/etc/timezone:ro -v /etc/localtime:/etc/localtime:ro --name temp -d starrocks/dev-env:${GITHUB_REF_NAME} /bin/bash -c "while true;do echo hello;sleep 1;done"
           sleep 10
-          docker exec --privileged temp /bin/bash -c "cd /root/starrocks; sh build.sh --clean --fe;"
+          echo "initialize docker container-----"
+          docker exec --privileged temp /bin/bash -c "cd /root/starrocks; ./build.sh --clean --fe;"
           echo "script run over-----"
 #          docker exec --privileged $container_name /bin/bash -c "cd /root/starrocks/fe; mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=dulong41_starrocks"
