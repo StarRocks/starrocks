@@ -307,7 +307,6 @@ public class BDBEnvironment {
                     refreshLog((InsufficientLogException) e);
                 }
                 close();
-                closing = false;
             } catch (DatabaseException e) {
                 if (i == 0 && e instanceof UnknownMasterException) {
                     // The node may be unable to join the group because the Master could not be determined because a
