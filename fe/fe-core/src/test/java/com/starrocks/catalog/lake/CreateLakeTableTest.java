@@ -3,6 +3,8 @@
 package com.starrocks.catalog.lake;
 
 import com.google.common.collect.Lists;
+import com.staros.proto.ObjectStorageInfo;
+import com.staros.proto.ShardStorageInfo;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.catalog.Database;
@@ -61,11 +63,15 @@ public class CreateLakeTableTest {
 
     @Test
     public void testCreateLakeTable(@Mocked StarOSAgent agent) throws UserException {
+        ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build();
+        ShardStorageInfo shardStorageInfo =
+                ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
+
         new Expectations() {
             {
-                agent.getServiceStorageUri();
-                result = "s3://bucket/1/";
-                agent.createShards(anyInt, (Map) any);
+                agent.getServiceShardStorageInfo();
+                result = shardStorageInfo;
+                agent.createShards(anyInt, (ShardStorageInfo) any);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
                         Lists.newArrayList(20008L), Lists.newArrayList(20009L));

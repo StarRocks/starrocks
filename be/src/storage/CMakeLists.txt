@@ -49,7 +49,6 @@ add_library(Storage STATIC
     rowset_update_state.cpp
     update_compaction_state.cpp
     version_graph.cpp
-    schema.cpp
     storage_engine.cpp
     data_dir.cpp
     short_key_index.cpp
@@ -161,8 +160,10 @@ add_library(Storage STATIC
     lake/async_delta_writer.cpp
     lake/delta_writer.cpp
     lake/general_tablet_writer.cpp
+    lake/rowset.cpp
     lake/starlet_group_assigner.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp
+    lake/tablet_reader.cpp
     lake/metadata_iterator.cpp
 )

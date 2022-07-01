@@ -3,16 +3,19 @@
 package com.starrocks.statistic;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Map;
-import java.util.concurrent.atomic.LongAdder;
 
 public class BasicStatsMeta implements Writable {
     @SerializedName("dbId")
@@ -30,13 +33,8 @@ public class BasicStatsMeta implements Writable {
     @SerializedName("properties")
     private Map<String, String> properties;
 
-    @SerializedName("healthy")
-    private double healthy;
-
     @SerializedName("updateRows")
     private long updateRows;
-
-    private LongAdder updateCounter;
 
     public BasicStatsMeta(long dbId, long tableId,
                           Constants.AnalyzeType type,
@@ -47,25 +45,18 @@ public class BasicStatsMeta implements Writable {
         this.type = type;
         this.updateTime = updateTime;
         this.properties = properties;
-        this.healthy = 1;
         this.updateRows = 0;
-        this.updateCounter = new LongAdder();
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
-        updateRows = updateCounter.longValue();
-
         String s = GsonUtils.GSON.toJson(this);
         Text.writeString(out, s);
     }
 
     public static BasicStatsMeta read(DataInput in) throws IOException {
         String s = Text.readString(in);
-        BasicStatsMeta basicStatsMeta = GsonUtils.GSON.fromJson(s, BasicStatsMeta.class);
-        basicStatsMeta.updateCounter = new LongAdder();
-        basicStatsMeta.updateCounter.add(basicStatsMeta.updateRows);
-        return basicStatsMeta;
+        return GsonUtils.GSON.fromJson(s, BasicStatsMeta.class);
     }
 
     public long getDbId() {
@@ -89,18 +80,40 @@ public class BasicStatsMeta implements Writable {
     }
 
     public double getHealthy() {
-        return healthy;
-    }
+        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+        OlapTable table = (OlapTable) database.getTable(tableId);
+        long minRowCount = Long.MAX_VALUE;
+        for (Partition partition : table.getPartitions()) {
+            if (partition.getRowCount() < minRowCount) {
+                minRowCount = partition.getRowCount();
+            }
+        }
 
-    public void setHealthy(double healthy) {
-        this.healthy = healthy;
+        /*
+         * health = totalLoadRows / totalRowCount.
+         * The ratio of the number of modified lines to the total number of lines.
+         * Because we cannot obtain complete table-level information, we use the row count of
+         * the partition with the smallest row count as totalRowCount.
+         * It can be understood that we assume an extreme case where all imported and modified lines
+         * are concentrated in only one partition
+         */
+        double healthy;
+        if (minRowCount == 0) {
+            healthy = 1;
+        } else if (updateRows > minRowCount) {
+            healthy = 0;
+        } else {
+            healthy = 1 - (double) updateRows / (double) minRowCount;
+        }
+
+        return healthy;
     }
 
     public long getUpdateRows() {
         return updateRows;
     }
 
-    public void increase(Long delta) {
-        updateCounter.add(delta);
+    public void increaseUpdateRows(Long delta) {
+        updateRows += delta;
     }
 }

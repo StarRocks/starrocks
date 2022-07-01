@@ -52,24 +52,6 @@ public class PredicateStatisticsCalculator {
             return true;
         }
 
-        private Statistics computeStatisticsAfterPredicate(Statistics statistics, double rowCount) {
-            // Do not compute predicate statistics if column statistics is unknown or table row count may inaccurate
-            if (statistics.getColumnStatistics().values().stream().anyMatch(ColumnStatistic::isUnknown) ||
-                    statistics.isTableRowCountMayInaccurate()) {
-                return statistics;
-            }
-            Statistics.Builder builder = Statistics.buildFrom(statistics);
-            // use row count to adjust column statistics distinct values
-            double distinctValues = Math.max(1, rowCount);
-            statistics.getColumnStatistics().forEach((column, columnStatistic) -> {
-                if (columnStatistic.getDistinctValuesCount() > distinctValues) {
-                    builder.addColumnStatistic(column,
-                            ColumnStatistic.buildFrom(columnStatistic).setDistinctValuesCount(distinctValues).build());
-                }
-            });
-            return builder.build();
-        }
-
         @Override
         public Statistics visit(ScalarOperator predicate, Void context) {
             if (!checkNeedEvalEstimate(predicate)) {
@@ -77,8 +59,8 @@ public class PredicateStatisticsCalculator {
             }
             double outputRowCount =
                     statistics.getOutputRowCount() * StatisticsEstimateCoefficient.PREDICATE_UNKNOWN_FILTER_COEFFICIENT;
-            return computeStatisticsAfterPredicate(
-                    statistics.buildFrom(statistics).setOutputRowCount(outputRowCount).build(),
+            return StatisticsEstimateUtils.adjustStatisticsByRowCount(
+                    Statistics.buildFrom(statistics).setOutputRowCount(outputRowCount).build(),
                     outputRowCount);
         }
 
@@ -158,7 +140,7 @@ public class PredicateStatisticsCalculator {
                             Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
                                     addColumnStatistic(operator, newInColumnStatistic).build()).
                     orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
-            return computeStatisticsAfterPredicate(inStatistics, rowCount);
+            return StatisticsEstimateUtils.adjustStatisticsByRowCount(inStatistics, rowCount);
         }
 
         @Override
@@ -188,11 +170,10 @@ public class PredicateStatisticsCalculator {
             selectivity =
                     Math.max(selectivity, StatisticsEstimateCoefficient.IS_NULL_PREDICATE_DEFAULT_FILTER_COEFFICIENT);
             double rowCount = statistics.getOutputRowCount() * selectivity;
-            return computeStatisticsAfterPredicate(Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
-                    addColumnStatistics(
+            return StatisticsEstimateUtils.adjustStatisticsByRowCount(Statistics.buildFrom(statistics).
+                    setOutputRowCount(rowCount).addColumnStatistics(
                             ImmutableMap.of(children.get(0), ColumnStatistic.buildFrom(isNullColumnStatistic).
                                     setNullsFraction(predicate.isNotNull() ? 0.0 : 1.0).build())).build(), rowCount);
-
         }
 
         @Override
@@ -238,19 +219,21 @@ public class PredicateStatisticsCalculator {
                     Statistics binaryStats =
                             BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(leftChildOpt,
                                     leftColumnStatistic, predicate, constant, statistics);
-                    return computeStatisticsAfterPredicate(binaryStats, binaryStats.getOutputRowCount());
+                    return StatisticsEstimateUtils.adjustStatisticsByRowCount(binaryStats,
+                            binaryStats.getOutputRowCount());
                 } else {
                     Statistics binaryStats = BinaryPredicateStatisticCalculator.estimateColumnToColumnComparison(
                             leftChild, leftColumnStatistic,
                             rightChild, rightColumnStatistic,
                             predicate, statistics);
-                    return computeStatisticsAfterPredicate(binaryStats, binaryStats.getOutputRowCount());
+                    return StatisticsEstimateUtils.adjustStatisticsByRowCount(binaryStats,
+                            binaryStats.getOutputRowCount());
                 }
             } else {
                 // constant compare constant
                 double outputRowCount = statistics.getOutputRowCount() *
                         StatisticsEstimateCoefficient.CONSTANT_TO_CONSTANT_PREDICATE_COEFFICIENT;
-                return computeStatisticsAfterPredicate(
+                return StatisticsEstimateUtils.adjustStatisticsByRowCount(
                         Statistics.buildFrom(statistics).setOutputRowCount(outputRowCount).build(), outputRowCount);
             }
         }
@@ -267,7 +250,8 @@ public class PredicateStatisticsCalculator {
                 Statistics andStatistics = predicate.getChild(1)
                         .accept(new PredicateStatisticsCalculator.PredicateStatisticsCalculatingVisitor(leftStatistics),
                                 null);
-                return computeStatisticsAfterPredicate(andStatistics, andStatistics.getOutputRowCount());
+                return StatisticsEstimateUtils.adjustStatisticsByRowCount(andStatistics,
+                        andStatistics.getOutputRowCount());
             } else if (predicate.isOr()) {
                 Preconditions.checkState(predicate.getChildren().size() == 2);
                 Statistics leftStatistics = predicate.getChild(0).accept(this, null);
@@ -278,13 +262,13 @@ public class PredicateStatisticsCalculator {
                 double rowCount = leftStatistics.getOutputRowCount() + rightStatistics.getOutputRowCount() -
                         andStatistics.getOutputRowCount();
                 rowCount = Math.min(rowCount, statistics.getOutputRowCount());
-                return computeStatisticsAfterPredicate(
+                return StatisticsEstimateUtils.adjustStatisticsByRowCount(
                         computeOrPredicateStatistics(leftStatistics, rightStatistics, statistics, rowCount), rowCount);
             } else {
                 Preconditions.checkState(predicate.getChildren().size() == 1);
                 Statistics inputStatistics = predicate.getChild(0).accept(this, null);
                 double rowCount = Math.max(0, statistics.getOutputRowCount() - inputStatistics.getOutputRowCount());
-                return computeStatisticsAfterPredicate(
+                return StatisticsEstimateUtils.adjustStatisticsByRowCount(
                         Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build(), rowCount);
             }
         }

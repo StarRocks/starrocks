@@ -150,10 +150,14 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalHashJoin(OptExpression optExpression, C context) {
-        return visit(optExpression, context);
+        return visitPhysicalJoin(optExpression, context);
     }
 
     public R visitPhysicalMergeJoin(OptExpression optExpression, C context) {
+        return visitPhysicalJoin(optExpression, context);
+    }
+
+    public R visitPhysicalJoin(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 

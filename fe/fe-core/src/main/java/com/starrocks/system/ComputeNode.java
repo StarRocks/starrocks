@@ -207,10 +207,6 @@ public class ComputeNode implements IComputable, Writable {
         this.backendState = state.ordinal();
     }
 
-    protected void setBackendStateVlaue(int state) {
-        this.backendState = state;
-    }
-
     protected void setHeartbeatPort(int heartbeatPort) {
         this.heartbeatPort = heartbeatPort;
     }
@@ -330,14 +326,6 @@ public class ComputeNode implements IComputable, Writable {
         this.version = version;
     }
 
-    public int getCpuCores() {
-        return cpuCores;
-    }
-
-    public void setCpuCores(int cpuCores) {
-        this.cpuCores = cpuCores;
-    }
-
     public AtomicBoolean getIsAlive() {
         return isAlive;
     }
@@ -360,10 +348,6 @@ public class ComputeNode implements IComputable, Writable {
 
     public void setBackendState(int backendState) {
         this.backendState = backendState;
-    }
-
-    public void setHeartbeatErrMsg(String heartbeatErrMsg) {
-        this.heartbeatErrMsg = heartbeatErrMsg;
     }
 
     public void setLastMissingHeartbeatTime(long lastMissingHeartbeatTime) {

@@ -76,15 +76,15 @@ public class PreAggregateTurnOnRule {
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projection.getColumnRefMap());
 
             context.aggregations = context.aggregations.stream()
-                    .map(d -> rewriter.rewrite(d))
+                    .map(rewriter::rewrite)
                     .collect(Collectors.toList());
 
             context.groupings = context.groupings.stream()
-                    .map(d -> rewriter.rewrite(d))
+                    .map(rewriter::rewrite)
                     .collect(Collectors.toList());
 
             context.joinPredicates = context.joinPredicates.stream().filter(Objects::nonNull)
-                    .map(d -> rewriter.rewrite(d))
+                    .map(rewriter::rewrite)
                     .collect(Collectors.toList());
         }
 

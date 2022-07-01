@@ -10,6 +10,7 @@
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/olap_table_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/result_sink_operator.h"
@@ -17,6 +18,7 @@
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/scan_node.h"
+#include "exec/tablet_sink.h"
 #include "exec/vectorized/cross_join_node.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/doris_internal_service.pb.h"
@@ -273,7 +275,6 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
     const auto fragment_instance_id = request.params.fragment_instance_id;
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
     const auto& fragment = request.fragment;
-    const auto& params = request.params;
     ExecNode* plan = _fragment_ctx->plan();
 
     Drivers drivers;
@@ -287,16 +288,16 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
     _fragment_ctx->set_pipelines(builder.build(*_fragment_ctx, plan));
 
     // Set up sink if required
-    std::unique_ptr<DataSink> sink;
+    std::unique_ptr<DataSink> datasink;
     if (fragment.__isset.output_sink) {
         RowDescriptor row_desc;
-        RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, fragment.output_sink, fragment.output_exprs, params,
-                                                   row_desc, &sink));
-        RuntimeProfile* sink_profile = sink->profile();
+        RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, request.fragment.output_sink,
+                                                   request.fragment.output_exprs, request.params, row_desc, &datasink));
+        RuntimeProfile* sink_profile = datasink->profile();
         if (sink_profile != nullptr) {
             runtime_state->runtime_profile()->add_child(sink_profile, true, nullptr);
         }
-        _decompose_data_sink_to_operator(runtime_state, &context, fragment.output_sink, sink.get());
+        RETURN_IF_ERROR(_decompose_data_sink_to_operator(runtime_state, &context, request, datasink));
     }
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
 
@@ -449,11 +450,12 @@ void FragmentExecutor::_fail_cleanup() {
     }
 }
 
-void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
-                                                        const TDataSink& t_datasink, DataSink* datasink) {
+Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
+                                                          const TExecPlanFragmentParams& params,
+                                                          std::unique_ptr<starrocks::DataSink>& datasink) {
     auto fragment_ctx = context->fragment_context();
     if (typeid(*datasink) == typeid(starrocks::ResultSink)) {
-        starrocks::ResultSink* result_sink = down_cast<starrocks::ResultSink*>(datasink);
+        starrocks::ResultSink* result_sink = down_cast<starrocks::ResultSink*>(datasink.get());
         // Result sink doesn't have plan node id;
         OpFactoryPtr op =
                 std::make_shared<ResultSinkOperatorFactory>(context->next_operator_id(), result_sink->get_sink_type(),
@@ -461,9 +463,9 @@ void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_st
         // Add result sink operator to last pipeline
         fragment_ctx->pipelines().back()->add_op_factory(op);
     } else if (typeid(*datasink) == typeid(starrocks::DataStreamSender)) {
-        starrocks::DataStreamSender* sender = down_cast<starrocks::DataStreamSender*>(datasink);
+        starrocks::DataStreamSender* sender = down_cast<starrocks::DataStreamSender*>(datasink.get());
         auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
-        auto& t_stream_sink = t_datasink.stream_sink;
+        auto& t_stream_sink = params.fragment.output_sink.stream_sink;
         bool is_dest_merge = false;
         if (t_stream_sink.__isset.is_merge && t_stream_sink.is_merge) {
             is_dest_merge = true;
@@ -504,9 +506,9 @@ void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_st
         // and source[B] will pull chunk from exchanger
         // so basically you can think exchanger is a chunk repository.
         // Further workflow explanation is in mcast_local_exchange.h file.
-        starrocks::MultiCastDataStreamSink* mcast_sink = down_cast<starrocks::MultiCastDataStreamSink*>(datasink);
+        starrocks::MultiCastDataStreamSink* mcast_sink = down_cast<starrocks::MultiCastDataStreamSink*>(datasink.get());
         const auto& sinks = mcast_sink->get_sinks();
-        auto& t_multi_case_stream_sink = t_datasink.multi_cast_stream_sink;
+        auto& t_multi_case_stream_sink = params.fragment.output_sink.multi_cast_stream_sink;
 
         // === create exchange ===
         auto mcast_local_exchanger = std::make_shared<MultiCastLocalExchanger>(runtime_state, sinks.size());
@@ -552,7 +554,15 @@ void FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_st
             auto pp = std::make_shared<Pipeline>(context->next_pipe_id(), ops);
             fragment_ctx->pipelines().emplace_back(pp);
         }
+    } else if (typeid(*datasink) == typeid(starrocks::stream_load::OlapTableSink)) {
+        runtime_state->set_per_fragment_instance_idx(params.params.sender_id);
+        runtime_state->set_num_per_fragment_instances(params.params.num_senders);
+        OpFactoryPtr op =
+                std::make_shared<OlapTableSinkOperatorFactory>(context->next_operator_id(), datasink, fragment_ctx);
+        fragment_ctx->pipelines().back()->add_op_factory(op);
     }
+
+    return Status::OK();
 }
 
 } // namespace starrocks::pipeline
