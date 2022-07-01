@@ -898,7 +898,7 @@ StringColumnWriter::StringColumnWriter(const ColumnWriterOptions& opts, std::uni
         : ColumnWriter(std::move(field), opts.meta->is_nullable()), _scalar_column_writer(std::move(column_writer)) {}
 
 Status StringColumnWriter::append(const vectorized::Column& column) {
-    DCHECK(check_string_lengths(column).ok());
+    RETURN_IF_ERROR(check_string_lengths(column));
     if (_is_speculated) {
         return _scalar_column_writer->append(column);
     }
