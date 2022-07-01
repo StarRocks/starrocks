@@ -76,6 +76,7 @@ After the service is started, you may adjust the configuration parameters to mee
 |export_checker_interval_second|5| Interval for exporting thread polling |
 |export_running_job_num_limit|5| Maximum number of exporting jobs |
 |export_task_default_timeout_second|7200| Timeout for export job, 2 hours by default |
+|empty_load_as_error|TRUE|Switch value to control if to return error `all partitions have no load data` when the data to load is empty. If this parameter is set as `false`, the system returns `OK` instead of the error when the data to load is empty.|
 |export_max_bytes_per_be_per_task|268435456| Maximum amount of data exported by a single export job on a single be, 256M by default |
 |export_task_pool_size|5| Size of export task thread pool, 5 by default |
 |consistency_check_start_time|23| The start time for FE to initiate replica consistency check |
