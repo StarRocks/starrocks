@@ -42,8 +42,6 @@ jobs:
       - name: Install preparation
         run: |
           sudo apt-get install -y byacc
-          wget https://boostorg.jfrog.io/artifactory/main/release/1.75.0/source/boost_1_75_0.tar.gz
-          cp boost_1_75_0.tar.gz thirdparty/src
       - name: Run build-wrapper
         run: |
           build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} ${{ github.workspace }}/build.sh --fe --clean
