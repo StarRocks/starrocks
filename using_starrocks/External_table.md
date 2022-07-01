@@ -189,6 +189,8 @@ SHOW RESOURCES;
 DROP RESOURCE "hive0";
 ~~~
 
+You can modify `hive.metastore.uris` of a Hive resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER%20RESOURCE.md).
+
 ### Create a database
 
 ~~~sql
@@ -321,6 +323,8 @@ select count(*) from profile_wos_p7;
   * The cached data can also be refreshed manually.
     1. If a partition is added or deleted from a table in Hive, you must run the `REFRESH EXTERNAL TABLE hive_t` command to refresh the table metadata cached in StarRocks. `hive_t` is the name of the Hive external table in StarRocks.
     2. If data in some Hive partitions is updated, you must refresh the cached data in StarRocks by running the `REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')` command. `hive_t` is the name of the Hive external table in StarRocks. `'k1=01/k2=02'` and `'k1=03/k2=04'` are the names of Hive partitions whose data is updated.
+    3. When you run `REFRESH EXTERNAL TABLE hive_t`, StarRocks first checks if the column information of the Hive external table is the same as the column information of the Hive table returned by the Hive Metastore. If the schema of the Hive table changes, such as adding columns or remove columns, StarRocks synchronizes the changes to the Hive external table. After synchronization, the column order of the Hive external table remains the same as the column order of the Hive table, with the partition column being the last column.
+* When Hive data is stored in the Parquet, ORC, and CSV format, you can synchronize schema changes (such as ADD COLUMN and REPLACE COLUMN) of a Hive table to a Hive external table in StarRocks 2.3 and later versions.
 
 ## StarRocks external table
 
@@ -390,139 +394,167 @@ The following limits apply when you use a StarRocks external table:
 
 ## Apache Iceberg external table
 
-StarRocks allows you to query data in Apache Iceberg by using an external table, which achieves blazing-fast analytics on data lakes. This topic describes how to use an external table in StarRocks to query Apache Iceberg data.
+To query the data in Iceberg, you need to create an Iceberg external table in StarRocks. When you create the table, you need to map the external table to the Iceberg table you want to query.
 
-### Prerequisites
+### Before you begin
 
-StarRocks has permissions to access the Hive metastore, HDFS cluster, and object storage bucket that corresponds to Apache Iceberg.
+Make sure that StarRocks has permissions to access the metadata service (such as Hive metastore), file system (such as HDFS), and object storage system (such as Amazon S3 and Alibaba Cloud Object Storage Service) used by Apache Iceberg.
 
 ### Precautions
 
-* The Iceberg external table is read-only and can only be used for data queries.
+* The Iceberg external table can be used to query only the following types of data:
+  * Versions 1 (Analytic Data Tables) tables. Versions 2 (Row-level Deletes) tables are not supported. For the differences between Versions 1 tables and Versions 2 tables, see [Iceberg Table Spec](https://iceberg.apache.org/spec/).
+  * Tables that are compressed in gzip (default format), Zstd, LZ4, or Snappy format.
+  * Files that are stored in Parquet or ORC format.
 
-* Only Iceberg V1 (copy on write) tables are supported. Iceberg V2 (merge on read) tables are not supported. For the differences between V1 and V2 tables, visit the [official website of Apache Iceberg](https://iceberg.apache.org/#spec/#format-versioning).
-
-* The compression formats of Iceberg data files must be GZIP (default value), ZSTD, LZ4, and SNAPPY.
-
-* The Iceberg catalog type must be a Hive catalog. The data storage format must be Parquet or ORC.
-
-* Currently, StarRocks cannot synchronize [schema evolution](https://iceberg.apache.org/#evolution#schema-evolution) from Apache Iceberg. If the schema of the source Iceberg table changes, you must delete the Iceberg external table that corresponds to the source table and create another one in StarRocks.
+* Iceberg external tables in StarRocks 2.3 and later versions support synchronizing schema changes of an Iceberg table while Iceberg external tables in versions earlier than StarRocks 2.3 do not. If the schema of an Iceberg table changes, you must delete the corresponding external table and create a new one.
 
 ### Procedure
 
-#### Step 1: Create and manage Iceberg resources
+#### Step 1: Create an Iceberg resource
 
-Before you create a database and Iceberg external table in StarRocks, you must create an Iceberg resource in StarRocks. The resource manages the connection information with the Iceberg data source. After the resource is created, you can create an Iceberg external table.
+Before you create an Iceberg external table, you must create an Iceberg resource in StarRocks. The resource is used to manage the Iceberg access information. Additionally, you also need to specify this resource in the statement that is used to create the external table. You can create a resource based on your business requirements:
 
-Run the following command to create an Iceberg resource named `iceberg0`.
+* If the metadata of an Iceberg table is obtained from a Hive metastore, you can create a resource and set the catalog type to `HIVE`.
+
+* If the metadata of an Iceberg table is obtained from other services, you need to create a custom catalog. Then create a resource and set the catalog type to `CUSTOM`.
+
+**Create a resource whose catalog type is** **`HIVE`**
+
+For example, create a resource named `iceberg0` and set the catalog type to `HIVE`.
 
 ~~~SQL
 CREATE EXTERNAL RESOURCE "iceberg0" 
-
-PROPERTIES ( 
-
-"type" = "iceberg", 
-
-"starrocks.catalog-type"="HIVE", 
-
-"iceberg.catalog.hive.metastore.uris"="thrift://192.168.0.81:9083" 
-
+PROPERTIES ( "type" = "iceberg", "starrocks.catalog-type"="HIVE", "iceberg.catalog.hive.metastore.uris"="thrift://192.168.0.81:9083" 
 );
 ~~~
 
-|  Parameter  |   Description   |
-| --- |   ---  |
-|   type  |   The resource type. Set the value to `iceberg`.    |
-|   starrocks.catalog-type  |  The catalog type. Only the Hive catalog is supported. The value is `HIVE`.    |
-|   iceberg.catalog.hive.metastore.uris  |  The thrift URI of the Hive metastore. Apache Iceberg uses the Hive catalog to access the Hive metastore and create and manage tables. You must pass in the thrift URI of the Hive metastore. The parameter value is in the following format: thrift://< Hive metadata IP address >:< Port number >. The port number defaults to 9083.   |
+The following table describes the related parameters.
 
-Run the following command to query Iceberg resources in StarRocks.
+| **Parameter**                       | **Description**                                              |
+| ----------------------------------- | ------------------------------------------------------------ |
+| type                                | The resource type. Set the value to `iceberg`.               |
+| starrocks.catalog-type              | The catalog type of the resource. Both Hive catalog and custom catalog are supported. If you specify a Hive catalog, set the value to `HIVE`.If you specify a custom catalog, set the value to `CUSTOM`. |
+| iceberg.catalog.hive.metastore.uris | The URI of the Hive metastore. The parameter value is in the following format: `thrift://< IP address of Iceberg metadata >:< port number >`. The port number defaults to 9083. Apache Iceberg uses a Hive catalog to access the Hive metastore and then queries the metadata of Iceberg tables. |
+
+**Create a resource whose catalog type is a** **`CUSTOM`**
+
+A custom catalog needs to inherit the abstract class BaseMetastoreCatalog, and you need to implement the IcebergCatalog interface. For more information about how to create a custom catalog, see [IcebergHiveCatalog](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/main/java/com/starrocks/external/iceberg/IcebergHiveCatalog.java). Additionally, the class name of a custom catalog cannot be duplicated with the name of the class that already exists in StarRock. After the catalog is created, package the catalog and its related files, and place them under the **fe/lib** path of each frontend (FE). Then restart each FE. After you complete the preceding operations, you can create a resource whose catalog is a custom catalog.
+
+For example, create a resource named `iceberg1` and set the catalog type to `CUSTOM`.
+
+~~~SQL
+CREATE EXTERNAL RESOURCE "iceberg1" 
+PROPERTIES ( "type" = "iceberg", "starrocks.catalog-type"="CUSTOM", "iceberg.catalog-impl"="com.starrocks.IcebergCustomCatalog" 
+);
+~~~
+
+The following table describes the related parameters.
+
+| **Parameter**          | **Description**                                              |
+| ---------------------- | ------------------------------------------------------------ |
+| type                   | The resource type. Set the value to `iceberg`.               |
+| starrocks.catalog-type | The catalog type of the resource. Both Hive catalog and custom catalog are supported. If you specify a Hive catalog, set the value to `HIVE`.If you specify a custom catalog, set the value to `CUSTOM`. |
+| iceberg.catalog-impl   | The fully qualified class name of the custom catalog. FEs search for the catalog based on this name. If the catalog contains custom configuration items, you must add them to the `PROPERTIES` parameter as key-value pairs when you create an Iceberg external table. |
+
+You can modify `hive.metastore.uris` and `iceberg.catalog-impl`of a Iceberg resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER%20RESOURCE.md).
+
+**View Iceberg resources**
 
 ~~~SQL
 SHOW RESOURCES;
 ~~~
 
-Run the following command to drop the Iceberg resource `iceberg0`.
+**Drop an Iceberg resource**
+
+For example, drop a resource named `iceberg0`.
 
 ~~~SQL
 DROP RESOURCE "iceberg0";
 ~~~
 
-> Dropping an Iceberg resource makes all Iceberg external tables that correspond to this resource unavailable. However, data in Apache Iceberg will not be lost. If you still need to query Iceberg data in StarRocks, create another Iceberg resource, database, and external table.
+Dropping an Iceberg resource makes all external tables that reference this resource unavailable. However, the corresponding data in Apache Iceberg is not deleted. If you still need to query the data in Apache Iceberg, create a new resource and a new external table.
 
-#### Step 2: Create an Iceberg database
+#### Step 2: (Optional) Create a database
 
-Run the following command to create an Iceberg database named `iceberg_test` in StarRocks.
+For example, create a database named `iceberg_test` in StarRocks.
 
 ~~~SQL
 CREATE DATABASE iceberg_test; 
-
-
-
 USE iceberg_test; 
 ~~~
 
-> The database name in StarRocks can be different from the name of the source database in Iceberg.
+> Note: The name of the database in StarRocks can be different from the name of the database in Apache Iceberg.
 
 #### Step 3: Create an Iceberg external table
 
-Run the following command to create an Iceberg external table named `iceberg_tbl` in the Iceberg database `iceberg_test`.
+For example, create an Iceberg external table named `iceberg_tbl` in the database `iceberg_test`.
 
 ~~~SQL
 CREATE EXTERNAL TABLE `iceberg_tbl` ( 
-
-`id` bigint NULL, 
-
-`data` varchar(200) NULL 
-
+    `id` bigint NULL, 
+    `data` varchar(200) NULL 
 ) ENGINE=ICEBERG 
-
 PROPERTIES ( 
-
-"resource" = "iceberg0", 
-
-"database" = "iceberg", 
-
-"table" = "iceberg_table" 
-
+    "resource" = "iceberg0", 
+    "database" = "iceberg", 
+    "table" = "iceberg_table" 
 ); 
 ~~~
 
-The following table describes related parameters.
-|  Parameter  |  Description |
-| --- | ---|
-|  ENGINE  |  The engine name. Set the value to `ICEBERG`. |
-|  resource  |  The name of the Iceberg resource in StarRocks. |
-|  database  |  The name of the database in Iceberg. |
-|  table  |  The name of the data table in Iceberg. |
+The following table describes the related parameters.
 
-* The name of the external table can be different from the name of the Iceberg data table.
+| **Parameter** | **Description**                                              |
+| ------------- | ------------------------------------------------------------ |
+| ENGINE        | The engine name. Set the value to `ICEBERG`.                 |
+| resource      | The name of the Iceberg resource that the external table references. |
+| database      | The name of the database to which the Iceberg table belongs. |
+| table         | The name of the Iceberg table.                               |
 
-* The column names of the external table must be the same as those in the Iceberg data table. The column order can be different.
+> Note:
+   >
+   > * The name of the external table can be different from the name of the Iceberg table.
+   >
+   > * The column names of the external table must be the same as those in the Iceberg table. The column order of the two tables can be different.
 
-* You can select all or part of the columns in the Iceberg data table based on your business needs. The following table provides the mapping between data types supported by StarRocks and Iceberg.
+If you define configuration items in the custom catalog and want configuration items to take effect when you query data, you can add the configuration items to the `PROPERTIES` parameter as key-value pairs when you create an external table. For example, if you define a configuration item `custom-catalog.properties` in the custom catalog, you can run the following command to create an external table.
 
-|  Apache Iceberg  |  StarRocks |
-| --- | ---|
-|  BOOLEAN  |  BOOLEAN |
-|  INT  |  TINYINT, SMALLINT, INT |
-|  LONG  |  BIGINT |
-|  FLOAT  |  FLOAT |
-|  DOUBLE  |  DOUBLE |
-|  DECIMAL(P,S)  |  DECIMAL |
-|  DATE  |  DATE, DATETIME |
-|  TIME  |  BIGINT |
-|  TIMESTAMP  |  DATETIME |
-|  STRING  |  STRING, VARCHAR |
-|  UUID  |  STRING, VARCHAR |
-|  FIXED(L)  |  CHAR |
-|  BINARY  |  VARCHAR |
+~~~SQL
+CREATE EXTERNAL TABLE `iceberg_tbl` ( 
+    `id` bigint NULL, 
+    `data` varchar(200) NULL 
+) ENGINE=ICEBERG 
+PROPERTIES ( 
+    "resource" = "iceberg0", 
+    "database" = "iceberg", 
+    "table" = "iceberg_table",
+    "custom-catalog.properties" = "my_property"
+); 
+~~~
 
-> Currently, StarRocks does not support using an Iceberg external table to query Iceberg data whose data type is TIMESTAMPTZ, STRUCT, LIST, or MAP.
+When you create an external table, you need to specify the data types of columns in the external table based on the data types of columns in the Iceberg table. The following table shows the mapping of column data types.
 
-#### Step 4: Query Iceberg data
+| **Iceberg table** | **Iceberg external table** |
+| ----------------- | -------------------------- |
+| BOOLEAN           | BOOLEAN                    |
+| INT               | TINYINT / SMALLINT / INT   |
+| LONG              | BIGINT                     |
+| FLOAT             | FLOAT                      |
+| DOUBLE            | DOUBLE                     |
+| DECIMAL(P, S)     | DECIMAL                    |
+| DATE              | DATE / DATETIME            |
+| TIME              | BIGINT                     |
+| TIMESTAMP         | DATETIME                   |
+| STRING            | STRING / VARCHAR           |
+| UUID              | STRING / VARCHAR           |
+| FIXED(L)          | CHAR                       |
+| BINARY            | VARCHAR                    |
 
-After the Iceberg external table is created, you can run the following command to directly query data in Apache Iceberg without having to import Iceberg data into StarRocks.
+StarRocks does not support querying Iceberg data whose data type is TIMESTAMPTZ, STRUCT, LIST, and MAP.
+
+#### Step 4: Query the data in Apache Iceberg
+
+After an external table is created, you can query the data in Apache Iceberg by using the external table.
 
 ~~~SQL
 select count(*) from iceberg_tbl;
