@@ -22,3 +22,11 @@ jobs:
           source: 'be/src be/test'
           clangFormatVersion: 14
           inplace: False
+#          inplace: True
+#      - uses: EndBug/add-and-commit@v4
+#        with:
+#          committer_name: dulong41
+#          committer_email: dulong@starrrocks.com
+#          message: 'Committing clang-format changes'
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
