@@ -15,6 +15,9 @@ jobs:
           persist-credentials: false
           submodules: recursive
 
+      - name: build fe
+        run: bash ./build.sh --fe --clean
+        
       - name: "Format it!"
         uses: DoozyX/clang-format-lint-action@master
         id: be_clang_format
