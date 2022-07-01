@@ -208,6 +208,7 @@ Status CompactionAction::_handle_show_repairs(HttpRequest* req, std::string* jso
             rowsets.PushBack(rs, root.GetAllocator());
         }
         item.AddMember("rowsets", rowsets, root.GetAllocator());
+        need_to_repair.PushBack(item, root.GetAllocator());
     }
     root.AddMember("need_to_repair", need_to_repair, root.GetAllocator());
     root.AddMember("need_to_repair_num", tablets_with_small_segment_files.size(), root.GetAllocator());
@@ -228,6 +229,7 @@ Status CompactionAction::_handle_show_repairs(HttpRequest* req, std::string* jso
             obj.AddMember("status", rapidjson::StringRef(rowset_st.second.c_str()), root.GetAllocator());
             rowsets.PushBack(obj, root.GetAllocator());
         }
+        item.AddMember("rowsets", rowsets, root.GetAllocator());
         executed.PushBack(item, root.GetAllocator());
     }
     root.AddMember("executed_task", executed, root.GetAllocator());
@@ -255,7 +257,7 @@ Status CompactionAction::_handle_submit_repairs(HttpRequest* req, std::string* j
         for (const auto& rowset_segments_pair : itr->second) {
             rowsetids.emplace_back(rowset_segments_pair.first);
         }
-        tasks.emplace_back(tablet_id, std::move(rowsetids));
+        tasks.emplace_back(itr->first, std::move(rowsetids));
     } else {
         // do all tablets
         for (auto& itr : tablets_with_small_segment_files) {
@@ -263,7 +265,7 @@ Status CompactionAction::_handle_submit_repairs(HttpRequest* req, std::string* j
             for (const auto& rowset_segments_pair : itr.second) {
                 rowsetids.emplace_back(rowset_segments_pair.first);
             }
-            tasks.emplace_back(tablet_id, std::move(rowsetids));
+            tasks.emplace_back(itr.first, std::move(rowsetids));
         }
     }
     StorageEngine::instance()->submit_repair_compaction_tasks(tasks);

@@ -266,7 +266,7 @@ void* StorageEngine::_repair_compaction_thread_callback(void* arg) {
 #endif
     Status status = Status::OK();
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        std::pair<int64_t, vector<uint32_t>> task(-1, 0);
+        std::pair<int64_t, vector<uint32_t>> task(-1, vector<uint32>());
         {
             std::lock_guard lg(_repair_compaction_tasks_lock);
             if (!_repair_compaction_tasks.empty()) {
@@ -300,7 +300,7 @@ void* StorageEngine::_repair_compaction_thread_callback(void* arg) {
         }
         do {
             // do a compaction per 10min, to reduce potential memory pressure
-            SLEEP_IN_BG_WORKER(10 * 60);
+            SLEEP_IN_BG_WORKER(config::repair_compaction_interval_seconds);
             if (!_options.compaction_mem_tracker->any_limit_exceeded()) {
                 break;
             }
