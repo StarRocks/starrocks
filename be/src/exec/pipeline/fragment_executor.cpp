@@ -334,7 +334,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
             DCHECK(morsel_queue_factories.count(source_id));
             auto& morsel_queue_factory = morsel_queue_factories[source_id];
-            DCHECK_EQ(cur_pipeline_dop, morsel_queue_factory->size());
+            // DOP of OlapScanPrepareOperator is always 1.
+            DCHECK(cur_pipeline_dop == 1 || cur_pipeline_dop == morsel_queue_factory->size());
 
             for (size_t i = 0; i < cur_pipeline_dop; ++i) {
                 auto&& operators = pipeline->create_operators(cur_pipeline_dop, i);
