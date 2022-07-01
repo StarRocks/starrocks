@@ -96,6 +96,6 @@ echo "script run over-----"
 #        time_count=`expr $time_count + 1`
 #    done
 #fi
-cd fe
+#cd fe
 #sudo cp -r /home/runner/.m2 /root
-mvn clean -DskipTests verify sonar:sonar -Dsonar.projectKey=dulong41_starrocks -Dsonar.login=23d4ba0aa0f8c547f3db2c329c96546e2e280468
+#mvn clean -DskipTests verify sonar:sonar -Dsonar.projectKey=dulong41_starrocks -Dsonar.login=23d4ba0aa0f8c547f3db2c329c96546e2e280468
