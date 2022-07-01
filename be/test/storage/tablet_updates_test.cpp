@@ -66,13 +66,21 @@ public:
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (int64_t key : keys) {
-            cols[0]->append_datum(vectorized::Datum(key));
-            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
-            if (cols[2]->is_binary()) {
-                string v = fmt::to_string(key % 1000 + 2);
-                cols[2]->append_datum(vectorized::Datum(Slice(v)));
+            if (schema.num_key_fields() == 1) {
+                cols[0]->append_datum(vectorized::Datum(key));
             } else {
-                cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
+                cols[0]->append_datum(vectorized::Datum(key));
+                string v = fmt::to_string(key * 234234342345);
+                cols[1]->append_datum(vectorized::Datum(Slice(v)));
+                cols[2]->append_datum(vectorized::Datum((int32_t)key));
+            }
+            int vcol_start = schema.num_key_fields();
+            cols[vcol_start]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+            if (cols[vcol_start + 1]->is_binary()) {
+                string v = fmt::to_string(key % 1000 + 2);
+                cols[vcol_start + 1]->append_datum(vectorized::Datum(Slice(v)));
+            } else {
+                cols[vcol_start + 1]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
             }
         }
         if (one_delete == nullptr && !keys.empty()) {
@@ -109,14 +117,16 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*partial_schema.get());
 
-        auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
-        EXPECT_TRUE(2 == chunk->num_columns());
-        auto& cols = chunk->columns();
-        for (size_t i = 0; i < keys.size(); i++) {
-            cols[0]->append_datum(vectorized::Datum(keys[i]));
-            cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 3)));
+        if (keys.size() > 0) {
+            auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
+            EXPECT_TRUE(2 == chunk->num_columns());
+            auto& cols = chunk->columns();
+            for (size_t i = 0; i < keys.size(); i++) {
+                cols[0]->append_datum(vectorized::Datum(keys[i]));
+                cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 3)));
+            }
+            CHECK_OK(writer->flush_chunk(*chunk));
         }
-        CHECK_OK(writer->flush_chunk(*chunk));
         RowsetSharedPtr partial_rowset = *writer->build();
 
         return partial_rowset;
@@ -153,21 +163,40 @@ public:
         return *writer->build();
     }
 
-    TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
+    TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool multi_column_pk = false) {
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
         request.__set_version_hash(0);
         request.tablet_schema.schema_hash = schema_hash;
-        request.tablet_schema.short_key_column_count = 6;
+        request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
 
-        TColumn k1;
-        k1.column_name = "pk";
-        k1.__set_is_key(true);
-        k1.column_type.type = TPrimitiveType::BIGINT;
-        request.tablet_schema.columns.push_back(k1);
+        if (multi_column_pk) {
+            TColumn pk1;
+            pk1.column_name = "pk1_bigint";
+            pk1.__set_is_key(true);
+            pk1.column_type.type = TPrimitiveType::BIGINT;
+            request.tablet_schema.columns.push_back(pk1);
+            TColumn pk2;
+            pk2.column_name = "pk2_varchar";
+            pk2.__set_is_key(true);
+            pk2.column_type.type = TPrimitiveType::VARCHAR;
+            pk2.column_type.len = 128;
+            request.tablet_schema.columns.push_back(pk2);
+            TColumn pk3;
+            pk3.column_name = "pk3_int";
+            pk3.__set_is_key(true);
+            pk3.column_type.type = TPrimitiveType::INT;
+            request.tablet_schema.columns.push_back(pk3);
+        } else {
+            TColumn k1;
+            k1.column_name = "pk";
+            k1.__set_is_key(true);
+            k1.column_type.type = TPrimitiveType::BIGINT;
+            request.tablet_schema.columns.push_back(k1);
+        }
 
         TColumn k2;
         k2.column_name = "v1";
@@ -250,6 +279,7 @@ public:
         k3.column_name = "v2";
         k3.__set_is_key(false);
         k3.column_type.type = TPrimitiveType::VARCHAR;
+        k3.column_type.len = 128;
         request.tablet_schema.columns.push_back(k3);
 
         auto st = StorageEngine::instance()->create_tablet(request);
@@ -887,7 +917,9 @@ TEST_F(TabletUpdatesTest, compaction_score_enough_normal) {
 
 // NOLINTNEXTLINE
 TEST_F(TabletUpdatesTest, horizontal_compaction) {
+    auto orig = config::vertical_compaction_max_columns_per_group;
     config::vertical_compaction_max_columns_per_group = 5;
+    DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
 
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
@@ -916,7 +948,9 @@ TEST_F(TabletUpdatesTest, horizontal_compaction) {
 }
 
 TEST_F(TabletUpdatesTest, vertical_compaction) {
+    auto orig = config::vertical_compaction_max_columns_per_group;
     config::vertical_compaction_max_columns_per_group = 1;
+    DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
 
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
