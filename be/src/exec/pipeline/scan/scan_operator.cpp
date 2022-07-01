@@ -213,6 +213,23 @@ inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
     return !ptr.owner_before(wp{}) && !wp{}.owner_before(ptr);
 }
 
+void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns,
+                                             int64_t scan_rows, int64_t scan_bytes) {
+    _last_growth_cpu_time_ns += cpu_time_ns;
+    _last_scan_rows_num += scan_rows;
+    _last_scan_bytes += scan_bytes;
+    _decrease_committed_scan_tasks();
+    _num_running_io_tasks--;
+
+    if (!_chunk_sources[chunk_source_index]->has_next_chunk()) {
+        _chunk_sources[chunk_source_index]->close(state);
+        _chunk_sources[chunk_source_index] = nullptr;
+        detach_chunk_source(chunk_source_index);
+    }
+
+    _is_io_task_running[chunk_source_index] = false;
+}
+
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
     if (_chunk_sources[chunk_source_index]->get_buffer_size() >= _buffer_size) {
         return Status::OK();
@@ -230,32 +247,33 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         _query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
     }
     if (_workgroup != nullptr) {
-        workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [wp = _query_ctx, this, state,
-                                                                    chunk_source_index](int worker_id) {
-            if (auto sp = wp.lock()) {
-                {
-                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-                    size_t num_read_chunks = 0;
-                    Status status = _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking_for_workgroup(
-                            _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
-                    if (!status.ok() && !status.is_end_of_file()) {
-                        _set_scan_status(status);
+        workgroup::ScanTask task =
+                workgroup::ScanTask(_workgroup, [wp = _query_ctx, this, state, chunk_source_index](int worker_id) {
+                    if (auto sp = wp.lock()) {
+                        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+
+                        auto& chunk_source = _chunk_sources[chunk_source_index];
+                        size_t num_read_chunks = 0;
+                        int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
+                        int64_t prev_scan_rows = chunk_source->get_scan_rows();
+                        int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
+
+                        // Read chunk
+                        Status status = chunk_source->buffer_next_batch_chunks_blocking_for_workgroup(
+                                _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
+                        if (!status.ok() && !status.is_end_of_file()) {
+                            _set_scan_status(status);
+                        }
+
+                        int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
+                        _workgroup->increment_real_runtime_ns(delta_cpu_time);
+                        _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
+
+                        _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
+                                                  chunk_source->get_scan_rows() - prev_scan_rows,
+                                                  chunk_source->get_scan_bytes() - prev_scan_bytes);
                     }
-                    // TODO (by laotan332): More detailed information is needed
-                    _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
-                    _workgroup->increment_real_runtime_ns(_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
-
-                    _last_growth_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
-                    _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
-                    _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
-                }
-
-                _decrease_committed_scan_tasks();
-                _num_running_io_tasks--;
-                _is_io_task_running[chunk_source_index] = false;
-            }
-        });
-
+                });
         if (dynamic_cast<ConnectorScanOperator*>(this) != nullptr) {
             offer_task_success = ExecEnv::GetInstance()->hdfs_scan_executor()->submit(std::move(task));
         } else {
@@ -265,21 +283,23 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         PriorityThreadPool::Task task;
         task.work_function = [wp = _query_ctx, this, state, chunk_source_index]() {
             if (auto sp = wp.lock()) {
-                {
-                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-                    Status status =
-                            _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);
-                    if (!status.ok() && !status.is_end_of_file()) {
-                        _set_scan_status(status);
-                    }
-                    _last_growth_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
-                    _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
-                    _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
-                }
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
 
-                _decrease_committed_scan_tasks();
-                _num_running_io_tasks--;
-                _is_io_task_running[chunk_source_index] = false;
+                auto& chunk_source = _chunk_sources[chunk_source_index];
+                int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
+                int64_t prev_scan_rows = chunk_source->get_scan_rows();
+                int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
+
+                Status status =
+                        _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);
+                if (!status.ok() && !status.is_end_of_file()) {
+                    _set_scan_status(status);
+                }
+                int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
+
+                _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
+                                          chunk_source->get_scan_rows() - prev_scan_rows,
+                                          chunk_source->get_scan_bytes() - prev_scan_bytes);
             }
         };
         // TODO(by satanson): set a proper priority

@@ -54,8 +54,6 @@ public:
                                                            size_t* num_read_chunks, int worker_id,
                                                            workgroup::WorkGroupPtr running_wg) override;
 
-    int64_t last_spent_cpu_time_ns() override;
-
 private:
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
@@ -77,8 +75,6 @@ private:
     void _update_counter();
     void _update_realtime_counter(vectorized::Chunk* chunk);
     void _decide_chunk_size();
-
-    void _update_avg_row_bytes(vectorized::Chunk* chunk, size_t chunk_index, size_t batch_size);
 
 private:
     vectorized::TabletReaderParams _params{};
@@ -117,12 +113,11 @@ private:
 
     // The following are profile meatures
     int64_t _num_rows_read = 0;
-    int64_t _raw_rows_read = 0;
-    int64_t _compressed_bytes_read = 0;
-    int64_t _last_spent_cpu_time_ns = 0;
 
+    // Local counters for row-size estimation, will be reset after a batch
     size_t _local_sum_row_bytes = 0;
     size_t _local_num_rows = 0;
+    size_t _local_sum_chunks = 0;
 
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;

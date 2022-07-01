@@ -51,6 +51,7 @@ public:
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
     int64_t num_bytes_read() const override;
+    int64_t cpu_time_spent() const override;
 
 private:
     const ESDataSourceProvider* _provider;
@@ -76,6 +77,7 @@ private:
     int64_t _rows_read_number = 0;
     int64_t _rows_return_number = 0;
     int64_t _bytes_read = 0;
+    int64_t _cpu_time_ns = 0;
 
     ESScanReader* _es_reader = nullptr;
     std::unique_ptr<vectorized::ScrollParser> _es_scroll_parser;
