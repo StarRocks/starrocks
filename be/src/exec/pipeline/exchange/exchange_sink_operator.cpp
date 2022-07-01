@@ -275,7 +275,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
                                            int32_t driver_sequence, const std::shared_ptr<SinkBuffer>& buffer,
                                            TPartitionType::type part_type,
                                            const std::vector<TPlanFragmentDestination>& destinations,
-                                           bool is_pipeline_level_shuffle, const int32_t num_shuffles,
+                                           bool is_pipeline_level_shuffle, const int32_t num_shuffles_per_channel,
                                            int32_t sender_id, PlanNodeId dest_node_id,
                                            const std::vector<ExprContext*>& partition_expr_ctxs,
                                            bool enable_exchange_pass_through, FragmentContext* const fragment_ctx,
@@ -285,7 +285,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
           _part_type(part_type),
           _destinations(destinations),
           _is_pipeline_level_shuffle(is_pipeline_level_shuffle),
-          _num_shuffles(num_shuffles > 0 ? num_shuffles : 1),
+          _num_shuffles_per_channel(num_shuffles_per_channel > 0 ? num_shuffles_per_channel : 1),
           _sender_id(sender_id),
           _dest_node_id(dest_node_id),
           _partition_expr_ctxs(partition_expr_ctxs),
@@ -296,21 +296,42 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
     PassThroughChunkBuffer* pass_through_chunk_buffer =
             state->exec_env()->stream_mgr()->get_pass_through_chunk_buffer(state->query_id());
 
-    // fragment_instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
-    std::optional<std::shared_ptr<Channel>> pseudo_channel;
-
-    for (const auto& destination : destinations) {
+    _channels.reserve(destinations.size());
+    std::vector<int> driver_sequence_per_channel(destinations.size(), 0);
+    for (int i = 0; i < destinations.size(); ++i) {
+        const auto& destination = destinations[i];
         const auto& fragment_instance_id = destination.fragment_instance_id;
-        if (fragment_instance_id.lo == -1 && pseudo_channel.has_value()) {
-            _channels.emplace_back(pseudo_channel.value());
+
+        auto it = _instance_id2channel.find(fragment_instance_id.lo);
+        if (it != _instance_id2channel.end()) {
+            _channels.emplace_back(it->second.get());
         } else {
-            _channels.emplace_back(new Channel(this, destination.brpc_server, fragment_instance_id, dest_node_id,
-                                               _num_shuffles, enable_exchange_pass_through, pass_through_chunk_buffer));
-            if (fragment_instance_id.lo == -1) {
-                pseudo_channel = _channels.back();
+            std::unique_ptr<Channel> channel = std::make_unique<Channel>(
+                    this, destination.brpc_server, fragment_instance_id, dest_node_id, _num_shuffles_per_channel,
+                    enable_exchange_pass_through, pass_through_chunk_buffer);
+            _channels.emplace_back(channel.get());
+            _instance_id2channel.emplace(fragment_instance_id.lo, std::move(channel));
+        }
+
+        if (destination.__isset.pipeline_driver_sequence) {
+            driver_sequence_per_channel[i] = destination.pipeline_driver_sequence;
+            _is_channel_bound_driver_sequence = true;
+        }
+    }
+
+    // Each channel is bound to a specific driver sequence for the local bucket shuffle join.
+    if (_is_channel_bound_driver_sequence) {
+        _num_shuffles_per_channel = 1;
+        _driver_sequence_per_shuffle = std::move(driver_sequence_per_channel);
+    } else {
+        _driver_sequence_per_shuffle.reserve(_channels.size() * _num_shuffles_per_channel);
+        for (int channel_id = 0; channel_id < _channels.size(); ++channel_id) {
+            for (int i = 0; i < _num_shuffles_per_channel; ++i) {
+                _driver_sequence_per_shuffle.emplace_back(i);
             }
         }
     }
+    _num_shuffles = _channels.size() * _num_shuffles_per_channel;
 }
 
 Status ExchangeSinkOperator::prepare(RuntimeState* state) {
@@ -358,12 +379,12 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
 
-    for (auto& _channel : _channels) {
-        RETURN_IF_ERROR(_channel->init(state));
+    for (auto& [_, channel] : _instance_id2channel) {
+        RETURN_IF_ERROR(channel->init(state));
     }
 
     _channel_ids.resize(state->chunk_size());
-    _driver_sequences.resize(state->chunk_size());
+    _shuffle_ids.resize(state->chunk_size());
     _row_indexes.resize(state->chunk_size());
 
     return Status::OK();
@@ -406,7 +427,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         send_chunk = &temp_chunk;
     }
 
-    if (_part_type == TPartitionType::UNPARTITIONED || (_num_shuffles == 1 && _channels.size() == 1)) {
+    if (_part_type == TPartitionType::UNPARTITIONED || _num_shuffles == 1) {
         if (_chunk_request == nullptr) {
             _chunk_request = std::make_shared<PTransmitChunkParams>();
         }
@@ -449,7 +470,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         // Round-robin batches among channels. Wait for the current channel to finish its
         // rpc before overwriting its batch.
         // 1. Get request of that channel
-        std::vector<std::shared_ptr<Channel>> local_channels;
+        std::vector<Channel*> local_channels;
         for (const auto& channel : _channels) {
             if (channel->is_local()) {
                 local_channels.emplace_back(channel);
@@ -469,7 +490,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         // hash-partition batch's rows across channels
-        const auto num_channels = _channels.size();
+        const size_t num_channels = _channels.size();
         {
             SCOPED_TIMER(_shuffle_hash_timer);
             for (size_t i = 0; i < _partitions_columns.size(); ++i) {
@@ -493,27 +514,31 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
             }
 
             // Compute row indexes for each channel's each shuffle
-            _channel_row_idx_start_points.assign(num_channels * _num_shuffles + 1, 0);
+            _channel_row_idx_start_points.assign(_num_shuffles + 1, 0);
 
             for (size_t i = 0; i < num_rows; ++i) {
-                auto channel_id = _hash_values[i] % num_channels;
-                // Note that xorshift32 rehash must be applied for both local shuffle and exchange sink here.
-                auto driver_sequence = HashUtil::xorshift32(_hash_values[i]) % _num_shuffles;
+                size_t channel_id = _hash_values[i] % num_channels;
+                size_t shuffle_id;
+                if (_is_channel_bound_driver_sequence) {
+                    shuffle_id = channel_id;
+                } else {
+                    // Note that xorshift32 rehash must be applied for both local shuffle and exchange sink here.
+                    uint32_t driver_sequence = HashUtil::xorshift32(_hash_values[i]) % _num_shuffles_per_channel;
+                    shuffle_id = channel_id * _num_shuffles_per_channel + driver_sequence;
+                }
                 _channel_ids[i] = channel_id;
-                _driver_sequences[i] = driver_sequence;
-                _channel_row_idx_start_points[channel_id * _num_shuffles + driver_sequence]++;
+                _shuffle_ids[i] = shuffle_id;
+                _channel_row_idx_start_points[shuffle_id]++;
             }
             // NOTE:
             // we make the last item equal with number of rows of this chunk
-            for (int32_t i = 1; i <= num_channels * _num_shuffles; ++i) {
+            for (int32_t i = 1; i <= _num_shuffles; ++i) {
                 _channel_row_idx_start_points[i] += _channel_row_idx_start_points[i - 1];
             }
 
             for (int32_t i = num_rows - 1; i >= 0; --i) {
-                auto channel_id = _channel_ids[i];
-                auto driver_sequence = _driver_sequences[i];
-                _row_indexes[_channel_row_idx_start_points[channel_id * _num_shuffles + driver_sequence] - 1] = i;
-                _channel_row_idx_start_points[channel_id * _num_shuffles + driver_sequence]--;
+                _row_indexes[_channel_row_idx_start_points[_shuffle_ids[i]] - 1] = i;
+                _channel_row_idx_start_points[_shuffle_ids[i]]--;
             }
         }
 
@@ -522,9 +547,13 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
                 // dest bucket is no used, continue
                 continue;
             }
-            for (int32_t driver_sequence = 0; driver_sequence < _num_shuffles; ++driver_sequence) {
-                size_t from = _channel_row_idx_start_points[channel_id * _num_shuffles + driver_sequence];
-                size_t size = _channel_row_idx_start_points[channel_id * _num_shuffles + driver_sequence + 1] - from;
+
+            for (int32_t i = 0; i < _num_shuffles_per_channel; ++i) {
+                int shuffle_id = channel_id * _num_shuffles_per_channel + i;
+                int driver_sequence = _driver_sequence_per_shuffle[shuffle_id];
+
+                size_t from = _channel_row_idx_start_points[shuffle_id];
+                size_t size = _channel_row_idx_start_points[shuffle_id + 1] - from;
                 if (size == 0) {
                     // no data for this channel continue;
                     continue;
@@ -544,7 +573,7 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     if (_chunk_request != nullptr) {
         butil::IOBuf attachment;
         construct_brpc_attachment(_chunk_request, attachment);
-        for (const auto& channel : _channels) {
+        for (const auto& [_, channel] : _instance_id2channel) {
             PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
             channel->send_chunk_request(copy, attachment);
         }
@@ -552,8 +581,8 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
         _chunk_request.reset();
     }
 
-    for (auto& _channel : _channels) {
-        _channel->close(state, _fragment_ctx);
+    for (auto& [_, channel] : _instance_id2channel) {
+        channel->close(state, _fragment_ctx);
     }
 
     _buffer->set_finishing();
@@ -644,16 +673,16 @@ void ExchangeSinkOperator::construct_brpc_attachment(PTransmitChunkParamsPtr chu
 
 ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
         int32_t id, int32_t plan_node_id, std::shared_ptr<SinkBuffer> buffer, TPartitionType::type part_type,
-        const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle, int32_t num_shuffles,
-        int32_t sender_id, PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs,
-        bool enable_exchange_pass_through, FragmentContext* const fragment_ctx,
-        const std::vector<int32_t>& output_columns)
+        const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle,
+        int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
+        std::vector<ExprContext*> partition_expr_ctxs, bool enable_exchange_pass_through,
+        FragmentContext* const fragment_ctx, const std::vector<int32_t>& output_columns)
         : OperatorFactory(id, "exchange_sink", plan_node_id),
           _buffer(std::move(buffer)),
           _part_type(part_type),
           _destinations(destinations),
           _is_pipeline_level_shuffle(is_pipeline_level_shuffle),
-          _num_shuffles(num_shuffles),
+          _num_shuffles_per_channel(num_shuffles_per_channel),
           _sender_id(sender_id),
           _dest_node_id(dest_node_id),
           _partition_expr_ctxs(std::move(partition_expr_ctxs)),
@@ -663,9 +692,9 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
 
 OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     return std::make_shared<ExchangeSinkOperator>(this, _id, _plan_node_id, driver_sequence, _buffer, _part_type,
-                                                  _destinations, _is_pipeline_level_shuffle, _num_shuffles, _sender_id,
-                                                  _dest_node_id, _partition_expr_ctxs, _enable_exchange_pass_through,
-                                                  _fragment_ctx, _output_columns);
+                                                  _destinations, _is_pipeline_level_shuffle, _num_shuffles_per_channel,
+                                                  _sender_id, _dest_node_id, _partition_expr_ctxs,
+                                                  _enable_exchange_pass_through, _fragment_ctx, _output_columns);
 }
 
 Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {

@@ -340,7 +340,8 @@ void OlapScanNode::enable_shared_scan(bool enable) {
 }
 
 StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_queue(
-        const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams& request) {
+        const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams& request,
+        size_t num_total_scan_ranges) {
     pipeline::Morsels morsels;
     for (const auto& scan_range : scan_ranges) {
         morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
@@ -361,7 +362,8 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
 
     int64_t scan_dop;
     int64_t splitted_scan_rows;
-    ASSIGN_OR_RETURN(auto could, _could_tablet_internal_parallel(scan_ranges, request, &scan_dop, &splitted_scan_rows));
+    ASSIGN_OR_RETURN(auto could, _could_tablet_internal_parallel(scan_ranges, request, num_total_scan_ranges, &scan_dop,
+                                                                 &splitted_scan_rows));
     if (!could) {
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
     }
@@ -376,12 +378,13 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
 }
 
 StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
-                                                             const TExecPlanFragmentParams& request, int64_t* scan_dop,
+                                                             const TExecPlanFragmentParams& request,
+                                                             size_t num_total_scan_ranges, int64_t* scan_dop,
                                                              int64_t* splitted_scan_rows) const {
     // The enough number of tablets shouldn't use tablet internal parallel.
     int32_t dop = request.__isset.pipeline_dop ? request.pipeline_dop : 0;
     dop = ExecEnv::GetInstance()->calc_pipeline_dop(dop);
-    if (scan_ranges.size() >= dop) {
+    if (num_total_scan_ranges >= dop) {
         return false;
     }
 
@@ -756,12 +759,7 @@ void OlapScanNode::_close_pending_scanners() {
 
 pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     // Set the dop according to requested parallelism and number of morsels
-    int node_id = id();
-    auto& morsel_queues = context->fragment_context()->morsel_queues();
-    DCHECK_GT(morsel_queues.count(node_id), 0);
-    auto& morsel_queue = morsel_queues[node_id];
-    size_t dop = std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
-
+    size_t dop = context->dop_of_source_operator(id());
     auto scan_ctx = std::make_shared<pipeline::OlapScanContext>(this, dop, _enable_shared_scan);
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
 
