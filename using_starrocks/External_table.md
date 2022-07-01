@@ -38,6 +38,72 @@ Parameters:
 * **database**: the name of the MySQL database
 * **table**: the name of the table in the MySQL database
 
+## StarRocks external table
+
+From StarRocks 1.19 onwards, StarRocks allows you to use a StarRocks external table to write data from one StarRocks cluster to another. This achieves read-write separation and provides better resource isolation. You can first create a destination table in the destination StarRocks cluster. Then, in the source StarRocks cluster, you can create a StarRocks external table that has the same schema as the destination table and specify the information of the destination cluster and table in the `PROPERTIES` field.
+
+Data can be written from  a source cluster to a  destination cluster by using INSERT INTO statement to write into a StarRocks external table. It can help realize the following goals:
+
+* Data synchronization between StarRocks clusters.
+* Read-write separation. Data is written to the source cluster, and data changes from the source cluster are synchronized to the destination cluster, which provides query services.
+
+The following code shows how to create a destination table and an external table.
+
+~~~SQL
+# Create a destination table in the destination StarRocks cluster.
+CREATE TABLE t
+(
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    k4 VARCHAR(2048),
+    k5 DATETIME
+)
+ENGINE=olap
+DISTRIBUTED BY HASH(k1) BUCKETS 10;
+
+# Create an external table in the source StarRocks cluster.
+CREATE EXTERNAL TABLE external_t
+(
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    k4 VARCHAR(2048),
+    k5 DATETIME
+)
+ENGINE=olap
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+PROPERTIES
+(
+    "host" = "127.0.0.1",
+    "port" = "9020",
+    "user" = "user",
+    "password" = "passwd",
+    "database" = "db_test",
+    "table" = "t"
+);
+
+# Write data from a source cluster to a destination cluster by writing data into the StarRocks external table. The second statement is recommended for the production environment.
+insert into external_t values ('2020-10-11', 1, 1, 'hello', '2020-10-11 10:00:00');
+insert into external_t select * from other_table;
+~~~
+
+Parameters：
+
+* **EXTERNAL:** This keyword indicates that the table to be created is an external table.
+* **host:** This parameter specifies the IP address of the leader FE node of the destination StarRocks cluster.
+* **port:**  This parameter specifies the RPC port of the leader FE node of the destination StarRocks cluster. You can set this parameter based on the rpc_port configuration in the **fe/fe.conf** file.
+* **user:** This parameter specifies the username used to access the destination StarRocks cluster.
+* **password:** This parameter specifies the password used to access the destination StarRocks cluster.
+* **database:** This parameter specifies the database to which the destination table belongs.
+* **table:** This parameter specifies the name of the destination table.
+
+The following limits apply when you use a StarRocks external table:
+
+* You can only run the INSERT INTO and SHOW CREATE TABLE commands on a StarRocks external table. Other data writing methods are not supported. In addition, you cannot query data from a StarRocks external table or perform DDL operations on the external table.
+* The syntax of creating an external table is the same as creating a normal table, but the column names and other information in the external table must be the same as the destination table.
+* The external table synchronizes table metadata from the destination table every 10 seconds. If a DDL operation is performed on the destination table, there may be a delay for data synchronization between the two tables.
+
 ## Elasticsearch external table
 
 StarRocks and Elasticsearch are two popular analytics systems. StarRocks is performant in large-scale distributed computing. Elasticsearch is ideal for full-text search. StarRocks combined with Elasticsearch can deliver a more complete OLAP solution.
@@ -66,14 +132,17 @@ PROPERTIES (
 ~~~
 
 Parameters
-|  Parameter  | Description   |
-| :---: |     :---:     |
-|  host |  The connection address of the Elasticsearch cluster. You can specify one or more addresses. StarRocks can parse the Elasticsearch version and index shard allocation from this address.   |
-|  user |  The username of the Elasticsearch cluster with **basic authentication** enabled. Make sure you have the access to `/*cluster/state/*nodes/http` and the index.   |
-|  password |  The password of the Elasticsearch cluster.   |
-|  index |  The name of the Elasticsearch index that corresponds to the table in StarRocks. It can be an alias.   |
-|  type  |  he type of the index. Default value: doc.   |
-|  transport |  This parameter is reserved. Default value: http.   |
+
+* **host**: The connection address of the Elasticsearch cluster. You can specify one or more addresses. StarRocks can parse the Elasticsearch version and index shard allocation from this address.
+* **user**: The username of the Elasticsearch cluster with **basic authentication** enabled. Make sure you have the access to `/*cluster/state/*nodes/http` and the index.
+* **password**: The password of the Elasticsearch cluster.
+* **index**: The name of the Elasticsearch index that corresponds to the table in StarRocks. It can be an alias.
+* **type**: the type of the index. Default value: doc.
+* **transport**: This parameter is reserved. Default value: http.
+* **es.nodes.wan.only**: indicates whether StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data.
+
+  * true: StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data and does not sniff data nodes which shards of the Elasticsearch index reside in. If StarRocks cannot access the addresses of the data nodes inside the Elasticsearch cluster, you need to set this parameter to `true`.
+  * false: default value. StarRocks uses the addresses specified by `host` to sniff data nodes on which the shards of the Elasticsearch cluster indexes are located. After StarRocks generates a query execution plan, the relevant BEs directly access the data nodes inside the Elasticsearch cluster to fetch data from the shards of indexes. If StarRocks can access the addresses of the data nodes inside the Elasticsearch cluster, we recommend that you retain the default value `false`.
 
 ### Predicate pushdown
 
@@ -160,6 +229,217 @@ select * from es_table where esquery(k4, ' {
 * Elasticsearch earlier than 5.x scans data in a different way than that later than 5.x. Currently, **only versions later than 5.x** are supported.
 * Elasticsearch clusters with HTTP basic authentication enabled are supported.
 * Querying data from StarRocks may not be as fast as directly querying data from Elasticsearch, such as count-related queries. The reason is that Elasticsearch directly reads the metadata of target documents without the need to filter the real data, which accelerates the count query.
+
+## External table for databases that support JDBC drivers
+
+Since 2.3.0 version, StarRocks provides external tables to query databases that support JDBC drivers. This way, you can analyze the data of such databases in a blazing fast manner without the need to import the data into StarRocks.  This topic describes how to create an external table in StarRocks and query data in databases that support JDBC drivers.
+
+### Prerequisites
+
+When a JDBC resource is created, and a JDBC external table is queried for the first time, the FEs and BEs need to download the JDBC driver. Therefore, the machines on which the FEs and BEs are located must have access to the download URL of the JDBC driver during these two phases. The download URL is specified by the `driver_url` parameter when the JDBC resource is created.
+
+### Create and manage JDBC resources
+
+#### Create a JDBC resource
+
+Before you create an external table to query data from a database, you need to create a JDBC resource in StarRocks to manage the connection information of the database. The database must support the JDBC driver and is referred as the "target database". After creating the resource, you can use it to create external tables.
+
+Execute the following statement to create a JDBC resource named `jdbc0`:
+
+~~~SQL
+create external resource jdbc0
+properties (
+    "type"="jdbc",
+    "user"="postgres",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:postgresql://127.0.0.1:5432/jdbc_test",
+    "driver_url"="https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar",
+    "driver_class"="org.postgresql.Driver"
+);
+~~~
+
+The required parameters in `properties` are as follows:
+
+* `type`: the type of the resource. Set the value to `jdbc`.
+
+* `user`: the username that is used to connect to the target database.
+
+* `password`: the password that is used to connect to the target database.
+
+* `jdbc_uri`: the URL that the JDBC driver uses to connect to the target database. The URL format must satisfy the database URL syntax. For the URL syntax of some common databases, visit the official websites of [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html)、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html)、[SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16).
+
+> Note: The URL must include the name of the target database. For example, in the preceding code example, `jdbc_test` is the name of the target database that you want to connect.
+
+* `driver_url`:  the download URL of the JDBC driver used by the target database.
+
+* `driver_class`: the class name of the JDBC driver used by the target database. The class names of common xxx are as follows:
+  * MySQL: com.mysql.jdbc.Driver (MySQL 5.x and earlier), com.mysql.cj.jdbc.Driver (MySQL 6.x and later)
+  * SQL Server: com.microsoft.sqlserver.jdbc.SQLServerDriver
+  * Oracle: oracle.jdbc.driver.OracleDriver
+  * PostgreSQL: org.postgresql.Driver
+
+After the resource is created, the FEs download the JDBC driver JAR package by using the URL that is specified in the `driver_url` parameter, generates a checksum, and saves the checksum to verify the correctness of the JDBC driver JAR package downloaded by BEs.
+
+> Note: If the download of  the JDBC driver JAR package fails, the creation of the resource also fails.
+
+When BEs query the JDBC external table for the first time and find that the corresponding JDBC driver JAR package does not exist on their machines, BEs download the JDBC driver JAR package by using the URL that is specified in the `driver_url` parameter, and all JDBC driver JAR packages are saved in the `${STARROCKS_HOME}/lib/jdbc_drivers` directory.
+
+#### View JDBC resources
+
+Execute the following statement to view all JDBC resources in StarRocks:
+
+~~~SQL
+SHOW RESOURCES;
+~~~
+
+> Note: The `ResourceType` column is `jdbc`.
+
+#### Delete a JDBC resource
+
+Execute the following statement to delete the JDBC resource named `jdbc0`:
+
+~~~SQL
+DROP RESOURCE "jdbc0";
+~~~
+
+> Note: After a JDBC resource is deleted, all JDBC external tables that are created by using that JDBC resource are unavailable. However, the data in the target database is not lost. If you still need to use StarRocks to query data in the target database, you can create the JDBC resource and the JDBC external tables again.
+
+### Create a database
+
+Execute the following statement to create and access a database named `jdbc_test` in StarRocks:
+
+~~~SQL
+CREATE DATABASE jdbc_test; 
+USE jdbc_test; 
+~~~
+
+> Note: The database name that you specify in the preceding statement does not need to be same as the name of the target database.
+
+### Create a JDBC external table
+
+Execute the following statement to create a JDBC external table named `jdbc_tbl` in the database `jdbc_test`:
+
+~~~SQL
+create external table jdbc_tbl (
+    `id` bigint NULL, 
+    `data` varchar(200) NULL 
+) ENGINE=jdbc 
+properties (
+    "resource"="jdbc0",
+    "table"="dest_tbl"
+);
+~~~
+
+The required parameters in `properties` are as follows:
+
+* `resource`: the name of the JDBC resource used to create the external table.
+
+* `table`：the target table name in the database.
+
+For supported data types and data type mapping between StarRocks and target databases, see [Data type mapping](./External_table.md#Data type mapping).
+
+> Note:
+>
+> * Indexes are not supported.
+> * You cannot use PARTITION BY or DISTRIBUTED BY to specify data distribution rules.
+
+### Query a JDBC external table
+
+Before you query JDBC external tables, you must execute the following statement to enable the Pipeline engine:
+
+~~~SQL
+set enable_pipeline_engine=true;
+~~~
+
+> Note: If the Pipeline engine is already enabled, you can skip this step.
+
+Execute the following statement to query the data in the target database by using JDBC external tables.
+
+~~~SQL
+select * from JDBC_tbl;
+~~~
+
+StarRocks supports predicate pushdown by pushing down filter conditions to the target table. Executing filter conditions as close as possible to the data source can improve query performance. Currently, StarRocks can push down operators, including the binary comparison operators (`>`, `>=`, `=`, `<`, and `<=`), `IN`, `IS NULL`, and `BETWEEN ... AND ...` . However, StarRocks can not push down functions.
+
+### Data type mapping
+
+Currently, StarRocks can only query data of basic types in the target database, such as NUMBER, STRING, TIME, and DATE. If the ranges of data values in the target database are not supported by StarRocks, the query reports an error.
+
+The mapping between the target database and StarRocks varies based on the type of the target database.
+
+#### **MySQL and StarRocks**
+
+| MySQL        | StarRocks |
+| ------------ | --------- |
+| BOOLEAN      | BOOLEAN   |
+| TINYINT      | TINYINT   |
+| SMALLINT     | SMALLINT  |
+| MEDIUMINTINT | INT       |
+| BIGINT       | BIGINT    |
+| FLOAT        | FLOAT     |
+| DOUBLE       | DOUBLE    |
+| DECIMAL      | DECIMAL   |
+| CHAR         | CHAR      |
+| VARCHAR      | VARCHAR   |
+| DATE         | DATE      |
+| DATETIME     | DATETIME  |
+
+#### **Oracle and StarRocks**
+
+| Oracle          | StarRocks |
+| --------------- | --------- |
+| CHAR            | CHAR      |
+| VARCHARVARCHAR2 | VARCHAR   |
+| DATE            | DATE      |
+| SMALLINT        | SMALLINT  |
+| INT             | INT       |
+| BINARY_FLOAT    | FLOAT     |
+| BINARY_DOUBLE   | DOUBLE    |
+| DATE            | DATE      |
+| DATETIME        | DATETIME  |
+| NUMBER          | DECIMAL   |
+
+#### **PostgreSQL and StarRocks**
+
+| PostgreSQL          | StarRocks |
+| ------------------- | --------- |
+| SMALLINTSMALLSERIAL | SMALLINT  |
+| INTEGERSERIAL       | INT       |
+| BIGINTBIGSERIAL     | BIGINT    |
+| BOOLEAN             | BOOLEAN   |
+| REAL                | FLOAT     |
+| DOUBLE PRECISION    | DOUBLE    |
+| DECIMAL             | DECIMAL   |
+| TIMESTAMP           | DATETIME  |
+| DATE                | DATE      |
+| CHAR                | CHAR      |
+| VARCHAR             | VARCHAR   |
+| TEXT                | STRING    |
+
+#### **SQL Server and StarRocks**
+
+| SQL Server        | StarRocks |
+| ----------------- | --------- |
+| BOOLEAN           | BOOLEAN   |
+| TINYINT           | TINYINT   |
+| SMALLINT          | SMALLINT  |
+| INT               | INT       |
+| BIGINT            | BIGINT    |
+| FLOAT             | FLOAT     |
+| REAL              | DOUBLE    |
+| DECIMALNUMERIC    | DECIMAL   |
+| CHAR              | CHAR      |
+| VARCHAR           | VARCHAR   |
+| DATE              | DATE      |
+| DATETIMEDATETIME2 | DATETIME  |
+
+### Limits
+
+* When you create JDBC external tables, you cannot create indexes on the tables or use PARTITION BY and DISTRIBUTED BY to specify data distribution rules for the tables.
+
+* When you query JDBC external tables, StarRocks cannot push down functions to the tables.
+
+* You cannot use the INSERT INTO ... SELECT ... statement to load the data of the target database into StarRocks.
 
 ## Hive external table
 
@@ -325,72 +605,6 @@ select count(*) from profile_wos_p7;
     2. If data in some Hive partitions is updated, you must refresh the cached data in StarRocks by running the `REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')` command. `hive_t` is the name of the Hive external table in StarRocks. `'k1=01/k2=02'` and `'k1=03/k2=04'` are the names of Hive partitions whose data is updated.
     3. When you run `REFRESH EXTERNAL TABLE hive_t`, StarRocks first checks if the column information of the Hive external table is the same as the column information of the Hive table returned by the Hive Metastore. If the schema of the Hive table changes, such as adding columns or remove columns, StarRocks synchronizes the changes to the Hive external table. After synchronization, the column order of the Hive external table remains the same as the column order of the Hive table, with the partition column being the last column.
 * When Hive data is stored in the Parquet, ORC, and CSV format, you can synchronize schema changes (such as ADD COLUMN and REPLACE COLUMN) of a Hive table to a Hive external table in StarRocks 2.3 and later versions.
-
-## StarRocks external table
-
-From StarRocks 1.19 onwards, StarRocks allows you to use a StarRocks external table to write data from one StarRocks cluster to another. This achieves read-write separation and provides better resource isolation. You can first create a destination table in the destination StarRocks cluster. Then, in the source StarRocks cluster, you can create a StarRocks external table that has the same schema as the destination table and specify the information of the destination cluster and table in the `PROPERTIES` field.
-
-Data can be written from  a source cluster to a  destination cluster by using INSERT INTO statement to write into a StarRocks external table. It can help realize the following goals:
-
-* Data synchronization between StarRocks clusters.
-* Read-write separation. Data is written to the source cluster, and data changes from the source cluster are synchronized to the destination cluster, which provides query services.
-
-The following code shows how to create a destination table and an external table.
-
-~~~SQL
-# Create a destination table in the destination StarRocks cluster.
-CREATE TABLE t
-(
-    k1 DATE,
-    k2 INT,
-    k3 SMALLINT,
-    k4 VARCHAR(2048),
-    k5 DATETIME
-)
-ENGINE=olap
-DISTRIBUTED BY HASH(k1) BUCKETS 10;
-
-# Create an external table in the source StarRocks cluster.
-CREATE EXTERNAL TABLE external_t
-(
-    k1 DATE,
-    k2 INT,
-    k3 SMALLINT,
-    k4 VARCHAR(2048),
-    k5 DATETIME
-)
-ENGINE=olap
-DISTRIBUTED BY HASH(k1) BUCKETS 10
-PROPERTIES
-(
-    "host" = "127.0.0.1",
-    "port" = "9020",
-    "user" = "user",
-    "password" = "passwd",
-    "database" = "db_test",
-    "table" = "t"
-);
-
-# Write data from a source cluster to a destination cluster by writing data into the StarRocks external table. The second statement is recommended for the production environment.
-insert into external_t values ('2020-10-11', 1, 1, 'hello', '2020-10-11 10:00:00');
-insert into external_t select * from other_table;
-~~~
-
-Parameters：
-
-* **EXTERNAL:** This keyword indicates that the table to be created is an external table.
-* **host:** This parameter specifies the IP address of the leader FE node of the destination StarRocks cluster.
-* **port:**  This parameter specifies the RPC port of the leader FE node of the destination StarRocks cluster. You can set this parameter based on the rpc_port configuration in the **fe/fe.conf** file.
-* **user:** This parameter specifies the username used to access the destination StarRocks cluster.
-* **password:** This parameter specifies the password used to access the destination StarRocks cluster.
-* **database:** This parameter specifies the database to which the destination table belongs.
-* **table:** This parameter specifies the name of the destination table.
-
-The following limits apply when you use a StarRocks external table:
-
-* You can only run the INSERT INTO and SHOW CREATE TABLE commands on a StarRocks external table. Other data writing methods are not supported. In addition, you cannot query data from a StarRocks external table or perform DDL operations on the external table.
-* The syntax of creating an external table is the same as creating a normal table, but the column names and other information in the external table must be the same as the destination table.
-* The external table synchronizes table metadata from the destination table every 10 seconds. If a DDL operation is performed on the destination table, there may be a delay for data synchronization between the two tables.
 
 ## Apache Iceberg external table
 
