@@ -53,29 +53,29 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     public static class BasePartitionInfo {
 
         @SerializedName(value = "id")
-        private Long id;
+        private long id;
 
         @SerializedName(value = "version")
-        private Long version;
+        private long version;
 
-        public BasePartitionInfo(Long id, Long version) {
+        public BasePartitionInfo(long id, long version) {
             this.id = id;
             this.version = version;
         }
 
-        public Long getId() {
+        public long getId() {
             return id;
         }
 
-        public void setId(Long id) {
+        public void setId(long id) {
             this.id = id;
         }
 
-        public Long getVersion() {
+        public long getVersion() {
             return version;
         }
 
-        public void setVersion(Long version) {
+        public void setVersion(long version) {
             this.version = version;
         }
     }
