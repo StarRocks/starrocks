@@ -31,7 +31,7 @@ jobs:
         with:
           path: ~/.m2
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-maven
+          restore-keys: ${{ runner.os }}-maven-
           
       - name: Build and analyze
         env:
