@@ -1,4 +1,4 @@
-name: Build
+name: FE Build
 on:
   push:
     branches:
