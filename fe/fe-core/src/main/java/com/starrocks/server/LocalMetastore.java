@@ -608,6 +608,10 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
+            Cluster cluster = nameToCluster.get(SystemInfoService.DEFAULT_CLUSTER);
+            if (cluster == null) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_EXISTS, SystemInfoService.DEFAULT_CLUSTER);
+            }
             // check if db exists
             db = fullNameToDb.get(fullDbName);
             if (db == null) {
