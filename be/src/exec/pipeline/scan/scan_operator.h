@@ -49,22 +49,11 @@ public:
     virtual void do_close(RuntimeState* state) = 0;
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
 
-    virtual int64_t get_last_scan_rows_num() {
-        int64_t scan_rows_num = _last_scan_rows_num;
-        _last_scan_rows_num = 0;
-        return scan_rows_num;
-    }
+    int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
+    int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
 
-    virtual int64_t get_last_scan_bytes() {
-        int64_t res = _last_scan_bytes;
-        _last_scan_bytes = 0;
-        return res;
-    }
-
-    virtual size_t max_scan_concurrency() const {
-        // It takes effect, only when it is positive.
-        return 0;
-    }
+    // It takes effect, only when it is positive.
+    virtual size_t max_scan_concurrency() const { return 0; }
 
 private:
     // This method is only invoked when current morsel is reached eof
@@ -72,6 +61,11 @@ private:
     Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
+<<<<<<< HEAD
+=======
+    void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
+                                   int64_t scan_bytes);
+>>>>>>> 14983c7e1 ([Refactor] refactor and fix the scan counters (#8088))
     void _merge_chunk_source_profiles();
 
     inline void _set_scan_status(const Status& status) {
