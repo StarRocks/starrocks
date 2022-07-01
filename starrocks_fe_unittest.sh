@@ -70,7 +70,6 @@ echo "run docker for script"
 
 cmd="cd /root/starrocks;
 sh build.sh --clean --fe;"
-
 # com.starrocks.utframe.Demo#testCreateDbAndTable+test2;
 # sh run-fe-ut.sh --run com.starrocks.utframe.Demo
 # sh run-fe-ut.sh --run com.starrocks.utframe.Demo#testCreateDbAndTable+test2
