@@ -462,6 +462,16 @@ public class SystemInfoService {
         return null;
     }
 
+    public long getBackendIdWithStarletPort(String host, int starletPort) {
+        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
+        for (Backend backend : idToBackend.values()) {
+            if (backend.getHost().equals(host) && backend.getStarletPort() == starletPort) {
+                return backend.getId();
+            }
+        }
+        return -1L;
+    }
+
     public Backend getBackendWithBePort(String host, int bePort) {
 
         Pair<String, String> targetPair;
@@ -960,6 +970,16 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(backend.getOwnerClusterName());
         if (null != cluster) {
             cluster.removeBackend(backend.getId());
+            // clear map in starosAgent
+            if (Config.integrate_starmgr) {
+                long starletPort = backend.getStarletPort();
+                if (starletPort == 0) {
+                    return;
+                }
+                String workerAddr = backend.getHost() + ":" + starletPort;
+                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerId(workerAddr);
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerId, workerAddr);
+            }
         } else {
             LOG.error("Cluster " + backend.getOwnerClusterName() + " no exist.");
         }
