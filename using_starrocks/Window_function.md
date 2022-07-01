@@ -234,6 +234,66 @@ from int_t;
 +---+---+------+
 ~~~
 
+### NTILE
+
+NTILE() function divides the sorted rows in a partition by the specified number of `num_buckets` as equally as possible, stores the divided rows in the respective buckets, starting from 1 `[1, 2, ..., num_buckets]`, and returns the bucket number that each row is in.
+
+About the size of the bucket:
+
+* If the row counts can be divided by the specified number of `num_buckets` exactly, all the buckets will be of the same size.
+* If the row counts cannot be divided by the specified number of `num_buckets` exactly, there will be buckets of two different sizes. The difference between sizes is 1. The buckets with more rows will be listed ahead of the one with fewer rows.
+
+Syntax:
+
+~~~~SQL
+NTILE (num_buckets) OVER (partition_by_clause order_by_clause)
+~~~~
+
+`num_buckets`: Number of the buckets to be created. The value must be a constant positive integer whose maximum is `2^63 - 1`.
+
+Window clause is not allowed in NTILE() function
+
+NTILE() function returns BIGINT type of data.
+
+Example:
+
+The following example divides all rows in the partition into 2 buckets.
+
+~~~~sql
+select id, x, y,
+    ntile(2)
+        over (
+            partition by x
+            order by y
+        ) as bucket_id
+from t1;
+~~~~
+
+~~~~Plain Text
++------+------+------+-----------+
+| id   | x    | y    | bucket_id |
++------+------+------+-----------+
+|    1 |    1 |   11 |         1 |
+|    2 |    1 |   11 |         1 |
+|    3 |    1 |   22 |         1 |
+|    4 |    1 |   33 |         2 |
+|    5 |    1 |   44 |         2 |
+|    6 |    1 |   55 |         2 |
+|    7 |    2 |   66 |         1 |
+|    8 |    2 |   77 |         1 |
+|    9 |    2 |   88 |         2 |
+|   10 |    3 |   99 |         1 |
++------+------+------+-----------+
+~~~~
+
+As the above example shown, when `num_buckets` is `2`:
+
+* Rows of No.1 to No.6 were classified into the first partition; rows of No.1 to No.3 were stored in the first bucket, and rows of No.4 to No.6 were stored in the second one.
+* Rows of No.7 to No.9 were classified into the second partition; rows of No.7 and No.8 were stored in the first bucket, and row No.9 was stored in the second one.
+* Row No.10 was classified into the third partition and stored in the first bucket.
+
+<br/>
+
 ### FIRST_VALUE()
 
 FIRST_VALUE() returns the **first** value of the window range.
