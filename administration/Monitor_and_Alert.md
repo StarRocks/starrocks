@@ -323,7 +323,7 @@ The top left corner shows the Dashboard name.
 The top right corner shows the current time range. Use the drop down to select a different time range and specify an interval for page refresh.
 cluster_name: The `job_name` of each job in the Prometheus configuration file, representing a StarRocks cluster. You can select a cluster and view its monitoring information in the chart.
 
-* fe_master: The master frontend node of the cluster.
+* fe_master: The leader node of the cluster.
 * fe_instance: All frontend nodes of the corresponding cluster. Select to view the monitoring information in the chart.
 * be_instance: All backend nodes of the corresponding cluster. Select to view the monitoring information in the chart.
 * interval: Some charts show intervals  related to monitoring items. Interval is customizable(Note: 15s interval may cause some charts not to display).

@@ -1,8 +1,8 @@
 # Introduction
 
-You can import semi-structured data (e.g. JSON) by stream load or routine load.
+You can import semi-structured data (for example, JSON) by using stream load or routine load.
 
-## Usage Scenarios
+## Use Scenarios
 
 * Stream Load: For JSON data stored in text files, use stream load to import.
 * Routine Load: For JSON data in Kafka, use routine load to import.
@@ -164,10 +164,10 @@ CREATE TABLE `query_record` (
 [mysqld]
 log-bin=mysql-bin # Enable binlog
 binlog-format=ROW # Select ROW mode
-server_id=1 # MySQL replica     tion need to be defined, and do not duplicate canal's slaveId
+server_id=1 # MySQL replication need to be defined, and do not duplicate canal's slaveId
 ~~~
 
-* Create an account and grant privileges to the MySQL slave:
+* Create an account and grant privileges to the secondary MySQL server:
 
 ~~~sql
 CREATE USER canal IDENTIFIED BY 'canal';

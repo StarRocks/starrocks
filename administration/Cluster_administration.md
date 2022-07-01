@@ -28,13 +28,13 @@ After you complete the previous configurations, perform the following steps to s
 1. Navigate to the deployment directory of the FE.
 2. Run `sh bin/start_fe.sh --daemon` to start the FE.
 
-You can deploy multiple FEs to ensure high availability. Typically, you can deploy three FEs: one master FE and two follower FEs.
+You can deploy multiple FEs to ensure high availability. Typically, you can deploy three FEs: one leader FE and two follower FEs.
 
-When you start multiple FEs, start the follower FE one by one. When you upgrade a cluster, upgrade the follower FEs and then upgrade the master FE. By doing so, you can detect errors that may occur during the upgrades of the follower FEs and make sure that the cluster can continue to properly process queries.
+When you start multiple FEs, start the follower FE one by one. When you upgrade a cluster, upgrade the follower FEs and then upgrade the leader FE. By doing so, you can detect errors that may occur during the upgrades of the follower FEs and make sure that the cluster can continue to properly process queries.
 
 **Note**:
 
-- If you configured multiple follower FEs, the cluster can select one follower FE as the master FE to process queries only when more than half of configured follower FEs are available.
+- If you configured multiple follower FEs, the cluster can select one follower FE as the leader FE to process queries only when more than half of configured follower FEs are available.
 - We recommend that you verify every FE that you want to start. You can send a query to an FE to verify the FE.
 
 ### Start a BE
@@ -279,7 +279,7 @@ The FE metadata is critical and an abnormal upgrade may cause data loss. We reco
 2. Modify the **fe.conf** file. Configure the ports of the test FE to be different from the ports of the online FEs.
 3. Set `cluster_id` in the **fe.conf** file to `123456`.
 4. Set `metadata_failure_recovery` in the **fe.conf** file to `true`.
-5. Copy the metadata directory of the master FE in the production environment to your test environment.
+5. Copy the metadata directory of the leader FE in the production environment to your test environment.
 6. Set the `cluster_id` configuration item in the **meta/image/VERSION** file to 123456.
 7. In your test environment, run `sh bin/start_fe.sh` to start the test FE.
 8. View the **fe.log** file of the test FE to check whether the restart is successful.

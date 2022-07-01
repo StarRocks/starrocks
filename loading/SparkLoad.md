@@ -100,7 +100,7 @@ REVOKE USAGE_PRIV ON RESOURCE resource_name FROM user_identityREVOKE USAGE_PRIV 
 * `spark.master`: Required, currently supports yarn.
 * `spark.submit.deployMode`: The deployment mode of the Apache Spark™ program, required, currently supports both cluster and client.
 * `spark.hadoop.fs.defaultFS`: Required if master is yarn.
-* Parameters related to yarn resource manager, required if      master is yarn.
+* Parameters related to yarn resource manager, required if master is yarn.
 * Single point resource manager required
 * `spark.hadoop.yarn.resourcemanager.address`: Address of the single point resource manager.
 * HA resource manager needs to be configured, where either hostname or address is configured.

@@ -75,7 +75,7 @@ LOAD MYSQL VARIABLES TO RUNTIME;
 SAVE MYSQL VARIABLES TO DISK;
 ~~~
 
-### 8. Insert the master node
+### 8. Insert into the leader node
 
 ~~~sql
 insert into mysql_servers(hostgroup_id, hostname, port) values(1, '172.26.92.139', 8533);

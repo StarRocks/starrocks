@@ -28,8 +28,8 @@ After the service is started, you may adjust the configuration parameters to mee
 |tmp_dir|starrocksFe.STARROCKS_HOME_DIR/temp_ddir| Directory where temporary files are kept, such as backup/restore, etc. |
 |edit_log_port|9010| The port used for communication between FE Groups (Master, Follower, Observer) |
 |edit_log_roll_num|50000| Split size of image log |
-|meta_delay_toleration_second|300| Maximum metadata lag time tolerated by non-master nodes |
-|master_sync_policy|SYNC| Swipe method for master’s log, SYNC by default |
+|meta_delay_toleration_second|300| Maximum metadata lag time tolerated by non-leader nodes |
+|master_sync_policy|SYNC| Swipe method for leader’s log, SYNC by default |
 |replica_sync_policy|SYNC| Swipe method for follower’s log,  SYNC by default |
 |replica_ack_policy|SIMPLE_MAJORITY| The form in which logs are considered valid. The default is for the majority to return a confirmation message, which is considered to be in effect |
 |bdbje_heartbeat_timeout_second|30|The interval for BDBJE heartbeat timeout|
@@ -39,7 +39,7 @@ After the service is started, you may adjust the configuration parameters to mee
 |priority_networks| empty string | Specify BE IP address in the form of CIDR 10.10.10.0/24 for machines with multiple IPs |
 |metadata_failure_recovery|false| Forced reset of FE metadata. Use with caution |
 |ignore_meta_check|false| Ignore the metadata lag |
-|max_bdbje_clock_delta_ms|5000| Maximum tolerated time offset between master and non-master |
+|max_bdbje_clock_delta_ms|5000| Maximum tolerated time offset between leader and non-leader |
 |http_port|8030| Port of Http Server |
 |http_backlog_num|1024|HttpServer port backlog|
 |thrift_backlog_num|1024|ThriftServer port backlog|
