@@ -96,5 +96,5 @@ echo "script run over-----"
 #        time_count=`expr $time_count + 1`
 #    done
 #fi
-
+cd fe
 mvn verify sonar:sonar -Dsonar.projectKey=dulong41_starrocks -Dsonar.login=23d4ba0aa0f8c547f3db2c329c96546e2e280468
