@@ -233,7 +233,7 @@ Note that the storage engine creates an index for the primary key of each table.
 
 - The table contains both fast-changing data and slow-changing data. Fast-changing data is frequently updated over the most recent days, whereas slow-changing data is seldom updated. Suppose that you need to synchronize a MySQL order table to StarRocks in real time for analytics and queries. In this example, the data of the table is partitioned on a daily basis, and most updates are performed on orders that were created within the most recent days. Old orders are no longer updated after they are completed. When you run a data load job, the primary key index only the data in the primary key columns for new orders is loaded into the memory, whereas the data in the primary key columns for old orders is not loaded.
 
-![img](https://starrocks.feishu.cn/space/api/box/stream/download/asynccode/?code=ZTMyMmM1ZWEzMTBlODg5NTJlM2UwZjY3YTdhOGYwMjVfMGFkVGZKcHpXdnhWVkJvYXAwY2hScndqQm5rTE1FdkFfVG9rZW46Ym94Y25YSXZxZ0lreVJxaElVSlpMSVh5bXBjXzE2NTUwODgyODM6MTY1NTA5MTg4M19WNA)
+![fig1](/assets/3.2.4-1.png)
 
 The table shown in the preceding figure is partitioned on a daily basis, and the primary key-related data in the most recently created partitions is updated more frequently than the data in the other partitions.
 
@@ -241,7 +241,7 @@ The preceding figure shows that the data related to the primary key.
 
 - Your database system uses flat tables. Each flat table consists hundreds to thousands of columns. Primary key-related data comprises only a small portion of the table data and consumes only a small amount of memory. For example, a user status or profile table consists of a large number of columns but only tens to hundreds of millions of users. In this situation, the amount of memory consumed by the data in primary key columns can be limited.
 
-![img](https://starrocks.feishu.cn/space/api/box/stream/download/asynccode/?code=MjEyNTk5ODM3MjIyY2I2ZThhY2JkMGQyMWE0NGViMjdfMUxTOUROd0JySWZxNkRZRTJ3dEhGUEhleHBhYUgzcUpfVG9rZW46Ym94Y25vYnBSNG9XMjNlQzNuTk5hUHMzMHVnXzE2NTUwODgyODM6MTY1NTA5MTg4M19WNA)
+![fig1](/assets/3.2.4-2.png)
 
 The primary key-related data in the flat table shown in the preceding figure comprises only a small portion of the table, and the table consists a small number of rows.
 
@@ -304,7 +304,8 @@ PARTITION BY RANGE(`dt`) (
 
 ) DISTRIBUTED BY HASH(order_id) BUCKETS 4
 
-PROPERTIES("replication_num" = "3");
+PROPERTIES("replication_num" = "3",
+"replication_num" = "3");
 ```
 
 Example 2: Create a status table that uses the Primary Key model.
@@ -340,7 +341,8 @@ create table users (
 
 DISTRIBUTED BY HASH(user_id) BUCKETS 4
 
-PROPERTIES("replication_num" = "3");
+PROPERTIES("replication_num" = "3",
+"replication_num" = "3");
 ```
 
 Take note of the following points:
@@ -357,6 +359,8 @@ Take note of the following points:
  `(12 + 9 1000W * 3 * 1.5 (average additional overhead per hash table) = 945 MB`
 
   In the preceding formula, `9` is the fixed memory consumption per row, and `1.5` indicates the average additional memory consumpdtion per hash table.
+
+- `enable_persistent_index`: whether to enable persistent primary key indexes. A persistent primary key index is stored in both the disk and memory to prevent excessive memory consumption. The value can be `true` or `false`. If the disk is SSD, we recommend that you set this parameter to `true`.
 
 #### Update a table
 
