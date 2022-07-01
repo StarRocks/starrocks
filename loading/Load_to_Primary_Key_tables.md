@@ -10,7 +10,7 @@ StarRocks supports the following data ingestion methods: stream load, broker loa
 
 - > You cannot insert, update, or delete data by performing a Spark load job.
 
-- > You cannot insert, update, or delete data by executing the following SQL DML statements: INSERT, UPDATE, and DELETE. These operations will be supported in future StarRocks versions.
+- > You cannot insert, update, or delete data by executing the SQL DML statements INSERT and UPDATE. These operations will be supported in future StarRocks versions.
 
 All load operations are UPSERT by default. INSERT operations are not distinguished from UPDATE operations. To support both UPSERT and DELETE operations during a load job, StarRocks provides a field named `op` in the syntax that is used to create a stream or broker load job. The `op` field is used to hold operation types. You can create a column named `__op` when you start a load job. A value of `0` indicates an UPSERT operation, and a value of `1` indicates a DELETE operation.
 
@@ -382,3 +382,7 @@ Execute the following statements to update the data:
     ~~~
 
     > Note: In the preceding statement, you must specify the `-H "partial_update:true"` setting, and specify the columns that you want to update in the `COLUMNS (id, name)` format. For more information about the parameter settings for a stream load job, see [Routine Load](/loading/RoutineLoad.md).
+
+## References
+
+For more information about the usage of the DELETE statement in the Primary Key model, see [DELETE](/sql-reference/sql-statements/data-manipulation/DELETE.md).
