@@ -54,6 +54,7 @@
   + 部署使用
     + [容器编译](/administration/Build_in_docker.md)
     + [集群部署](/administration/Deployment.md)
+    + [在 AWS 上使用 AWS CloudFormation 部署 StarRocks 集群](/administration/AWS_cloudformation.md)
     + [集群管理](/administration/Cluster_administration.md)
     + [DorisDB升级到StarRocks](/administration/update_from_dorisdb.md)
     + [Apache Doris升级到StarRocks](/administration/update_from_doris.md)
