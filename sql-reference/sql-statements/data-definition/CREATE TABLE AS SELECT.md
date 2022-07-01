@@ -1,147 +1,331 @@
 # CREATE TABLE AS SELECT
 
-## 功能  
+## 功能
 
-CREATE TABLE AS SELECT（简称 CTAS）可以查询原表，并基于查询结果，创建一个新表并且导入数据。
+CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原表并基于查询结果创建新表，然后将查询结果插入到新表中。
 
 ## 语法
 
-```SQL
-CREATE TABLE [IF NOT EXISTS] [database.]table_name
-[(column_name [, column_name2, ...]]
-[COMMENT "table comment"]
-[partition_desc]
-[distribution_desc]
-[PROPERTIES ("key"="value", ...)]
-AS SELECT query
-[ ... ]
-```
+- 同步查询原表并基于查询结果创建新表，然后将查询结果插入到新表中。
 
-注：方括号 [] 中内容可省略不写。
+  ```SQL
+  CREATE TABLE [IF NOT EXISTS] [database.]table_name
 
-### 参数说明
+  [(column_name [, column_name2, ...]]
 
-#### 建表部分
+  [COMMENT "table comment"]
 
-| 参数             | 说明                                                         |
-| ---------------- | ------------------------------------------------------------ |
-| column_name      | 列名。您无需传入列类型，StarRocks 会自动选择合适的类型，并将 FLOAT 或 DOUBLE 转换为 DECIMAL(38,9)，CHAR、VARCHAR、STRING 转换为 VARCHAR(65533)。 |
-| COMMENT          | 表注释。                                                     |
-| partition_desc   | 分区方式。更多说明，请参见 [partition_desc](CREATE%20TABLE.md/#syntax)。如果不填写，则默认为无分区。 |
-| distribution_desc | 分桶方式。更多说明，请参见 [distribution_desc](CREATE%20TABLE.md/#syntax)。如果不填写，则默认分桶键为CBO统计信息中最高基数的列，分桶数量为10。如果CBO中没有相关统计信息，则默认分桶键为第一列。 |
-| properties       | 新表的附带属性。更多说明，请参见 [PROPERTIES](CREATE%20TABLE.md/#syntax)。目前CTAS仅支持创建ENGINE类型为OLAP的表。 |
+  [partition_desc]
 
-#### 查询部分
+  [distribution_desc]
 
-支持 `... AS SELECT query` 直接指定具体列，比如 `... AS SELECT a, b, c FROM table_a;` ，则新建表的列名为 a，b， c 。
+  [PROPERTIES ("key"="value", ...)]AS SELECT query
 
-支持 `... AS SELECT query` 使用表达式，并且建议您为新表的列设置具有业务意义的别名，便于后续识别，比如 `... AS SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a;`，设置新列名为 x，y，z。
+  [ ... ]
+  ```
 
-## 使用说明
+- 异步查询原表并基于查询结果创建新表，然后将查询结果插入到新表中。
 
-- 仅支持 ENGINE 类型为 OLAP ；[数据模型](/table_design/Data_model.md) 为 [Duplicate Key](/table_design/Data_model.md#明细模型)，排序键为前三列（数据类型的存储空间不能超过 36 字节）。
-- 暂不支持设置索引。
-- 暂无法对 CTAS 提供事务保证。如果 CTAS 语句执行失败（FE 重启等原因），则可能存在如下情况：
-  - 新表可能已创建且未删除。
-  - 新表可能已创建，此时，如果除 CTAS 外存在其他导入（比如 INSERT ）将数据导入至新表，则首次成功导入的数据，视为该数据的第一版本。
-- 创建成功后，您需要手动授予用户权限。
+  ```SQL
+  SUBMIT [/*+ SET_VAR(key=value) */] TASK [[database.]<task_name>]AS
+
+  CREATE TABLE [IF NOT EXISTS] [database.]table_name
+
+  [(column_name [, column_name2, ...]]
+
+  [COMMENT "table comment"]
+
+  [partition_desc]
+
+  [distribution_desc]
+
+  [PROPERTIES ("key"="value", ...)]AS SELECT query
+
+  [ ... ]
+  ```
+
+  该语法会创建一个 Task，表示一个 CTAS 语句执行任务的存储模板。查看 Task 信息的语法如下。
+
+  ```SQL
+  SELECT * FROM INFORMATION_SCHEMA.tasks;
+  ```
+
+  执行 Task 后会对应生成一个 TaskRun，表示一个 CTAS 语句执行任务。TaskRun 有以下 4 种状态：
+
+  - `PEDING`：任务等待执行。
+  - `RUNNING`：任务正在执行。
+  - `FAILED`：任务执行失败。
+  - `SUCCESS`：任务执行成功。
+
+  查看 TaskRun 状态的语法如下。
+
+  ```SQL
+  SELECT * FROM INFORMATION_SCHEMA.task_runs;
+  ```
+
+## 参数说明
+
+### 语句参数
+
+| **参数**          | **必填** | **描述**                                                     |
+| ----------------- | -------- | ------------------------------------------------------------ |
+| column_name       | 是       | 新表的列名。您无需指定列类型。StarRocks 会自动选择合适的列类型，并将 FLOAT 和 DOUBLE 转换为 DECIMAL(38,9)；将 CHAR、VARCHAR 和 STRING 转换为 VARCHAR(65533)。 |
+| COMMENT           | 否       | 新表注释。                                                   |
+| partition_desc    | 否       | 新表的分区方式。如不指定该参数，则默认新表为无分区。更多有关分区的设置，参见 CREATE TABLE。 |
+| distribution_desc | 否       | 新表的分桶方式。如不指定该参数，则默认新表的分桶列为使用 CBO 优化器采集的统计信息中基数最高的列，且分桶数量默认为 10。如果 CBO 优化器没有采集基数信息，则默认新表的第一列为分桶列。更多有关分桶的设置，参见 CREATE TABLE。 |
+| Properties        | 否       | 新表的属性。                                                 |
+| AS SELECT query   | 是       | 查询结果。该参数支持如下值： 列。比如 `... AS SELECT a, b, c FROM table_a;`，其中 `a`、`b` 和 `c` 为原表的列名。如果您没有为新表指定列名，那么新表的列名也为 `a`、`b` 和 `c`。 表达式。比如 `... AS SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a;`，其中 `a+1`、`b+2` 和 `c*c` 为原表的列名，`x`、`y` 和 `z` 为新表的列名。 说明： 新表的列数需要与 `AS SELECT query` 中指定的列数保持一致。 建议您为新表的列设置具有业务意义的列名，便于后续识别使用。 |
+
+### FE 参数
+
+如需异步查询原表并根据查询结果创建新表，您需要配置如下 FE 参数。
+
+| **参数**                   | **默认值** | **说明**                                                     |
+| -------------------------- | ---------- | ------------------------------------------------------------ |
+| task_ttl_second            | 259200     | Task 的有效期，单位秒。超过有效期的 Task 会被自动删除        |
+| task_check_interval_second | 14400      | 删除过期 Task 的间隔时间，单位秒。                           |
+| task_runs_ttl_second       | 259200     | TaskRun 的有效期，单位秒。超过有效期的 TaskRun 会被自动删除。此外，成功和失败状态的 TaskRun 也会被自动删除。 |
+| task_runs_concurrency      | 20         | 最多可同时运行的 TaskRun 的数量。                            |
+| task_runs_queue_length     | 500        | 最多可同时等待运行的 TaskRun 的数量。如同时等待运行的 TaskRun 的数量超过该参数的默认值，您将无法继续执行 Task。 |
+
+## 注意事项
+
+- 使用 CTAS 语句创建的新表需满足如下条件：
+  - `ENGINE` 类型为 `OLAP`。
+
+  - 数据模型为明细模型 (Duplicate Key)。
+
+  - 排序列为前三列且这三列类型的存储空间不能超过 36 个字节。
+
+- CTAS 语句不支持为新表设置索引。
+
+- 如果 CTAS 语句由于 FE 重启或其他原因执行失败，可能会发生如下情况：
+  - 新表创建成功，但表中没有数据。
+
+  - 新表创建失败。
+
+- 新表创建后，如果存在多种方式（比如 Insert Into）将数据插入到新表中，那么最先执行完插入操作的即最先将数据插入到新表中。
+
+- 新表创建成功后，您需要手动授予用户对该表的权限。
+
+- 当异步查询原表并基于查询结果创建新表时，如果不指定 Task 名称，那么 StarRocks 会自动生成一个 Task 名称。
 
 ## 示例
 
-### 复制原表
-
-复制原表 order，创建一个新表 order_new。
+示例一：同步查询原表 `order` 并根据查询结果创建新表 `order_new`，然后将查询结果插入到新表中。
 
 ```SQL
 CREATE TABLE order_new
+
 AS SELECT * FROM order;
 ```
 
-### 基于原表改变列名称创建新表
-
-根据原表 order 的列 k1、k2 和 k3，创建一个新表 order_new，并指定列名为 a、b 和 c。
-
-> 指定的列数需要与 `... AS SELECT query` 的列数保持一致。
+示例二：同步查询原表 `order`中的 `k1`、`k2` 和 `k3` 列并根据查询结果创建新表 `order_new`，然后将查询结果插入到新表中，并指定新表中列的名称为 `a`、`b` 和 `c`。
 
 ```SQL
-CREATE TABLE order_new a, b, c
+CREATE TABLE order_new (a, b, c)
+
 AS SELECT k1, k2, k3 FROM order;
 ```
 
+或
+
 ```SQL
 CREATE TABLE order_new
+
 AS SELECT k1 AS a, k2 AS b, k3 AS c FROM order;
 ```
 
-### 基于原表使用表达式生成新表的新列
-
-`... AS SELECT query` 使用表达式，根据表达式结果，创建一个新表，并重新指定列名。
-
-> 建议您为新表的列名设置具有业务意义的别名，便于后续识别。
+示例三：同步查询原表 `employee`中 `salary` 列的最大值并根据查询结果创建新表 `employee_new` ，然后将查询结果插入到新表中，并指定新表中列名为 `salary_new`。
 
 ```SQL
---根据原表 employee 的列 salary 计算出最大值，并根据结果，创建一个新表 employee_new 并指定新列名为 salary_new 。
 CREATE TABLE employee_new
+
 AS SELECT MAX(salary) AS salary_max FROM employee;
- 
---查询新表 employee_new 。
+```
+
+插入完成后，查询新表 `employee_new`。
+
+```SQL
 SELECT * FROM employee_new;
+
 +------------+
+
 | salary_max |
+
 +------------+
+
 |   10000    |
+
 +------------+
 ```
 
-示例四：根据四张原表 lineorder、customer、supplier 和 part，创建一个新表 lineorder_flat，并且调整分区和分桶方式。
+示例四：同步查询四张原表 `lineorder`、`customer`、`supplier` 和 `part` 并根据查询结果创建新表 `lineorder_flat`，然后将查询结果插入到新表中，并指定新表的分区和分桶方式。
 
 ```SQL
 CREATE TABLE lineorder_flat
+
 PARTITION BY RANGE(`LO_ORDERDATE`)(
+
     START ("1993-01-01") END ("1999-01-01") EVERY (INTERVAL 1 YEAR)
+
 )
-DISTRIBUTED BY HASH(`LO_ORDERKEY`) BUCKETS 120 
-AS SELECT
+
+DISTRIBUTED BY HASH(`LO_ORDERKEY`) BUCKETS 120 AS SELECT
+
     l.LO_ORDERKEY AS LO_ORDERKEY,
+
     l.LO_LINENUMBER AS LO_LINENUMBER,
+
     l.LO_CUSTKEY AS LO_CUSTKEY,
+
     l.LO_PARTKEY AS LO_PARTKEY,
+
     l.LO_SUPPKEY AS LO_SUPPKEY,
+
     l.LO_ORDERDATE AS LO_ORDERDATE,
+
     l.LO_ORDERPRIORITY AS LO_ORDERPRIORITY,
+
     l.LO_SHIPPRIORITY AS LO_SHIPPRIORITY,
+
     l.LO_QUANTITY AS LO_QUANTITY,
+
     l.LO_EXTENDEDPRICE AS LO_EXTENDEDPRICE,
+
     l.LO_ORDTOTALPRICE AS LO_ORDTOTALPRICE,
+
     l.LO_DISCOUNT AS LO_DISCOUNT,
+
     l.LO_REVENUE AS LO_REVENUE,
+
     l.LO_SUPPLYCOST AS LO_SUPPLYCOST,
+
     l.LO_TAX AS LO_TAX,
+
     l.LO_COMMITDATE AS LO_COMMITDATE,
+
     l.LO_SHIPMODE AS LO_SHIPMODE,
+
     c.C_NAME AS C_NAME,
+
     c.C_ADDRESS AS C_ADDRESS,
+
     c.C_CITY AS C_CITY,
+
     c.C_NATION AS C_NATION,
+
     c.C_REGION AS C_REGION,
+
     c.C_PHONE AS C_PHONE,
+
     c.C_MKTSEGMENT AS C_MKTSEGMENT,
+
     s.S_NAME AS S_NAME,
+
     s.S_ADDRESS AS S_ADDRESS,
+
     s.S_CITY AS S_CITY,
+
     s.S_NATION AS S_NATION,
+
     s.S_REGION AS S_REGION,
+
     s.S_PHONE AS S_PHONE,
+
     p.P_NAME AS P_NAME,
+
     p.P_MFGR AS P_MFGR,
+
     p.P_CATEGORY AS P_CATEGORY,
+
     p.P_BRAND AS P_BRAND,
+
     p.P_COLOR AS P_COLOR,
+
     p.P_TYPE AS P_TYPE,
+
     p.P_SIZE AS P_SIZE,
-    p.P_CONTAINER AS P_CONTAINER
-FROM lineorder AS l
+
+    p.P_CONTAINER AS P_CONTAINER FROM lineorder AS l 
+
 INNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY
+
 INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
+
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
+```
+
+示例五：异步查询原表 `order_detail` 并根据查询结果创建新表 `order_statistics`，然后将查询结果插入到新表中。
+
+```Plain%20Text
+SUBMIT TASK AS CREATE TABLE order_statistics AS SELECT COUNT(*) as count FROM order_detail;
+
++-------------------------------------------+-----------+
+
+| TaskName                                  | Status    |
+
++-------------------------------------------+-----------+
+
+| ctas-df6f7930-e7c9-11ec-abac-bab8ee315bf2 | SUBMITTED |
+
++-------------------------------------------+-----------+
+```
+
+查询 Task 的信息。
+
+```SQL
+SELECT * FROM INFORMATION_SCHEMA.tasks;
+
+
+
+-- Task 信息如下
+
+TASK_NAME: ctas-df6f7930-e7c9-11ec-abac-bab8ee315bf2
+
+CREATE_TIME: 2022-06-14 14:07:06
+
+SCHEDULE: MANUAL
+
+DATABASE: default_cluster:test
+
+DEFINITION: CREATE TABLE order_statistics AS SELECT COUNT(*) as cnt FROM order_detail
+
+EXPIRE_TIME: 2022-06-17 14:07:06
+```
+
+查询 TaskRun 的状态。
+
+```SQL
+SELECT * FROM INFORMATION_SCHEMA.task_runs;
+
+
+
+--TaskRun 的状态如下
+
+QUERY_ID: 37bd2b63-eba8-11ec-8d41-bab8ee315bf2
+
+TASK_NAME: ctas-df6f7930-e7c9-11ec-abac-bab8ee315bf2
+
+CREATE_TIME: 2022-06-14 14:07:06
+
+FINISH_TIME: 2022-06-14 14:07:07
+
+STATE: SUCCESS
+
+DATABASE: 
+
+DEFINITION: CREATE TABLE order_statistics AS SELECT COUNT(*) as cnt FROM order_detail
+
+EXPIRE_TIME: 2022-06-17 14:07:06
+
+ERROR_CODE: 0
+
+ERROR_MESSAGE: NULL
+```
+
+当 TaskRun 的状态为 `SUCCESS` 时即可查询新表。
+
+```SQL
+SELECT * FROM order_statistics;
 ```
