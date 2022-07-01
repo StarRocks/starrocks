@@ -685,7 +685,8 @@ Hive Table 的 Partition 统计信息以及 Partition 下面的文件信息可�
 * 手动刷新元数据信息：
   1. hive 中新增或者删除分区时，需要刷新 **表** 的元数据信息：`REFRESH EXTERNAL TABLE hive_t`，其中 hive_t 是 starrocks 中的外表名称。
   2. hive 中向某些 partition 中新增数据时，需要 **指定 partition** 进行刷新：`REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')`，其中 hive_t 是 starrocks 中的外表名称，'k1 = 01/k2 = 02'、 'k1 = 03/k2 = 04'是 hive 中的 partition 名称。
-
+  3. 在执行 `REFRESH EXTERNAL TABLE hive_t` 命令时，StarRocks 会先检查 Apache Hive™ 外部表中的列信息和 Hive Metastore 返回的 Apache Hive™ 表中的列信息是否一致。若发现 Apache Hive™ 表的 schema 有修改，如增加列或减少列，那么 StarRocks 会将修改的信息同步到 Apache Hive™ 外部表。同步后，Apache Hive™ 外部表的列顺序和 Apache Hive™ 表的列顺序保持一致，且分区列为最后一列。
+  
 #### 自动增量更新元数据缓存
 
 自动增量更新元数据缓存主要是通过定期消费 Hive Metastore 的 event 来实现，新增分区以及分区新增数据无需通过手动执行 refresh 来更新。用户需要在 Hive Metastore 端开启元数据 Event 机制。相比 Loading Cache 的自动刷新机制，自动增量更新性能更好，建议用户开启该功能。开启该功能后，Loading Cache 的自动刷新机制将不再生效。
