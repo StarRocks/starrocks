@@ -397,13 +397,9 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
                                                       ScanNode* scan_node, pipeline::PipelineBuilderContext* context) {
     OpFactories ops;
 
-    const auto* morsel_queue = context->morsel_queue_of_source_operator(scan_operator.get());
-
-    // ScanOperator's degree_of_parallelism is not more than the number of morsels
-    // If table is empty, then morsel size is zero and we still set degree of parallelism to 1
-    const auto degree_of_parallelism =
-            std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
-    scan_operator->set_degree_of_parallelism(degree_of_parallelism);
+    const auto* morsel_queue_factory = context->morsel_queue_factory_of_source_operator(scan_operator.get());
+    scan_operator->set_degree_of_parallelism(morsel_queue_factory->size());
+    scan_operator->set_need_local_shuffle(morsel_queue_factory->is_shared());
 
     ops.emplace_back(std::move(scan_operator));
 

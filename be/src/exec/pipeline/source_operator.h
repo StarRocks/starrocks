@@ -31,6 +31,14 @@ public:
     }
     virtual size_t degree_of_parallelism() const { return _degree_of_parallelism; }
 
+    // When the pipeline of this source operator wants to insert a local shuffle for some complex operators,
+    // such as hash join and aggregate, use this method to decide whether really need to insert a local shuffle.
+    // There are two source operators returning false.
+    // - The scan operator, which has been assigned tablets with the specific bucket sequences.
+    // - The exchange source operator, partitioned by HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED.
+    virtual bool need_local_shuffle() const { return true; }
+    virtual TPartitionType::type partition_type() const { return TPartitionType::type::HASH_PARTITIONED; }
+
 protected:
     size_t _degree_of_parallelism = 1;
 };
