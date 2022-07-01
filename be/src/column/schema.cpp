@@ -34,7 +34,8 @@ Schema::Schema(Schema* schema, const std::vector<ColumnId>& cids)
     _build_index_map(_fields);
 }
 
-// if we use the constructor, we must make sure that input (Schema* schema) is read_only
+// if we use this constructor and share the name_to_index with another schema,
+// we must make sure another shema is read only!!!
 Schema::Schema(Schema* schema)
         : _num_keys(schema->_num_keys), _name_to_index_append_buffer(nullptr), _keys_type(schema->_keys_type) {
     DCHECK(schema->_name_to_index_append_buffer == nullptr);
@@ -43,7 +44,7 @@ Schema::Schema(Schema* schema)
         _fields[i] = schema->_fields[i];
     }
     if (schema->_name_to_index_append_buffer == nullptr) {
-        // share the name_to_index with schema&, later append fields will be added to _name_to_index_append_buffer
+        // share the name_to_index with schema, later append fields will be added to _name_to_index_append_buffer
         schema->_share_name_to_index = true;
         _share_name_to_index = true;
         _name_to_index = schema->_name_to_index;
@@ -53,7 +54,8 @@ Schema::Schema(Schema* schema)
     }
 }
 
-// if we use the constructor, we must make sure that input (Schema& schema) is read_only
+// if we use this constructor and share the name_to_index with another schema,
+// we must make sure another shema is read only!!!
 Schema::Schema(const Schema& schema)
         : _num_keys(schema._num_keys), _name_to_index_append_buffer(nullptr), _keys_type(schema._keys_type) {
     _fields.resize(schema.num_fields());
@@ -71,7 +73,8 @@ Schema::Schema(const Schema& schema)
     }
 }
 
-// if we use the schema, we must make sure that input (Schema& schema) is read_only
+// if we use this constructor and share the name_to_index with another schema,
+// we must make sure another shema is read only!!!
 Schema& Schema::operator=(const Schema& other) {
     this->_num_keys = other._num_keys;
     this->_name_to_index_append_buffer = nullptr;

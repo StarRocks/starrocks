@@ -20,12 +20,18 @@ public:
 
     explicit Schema(Fields fields, KeysType keys_type);
 
+    // if we use this constructor and share the name_to_index with another schema,
+    // we must make sure another shema is read only!!!
     explicit Schema(Schema* schema);
 
     explicit Schema(Schema* schema, const std::vector<ColumnId>& cids);
 
+    // if we use this constructor and share the name_to_index with another schema,
+    // we must make sure another shema is read only!!!
     Schema(const Schema& schema);
 
+    // if we use this constructor and share the name_to_index with another schema,
+    // we must make sure another shema is read only!!!
     Schema& operator=(const Schema& other);
 
     size_t num_fields() const { return _fields.size(); }
