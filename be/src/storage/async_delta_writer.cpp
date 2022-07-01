@@ -45,6 +45,7 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
         } else {
             iter->write_cb->run(st, nullptr);
         }
+        LOG_IF(WARNING, !st.ok()) << st;
         // Do NOT touch |iter->commit_cb| since here, it may have been deleted.
     }
     return 0;
