@@ -17,6 +17,7 @@ statement
 
     // Database Statement
     | createDbStatement                                                                     #createDb
+    | dropDbStatement                                                                       #dropDb
 
     // Table Statement
     | createTableStatement                                                                  #createTable
@@ -98,13 +99,14 @@ statement
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
     ;
 
-
-
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
 createDbStatement
     : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? identifier
     ;
 
+dropDbStatement
+    : DROP (DATABASE | SCHEMA) (IF EXISTS)? identifier FORCE?
+    ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
