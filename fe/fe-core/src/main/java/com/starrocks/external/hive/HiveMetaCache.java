@@ -477,7 +477,8 @@ public class HiveMetaCache {
 
     public void refreshPartition(HiveMetaStoreTableInfo hmsTable, List<String> partNames) throws DdlException {
         GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().getEventProcessorLock().writeLock().lock();
-        Map<HivePartitionKey, Future<HivePartition>> hivePartitionFutures = new HashMap();try {
+        Map<HivePartitionKey, Future<HivePartition>> hivePartitionFutures = new HashMap();
+        try {
             for (String partName : partNames) {
                 List<String> partValues = client.partitionNameToVals(partName);
                 HivePartitionKey key = new HivePartitionKey(hmsTable.getDb(), hmsTable.getTable(),
