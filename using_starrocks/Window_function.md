@@ -1,13 +1,13 @@
-# 窗口函数
+# 使用窗口函数
 
-## 功能
+本文介绍如何使用 StarRocks 中的窗口函数。
 
-窗口函数是一类特殊的内置函数。和聚合函数类似，窗口函数也是对于多个输入行做计算得到一个数据值。不同的是，窗口函数是在一个特定的窗口内对输入数据做处理，而不是按照 group by 来分组计算。每个窗口内的数据可以用 over() 从句进行排序和分组。窗口函数会**对结果集的每一行**计算出一个单独的值，而不是每个 group by 分组计算一个值。这种灵活的方式允许用户在 select 从句中增加额外的列，给用户提供了更多的机会来对结果集进行重新组织和过滤。窗口函数只能出现在 select 列表和最外层的 order by 从句中。在查询过程中，窗口函数会在最后生效，就是说，在执行完 join，where 和 group by 等操作之后再执行。窗口函数在金融和科学计算领域经常被使用到，用来分析趋势、计算离群值以及对大量数据进行分桶分析等。
+窗口函数是一类特殊的内置函数。和聚合函数类似，窗口函数通过对多个输入行进行计算得到一个数据值。不同的是，窗口函数是在一个特定的窗口内对输入数据做处理，而不是按照 GROUP BY 来分组计算。每个窗口内的数据可以用 `OVER()` 从句进行排序和分组。窗口函数会**对结果集的每一行**计算出一个单独的值，而不是每个 GROUP BY 分组计算一个值。这种灵活的方式允许您在 SELECT 从句中增加额外的列，给您提供了更多的机会来对结果集进行重新组织和过滤。窗口函数只能出现在 SELECT 列表和最外层的 ORDER BY 从句中。在查询过程中，窗口函数会在最后生效，也即是在执行完 Join，Where 和 GROUP BY 等操作之后生效。窗口函数在金融和科学计算领域较为常用，常被用来分析趋势、计算离群值以及对大量数据进行分桶分析等。
 
 ## 语法
 
 ~~~SQL
-function(args) OVER(partition_by_clause order_by_clause [window_clause])
+FUNCTION(args) OVER(partition_by_clause order_by_clause [window_clause])
 partition_by_clause ::= PARTITION BY expr [, expr ...]
 order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
 ~~~
@@ -44,19 +44,23 @@ ROWS BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | {
 
 举例：
 
-假设我们有如下的股票数据，股票代码是 JDR，closing price 是每天的收盘价。
+假设我们有如下的股票数据，股票代码是 `JDR`，`closing price` 是每天的收盘价。
 
 ~~~SQL
-create table stock_ticker (
-    stock_symbol string,
-    closing_price decimal(8,2),
-    closing_date timestamp);
+CREATE TABLE stock_ticker (
+    stock_symbol  STRING,
+    closing_price DECIMAL(8,2),
+    closing_date  DATETIME
+)
+DUPLICATE KEY(stock_symbol)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(closing_date) BUCKETS 3;
 
--- ...load some data...
+INSERT INTO stock_ticker VALUES ("JDR", 12.86, "2014-10-02 00:00:00"), ("JDR", 12.89, "2014-10-03 00:00:00"), ("JDR", 12.94, "2014-10-04 00:00:00"), ("JDR", 12.55, "2014-10-05 00:00:00"), ("JDR", 14.03, "2014-10-06 00:00:00"), ("JDR", 14.75, "2014-10-07 00:00:00"), ("JDR", 13.98, "2014-10-08 00:00:00");
 
 select *
 from stock_ticker
-order by stock_symbol, closing_date
+order by stock_symbol, closing_date;
 ~~~
 
 得到原始数据如下：
@@ -75,7 +79,7 @@ order by stock_symbol, closing_date
 +--------------+---------------+---------------------+
 ~~~
 
-这个查询使用窗口函数产生 moving_average 这一列，它的值是3天的股票均价，即前一天、当前以及后一天三天的均价。第一天没有前一天的值，最后一天没有后一天的值，所以这两行只计算了两天的均值。这里 Partition By 没有起到作用，因为所有的数据都是 JDR 的数据，但如果还有其他股票信息，Partition By 会保证窗口函数值作用在本 Partition 之内。
+这个查询使用窗口函数产生 `moving_average` 这一列，它的值是 3 天的股票均价，即前一天、当前以及后一天三天的均价。第一天没有前一天的值，最后一天没有后一天的值，所以这两行只计算了两天的均值。这里 Partition By 没有起到作用，因为所有的数据都是 `JDR` 的数据，但如果还有其他股票信息，Partition By 会保证窗口函数值作用在本 Partition 之内。
 
 ~~~SQL
 select stock_symbol, closing_date, closing_price,
@@ -93,13 +97,13 @@ from stock_ticker;
 +--------------+---------------------+---------------+----------------+
 | stock_symbol | closing_date        | closing_price | moving_average |
 +--------------+---------------------+---------------+----------------+
-| JDR          | 2014-10-02 00:00:00 | 12.86         | 12.87          |
-| JDR          | 2014-10-03 00:00:00 | 12.89         | 12.89          |
-| JDR          | 2014-10-04 00:00:00 | 12.94         | 12.79          |
-| JDR          | 2014-10-05 00:00:00 | 12.55         | 13.17          |
-| JDR          | 2014-10-06 00:00:00 | 14.03         | 13.77          |
-| JDR          | 2014-10-07 00:00:00 | 14.75         | 14.25          |
-| JDR          | 2014-10-08 00:00:00 | 13.98         | 14.36          |
+| JDR          | 2014-10-02 00:00:00 |         12.86 |    12.87500000 |
+| JDR          | 2014-10-03 00:00:00 |         12.89 |    12.89666667 |
+| JDR          | 2014-10-04 00:00:00 |         12.94 |    12.79333333 |
+| JDR          | 2014-10-05 00:00:00 |         12.55 |    13.17333333 |
+| JDR          | 2014-10-06 00:00:00 |         14.03 |    13.77666667 |
+| JDR          | 2014-10-07 00:00:00 |         14.75 |    14.25333333 |
+| JDR          | 2014-10-08 00:00:00 |         13.98 |    14.36500000 |
 +--------------+---------------------+---------------+----------------+
 ~~~
 

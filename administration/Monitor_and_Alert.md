@@ -39,7 +39,7 @@ StarRocksManager 的监控可以分成 **集群** 和 **节点** 两个维度。
 
 ## 使用 Prometheus+Grafana
 
-你可以使用 [Prometheus](https://prometheus.io/) 作为 StarRocks 监控数据存储方案，并使用[Grafana](https://grafana.com/) 作为可视化组件。
+您可以使用 [Prometheus](https://prometheus.io/) 作为 StarRocks 监控数据存储方案，并使用[Grafana](https://grafana.com/) 作为可视化组件。
 
 Prometheus 是一个拥有多维度数据模型的、灵活的查询语句的时序数据库。它可以通过 Pull 或 Push 采集被监控系统的监控项，存入自身的时序数据库中。并且通过丰富的多维数据查询语言，满足用户的不同需求。
 
@@ -352,6 +352,13 @@ Grafana 中，Row 代表一组图表的集合。如上图中的 Overview、Clust
 |disk_io_svctm|Ms|平均值|磁盘IO服务时间。|
 |disk_io_util|百分比|平均值|磁盘使用率。|
 |disk_used|bytes|平均值|已用磁盘容量。|
+|starrocks_fe_query_resource_group|个|平均值|该资源组中查询任务的数量|
+|starrocks_fe_query_resource_group_latency|秒|平均值|该资源组的查询延迟百分位数|
+|starrocks_fe_query_resource_group_err|个|平均值|该资源组中报错的查询任务的数量|
+|starrocks_be_resource_group_cpu_limit_ratio|百分比|瞬时值|该资源组 CPU 配额比率的瞬时值|
+|starrocks_be_resource_group_cpu_use_ratio|百分比|瞬时值|该资源组 CPU 使用率瞬时值|
+|starrocks_be_resource_group_mem_limit_bytes|Byte|瞬时值|该资源组内存配额比率的瞬时值|
+|starrocks_be_resource_group_mem_allocated_bytes|Byte|瞬时值|该资源组内存使用率瞬时值|
 
 ## 最佳实践
 
