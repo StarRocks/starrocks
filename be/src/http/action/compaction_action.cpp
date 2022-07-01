@@ -195,16 +195,22 @@ Status CompactionAction::_handle_show_repairs(HttpRequest* req, std::string* jso
     auto tablets_with_small_segment_files =
             StorageEngine::instance()->tablet_manager()->get_tablets_need_repair_compaction();
     for (auto& itr : tablets_with_small_segment_files) {
+        rapidjson::Document item;
+        item.SetObject();
+        item.AddMember("tablet_id", itr.first, root.GetAllocator());
+        rapidjson::Document rowsets;
+        rowsets.SetArray();
         for (const auto& rowset : itr.second) {
-            rapidjson::Document item;
-            item.SetObject();
-            item.AddMember("tablet_id", itr.first, root.GetAllocator());
-            item.AddMember("rowset_id", rowset.first, root.GetAllocator());
-            item.AddMember("segments", rowset.second, root.GetAllocator());
-            need_to_repair.PushBack(item, root.GetAllocator());
+            rapidjson::Document rs;
+            rs.SetObject();
+            rs.AddMember("rowset_id", rowset.first, root.GetAllocator());
+            rs.AddMember("segments", rowset.second, root.GetAllocator());
+            rowsets.PushBack(rs, root.GetAllocator());
         }
+        item.AddMember("rowsets", rowsets, root.GetAllocator());
     }
     root.AddMember("need_to_repair", need_to_repair, root.GetAllocator());
+    root.AddMember("need_to_repair_num", tablets_with_small_segment_files.size(), root.GetAllocator());
 
     rapidjson::Document executed;
     executed.SetArray();
@@ -212,13 +218,20 @@ Status CompactionAction::_handle_show_repairs(HttpRequest* req, std::string* jso
     for (auto& task_info : tasks) {
         rapidjson::Document item;
         item.SetObject();
-        item.AddMember("tablet_id", std::get<0>(task_info), root.GetAllocator());
-        item.AddMember("rowset_id", std::get<1>(task_info), root.GetAllocator());
-        string v = std::get<2>(task_info);
-        item.AddMember("status", rapidjson::StringRef(v.c_str()), root.GetAllocator());
+        item.AddMember("tablet_id", task_info.first, root.GetAllocator());
+        rapidjson::Document rowsets;
+        rowsets.SetArray();
+        for (auto& rowset_st : task_info.second) {
+            rapidjson::Document obj;
+            obj.SetObject();
+            obj.AddMember("rowset_id", rowset_st.first, root.GetAllocator());
+            obj.AddMember("status", rapidjson::StringRef(rowset_st.second.c_str()), root.GetAllocator());
+            rowsets.PushBack(obj, root.GetAllocator());
+        }
         executed.PushBack(item, root.GetAllocator());
     }
-    root.AddMember("executed_tasks", executed, root.GetAllocator());
+    root.AddMember("executed_task", executed, root.GetAllocator());
+    root.AddMember("executed_task_num", tasks.size(), root.GetAllocator());
 
     rapidjson::StringBuffer strbuf;
     rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(strbuf);
@@ -231,22 +244,26 @@ Status CompactionAction::_handle_submit_repairs(HttpRequest* req, std::string* j
     auto tablets_with_small_segment_files =
             StorageEngine::instance()->tablet_manager()->get_tablets_need_repair_compaction();
     uint64_t tablet_id;
-    std::vector<std::pair<int64_t, uint32_t>> tasks;
+    vector<pair<int64_t, vector<uint32_t>>> tasks;
     if (get_params(req, &tablet_id).ok()) {
         // do single tablet
         auto itr = tablets_with_small_segment_files.find(tablet_id);
         if (itr == tablets_with_small_segment_files.end()) {
             return Status::NotFound(fmt::format("tablet_id {} not found in repair tablet list", tablet_id));
         }
+        vector<uint32_t> rowsetids;
         for (const auto& rowset_segments_pair : itr->second) {
-            tasks.emplace_back(tablet_id, rowset_segments_pair.first);
+            rowsetids.emplace_back(rowset_segments_pair.first);
         }
+        tasks.emplace_back(tablet_id, std::move(rowsetids));
     } else {
-        // do all repairs
+        // do all tablets
         for (auto& itr : tablets_with_small_segment_files) {
+            vector<uint32_t> rowsetids;
             for (const auto& rowset_segments_pair : itr.second) {
-                tasks.emplace_back(itr.first, rowset_segments_pair.first);
+                rowsetids.emplace_back(rowset_segments_pair.first);
             }
+            tasks.emplace_back(tablet_id, std::move(rowsetids));
         }
     }
     StorageEngine::instance()->submit_repair_compaction_tasks(tasks);

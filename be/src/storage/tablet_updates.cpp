@@ -1818,8 +1818,8 @@ StatusOr<std::vector<std::pair<uint32_t, uint32_t>>> TabletUpdates::list_rowsets
             }
             size_t bytes = itr->second->data_disk_size();
             size_t num_segments = itr->second->num_segments();
-            // average segment file size < 1M and num of segment file > 5
-            if (num_segments > 5 && bytes / num_segments < 1024 * 1024) {
+            // average segment file size < 1M and num of segment file > 10
+            if (num_segments > 10 && bytes / num_segments < 1024 * 1024) {
                 ret.emplace_back(rowsetid, num_segments);
             }
         }

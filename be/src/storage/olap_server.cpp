@@ -266,7 +266,7 @@ void* StorageEngine::_repair_compaction_thread_callback(void* arg) {
 #endif
     Status status = Status::OK();
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        std::pair<int64_t, uint32_t> task(-1, 0);
+        std::pair<int64_t, vector<uint32_t>> task(-1, 0);
         {
             std::lock_guard lg(_repair_compaction_tasks_lock);
             if (!_repair_compaction_tasks.empty()) {
@@ -284,19 +284,23 @@ void* StorageEngine::_repair_compaction_thread_callback(void* arg) {
                 LOG(ERROR) << "repair compaction failed, tablet not primary key tablet found: " << task.first;
                 continue;
             }
-            auto st = tablet->updates()->compaction(ExecEnv::GetInstance()->compaction_mem_tracker(), {task.second});
-            _executed_repair_compaction_tasks.emplace_back(task.first, task.second, st.to_string());
-            if (!st.ok()) {
-                LOG(WARNING) << "repair compaction failed tablet: " << task.first << " rowset: " << task.second << " "
-                             << st;
-            } else {
-                LOG(INFO) << "repair compaction succeed tablet: " << task.first << " rowset: " << task.second << " "
-                          << st;
+            vector<pair<uint32_t, string>> rowset_results;
+            for (auto rowsetid : task.second) {
+                auto st = tablet->updates()->compaction(ExecEnv::GetInstance()->compaction_mem_tracker(), {rowsetid});
+                if (!st.ok()) {
+                    LOG(WARNING) << "repair compaction failed tablet: " << task.first << " rowset: " << rowsetid << " "
+                                 << st;
+                } else {
+                    LOG(INFO) << "repair compaction succeed tablet: " << task.first << " rowset: " << rowsetid << " "
+                              << st;
+                }
+                rowset_results.emplace_back(rowsetid, st.to_string());
             }
+            _executed_repair_compaction_tasks.emplace_back(task.first, std::move(rowset_results));
         }
         do {
-            // do a compaction per 20min, to reduce potential memory pressure
-            SLEEP_IN_BG_WORKER(20 * 60);
+            // do a compaction per 10min, to reduce potential memory pressure
+            SLEEP_IN_BG_WORKER(10 * 60);
             if (!_options.compaction_mem_tracker->any_limit_exceeded()) {
                 break;
             }
@@ -313,23 +317,27 @@ public:
     }
 };
 
-void StorageEngine::submit_repair_compaction_tasks(const std::vector<std::pair<int64_t, uint32_t>>& tasks) {
+void StorageEngine::submit_repair_compaction_tasks(
+        const std::vector<std::pair<int64_t, std::vector<uint32_t>>>& tasks) {
     std::lock_guard lg(_repair_compaction_tasks_lock);
-    std::unordered_set<std::pair<int64_t, uint32_t>, pair_hash> all_tasks;
+    std::unordered_set<int64_t> all_tasks;
     size_t submitted = 0;
-    all_tasks.insert(_repair_compaction_tasks.begin(), _repair_compaction_tasks.end());
+    for (const auto& t : _repair_compaction_tasks) {
+        all_tasks.insert(t.first);
+    }
     for (const auto& task : tasks) {
-        if (all_tasks.find(task) == all_tasks.end()) {
-            all_tasks.insert(task);
+        if (all_tasks.find(task.first) == all_tasks.end()) {
+            all_tasks.insert(task.first);
             _repair_compaction_tasks.push_back(task);
             submitted++;
-            LOG(INFO) << "submit repair compaction task tablet: " << task.first << " rowset:" << task.second
+            LOG(INFO) << "submit repair compaction task tablet: " << task.first << " #rowset:" << task.second.size()
                       << " current tasks: " << _repair_compaction_tasks.size();
         }
     }
 }
 
-std::vector<std::tuple<int64_t, uint32_t, std::string>> StorageEngine::get_executed_repair_compaction_tasks() {
+std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>>
+StorageEngine::get_executed_repair_compaction_tasks() {
     std::lock_guard lg(_repair_compaction_tasks_lock);
     return _executed_repair_compaction_tasks;
 }

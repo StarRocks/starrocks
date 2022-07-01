@@ -184,8 +184,9 @@ public:
     void compaction_check();
 
     // submit repair compaction tasks
-    void submit_repair_compaction_tasks(const std::vector<std::pair<int64_t, uint32_t>>& tasks);
-    std::vector<std::tuple<int64_t, uint32_t, std::string>> get_executed_repair_compaction_tasks();
+    void submit_repair_compaction_tasks(const std::vector<std::pair<int64_t, std::vector<uint32_t>>>& tasks);
+    std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>>
+    get_executed_repair_compaction_tasks();
 
 protected:
     static StorageEngine* _s_instance;
@@ -308,8 +309,8 @@ private:
     // thread to run repair compactions
     std::thread _repair_compaction_thread;
     std::mutex _repair_compaction_tasks_lock;
-    std::vector<std::pair<int64_t, uint32_t>> _repair_compaction_tasks;
-    std::vector<std::tuple<int64_t, uint32_t, std::string>> _executed_repair_compaction_tasks;
+    std::vector<std::pair<int64_t, std::vector<uint32_t>>> _repair_compaction_tasks;
+    std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>> _executed_repair_compaction_tasks;
     // threads to clean all file descriptor not actively in use
     std::thread _fd_cache_clean_thread;
     std::vector<std::thread> _path_gc_threads;
