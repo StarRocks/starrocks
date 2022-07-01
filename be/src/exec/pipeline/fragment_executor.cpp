@@ -20,6 +20,7 @@
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
 #include "exec/vectorized/cross_join_node.h"
+#include "exec/vectorized/olap_scan_node.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gutil/casts.h"
@@ -258,6 +259,11 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
     std::vector<TScanRangeParams> no_scan_ranges;
     plan->collect_scan_nodes(&scan_nodes);
 
+    bool enable_shared_scan = false;
+    if (request.__isset.enable_shared_scan) {
+        enable_shared_scan = request.enable_shared_scan;
+    }
+
     MorselQueueMap& morsel_queues = _fragment_ctx->morsel_queues();
     for (auto& i : scan_nodes) {
         ScanNode* scan_node = down_cast<ScanNode*>(i);
@@ -266,6 +272,10 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
         ASSIGN_OR_RETURN(MorselQueuePtr morsel_queue,
                          scan_node->convert_scan_range_to_morsel_queue(scan_ranges, scan_node->id(), request));
         morsel_queues.emplace(scan_node->id(), std::move(morsel_queue));
+
+        if (auto* olap_scan = dynamic_cast<vectorized::OlapScanNode*>(scan_node)) {
+            olap_scan->enable_shared_scan(enable_shared_scan);
+        }
     }
 
     return Status::OK();
