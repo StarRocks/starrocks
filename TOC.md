@@ -42,6 +42,7 @@
   + [Materialized View](/using_starrocks/Materialized_view.md)
   + [Colocate Join](/using_starrocks/Colocation_join.md)
   + [External Table](/using_starrocks/External_table.md)
+  + [Use catalogs to manage internal and external data](/using_starrocks/Manage_data.md)
   + [Array](/using_starrocks/Array.md)
   + [Window Function](/using_starrocks/Window_function.md)
   + [SHOW ROLES](/sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
