@@ -24,7 +24,7 @@
 
 - 支持通过 JDBC 外表查询 Oracle、PostgreSQL、MySQL、SQL Server、ClickHouse 等数据库，查询时支持谓词下推。相关文档，请参见 [更多数据库（支持 JDBC 驱动程序）的外部表](../using_starrocks/External_table.md#更多数据库支持-jdbc-驱动程序的外部表)。
 
-- 【Preview】发布全新数据源 Connector 框架，支持用户自定义外部数据目录（External Catalog）并接入 Apache Hive™ ，无需创建外部表，即可直接分析 Apache Hive™。
+- 【Preview】发布全新数据源 Connector 框架，支持用户自定义外部数据目录（External Catalog）并接入 Apache Hive™ ，无需创建外部表，即可直接分析 Apache Hive™。相关文档，请参见[使用 Catalog 管理内部和外部数据](../using_starrocks/Manage_data.md)。
 
 - 新增如下函数：
   - [window_funnel](../sql-reference/sql-functions/aggregate-functions/window_funnel.md)
