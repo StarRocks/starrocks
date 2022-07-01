@@ -109,7 +109,6 @@ public class SelectList {
                     s.getStatement().rewriteExprs(rewriter);
                 }
             }
-            item.setExpr(rewriter.rewrite(item.getExpr(), analyzer));
         }
     }
 

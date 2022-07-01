@@ -439,15 +439,6 @@ public class SetOperationStmt extends QueryStmt {
         baseTblResultExprs = resultExprs;
     }
 
-    /**
-     * Marks the baseTblResultExprs of its operands as materialized, based on
-     * which of the output slots have been marked.
-     * Calls materializeRequiredSlots() on the operands themselves.
-     */
-    @Override
-    public void materializeRequiredSlots(Analyzer analyzer) {
-    }
-
     @Override
     public void rewriteExprs(ExprRewriter rewriter) throws AnalysisException {
         for (SetOperand op : operands) {
@@ -457,16 +448,6 @@ public class SetOperationStmt extends QueryStmt {
             for (OrderByElement orderByElem : orderByElements) {
                 orderByElem.setExpr(rewriter.rewrite(orderByElem.getExpr(), analyzer));
             }
-        }
-    }
-
-    @Override
-    public void getMaterializedTupleIds(ArrayList<TupleId> tupleIdList) {
-        // Return the sort tuple if there is an evaluated order by.
-        if (evaluateOrderBy) {
-            tupleIdList.add(sortInfo.getSortTupleDescriptor().getId());
-        } else {
-            tupleIdList.add(tupleId);
         }
     }
 
