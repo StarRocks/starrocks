@@ -53,13 +53,21 @@ public:
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (int64_t key : keys) {
-            cols[0]->append_datum(vectorized::Datum(key));
-            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
-            if (cols[2]->is_binary()) {
-                string v = fmt::to_string(key % 1000 + 2);
-                cols[2]->append_datum(vectorized::Datum(Slice(v)));
+            if (schema.num_key_fields() == 1) {
+                cols[0]->append_datum(vectorized::Datum(key));
             } else {
-                cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
+                cols[0]->append_datum(vectorized::Datum(key));
+                string v = fmt::to_string(key * 234234342345);
+                cols[1]->append_datum(vectorized::Datum(Slice(v)));
+                cols[2]->append_datum(vectorized::Datum((int32_t)key));
+            }
+            int vcol_start = schema.num_key_fields();
+            cols[vcol_start]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+            if (cols[vcol_start + 1]->is_binary()) {
+                string v = fmt::to_string(key % 1000 + 2);
+                cols[vcol_start + 1]->append_datum(vectorized::Datum(Slice(v)));
+            } else {
+                cols[vcol_start + 1]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
             }
         }
         if (one_delete == nullptr && !keys.empty()) {
@@ -67,26 +75,119 @@ public:
         } else if (one_delete == nullptr) {
             EXPECT_EQ(OLAP_SUCCESS, writer->flush());
         } else if (one_delete != nullptr) {
+<<<<<<< HEAD
             EXPECT_EQ(OLAP_SUCCESS, writer->flush_chunk_with_deletes(*chunk, *one_delete));
+=======
+            CHECK_OK(writer->flush_chunk_with_deletes(*chunk, *one_delete));
+        }
+        return *writer->build();
+    }
+
+    RowsetSharedPtr create_partial_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
+                                          std::vector<int32_t>& column_indexes,
+                                          std::shared_ptr<TabletSchema> partial_schema) {
+        // create partial rowset
+        RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = tablet->tablet_id();
+        writer_context.tablet_schema_hash = tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_type = BETA_ROWSET;
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+
+        writer_context.partial_update_tablet_schema = partial_schema;
+        writer_context.referenced_column_ids = column_indexes;
+        writer_context.tablet_schema = partial_schema.get();
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = NONOVERLAPPING;
+        std::unique_ptr<RowsetWriter> writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*partial_schema.get());
+
+        if (keys.size() > 0) {
+            auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
+            EXPECT_TRUE(2 == chunk->num_columns());
+            auto& cols = chunk->columns();
+            for (size_t i = 0; i < keys.size(); i++) {
+                cols[0]->append_datum(vectorized::Datum(keys[i]));
+                cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 3)));
+            }
+            CHECK_OK(writer->flush_chunk(*chunk));
+        }
+        RowsetSharedPtr partial_rowset = *writer->build();
+
+        return partial_rowset;
+    }
+
+    RowsetSharedPtr create_rowsets(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
+                                   std::size_t max_rows_per_segment) {
+        RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = tablet->tablet_id();
+        writer_context.tablet_schema_hash = tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_type = BETA_ROWSET;
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+        writer_context.tablet_schema = &tablet->tablet_schema();
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = NONOVERLAPPING;
+        std::unique_ptr<RowsetWriter> writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+        for (std::size_t written_rows = 0; written_rows < keys.size(); written_rows += max_rows_per_segment) {
+            auto chunk = vectorized::ChunkHelper::new_chunk(schema, max_rows_per_segment);
+            auto& cols = chunk->columns();
+            for (size_t i = 0; i < max_rows_per_segment; i++) {
+                cols[0]->append_datum(vectorized::Datum(keys[written_rows + i]));
+                cols[1]->append_datum(vectorized::Datum((int16_t)(keys[written_rows + i] % 100 + 1)));
+                cols[2]->append_datum(vectorized::Datum((int32_t)(keys[written_rows + i] % 1000 + 2)));
+            }
+            CHECK_OK(writer->flush_chunk(*chunk));
+>>>>>>> 7b41c8bad ([Bugfix] enable-check-string-length)
         }
         return writer->build();
     }
 
-    TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
+    TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool multi_column_pk = false) {
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
         request.__set_version_hash(0);
         request.tablet_schema.schema_hash = schema_hash;
-        request.tablet_schema.short_key_column_count = 6;
+        request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
 
-        TColumn k1;
-        k1.column_name = "pk";
-        k1.__set_is_key(true);
-        k1.column_type.type = TPrimitiveType::BIGINT;
-        request.tablet_schema.columns.push_back(k1);
+        if (multi_column_pk) {
+            TColumn pk1;
+            pk1.column_name = "pk1_bigint";
+            pk1.__set_is_key(true);
+            pk1.column_type.type = TPrimitiveType::BIGINT;
+            request.tablet_schema.columns.push_back(pk1);
+            TColumn pk2;
+            pk2.column_name = "pk2_varchar";
+            pk2.__set_is_key(true);
+            pk2.column_type.type = TPrimitiveType::VARCHAR;
+            pk2.column_type.len = 128;
+            request.tablet_schema.columns.push_back(pk2);
+            TColumn pk3;
+            pk3.column_name = "pk3_int";
+            pk3.__set_is_key(true);
+            pk3.column_type.type = TPrimitiveType::INT;
+            request.tablet_schema.columns.push_back(pk3);
+        } else {
+            TColumn k1;
+            k1.column_name = "pk";
+            k1.__set_is_key(true);
+            k1.column_type.type = TPrimitiveType::BIGINT;
+            request.tablet_schema.columns.push_back(k1);
+        }
 
         TColumn k2;
         k2.column_name = "v1";
@@ -169,6 +270,7 @@ public:
         k3.column_name = "v2";
         k3.__set_is_key(false);
         k3.column_type.type = TPrimitiveType::VARCHAR;
+        k3.column_type.len = 128;
         request.tablet_schema.columns.push_back(k3);
 
         auto st = StorageEngine::instance()->create_tablet(request);
@@ -751,7 +853,46 @@ TEST_F(TabletUpdatesTest, compaction_score_enough_normal) {
 }
 
 // NOLINTNEXTLINE
+<<<<<<< HEAD
 TEST_F(TabletUpdatesTest, compaction) {
+=======
+TEST_F(TabletUpdatesTest, horizontal_compaction) {
+    auto orig = config::vertical_compaction_max_columns_per_group;
+    config::vertical_compaction_max_columns_per_group = 5;
+    DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
+
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    std::vector<int64_t> keys;
+    for (int i = 0; i < 100; i++) {
+        keys.push_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
+    const auto& best_tablet =
+            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
+    EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+    EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
+    ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 3, keys));
+    ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
+    ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
+    // the time interval is not enough after last compaction
+    EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+}
+
+TEST_F(TabletUpdatesTest, vertical_compaction) {
+    auto orig = config::vertical_compaction_max_columns_per_group;
+    config::vertical_compaction_max_columns_per_group = 1;
+    DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
+
+>>>>>>> 7b41c8bad ([Bugfix] enable-check-string-length)
     srand(GetCurrentTimeMicros());
     _tablet = create_tablet(rand(), rand());
     std::vector<int64_t> keys;
