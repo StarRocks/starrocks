@@ -35,7 +35,7 @@ public:
     int64_t raw_rows_read() const override { return _raw_rows_read; }
     int64_t num_rows_read() const override { return _num_rows_read; }
     int64_t num_bytes_read() const override { return _bytes_read; }
-    int64_t cpu_time_spent() const { return _cpu_time_spent_ns; }
+    int64_t cpu_time_spent() const override { return _cpu_time_spent_ns; }
 
 private:
     Status get_tablet(const TInternalScanRange& scan_range);
