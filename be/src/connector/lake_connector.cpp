@@ -388,17 +388,9 @@ void LakeDataSource::init_counter(RuntimeState* state) {
 }
 
 void LakeDataSource::update_realtime_counter(vectorized::Chunk* chunk) {
-    COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read);
-    _compressed_bytes_read += _reader->stats().compressed_bytes_read;
-    _reader->mutable_stats()->compressed_bytes_read = 0;
-
-    COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
-    _raw_rows_read += _reader->stats().raw_rows_read;
-    _last_scan_rows_num += _reader->stats().raw_rows_read;
-    _last_scan_bytes += _reader->stats().bytes_read;
-
-    _reader->mutable_stats()->raw_rows_read = 0;
     _num_rows_read += chunk->num_rows();
+    _raw_rows_read = _reader->stats().raw_rows_read;
+    _bytes_read = _reader->stats().bytes_read;
 }
 
 void LakeDataSource::update_counter() {
@@ -407,7 +399,6 @@ void LakeDataSource::update_counter() {
 
     COUNTER_UPDATE(_io_timer, _reader->stats().io_ns);
     COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read);
-    _compressed_bytes_read += _reader->stats().compressed_bytes_read;
     COUNTER_UPDATE(_decompress_timer, _reader->stats().decompress_ns);
     COUNTER_UPDATE(_read_uncompressed_counter, _reader->stats().uncompressed_bytes_read);
     COUNTER_UPDATE(_bytes_read_counter, _reader->stats().bytes_read);
@@ -417,14 +408,10 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_block_fetch_timer, _reader->stats().block_fetch_ns);
     COUNTER_UPDATE(_block_seek_timer, _reader->stats().block_seek_ns);
 
-    COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
-    _raw_rows_read += _reader->mutable_stats()->raw_rows_read;
-    _last_scan_rows_num += _reader->mutable_stats()->raw_rows_read;
-    _last_scan_bytes += _reader->mutable_stats()->bytes_read;
-
     COUNTER_UPDATE(_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
-
     COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);
+
+    COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
 
     int64_t cond_evaluate_ns = 0;
     cond_evaluate_ns += _reader->stats().vec_cond_evaluate_ns;
@@ -455,7 +442,7 @@ void LakeDataSource::update_counter() {
 
     COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.predicates.size());
 
-    StarRocksMetrics::instance()->query_scan_bytes.increment(_compressed_bytes_read);
+    StarRocksMetrics::instance()->query_scan_bytes.increment(_bytes_read);
     StarRocksMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
 
     if (_reader->stats().decode_dict_ns > 0) {
