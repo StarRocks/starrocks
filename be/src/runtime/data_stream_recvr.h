@@ -188,6 +188,10 @@ private:
     RuntimeProfile::Counter* _decompress_chunk_timer;
     RuntimeProfile::Counter* _request_received_counter;
 
+    // Average time of closure stayed in the buffer
+    // Formula is: cumulative_time / _degree_of_parallelism, so the estimation may
+    // not be that accurate, but enough to reflect the issue.
+    RuntimeProfile::Counter* _closure_block_timer;
     RuntimeProfile::Counter* _process_total_timer = nullptr;
 
     // Total spent for senders putting data in the queue
