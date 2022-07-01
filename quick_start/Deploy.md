@@ -1,647 +1,563 @@
 # Deploy StarRocks
 
-Manual deployment allows users to quickly leverage StarRocks to do operation and maintenance tasks.
+This topic describes how to deploy StarRocks. StarRocks supports deployment via binary installer and Docker image.
 
-## Get the Binary Package
+If you need to compile StarRocks from [source code](https://github.com/StarRocks/starrocks), see [Build in Docker](../administration/Build_in_docker.md) for detailed instruction.
 
-Please download the latest stable version of the StarRocks binary package.
+If you need to scale your StarRocks cluster in or out, see [Scale In and Out](../administration/Scale_up_down.md) for detailed instruction.
 
-For example, below is what you get after decompressing the package “starrocks-1.0.0.tar.gz”:
+## Deploy via binary installer
 
-```Plain Text
-StarRocks-XX-1.0.0
+You can deploy StarRocks via binary installer.
 
-├── be  # BE Catalog
-│   ├── bin
-│   │   ├── start_be.sh # BE start command
-│   │   └── stop_be.sh  # BE shutdown command
-│   ├── conf
-│   │   └── be.conf     # BE configuration file
-│   ├── lib
-│   │   ├── starrocks_be  # BE executable file
-│   │   └── meta_tool
-│   └── www
-├── fe  # FE Catalog
-│   ├── bin
-│   │   ├── start_fe.sh # FE start command
-│   │   └── stop_fe.sh  # FE shutdown command
-│   ├── conf
-│   │   └── fe.conf     # FE configuration file
-│   ├── lib
-│   │   ├── starrocks-fe.jar  # FE jar package
-│   │   └── *.jar           # FE dependent jar packages
-│   └── webroot
-└── udf
-```
+The following example deploys an FE and a BE in the cluster. Please note that at least three BE nodes are required in production environment.
 
-## Environment Setup
+### Prerequisites
 
-You need three physical machines that support:
+Before deploying StarRocks, make sure the following requirements are satisfied.
 
-* Linux (Centos 7+)
-* Java 1.8+
+|Requirement|Description|Note|
+|-----------|------------|------|
+|Hardware|<ul><li>At least two physical or virtual machines in the cluster.</li><li>CPU of BE machines must support AVX2 instruction sets.</li><li>All nodes must be connected via 10GB ethernet NIC and switch.</li></ul>|<ul><li>8-cores CPU and 16GB memory are recommended for each FE node.</li> <li>16-cores CPU and 64GB memory are recommended for each BE node.</li><li>By running <code>cat /proc/cpuinfo \|grep avx2</code> to check the instruction sets supported by the CPU.</li></ul>|
+|Operating system|CentOS (7 or later) is required on all nodes.| |
+|Software|Install the following on all nodes: <ul><li><a href="https://www.oracle.com/java/technologies/downloads/">Oracle Java</a> (1.8 or later)</li><li><a href="https://www.mysql.com/downloads/">MySQL client</a> (5.5 or later)</li></ul>|  |
+|System environment|<ul><li>Clock within the cluster must be synced.</li> <li>You must have the privilege to set <code>ulimit -n</code>.</li> </ul> | |
 
-The CPU needs to support AVX2 instruction sets. When running `cat /proc/cpuinfo |grep avx2`, you should get a result output indicating the support. If not, we recommend that you replace the machine. StarRocks uses vectorization technology that requires instruction set support to be effective.
+Other system configurations:
 
-You can distribute and decompress the binary package to the deployment path of your target host, and create a user account to manage it.
-
-## FE Deployment
-
-### Basic Configuration for FE
-
-The FE configuration file is `StarRocks-XX-1.0.0/fe/conf/fe.conf`. The default configuration is sufficient to start the cluster.
-
-### FE Single Instance Deployment
-
-```bash
-cd StarRocks-XX-1.0.0/fe
-```
-
-Step 1: Customize the configuration file `conf/fe.conf`.
-
-```bash
-JAVA_OPTS = "-Xmx4096m -XX:+UseMembar -XX:SurvivorRatio=8 -XX:MaxTenuringThreshold=7 -XX:+PrintGCDateStamps -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+CMSClassUnloadingEnabled -XX:-CMSParallelRemarkEnabled -XX:CMSInitiatingOccupancyFraction=80 -XX:SoftRefLRUPolicyMSPerMB=0 -Xloggc:$STARROCKS_HOME/log/fe.gc.log"
-```
-
-You can adjust `-Xmx4096m` based on the FE memory size. It is recommended to set the memory size to 16G or above to avoid GC. All StarRocks metadata is stored in the memory.
-
-Step 2: Create a metadata directory and add the meta_dir config to `conf/fe.conf`
-
-```bash
-mkdir -p meta
-```
-
-Add the meta_dir config to `conf/fe.conf` :
-
-```bash
-meta_dir = the absolute path of meta dir you created before
-```
-
-Step 3: Start the FE.
-
-```bash
-bin/start_fe.sh --daemon
-```
-
-Step 4: Look up the log file (`log/fe.log`) to confirm that the FE has been started successfully.
-
-* check `log/fe.log` to confirm.
-
-```Plain Text
-2020-03-16 20:32:14,686 INFO 1 [FeServer.start():46] thrift server started.
-
-2020-03-16 20:32:14,696 INFO 1 [NMysqlServer.start():71] Open mysql server success on 9030
-
-2020-03-16 20:32:14,696 INFO 1 [QeService.start():60] QE service start.
-
-2020-03-16 20:32:14,825 INFO 76 [HttpServer$HttpServerThread.run():210] HttpServer started with port 8030
-
-...
-```
-
-* If the FE fails to start, check if the port number is occupied. If so, modify the port number (`http_port`) in the configuration file.
-* You can also use the jps command to view the java process and see if StarRocks FE exists.
-
-### Use MySQL Client to Access FE
-
-Step 1: Install the MySQL client if you haven’t done so.
-
-Ubuntu：sudo apt-get install mysql-client
-
-Centos：sudo yum install mysql-client
-
-Step 2: Connect using the MySQL client.
-
-```sql
-mysql -h 127.0.0.1 -P9030 -uroot
-```
-
-> Note: The default root user password is empty. The port is query_port in fe/conf/fe.conf, default to 9030.
-
-Step 3: Check the FE status.
-
-```Plain Text
-mysql> SHOW PROC '/frontends'\G
-
-***1\. row***
-
-Name: 172.16.139.24_9010_1594200991015
-
-IP: 172.16.139.24
-
-HostName: starrocks-sandbox01
-
-EditLogPort: 9010
-
-HttpPort: 8030
-
-QueryPort: 9030
-
-RpcPort: 9020
-
-Role: FOLLOWER
-
-IsMaster: true
-
-ClusterId: 861797858
-
-Join: true
-
-Alive: true
-
-ReplayedJournalId: 64
-
-LastHeartbeat: 2020-03-23 20:15:07
-
-IsHelper: true
-
-ErrMsg:
-
-1 row in set (0.03 sec)
-```
-
-`Role` is `FOLLOWER`, indicating that the FE is eligible to be elected as the leader. `IsMaster` is true, indicating that the FE is currently the leader node.
-
-If the MySQL client connection is not successful, use the log file (`log/fe.warn.log`) for troubleshooting. Since it is the initial setup, feel free to start over if you encounter any unexpected problems.
-
-### FE High-Availability Cluster Deployment
-
-FE's high-availability clusters use a primary-secondary replication architecture to avoid single points of failure. FE uses the raft-like BDBJE protocol to complete leader selection, log replication, and failover. In FE clusters, instances are divided into two roles -- follower and observer. The follower is a voting member of the replication protocol, participating in the selection of the leader and submitting logs. Its general number is odd (2n+1). It takes majority (n+1) for confirmation and tolerates minority (n) failure. The observer is a non-voting member and is used to subscribe to replication logs asynchronously. The status of the observer lags behind the follower, similar to the leaner role in other replication protocols.
-
-The FE cluster automatically selects the leader node from the followers. The leader node executes all state changes. A change can be initiated from a non-leader node, and then forwarded to the leader node for execution. The non-leader node records the LSN of the most recent change in the replication log. The read operation can be performed directly on the non-leader node, but it needs to wait until the state of the non-leader node gets synchronized with the LSN of the last operation. Observer nodes can increase the read load capacity of the FE cluster. Users with little urgency can read the observer nodes.
-
-The clock difference between the FE nodes should not exceed 5s. Use the NTP protocol to calibrate the time.
-
-A single FE node can only be deployed on one machine. The HTTP ports of all FE nodes need to be the same.
-
-For cluster deployment, follow the following steps to add FE instances one by one.
-
-Step 1: Distribute binary and configuration files (same as a single instance).
-
-Step 2: Connect the MySQL client to the existing FE, and add the information of the new instance, including role, IP, port:
-
-```sql
-mysql> ALTER SYSTEM ADD FOLLOWER "host:port";
-```
-
-Or
-
-```sql
-mysql> ALTER SYSTEM ADD OBSERVER "host:port";
-```
-
-The host is the IP of the machine. If the machine has multiple IPs, select the IP in priority_networks. For example, `priority_networks=192.168.1.0/24` can be set to use the subnet `192.168.1.x` for communication. The port is `edit_log_port`, default to `9010`.
-
-> Note: Due to security considerations, StarRocks' FE and BE can only listen to one IP for communication. If a machine has multiple network cards, StarRocks may not be able to automatically find the correct IP. For example, run the `ifconfig` command to get that `eth0 IP` is `192.168.1.1`, `docker0 : 172.17.0.1`. We can set the word network `192.168.1.0/24` to designate eth0 as the communication IP. Here we use [CIDR](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing) notation to specify the subnet range where the IP is located, so that it can be used on all BE and FE. `priority_networks` is written in both `fe.conf` and `be.conf`. This attribute indicates which IP to use when the FE or BE is started. The example is as follows: `priority_networks=10.1.3.0/24`.
-
-If an error occurs, delete the FE by using the following command:
-
-```sql
-alter system drop follower "fe_host:edit_log_port";
-alter system drop observer "fe_host:edit_log_port";
-```
-
-Step 3: FE nodes need to be interconnected in pairs to complete master selection, voting, log submission, and replication. When the FE node is first initiated, a node in the existing cluster needs to be designated as a helper. The helper node gets the configuration information of all the FE nodes in the cluster to establish a connection. Therefore, during initiation, specify the `--helper` parameter:
-
-```shell
-./bin/start_fe.sh --helper host:port --daemon
-```
-
-The host is the IP of the helper node. If there are multiple IPs, select the IP in `priority_networks`. The port is `edit_log_port`, default to `9010`.
-
-There is no need to specify the `--helper` parameter for future starts. The FE stores other FEs’ configuration information in the local directory. To start directly:
-
-```shell
-./bin/start_fe.sh --daemon
-```
-
-Step 4: Check the cluster status and confirm that the deployment is successful:
-
-```Plain Text
-mysql> SHOW PROC '/frontends'\G
-
-***1\. row***
-
-Name: 172.26.108.172_9010_1584965098874
-
-IP: 172.26.108.172
-
-HostName: starrocks-sandbox01
-
-......
-
-Role: FOLLOWER
-
-IsMaster: true
-
-......
-
-Alive: true
-
-......
-
-***2\. row***
-
-Name: 172.26.108.174_9010_1584965098874
-
-IP: 172.26.108.174
-
-HostName: starrocks-sandbox02
-
-......
-
-Role: FOLLOWER
-
-IsMaster: false
-
-......
-
-Alive: true
-
-......
-
-***3\. row***
-
-Name: 172.26.108.175_9010_1584965098874
-
-IP: 172.26.108.175
-
-HostName: starrocks-sandbox03
-
-......
-
-Role: FOLLOWER
-
-IsMaster: false
-
-......
-
-Alive: true
-
-......
-
-3 rows in set (0.05 sec)
-```
-
-Alive is true, indicating the node is successfully added. In the above example, 172.26.108.172_9010_1584965098874 is the main FE node.
-
-## BE Deployment
-
-### Basic Configuration for BE
-
-The BE configuration file is `StarRocks-XX-1.0.0/be/conf/be.conf`. The default configuration is sufficient to start the cluster.
-
-### BE Instance Deployment
-
-Users can use the following steps to add BE to the StarRocks cluster. In most cases, at least three BE instances are deployed. The steps for adding each instance are the same.
-
-```shell
-cd StarRocks-XX-1.0.0/be
-```
-
-Step 1: Create a data storage directory.
-
-```shell
-mkdir -p storage
-```
-
-Step 2: Add a BE node via the MySQL client.
-
-```sql
-mysql> ALTER SYSTEM ADD BACKEND "host:port";
-```
-
-The IP address should match the `priority_networks` setting; `portheartbeat_service_port` defaults to `9050`.
-
-If an error occurs, delete the BE node using the following commands:
-
-* `alter system decommission backend "be_host:be_heartbeat_service_port";`
-* `alter system drop backend "be_host:be_heartbeat_service_port";`
-
-Step 3: Start the BE.
-
-```shell
-bin/start_be.sh --daemon
-```
-
-Step 4: Check the BE status to confirm it is ready.
-
-```Plain Text
-mysql> SHOW PROC '/backends'\G
-
-***1\. row***
-
-BackendId: 10002
-
-Cluster: default\_cluster
-
-IP: 172.16.139.24
-
-HostName: starrocks-sandbox01
-
-HeartbeatPort: 9050
-
-BePort: 9060
-
-HttpPort: 8040
-
-BrpcPort: 8060
-
-LastStartTime: 2020-03-23 20:19:07
-
-LastHeartbeat: 2020-03-23 20:34:49
-
-Alive: true
-
-SystemDecommissioned: false
-
-ClusterDecommissioned: false
-
-TabletNum: 0
-
-DataUsedCapacity: .000
-
-AvailCapacity: 327.292 GB
-
-TotalCapacity: 450.905 GB
-
-UsedPct: 27.41 %
-
-MaxDiskUsedPct: 27.41 %
-
-ErrMsg:
-
-Version:
-
-1 row in set (0.01 sec)
-```
-
-`isAlive` is true, indicating that the BE is successfully connected to the cluster. If not, check the log file (`be.WARNING`) to determine the root cause.
-
-The following message indicates that there is a problem with the `priority_networks` settings.
-
-```Plain Text
-W0708 17:16:27.308156 11473 heartbeat\_server.cpp:82\] backend ip saved in leader does not equal to backend local ip127.0.0.1 vs. 172.16.179.26
-```
-
-At this time, you need to use the following command to drop the originally added BE, and then add it back with the correct IP.
-
-```sql
-mysql> ALTER SYSTEM DROP BACKEND "172.16.139.24:9050";
-```
-
-Since it is the initial setup, feel free to start over if you encounter any unexpected problems.
-
-## Broker Deployment
-
-The configuration file is `apache_hdfs_broker/conf/apache_hdfs_broker.conf`.
-
-> Note: If the machine has multiple IPs, priority_networks needs to be configured in the same way as the FE.
-
-If there is a special HDFS configuration, copy `hdfs-site.xml` to the conf directory.
-
-Step 1:To start the broker:
-
-```shell
-./apache_hdfs_broker/bin/start_broker.sh --daemon
-```
-
-Step 2: Add the broker node to the cluster:
-
-```sql
-MySQL> ALTER SYSTEM ADD BROKER broker1 "172.16.139.24:8000";
-```
-
-Step 3: Check the broker status:
-
-```plain text
-MySQL> SHOW PROC '/brokers'\G
-*************************** 1. row ***************************
-          Name: broker1
-            IP: 172.16.139.24
-          Port: 8000
-         Alive: true
- LastStartTime: 2020-04-01 19:08:35
-LastUpdateTime: 2020-04-01 19:08:45
-        ErrMsg: 
-1 row in set (0.00 sec)
-```
-
-`Alive` is true, indicating the state is normal.
-
-## Parameter Settings
-
-* **Swappiness**
-
-Shut down the swap space to avoid impacting performance when transferring data from the real memory to the virtual memory.
+* It is recommended to disable swappiness to reduce the impact on performance.
 
 ```shell
 echo 0 | sudo tee /proc/sys/vm/swappiness
 ```
 
-* **Compaction**
-
-When using aggregate models or updating models, data gets imported at a high speed. You can modify the following parameters to speed up compaction.
+* It is recommended to enable Overcommit, and set `cat /proc/sys/vm/overcommit_memory` as `1`.
 
 ```shell
-cumulative_compaction_num_threads_per_disk = 4
-base_compaction_num_threads_per_disk = 2
-cumulative_compaction_check_interval_seconds = 2
+echo 1 | sudo tee /proc/sys/vm/overcommit_memory
 ```
 
-* **Parallelism**
+### Deploy FE node
 
-You can modify the parallelism of StarRocks (similar to clickhouse set max_threads= 8) when executing commands via the client. The parallelism can be set to half the number of the current machine's CPU cores.
+This section describes how to deploy Frontend (FE) nodes. FE is the front layer of StarRocks. It manages system metadata, client connections, query plan, and query schedule.
+
+#### Download and decompress the installer
+
+[Download](https://www.starrocks.com/zh-CN/download) and decompress StarRocks installer.
+
+```bash
+tar -xzvf StarRocks-x.x.x.tar.gz
+```
+
+> Caution
+> Replace the file name in the command as the real file name you downloaded.
+
+#### Configure FE node
+
+Enter **StarRocks-x.x.x/fe**.
+
+```bash
+cd StarRocks-x.x.x/fe
+```
+
+> Caution
+> Replace the path in the command as the real path after the decompression.
+
+Specify the FE configuration file **conf/fe.conf**. The following example only adds the metadata directory and Java directory to ensure the success of deployment. If you need to change more configuration items, see [Configuration](../administration/Configuration.md) for more instruction.
+
+> Caution
+> When there is multiple IP addresses in the machine, you need to configure a unique IP address for the FE node under `priority_networks` in **conf/fe.conf**.
+
+Specify the metadata directory.
+
+```Plain Text
+meta_dir = ${STARROCKS_HOME}/meta
+```
+
+Specify the Java directory.
+
+```Plain Text
+JAVA_HOME = /path/to/your/java
+```
+
+> Caution
+> Replace the path in the command as the real path to Java.
+
+#### Create metadata directory
+
+Create the metadata directory **meta** in FE.
+
+```bash
+mkdir -p meta
+```
+
+> Caution
+> Make sure the path you created is identical to the path you specified in **conf/fe.conf**.
+
+#### Start FE node
+
+Run the following command to start the FE node.
+
+```bash
+bin/start_fe.sh --daemon
+```
+
+#### Verify if FE starts
+
+You can verify if the FE node is started properly via the following methods:
+
+* Check the FE log **log/fe.log**.
+
+```Plain Text
+2020-03-16 20:32:14,686 INFO 1 [FeServer.start():46] thrift server started.  // FE node is started successfully.
+2020-03-16 20:32:14,696 INFO 1 [NMysqlServer.start():71] Open mysql server success on 9030  // You can connect the FE node with MySQL client via port `9030`.
+2020-03-16 20:32:14,696 INFO 1 [QeService.start():60] QE service start.
+2020-03-16 20:32:14,825 INFO 76 [HttpServer$HttpServerThread.run():210] HttpServer started with port 8030
+...
+```
+
+* Run `jps` in your terminal to check the Java process, and make sure process **StarRocksFe** exists.
+* Visit `FE ip:http_port` (default `http_port` is `8030`) in your browser, and enter the StarRocks WebUI. Login with username `root`, and the password id empty。
+
+> Note
+> If the FE node is not start properly because the port is occupied, you can change the `http_port` item in **conf/fe.conf**.
+
+#### Add FE node to cluster
+
+You need to add the FE node to the StarRocks cluster.
+
+When the FE node is started, connect the FE node via MySQL client.
+
+```bash
+mysql -h 127.0.0.1 -P9030 -uroot
+```
+
+> Note
+> `root` is the default user of a StarRocks cluster, and its password is empty. You need to connect via the `query_port` (default value `9030`) you have specified in **fe/conf/fe.conf**.
+
+Check the status of FE node.
 
 ```sql
-set global parallel_fragment_exec_instance_num =  8;
+SHOW PROC '/frontends'\G
 ```
 
-## Use MySQL Client to Access StarRocks
+Example:
 
-### Root User Login
+```Plain Text
+MySQL [(none)]> SHOW PROC '/frontends'\G
 
-Use the MySQL client to connect to `query_port (9030)` of a certain FE instance. StarRocks has a built-in root user, its password is empty by default.
+*************************** 1. row ***************************
+             Name: 172.26.xxx.xx_9010_1652926508967
+               IP: 172.26.xxx.xx
+         HostName: iZ8vb61k11tstgnvrmrdfdZ
+      EditLogPort: 9010
+         HttpPort: 8030
+        QueryPort: 9030
+          RpcPort: 9020
+             Role: FOLLOWER
+         IsMaster: true
+        ClusterId: 1160043595
+             Join: true
+            Alive: true
+ReplayedJournalId: 1303
+    LastHeartbeat: 2022-05-19 11:27:16
+         IsHelper: true
+           ErrMsg:
+        StartTime: 2022-05-19 10:15:21
+          Version: 2.2.0-RC02-2ab1482
+1 row in set (0.02 sec)
+```
+
+* If the field **Role** is **FOLLOWER**, this FE node is eligible to be elected as the Leader node.
+* If the field **IsMaster** is **true**, this FE node is the Leader node.
+
+If you failed to connect via MySQL client, you can check **log/fe.warn.log** to identify the problem.
+
+During the **first deployment** of the cluster, you can re-deploy the FE node after deleting and re-creating its metadata directory.
+
+#### Deploy FE node with high availability
+
+StarRocks FE nodes support High Availability deployment. For detailed information, see [FE High Availability Deployment](/administration/Deployment.md)。
+
+#### Stop FE node
+
+Run the following command to stop the FE node.
+
+```bash
+./bin/stop_fe.sh --daemon
+```
+
+<br/>
+
+### Deploy BE node
+
+This section describes how to deploy Backend (BE) nodes. BE is the executing layer of StarRocks. It stores data and executes queries.
+
+#### Download and decompress the installer
+
+[Download](https://www.starrocks.com/zh-CN/download) and decompress StarRocks installer.
+
+```bash
+tar -xzvf StarRocks-x.x.x.tar.gz
+```
+
+> Caution
+> Replace the file name in the command as the real file name you downloaded.
+
+#### Configure BE node
+
+Enter **StarRocks-x.x.x/be**.
+
+```bash
+cd StarRocks-x.x.x/be
+```
+
+> Caution
+> Replace the path in the command as the real path after the decompression.
+
+Specify the BE configuration file **conf/be.conf**. Because the default configuration can be used directly, no configuration item is changed in the following example. If you need to change more configuration items, see [Configuration](../administration/Configuration.md) for more instruction.
+
+#### Create storage directory
+
+Create the data storage directory **storage** in BE.
+
+```bash
+mkdir -p storage
+```
+
+> Caution
+> Make sure the path you created is identical to the path you specified in **conf/be.conf**.
+
+#### Add BE node to cluster
+
+Run the following command to add the BE node to cluster.
+
+```sql
+ALTER SYSTEM ADD BACKEND "host:port";
+```
+
+> Caution
+> Parameter `host` must match the pre-specified `priority_networks`, and parameter `port` must match the `heartbeat_service_port` specified in **be.conf** (default is`9050`).
+
+If any problem occur while adding the BE node, you can drop it with the following command.
+
+```sql
+ALTER SYSTEM decommission BACKEND "host:port";
+```
+
+> Caution
+> Parameter `host` and `port` must be identical with those when adding the node.
+
+#### Start BE node
+
+Run the following command to start the BE node.
 
 ```shell
-mysql -h fe_host -P9030 -u root
+bin/start_be.sh --daemon
 ```
 
-Clean up the environment:
+#### Verify if BE starts
+
+You can verify if the BE node is started properly via MySQL client.
 
 ```sql
-mysql > drop database if exists example_db;
-
-mysql > drop user test;
+SHOW PROC '/backends'\G
 ```
 
-### Create a New User
-
-Create a user using the following command:
-
-```sql
-mysql > create user 'test' identified by '123456';
-```
-
-### Create a Database
-
-Only root account has the right to create a database. Log in as root user to create a database:
-
-```sql
-mysql > create database example_db;
-```
-
-After the database is created, you can view the database information using the following command:
+Example:
 
 ```Plain Text
-mysql > show databases;
+MySQL [(none)]> SHOW PROC '/backends'\G
 
-+--------------------+
-| Database           |
-+--------------------+
-| example_db         |
-| information_schema |
-+--------------------+
-2 rows in set (0.00 sec)
+*************************** 1. row ***************************
+            BackendId: 10003
+              Cluster: default_cluster
+                   IP: 172.26.xxx.xx
+             HostName: sandbox-pdtw02
+        HeartbeatPort: 9050
+               BePort: 9060
+             HttpPort: 8040
+             BrpcPort: 8060
+        LastStartTime: 2022-05-19 11:15:00
+        LastHeartbeat: 2022-05-19 11:27:36
+                Alive: true
+ SystemDecommissioned: false
+ClusterDecommissioned: false
+            TabletNum: 10
+     DataUsedCapacity: .000
+        AvailCapacity: 1.865 TB
+        TotalCapacity: 1.968 TB
+              UsedPct: 5.23 %
+       MaxDiskUsedPct: 5.23 %
+               ErrMsg:
+              Version: 2.2.0-RC02-2ab1482
+               Status: {"lastSuccessReportTabletsTime":"2022-05-19 11:27:01"}
+    DataTotalCapacity: 1.865 TB
+          DataUsedPct: 0.00 %
+1 row in set (0.01 sec)
 ```
 
-The `information_schema` exists to be compatible with the MySQL protocol. In reality, the information may not be accurate. Therefore, it is recommended to directly query the corresponding database to get information.
+When the field `isAlive` is `true`, the BE node is properly started and added to the cluster.
 
-### Authorization an Account
+If the BE node is not properly added to the cluster, you can check the **log/be.WARNING** file to identify the problem.
 
-Once the database is created, you can authorize test accounts to have root account permissions. Once done, log in to the test account and manage the database:
-
-```sql
-mysql > grant all on example_db to test;
-```
-
-Log out of the root account and log in as a test user:
-
-```sql
-mysql > exit
-
-mysql -h 127.0.0.1 -P9030 -utest -p123456
-```
-
-### Create Tables
-
-StarRocks supports two ways of creating tables -- bucketing and composite partition.
-
-In a composite partition:
-
-* The first level is partition. Users can specify a certain key as the partition key (currently only integer and time are supported), and set the value range of each partition.
-* The second level is called tablet, which is bucket. Users can specify several keys (or none, that is, all KEY columns) and the number of buckets for distributing data by HASH.
-
-Composite partitions are recommended for the following scenarios:
-
-* There are time keys or similar keys with ordered values. Such keys can be used as partition keys. Partition granularity can be evaluated based on import frequency, partition data volume, etc.
-* If there is a requirement to delete historical data (for example, only keep the data of the last N days), use composite partitions to achieve that goal. You can also delete data by sending a `DELETE` statement in the specified partition.
-* To solve the problem of data skew. Each partition can individually specify the number of buckets. For example, when partitioning by day and the amount of data varies greatly each day, you can specify the number of buckets in the partition to reasonably divide the data into different partitions. It is recommended to choose easily differentiable keys as the bucket keys.
-
-Users can use buckets, in which case the data is only distributed by HASH.
-
-Next, let’s see how to create a table with buckets.
-
-1. Switch to the database: `mysql> use example_db`.
-2. Create a logical table named table1. Use the full hash to divide buckets; list the buckets as siteid and the number of buckets as 10. The schema of the table is as follows:
-
-* siteid: The type is INT (4 bytes), the default value is 10
-* cidy_code: The type is SMALLINT (2 bytes)
-* username: The type is VARCHAR, the maximum length is 32, and the default value is an empty string
-* pv: The type is BIGINT (8 bytes), and the default value is 0. This is an indicator column. StarRocks internally aggregates indicator columns. The aggregation method is sum (SUM).
-
-```sql
-mysql >
-CREATE TABLE table1
-(
-    siteid INT DEFAULT '10',
-    citycode SMALLINT,
-    username VARCHAR(32) DEFAULT '',
-    pv BIGINT SUM DEFAULT '0'
-)
-AGGREGATE KEY(siteid, citycode, username)
-DISTRIBUTED BY HASH(siteid) BUCKETS 10
-PROPERTIES("replication_num" = "1");
-```
-
-Then, let’s see how to create a composite partition table. The schema of the table is as follows:
-
-* event_day: The type is DATE, no default value
-* siteid: The type is INT (4 bytes), the default value is 10
-* cidy_code: The type is SMALLINT (2 bytes)
-* username: The type is VARCHAR, the maximum length is 32, and the default value is an empty string
-* pv: The type is BIGINT (8 bytes), the default value is 0. This is an indicator column. StarRocks internally aggregates indicator columns. The aggregation method of this column is sum (SUM).
-
-We use the `event_day` as the partition key to create three partitions (p1, p2, p3).
-
-* p1: The range is [minimum value, 2017-06-30)
-* p2: The range is [2017-06-30, 2017-07-31)
-* p3: The range is [2017-07-31, 2017-08-31)
-
-Each partition is hashed into buckets using `siteid`; the number of buckets is 10.
-
-```sql
-CREATE TABLE table2
-(
-event_day DATE,
-siteid INT DEFAULT '10',
-citycode SMALLINT,
-username VARCHAR(32) DEFAULT '',
-pv BIGINT SUM DEFAULT '0'
-)
-AGGREGATE KEY(event_day, siteid, citycode, username)
-PARTITION BY RANGE(event_day)
-(
-PARTITION p1 VALUES LESS THAN ('2017-06-30'),
-PARTITION p2 VALUES LESS THAN ('2017-07-31'),
-PARTITION p3 VALUES LESS THAN ('2017-08-31')
-)
-DISTRIBUTED BY HASH(siteid) BUCKETS 10
-PROPERTIES("replication_num" = "1");
-```
-
-Once the table is created, you can view the table information using the following command:
+The following logs in the file indicates the parameter `priority_networks` is not properly set.
 
 ```Plain Text
-mysql> show tables;
-
-+-------------------------+
-| Tables_in_example_db    |
-+-------------------------+
-| table1                  |
-| table2                  |
-+-------------------------+
-2 rows in set (0.01 sec)
-
-
-mysql> desc table1;
-
-+----------+-------------+------+-------+---------+-------+
-| Field    | Type        | Null | Key   | Default | Extra |
-+----------+-------------+------+-------+---------+-------+
-| siteid   | int(11)     | Yes  | true  | 10      |       |
-| citycode | smallint(6) | Yes  | true  | N/A     |       |
-| username | varchar(32) | Yes  | true  |         |       |
-| pv       | bigint(20)  | Yes  | false | 0       | SUM   |
-+----------+-------------+------+-------+---------+-------+
-4 rows in set (0.00 sec)
-
-
-
-mysql> desc table2;
-
-+-----------+-------------+------+-------+---------+-------+
-| Field     | Type        | Null | Key   | Default | Extra |
-+-----------+-------------+------+-------+---------+-------+
-| event_day | date        | Yes  | true  | N/A     |       |
-| siteid    | int(11)     | Yes  | true  | 10      |       |
-| citycode  | smallint(6) | Yes  | true  | N/A     |       |
-| username  | varchar(32) | Yes  | true  |         |       |
-| pv        | bigint(20)  | Yes  | false | 0       | SUM   |
-+-----------+-------------+------+-------+---------+-------+
-5 rows in set (0.00 sec)
+W0708 17:16:27.308156 11473 heartbeat_server.cpp:82\] backend ip saved in leader does not equal to backend local ip127.0.0.1 vs. 172.16.xxx.xx
 ```
 
-## Build in docker
+You can drop the wrong BE node and re-add it to the cluster with correct IP address.
 
-Refer to[Build in docker](../administration/Build_in_docker.md).
+```sql
+ALTER SYSTEM DROP BACKEND "172.16.xxx.xx:9050";
+```
+
+During the **first deployment** of the cluster, you can re-deploy the BE node after deleting and re-creating its storage directory.
+
+#### Stop BE node
+
+Run the following command to stop the BE node.
+
+```bash
+./bin/stop_be.sh --daemon
+```
+
+<br/>
+
+### Deploy Broker
+
+This section describes how to deploy Broker. With broker, StarRocks can read data from source such as HDFS and S3, and pre-process, load, and backup the data with its own computing resources.
+
+#### Download and decompress the installer
+
+[Download](https://www.starrocks.com/zh-CN/download) and decompress StarRocks installer.
+
+```bash
+tar -xzvf StarRocks-x.x.x.tar.gz
+```
+
+> Caution
+> Replace the file name in the command as the real file name you downloaded.
+
+#### Configure Broker
+
+Enter **StarRocks-x.x.x/apache_hdfs_broker**.
+
+```bash
+cd StarRocks-x.x.x/apache_hdfs_broker
+```
+
+> Caution
+> Replace the file name in the command as the real file name you downloaded.
+
+Specify the broker configuration file **conf/apache_hdfs_broker.conf**. Because the default configuration can be used directly, no configuration item is changed in the following example. You can copy your own HDFS cluster configuration file and paste it under **conf** directory.
+
+#### Start Broker
+
+Run the following command to start Broker.
+
+```bash
+./apache_hdfs_broker/bin/start_broker.sh --daemon
+```
+
+#### Add Broker to cluster
+
+Run the following command to add the broker to cluster.
+
+```sql
+ALTER SYSTEM ADD BROKER broker1 "172.16.xxx.xx:8000";
+```
+
+> Note
+> By default, the port for broker is `8000`。
+
+#### verify if Broker starts
+
+You can verify if the BE node is started properly via MySQL client.
+
+```sql
+SHOW PROC "/brokers"\G
+```
+
+Example:
+
+```plain text
+MySQL [(none)]> SHOW PROC "/brokers"\G
+
+*************************** 1. row ***************************
+          Name: broker1
+            IP: 172.26.xxx.xx
+          Port: 8000
+         Alive: true
+ LastStartTime: 2022-05-19 11:21:36
+LastUpdateTime: 2022-05-19 11:28:31
+        ErrMsg:
+1 row in set (0.00 sec)
+```
+
+When the field `isAlive` is `true`, the broker is properly started and added to the cluster.
+
+#### Stop Broker
+
+Run the following command to stop Broker.
+
+```bash
+./bin/stop_broker.sh --daemon
+```
+
+<br/>
+
+## Deploy with Docker
+
+### Prerequisites
+
+|Requirement|Description|
+|---------|--------|
+|Hardware|<ul><li>CPU supports AVX2 instruction sets.</li><li>8-cores CPU and 16GB memory are recommended.</li></ul>|
+|Operating system|CentOS (7 or later)|
+|Software|<ul><li>Docker</li><li>MySQL client (5.5 or later)</li></ul>|
+
+### Create Dockerfile
+
+Create a Dockerfile with the following template.
+
+```shell
+FROM centos:centos7
+
+# Prepare StarRocks Installer.
+RUN yum -y install wget
+RUN mkdir -p /data/deploy/ 
+RUN wget -SO /data/deploy/StarRocks-x.x.x.tar.gz <url_to_download_specific_ver_of_starrocks>
+RUN cd /data/deploy/ && tar zxf StarRocks-x.x.x.tar.gz
+
+# Install Java JDK.
+RUN yum -y install java-1.8.0-openjdk-devel.x86_64
+RUN rpm -ql java-1.8.0-openjdk-devel.x86_64 | grep bin$
+RUN /usr/lib/jvm/java-1.8.0-openjdk-1.8.0.322.b09-1.el7_9.x86_64/bin/java -version
+
+# Create directory for FE meta and BE storage in StarRocks.
+RUN mkdir -p /data/deploy/StarRocks-x.x.x/fe/meta
+RUN jps
+RUN mkdir -p /data/deploy/StarRocks-x.x.x/be/storage
+
+# Install relevant tools.
+RUN yum -y install mysql net-tools telnet
+
+# Run Setup script.
+COPY run_script.sh /data/deploy/run_script.sh
+RUN chmod +x /data/deploy/run_script.sh
+CMD /data/deploy/run_script.sh
+```
+
+> Caution
+> Replace `<url_to_download_specific_ver_of_starrocks>` with the real [download path](https://www.starrocks.com/zh-CN/download), and replace `StarRocks-x.x.x` with the real StarRocks version.
+
+### Create script
+
+build the script file `run_script.sh` to configure and start StarRocks.
+
+```shell
+
+#!/bin/bash
+
+# Set JAVA_HOME.
+export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.322.b06-1.el7_9.x86_64
+
+# Start FE.
+cd /data/deploy/StarRocks-x.x.x/fe/bin/
+./start_fe.sh --daemon
+
+# Start BE.
+cd /data/deploy/StarRocks-x.x.x/be/bin/
+./start_be.sh --daemon
+
+# Sleep until the cluster starts.
+sleep 30;
+
+# Set BE server IP.
+IP=$(ifconfig eth0 | grep 'inet' | cut -d: -f2 | awk '{print $2}')
+mysql -uroot -h${IP} -P 9030 -e "alter system add backend '${IP}:9050';"
+
+# Loop to detect the process.
+while sleep 60; do
+  ps aux | grep starrocks | grep -q -v grep
+  PROCESS_STATUS=$?
+
+  if [ PROCESS_STATUS -ne 0 ]; then
+    echo "one of the starrocks process already exit."
+    exit 1;
+  fi
+done
+```
+
+> Caution
+> Replace `StarRocks-x.x.x` with the real StarRocks version.
+
+### Build Docker image
+
+Run the following command to build Docker image.
+
+```shell
+docker build --no-cache --progress=plain -t starrocks:1.0 .
+```
+
+### Start Docker container
+
+Run the following command to start the Docker container.
+
+```shell
+docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 --privileged=true -itd --name starrocks-test starrocks:1.0
+```
+
+### Connect to StarRocks
+
+Run the following command to connect to StarRocks after the container is started successfully.
+
+```shell
+mysql -uroot -h127.0.0.1 -P 9030
+```
+
+### Verify if cluster
+
+Run the following SQL to verify if the cluster is started properly.
+
+```sql
+CREATE DATABASE TEST;
+
+USE TEST;
+
+CREATE TABLE `sr_on_mac` (
+ `c0` int(11) NULL COMMENT "",
+ `c1` date NULL COMMENT "",
+ `c2` datetime NULL COMMENT "",
+ `c3` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c0`)
+PARTITION BY RANGE (c1) (
+  START ("2022-02-01") END ("2022-02-10") EVERY (INTERVAL 1 DAY)
+)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT"
+);
+
+
+insert into sr_on_mac values (1, '2022-02-01', '2022-02-01 10:47:57', '111');
+insert into sr_on_mac values (2, '2022-02-02', '2022-02-02 10:47:57', '222');
+insert into sr_on_mac values (3, '2022-02-03', '2022-02-03 10:47:57', '333');
+
+
+select * from sr_on_mac where c1 >= '2022-02-02';
+```
+
+If no error is returned, you have successfully deployed StarRocks in Docker.
+
+## What to do next
+
+Having Deployed StarRocks, you can:
+
+* [Create a table](Create_table.md)
+* [Upgrade StarRocks](../administration/Cluster_administration.md#集群升级)
