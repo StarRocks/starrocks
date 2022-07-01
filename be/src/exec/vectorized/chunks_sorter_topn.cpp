@@ -468,23 +468,34 @@ void ChunksSorterTopn::_rank_pruning() {
     if (_topn_type != TTopNType::RANK) {
         return;
     }
-    if (_merged_segment.order_by_columns.empty()) {
+    if (!_init_merged_segment) {
         return;
     }
     if (_merged_segment.chunk->num_rows() <= _get_number_of_rows_to_sort()) {
         return;
     }
-    const auto peer_group_start = static_cast<int>(_get_number_of_rows_to_sort()) - 1;
-    DCHECK_GE(peer_group_start, 0);
-    Tie tie(_merged_segment.chunk->num_rows(), 1);
-    vectorized::build_tie_for_columns(_merged_segment.order_by_columns, &tie);
-    const auto peer_group_end = SIMD::find_zero(tie, peer_group_start + 1);
+    DCHECK(!_merged_segment.order_by_columns.empty());
 
-    for (auto& column : _merged_segment.chunk->columns()) {
-        column->resize(peer_group_end);
+    const auto size = _merged_segment.chunk->num_rows();
+    const auto peer_group_start = _get_number_of_rows_to_sort() - 1;
+    size_t peer_group_end = size;
+    bool found = false;
+
+    for (int i = peer_group_start + 1; !found && i < size; ++i) {
+        for (auto& column : _merged_segment.order_by_columns) {
+            if (column->compare_at(i, i - 1, *column, 1) != 0) {
+                peer_group_end = i;
+                found = true;
+                break;
+            }
+        }
     }
-    for (auto& column : _merged_segment.order_by_columns) {
-        column->resize(peer_group_end);
+
+    if (found) {
+        _merged_segment.chunk->set_num_rows(peer_group_end);
+        for (auto& column : _merged_segment.order_by_columns) {
+            column->resize(peer_group_end);
+        }
     }
 }
 

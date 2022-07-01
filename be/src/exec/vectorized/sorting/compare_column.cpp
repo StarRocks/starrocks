@@ -216,13 +216,8 @@ public:
         // 2. Compare the value if both are not null. Since value for null is just default value,
         //    which are equal, so just compare the value directly
         const NullData& null_data = column.immutable_null_column_data();
-        TieIterator iterator(*_tie);
-        while (iterator.next()) {
-            int range_first = iterator.range_first;
-            int range_last = iterator.range_last;
-            for (size_t i = range_first + 1; i < range_last; i++) {
-                (*_tie)[i] &= (null_data[i - 1] == null_data[i]);
-            }
+        for (size_t i = 1; i < column.size(); i++) {
+            (*_tie)[i] &= (null_data[i - 1] == null_data[i]);
         }
 
         build_tie_for_column(column.data_column(), _tie);
@@ -232,13 +227,8 @@ public:
     template <typename T>
     Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
         auto& data = column.get_data();
-        TieIterator iterator(*_tie);
-        while (iterator.next()) {
-            int range_first = iterator.range_first;
-            int range_last = iterator.range_last;
-            for (size_t i = range_first + 1; i < range_last; i++) {
-                (*_tie)[i] &= SorterComparator<Slice>::compare(data[i - 1], data[i]) == 0;
-            }
+        for (size_t i = 1; i < column.size(); i++) {
+            (*_tie)[i] &= SorterComparator<Slice>::compare(data[i - 1], data[i]) == 0;
         }
         return Status::OK();
     }
@@ -246,13 +236,8 @@ public:
     template <typename T>
     Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
         auto& data = column.get_data();
-        TieIterator iterator(*_tie);
-        while (iterator.next()) {
-            int range_first = iterator.range_first;
-            int range_last = iterator.range_last;
-            for (size_t i = range_first + 1; i < range_last; i++) {
-                (*_tie)[i] &= SorterComparator<T>::compare(data[i - 1], data[i]) == 0;
-            }
+        for (size_t i = 1; i < column.size(); i++) {
+            (*_tie)[i] &= SorterComparator<T>::compare(data[i - 1], data[i]) == 0;
         }
         return Status::OK();
     }
@@ -309,9 +294,4 @@ void build_tie_for_column(const ColumnPtr column, Tie* tie) {
     DCHECK(st.ok());
 }
 
-void build_tie_for_columns(const Columns& columns, Tie* tie) {
-    for (auto& column : columns) {
-        build_tie_for_column(column, tie);
-    }
-}
 } // namespace starrocks::vectorized
