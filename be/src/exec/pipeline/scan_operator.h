@@ -42,17 +42,8 @@ public:
     virtual void do_close(RuntimeState* state) = 0;
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
 
-    virtual int64_t get_last_scan_rows_num() {
-        int64_t scan_rows_num = _last_scan_rows_num;
-        _last_scan_rows_num = 0;
-        return scan_rows_num;
-    }
-
-    virtual int64_t get_last_scan_bytes() {
-        int64_t res = _last_scan_bytes;
-        _last_scan_bytes = 0;
-        return res;
-    }
+    int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
+    int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
 
 private:
     // This method is only invoked when current morsel is reached eof
