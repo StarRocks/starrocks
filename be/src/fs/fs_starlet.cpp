@@ -171,9 +171,9 @@ public:
 
     Type type() const override { return STARLET; }
 
-    StatusOr<Configuration> get_shard_config(int64_t tablet_id) {
+    StatusOr<Configuration> get_shard_config(int64_t shard_id) {
         Configuration conf;
-        ASSIGN_OR_RETURN(auto shardinfo, g_worker->get_shard_info(tablet_id));
+        ASSIGN_OR_RETURN(auto shardinfo, g_worker->get_shard_info(shard_id));
 
         auto iter = shardinfo.properties.find("scheme");
         if (iter == shardinfo.properties.end()) {
@@ -186,27 +186,27 @@ public:
         iter = shardinfo.properties.find(kS3AccessKeyId);
         if (iter == shardinfo.properties.end()) {
             return Status::InvalidArgument(
-                    fmt::format("shardinfo {} should contains {} conf", tablet_id, kS3AccessKeyId));
+                    fmt::format("shardinfo {} should contains {} conf", shard_id, kS3AccessKeyId));
         }
         conf.emplace(std::make_pair(kS3AccessKeyId, std::move(iter->second)));
 
         iter = shardinfo.properties.find(kS3AccessKeySecret);
         if (iter == shardinfo.properties.end()) {
             return Status::InvalidArgument(
-                    fmt::format("shardinfo {} should contains {} conf", tablet_id, kS3AccessKeySecret));
+                    fmt::format("shardinfo {} should contains {} conf", shard_id, kS3AccessKeySecret));
         }
         conf.emplace(std::make_pair(kS3AccessKeySecret, std::move(iter->second)));
 
         iter = shardinfo.properties.find(kS3OverrideEndpoint);
         if (iter == shardinfo.properties.end()) {
             return Status::InvalidArgument(
-                    fmt::format("shardinfo {} should contains {} conf", tablet_id, kS3OverrideEndpoint));
+                    fmt::format("shardinfo {} should contains {} conf", shard_id, kS3OverrideEndpoint));
         }
         conf.emplace(std::make_pair(kS3OverrideEndpoint, std::move(iter->second)));
 
         iter = shardinfo.properties.find(kS3Bucket);
         if (iter == shardinfo.properties.end()) {
-            return Status::InvalidArgument(fmt::format("shardinfo {} should contains {} conf", tablet_id, kS3Bucket));
+            return Status::InvalidArgument(fmt::format("shardinfo {} should contains {} conf", shard_id, kS3Bucket));
         }
         conf.emplace(std::make_pair(kS3Bucket, std::move(iter->second)));
 

@@ -10,7 +10,7 @@
 
 namespace starrocks::lake {
 
-static const char* const kStarletPrefix = "staros_://";
+static const char* const kStarletPrefix = "staros://";
 static const char* const kGroupKey = "storageGroup";
 
 std::string StarletGroupAssigner::get_fs_prefix() {
@@ -34,7 +34,6 @@ Status StarletGroupAssigner::list_group(std::set<std::string>* groups) {
         return Status::InternalError("init_staros_worker() must be called before get_shard_info()");
     }
 
-    std::set<std::string> path_groups;
     std::vector<staros::starlet::ShardInfo> shards = g_worker->shards();
     for (const auto& shard : shards) {
         auto iter = shard.properties.find(kGroupKey);
