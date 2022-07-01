@@ -23,35 +23,32 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.IOException;
 
 public class DescribeStmtTest {
     private static ConnectContext ctx;
+    private static StarRocksAssert starRocksAssert;
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
 
-        String createDbStmtStr = "create database testDb;";
-        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr, ctx);
-
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
-        String sql = "create table testDb.testTbl(" +
+        starRocksAssert = new StarRocksAssert();
+        starRocksAssert.withDatabase("testDb").useDatabase("testTbl");
+        starRocksAssert.withTable("create table testDb.testTbl(" +
                 "id int, name string) DISTRIBUTED BY HASH(id) BUCKETS 10 " +
-                "PROPERTIES(\"replication_num\" = \"1\")";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+                "PROPERTIES(\"replication_num\" = \"1\")");
     }
+
     @Test
-    public void testDescribeTable() throws UserException, IOException {
+    public void testDescribeTable() {
         DescribeStmt stmt = new DescribeStmt(new TableName("testDb", "testTbl"), false);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("DESCRIBE `default_cluster:testDb.testTbl`", stmt.toString());

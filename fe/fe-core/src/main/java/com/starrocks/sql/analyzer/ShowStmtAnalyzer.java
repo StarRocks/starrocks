@@ -195,7 +195,7 @@ public class ShowStmtAnalyzer {
                     try {
                         node.setNode(ProcService.getInstance().open(procString));
                     } catch (AnalysisException e) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PROC_NODE_ERROR, procString);
+                        throw new SemanticException(String.format("Unknown proc node path: ", procString));
                     }
                 } else {
                     if (table.isNativeTable()) {

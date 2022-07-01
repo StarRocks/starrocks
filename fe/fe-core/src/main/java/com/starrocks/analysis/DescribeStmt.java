@@ -25,7 +25,6 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -91,11 +90,6 @@ public class DescribeStmt extends ShowStmt {
         return isAllTables;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-
-    }
-
     public String getTableName() {
         return dbTableName.getTbl();
     }
@@ -103,6 +97,7 @@ public class DescribeStmt extends ShowStmt {
     public String getDb() {
         return dbTableName.getDb();
     }
+
     public TableName getDbTableName() {
         return dbTableName;
     }
@@ -191,6 +186,7 @@ public class DescribeStmt extends ShowStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDescTableStmt(this, context);
     }
+
     @Override
     public boolean isSupportNewPlanner() {
         return true;

@@ -415,14 +415,10 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitDescTableStmt(DescribeStmt statement, ConnectContext session) {
-            String db = statement.getDb();
-            String tableName = statement.getTableName();
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                    db, tableName, PrivPredicate.SHOW)) {
+            TableName tableName = statement.getDbTableName();
+            if (!checkTblPriv(session, tableName, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "DESCRIBE",
-                        ConnectContext.get().getQualifiedUser(),
-                        ConnectContext.get().getRemoteIP(),
-                        tableName);
+                        session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
             }
             return null;
         }
