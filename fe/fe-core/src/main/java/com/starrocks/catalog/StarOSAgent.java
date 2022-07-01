@@ -133,11 +133,6 @@ public class StarOSAgent {
         }
     }
 
-    public String getServiceStorageUri() {
-        // TODO: get from StarMgr
-        return String.format("s3://bucket/%d/", serviceId);
-    }
-
     // for ut only
     public long getWorkerId(String workerIpPort) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
