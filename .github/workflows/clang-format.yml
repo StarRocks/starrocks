@@ -16,7 +16,9 @@ jobs:
           submodules: recursive
 
       - name: build fe
-        run: bash ./build.sh --fe --clean
+        run: |
+          sudo apt-get install -y byacc
+          bash ./build.sh --fe --clean
         
       - name: "Format it!"
         uses: DoozyX/clang-format-lint-action@master
