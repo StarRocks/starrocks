@@ -4,6 +4,7 @@
 #include <fslib/configuration.h>
 #include <fslib/file.h>
 #include <fslib/file_system.h>
+#include <fslib/fslib_all_initializer.h>
 #include <fslib/stream.h>
 #include <s3_uri.h>
 #include <starlet.h>
