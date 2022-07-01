@@ -220,13 +220,6 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
     _last_scan_bytes += scan_bytes;
     _decrease_committed_scan_tasks();
     _num_running_io_tasks--;
-
-    if (!_chunk_sources[chunk_source_index]->has_next_chunk()) {
-        _chunk_sources[chunk_source_index]->close(state);
-        _chunk_sources[chunk_source_index] = nullptr;
-        detach_chunk_source(chunk_source_index);
-    }
-
     _is_io_task_running[chunk_source_index] = false;
 }
 
