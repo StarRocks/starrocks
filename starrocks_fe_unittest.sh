@@ -67,8 +67,10 @@ echo "run docker for script"
 #cmd="cd /root/starrocks;
 #export FE_UT_PARALLEL=2;
 #timeout 3600 sh run-fe-ut.sh --run;"
+
 cmd="cd /root/starrocks;
 sh build.sh --clean --fe;"
+
 # com.starrocks.utframe.Demo#testCreateDbAndTable+test2;
 # sh run-fe-ut.sh --run com.starrocks.utframe.Demo
 # sh run-fe-ut.sh --run com.starrocks.utframe.Demo#testCreateDbAndTable+test2
