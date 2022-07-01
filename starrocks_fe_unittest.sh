@@ -97,4 +97,4 @@ echo "script run over-----"
 #    done
 #fi
 
-mvn verify sonar:sonar -Dsonar.projectKey=dulong41_starrocks -Dsonar.organization=dulong41 -Dsonar.host.url=https://sonarcloud.io -Dsonar.login=23d4ba0aa0f8c547f3db2c329c96546e2e280468
+mvn verify sonar:sonar -Dsonar.projectKey=dulong41_starrocks -Dsonar.login=23d4ba0aa0f8c547f3db2c329c96546e2e280468
