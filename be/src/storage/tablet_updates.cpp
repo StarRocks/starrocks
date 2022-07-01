@@ -1454,6 +1454,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
         return Status::InternalError("illegal state: another compaction is running");
     }
+    DeferOp defer([&]() { _compaction_running = false; });
     std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
     vector<uint32_t> rowsets;
     {
@@ -1537,10 +1538,171 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
     Status st = _do_compaction(&info, true);
-    if (!st.ok()) {
-        _compaction_running = false;
-    }
     return st;
+}
+
+Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>& input_rowset_ids) {
+    if (_error) {
+        return Status::InternalError(Substitute("compaction failed, tablet updates is in error state: tablet:$0 $1",
+                                                _tablet.tablet_id(), _error_msg));
+    }
+    bool was_runing = false;
+    if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
+        return Status::InternalError("illegal state: another compaction is running");
+    }
+    DeferOp defer([&]() { _compaction_running = false; });
+    std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
+    std::unordered_set<uint32_t> all_rowsets;
+    {
+        std::lock_guard rl(_lock);
+        if (_edit_version_infos.empty()) {
+            string msg = Substitute("tablet deleted when compaction tablet:$0", _tablet.tablet_id());
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
+        // 1. start compaction at current apply version
+        info->start_version = _edit_version_infos[_apply_version_idx]->version;
+        const auto& rowsets = _edit_version_infos[_apply_version_idx]->rowsets;
+        all_rowsets.insert(rowsets.begin(), rowsets.end());
+    }
+    size_t total_rows = 0;
+    size_t total_bytes = 0;
+    size_t total_rows_after_compaction = 0;
+    size_t total_bytes_after_compaction = 0;
+    {
+        std::lock_guard lg(_rowset_stats_lock);
+        for (auto rowsetid : input_rowset_ids) {
+            if (all_rowsets.find(rowsetid) == all_rowsets.end()) {
+                LOG(WARNING) << "specified input rowset not found in current version rowsetid:" << rowsetid;
+                continue;
+            }
+            auto itr = _rowset_stats.find(rowsetid);
+            if (itr == _rowset_stats.end()) {
+                // should not happen
+                string msg = Substitute("rowset not found in rowset stats tablet=$0 rowset=$1", _tablet.tablet_id(),
+                                        rowsetid);
+                DCHECK(false) << msg;
+                LOG(WARNING) << msg;
+                continue;
+            }
+            auto& stat = *itr->second;
+            info->inputs.push_back(itr->first);
+            if (stat.num_rows > 0) {
+                total_rows += stat.num_rows;
+                total_bytes += stat.byte_size;
+                total_rows_after_compaction += stat.num_rows - stat.num_dels;
+                total_bytes_after_compaction += stat.byte_size * (stat.num_rows - stat.num_dels) / stat.num_rows;
+            }
+        }
+    }
+    // do not reset _last_compaction_time_ms so we can continue doing compaction
+    std::sort(info->inputs.begin(), info->inputs.end());
+    LOG(INFO) << "update compaction with specified rowsets start tablet:" << _tablet.tablet_id()
+              << " version:" << info->start_version.to_string() << " pick:" << info->inputs.size()
+              << "/all:" << all_rowsets.size() << " " << int_list_to_string(info->inputs) << " #rows:" << total_rows
+              << "->" << total_rows_after_compaction << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES)
+              << "->" << PrettyPrinter::print(total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
+
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
+    Status st = _do_compaction(&info, true);
+    return st;
+}
+
+StatusOr<std::vector<std::pair<uint32_t, uint32_t>>> TabletUpdates::list_rowsets_need_repair_compaction() {
+    if (_error) {
+        return Status::InternalError(Substitute(
+                "list_old_rowsets_with_small_segment_files failed, tablet updates is in error state: tablet:$0 $1",
+                _tablet.tablet_id(), _error_msg));
+    }
+    vector<uint32_t> rowsets;
+    {
+        std::lock_guard rl(_lock);
+        if (_edit_version_infos.empty()) {
+            string msg = Substitute("tablet deleted when compaction tablet:$0", _tablet.tablet_id());
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
+        rowsets = _edit_version_infos[_apply_version_idx]->rowsets;
+    }
+    std::vector<std::pair<uint32_t, uint32_t>> ret;
+    {
+        std::lock_guard lg(_rowsets_lock);
+        for (auto rowsetid : rowsets) {
+            auto itr = _rowsets.find(rowsetid);
+            if (itr == _rowsets.end()) {
+                string msg = Substitute("rowset not found tablet=$0 rowset=$1", _tablet.tablet_id(), rowsetid);
+                DCHECK(false) << msg;
+                LOG(WARNING) << msg;
+                continue;
+            }
+            size_t bytes = itr->second->data_disk_size();
+            size_t num_segments = itr->second->num_segments();
+            // average segment file size < 1M and num of segment file > 10
+            if (num_segments > 10 && bytes / num_segments < 1024 * 1024) {
+                ret.emplace_back(rowsetid, num_segments);
+            }
+        }
+    }
+    return ret;
+}
+
+void TabletUpdates::get_compaction_status(std::string* json_result) {
+    rapidjson::Document root;
+    root.SetObject();
+
+    EditVersion last_version;
+    std::vector<RowsetSharedPtr> rowsets;
+    std::vector<uint32_t> rowset_ids;
+    {
+        std::lock_guard l1(_lock);
+        if (_edit_version_infos.empty()) {
+            return;
+        }
+        std::lock_guard l2(_rowsets_lock);
+        last_version = _edit_version_infos.back()->version;
+        rowset_ids = _edit_version_infos.back()->rowsets;
+        std::sort(rowset_ids.begin(), rowset_ids.end());
+        rowsets.reserve(rowset_ids.size());
+        for (uint32_t i = 0; i < rowset_ids.size(); ++i) {
+            auto it = _rowsets.find(rowset_ids[i]);
+            if (it != _rowsets.end()) {
+                rowsets.push_back(it->second);
+            } else {
+                // should not happen
+                rowsets.push_back(nullptr);
+            }
+        }
+    }
+
+    std::string version_str = Substitute("tablet:$0 #version:[$1_$2] rowsets:$3", _tablet.tablet_id(),
+                                         last_version.major(), last_version.minor(), rowsets.size());
+
+    rapidjson::Value rowset_version;
+    rowset_version.SetString(version_str.c_str(), version_str.length(), root.GetAllocator());
+    root.AddMember("rowset_version", rowset_version, root.GetAllocator());
+
+    rapidjson::Document rowsets_arr;
+    rowsets_arr.SetArray();
+    for (int i = 0; i < rowset_ids.size(); ++i) {
+        rapidjson::Value value;
+        std::string rowset_str;
+        if (rowsets[i] != nullptr) {
+            rowset_str = strings::Substitute("id:$0 #seg:$1", rowset_ids[i], rowsets[i]->num_segments());
+        } else {
+            rowset_str = strings::Substitute("id:$0/NA", rowset_ids[i]);
+        }
+        value.SetString(rowset_str.c_str(), rowset_str.length(), rowsets_arr.GetAllocator());
+        rowsets_arr.PushBack(value, rowsets_arr.GetAllocator());
+    }
+    root.AddMember("rowsets", rowsets_arr, root.GetAllocator());
+
+    // to json string
+    rapidjson::StringBuffer strbuf;
+    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(strbuf);
+    root.Accept(writer);
+    *json_result = std::string(strbuf.GetString());
 }
 
 void TabletUpdates::_calc_compaction_score(RowsetStats* stats) {
