@@ -37,7 +37,9 @@ public class BDBEnvironmentTest {
     @Before
     public void setup() throws Exception {
         BDBEnvironment.RETRY_TIME = 3;
-        BDBEnvironment.SLEEP_INTERVAL_SEC = 0;
+        // give master time to update membership
+        // otherwise may get error Conflicting node types: uses: SECONDARY Replica is configured as type: ELECTABLE
+        BDBEnvironment.SLEEP_INTERVAL_SEC = 1;
     }
 
     @After
