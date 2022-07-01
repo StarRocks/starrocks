@@ -29,13 +29,8 @@ import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.MVColumnItem;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -67,10 +62,8 @@ import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.FakeTransactionIDGenerator;
 import com.starrocks.transaction.GlobalTransactionMgr;
-import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -117,8 +110,6 @@ public class RollupJobV2Test {
         MetaContext metaContext = new MetaContext();
         metaContext.setMetaVersion(FeMetaVersion.VERSION_61);
         metaContext.setThreadLocalInfo();
-        // masterGlobalStateMgr.setJournalVersion(FeMetaVersion.VERSION_40);
-        // slaveGlobalStateMgr.setJournalVersion(FeMetaVersion.VERSION_40);
         masterTransMgr = masterGlobalStateMgr.getGlobalTransactionMgr();
         masterTransMgr.setEditLog(masterGlobalStateMgr.getEditLog());
 
@@ -236,11 +227,6 @@ public class RollupJobV2Test {
                         shadowReplica.getRowCount());
             }
         }
-
-        // add this call to avoid the follow error:
-        //  Missing 1 invocation to:
-        //  com.starrocks.server.GlobalStateMgr#getCurrentSystemInfo()
-        FakeGlobalStateMgr.getCurrentSystemInfo();
 
         materializedViewHandler.runAfterCatalogReady();
         Assert.assertEquals(JobState.FINISHED, rollupJob.getJobState());
