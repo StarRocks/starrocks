@@ -20,6 +20,8 @@ class AsyncDeltaWriterCallback;
 
 // AsyncDeltaWriter is a wrapper on DeltaWriter to support non-blocking async write.
 // All submitted tasks will be executed in the FIFO order.
+// TODO: this class is too similar to lake::AsyncDeltaWriter, remove this AsyncDeltaWriter and
+// keep lake::AsyncDeltaWriter.
 class AsyncDeltaWriter {
     struct private_type;
 
