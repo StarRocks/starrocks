@@ -39,6 +39,7 @@ ScanOperator::~ScanOperator() {
         if (_chunk_sources[i] != nullptr) {
             _chunk_sources[i]->close(state);
             _chunk_sources[i] = nullptr;
+            detach_chunk_source(i);
         }
     }
 }
@@ -73,6 +74,7 @@ void ScanOperator::close(RuntimeState* state) {
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i]) {
             _chunk_sources[i]->close(state);
             _chunk_sources[i] = nullptr;
+            detach_chunk_source(i);
         }
     }
 
@@ -89,11 +91,8 @@ bool ScanOperator::has_output() const {
     if (!_get_scan_status().ok()) {
         return true;
     }
-
-    for (const auto& chunk_source : _chunk_sources) {
-        if (chunk_source != nullptr && chunk_source->has_output()) {
-            return true;
-        }
+    if (has_buffer_output()) {
+        return true;
     }
 
     if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP ||
@@ -138,10 +137,14 @@ bool ScanOperator::is_finished() const {
         return false;
     }
 
-    for (const auto& chunk_source : _chunk_sources) {
-        if (chunk_source != nullptr && (chunk_source->has_output() || chunk_source->has_next_chunk())) {
-            return false;
-        }
+    // Any shared chunk source from other ScanOperator
+    if (has_shared_chunk_source()) {
+        return false;
+    }
+
+    // Remain some data in the buffer
+    if (has_buffer_output()) {
+        return false;
     }
 
     // This scan operator is finished, if no more io tasks are running
@@ -161,16 +164,12 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         _workgroup->incr_period_ask_chunk_num(1);
     }
 
-    for (auto& chunk_source : _chunk_sources) {
-        if (chunk_source != nullptr && chunk_source->has_output()) {
-            auto&& chunk = chunk_source->get_next_chunk_from_buffer();
-            eval_runtime_bloom_filters(chunk.value().get());
-
-            return std::move(chunk);
-        }
+    vectorized::ChunkPtr res = get_chunk_from_buffer();
+    if (res == nullptr) {
+        return nullptr;
     }
-
-    return nullptr;
+    eval_runtime_bloom_filters(res.get());
+    return res;
 }
 
 int64_t ScanOperator::global_rf_wait_timeout_ns() const {
@@ -192,11 +191,9 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
             continue;
         }
 
-        if (_chunk_sources[i] == nullptr) {
-            RETURN_IF_ERROR(_pickup_morsel(state, i));
-        } else if (_chunk_sources[i]->has_next_chunk()) {
+        if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
             RETURN_IF_ERROR(_trigger_next_scan(state, i));
-        } else if (!_chunk_sources[i]->has_output()) {
+        } else {
             RETURN_IF_ERROR(_pickup_morsel(state, i));
         }
     }
@@ -213,10 +210,29 @@ inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
     return !ptr.owner_before(wp{}) && !wp{}.owner_before(ptr);
 }
 
+void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_source_index) {
+    _last_growth_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
+    _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
+    _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
+    _decrease_committed_scan_tasks();
+    _num_running_io_tasks--;
+
+    if (!_chunk_sources[chunk_source_index]->has_next_chunk()) {
+        _chunk_sources[chunk_source_index]->close(state);
+        _chunk_sources[chunk_source_index] = nullptr;
+        detach_chunk_source(chunk_source_index);
+    }
+
+    _is_io_task_running[chunk_source_index] = false;
+}
+
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
-    if (_chunk_sources[chunk_source_index]->get_buffer_size() >= _buffer_size) {
+    // Check if the buffer has available capacity to avoid occupy too much momory
+    if (!has_available_buffer()) {
         return Status::OK();
     }
+
+    // Check if exceed the concurrency limitation
     if (!_try_to_increase_committed_scan_tasks()) {
         return Status::OK();
     }
@@ -241,18 +257,11 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                     if (!status.ok() && !status.is_end_of_file()) {
                         _set_scan_status(status);
                     }
-                    // TODO (by laotan332): More detailed information is needed
                     _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
                     _workgroup->increment_real_runtime_ns(_chunk_sources[chunk_source_index]->last_spent_cpu_time_ns());
-
-                    _last_growth_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
-                    _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
-                    _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
                 }
 
-                _decrease_committed_scan_tasks();
-                _num_running_io_tasks--;
-                _is_io_task_running[chunk_source_index] = false;
+                _finish_chunk_source_task(state, chunk_source_index);
             }
         });
 
@@ -272,14 +281,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                     if (!status.ok() && !status.is_end_of_file()) {
                         _set_scan_status(status);
                     }
-                    _last_growth_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
-                    _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
-                    _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
                 }
 
-                _decrease_committed_scan_tasks();
-                _num_running_io_tasks--;
-                _is_io_task_running[chunk_source_index] = false;
+                _finish_chunk_source_task(state, chunk_source_index);
             }
         };
         // TODO(by satanson): set a proper priority
@@ -309,7 +313,17 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     if (_chunk_sources[chunk_source_index] != nullptr) {
         _chunk_sources[chunk_source_index]->close(state);
         _chunk_sources[chunk_source_index] = nullptr;
+        detach_chunk_source(chunk_source_index);
     }
+
+    // NOTE: attach an active source before really creating it, to avoid the race condition
+    bool need_detach = true;
+    attach_chunk_source(chunk_source_index);
+    DeferOp defer([&]() {
+        if (need_detach) {
+            detach_chunk_source(chunk_source_index);
+        }
+    });
 
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
     if (morsel != nullptr) {
@@ -320,6 +334,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
             _is_finished = true;
             return status;
         }
+        need_detach = false;
         RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
     }
 

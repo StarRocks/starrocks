@@ -66,12 +66,25 @@ public:
         return 0;
     }
 
+protected:
+    static constexpr int MAX_IO_TASKS_PER_OP = 4;
+    const size_t _buffer_size = config::pipeline_io_buffer_size;
+
+    // Shared scan
+    virtual void attach_chunk_source(int32_t source_index) = 0;
+    virtual void detach_chunk_source(int32_t source_index) {}
+    virtual bool has_shared_chunk_source() const = 0;
+    virtual bool has_buffer_output() const = 0;
+    virtual bool has_available_buffer() const = 0;
+    virtual ChunkPtr get_chunk_from_buffer() = 0;
+
 private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
     Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
+    void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index);
     void _merge_chunk_source_profiles();
 
     inline void _set_scan_status(const Status& status) {
@@ -105,10 +118,6 @@ protected:
     std::atomic<int>& _num_committed_scan_tasks;
 
 private:
-    static constexpr int MAX_IO_TASKS_PER_OP = 4;
-
-    const size_t _buffer_size = config::pipeline_io_buffer_size;
-
     int32_t _io_task_retry_cnt = 0;
     PriorityThreadPool* _io_threads = nullptr;
     std::atomic<int> _num_running_io_tasks = 0;
