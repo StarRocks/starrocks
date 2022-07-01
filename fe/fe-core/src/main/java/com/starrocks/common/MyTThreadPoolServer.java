@@ -14,7 +14,7 @@ public class MyTThreadPoolServer extends TThreadPoolServer {
     }
 
     /**
-     * override the execute method, catch any throwable and retry to avoid the accept thread exit unexpected
+     * override the execute method, catch OutOfMemoryError and retry to avoid the accept thread exit unexpected
      */
     @Override
     protected void execute() {
@@ -27,8 +27,10 @@ public class MyTThreadPoolServer extends TThreadPoolServer {
                 shouldSleep = true;
 
                 super.execute();
+            } catch (OutOfMemoryError error) {
+                LOG.error("thrift server accept failed, will retry", error);
             } catch (Throwable t) {
-                LOG.error("thrift server accept failed, will retry", t);
+                LOG.error("thrift server accept failed, will exit", t);
             }
         }
     }
