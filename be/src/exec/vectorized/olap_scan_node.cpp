@@ -339,6 +339,10 @@ Status OlapScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_r
     return Status::OK();
 }
 
+void OlapScanNode::enable_shared_scan(bool enable) {
+    _enable_shared_scan = enable;
+}
+
 StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_queue(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams& request) {
     pipeline::Morsels morsels;
@@ -756,7 +760,14 @@ void OlapScanNode::_close_pending_scanners() {
 }
 
 pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
-    auto scan_ctx = std::make_shared<pipeline::OlapScanContext>(this);
+    // Set the dop according to requested parallelism and number of morsels
+    int node_id = id();
+    auto& morsel_queues = context->fragment_context()->morsel_queues();
+    DCHECK_GT(morsel_queues.count(node_id), 0);
+    auto& morsel_queue = morsel_queues[node_id];
+    size_t dop = std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
+
+    auto scan_ctx = std::make_shared<pipeline::OlapScanContext>(this, dop, _enable_shared_scan);
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     size_t scan_dop = context->degree_of_parallelism_of_source_operator(id());
 

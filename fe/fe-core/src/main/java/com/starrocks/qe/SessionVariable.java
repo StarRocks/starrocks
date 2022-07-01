@@ -147,6 +147,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
 
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
+    public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
 
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
@@ -239,6 +240,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_TABLET_INTERNAL_PARALLEL)
     private boolean enableTabletInternalParallel = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_SHARED_SCAN)
+    private boolean enableSharedScan = true;
 
     // max memory used on every backend.
     public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;
@@ -903,6 +907,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getPipelineDop() {
         return this.pipelineDop;
+    }
+
+    public boolean isEnableSharedScan() {
+        return enableSharedScan;
     }
 
     public int getWorkGroupId() {
