@@ -2140,6 +2140,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
     RETURN_IF_ERROR(TabletMetaManager::clear_log(data_dir, &wb, tablet_id));
     RETURN_IF_ERROR(TabletMetaManager::clear_rowset(data_dir, &wb, tablet_id));
     RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(data_dir, &wb, tablet_id));
+    RETURN_IF_ERROR(TabletMetaManager::clear_persistent_index(data_dir, &wb, tablet_id));
     // do not clear pending rowsets, because these pending rowsets should be committed after schemachange is done
     RETURN_IF_ERROR(TabletMetaManager::put_tablet_meta(data_dir, &wb, meta_pb));
     for (auto& info : new_rowsets) {
@@ -2301,6 +2302,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     RETURN_IF_ERROR(TabletMetaManager::clear_log(data_dir, &wb, tablet_id));
     RETURN_IF_ERROR(TabletMetaManager::clear_rowset(data_dir, &wb, tablet_id));
     RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(data_dir, &wb, tablet_id));
+    RETURN_IF_ERROR(TabletMetaManager::clear_persistent_index(data_dir, &wb, tablet_id));
     // do not clear pending rowsets, because these pending rowsets should be committed after schemachange is done
     RETURN_IF_ERROR(TabletMetaManager::put_tablet_meta(data_dir, &wb, meta_pb));
     DelVector delvec;
@@ -2701,6 +2703,7 @@ Status TabletUpdates::clear_meta() {
     TabletMetaManager::clear_rowset(data_store, &wb, _tablet.tablet_id());
     TabletMetaManager::clear_del_vector(data_store, &wb, _tablet.tablet_id());
     TabletMetaManager::clear_log(data_store, &wb, _tablet.tablet_id());
+    TabletMetaManager::clear_persistent_index(data_store, &wb, _tablet.tablet_id());
     TabletMetaManager::remove_tablet_meta(data_store, &wb, _tablet.tablet_id(), _tablet.schema_hash());
     RETURN_IF_ERROR(meta_store->write_batch(&wb));
 
