@@ -38,6 +38,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_REF_NAME: ${GITHUB_ACTION_PATH}
         run: |
+          ./starrocks_fe_unittest.sh ${GITHUB_RUN_NUMBER} ${GITHUB_REF_NAME}
           cd fe
           mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=dulong41_starrocks
