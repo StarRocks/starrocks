@@ -27,6 +27,7 @@ jobs:
           source: 'be/src be/test'
           clangFormatVersion: 14
           inplace: False
+          
 #          inplace: True
 #      - uses: EndBug/add-and-commit@v4
 #        with:
