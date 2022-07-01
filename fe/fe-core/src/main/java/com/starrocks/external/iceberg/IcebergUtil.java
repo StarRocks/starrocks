@@ -199,7 +199,7 @@ public class IcebergUtil {
     }
 
     static Type convertColumnType(org.apache.iceberg.types.Type icebergType) {
-        if (icebergType == null || !icebergType.isPrimitiveType()) {
+        if (icebergType == null) {
             return Type.NULL;
         }
 

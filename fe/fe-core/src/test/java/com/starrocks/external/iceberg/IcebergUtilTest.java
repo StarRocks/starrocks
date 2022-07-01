@@ -43,10 +43,10 @@ public class IcebergUtilTest {
 
     @Test
     public void testDecimal() {
-        int p = 9;
-        int s = 5;
-        Type decimalType = ScalarType.createUnifiedDecimalType(p, s);
-        org.apache.iceberg.types.Type icebergType = Types.DecimalType.of(p, s);
+        int precision = 9;
+        int scale = 5;
+        Type decimalType = ScalarType.createUnifiedDecimalType(precision, scale);
+        org.apache.iceberg.types.Type icebergType = Types.DecimalType.of(precision, scale);
         Type resType = convertColumnType(icebergType);
         Assert.assertEquals(resType, decimalType);
     }
@@ -59,14 +59,10 @@ public class IcebergUtilTest {
         Assert.assertEquals(resType, stringType);
     }
 
-    @Test
+    @Test(expected = RuntimeException.class)
     public void testUnsupported() {
-        try {
-            org.apache.iceberg.types.Type icebergType = Types.MapType.ofRequired(1, 2,
-                    Types.StringType.get(), Types.StringType.get());
-            Type resType = convertColumnType(icebergType);
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
-        }
+        org.apache.iceberg.types.Type icebergType = Types.MapType.ofRequired(1, 2,
+                Types.StringType.get(), Types.StringType.get());
+        convertColumnType(icebergType);
     }
 }
