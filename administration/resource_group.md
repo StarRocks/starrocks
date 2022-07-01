@@ -1,10 +1,17 @@
 # [Preview] Resource group
 
-This topic describes the resource group feature that StarRocks has started to provide since v2.2.
+This topic describes the resource group feature of StarRocks.
 
-This feature allows StarRocks to limit resource consumption for queries and implement isolation and efficient use of resources among tenants in the same cluster.
+Since v2.2, StarRocks supports limiting resource consumption for queries and implementing isolation and efficient use of resources among tenants in the same cluster. In StarRocks v2.3, you can further restrict the resource consumption for big queries, and prevent the cluster resources from getting exhausted by oversized query requests, maintaining the system stability.
 
 With this feature, you can divide the computing resources of each backend (BE) into multiple resource groups and associate each resource group with one or more classifiers. When you run a query, StarRocks compares the conditions of each classifier with the information about the query to identify the classifier that best matches the query. Then, StarRocks allocates computing resources to the query based on the resource quotas of the resource group associated with the identified classifier.
+
+Enhancement plan of Resource Group feature
+
+|  | Internal Table | External Table | Big Query Resources | Load Resources | Schema Change Resources |
+|---|---|---|---|---|---|
+| 2.2 | √ | × | × | × | × |
+| 2.3 | √ | √ | √ | × | × |
 
 ## Terms
 
@@ -41,6 +48,14 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
   > Note: The amount of memory that can be used for queries is indicated by the `query_pool` parameter. For more information about the parameter, see [Memory management](https://starrocks.feishu.cn/docs/Memory_management.md).
 
+- `concurrency_limit`
+  This parameter specifies the upper limit of concurrent queries in a resource group. It is used to avoid system overload caused by too many concurrent queries.
+On the basis of the above resource consumption restrictions, you can further restrict the resource consumption for big queries with the following parameters:
+- `big_query_cpu_second_limit`: This parameter specifies the upper time limit of CPU occupation for a big query. Concurrent queries add up the time. The unit is second.
+- `big_query_mem_limit`: This parameter specifies the upper limit of memory usage of a big query. The unit is byte.
+
+> Note: When a query running in a resource group exceeds the above big query limit, the query will be terminated with an error. You can also view error messages in the `ErrorCode` column of the FE node **fe.audit.log**.
+
 ### classifier
 
 Each classifier holds one or more conditions that can be matched to the properties of queries. StarRocks identifies the classifier that best matches each query based on the match conditions and assigns resources for running the query.
@@ -51,8 +66,11 @@ Classifiers support the following conditions:
 - `role`: the role of the user.
 - `query_type`: the type of the query. Only `SELECT` queries are supported.
 - `source_ip`: the CIDR block from which the query is initiated.
+- `db`: the database which the query accesses. It can be specified by strings separated by commas `,`.
 
 A classifier matches a query only when one or all conditions of the classifier match the information about the query. If multiple classifiers match a query, StarRocks calculates the degree of matching between the query and each classifier and identifies the classifier with the highest degree of matching.
+
+> Note: You can view the resource group to which a query belongs in the `ResourceGroup` column of the FE node **fe.audit.log**.
 
 StarRocks calculates the degree of matching between a query and a classifier by using the following rules:
 
@@ -60,6 +78,7 @@ StarRocks calculates the degree of matching between a query and a classifier by 
 - If the classifier has the same value of `role` as the query, the degree of matching of the classifier increases by 1.
 - If the classifier has the same value of `query_type` as the query, the degree of matching of the classifier increases by 1 plus the number obtained from the following calculation: 1/Number of `query_type` fields in the classifier.
 - If the classifier has the same value of `source_ip` as the query, the degree of matching of the classifier increases by 1 plus the number obtained from the following calculation: (32 - `cidr_prefix`)/64.
+- If the classifier has the same value of `db` as the query, the degree of matching of the classifier increases by 10.
 
 If multiple classifiers match a query, the classifier with a larger number of conditions has a higher degree of matching.
 
@@ -77,23 +96,11 @@ If multiple matching classifiers have the same number of conditions, the classif
 
 ```Plain%20Text
 -- The CIDR block that is specified in Classifier B is smaller in range than Classifier A. Therefore, Classifier B has a higher degree of matching than Classifier A.
-
-
 classifier A (user='Alice', source_ip = '192.168.1.0/16')
-
-
 classifier B (user='Alice', source_ip = '192.168.1.0/24')
 
-
-
-
-
 -- Classifier C has fewer query types specified in it than Classifier D. Therefore, Classifier has a higher degree of matching than Classifier D.
-
-
 classifier C (user='Alice', query_type in ('select'))
-
-
 classifier D (user='Alice', query_type in ('insert','select', 'ctas')）
 ```
 
@@ -121,23 +128,17 @@ Execute the following statement to create a resource group, associate the resour
 
 ```SQL
 CREATE RESOURCE GROUP <group_name> 
-
-
-TO (user='string', role='string', query_type in ('select'), source_ip='cidr') --Create a classifier. If you create more than one classifier, separate the classifiers with commas (,).
-
-
+TO (
+    user='string', 
+    role='string', 
+    query_type in ('select'), 
+    source_ip='cidr'
+) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (,).
 WITH (
-
-
     "cpu_core_limit" = "INT",
-
-
     "mem_limit" = "m%",
-
-
+    "concurrency_limit" = "INT",
     "type" = "normal" --The type of the resource group. Set the value to normal.
-
-
 );
 ```
 
@@ -145,36 +146,28 @@ Example:
 
 ```SQL
 CREATE RESOURCE GROUP rg1
-
-
-to 
-
-
-    (user='rg1_user1', role='rg1_role1', query_type in ('select'), source_ip='192.168.2.1/24'),
-
-
-    (user='rg1_user2', query_type in ('select'), source_ip='192.168.3.1/24'),
-
-
-    (user='rg1_user3', source_ip='192.168.4.1/24'),
-
-
-    (user='rg1_user4')
-
-
-with (
-
-
+TO 
+    (user='rg1_user1', role='rg1_role1', query_type in ('select'), source_ip='192.168.x.x/24'),
+    (user='rg1_user2', query_type in ('select'), source_ip='192.168.x.x/24'),
+    (user='rg1_user3', source_ip='192.168.x.x/24'),
+    (user='rg1_user4'),
+    (db='db1')
+WITH (
     'cpu_core_limit' = '10',
-
-
     'mem_limit' = '20%',
-
-
-    'type' = 'normal'
-
-
+    'type' = 'normal',
+    'big_query_cpu_second_limit' = '100',
+    'big_query_scan_rows_limit' = '100000',
+    'big_query_mem_limit' = '1073741824'
 );
+```
+
+### Specify resource group (Optional)
+
+You can specify resource group for the current session directly.
+
+```SQL
+SET resource_group = 'group_name';
 ```
 
 ### View resource groups and classifiers
@@ -194,44 +187,24 @@ SHOW RESOURCE GROUPS;
 Execute the following statement to query a specified resource group and its classifiers:
 
 ```SQL
-SHOW RESOURCE GROUP <group_name>；
+SHOW RESOURCE GROUP group_name；
 ```
 
 Example:
 
 ```SQL
 mysql> SHOW RESOURCE GROUPS ALL;
-
-
-
-
-
 +------+--------+--------------+----------+------------------+--------+------------------------------------------------------------------------------------------------------------------------+
-
-
 | Name | Id     | CPUCoreLimit | MemLimit | ConcurrencyLimit | Type   | Classifiers                                                                                                            |
-
-
 +------+--------+--------------+----------+------------------+--------+------------------------------------------------------------------------------------------------------------------------+
-
-
 | rg1  | 300039 | 10           | 20.0%    | 11               | NORMAL | (id=300040, weight=4.409375, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)         |
-
-
 | rg1  | 300039 | 10           | 20.0%    | 11               | NORMAL | (id=300041, weight=3.459375, user=rg1_user2, query_type in (SELECT), source_ip=192.168.3.1/24)                         |
-
-
 | rg1  | 300039 | 10           | 20.0%    | 11               | NORMAL | (id=300042, weight=2.359375, user=rg1_user3, source_ip=192.168.4.1/24)                                                 |
-
-
 | rg1  | 300039 | 10           | 20.0%    | 11               | NORMAL | (id=300043, weight=1.0, user=rg1_user4)                                                                                |
-
-
 +------+--------+--------------+----------+------------------+--------+------------------------------------------------------------------------------------------------------------------------+
 ```
 
-> Note:
-> In the preceding example, `weight` indicates the degree of matching.
+> Note: In the preceding example, `weight` indicates the degree of matching.
 
 ### Manage resource groups and classifiers
 
@@ -240,34 +213,17 @@ You can modify the resource quotas for each resource group. You can also add or 
 Execute the following statement to modify the resource quotas for an existing resource group:
 
 ```SQL
-ALTER RESOURCE GROUP <group_name> WITH (
-
-
-    'cpu_core_limit' = '10',
-
-
-    'mem_limit' = '20%',
-
-
+ALTER RESOURCE GROUP group_name WITH (
+    'cpu_core_limit' = 'INT',
+    'mem_limit' = 'm%',
     'type' = 'normal'
-
-
 );
 ```
 
-Example:
+Execute the following statement to delete a resource group:
 
 ```SQL
--- Change the maximum number of CPU cores that can be allocated to rg1 to 20.
-
-
-ALTER RESOURCE GROUP rg1 WITH (
-
-
-    'cpu_core_limit' = '20'
-
-
-);
+DROP RESOURCE GROUP group_name;
 ```
 
 Execute the following statement to add a classifier to a resource group:
@@ -288,47 +244,21 @@ Execute the following statement to delete all classifiers of a resource group:
 ALTER RESOURCE GROUP <group_name> DROP ALL;
 ```
 
-Example:
+## Monitor resource group
 
-```SQL
--- Add a classifier to rg1.
+You can set [monitor and alert](Monitor_and_alert.md) for your resource groups.
 
+Metrics you can monitor regarding resource groups include:
 
-ALTER RESOURCE GROUP rg1 ADD (user='root', query_type in ('select'));
-
-
-
-
-
--- Delete classifiers 300040, 300041, and 300041 from rg1.
-
-
-ALTER RESOURCE GROUP rg1 DROP (300040, 300041, 300041);
-
-
-
-
-
--- Delete all classifiers of rg1.
-
-
-ALTER RESOURCE GROUP rg1 DROP ALL;
-```
-
-Execute the following statement to delete a resource group:
-
-```SQL
-DROP RESOURCE GROUP <group_name>;
-```
-
-Example:
-
-```SQL
--- Delete rg1.
-
-
-DROP RESOURCE GROUP rg1;
-```
+- FE
+  - `starrocks_fe_query_resource_group`: The number of queries in each resource group.
+  - `starrocks_fe_query_resource_group_latency`: The query latency percentile for each resource group.
+  - `starrocks_fe_query_resource_group_err`: The number of terminated-with-error queries in each resource group.
+- BE
+  - `starrocks_be_resource_group_cpu_limit_ratio`: Instantaneous value of resource group CPU quota ratio.
+  - `starrocks_be_resource_group_cpu_use_ratio`: Instantaneous value of resource group CPU usage ratio.
+  - `starrocks_be_resource_group_mem_limit_bytes`: Instantaneous value of resource group memory quota.
+  - `starrocks_be_resource_group_mem_allocated_bytes`: Instantaneous value of resource group memory usage.
 
 ## What to do next
 
