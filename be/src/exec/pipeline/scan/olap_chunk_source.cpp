@@ -297,17 +297,6 @@ StatusOr<vectorized::ChunkPtr> OlapChunkSource::get_next_chunk_from_buffer() {
     return chunk;
 }
 
-void OlapChunkSource::_update_avg_row_bytes(vectorized::Chunk* chunk, size_t chunk_index, size_t batch_size) {
-    _local_sum_row_bytes += chunk->memory_usage();
-    _local_num_rows += chunk->num_rows();
-
-    if (chunk_index % UPDATE_AVG_ROW_BYTES_FREQUENCY == 0 || chunk_index == batch_size - 1) {
-        _scan_ctx->update_avg_row_bytes(_local_sum_row_bytes, _local_num_rows);
-        _local_sum_row_bytes = 0;
-        _local_num_rows = 0;
-    }
-}
-
 Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state) {
     if (!_status.ok()) {
         return _status;
@@ -321,13 +310,11 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, Run
         if (!_status.ok()) {
             // end of file is normal case, need process chunk
             if (_status.is_end_of_file()) {
-                _update_avg_row_bytes(chunk.get(), i, batch_size);
                 _chunk_buffer.put(std::move(chunk));
             }
             break;
         }
 
-        _update_avg_row_bytes(chunk.get(), i, batch_size);
         _chunk_buffer.put(std::move(chunk));
     }
 
@@ -354,14 +341,12 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
                     ++(*num_read_chunks);
-                    _update_avg_row_bytes(chunk.get(), i, batch_size);
                     _chunk_buffer.put(std::move(chunk));
                 }
                 break;
             }
 
             ++(*num_read_chunks);
-            _update_avg_row_bytes(chunk.get(), i, batch_size);
             _chunk_buffer.put(std::move(chunk));
         }
 
@@ -444,26 +429,21 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
     return Status::OK();
 }
 
-int64_t OlapChunkSource::last_spent_cpu_time_ns() {
-    int64_t time_ns = _last_spent_cpu_time_ns;
-    _last_spent_cpu_time_ns += _reader->stats().decompress_ns;
-    _last_spent_cpu_time_ns += _reader->stats().vec_cond_ns;
-    _last_spent_cpu_time_ns += _reader->stats().del_filter_ns;
-    return _last_spent_cpu_time_ns - time_ns;
-}
-
 void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
-    COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read);
-    _compressed_bytes_read += _reader->stats().compressed_bytes_read;
-    _reader->mutable_stats()->compressed_bytes_read = 0;
-
-    COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
-    _raw_rows_read += _reader->stats().raw_rows_read;
-    _last_scan_rows_num += _reader->stats().raw_rows_read;
-    _last_scan_bytes += _reader->stats().bytes_read;
-
-    _reader->mutable_stats()->raw_rows_read = 0;
+    auto& stats = _reader->stats();
     _num_rows_read += chunk->num_rows();
+    _scan_rows_num = stats.raw_rows_read;
+    _scan_bytes = stats.bytes_read;
+    _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
+
+    // Update local countesr
+    _local_sum_row_bytes += chunk->memory_usage();
+    _local_num_rows += chunk->num_rows();
+    if (_local_sum_chunks++ % UPDATE_AVG_ROW_BYTES_FREQUENCY == 0) {
+        _scan_ctx->update_avg_row_bytes(_local_sum_row_bytes, _local_num_rows);
+        _local_sum_row_bytes = 0;
+        _local_num_rows = 0;
+    }
 }
 
 void OlapChunkSource::_update_counter() {
@@ -472,7 +452,6 @@ void OlapChunkSource::_update_counter() {
 
     COUNTER_UPDATE(_io_timer, _reader->stats().io_ns);
     COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read);
-    _compressed_bytes_read += _reader->stats().compressed_bytes_read;
     COUNTER_UPDATE(_decompress_timer, _reader->stats().decompress_ns);
     COUNTER_UPDATE(_read_uncompressed_counter, _reader->stats().uncompressed_bytes_read);
     COUNTER_UPDATE(_bytes_read_counter, _reader->stats().bytes_read);
@@ -482,14 +461,10 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_block_fetch_timer, _reader->stats().block_fetch_ns);
     COUNTER_UPDATE(_block_seek_timer, _reader->stats().block_seek_ns);
 
-    COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
-    _raw_rows_read += _reader->mutable_stats()->raw_rows_read;
-    _last_scan_rows_num += _reader->mutable_stats()->raw_rows_read;
-    _last_scan_bytes += _reader->mutable_stats()->bytes_read;
-
     COUNTER_UPDATE(_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
-
     COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);
+
+    COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
 
     int64_t cond_evaluate_ns = 0;
     cond_evaluate_ns += _reader->stats().vec_cond_evaluate_ns;
@@ -520,8 +495,8 @@ void OlapChunkSource::_update_counter() {
 
     COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.predicates.size());
 
-    StarRocksMetrics::instance()->query_scan_bytes.increment(_compressed_bytes_read);
-    StarRocksMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
+    StarRocksMetrics::instance()->query_scan_bytes.increment(_scan_bytes);
+    StarRocksMetrics::instance()->query_scan_rows.increment(_scan_rows_num);
 
     if (_reader->stats().decode_dict_ns > 0) {
         RuntimeProfile::Counter* c = ADD_TIMER(_runtime_profile, "DictDecode");
