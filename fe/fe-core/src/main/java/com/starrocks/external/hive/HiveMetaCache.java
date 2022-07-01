@@ -343,36 +343,10 @@ public class HiveMetaCache {
     }
 
     public static Schema loadHudiSchema(org.apache.hadoop.hive.metastore.api.Table hiveTable) throws DdlException {
-        Map<String, String> hudiProperties = Maps.newHashMap();
         String hudiBasePath = hiveTable.getSd().getLocation();
-        if (!Strings.isNullOrEmpty(hudiBasePath)) {
-            hudiProperties.put(HudiTable.HUDI_BASE_PATH, hudiBasePath);
-        }
-
         Configuration conf = new Configuration();
         HoodieTableMetaClient metaClient =
                 HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
-        HoodieTableConfig hudiTableConfig = metaClient.getTableConfig();
-
-        HoodieTableType hudiTableType = hudiTableConfig.getTableType();
-        if (hudiTableType == org.apache.hudi.common.model.HoodieTableType.MERGE_ON_READ) {
-            throw new DdlException("MERGE_ON_READ type of hudi table is NOT supported.");
-        }
-        hudiProperties.put(HudiTable.HUDI_TABLE_TYPE, hudiTableType.name());
-
-        Option<String[]> hudiTablePrimaryKey = hudiTableConfig.getRecordKeyFields();
-        if (hudiTablePrimaryKey.isPresent()) {
-            hudiProperties.put(HudiTable.HUDI_TABLE_PRIMARY_KEY, hudiTableConfig.getRecordKeyFieldProp());
-        }
-
-        String hudiTablePreCombineField = hudiTableConfig.getPreCombineField();
-        if (!Strings.isNullOrEmpty(hudiTablePreCombineField)) {
-            hudiProperties.put(HudiTable.HUDI_TABLE_PRE_COMBINE_FIELD, hudiTablePreCombineField);
-        }
-
-        HoodieFileFormat hudiBaseFileFormat = hudiTableConfig.getBaseFileFormat();
-        hudiProperties.put(HudiTable.HUDI_TABLE_BASE_FILE_FORMAT, hudiBaseFileFormat.name());
-
         TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
         Schema hudiTable;
         try {
