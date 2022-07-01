@@ -223,7 +223,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return visit(context.statement());
     }
 
-    // ------------------------------------------- Table Statement -----------------------------------------------------
+    // ---------------------------------------- Database Statement -----------------------------------------------------
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
@@ -231,8 +231,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.IF() != null,
                 dbName);
     }
-
-    // ------------------------------------------- Table Statement -----------------------------------------------------
 
     @Override
     public ParseNode visitDropDbStatement(StarRocksParser.DropDbStatementContext context) {
@@ -242,6 +240,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 dbName,
                 context.FORCE() != null);
     }
+
+    // ------------------------------------------- Table Statement -----------------------------------------------------
 
     @Override
     public ParseNode visitCreateTableStatement(StarRocksParser.CreateTableStatementContext context) {
