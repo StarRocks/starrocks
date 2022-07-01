@@ -1,104 +1,131 @@
 # GRANT
 
-## description
+## Description
 
-The GRANT command is used to give the specified user or role a specified permission.
+You can use the GRANT statement to grant specific privileges to a user or a role. You can also use this statement to grant a role to a user.
 
-### Syntax
+## Syntax
 
-GRANT privilege_list ON db_name[.tbl_name] TO user_identity [ROLE role_name]
+- Grant specific privileges on a database and a table to a user or a role. If the role that is granted these privileges does not exist, the system automatically creates the role when you execute this statement.
 
-GRANT privilege_list ON RESOURCE resource_name TO user_identity [ROLE role_name]
-
-permission_list is a list of permissions that need to be granted and that are separated by commas. Currently, StarRocks supports the following permissions:
-
-```plain text
-NODE_PRIV: Operational permissions of cluster nodes, including taking nodes offline and online. This permission is only granted to root users. 
-ADMIN_PRIV: All permissions except NODE_PRIV.
-GRANT_PRIV: The permission to alter operational permissions, including the creating and dropping users and roles, granting, revoking, setting passwords and etc. 
-SELECT_PRIV: Read permissions for specified libraries or tables. 
-LOAD_PRIV: Import permissions for specified libraries or tables.
-ALTER_PRIV: Schema change permissions for specified libraries or tables. 
-CREATE_PRIV: Creation permissions for specified libraries or tables.
-DROP_PRIV: Deletion permissions for specified libraries or tables.
-USAGE_PRIV: Usage permissions for specified resources. 
+```SQL
+GRANT privilege_list ON db_name[.tbl_name] TO {user_identity | ROLE 'role_name'}；
 ```
 
-ALL and READ_WRITE in previous permissions will be transformed as SELECT_PRIV, LOAD_PRIV, ALTER_PRIV, CREATE_PRIV, DROP_PRIV; READ_ONLY will be transformed as SELECT_PRIV.
+- Grant specific privileges on a resource to a user or a role. If the role that is granted these privileges does not exist, the system automatically creates the role when you execute this statement.
 
-Types of permissions:
-
-```plain text
-1. Node permission: NODE_PRIV
-2. Library and table permissions: SELECT_PRIV, LOAD_PRIV, ALTER_PRIV, CREATE_PRIV, DROP_PRIV
-3. Resource permission: USAGE_PRIV
+```SQL
+GRANT privilege_list ON RESOURCE 'resource_name' TO {user_identity | ROLE 'role_name'};
 ```
 
-db_name[.tbl_name] supports the following three forms:
+- Grant user `a` the privilege to perform operations as user `b`.
 
-```plain text
-1. *.* permission applies to all libraries and all tables in these libraries
-2. db.* permission applies to all tables under specified libraries 
-3. db.tbl permission applies to specified tables under specified libraries 
+```SQL
+GRANT IMPERSONATE ON user_identity_b TO user_identity_a;
 ```
 
-Here, the specified libraries and tables may not yet exist.
+- Grant a role to a user. The role to be granted must exist.
 
-resource_name supports the following two forms:
-
-```plain text
-1. * permission applies to all resources
-2. resource permission applies to specified resources
+```SQL
+GRANT 'role_name' TO user_identity;
 ```
 
-Here, specified resources may not yet exist.
+## Parameters
 
-```plain text
-user_identity：
+### privilege_list
+
+The privileges that can be granted to a user or a role. If you want to grant multiple privileges at a time, separate the privileges with commas (`,`). The following privileges are supported:
+
+- `NODE_PRIV`: the privilege to manage cluster nodes such as enabling nodes and disabling nodes. This privilege can only be granted to the root user.
+  - `ADMIN_PRIV`: all privileges except `NODE_PRIV`.
+  - `GRANT_PRIV`: the privilege of performing operations such as creating users and roles, deleting users and roles, granting privileges, revoking privileges, and setting passwords for accounts.
+  - `SELECT_PRIV`: the read privilege on databases and tables.
+  - `LOAD_PRIV`: the privilege to load data into databases and tables.
+  - `ALTER_PRIV`: the privilege to change schemas of databases and tables.
+  - `CREATE_PRIV`: the privilege to create databases and tables.
+  - `DROP_PRIV`: the privilege to delete databases and tables.
+  - `USAGE_PRIV`: the privilege to use resources.
+
+The preceding privileges can be classified into the following three categories:
+
+- Node privilege: `NODE_PRIV`
+  - Database and table privilege: `SELECT_PRIV`, `LOAD_PRIV`, `ALTER_PRIV`, `CREATE_PRIV`, and `DROP_PRIV`
+  - Resource privilege: `USAGE_PRIV`
+
+### db_name[.tbl_name]
+
+The database and table. This parameter supports the following three formats:
+
+- `*.*`: indicates all databases and tables.
+  - `db.*`: indicates a specific database and all tables in this database.
+  - `db.tbl`: indicates a specific table in a specific database.
+
+> Note: When you use the `db.*` or `db.tbl` format, you can specify a database or a table that does not exist.
+
+### resource_name
+
+ The resource name. This parameter supports the following two formats:
+
+- `*`: indicates all the resources.
+
+- `resource`: indicates a specific resource.
+
+> Note: When you use the `resource` format, you can specify a resource that does not exist.
+
+### user_identity
+
+This parameter contains two parts: `user_name` and `host`. `user_name` indicates the user name. `host` indicates the IP address of the user. You can leave `host` unspecified or you can specify a domain for `host`. If you leave `host` unspecified, `host` defaults to `%`, which means you can access StarRocks from any host. If you specify a domain for `host`, it may take one minute for the privilege to take effect. The `user_identity` parameter must be created by the [CREATE USER](../account-management/CREATE%20USER.md) statement.
+
+### role_name
+
+The role name.
+
+## Examples
+
+Example 1: Grant the read privilege on all databases and tables to user `jack`.
+
+```SQL
+GRANT SELECT_PRIV ON *.* TO 'jack'@'%';
 ```
 
-Here, the syntax of user_identity is the same as that of CREATE USER and must be the user_identity previously created through CREATE USER. The host in user_identity could be a domain name. If it is, there may be a short one-minute delay before the permission comes into effect.
+Example 2: Grant the data loading privilege on `db1` and all tables in this database to `my_role`.
 
-Permissions may also be granted to specified ROLE, which will be automatically created if it does not exist.
+```SQL
+GRANT LOAD_PRIV ON db1.* TO ROLE 'my_role';
+```
 
-## example
+Example 3: Grant the read privilege, schema change privilege, and data loading privilege on `db1` and `tbl1` to user `jack`.
 
-1. Grant permissions to all libraries and tables to users.
+```SQL
+GRANT SELECT_PRIV,ALTER_PRIV,LOAD_PRIV ON db1.tbl1 TO 'jack'@'192.8.%';
+```
 
-    ```sql
-    GRANT SELECT_PRIV ON *.* TO 'jack'@'%';
-    ```
+Example 4: Grant the privilege to use all the resources to user `jack`.
 
-2. Grant permission to specified libraries and tables to users.
+```SQL
+GRANT USAGE_PRIV ON RESOURCE * TO 'jack'@'%';
+```
 
-    ```sql
-    GRANT SELECT_PRIV,ALTER_PRIV,LOAD_PRIV ON db1.tbl1 TO 'jack'@'192.8.%';
-    ```
+Example 5: Grant the privilege to use spark_resource to user `jack`.
 
-3. Grant permissions to specified libraries and tables to roles.
+```SQL
+GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO 'jack'@'%';
+```
 
-    ```sql
-    GRANT LOAD_PRIV ON db1.* TO ROLE 'my_role';
-    ```
+Example 6: Grant the privilege to use spark_resource to the `my_role`.
 
-4. Grant permissions to specified libraries and tables to roles.
+```SQL
+GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO ROLE 'my_role';
+```
 
-    ```sql
-    GRANT USAGE_PRIV ON RESOURCE * TO 'jack'@'%';
-    ```
+Example 7: Grant `my_role` to user `jack`.
 
-5. Grant permission to specified resources to users.
+```SQL
+GRANT 'my_role' TO 'jack'@'%';
+```
 
-    ```sql
-    GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO 'jack'@'%';
-    ```
+Example 8: Grant user `jack` the privilege to perform operations as user `rose`.
 
-6. Grant permission to specified resources to roles.
-
-    ```sql
-    GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO ROLE 'my_role';
-    ```
-
-## keyword
-
-GRANT
+```SQL
+GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
+```

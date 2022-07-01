@@ -2,96 +2,153 @@
 
 ## Description
 
-CREATE TABLE AS SELECT (CTAS) is used to create a new table based on the query results of other tables.
+You can use the CREATE TABLE AS SELECT (CTAS) statement to synchronously or asynchronously query a table and create a new table based on the query result, and then insert the query result into the new table.
 
 ## Syntax
 
-~~~SQL
-CREATE TABLE [IF NOT EXISTS] [database.]table_name
+- Synchronously query a table and create a new table based on the query result, and then insert the query result into the new table.
 
-[(column_name [, column_name2, ...]]
+  ```SQL
+  CREATE TABLE [IF NOT EXISTS] [database.]table_name
 
-[COMMENT "table comment"]
+  [(column_name [, column_name2, ...]]
 
-[partition_desc]
+  [COMMENT "table comment"]
 
-[distribution_desc]
+  [partition_desc]
 
-[PROPERTIES ("key"="value", ...)]
+  [distribution_desc]
 
-AS SELECT query
+  [PROPERTIES ("key"="value", ...)]
 
-[ ... ]
-~~~
+  AS SELECT query
+
+  [ ... ]
+  ```
+
+- Asynchronously query a table and create a new table based on the query result, and then insert the query result into the new table.
+
+  ```SQL
+  SUBMIT [/*+ SET_VAR(key=value) */] TASK [[database.]<task_name>]AS
+
+  CREATE TABLE [IF NOT EXISTS] [database.]table_name
+
+  [(column_name [, column_name2, ...]]
+
+  [COMMENT "table comment"]
+
+  [partition_desc]
+
+  [distribution_desc]
+
+  [PROPERTIES ("key"="value", ...)]AS SELECT query
+
+  [ ... ]
+  ```
+
+  The preceding syntax creates a Task, which is a template for storing a task that executes the CTAS statement. You can check the information of the Task by using the following syntax.
+
+  ```SQL
+  SELECT * FROM INFORMATION_SCHEMA.tasks;
+  ```
+
+  After you run the Task, a TaskRun is generated accordingly. A TaskRun indicates a task that executes the CTAS statement. A TaskRun has the following four states:
+
+  - `PENDING`: The task waits to be run.
+  - `RUNNING`: The task is running.
+  - `FAILED`: The task failed.
+  - `SUCCESS`: The task runs successfully.
+
+  You can check the state of a TaskRun by using the following syntax.
+
+  ```SQL
+  SELECT * FROM INFORMATION_SCHEMA.task_runs;
+  ```
 
 ## Parameters
 
-### Table creation
+### Parameters of the CTAS statement
 
-| Parameter         | Description                                                  |
-| ----------------- | ------------------------------------------------------------ |
-| column_name       | The column name. You do not need to pass in the column data type. StarRocks automatically selects an appropriate data type for each column and converts FLOAT and DOUBLE data into DECIMAL (38,9), and converts CHAR, VARCHAR, and STRING data into VARCHAR (65533). |
-| COMMENT           | The table comment.                                           |
-| partition_desc    | The partitioning method. For more information, see [partition_desc](<https://docs.starrocks.com/zh-cn/main/sql-reference/sql-statements/data-definition/CREATE> TABLE/#syntax). An empty value indicates that the table has no partition. |
-| distribution_desc | The bucketing method. For more information, see [distribution_desc](<https://docs.starrocks.com/zh-cn/main/sql-reference/sql-statements/data-definition/CREATE> TABLE/#syntax). An empty value indicates that the bucket key is the column that has the highest cardinality in the cost-based optimizer (CBO) statistical information and the number of buckets is 10. If the CBO does not contain related statistical information, the bucket key is the first column by default. |
-| properties        | The properties of the new table. For more information, see [PROPERTIES](<https://docs.starrocks.com/zh-cn/main/sql-reference/sql-statements/data-definition/CREATE> TABLE/#syntax). Currently, CTAS can only be used to create a table whose ENGINE is OLAP. |
+| **Parameter**     | **Required** | **Description**                                              |
+| ----------------- | ------------ | ------------------------------------------------------------ |
+| column_name       | Yes          | The name of a column in the new table. You do not need to specify the data type for the column. StarRocks automatically specifies an appropriate data type for the column . StarRocks converts FLOAT and DOUBLE data into DECIMAL(38,9) data. StarRocks also converts CHAR, VARCHAR, and STRING data into VARCHAR(65533) data. |
+| COMMENT           | No           | The comment of the new table.                                |
+| partition_desc    | No           | The partitioning method of the new table. If you do not specify this parameter, by default, the new table has no partition. For more information about partitioning, see CREATE TABLE. |
+| distribution_desc | No           | The bucketing method of the new table. If you do not specify this parameter, the bucket column defaults to the column with the highest cardinality collected by the cost-based optimizer (CBO). The number of buckets defaults to 10. If the CBO does not collect information about the cardinality, the bucket column defaults to the first column in the new table. For more information about bucketing, see CREATE TABLE. |
+| Properties        | No           | The properties of the new table.                             |
+| AS SELECT query   | Yes          | The query result.  You can specify columns in `... AS SELECT query`, for example, `... AS SELECT a, b, c FROM table_a;`. In this example, `a`, `b`, and `c` indicates the column names of the table that is queried. If you do not specify the column names of the new table, the column names of the new table are also `a`, `b`, and `c`. You can specify expressions in `... AS SELECT query`, for example, `... AS SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a;`. In this example, `a+1`, `b+2`, and `c*c` indicates the column names of the table that is queried, and `x`, `y`, and `z` indicates the column names of the new table. Note:  The number of columns in the new table need to be the same as the number of the columns specified in the SELECT statement . We recommend that you use column names that are easy to identify. |
 
-### Query
+### Parameters of frontends (FEs)
 
-- You can specify columns in `... AS SELECT query`, for example, `... AS SELECT a, b, c FROM table_a;`. In this case, the column names of the new table are a, b, and c.
-- You can use expressions in `... AS SELECT query`. We also recommend that you specify aliases that are easy to identify for columns of the new table.
+If you asynchronously query a table and create a new table based on the query result, you also need to configure the following parameters.
+
+| **Parameter**              | **Default value** | **Description**                                              |
+| -------------------------- | ----------------- | ------------------------------------------------------------ |
+| task_ttl_second            | 259200            | The period during which a Task is valid. Unit: seconds. Tasks that exceed the validity period are deleted. |
+| task_check_interval_second | 14400             | The time interval to delete invalid Tasks. Unit: seconds.    |
+| task_runs_ttl_second       | 259200            | The period during which a TaskRun is valid. Unit: seconds. TaskRuns that exceed the validity period are deleted automatically. Additionally, TaskRuns in the `FAILED` and `SUCCESS` states are also deleted automatically. |
+| task_runs_concurrency      | 20                | The maximum number of TaskRuns that can be run in parallel.  |
+| task_runs_queue_length     | 500               | The maximum number of TaskRuns that are pending for running. If the number exceeds the default value, the incoming tasks will be suspended. |
 
 ## Usage notes
 
-- CTAS can only be used to create a table whose `ENGINE` is OLAP, the data model is the duplicate key model, and the sort keys are the first three columns (the storage space for each data type cannot exceed 36 bytes).
+- The CTAS statement can only create a new table that meets the following requirements:
+  - `ENGINE` is `OLAP`.
 
-- Currently, CTAS does not support indexes.
+  - The data model is the Duplicate Key model.
 
-- Currently, transaction guarantee is not provided for CTAS. If the CTAS statement fails (due to reasons such as an FE restart), the following issues may occur:
-  - A new table may have been created and is not deleted.
+  - The sort keys are the first three columns, and the storage space of the data types of these three columns does not exceed 36 bytes.
 
-- A new table may have been created. If another import job other than CTAS (such as INSERT) is also used to import data into the new table, the data successfully imported for the first time is regarded as the first version of the data.
+- The CTAS statement does not support setting indexes for a newly created table.
 
-- After the table is created, you must manually grant permissions on this table to users.
+- If the CTAS statement fails to execute due to reasons, such as an FE restart, one of the following issues may occur:
+  - A new table is created successfully but does not contain data.
+
+  - A new table fails to be created.
+
+- After a new table is created, if multiple methods (such as INSERT INTO) are used to insert data into the new table, the method that completes the INSERT operation first will insert its data into the new table.
+
+- After a new table is created, you need to manually grant permissions on this table to users.
+
+- If you do not specify a name for a Task when you asynchronously query a table and create a new table based on the query result, StarRocks automatically generates a name for the Task.
 
 ## Examples
 
-Example 1: Create a table `order_new` based on the table `order`.
+Example 1: Synchronously query a table `order` and create a new table `order_new` based on the query result, and then insert the query result into the new table.
 
-~~~SQL
+```SQL
 CREATE TABLE order_new
 
 AS SELECT * FROM order;
-~~~
+```
 
-Example 2: Create a table `order_new` based on columns k1, k2, and k3 in the table `order`, and specify column names as a, b, and c.
+Example 2: Synchronously query the `k1`, `k2`, and `k3` columns in the table `order` and create a new table `order_new` based on the query result, and then insert the query result into the new table. Additionally, set the column names of the new table to `a`, `b`, and `c`.
 
-> The number of specified columns must be the same as the number in `... AS SELECT query`.
-
-~~~SQL
-CREATE TABLE order_new a, b, c
+```SQL
+CREATE TABLE order_new (a, b, c)
 
 AS SELECT k1, k2, k3 FROM order;
+```
+
+or
+
+```SQL
 CREATE TABLE order_new
 
 AS SELECT k1 AS a, k2 AS b, k3 AS c FROM order;
-~~~
+```
 
-Example 3: Use an expression in `... AS SELECT query` and create a table based on the result of the expression and specify column names for the new table.
+Example 3: Synchronously query the largest value of the `salary` column in the table `employee` and create a new table `employee_new` based on the query result, and then insert the query result into the new table. Additionally, set the column name of the new table to `salary_max`.
 
-> We recommend that you specify column names that are easy to identify for the new table.
-
-~~~SQL
---Calculate the largest salary value in the table employee. Create a table employee_new based on the result and set the column name of the new table to salary_new.
-
+```SQL
 CREATE TABLE employee_new
 
 AS SELECT MAX(salary) AS salary_max FROM employee;
+```
 
- 
+After data is inserted, query the new table.
 
---Query data in the employee_new table.
-
+```SQL
 SELECT * FROM employee_new;
 
 +------------+
@@ -103,11 +160,11 @@ SELECT * FROM employee_new;
 |   10000    |
 
 +------------+
-~~~
+```
 
-Example 4: Create a table `lineorder_flat` based on four tables (`lineorder`, `customer`, `supplier`, and `part`), and adjust the partitioning and bucketing methods.
+Example 4: Synchronously query four tables, including `lineorder`, `customer`, `supplier`, and `part` and create a new table `lineorder_flat` based on the query result, and then insert the query result to the new table. Additionally, specify the partitioning method and bucketing method for the new table.
 
-~~~SQL
+```SQL
 CREATE TABLE lineorder_flat
 
 PARTITION BY RANGE(`LO_ORDERDATE`)(
@@ -116,9 +173,7 @@ PARTITION BY RANGE(`LO_ORDERDATE`)(
 
 )
 
-DISTRIBUTED BY HASH(`LO_ORDERKEY`) BUCKETS 120 
-
-AS SELECT
+DISTRIBUTED BY HASH(`LO_ORDERKEY`) BUCKETS 120 AS SELECT
 
     l.LO_ORDERKEY AS LO_ORDERKEY,
 
@@ -194,13 +249,85 @@ AS SELECT
 
     p.P_SIZE AS P_SIZE,
 
-    p.P_CONTAINER AS P_CONTAINER
+    p.P_CONTAINER AS P_CONTAINER 
 
-FROM lineorder AS l
-
-INNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY
+    FROM lineorder AS lINNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY
 
 INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
-~~~
+```
+
+Example 5: Asynchronously query the table `order_detail` and create a new table `order_statistics` based on the query result, and then insert the query result into the new table.
+
+```Plain%20Text
+SUBMIT TASK AS CREATE TABLE order_statistics AS SELECT COUNT(*) as count FROM order_detail;
+
++-------------------------------------------+-----------+
+
+| TaskName                                  | Status    |
+
++-------------------------------------------+-----------+
+
+| ctas-df6f7930-e7c9-11ec-abac-bab8ee315bf2 | SUBMITTED |
+
++-------------------------------------------+-----------+
+```
+
+Check information of the Task.
+
+```SQL
+SELECT * FROM INFORMATION_SCHEMA.tasks;
+
+
+
+-- Information of the Task
+
+TASK_NAME: ctas-df6f7930-e7c9-11ec-abac-bab8ee315bf2
+
+CREATE_TIME: 2022-06-14 14:07:06
+
+SCHEDULE: MANUAL
+
+DATABASE: default_cluster:test
+
+DEFINITION: CREATE TABLE order_statistics AS SELECT COUNT(*) as cnt FROM order_detail
+
+EXPIRE_TIME: 2022-06-17 14:07:06
+```
+
+Check the state of the TaskRun.
+
+```SQL
+SELECT * FROM INFORMATION_SCHEMA.task_runs;
+
+
+
+-- State of the TaskRun
+
+QUERY_ID: 37bd2b63-eba8-11ec-8d41-bab8ee315bf2
+
+TASK_NAME: ctas-df6f7930-e7c9-11ec-abac-bab8ee315bf2
+
+CREATE_TIME: 2022-06-14 14:07:06
+
+FINISH_TIME: 2022-06-14 14:07:07
+
+STATE: SUCCESS
+
+DATABASE: 
+
+DEFINITION: CREATE TABLE order_statistics AS SELECT COUNT(*) as cnt FROM order_detail
+
+EXPIRE_TIME: 2022-06-17 14:07:06
+
+ERROR_CODE: 0
+
+ERROR_MESSAGE: NULL
+```
+
+Query the new table when the state of the TaskRun is `SUCCESS`.
+
+```SQL
+SELECT * FROM order_statistics;
+```
