@@ -35,10 +35,7 @@ public:
     int64_t raw_rows_read() const override { return _raw_rows_read; }
     int64_t num_rows_read() const override { return _num_rows_read; }
     int64_t num_bytes_read() const override { return _bytes_read; }
-
-    // TODO:
-    // Return last bytes of Scan or Exchange Data, then reset it
-    // int64_t last_spent_cpu_time_ns() override;
+    int64_t cpu_time_spent() const { return _cpu_time_spent_ns; }
 
 private:
     Status get_tablet(const TInternalScanRange& scan_range);
@@ -93,6 +90,7 @@ private:
     int64_t _num_rows_read = 0;
     int64_t _raw_rows_read = 0;
     int64_t _bytes_read = 0;
+    int64_t _cpu_time_spent_ns = 0;
 
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
@@ -206,8 +204,12 @@ Status LakeDataSource::open(RuntimeState* state) {
 
 void LakeDataSource::close(RuntimeState* state) {
     update_counter();
-    _prj_iter->close();
-    _reader.reset();
+    if (_prj_iter) {
+        _prj_iter->close();
+    }
+    if (_reader) {
+        _reader.reset();
+    }
     _predicate_free_pool.clear();
     _dict_optimize_parser.close(state);
 }
@@ -317,16 +319,11 @@ Status LakeDataSource::init_scanner_columns(std::vector<uint32_t>& scanner_colum
 }
 
 void LakeDataSource::decide_chunk_size() {
-    bool has_huge_length_type = std::any_of(_query_slots.begin(), _query_slots.end(),
-                                            [](auto& slot) { return slot->type().is_huge_type(); });
     if (_read_limit != -1 && _read_limit < _runtime_state->chunk_size()) {
         // Improve for select * from table limit x, x is small
         _params.chunk_size = _read_limit;
     } else {
         _params.chunk_size = _runtime_state->chunk_size();
-    }
-    if (has_huge_length_type) {
-        _params.chunk_size = std::min(_params.chunk_size, CHUNK_SIZE_FOR_HUGE_TYPE);
     }
 }
 
@@ -504,8 +501,10 @@ void LakeDataSource::init_counter(RuntimeState* state) {
 
 void LakeDataSource::update_realtime_counter(vectorized::Chunk* chunk) {
     _num_rows_read += chunk->num_rows();
-    _raw_rows_read = _reader->stats().raw_rows_read;
-    _bytes_read = _reader->stats().bytes_read;
+    auto& stats = _reader->stats();
+    _raw_rows_read = stats.raw_rows_read;
+    _bytes_read = stats.bytes_read;
+    _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
 }
 
 void LakeDataSource::update_counter() {
