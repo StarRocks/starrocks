@@ -343,6 +343,7 @@
   + [Configuration](/administration/Configuration.md)
   + [Scale In and Out](/administration/Scale_up_down.md)
   + [Backup and Restore](/administration/Backup_and_restore.md)
+  + [Deploy StarRocks with StarGo](/administration/stargo.md)
   + Data Recovery
     + [Data Recovery](/administration/Data_recovery.md)
     + [Restore FEs](/administration/Metadata_recovery.md)
