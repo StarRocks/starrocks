@@ -322,9 +322,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                         Lists.newArrayList(scanOperator.getOutputColumns());
 
                 List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-                List<ColumnRefOperator> globalDictStringColumns = Lists.newArrayList();
-                Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
-                ScalarOperator newPredicate = scanOperator.getPredicate();
+                ScalarOperator newPredicate;
                 List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperator.getPredicate());
 
                 for (Integer columnId : context.tableIdToStringColumnIds.get(tableId)) {
@@ -350,8 +348,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                                 .allMatch(predicate -> !predicate.getUsedColumns().contains(columnId) ||
                                         couldApplyDictOptimize(predicate, context.allStringColumnIds));
                         if (!couldApply) {
-                            globalDictStringColumns.remove(stringColumn);
-                            dictStringIdToIntIds.remove(stringColumn.getId());
                             couldEncoded = false;
                         } else {
                             for (int i = 0; i < predicates.size(); i++) {
@@ -362,12 +358,11 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                                     if (newDictColumn == null) {
                                         newDictColumn = context.columnRefFactory.create(
                                                 stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
+                                        context.stringColumnIdToDictColumnIds.put(columnId, newDictColumn.getId());
                                     }
 
-                                    final DictMappingOperator newCallOperator =
-                                            new DictMappingOperator(newDictColumn, predicate.clone(),
-                                                    predicate.getType());
-
+                                    final DictMappingRewriter rewriter = new DictMappingRewriter(context);
+                                    final ScalarOperator newCallOperator = rewriter.rewrite(predicate.clone());
                                     predicates.set(i, newCallOperator);
                                 }
                             }
@@ -417,8 +412,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                             scanOperator.getProjection());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
                     newOlapScan.setGlobalDicts(globalDicts);
-                    newOlapScan.setGlobalDictStringColumns(globalDictStringColumns);
-                    newOlapScan.setDictStringIdToIntIds(dictStringIdToIntIds);
                     // set output columns because of the projection is not encoded but the colRefToColumnMetaMap has encoded.
                     // There need to set right output columns
                     newOlapScan.setOutputColumns(newOutputColumns);

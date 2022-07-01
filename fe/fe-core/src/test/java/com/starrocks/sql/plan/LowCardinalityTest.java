@@ -230,7 +230,6 @@ public class LowCardinalityTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  2:Decode\n" +
                 "  |  <dict id 10> : <string id 3>"));
         String thrift = getThriftPlan(sql);
-        System.out.println("thrift = " + thrift);
         Assert.assertTrue(thrift.contains("TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1])"));
     }
 
@@ -250,7 +249,6 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testDecodeNodeRewrite9() throws Exception {
         String sql = "select S_ADDRESS, upper(S_ADDRESS) from supplier";
         String plan = getFragmentPlan(sql);
-        System.out.println("plan = " + plan);
         Assert.assertTrue(plan.contains("  |  <dict id 10> : <string id 3>\n" +
                 "  |  <dict id 11> : <string id 9>"));
         String thriftPlan = getThriftPlan(sql);
@@ -605,7 +603,8 @@ public class LowCardinalityTest extends PlanTestBase {
         sql =
                 "select case when S_ADDRESS = 'key' then rand() when S_ADDRESS = '2' then 'key2' else 'key3' end from supplier";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("Decode"));
+        Assert.assertTrue(plan.contains(" |  9 <-> CASE WHEN DictExpr(10: S_ADDRESS,[<place-holder> = 'key']) THEN CAST(rand() AS VARCHAR) WHEN DictExpr(10: S_ADDRESS,[<place-holder> = '2']) THEN 'key2' ELSE 'key3' END"));
+        Assert.assertFalse(plan.contains("Decode"));
     }
 
     @Test

@@ -15,6 +15,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
@@ -107,17 +108,22 @@ public class DictMappingRewriter {
         @Override
         public ScalarOperator visit(ScalarOperator scalarOperator, RewriterContext context) {
             List<ScalarOperator> children = Lists.newArrayList(scalarOperator.getChildren());
-            context.reset();
+            boolean hasApplied = false;
+            boolean disableApplied = context.hasUnsupportedOperator;
             for (int i = 0; i < children.size(); i++) {
+                context.reset();
                 ScalarOperator child = scalarOperator.getChild(i).accept(this, context);
                 // wrapper using DictExpr
-                final boolean hasApplied = context.hasAppliedOperator;
-                if (hasApplied) {
+                if (context.hasAppliedOperator) {
                     child = rewriteAsDictMapping(child, context, child.getType());
+                    context.hasUnsupportedOperator = true;
                 }
                 scalarOperator.setChild(i, child);
+                hasApplied = hasApplied || context.hasAppliedOperator;
+                disableApplied = disableApplied || context.hasUnsupportedOperator;
             }
             context.hasAppliedOperator = false;
+            context.hasUnsupportedOperator = disableApplied;
             return scalarOperator;
         }
 
@@ -183,6 +189,12 @@ public class DictMappingRewriter {
         public ScalarOperator visitConstant(ConstantOperator operator, RewriterContext context) {
             context.hasAppliedOperator = false;
             context.hasUnsupportedOperator = false;
+            return operator;
+        }
+
+        @Override
+        public ScalarOperator visitLikePredicateOperator(LikePredicateOperator operator, RewriterContext context) {
+            operator.setChild(0, operator.getChild(0).accept(this, context));
             return operator;
         }
 
