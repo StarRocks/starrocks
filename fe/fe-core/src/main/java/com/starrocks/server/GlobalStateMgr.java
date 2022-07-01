@@ -114,6 +114,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.WorkGroupMgr;
+import com.starrocks.catalog.lake.ShardDelete;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
@@ -406,6 +407,9 @@ public class GlobalStateMgr {
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
 
+    private ShardDelete shardDelete;
+
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -565,6 +569,8 @@ public class GlobalStateMgr {
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
+
+        this.shardDelete = new ShardDelete();
     }
 
     public static void destroyCheckpoint() {
@@ -720,6 +726,10 @@ public class GlobalStateMgr {
 
     public ConnectorMetadata getMetadata() {
         return localMetastore;
+    }
+
+    public ShardDelete getShardDelete() {
+        return shardDelete;
     }
 
     @VisibleForTesting

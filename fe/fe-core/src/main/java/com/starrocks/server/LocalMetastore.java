@@ -4146,6 +4146,12 @@ public class LocalMetastore implements ConnectorMetadata {
                                 batchTask.addTask(dropTask);
                             } // end for replicas
                         }
+
+                        // drop shard and lake tablet
+                        if (olapTable.isLakeTable()) {
+                            GlobalStateMgr.getCurrentState().getShardDelete().addShardId(tabletId, (LakeTablet) tablet);
+                        }
+                        
                     } // end for tablets
                 } // end for indices
             } // end for partitions

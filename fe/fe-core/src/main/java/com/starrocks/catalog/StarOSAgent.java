@@ -244,6 +244,15 @@ public class StarOSAgent {
         }
     }
 
+    public void deleteShards(Set<Long> shardIds) throws DdlException {
+        // prepare();
+        try {
+            client.deleteShard(serviceId, shardIds);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to delete shards. error: " + e.getMessage());
+        }
+    }
+
     public List<Long> createShards(int numShards, ShardStorageInfo shardStorageInfo) throws DdlException {
         prepare();
         List<ShardInfo> shardInfos = null;
