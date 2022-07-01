@@ -21,7 +21,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.starrocks.analysis.CreateFunctionStmt;
@@ -88,25 +87,6 @@ public class ScalarFunction extends Function {
                 new FunctionName(name), argTypes, retType, hasVarArgs, true);
         fn.setBinaryType(TFunctionBinaryType.BUILTIN);
         fn.setUserVisible(true);
-        return fn;
-    }
-
-    /**
-     * Creates a builtin scalar function. This is a helper that wraps a few steps
-     * into one call.
-     */
-    public static ScalarFunction createBuiltin(
-            String name, List<Type> argTypes,
-            boolean hasVarArgs, Type retType, String symbol,
-            String prepareFnSymbol, String closeFnSymbol, boolean userVisible) {
-        Preconditions.checkNotNull(symbol);
-        ScalarFunction fn = new ScalarFunction(
-                new FunctionName(name), argTypes, retType, hasVarArgs);
-        fn.setBinaryType(TFunctionBinaryType.BUILTIN);
-        fn.setUserVisible(userVisible);
-        fn.symbolName = symbol;
-        fn.prepareFnSymbol = prepareFnSymbol;
-        fn.closeFnSymbol = closeFnSymbol;
         return fn;
     }
 
