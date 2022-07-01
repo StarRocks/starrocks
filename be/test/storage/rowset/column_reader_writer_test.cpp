@@ -608,6 +608,16 @@ TEST_F(ColumnReaderWriterTest, test_binary) {
     test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1", "100");
 }
 
+#ifdef STRING_COLUMN_WRITER_TEST
+// NOLINTNEXTLINE
+TEST_F(ColumnReaderWriterTest, test_string_column_writer_benchmark) {
+    for (int i = 0; i < 10000; i++) {
+        auto c = high_cardinality_strings(100000);
+        test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, PLAIN_ENCODING, 1>(*c, "0", "10000");
+    }
+}
+#endif
+
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_default_value) {
     std::string v_int("1");
