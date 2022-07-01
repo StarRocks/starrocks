@@ -816,7 +816,7 @@ frameBound
 // ------------------------------------------- COMMON AST --------------------------------------------------------------
 
 explainDesc
-    : EXPLAIN (LOGICAL | VERBOSE | COSTS)?
+    : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?
     ;
 
 partitionDesc
