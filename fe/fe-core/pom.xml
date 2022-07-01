@@ -40,11 +40,10 @@ under the License.
         <jacoco.version>0.8.5</jacoco.version>
         <starrocks.thrift>thrift</starrocks.thrift>
         <iceberg.version>0.12.1</iceberg.version>
-    </properties>
-    <properties>
         <sonar.organization>dulong41</sonar.organization>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
     </properties>
+
     <profiles>
         <profile>
             <id>thrift</id>
