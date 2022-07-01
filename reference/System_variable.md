@@ -144,7 +144,7 @@ Used to control whether the aggregation node enables streaming aggregation for c
 
 * forward_to_master
 
-Used to set whether some commands will be forwarded to the leader FE node for execution. The default value is false, meaning no forwarding. There are multiple FE nodes in StarRocks, one of which is the Master node. Normally, users can connect to any FE node for full-featured operation. However, some information is only available from the leader FE node.
+Used to set whether some commands will be forwarded to the leader FE node for execution. The default value is false, meaning no forwarding. There are multiple FE nodes in StarRocks, one of which is the leader node. Normally, users can connect to any FE node for full-featured operation. However, some information is only available from the leader FE node.
 
 For example, if the `SHOW BACKENDS;` commend is not forwarded to the leader FE node, only basic information (e.g., whether the node is alive or not) can be seen. Forwarding to the leader FE can get more detailed information including the node start time, last heartbeat time, etc.
 
@@ -152,31 +152,31 @@ The commands affected by this parameter are as follows:
 
 * SHOW FRONTENDS;
 
-Forwarding to Master allows users to view the last heartbeat message.
+Forwarding to leader allows users to view the last heartbeat message.
 
 * SHOW BACKENDS;
 
-Forwarding to Master allows users to view the boot time, last heartbeat information, and disk capacity information.
+Forwarding to leader allows users to view the boot time, last heartbeat information, and disk capacity information.
 
 * SHOW BROKER;
 
-Forwarding to Master allows users to view the boot time and last heartbeat information.
+Forwarding to leader allows users to view the boot time and last heartbeat information.
 
 * SHOW TABLET;
 * ADMIN SHOW REPLICA DISTRIBUTION;
 * ADMIN SHOW REPLICA STATUS;
 
-Forwarding to Master allows users to view the tablet information stored in the leader FE metadata. Normally, the tablet information in the different FE metadata should be the same. In case of a problem, you can use this method to compare the differences in metadata of the current FE and the leader FE.
+Forwarding to leader allows users to view the tablet information stored in the leader FE metadata. Normally, the tablet information in the different FE metadata should be the same. In case of a problem, you can use this method to compare the differences in metadata of the current FE and the leader FE.
 
 * Show PROC;
 
-Forwarding to Master allows users to view the PROC information stored in the metadata. This is mainly used for metadata comparison.
+Forwarding to leader allows users to view the PROC information stored in the metadata. This is mainly used for metadata comparison.
 
 * hash_join_push_down_right_table
 
 Used to control whether the data of the left table can be filtered by using the filter condition against the right table in the Join query. If so, it can reduce the amount of data that needs to be processed during the query.
 
-If “ture”, indicating the operation is allowed and the system will decide whether the left table can be filtered. If “false”, indicating the operation is disabled. The default value is true.
+If “true”, indicating the operation is allowed and the system will decide whether the left table can be filtered. If “false”, indicating the operation is disabled. The default value is true.
 
 * init_connect
 

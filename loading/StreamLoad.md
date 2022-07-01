@@ -179,6 +179,6 @@ See the section [Loading_intro/FAQs](/loading/Loading_intro.md#FAQs).
 * Label Already Exists
 
 See the section [Loading_intro/FAQs](/loading/Loading_intro.md#FAQs). Stream load jobs are submitted via the HTTP protocol, and generally the HTTP Client of each language has its own request retry logic. StarRocks will start to operate stream load after receiving the first request, but it is possible that the client will retry to create the request again because the result is not returned to them in time. At this time, StarRocks is already operating the first request, so the second request will encounter the error:`Label Already Exists`.
-One possible way to troubleshoot the above situation is to use `Label` to search the FE Master's logs and see if the same label is present twice. If so, that indicates that the client has submitted the request repeatedly.
+One possible way to troubleshoot the above situation is to use `Label` to search leader FE's logs and see if the same label is present twice. If so, that indicates that the client has submitted the request repeatedly.
 
 It is recommended to calculate the approximate import time based on the data volume of the current request. Meanwhile, increase the request timeout on the client side based on the import timeout to avoid the request being submitted multiple times by the Client.

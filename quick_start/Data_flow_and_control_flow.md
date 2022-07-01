@@ -30,11 +30,11 @@ After creating the table, user can import data.
 The data import process is as follows:
 
 * The user selects a BE as the coordinator, initiates a data import request that specifies the data format, data source, and label. The label is an identifier used to avoid repeated data imports. The user can also initiate a request to the FE, and the FE will redirect the request to the BE.
-* After receiving the request, the BE reports to the FE master node, executes `loadTxnBegin`, and creates a global transaction. Due to that the base table and multiple buckets of the materialized index need to be updated at the same time, the global transaction is used to control the atomicity of this import to ensure consistency.
+* After receiving the request, the BE reports to the leader FE node, executes `loadTxnBegin`, and creates a global transaction. Due to that the base table and multiple buckets of the materialized index need to be updated at the same time, the global transaction is used to control the atomicity of this import to ensure consistency.
 * When the transaction is created successfully, it executes the `streamLoadPut` call to obtain the data import plan from the FE. Data import can be regarded as distributing data to all tablets copies involved, and the import plan contains data schemas and tablet replication information.
 * The BE pulls data from the data source, and constructs the internal data format based on the schemas of the base table and materialized index table.
 * According to the partitioning and bucketing rules and the copy location information, the BE coordinator packs and sends the data batches. The receiving BE writes the data to the corresponding bucket replication.
-* When the BE coordinator node completes the data import, it executes `loadTxnCommit` to the FE master node, submits the global transaction, and sends the execution status. The FE master confirms that most of the tablets involved are successfully copied, and makes the data publicly visible. If the import fails, the data won’t be visible and inconsistent data will be cleaned up in the background.
+* When the BE coordinator node completes the data import, it executes `loadTxnCommit` to the leader FE node, submits the global transaction, and sends the execution status. The leader FE confirms that most of the tablets involved are successfully copied, and makes the data publicly visible. If the import fails, the data won’t be visible and inconsistent data will be cleaned up in the background.
 
 ![load](../assets/2.4.2-1.png)
 
@@ -48,12 +48,12 @@ The following operations involve metadata modification: create a database, a tab
 
 The updating process of metadata is as follows:
 
-* The user uses the MySQL client to execute SQL DDL commands and initiate a request to the FE master node. For example, create a table.
+* The user uses the MySQL client to execute SQL DDL commands and initiate a request to the leader FE. For example, create a table.
 * FE checks the validity of the request and then initiates a synchronization command to the BE. In other words, the FE first determines whether the column type of the table is valid, calculates the placement position of the tablet copy, and then requests the BE to create a copy.
 * If the BE executes successfully, the memory catalog will be modified. That is, the information of the table, partition, index, and tablet copy will be saved in the catalog.
 * FE appends and materializes this operation to `EditLog`.
 * FE synchronizes the new operation of `EditLog` to the FE follower node through the replication protocol.
-* After receiving the newly added operation item, the FE follower node will play it in sequence on its own catalog to ensure it catches up with the FE master node.
+* After receiving the newly added operation item, the FE follower node will play it in sequence on its own catalog to ensure it catches up with the leader FE node.
 
 If any part of the execution fails, this metadata modification will fail.
 ![meta_change](../assets/2.4.3-1.png)

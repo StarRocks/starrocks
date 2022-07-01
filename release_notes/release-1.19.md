@@ -64,7 +64,7 @@ Release date: November 20, 2021
 ### Bug Fixes
 
 * Fix the problem that repeat node cannot do predicate push-down[# 1410](https://github.com/StarRocks/starrocks/pull/1410) [# 1417](https://github.com/StarRocks/starrocks/pull/1417)
-* Repair the problem that routine load may lost data when the cluster alter master node during import.[# 1074](https://github.com/StarRocks/starrocks/pull/1074) [# 1272](https://github.com/StarRocks/starrocks/pull/1272)
+* Repair the problem that routine load may lost data when the cluster alter leader node during import.[# 1074](https://github.com/StarRocks/starrocks/pull/1074) [# 1272](https://github.com/StarRocks/starrocks/pull/1272)
 * Fix the problem that creation view cannot support union [# 1083](https://github.com/StarRocks/starrocks/pull/1083)
 * Fix some stability issues of Hive external table[# 1408](https://github.com/StarRocks/starrocks/pull/1408)
 * Fix an issue with group by view[# 1231](https://github.com/StarRocks/starrocks/pull/1231)
