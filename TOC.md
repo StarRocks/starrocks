@@ -474,6 +474,7 @@
   + [SSB 性能测试](/benchmarking/SSB_Benchmarking.md)
   + [TPC-H 基准测试](/benchmarking/TPC-H_Benchmark.md)
 + Release Notes
+  + [v2.3](/release_notes/release-2.3.md)
   + [v2.2](/release_notes/release-2.2.md)
   + [v2.1](/release_notes/release-2.1.md)
   + [v2.0](/release_notes/release-2.0.md)
