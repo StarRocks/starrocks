@@ -14,11 +14,6 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-
-      - name: build fe
-        run: |
-          sudo apt-get install -y byacc
-          bash ./build.sh --fe --clean
         
       - name: "Format it!"
         uses: DoozyX/clang-format-lint-action@master
