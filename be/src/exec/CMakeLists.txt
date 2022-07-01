@@ -138,6 +138,11 @@ set(EXEC_FILES
     pipeline/project_operator.cpp
     pipeline/dict_decode_operator.cpp
     pipeline/result_sink_operator.cpp
+<<<<<<< HEAD
+=======
+    pipeline/olap_table_sink_operator.cpp
+    pipeline/scan/balanced_chunk_buffer.cpp
+>>>>>>> f599c3f07 ([Enhance] support shared scan operator (#7368))
     pipeline/scan/morsel.cpp
     pipeline/scan/scan_operator.cpp
     pipeline/scan/olap_chunk_source.cpp

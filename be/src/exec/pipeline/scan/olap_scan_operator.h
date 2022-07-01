@@ -46,6 +46,14 @@ public:
 
     size_t max_scan_concurrency() const override;
 
+protected:
+    void attach_chunk_source(int32_t source_index) override;
+    void detach_chunk_source(int32_t source_index) override;
+    bool has_shared_chunk_source() const override;
+    bool has_buffer_output() const override;
+    bool has_available_buffer() const override;
+    ChunkPtr get_chunk_from_buffer() override;
+
 private:
     size_t _avg_max_scan_concurrency() const;
 
