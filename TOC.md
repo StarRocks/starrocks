@@ -38,6 +38,7 @@
   + [CBO 优化器](/using_starrocks/Cost_based_optimizer.md)
   + [物化视图](/using_starrocks/Materialized_view.md)
   + [外部表](/using_starrocks/External_table.md)
+  + [使用 catalog 管理内部和外部数据](/using_starrocks/Manage_data.md)
   + [Colocate Join](/using_starrocks/Colocate_join.md)
   + [Lateral Join](/using_starrocks/Lateral_join.md)
   + [数组](/using_starrocks/Array.md)
