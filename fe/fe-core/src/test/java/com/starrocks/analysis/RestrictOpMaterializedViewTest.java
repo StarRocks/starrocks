@@ -125,20 +125,6 @@ public class RestrictOpMaterializedViewTest {
     }
 
     @Test
-    public void testBrokerLoad() {
-        String sql1 = "LOAD LABEL db1.label0 (DATA INFILE('/path/file1') INTO TABLE mv1) with broker 'broker0';";
-        try {
-            SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql1)));
-            LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
-            Deencapsulation.setField(loadStmt, "label", new LabelName("default_cluster:db1", "mv1"));
-            loadStmt.analyze(AccessTestUtil.fetchAdminAnalyzer(true));
-            Assert.fail();
-        } catch (Exception e) {
-            assertTrue(e.getMessage().contains("the data of materialized view must be consistent with the base table"));
-        }
-    }
-
-    @Test
     public void testRoutineLoad() {
         LabelName labelName = new LabelName("default_cluster:db1", "job1");
         CreateRoutineLoadStmt createRoutineLoadStmt = new CreateRoutineLoadStmt(labelName, "mv1",
