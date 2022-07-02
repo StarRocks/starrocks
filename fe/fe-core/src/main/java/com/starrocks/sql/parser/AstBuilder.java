@@ -286,6 +286,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     // ------------------------------------------- Table Statement -----------------------------------------------------
+    @Override
+    public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
+        String dbName = ((Identifier) visit(context.identifier())).getValue();
+        return new CreateDbStmt(
+                context.IF() != null,
+                dbName);
+    }
+
+    // ------------------------------------------- Table Statement -----------------------------------------------------
 
     @Override
     public ParseNode visitCreateTableStatement(StarRocksParser.CreateTableStatementContext context) {
