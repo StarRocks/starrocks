@@ -40,8 +40,12 @@ OlapChunkSource::~OlapChunkSource() {
 
 void OlapChunkSource::close(RuntimeState* state) {
     _update_counter();
-    _prj_iter->close();
-    _reader.reset();
+    if (_prj_iter) {
+        _prj_iter->close();
+    }
+    if (_reader) {
+        _reader.reset();
+    }
     _predicate_free_pool.clear();
 }
 
@@ -121,16 +125,11 @@ Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
 }
 
 void OlapChunkSource::_decide_chunk_size() {
-    bool has_huge_length_type = std::any_of(_query_slots.begin(), _query_slots.end(),
-                                            [](auto& slot) { return slot->type().is_huge_type(); });
     if (_limit != -1 && _limit < _runtime_state->chunk_size()) {
         // Improve for select * from table limit x, x is small
         _params.chunk_size = _limit;
     } else {
         _params.chunk_size = _runtime_state->chunk_size();
-    }
-    if (has_huge_length_type) {
-        _params.chunk_size = std::min(_params.chunk_size, CHUNK_SIZE_FOR_HUGE_TYPE);
     }
 }
 
