@@ -27,7 +27,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rewrite.ExprRewriter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -437,18 +436,6 @@ public class SetOperationStmt extends QueryStmt {
             slotDesc.setIsNullable(isNullable);
         }
         baseTblResultExprs = resultExprs;
-    }
-
-    @Override
-    public void rewriteExprs(ExprRewriter rewriter) throws AnalysisException {
-        for (SetOperand op : operands) {
-            op.getQueryStmt().rewriteExprs(rewriter);
-        }
-        if (orderByElements != null) {
-            for (OrderByElement orderByElem : orderByElements) {
-                orderByElem.setExpr(rewriter.rewrite(orderByElem.getExpr(), analyzer));
-            }
-        }
     }
 
     @Override
