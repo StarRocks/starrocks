@@ -15,6 +15,9 @@ statement
     // Query Statement
     : queryStatement                                                                        #query
 
+    // Database Statement
+    | createDbStatement                                                                     #createDb
+
     // Table Statement
     | createTableStatement                                                                  #createTable
     | createTableAsSelectStatement                                                          #createTableAsSelect
@@ -95,6 +98,12 @@ statement
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
     ;
 
+
+
+// ---------------------------------------- DataBase Statement ---------------------------------------------------------
+createDbStatement
+    : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? identifier
+    ;
 
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------

@@ -35,6 +35,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -219,6 +220,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSingleStatement(StarRocksParser.SingleStatementContext context) {
         return visit(context.statement());
+    }
+
+    // ------------------------------------------- Table Statement -----------------------------------------------------
+    @Override
+    public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
+        String dbName = ((Identifier) visit(context.identifier())).getValue();
+        return new CreateDbStmt(
+                context.IF() != null,
+                dbName);
     }
 
     // ------------------------------------------- Table Statement -----------------------------------------------------
