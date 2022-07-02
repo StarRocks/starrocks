@@ -28,7 +28,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.OriginStatement;
-import com.starrocks.rewrite.ExprRewriter;
 
 import java.util.Collections;
 import java.util.List;
@@ -145,17 +144,6 @@ public abstract class StatementBase implements ParseNode {
      */
     public List<Expr> getResultExprs() {
         return Collections.<Expr>emptyList();
-    }
-
-    /**
-     * Uses the given 'rewriter' to transform all Exprs in this statement according
-     * to the rules specified in the 'rewriter'. Replaces the original Exprs with the
-     * transformed ones in-place. Subclasses that have Exprs to be rewritten must
-     * override this method. Valid to call after analyze().
-     */
-    public void rewriteExprs(ExprRewriter rewriter) throws AnalysisException {
-        throw new IllegalStateException(
-                "rewriteExprs() not implemented for this stmt: " + getClass().getSimpleName());
     }
 
     public void setOrigStmt(OriginStatement origStmt) {
