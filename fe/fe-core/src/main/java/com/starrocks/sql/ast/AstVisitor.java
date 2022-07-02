@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
@@ -376,6 +377,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitSwapTableClause(SwapTableClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitAddPartitionClause(AddPartitionClause clause, C context) {
         return visitNode(clause, context);
     }
 
