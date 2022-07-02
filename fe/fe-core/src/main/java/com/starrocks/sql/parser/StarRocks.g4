@@ -366,6 +366,11 @@ alterClause
     | addComputeNodeClause
     | dropComputeNodeClause
     | swapTableClause
+    | addPartitionClause
+    ;
+
+addPartitionClause
+    : ADD TEMPORARY? (singleRangePartition | PARTITIONS multiRangePartition) distributionDesc? properties?
     ;
 
 createIndexClause
