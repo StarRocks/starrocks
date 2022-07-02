@@ -16,6 +16,7 @@ import com.starrocks.analysis.AdminShowConfigStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
+import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
@@ -220,6 +221,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSingleStatement(StarRocksParser.SingleStatementContext context) {
         return visit(context.statement());
+    }
+
+    @Override
+    public ParseNode visitAlterDatabaseRename(StarRocksParser.AlterDatabaseRenameContext context) {
+        String dbName = ((Identifier) visit(context.identifier(0))).getValue();
+        String newName = ((Identifier) visit(context.identifier(1))).getValue();
+        return new AlterDatabaseRename(dbName, newName);
     }
 
     // ------------------------------------------- Table Statement -----------------------------------------------------

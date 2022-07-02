@@ -17,6 +17,7 @@ statement
 
     // Database Statement
     | createDbStatement                                                                     #createDb
+    | alterDatabaseRename                                                                   #databaseRename
 
     // Table Statement
     | createTableStatement                                                                  #createTable
@@ -99,6 +100,9 @@ statement
     ;
 
 
+alterDatabaseRename
+    : ALTER DATABASE identifier RENAME identifier
+    ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
 createDbStatement

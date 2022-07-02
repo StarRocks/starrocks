@@ -52,6 +52,14 @@ public class AlterDatabaseRename extends DdlStmt {
         return newDbName;
     }
 
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
+    }
+
+    public void setNewDbName(String newName) {
+        this.newDbName = newName;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
         super.analyze(analyzer);
