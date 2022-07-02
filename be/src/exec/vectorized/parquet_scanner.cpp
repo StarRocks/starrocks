@@ -252,8 +252,15 @@ Status ParquetScanner::convert_array_to_column(ConvertFunc conv_func, size_t num
         return illegal_converting_error(array->type()->name(), type_desc->debug_string());
     } else {
         auto* filter_data = (&_chunk_filter.front()) + _chunk_start_idx;
-        return conv_func(array, _batch_start_idx, num_elements, data_column, _chunk_start_idx, null_data, filter_data,
-                         &_conv_ctx);
+        auto st = conv_func(array, _batch_start_idx, num_elements, data_column, _chunk_start_idx, null_data,
+                            filter_data, &_conv_ctx);
+        if (st.ok()) {
+            // in some scene such as string length exceeds limit, the column will be set NULL, so we need reset has_null
+            if (column->is_nullable()) {
+                down_cast<NullableColumn*>(column.get())->update_has_null();
+            }
+        }
+        return st;
     }
 }
 
