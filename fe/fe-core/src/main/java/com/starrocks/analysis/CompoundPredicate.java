@@ -22,7 +22,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -132,43 +131,6 @@ public class CompoundPredicate extends Predicate {
         Expr negatedRight = getChild(1).negate();
         Operator newOp = (op == Operator.OR) ? Operator.AND : Operator.OR;
         return new CompoundPredicate(newOp, negatedLeft, negatedRight);
-    }
-
-    @Override
-    public Expr getResultValue() throws AnalysisException {
-        recursiveResetChildrenResult();
-        boolean compoundResult = false;
-        if (op == Operator.NOT) {
-            final Expr childValue = getChild(0);
-            if (childValue instanceof NullLiteral) {
-                return NullLiteral.create(ScalarType.BOOLEAN);
-            }
-            if (!(childValue instanceof BoolLiteral)) {
-                return this;
-            }
-            final BoolLiteral boolChild = (BoolLiteral) childValue;
-            compoundResult = !boolChild.getValue();
-        } else {
-            final Expr leftChildValue = getChild(0);
-            final Expr rightChildValue = getChild(1);
-            if (!(leftChildValue instanceof BoolLiteral)
-                    || !(rightChildValue instanceof BoolLiteral)) {
-                return this;
-            }
-            final BoolLiteral leftBoolValue = (BoolLiteral) leftChildValue;
-            final BoolLiteral rightBoolValue = (BoolLiteral) rightChildValue;
-            switch (op) {
-                case AND:
-                    compoundResult = leftBoolValue.getValue() && rightBoolValue.getValue();
-                    break;
-                case OR:
-                    compoundResult = leftBoolValue.getValue() || rightBoolValue.getValue();
-                    break;
-                default:
-                    Preconditions.checkState(false, "No defined binary operator.");
-            }
-        }
-        return new BoolLiteral(compoundResult);
     }
 
     @Override
