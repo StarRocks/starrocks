@@ -2411,6 +2411,11 @@ show_param ::=
     {:
         RESULT = new ShowExportStmt(db, parser.where, orderByClause, limitClause);
     :}
+    /* Show delete statement */
+    | KW_DELETE opt_db:db
+    {:
+        RESULT = new ShowDeleteStmt(db);
+    :}
     /* Show alter table statement: used to show process of alter table statement */
     | KW_ALTER KW_TABLE opt_alter_type:type opt_db:db opt_wild_where order_by_clause:orderByClause limit_clause:limitClause
     {:
