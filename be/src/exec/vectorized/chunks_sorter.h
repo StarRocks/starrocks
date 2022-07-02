@@ -13,9 +13,9 @@
 namespace starrocks::vectorized {
 
 struct DataSegment {
-    static const uint8_t SMALLER_THAN_MIN_OF_SEGMENT = 0;
+    static const uint8_t SMALLER_THAN_MIN_OF_SEGMENT = 2;
     static const uint8_t INCLUDE_IN_SEGMENT = 1;
-    static const uint8_t LARGER_THAN_MAX_OF_SEGMENT = 2;
+    static const uint8_t LARGER_THAN_MAX_OF_SEGMENT = 0;
 
     ChunkPtr chunk;
     Columns order_by_columns;
