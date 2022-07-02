@@ -125,6 +125,8 @@ public class AlterTableStmt extends DdlStmt {
     private static boolean isNewAlterTableClause(AlterClause clause) {
         return clause instanceof CreateIndexClause
                 || clause instanceof DropIndexClause
-                || clause instanceof TableRenameClause;
+                || clause instanceof TableRenameClause
+                || clause instanceof AddPartitionClause
+                ;
     }
 }

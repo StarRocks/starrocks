@@ -320,6 +320,11 @@ alterClause
     | modifyFrontendHostClause
     | addComputeNodeClause
     | dropComputeNodeClause
+    | addPartitionClause
+    ;
+
+addPartitionClause
+    : ADD TEMPORARY? (singleRangePartition | PARTITIONS multiRangePartition) distributionDesc? properties?
     ;
 
 createIndexClause
