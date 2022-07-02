@@ -57,6 +57,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
@@ -270,6 +271,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitUseStatement(UseStmt statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    public R visitShowCreateDbStatement(ShowCreateDbStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
     // ----------------- Catalog Clause -------------

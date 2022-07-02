@@ -15,6 +15,8 @@ statement
     // Query Statement
     : queryStatement                                                                        #query
 
+    | showCreateDbStatement                                                                 #showCreateDb
+
     // Table Statement
     | createTableStatement                                                                  #createTable
     | createTableAsSelectStatement                                                          #createTableAsSelect
@@ -96,6 +98,9 @@ statement
     ;
 
 
+showCreateDbStatement
+    : SHOW CREATE (DATABASE | SCHEMA) identifier
+    ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
