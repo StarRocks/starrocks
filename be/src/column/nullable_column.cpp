@@ -164,6 +164,10 @@ void NullableColumn::fill_null_with_default() {
     _data_column->fill_default(_null_column->get_data());
 }
 
+void NullableColumn::update_has_null() {
+    _has_null = SIMD::count_nonzero(_null_column->get_data());
+}
+
 Status NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
     size_t replace_num = src.size();
