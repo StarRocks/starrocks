@@ -27,6 +27,7 @@ statement
     | createIndexStatement                                                                  #createIndex
     | dropIndexStatement                                                                    #dropIndex
     | refreshTableStatement                                                                 #refreshTable
+    | showDeleteStatement                                                                   #showDelete
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -220,6 +221,10 @@ showTableStatusStatement
 
 refreshTableStatement
     : REFRESH EXTERNAL TABLE qualifiedName (PARTITION '(' string (',' string)* ')')?
+    ;
+
+showDeleteStatement
+    : SHOW DELETE ((FROM | IN) db=qualifiedName)?
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------
