@@ -104,6 +104,9 @@ public interface ConnectorMetadata {
     default void createView(CreateViewStmt stmt) throws DdlException {}
 
     default void alterView(AlterViewStmt stmt) throws DdlException, UserException {}
-
+    
+    default ConnectorTableHandle getTableHandle(String dbName, String tblName) {
+        return null;
+    }
 }
 

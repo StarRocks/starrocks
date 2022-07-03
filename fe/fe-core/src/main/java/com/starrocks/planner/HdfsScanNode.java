@@ -8,7 +8,9 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.hive.HiveTableHandle;
 import com.starrocks.external.RemoteScanRangeLocations;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
@@ -67,7 +69,8 @@ public class HdfsScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
-        return scanRangeLocations.getScanRangeLocations(maxScanRangeLength);
+        return GlobalStateMgr.getCurrentState().getScanRangeMgr().getScanRanges(
+                "", new HiveTableHandle(hiveTable, scanNodePredicates));
     }
 
     @Override

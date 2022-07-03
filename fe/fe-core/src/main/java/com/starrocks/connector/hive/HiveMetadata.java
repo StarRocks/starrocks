@@ -6,6 +6,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableHandle;
 import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.external.hive.HiveTableName;
 import com.starrocks.server.GlobalStateMgr;
@@ -65,5 +66,10 @@ public class HiveMetadata implements ConnectorMetadata {
         }
 
         return table;
+    }
+
+    @Override
+    public ConnectorTableHandle getTableHandle(String dbName, String tblName) {
+        return ConnectorMetadata.super.getTableHandle(dbName, tblName);
     }
 }

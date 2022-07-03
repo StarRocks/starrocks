@@ -3,11 +3,12 @@
 package com.starrocks.server;
 
 import com.starrocks.connector.ConnectorScanRangeMgr;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+import com.starrocks.connector.ConnectorTableHandle;
 import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -18,8 +19,8 @@ public class ScanRangeMgr {
 
     private final ConcurrentMap<String, ConnectorScanRangeMgr> scanRangeMgrs = new ConcurrentHashMap<>();
 
-    public TScanRangeLocations getScanRanges(String catalog, PhysicalScanOperator scanOperator) {
-        return scanRangeMgrs.get(catalog).getScanRanges(scanOperator);
+    public List<TScanRangeLocations> getScanRanges(String catalog, ConnectorTableHandle tableHandle) {
+        return scanRangeMgrs.get(catalog).getScanRanges(tableHandle);
     }
 
     public void addScanRangeMgr(String catalogName, ConnectorScanRangeMgr scanRangeMgr) {

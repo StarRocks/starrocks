@@ -3,18 +3,19 @@
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.connector.ConnectorScanRangeMgr;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+import com.starrocks.connector.ConnectorTableHandle;
 import com.starrocks.thrift.TScanRangeLocations;
+
+import java.util.List;
 
 public class HiveScanRangeMgr implements ConnectorScanRangeMgr {
 
     @Override
-    public TScanRangeLocations getScanRanges(DescriptorTable descTbl, PhysicalScanOperator scanOperator)
+    public List<TScanRangeLocations> getScanRanges(ConnectorTableHandle tableHandle)
     {
-        Preconditions.checkArgument(scanOperator instanceof PhysicalHiveScanOperator);
+        Preconditions.checkArgument(tableHandle instanceof HiveTableHandle);
+        HiveTableHandle hiveTableHandle = (HiveTableHandle) tableHandle;
 
         return null;
     }

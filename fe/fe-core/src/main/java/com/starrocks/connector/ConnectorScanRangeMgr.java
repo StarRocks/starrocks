@@ -2,8 +2,9 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.catalog.Table;
 import com.starrocks.thrift.TScanRangeLocations;
+
+import java.util.List;
 
 /**
  * Each connector needs to provide its own scan range calculation logic by implementing this
@@ -17,7 +18,7 @@ public interface ConnectorScanRangeMgr {
      * Used to get scan range locations for given connector.
      * @return
      */
-    default TScanRangeLocations getScanRanges(Table table, )
+    default List<TScanRangeLocations> getScanRanges(ConnectorTableHandle table)
     {
         return null;
     }
