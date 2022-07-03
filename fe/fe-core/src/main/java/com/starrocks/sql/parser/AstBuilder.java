@@ -50,6 +50,7 @@ import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.analysis.DropComputeNodeClause;
+import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -223,20 +224,31 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return visit(context.statement());
     }
 
-    @Override
-    public ParseNode visitAlterDatabaseRename(StarRocksParser.AlterDatabaseRenameContext context) {
-        String dbName = ((Identifier) visit(context.identifier(0))).getValue();
-        String newName = ((Identifier) visit(context.identifier(1))).getValue();
-        return new AlterDatabaseRename(dbName, newName);
-    }
 
-    // ------------------------------------------- Table Statement -----------------------------------------------------
+    // ---------------------------------------- Database Statement -----------------------------------------------------
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
         return new CreateDbStmt(
                 context.IF() != null,
                 dbName);
+    }
+
+    @Override
+    public ParseNode visitDropDbStatement(StarRocksParser.DropDbStatementContext context) {
+        String dbName = ((Identifier) visit(context.identifier())).getValue();
+        return new DropDbStmt(
+                context.IF() != null,
+                dbName,
+                context.FORCE() != null);
+    }
+
+
+    @Override
+    public ParseNode visitAlterDatabaseRename(StarRocksParser.AlterDatabaseRenameContext context) {
+        String dbName = ((Identifier) visit(context.identifier(0))).getValue();
+        String newName = ((Identifier) visit(context.identifier(1))).getValue();
+        return new AlterDatabaseRename(dbName, newName);
     }
 
     // ------------------------------------------- Table Statement -----------------------------------------------------

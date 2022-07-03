@@ -67,6 +67,7 @@ public class AlterDatabaseRename extends DdlStmt {
             throw new AnalysisException("Database name is not set");
         }
 
+        dbName = ClusterNamespace.getFullName(dbName);
         if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName,
                 PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
                                 Privilege.ALTER_PRIV),
@@ -80,7 +81,6 @@ public class AlterDatabaseRename extends DdlStmt {
 
         FeNameFormat.checkDbName(newDbName);
 
-        dbName = ClusterNamespace.getFullName(dbName);
         newDbName = ClusterNamespace.getFullName(newDbName);
     }
 

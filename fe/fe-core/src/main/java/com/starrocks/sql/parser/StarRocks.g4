@@ -17,7 +17,10 @@ statement
 
     // Database Statement
     | createDbStatement                                                                     #createDb
+    | dropDbStatement                                                                       #dropDb
+
     | alterDatabaseRename                                                                   #databaseRename
+
 
     // Table Statement
     | createTableStatement                                                                  #createTable
@@ -99,16 +102,19 @@ statement
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
     ;
 
-
-alterDatabaseRename
-    : ALTER DATABASE identifier RENAME identifier
-    ;
-
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
 createDbStatement
     : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? identifier
     ;
 
+dropDbStatement
+    : DROP (DATABASE | SCHEMA) (IF EXISTS)? identifier FORCE?
+    ;
+
+
+alterDatabaseRename
+    : ALTER DATABASE identifier RENAME identifier
+    ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 

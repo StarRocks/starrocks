@@ -17,6 +17,7 @@ import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
@@ -280,6 +281,13 @@ public class Analyzer {
             CreateDbAnalyzer.analyze(statement, context);
             return null;
         }
+
+        @Override
+        public Void visitDropDbStatement(DropDbStmt statement, ConnectContext context) {
+            DropStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
 
         @Override
         public Void visitAlterDatabaseRename(AlterDatabaseRename statement, ConnectContext context) {
