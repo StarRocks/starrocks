@@ -637,22 +637,12 @@ public class EditLog {
                 }
                 case OperationType.OP_ADD_FUNCTION: {
                     final Function function = (Function) journal.getData();
-                    String dbName = function.getFunctionName().getDb();
-                    Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-                    if (db == null) {
-                        throw new Error("unknown database when replay log, db=" + dbName);
-                    }
-                    db.replayAddFunction(function);
+                    Database.replayCreateFunctionLog(function);
                     break;
                 }
                 case OperationType.OP_DROP_FUNCTION: {
                     FunctionSearchDesc function = (FunctionSearchDesc) journal.getData();
-                    String dbName = function.getName().getDb();
-                    Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-                    if (db == null) {
-                        throw new Error("unknown database when replay log, db=" + dbName);
-                    }
-                    db.replayDropFunction(function);
+                    Database.replayDropFunctionLog(function);
                     break;
                 }
                 case OperationType.OP_BACKEND_TABLETS_INFO: {
