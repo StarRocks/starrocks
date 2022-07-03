@@ -42,7 +42,7 @@ public class DropIndexClause extends AlterTableClause {
     }
 
     @Override
-    public boolean isNewAlterTableClause() {
+    public boolean isSupportNewPlanner() {
         return true;
     }
 }

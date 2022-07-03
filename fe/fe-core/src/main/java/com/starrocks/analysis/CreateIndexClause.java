@@ -54,7 +54,7 @@ public class CreateIndexClause extends AlterTableClause {
     }
 
     @Override
-    public boolean isNewAlterTableClause() {
+    public boolean isSupportNewPlanner() {
         return true;
     }
 }

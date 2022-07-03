@@ -43,7 +43,7 @@ public class TableRenameClause extends AlterTableClause {
     }
 
     @Override
-    public boolean isNewAlterTableClause() {
+    public boolean isSupportNewPlanner() {
         return true;
     }
 }

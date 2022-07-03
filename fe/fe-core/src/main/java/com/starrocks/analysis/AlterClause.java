@@ -43,7 +43,7 @@ public abstract class AlterClause implements ParseNode {
         return opType;
     }
 
-    public boolean isNewAlterTableClause() {
+    public boolean isSupportNewPlanner() {
         return false;
     }
 }

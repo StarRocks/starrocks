@@ -119,6 +119,6 @@ public class AlterTableStmt extends DdlStmt {
 
     public static boolean isSupportNewPlanner(StatementBase statement) {
         return statement instanceof AlterTableStmt &&
-                ((AlterTableStmt) statement).getOps().stream().allMatch(AlterClause::isNewAlterTableClause);
+                ((AlterTableStmt) statement).getOps().stream().allMatch(AlterClause::isSupportNewPlanner);
     }
 }
