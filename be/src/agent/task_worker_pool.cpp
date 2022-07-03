@@ -654,7 +654,7 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
         tablet_infos.reserve(tablet_related_rs.size());
 
         // vector for tablet publishing version status, which collects the execution results of the corresponding tablet.
-        std::vector<Status> statuses(tablet_related_rs.size(), Status::OK());
+        std::vector<Status> statuses(tablet_related_rs.size(), Status::Unknown("publish task not being executed"));
 
         size_t idx = 0;
         // each tablet
@@ -663,48 +663,49 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
 
             uint32_t retry_time = 0;
 
-            Status st;
-            while (retry_time++ < PUBLISH_VERSION_SUBMIT_MAX_RETRY) {
+            auto status = &statuses[idx];
+            while (true) {
                 // submit publishing tablet version task to the threadpool.
-                st = threadpool->submit_func([&worker_pool_this, &tablet_rs, &statuses, idx, &version, &transaction_id,
-                                              &partition_id]() {
+                auto st = threadpool->submit_func([&worker_pool_this, &tablet_rs, status, &version, &transaction_id,
+                                                   &partition_id]() {
                     const TabletInfo& tablet_info = tablet_rs.first;
                     const RowsetSharedPtr& rowset = tablet_rs.second;
-                    auto& status = statuses[idx];
                     // if rowset is null, it means this be received write task, but failed during write
                     // and receive fe's publish version task
                     // this be must return as an error tablet
                     if (rowset == nullptr) {
                         LOG(WARNING) << "Not found rowset of tablet: " << tablet_info.tablet_id << ", txn_id "
                                      << transaction_id;
-                        status = Status::NotFound(fmt::format("Not found rowset of tablet: {}, txn_id: {}",
-                                                              tablet_info.tablet_id, transaction_id));
+                        *status = Status::NotFound(fmt::format("Not found rowset of tablet: {}, txn_id: {}",
+                                                               tablet_info.tablet_id, transaction_id));
                         return;
                     }
                     EnginePublishVersionTask engine_task(transaction_id, partition_id, version, tablet_info, rowset);
 
-                    status = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
-                    if (!status.ok())
-                        LOG(WARNING) << "failed to publish version for tablet, tablet_id: " << tablet_info.tablet_id
-                                     << ", txn_id: " << transaction_id << ", err: " << status;
+                    *status = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+                    if (status->ok())
+                        LOG(WARNING) << "failed to publish version for tablet, tablet_id " << tablet_info.tablet_id
+                                     << ", txn_id " << transaction_id << ", err: " << *status;
                 });
 
-                if (st.is_service_unavailable()) {
-                    // Status::ServiceUnavailable is returned when all of the threads of the pool are busy.
-                    LOG(WARNING) << "publish version threadpool is busy, retry later. [txn_id: "
-                                 << publish_version_req.transaction_id << ", tablet_id: " << tablet_rs.first.tablet_id;
-                    // In general, publish version is fast. A small sleep is needed here.
-                    SleepFor(MonoDelta::FromMilliseconds(50 * retry_time));
-                    continue;
+                if (st.ok()) {
+                    break;
                 }
-                break;
+
+                // Status::ServiceUnavailable is returned when all of the threads of the pool are busy.
+                LOG(WARNING) << "publish version thread pool is not ready, retry later. txn_id: "
+                             << publish_version_req.transaction_id << ", tablet_id: " << tablet_rs.first.tablet_id
+                             << ", err: " << st;
+                // In general, publish version is fast. A small sleep is needed here.
+                SleepFor(MonoDelta::FromMilliseconds(50 * retry_time));
+
+                if (++retry_time < PUBLISH_VERSION_SUBMIT_MAX_RETRY) {
+                    LOG(WARNING) << "Retry of publish version on partition is beyond limit. partition: " << partition_id
+                                 << ", txn_id: " << transaction_id << ", version: " << version
+                                 << ", retry_time: " << retry_time;
+                    break;
+                }
             }
-
-            // error category:
-            // 1. ServiceUnavailable, which means that the threadpool is busy even in retry.
-            // 2. error that is not ServiceUnavailable.
-            if (!st.ok()) return st;
-
             ++idx;
         }
         // wait until that all jobs in threadpool are done.
@@ -741,7 +742,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
                     // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
                     // But it seems that there's no limit for the number of tablets of a partition.
                     // Since a large queue size brings a little overhead, a big one is chosen here.
-                    .set_max_queue_size(2048)
+                    .set_max_queue_size(8192)
                     .build(&threadpool);
     assert(st.ok());
 
