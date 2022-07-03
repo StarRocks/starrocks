@@ -87,6 +87,7 @@ public:
 
     ~Segment() = default;
 
+    // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
                                             const vectorized::SegmentReadOptions& read_options);
 
