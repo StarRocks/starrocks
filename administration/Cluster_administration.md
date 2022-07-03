@@ -25,7 +25,7 @@
 #### 启动 FE 进程
 
 进入 FE 进程的部署路径并运行命令启动服务。启动多 FE 节点时，您需要逐台启动 FE Follower 节点。
-  
+
 ```shell
 cd StarRocks-x.x.x/fe
 sh bin/start_fe.sh --daemon
@@ -47,7 +47,7 @@ BE 配置的通信端口有四个:
 
 |配置项|描述|默认值|
 |---|---|---|
-|meta_dir|BE 节点存储数据路径，您需要提前创建相应路径。建议您为每个磁盘创建一个路径。|${STARROCKS_HOME}/meta|
+|storage_root_path|BE 节点存储数据路径，您需要提前创建相应路径。建议您为每个磁盘创建一个路径。|${STARROCKS_HOME}/storage|
 |be_port|BE 上 Thrift Server 的端口，用于接收来自 FE 的请求。|9060|
 |webserver_port|BE 上的 HTTP Server 的端口。|8040|
 |heartbeat_service_port|BE 上心跳服务端口（Thrift），用于接收来自 FE 的心跳。|9050|
@@ -56,7 +56,7 @@ BE 配置的通信端口有四个:
 #### 启动 BE 进程
 
 进入 BE 进程的部署路径并运行命令启动服务。
-  
+
 ```shell
 cd StarRocks-x.x.x/be
 sh bin/start_be.sh --daemon
