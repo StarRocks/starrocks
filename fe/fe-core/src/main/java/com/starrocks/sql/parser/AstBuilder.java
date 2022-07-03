@@ -49,6 +49,7 @@ import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.analysis.DropComputeNodeClause;
+import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -222,13 +223,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return visit(context.statement());
     }
 
-    // ------------------------------------------- Table Statement -----------------------------------------------------
+    // ---------------------------------------- Database Statement -----------------------------------------------------
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
         return new CreateDbStmt(
                 context.IF() != null,
                 dbName);
+    }
+
+    @Override
+    public ParseNode visitDropDbStatement(StarRocksParser.DropDbStatementContext context) {
+        String dbName = ((Identifier) visit(context.identifier())).getValue();
+        return new DropDbStmt(
+                context.IF() != null,
+                dbName,
+                context.FORCE() != null);
     }
 
     // ------------------------------------------- Table Statement -----------------------------------------------------
