@@ -34,6 +34,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class AlterDatabaseRename extends DdlStmt {
     private String dbName;
@@ -87,6 +88,16 @@ public class AlterDatabaseRename extends DdlStmt {
     @Override
     public String toSql() {
         return "ALTER DATABASE " + dbName + " RENAME " + newDbName;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAlterDatabaseRename(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
 }
