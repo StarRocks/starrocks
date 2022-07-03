@@ -18,6 +18,7 @@ statement
     | showCreateDbStatement                                                                 #showCreateDb
     // Database Statement
     | createDbStatement                                                                     #createDb
+    | dropDbStatement                                                                       #dropDb
 
     // Table Statement
     | createTableStatement                                                                  #createTable
@@ -100,15 +101,18 @@ statement
     ;
 
 
-showCreateDbStatement
-    : SHOW CREATE (DATABASE | SCHEMA) identifier
-    ;
-
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
 createDbStatement
     : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? identifier
     ;
 
+dropDbStatement
+    : DROP (DATABASE | SCHEMA) (IF EXISTS)? identifier FORCE?
+    ;
+    
+showCreateDbStatement
+    : SHOW CREATE (DATABASE | SCHEMA) identifier
+    ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
