@@ -836,7 +836,7 @@ public class GlobalStateMgr {
         auditEventProcessor.start();
 
         // 2. get cluster id and role (Observer or Follower)
-        nodeMgr.getClusterIdAndRole();
+        nodeMgr.getClusterIdAndRoleOnStartup();
 
         // 3. Load image first and replay edits
         this.editLog = new EditLog(nodeMgr.getNodeName());
@@ -1111,7 +1111,7 @@ public class GlobalStateMgr {
         DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
 
         long checksum = 0;
-        long remoteChecksum = 0;
+        long remoteChecksum = -1;  // in case of empty image file checksum match
         try {
             checksum = loadHeader(dis, checksum);
             checksum = nodeMgr.loadMasterInfo(dis, checksum);
