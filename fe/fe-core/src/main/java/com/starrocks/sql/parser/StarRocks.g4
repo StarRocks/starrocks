@@ -16,6 +16,8 @@ statement
     : queryStatement                                                                        #query
 
     | showCreateDbStatement                                                                 #showCreateDb
+    // Database Statement
+    | createDbStatement                                                                     #createDb
 
     // Table Statement
     | createTableStatement                                                                  #createTable
@@ -101,6 +103,12 @@ statement
 showCreateDbStatement
     : SHOW CREATE (DATABASE | SCHEMA) identifier
     ;
+
+// ---------------------------------------- DataBase Statement ---------------------------------------------------------
+createDbStatement
+    : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? identifier
+    ;
+
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 

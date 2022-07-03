@@ -99,6 +99,7 @@ public:
     static const std::string ES;
     static const std::string JDBC;
     static const std::string MYSQL;
+    static const std::string LAKE;
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.

@@ -22,7 +22,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Predicates;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
@@ -30,7 +29,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.View;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ColumnAliasGenerator;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.TableAliasGenerator;
@@ -39,14 +37,11 @@ import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rewrite.ExprRewriter;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -281,23 +276,6 @@ public class SelectStmt extends QueryStmt {
         return false;
     }
 
-    // Column alias generator used during query rewriting.
-    private ColumnAliasGenerator columnAliasGenerator = null;
-
-    public ColumnAliasGenerator getColumnAliasGenerator() {
-        if (columnAliasGenerator == null) {
-            columnAliasGenerator = new ColumnAliasGenerator(colLabels, null);
-        }
-        return columnAliasGenerator;
-    }
-
-    public TableAliasGenerator getTableAliasGenerator() {
-        if (tableAliasGenerator == null) {
-            tableAliasGenerator = new TableAliasGenerator(analyzer, null);
-        }
-        return tableAliasGenerator;
-    }
-
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
     }
 
@@ -363,121 +341,6 @@ public class SelectStmt extends QueryStmt {
             resultExprs.add(new SlotRef(tblName, col.getName()));
             colLabels.add(col.getName());
         }
-    }
-
-    @Override
-    public void rewriteExprs(ExprRewriter rewriter) throws AnalysisException {
-        Preconditions.checkState(isAnalyzed());
-        rewriteSelectList(rewriter);
-        for (TableRef ref : fromClause_) {
-            ref.rewriteExprs(rewriter, analyzer);
-        }
-        // Also equal exprs in the statements of subqueries.
-        List<Subquery> subqueryExprs = Lists.newArrayList();
-        if (whereClause != null) {
-            whereClause = rewriter.rewrite(whereClause, analyzer);
-            whereClause.collect(Subquery.class, subqueryExprs);
-
-        }
-        if (havingClause != null) {
-            havingClause = rewriter.rewrite(havingClause, analyzer);
-            havingClauseAfterAnaylzed.collect(Subquery.class, subqueryExprs);
-        }
-        for (Subquery subquery : subqueryExprs) {
-            subquery.getStatement().rewriteExprs(rewriter);
-        }
-        if (groupByClause != null) {
-            ArrayList<Expr> groupingExprs = groupByClause.getGroupingExprs();
-            if (groupingExprs != null) {
-                rewriter.rewriteList(groupingExprs, analyzer);
-            }
-            List<Expr> oriGroupingExprs = groupByClause.getOriGroupingExprs();
-            if (oriGroupingExprs != null) {
-                rewriter.rewriteList(oriGroupingExprs, analyzer);
-            }
-        }
-        if (orderByElements != null) {
-            for (OrderByElement orderByElem : orderByElements) {
-                orderByElem.setExpr(rewriter.rewrite(orderByElem.getExpr(), analyzer));
-            }
-        }
-    }
-
-    private void rewriteSelectList(ExprRewriter rewriter) throws AnalysisException {
-        for (SelectListItem item : selectList.getItems()) {
-            if (item.getExpr() instanceof CaseExpr && item.getExpr().contains(Predicates.instanceOf(Subquery.class))) {
-                rewriteSubquery(item.getExpr(), analyzer);
-            }
-        }
-        selectList.rewriteExprs(rewriter, analyzer);
-    }
-
-    /**
-     * equal subquery in case when to an inline view
-     * subquery in case when statement like
-     * <p>
-     * SELECT CASE
-     * WHEN (
-     * SELECT COUNT(*) / 2
-     * FROM t
-     * ) > k4 THEN (
-     * SELECT AVG(k4)
-     * FROM t
-     * )
-     * ELSE (
-     * SELECT SUM(k4)
-     * FROM t
-     * )
-     * END AS kk4
-     * FROM t;
-     * this statement will be equal to
-     * <p>
-     * SELECT CASE
-     * WHEN t1.a > k4 THEN t2.a
-     * ELSE t3.a
-     * END AS kk4
-     * FROM t, (
-     * SELECT COUNT(*) / 2 AS a
-     * FROM t
-     * ) t1,  (
-     * SELECT AVG(k4) AS a
-     * FROM t
-     * ) t2,  (
-     * SELECT SUM(k4) AS a
-     * FROM t
-     * ) t3;
-     */
-    private Expr rewriteSubquery(Expr expr, Analyzer analyzer)
-            throws AnalysisException {
-        if (expr instanceof Subquery) {
-            if (!(((Subquery) expr).getStatement() instanceof SelectStmt)) {
-                throw new AnalysisException("Only support select subquery in case-when clause.");
-            }
-            if (expr.isCorrelatedPredicate(getTableRefIds())) {
-                throw new AnalysisException("The correlated subquery in case-when clause is not supported");
-            }
-            SelectStmt subquery = (SelectStmt) ((Subquery) expr).getStatement();
-            if (subquery.resultExprs.size() != 1 || !subquery.returnsSingleRow()) {
-                throw new AnalysisException("Subquery in case-when must return scala type");
-            }
-            subquery.reset();
-            subquery.setAssertNumRowsElement(1, AssertNumRowsElement.Assertion.EQ);
-            String alias = getTableAliasGenerator().getNextAlias();
-            String colAlias = getColumnAliasGenerator().getNextAlias();
-            InlineViewRef inlineViewRef = new InlineViewRef(alias, subquery, Arrays.asList(colAlias));
-            try {
-                inlineViewRef.analyze(analyzer);
-            } catch (UserException e) {
-                throw new AnalysisException(e.getMessage());
-            }
-            fromClause_.add(inlineViewRef);
-            expr = new SlotRef(inlineViewRef.getAliasAsName(), colAlias);
-        } else if (CollectionUtils.isNotEmpty(expr.getChildren())) {
-            for (int i = 0; i < expr.getChildren().size(); ++i) {
-                expr.setChild(i, rewriteSubquery(expr.getChild(i), analyzer));
-            }
-        }
-        return expr;
     }
 
     @Override
