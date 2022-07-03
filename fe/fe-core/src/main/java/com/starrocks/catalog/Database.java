@@ -749,7 +749,7 @@ public class Database extends MetaObject implements Writable {
         if (db == null) {
             throw new Error("unknown database when replay log, db=" + dbName);
         }
-        db.replayDropFunction(function);
+        db.replayDropFunction(functionSearchDesc);
     }
 
     private void dropFunctionImpl(FunctionSearchDesc function) throws UserException {
