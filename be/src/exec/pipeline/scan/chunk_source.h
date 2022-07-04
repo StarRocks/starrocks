@@ -43,27 +43,20 @@ public:
                                                                    size_t* num_read_chunks, int worker_id,
                                                                    workgroup::WorkGroupPtr running_wg) = 0;
 
-    // Some statistic of chunk source
-    virtual int64_t last_spent_cpu_time_ns() { return 0; }
-
-    virtual int64_t last_scan_rows_num() {
-        int64_t res = _last_scan_rows_num;
-        _last_scan_rows_num = 0;
-        return res;
-    }
-
-    virtual int64_t last_scan_bytes() {
-        int64_t res = _last_scan_bytes;
-        _last_scan_bytes = 0;
-        return res;
-    }
+    // Counters of scan
+    int64_t get_cpu_time_spent() { return _cpu_time_spent_ns; }
+    int64_t get_scan_rows() const { return _scan_rows_num; }
+    int64_t get_scan_bytes() const { return _scan_bytes; }
 
 protected:
     RuntimeProfile* _runtime_profile;
     // The morsel will own by pipeline driver
     MorselPtr _morsel;
-    int64_t _last_scan_rows_num = 0;
-    int64_t _last_scan_bytes = 0;
+
+    // NOTE: These counters need to be maintained by ChunkSource implementations, and update in realtime
+    int64_t _cpu_time_spent_ns = 0;
+    int64_t _scan_rows_num = 0;
+    int64_t _scan_bytes = 0;
 };
 
 using ChunkSourcePtr = std::shared_ptr<ChunkSource>;

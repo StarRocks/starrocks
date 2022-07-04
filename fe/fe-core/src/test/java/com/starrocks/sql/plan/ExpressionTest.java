@@ -1012,4 +1012,18 @@ public class ExpressionTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3 | 1: v1 | 2: v2 | 3: v3"));
     }
+
+    @Test
+    public void testTimestampadd() throws Exception {
+        String sql = "select timestampadd(YEAR,1,'2022-04-02 13:21:03')";
+        String plan =  getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("<slot 2> : '2023-04-02 13:21:03'"));
+    }
+
+    @Test
+    public void testDaysSub() throws Exception {
+        String sql = "select days_sub('2010-11-30 23:59:59', 0)";
+        String plan =  getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("<slot 2> : '2010-11-30 23:59:59'"));
+    }
 }
