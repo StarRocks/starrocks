@@ -56,7 +56,7 @@ Status OlapTableSinkOperator::set_cancelled(RuntimeState* state) {
 
 Status OlapTableSinkOperator::set_finishing(RuntimeState* state) {
     if (!_is_open_done) {
-        // we will be here since _sink->is_open_done() return true
+        // _is_open_done indicates the reponse of open() is returned or not
         RETURN_IF_ERROR(_sink->open_wait());
         _is_open_done = true;
     }
@@ -78,7 +78,7 @@ bool OlapTableSinkOperator::need_input() const {
 
 Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     if (!_is_open_done) {
-        // we will be here since _sink->is_open_done() return true
+        // _is_open_done indicates the reponse of open() is returned or not
         RETURN_IF_ERROR(_sink->open_wait());
         _is_open_done = true;
     }
