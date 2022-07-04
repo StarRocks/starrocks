@@ -25,7 +25,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
@@ -34,7 +33,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.OrderByPair;
@@ -97,6 +95,10 @@ public class ShowAlterStmt extends ShowStmt {
         return this.node;
     }
 
+    public void setNode(ProcNodeInterface node) {
+        this.node = node;
+    }
+
     public ShowAlterStmt(AlterType type, String dbName, Expr whereClause, List<OrderByElement> orderByElements,
                          LimitElement limitElement) {
         this.type = type;
@@ -154,9 +156,6 @@ public class ShowAlterStmt extends ShowStmt {
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
         //first analyze 
         analyzeSyntax(analyzer);
-
-        // check auth when get job info
-        handleShowAlterTable(analyzer);
     }
 
     public void analyzeSyntax(Analyzer analyzer) throws AnalysisException, UserException {
@@ -193,34 +192,6 @@ public class ShowAlterStmt extends ShowStmt {
 
         if (limitElement != null) {
             limitElement.analyze(analyzer);
-        }
-    }
-
-    public void handleShowAlterTable(Analyzer analyzer) throws AnalysisException, UserException {
-        final String dbNameWithoutPrefix = ClusterNamespace.getNameFromFullName(dbName);
-        Database db = analyzer.getCatalog().getDb(dbName);
-        if (db == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbNameWithoutPrefix);
-        }
-
-        // build proc path
-        StringBuilder sb = new StringBuilder();
-        sb.append("/jobs/");
-        sb.append(db.getId());
-        if (type == AlterType.COLUMN) {
-            sb.append("/schema_change");
-        } else if (type == AlterType.ROLLUP || type == AlterType.MATERIALIZED_VIEW) {
-            sb.append("/rollup");
-        } else {
-            throw new UserException("SHOW ALTER " + type.name() + " does not implement yet");
-        }
-
-        LOG.debug("process SHOW PROC '{}';", sb.toString());
-        // create show proc stmt
-        // '/jobs/db_name/rollup|schema_change/
-        node = ProcService.getInstance().open(sb.toString());
-        if (node == null) {
-            throw new AnalysisException("Failed to show alter table");
         }
     }
 

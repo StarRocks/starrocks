@@ -30,6 +30,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.UserException;
 import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.TableProcDir;
 import com.starrocks.qe.ConnectContext;
@@ -120,9 +121,11 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowAlterStmt(ShowAlterStmt node, ConnectContext context) {
-            String dbName = node.getDbName();
-            dbName = getFullDatabaseName(dbName, context);
-            node.setDbName(dbName);
+            try {
+                ShowAlterStmtAnalyzer.analyze(node, context);
+            } catch (UserException e) {
+                throw new RuntimeException(e);
+            }
             return null;
         }
 
