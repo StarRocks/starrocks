@@ -57,24 +57,42 @@ public:
     using ResultType = RunTimeCppType<ResultPT>;
     using ResultColumnType = RunTimeColumnType<ResultPT>;
 
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
-                size_t row_num) const override {
+    template <bool is_inc>
+    void do_update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state, size_t row_num) const {
         DCHECK(!columns[0]->is_nullable());
         [[maybe_unused]] const InputColumnType* column = down_cast<const InputColumnType*>(columns[0]);
-        if constexpr (pt_is_datetime<PT>) {
-            this->data(state).sum += column->get_data()[row_num].to_unix_second();
-        } else if constexpr (pt_is_date<PT>) {
-            this->data(state).sum += column->get_data()[row_num].julian();
-        } else if constexpr (pt_is_decimalv2<PT>) {
-            this->data(state).sum += column->get_data()[row_num];
-        } else if constexpr (pt_is_arithmetic<PT>) {
-            this->data(state).sum += column->get_data()[row_num];
-        } else if constexpr (pt_is_decimal<PT>) {
-            this->data(state).sum += column->get_data()[row_num];
+        if constexpr (is_inc) {
+            if constexpr (pt_is_datetime<PT>) {
+                this->data(state).sum += column->get_data()[row_num].to_unix_second();
+            } else if constexpr (pt_is_date<PT>) {
+                this->data(state).sum += column->get_data()[row_num].julian();
+            } else if constexpr (pt_is_decimalv2<PT>) {
+                this->data(state).sum += column->get_data()[row_num];
+            } else if constexpr (pt_is_arithmetic<PT>) {
+                this->data(state).sum += column->get_data()[row_num];
+            } else if constexpr (pt_is_decimal<PT>) {
+                this->data(state).sum += column->get_data()[row_num];
+            }
+            this->data(state).count++;
         } else {
-            // static_assert(pt_is_fixedlength<PT>, "Invalid PrimitiveTypes for avg function");
+            if constexpr (pt_is_datetime<PT>) {
+                this->data(state).sum -= column->get_data()[row_num].to_unix_second();
+            } else if constexpr (pt_is_date<PT>) {
+                this->data(state).sum -= column->get_data()[row_num].julian();
+            } else if constexpr (pt_is_decimalv2<PT>) {
+                this->data(state).sum -= column->get_data()[row_num];
+            } else if constexpr (pt_is_arithmetic<PT>) {
+                this->data(state).sum -= column->get_data()[row_num];
+            } else if constexpr (pt_is_decimal<PT>) {
+                this->data(state).sum -= column->get_data()[row_num];
+            }
+            this->data(state).count--;
         }
-        this->data(state).count++;
+    }
+
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
+        do_update<true>(ctx, columns, state, row_num);
     }
 
     void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -82,6 +100,18 @@ public:
                                    int64_t frame_end) const override {
         for (size_t i = frame_start; i < frame_end; ++i) {
             update(ctx, columns, state, i);
+        }
+    }
+
+    void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                             int64_t current_row_position, int64_t partition_start,
+                                             int64_t partition_end, int64_t preceding,
+                                             int64_t following) const override {
+        if (preceding >= 0 && current_row_position - 1 - preceding >= partition_start) {
+            do_update<false>(ctx, columns, state, current_row_position - 1 - preceding);
+        }
+        if (following >= 0 && current_row_position + following < partition_end) {
+            do_update<true>(ctx, columns, state, current_row_position + following);
         }
     }
 
@@ -132,8 +162,6 @@ public:
                 result = src_column->get_data()[i];
             } else if constexpr (pt_is_decimal<PT>) {
                 result = src_column->get_data()[i];
-            } else {
-                // static_assert(pt_is_fixedlength<PT>, "Invalid PrimitiveTypes for avg function");
             }
             memcpy(bytes.data() + old_size, &result, sizeof(ImmediateType));
             memcpy(bytes.data() + old_size + sizeof(ImmediateType), &count, sizeof(int64_t));
@@ -165,8 +193,6 @@ public:
             ResultType sum = ResultType(this->data(state).sum);
             ResultType count = ResultType(this->data(state).count);
             result = decimal_div_integer<ResultType>(sum, count, ctx->get_arg_type(0)->scale);
-        } else {
-            // static_assert(pt_is_fixedlength<PT>, "Invalid PrimitiveTypes for avg function");
         }
         column->append(result);
     }
@@ -191,8 +217,6 @@ public:
             ResultType sum = ResultType(this->data(state).sum);
             ResultType count = ResultType(this->data(state).count);
             result = decimal_div_integer<ResultType>(sum, count, ctx->get_arg_type(0)->scale);
-        } else {
-            // static_assert(pt_is_fixedlength<PT>, "Invalid PrimitiveTypes for avg function");
         }
         for (size_t i = start; i < end; ++i) {
             column->get_data()[i] = result;

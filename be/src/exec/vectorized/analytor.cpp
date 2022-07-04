@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ios>
 #include <memory>
 
 #include "column/chunk.h"
@@ -43,30 +44,24 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
         if (window.__isset.window_start) {
             TAnalyticWindowBoundary b = window.window_start;
             if (b.__isset.rows_offset_value) {
-                _rows_start_offset = b.rows_offset_value;
-                if (b.type == TAnalyticWindowBoundaryType::PRECEDING) {
-                    _rows_start_offset *= -1;
-                }
+                DCHECK_EQ(b.type, TAnalyticWindowBoundaryType::PRECEDING);
+                _preceding = b.rows_offset_value;
             } else {
                 DCHECK_EQ(b.type, TAnalyticWindowBoundaryType::CURRENT_ROW);
-                _rows_start_offset = 0;
+                _preceding = 0;
             }
         }
 
         if (window.__isset.window_end) {
             TAnalyticWindowBoundary b = window.window_end;
             if (b.__isset.rows_offset_value) {
-                _rows_end_offset = b.rows_offset_value;
-                if (b.type == TAnalyticWindowBoundaryType::PRECEDING) {
-                    _rows_end_offset *= -1;
-                }
+                DCHECK_EQ(b.type, TAnalyticWindowBoundaryType::FOLLOWING);
+                _following = b.rows_offset_value;
             } else {
                 DCHECK_EQ(b.type, TAnalyticWindowBoundaryType::CURRENT_ROW);
-                _rows_end_offset = 0;
+                _following = 0;
             }
         }
-
-        _is_range_with_start = window.__isset.window_start;
     }
 }
 
@@ -120,8 +115,13 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             if (!state->enable_pipeline_engine()) {
                 return Status::NotSupported("The NTILE window function is only supported by the pipeline engine.");
             }
-
             _need_partition_materializing = true;
+        }
+
+        if (fn.name.function_name == "sum" || fn.name.function_name == "avg" || fn.name.function_name == "count") {
+            if (state->enable_pipeline_engine()) {
+                _support_cumulative_algo = true;
+            }
         }
 
         bool is_input_nullable = false;
@@ -359,10 +359,10 @@ void Analytor::offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk) {
 }
 
 FrameRange Analytor::get_sliding_frame_range() {
-    if (_is_range_with_start) {
-        return {_current_row_position + _rows_start_offset, _current_row_position + _rows_end_offset + 1};
+    if (_preceding >= 0) {
+        return {_current_row_position - _preceding, _current_row_position + _following + 1};
     } else {
-        return {_partition_start, _current_row_position + _rows_end_offset + 1};
+        return {_partition_start, _current_row_position + _following + 1};
     }
 }
 
@@ -670,6 +670,18 @@ void Analytor::remove_unused_buffer_values(RuntimeState* state) {
     DCHECK_GE(_current_row_position, 0);
 }
 
+std::string Analytor::debug_string() const {
+    std::stringstream ss;
+    ss << std::boolalpha;
+
+    ss << "current_row_position=" << _current_row_position << ", partition=(" << _partition_start << ", "
+       << _partition_end << ", " << _found_partition_end.second << "/" << _found_partition_end.first
+       << "), peer_group=(" << _peer_group_start << ", " << _peer_group_end << ")"
+       << ", frame=(" << _preceding << ", " << _following << ")";
+
+    return ss.str();
+}
+
 void Analytor::_update_window_batch_lead_lag(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                              int64_t frame_end) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
@@ -691,6 +703,17 @@ void Analytor::_update_window_batch_normal(int64_t peer_group_start, int64_t pee
         _agg_functions[i]->update_batch_single_state(
                 _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], &agg_column,
                 peer_group_start, peer_group_end, frame_start, frame_end);
+    }
+}
+
+void Analytor::update_window_batch_removable_cumulatively() {
+    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+        const vectorized::Column* agg_column = _agg_intput_columns[i][0].get();
+        _agg_functions[i]->update_state_removable_cumulatively(
+                _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], &agg_column,
+                _current_row_position, _partition_start, _partition_end,
+                _preceding >= 0 ? _preceding : (_current_row_position - _partition_start),
+                _following >= 0 ? _following : (_partition_end - 1 - _current_row_position));
     }
 }
 

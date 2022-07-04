@@ -10,6 +10,9 @@ namespace starrocks::vectorized {
 
 struct AggregateFunctionCountData {
     int64_t count = 0;
+
+    // The following field are only used in "update_state_removable_cumulatively"
+    bool is_frame_init = false;
 };
 
 // count not null column
@@ -18,6 +21,7 @@ class CountAggregateFunction final
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         this->data(state).count = 0;
+        this->data(state).is_frame_init = false;
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -40,6 +44,18 @@ public:
             return;
         }
         this->data(state).count += (frame_end - frame_start);
+    }
+
+    void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                             int64_t current_row_position, int64_t partition_start,
+                                             int64_t partition_end, int64_t preceding,
+                                             int64_t following) const override {
+        DCHECK_GE(preceding, 0);
+        DCHECK_GE(following, 0);
+        // We don't actually update in removable cumulative way, since the ordinary way is effecient enough
+        const auto frame_start = std::max(current_row_position - preceding, partition_start);
+        const auto frame_end = std::min(current_row_position + following + 1, partition_end);
+        this->data(state).count = (frame_end - frame_start);
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
@@ -91,6 +107,7 @@ class CountNullableAggregateFunction final
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).count = 0;
+        this->data(state).is_frame_init = false;
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -137,6 +154,44 @@ public:
         } else {
             this->data(state).count += (frame_end - frame_start);
         }
+    }
+
+    void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                             int64_t current_row_position, int64_t partition_start,
+                                             int64_t partition_end, int64_t preceding,
+                                             int64_t following) const override {
+        DCHECK_GE(preceding, 0);
+        DCHECK_GE(following, 0);
+        const auto frame_start = std::max(current_row_position - preceding, partition_start);
+        const auto frame_end = std::min(current_row_position + following + 1, partition_end);
+        if (columns[0]->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(columns[0]);
+            if (nullable_column->has_null()) {
+                const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
+                if (this->data(state).is_frame_init) {
+                    // Since frame has been evaluated, we only need to update the boundary
+                    if (current_row_position - 1 - preceding >= partition_start &&
+                        null_data[current_row_position - 1 - preceding] == 0) {
+                        this->data(state).count--;
+                    }
+                    if (current_row_position + following < partition_end &&
+                        null_data[current_row_position + following] == 0) {
+                        this->data(state).count++;
+                    }
+                } else {
+                    // Build the frame for the first time
+                    for (size_t i = frame_start; i < frame_end; ++i) {
+                        this->data(state).count += !null_data[i];
+                    }
+                    this->data(state).is_frame_init = true;
+                }
+                return;
+            }
+        }
+
+        // Has no null value
+        // We don't actually update in removable cumulative way, since the ordinary way is effecient enough
+        this->data(state).count = (frame_end - frame_start);
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {

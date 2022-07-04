@@ -111,6 +111,17 @@ public:
     virtual void update_single_state_null(FunctionContext* ctx, AggDataPtr __restrict state, int64_t peer_group_start,
                                           int64_t peer_group_end) const {}
 
+    // For window functions with slide frame
+    // For example, given a slide frame, i.e. "sum() over (m preceding and n following)",
+    // if we had already evaluated the state of (i-1)-th frame, then we can get the i-th frame through reusing
+    // the sum of (i-1)-th frame, i.e. "sum(i) = sum(i-1) - v[i-1-m] +  v[i+n]"
+    // Ignore subtraction if preceding is negative
+    // Ignore addition if following is negative
+    virtual void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state,
+                                                     const Column** columns, int64_t current_row_position,
+                                                     int64_t partition_start, int64_t partition_end, int64_t preceding,
+                                                     int64_t following) const {}
+
     // Contains a loop with calls to "merge" function.
     // You can collect arguments into array "states"
     // and do a single call to "merge_batch" for devirtualization and inlining.
