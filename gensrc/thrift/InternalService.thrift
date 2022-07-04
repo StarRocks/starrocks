@@ -217,6 +217,8 @@ struct TPlanFragmentExecParams {
   51: optional i32 instances_number
   // To enable pass through chunks between sink/exchange if they are in the same process.
   52: optional bool enable_exchange_pass_through
+
+  53: optional map<Types.TPlanNodeId, map<i32, list<TScanRangeParams>>> node_to_per_driver_seq_scan_ranges
 }
 
 // Global query parameters assigned by the coordinator.

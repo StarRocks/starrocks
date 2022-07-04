@@ -21,13 +21,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * and no storage capacity。
  */
 public class ComputeNode implements IComputable, Writable {
-
-    public enum BackendState {
-        using, /* backend is belong to a cluster*/
-        offline,
-        free /* backend is not belong to any clusters */
-    }
-
     private static final Logger LOG = LogManager.getLogger(ComputeNode.class);
 
     @SerializedName("id")
@@ -58,7 +51,7 @@ public class ComputeNode implements IComputable, Writable {
     private AtomicBoolean isAlive;
 
     @SerializedName("isDecommissioned")
-    private AtomicBoolean isDecommissioned;
+    private final AtomicBoolean isDecommissioned;
     @SerializedName("decommissionType")
     private volatile int decommissionType;
     @SerializedName("ownerClusterName")
@@ -338,10 +331,6 @@ public class ComputeNode implements IComputable, Writable {
         return isDecommissioned;
     }
 
-    public void setIsDecommissioned(AtomicBoolean isDecommissioned) {
-        this.isDecommissioned = isDecommissioned;
-    }
-
     public void setDecommissionType(int decommissionType) {
         this.decommissionType = decommissionType;
     }
@@ -350,27 +339,11 @@ public class ComputeNode implements IComputable, Writable {
         this.backendState = backendState;
     }
 
-    public void setLastMissingHeartbeatTime(long lastMissingHeartbeatTime) {
-        this.lastMissingHeartbeatTime = lastMissingHeartbeatTime;
-    }
-
-    public int getHeartbeatRetryTimes() {
-        return heartbeatRetryTimes;
-    }
-
-    public void setHeartbeatRetryTimes(int heartbeatRetryTimes) {
-        this.heartbeatRetryTimes = heartbeatRetryTimes;
-    }
-
     public DecommissionBackendJob.DecommissionType getDecommissionType() {
         if (decommissionType == DecommissionBackendJob.DecommissionType.ClusterDecommission.ordinal()) {
             return DecommissionBackendJob.DecommissionType.ClusterDecommission;
         }
         return DecommissionBackendJob.DecommissionType.SystemDecommission;
-    }
-
-    protected int getDecommissionTypeValue() {
-        return decommissionType;
     }
 
     /**

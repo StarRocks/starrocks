@@ -40,6 +40,13 @@ public class PartitionCommitInfo implements Writable {
     private long partitionId;
     @SerializedName(value = "version")
     private long version;
+
+    // For LakeTable, the value of versionTime indicates different circumstances:
+    //  = 0 : no publish version task has been executed since process starts
+    //  < 0 : last publish version task failed and Math.abs(versionTime) is the last execution time
+    //  > 0 : last publish version task succeeded and versionTime is the last execution time
+    //
+    // For OlapTable, versionTime always greater than 0.
     @SerializedName(value = "versionTime")
     private long versionTime;
 
@@ -91,6 +98,10 @@ public class PartitionCommitInfo implements Writable {
             String json = Text.readString(in);
             return GsonUtils.GSON.fromJson(json, PartitionCommitInfo.class);
         }
+    }
+
+    public void setVersionTime(long time) {
+        this.versionTime = time;
     }
 
     public long getPartitionId() {

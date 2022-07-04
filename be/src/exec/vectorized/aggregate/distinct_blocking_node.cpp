@@ -132,7 +132,7 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::decompose_to_pipeline(
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-    OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
+    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
@@ -152,13 +152,16 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
-    operators_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), operators_with_sink,
-                                                                            partition_expr_ctxs);
-    operators_with_sink.push_back(std::move(sink_operator));
-    context->add_pipeline(operators_with_sink);
+    if (context->need_local_shuffle(ops_with_sink)) {
+        ops_with_sink =
+                context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink, partition_expr_ctxs);
+    }
+    ops_with_sink.push_back(std::move(sink_operator));
+    context->add_pipeline(ops_with_sink);
+
     // Aggregator must be used by a pair of sink and source operators,
     // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
-    auto degree_of_parallelism = ((SourceOperatorFactory*)(operators_with_sink[0].get()))->degree_of_parallelism();
+    auto degree_of_parallelism = ((SourceOperatorFactory*)(ops_with_sink[0].get()))->degree_of_parallelism();
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
     operators_with_source.push_back(std::move(source_operator));
     if (limit() != -1) {

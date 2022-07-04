@@ -247,11 +247,17 @@ int64_t MySQLDataSource::num_bytes_read() const {
     return _bytes_read;
 }
 
+int64_t MySQLDataSource::cpu_time_spent() const {
+    return _cpu_time_spent_ns;
+}
+
 void MySQLDataSource::close(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 }
 
 Status MySQLDataSource::fill_chunk(vectorized::ChunkPtr* chunk, char** data, size_t* length) {
+    SCOPED_RAW_TIMER(&_cpu_time_spent_ns);
+
     int materialized_col_idx = -1;
     for (size_t col_idx = 0; col_idx < _slot_num; ++col_idx) {
         SlotDescriptor* slot_desc = _tuple_desc->slots()[col_idx];

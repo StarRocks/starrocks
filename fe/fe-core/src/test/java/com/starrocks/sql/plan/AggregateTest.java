@@ -205,8 +205,8 @@ public class AggregateTest extends PlanTestBase {
                         + "  |  group by: 2: v2\n"
                         + "  |  \n"
                         + "  0:OlapScanNode"));
-                Assert.assertEquals(expectedTotalDop, aggPlan.getParallelExecNum());
-                Assert.assertEquals(1, aggPlan.getPipelineDop());
+                Assert.assertEquals(expectedTotalDop, aggPlan.getPipelineDop());
+                Assert.assertEquals(1, aggPlan.getParallelExecNum());
             }
 
             // Manually set dop

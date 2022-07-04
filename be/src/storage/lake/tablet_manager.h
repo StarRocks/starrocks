@@ -44,16 +44,14 @@ public:
     Status put_tablet_metadata(const std::string& group, TabletMetadataPtr metadata);
     StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& group, int64_t tablet_id, int64_t version);
     StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& group, const std::string& path);
-    StatusOr<TabletMetadataIter> list_tablet_metadata(const std::string& group);
-    StatusOr<TabletMetadataIter> list_tablet_metadata(const std::string& group, int64_t tablet_id);
+    StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id, bool filter_tablet);
     Status delete_tablet_metadata(const std::string& group, int64_t tablet_id, int64_t version);
 
     Status put_txn_log(const std::string& group, const TxnLog& log);
     Status put_txn_log(const std::string& group, TxnLogPtr log);
     StatusOr<TxnLogPtr> get_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id);
     StatusOr<TxnLogPtr> get_txn_log(const std::string& group, const std::string& path);
-    StatusOr<TxnLogIter> list_txn_log(const std::string& group);
-    StatusOr<TxnLogIter> list_txn_log(const std::string& group, int64_t tablet_id);
+    StatusOr<TxnLogIter> list_txn_log(int64_t tablet_id, bool filter_tablet);
     Status delete_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id);
 
     void prune_metacache();
@@ -68,12 +66,12 @@ private:
     std::string tablet_metadata_path(const std::string& group, int64_t tablet_id, int64_t verson);
     std::string tablet_metadata_path(const std::string& group, const std::string& metadata_path);
     std::string tablet_metadata_cache_key(int64_t tablet_id, int64_t verson);
-    StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_path);
+    StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_path, int64_t tablet_id);
 
     std::string txn_log_path(const std::string& group, int64_t tablet_id, int64_t txn_id);
     std::string txn_log_path(const std::string& group, const std::string& txnlog_path);
     std::string txn_log_cache_key(int64_t tablet_id, int64_t txn_id);
-    StatusOr<TxnLogPtr> load_txn_log(const std::string& txnlog_path);
+    StatusOr<TxnLogPtr> load_txn_log(const std::string& txnlog_path, int64_t tablet_id);
 
     bool fill_metacache(const std::string& key, void* ptr, int size);
     TabletMetadataPtr lookup_tablet_metadata(const std::string& key);

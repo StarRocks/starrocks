@@ -25,6 +25,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.ComputeNodeClause;
+import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -34,6 +35,7 @@ import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
@@ -269,6 +271,14 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitUseStatement(UseStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateDbStatement(CreateDbStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropDbStatement(DropDbStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

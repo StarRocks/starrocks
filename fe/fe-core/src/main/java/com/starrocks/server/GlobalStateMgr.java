@@ -811,7 +811,7 @@ public class GlobalStateMgr {
         auditEventProcessor.start();
 
         // 2. get cluster id and role (Observer or Follower)
-        nodeMgr.getClusterIdAndRole();
+        nodeMgr.getClusterIdAndRoleOnStartup();
 
         // 3. Load image first and replay edits
         initJournal();
@@ -965,6 +965,11 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startMasterOnlyDaemonThreads() {
+        if (Config.integrate_starmgr) {
+            // register service to starMgr
+            getStarOSAgent().registerAndBootstrapService();
+        }
+
         // start checkpoint thread
         checkpointer = new Checkpoint(journal);
         checkpointer.setMetaContext(metaContext);
@@ -1019,11 +1024,6 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
-        // register service to starMgr
-        if (Config.integrate_starmgr) {
-            int clusterId = getCurrentState().getClusterId();
-            getStarOSAgent().registerAndBootstrapService(Integer.toString(clusterId));
-        }
     }
 
     // start threads that should running on all FE
@@ -1053,11 +1053,6 @@ public class GlobalStateMgr {
             // not set canRead here, leave canRead as what is was.
             // if meta out of date, canRead will be set to false in replayer thread.
             metaReplayState.setTransferToUnknown();
-            // get serviceId from starMgr
-            if (Config.integrate_starmgr) {
-                int clusterId = getCurrentState().getClusterId();
-                getStarOSAgent().getServiceId(Integer.toString(clusterId));
-            }
             return;
         }
 
@@ -1100,7 +1095,7 @@ public class GlobalStateMgr {
         DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
 
         long checksum = 0;
-        long remoteChecksum = 0;
+        long remoteChecksum = -1;  // in case of empty image file checksum match
         try {
             checksum = loadHeader(dis, checksum);
             checksum = nodeMgr.loadMasterInfo(dis, checksum);

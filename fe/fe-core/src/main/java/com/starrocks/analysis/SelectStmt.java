@@ -22,7 +22,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Predicates;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
@@ -30,7 +29,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.View;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ColumnAliasGenerator;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.TableAliasGenerator;
@@ -39,14 +37,11 @@ import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rewrite.ExprRewriter;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -281,23 +276,6 @@ public class SelectStmt extends QueryStmt {
         return false;
     }
 
-    // Column alias generator used during query rewriting.
-    private ColumnAliasGenerator columnAliasGenerator = null;
-
-    public ColumnAliasGenerator getColumnAliasGenerator() {
-        if (columnAliasGenerator == null) {
-            columnAliasGenerator = new ColumnAliasGenerator(colLabels, null);
-        }
-        return columnAliasGenerator;
-    }
-
-    public TableAliasGenerator getTableAliasGenerator() {
-        if (tableAliasGenerator == null) {
-            tableAliasGenerator = new TableAliasGenerator(analyzer, null);
-        }
-        return tableAliasGenerator;
-    }
-
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
     }
 
@@ -323,61 +301,6 @@ public class SelectStmt extends QueryStmt {
             havingClauseAfterAnaylzed.getIds(result, null);
         }
         return result;
-    }
-
-    /**
-     * Marks all unassigned join predicates as well as exprs in aggInfo and sortInfo.
-     */
-    public void materializeRequiredSlots(Analyzer analyzer) throws AnalysisException {
-        // Mark unassigned join predicates. Some predicates that must be evaluated by a join
-        // can also be safely evaluated below the join (picked up by getBoundPredicates()).
-        // Such predicates will be marked twice and that is ok.
-        List<Expr> unassigned =
-                analyzer.getUnassignedConjuncts(getTableRefIds(), true);
-        List<Expr> unassignedJoinConjuncts = Lists.newArrayList();
-        for (Expr e : unassigned) {
-            if (analyzer.evalAfterJoin(e)) {
-                unassignedJoinConjuncts.add(e);
-            }
-        }
-        List<Expr> baseTblJoinConjuncts =
-                Expr.trySubstituteList(unassignedJoinConjuncts, baseTblSmap, analyzer, false);
-        analyzer.materializeSlots(baseTblJoinConjuncts);
-
-        if (evaluateOrderBy) {
-            // mark ordering exprs before marking agg/analytic exprs because they could contain
-            // agg/analytic exprs that are not referenced anywhere but the ORDER BY clause
-            sortInfo.materializeRequiredSlots(analyzer, baseTblSmap);
-        }
-
-        if (hasAnalyticInfo()) {
-            // Mark analytic exprs before marking agg exprs because they could contain agg
-            // exprs that are not referenced anywhere but the analytic expr.
-            // Gather unassigned predicates and mark their slots. It is not desirable
-            // to account for propagated predicates because if an analytic expr is only
-            // referenced by a propagated predicate, then it's better to not materialize the
-            // analytic expr at all.
-            ArrayList<TupleId> tids = Lists.newArrayList();
-            getMaterializedTupleIds(tids); // includes the analytic tuple
-            List<Expr> conjuncts = analyzer.getUnassignedConjuncts(tids);
-            analyzer.materializeSlots(conjuncts);
-            analyticInfo.materializeRequiredSlots(analyzer, baseTblSmap);
-        }
-
-        if (aggInfo != null) {
-            // mark all agg exprs needed for HAVING pred and binding predicates as materialized
-            // before calling AggregateInfo.materializeRequiredSlots(), otherwise they won't
-            // show up in AggregateInfo.getMaterializedAggregateExprs()
-            ArrayList<Expr> havingConjuncts = Lists.newArrayList();
-            if (havingPred != null) {
-                havingConjuncts.add(havingPred);
-            }
-
-            havingConjuncts.addAll(
-                    analyzer.getUnassignedConjuncts(aggInfo.getResultTupleId().asList()));
-            materializeSlots(analyzer, havingConjuncts);
-            aggInfo.materializeRequiredSlots(analyzer, baseTblSmap);
-        }
     }
 
     /**
@@ -418,121 +341,6 @@ public class SelectStmt extends QueryStmt {
             resultExprs.add(new SlotRef(tblName, col.getName()));
             colLabels.add(col.getName());
         }
-    }
-
-    @Override
-    public void rewriteExprs(ExprRewriter rewriter) throws AnalysisException {
-        Preconditions.checkState(isAnalyzed());
-        rewriteSelectList(rewriter);
-        for (TableRef ref : fromClause_) {
-            ref.rewriteExprs(rewriter, analyzer);
-        }
-        // Also equal exprs in the statements of subqueries.
-        List<Subquery> subqueryExprs = Lists.newArrayList();
-        if (whereClause != null) {
-            whereClause = rewriter.rewrite(whereClause, analyzer);
-            whereClause.collect(Subquery.class, subqueryExprs);
-
-        }
-        if (havingClause != null) {
-            havingClause = rewriter.rewrite(havingClause, analyzer);
-            havingClauseAfterAnaylzed.collect(Subquery.class, subqueryExprs);
-        }
-        for (Subquery subquery : subqueryExprs) {
-            subquery.getStatement().rewriteExprs(rewriter);
-        }
-        if (groupByClause != null) {
-            ArrayList<Expr> groupingExprs = groupByClause.getGroupingExprs();
-            if (groupingExprs != null) {
-                rewriter.rewriteList(groupingExprs, analyzer);
-            }
-            List<Expr> oriGroupingExprs = groupByClause.getOriGroupingExprs();
-            if (oriGroupingExprs != null) {
-                rewriter.rewriteList(oriGroupingExprs, analyzer);
-            }
-        }
-        if (orderByElements != null) {
-            for (OrderByElement orderByElem : orderByElements) {
-                orderByElem.setExpr(rewriter.rewrite(orderByElem.getExpr(), analyzer));
-            }
-        }
-    }
-
-    private void rewriteSelectList(ExprRewriter rewriter) throws AnalysisException {
-        for (SelectListItem item : selectList.getItems()) {
-            if (item.getExpr() instanceof CaseExpr && item.getExpr().contains(Predicates.instanceOf(Subquery.class))) {
-                rewriteSubquery(item.getExpr(), analyzer);
-            }
-        }
-        selectList.rewriteExprs(rewriter, analyzer);
-    }
-
-    /**
-     * equal subquery in case when to an inline view
-     * subquery in case when statement like
-     * <p>
-     * SELECT CASE
-     * WHEN (
-     * SELECT COUNT(*) / 2
-     * FROM t
-     * ) > k4 THEN (
-     * SELECT AVG(k4)
-     * FROM t
-     * )
-     * ELSE (
-     * SELECT SUM(k4)
-     * FROM t
-     * )
-     * END AS kk4
-     * FROM t;
-     * this statement will be equal to
-     * <p>
-     * SELECT CASE
-     * WHEN t1.a > k4 THEN t2.a
-     * ELSE t3.a
-     * END AS kk4
-     * FROM t, (
-     * SELECT COUNT(*) / 2 AS a
-     * FROM t
-     * ) t1,  (
-     * SELECT AVG(k4) AS a
-     * FROM t
-     * ) t2,  (
-     * SELECT SUM(k4) AS a
-     * FROM t
-     * ) t3;
-     */
-    private Expr rewriteSubquery(Expr expr, Analyzer analyzer)
-            throws AnalysisException {
-        if (expr instanceof Subquery) {
-            if (!(((Subquery) expr).getStatement() instanceof SelectStmt)) {
-                throw new AnalysisException("Only support select subquery in case-when clause.");
-            }
-            if (expr.isCorrelatedPredicate(getTableRefIds())) {
-                throw new AnalysisException("The correlated subquery in case-when clause is not supported");
-            }
-            SelectStmt subquery = (SelectStmt) ((Subquery) expr).getStatement();
-            if (subquery.resultExprs.size() != 1 || !subquery.returnsSingleRow()) {
-                throw new AnalysisException("Subquery in case-when must return scala type");
-            }
-            subquery.reset();
-            subquery.setAssertNumRowsElement(1, AssertNumRowsElement.Assertion.EQ);
-            String alias = getTableAliasGenerator().getNextAlias();
-            String colAlias = getColumnAliasGenerator().getNextAlias();
-            InlineViewRef inlineViewRef = new InlineViewRef(alias, subquery, Arrays.asList(colAlias));
-            try {
-                inlineViewRef.analyze(analyzer);
-            } catch (UserException e) {
-                throw new AnalysisException(e.getMessage());
-            }
-            fromClause_.add(inlineViewRef);
-            expr = new SlotRef(inlineViewRef.getAliasAsName(), colAlias);
-        } else if (CollectionUtils.isNotEmpty(expr.getChildren())) {
-            for (int i = 0; i < expr.getChildren().size(); ++i) {
-                expr.setChild(i, rewriteSubquery(expr.getChild(i), analyzer));
-            }
-        }
-        return expr;
     }
 
     @Override
@@ -700,38 +508,6 @@ public class SelectStmt extends QueryStmt {
         return strBuilder.toString();
     }
 
-    /**
-     * If the select statement has a sort/top that is evaluated, then the sort tuple
-     * is materialized. Else, if there is aggregation then the aggregate tuple id is
-     * materialized. Otherwise, all referenced tables are materialized as long as they are
-     * not semi-joined. If there are analytics and no sort, then the returned tuple
-     * ids also include the logical analytic output tuple.
-     */
-    @Override
-    public void getMaterializedTupleIds(ArrayList<TupleId> tupleIdList) {
-        // If select statement has an aggregate, then the aggregate tuple id is materialized.
-        // Otherwise, all referenced tables are materialized.
-        if (evaluateOrderBy) {
-            tupleIdList.add(sortInfo.getSortTupleDescriptor().getId());
-        } else if (aggInfo != null) {
-            // Return the tuple id produced in the final aggregation step.
-            if (aggInfo.isDistinctAgg()) {
-                tupleIdList.add(aggInfo.getSecondPhaseDistinctAggInfo().getOutputTupleId());
-            } else {
-                tupleIdList.add(aggInfo.getOutputTupleId());
-            }
-        } else {
-            for (TableRef tblRef : fromClause_) {
-                tupleIdList.addAll(tblRef.getMaterializedTupleIds());
-            }
-        }
-        // Fixme(kks): get tuple id from analyticInfo is wrong, should get from AnalyticEvalNode
-        // We materialize the agg tuple or the table refs together with the analytic tuple.
-        if (hasAnalyticInfo() && isEvaluateOrderBy()) {
-            tupleIdList.add(analyticInfo.getOutputTupleId());
-        }
-    }
-
     @Override
     public void substituteSelectList(Analyzer analyzer, List<String> newColLabels)
             throws AnalysisException, UserException {
@@ -846,19 +622,6 @@ public class SelectStmt extends QueryStmt {
                 tblRefs.add(tblRef);
             }
         }
-    }
-
-    private boolean checkGroupingFn(Expr expr) {
-        if (expr instanceof GroupingFunctionCallExpr) {
-            return true;
-        } else if (expr.getChildren() != null && expr.getChildren().size() > 0) {
-            for (Expr child : expr.getChildren()) {
-                if (checkGroupingFn(child)) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     @Override
