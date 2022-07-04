@@ -95,7 +95,7 @@ public class PushDownPredicateJoinRule extends PushDownJoinPredicateBase {
             }
         }
 
-        joinOpt = pushDownPredicate(joinOpt, Utils.compoundAnd(leftPushDown), Utils.compoundAnd(rightPushDown));
+        joinOpt = pushDownPredicate(joinOpt, leftPushDown, rightPushDown);
 
         LogicalJoinOperator newJoinOperator;
         if (!remainingFilter.isEmpty()) {
@@ -170,7 +170,7 @@ public class PushDownPredicateJoinRule extends PushDownJoinPredicateBase {
      * it proves that the expression can filter the NULL value in nullColumns
      * 4: Return true to prove that NULL values can be eliminated, and vice versa
      */
-    public boolean canEliminateNull(ColumnRefSet nullColumns, ScalarOperator expression) {
+    private boolean canEliminateNull(ColumnRefSet nullColumns, ScalarOperator expression) {
         Map<ColumnRefOperator, ScalarOperator> m = Arrays.stream(nullColumns.getColumnIds()).boxed()
                 .map(id -> new ColumnRefOperator(id, Type.INVALID, "", true))
                 .collect(Collectors.toMap(identity(), col -> ConstantOperator.createNull(col.getType())));
@@ -196,12 +196,13 @@ public class PushDownPredicateJoinRule extends PushDownJoinPredicateBase {
         OptExpression joinOpt = input.getInputs().get(0);
         LogicalJoinOperator join = (LogicalJoinOperator) joinOpt.getOp();
 
+        OptExpression result;
         if (join.getJoinType().isCrossJoin() || join.getJoinType().isInnerJoin()) {
             // The effect will be better, first do the range derive, and then do the equivalence derive
             ScalarOperator predicate =
                     rangePredicateDerive(Utils.compoundAnd(join.getOnPredicate(), filter.getPredicate()));
             predicate = equivalenceDerive(predicate, true);
-            return Lists.newArrayList(pushDownOnPredicate(input.getInputs().get(0), predicate));
+            result = pushDownOnPredicate(input.getInputs().get(0), predicate);
         } else {
             if (join.getJoinType().isOuterJoin()) {
                 convertOuterToInner(input);
@@ -212,20 +213,24 @@ public class PushDownPredicateJoinRule extends PushDownJoinPredicateBase {
                 ScalarOperator predicate =
                         rangePredicateDerive(Utils.compoundAnd(join.getOnPredicate(), filter.getPredicate()));
                 predicate = equivalenceDerive(predicate, true);
-                return Lists.newArrayList(pushDownOnPredicate(input.getInputs().get(0), predicate));
+                result = pushDownOnPredicate(input.getInputs().get(0), predicate);
             } else {
                 ScalarOperator predicate = rangePredicateDerive(filter.getPredicate());
                 List<ScalarOperator> leftPushDown = Lists.newArrayList();
                 List<ScalarOperator> rightPushDown = Lists.newArrayList();
                 equivalenceDeriveOnOuterOrSemi(Utils.compoundAnd(join.getOnPredicate(), predicate), joinOpt, join,
                         leftPushDown, rightPushDown);
-                return Lists.newArrayList(pushDownOuterOrSemiJoin(input, predicate, leftPushDown, rightPushDown));
+                result = pushDownOuterOrSemiJoin(input, predicate, leftPushDown, rightPushDown);
             }
         }
+
+        ((LogicalJoinOperator) result.getOp()).setHasPushDownJoinOnClause(true);
+        return Lists.newArrayList(result);
     }
 
-    void equivalenceDeriveOnOuterOrSemi(ScalarOperator predicate, OptExpression joinOpt, LogicalJoinOperator join,
-                                        List<ScalarOperator> leftPushDown, List<ScalarOperator> rightPushDown) {
+    private void equivalenceDeriveOnOuterOrSemi(ScalarOperator predicate, OptExpression joinOpt,
+                                                LogicalJoinOperator join, List<ScalarOperator> leftPushDown,
+                                                List<ScalarOperator> rightPushDown) {
         // For SQl: select * from t1 left join t2 on t1.id = t2.id where t1.id > 1
         // Infer t2.id > 1 and Push down it to right child
         if (!join.getJoinType().isSemiJoin() && !join.getJoinType().isOuterJoin()) {

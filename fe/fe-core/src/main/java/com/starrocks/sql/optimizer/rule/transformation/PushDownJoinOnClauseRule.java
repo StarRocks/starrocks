@@ -33,6 +33,7 @@ public class PushDownJoinOnClauseRule extends PushDownJoinPredicateBase {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        List<OptExpression> children = Lists.newArrayList(input.getInputs());
         LogicalJoinOperator join = (LogicalJoinOperator) input.getOp();
 
         ScalarOperator on = join.getOnPredicate();
@@ -42,7 +43,8 @@ public class PushDownJoinOnClauseRule extends PushDownJoinPredicateBase {
 
         OptExpression root = pushDownOnPredicate(input, on);
         ((LogicalJoinOperator) root.getOp()).setHasPushDownJoinOnClause(true);
-        if (root.getOp().equals(input.getOp()) && on.equals(join.getOnPredicate())) {
+        if (root.getOp().equals(input.getOp()) && on.equals(join.getOnPredicate()) &&
+                children.equals(root.getInputs())) {
             return Collections.emptyList();
         }
         return Lists.newArrayList(root);
