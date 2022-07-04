@@ -331,16 +331,14 @@ select count(*) from profile_wos_p7;
 
 ### 缓存更新
 
-* hive的partition信息以及partition对应的文件信息都会缓存在starrocks中，缓存的刷新时间为hive_meta_cache_refresh_interval_s，默认7200，缓存的失效时间为hive_meta_cache_ttl_s，默认86400。
+Hive的partition信息以及partition对应的文件信息都会缓存在starrocks中，缓存的刷新时间为hive_meta_cache_refresh_interval_s，默认7200，缓存的失效时间为hive_meta_cache_ttl_s，默认86400。
 
-* 也可以手动刷新元数据信息：
+**手动更新元数据缓存**
+
   1. hive中新增或者删除分区时，需要刷新**表**的元数据信息：`REFRESH EXTERNAL TABLE hive_t`，其中hive_t是starrocks中的外表名称。
   2. hive中向某些partition中新增数据时，需要**指定partition**进行刷新：`REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')`，其中hive_t是starrocks中的外表名称，'k1=01/k2=02'、 'k1=03/k2=04'是hive中的partition名称。
 
-## StarRocks外部表
-
-1.19版本开始，StarRocks支持将数据通过外表方式写入另一个StarRocks集群的表中。这可以解决用户的读写分离需求，提供更好的资源隔离。用户需要首先在目标集群上创建一张目标表，然后在源StarRocks集群上创建一个Schema信息一致的外表，并在属性中指定目标集群和表的信息。
-
+**自动增量更新元数据缓存**
 自动增量更新元数据缓存主要是通过定期消费 Hive Metastore 的 event 来实现，新增分区以及分区新增数据无需通过手动执行 refresh 来更新。用户需要在 Hive Metastore 端开启元数据 Event 机制。相比 Loading Cache 的自动刷新机制，自动增量更新性能更好，建议用户开启该功能。开启该功能后，Loading Cache 的自动刷新机制将不再生效。
 
 * Hive Metastore 开启 event 机制
