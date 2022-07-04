@@ -55,6 +55,12 @@ Status OlapTableSinkOperator::set_cancelled(RuntimeState* state) {
 }
 
 Status OlapTableSinkOperator::set_finishing(RuntimeState* state) {
+    if (!_is_open_done) {
+        // we will be here since _sink->is_open_done() return true
+        RETURN_IF_ERROR(_sink->open_wait());
+        _is_open_done = true;
+    }
+
     _is_finished = true;
 
     return _sink->try_close(state);
