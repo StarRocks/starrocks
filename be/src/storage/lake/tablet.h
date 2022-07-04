@@ -47,6 +47,8 @@ public:
 
     std::string group() const { return _group; }
 
+    std::string group_assemble() const;
+
     Status put_metadata(const TabletMetadata& metadata);
 
     Status put_metadata(TabletMetadataPtr metadata);
@@ -78,6 +80,8 @@ public:
     std::string metadata_path(int64_t version) const;
 
     std::string txn_log_path(int64_t txn_id) const;
+
+    std::string segment_path_assemble(const std::string& segment_name) const;
 
 private:
     TabletManager* _mgr;
