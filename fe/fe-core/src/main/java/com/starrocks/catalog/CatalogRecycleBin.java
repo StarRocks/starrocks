@@ -66,7 +66,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(CatalogRecycleBin.class);
     // erase meta at least after MIN_ERASE_LATENCY milliseconds
     // to avoid erase log ahead of drop log
-    protected static final long MIN_ERASE_LATENCY = 10 * 60 * 1000;  // 10 min
+    private static final long MIN_ERASE_LATENCY = 10 * 60 * 1000;  // 10 min
     // Maximum value of a batch of operations for actually delete database(table/partition)
     // The erase operation will be locked, so one batch can not be too many.
     private static final int MAX_ERASE_OPERATIONS_PER_CYCLE = 500;
@@ -79,8 +79,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
     private Map<Long, RecyclePartitionInfo> idToPartition;
 
     // if enable erase later, the real recycle time is RecycleTime + LATE_RECYCLE_INTERVAL_SECONDS
-    // you can only enable once.
-    // This is useful when tablet scheduler repair a tablet that is about to expire
+    // This is only useful on master, when tablet scheduler repair a tablet that is about to expire
     // We can make the db/table/partition infomation stay logger until the asynchronized agent task finish.
     protected static int LATE_RECYCLE_INTERVAL_SECONDS = 10;
     protected Map<Long, Long> idToRecycleTime;
@@ -304,7 +303,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
     public synchronized void replayEraseDatabase(long dbId) {
         idToDatabase.remove(dbId);
-        removeRecycleMarkers(dbId);
+        idToRecycleTime.remove(dbId);
 
         GlobalStateMgr.getCurrentState().onEraseDatabase(dbId);
         LOG.info("replay erase db[{}] finished", dbId);
@@ -375,7 +374,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 }
             }
         }
-        removeRecycleMarkers(tableId);
+        idToRecycleTime.remove(tableId);
         LOG.info("replay erase table[{}] finished", tableId);
     }
 
@@ -428,7 +427,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
     public synchronized void replayErasePartition(long partitionId) {
         RecyclePartitionInfo partitionInfo = idToPartition.remove(partitionId);
-        removeRecycleMarkers(partitionId);
+        idToRecycleTime.remove(partitionId);
 
         Partition partition = partitionInfo.getPartition();
         if (!isCheckpointThread()) {
