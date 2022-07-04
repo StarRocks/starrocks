@@ -6,7 +6,7 @@ Catalog（数据目录）用于管理数据。StarRocks 2.3 及以上版本提�
 
 - **External catalog**：外部数据目录，用于管理外部数据源中的数据。创建外部数据目录时需指定外部数据源访问信息。创建后，无需创建外部表即可查询外部数据。
 
-## **创建 external catalog**
+## 创建 external catalog
 
 ### 语法
 
@@ -35,7 +35,7 @@ PROPERTIES(
 | type                | 数据源类型，取值为 `hive`。                                  |
 | hive.metastore.uris | Hive metastore 的 URI。格式为 `thrift://<``Hive元数据的IP地址``>:<端口号``>`，端口号默认为 9083。 |
 
-## **查询数据**
+## 查询数据
 
 ### 查询内部数据
 
@@ -149,7 +149,7 @@ PROPERTIES(
     SELECT * FROM hive_catalog.hive_db.hive_table h JOIN default_catalog.olap_db.olap_table o WHERE h.id = o.id;
     ```
 
-## **删除 external catalog**
+## 删除 external catalog
 
 ### 语法
 
@@ -165,6 +165,6 @@ DROP CATALOG <catalog_name>;
 DROP CATALOG hive_catalog;
 ```
 
-## **更新 external catalog** 中表的元数据
+## 更新 external catalog 中表的元数据
 
 External catalog 中表的元数据缓存在 FE 中，因此表结构和分区文件等元数据的刷新机制和[缓存更新](../using_starrocks/External_table#缓存更新)相同。您可执行 `refresh external catalog.db.table` 来进行刷新。
