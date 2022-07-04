@@ -1,27 +1,64 @@
 # convert_tz
 
-## Syntax
+## 功能
 
-`DATETIME CONVERT_TZ(DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)`
+将给定的时间转化为另一个时区的时间。
 
-## Description
-
-转换datetime值dt，从 from_tz 由给定转到 to_tz 时区给出的时区，并返回的结果值。 如果参数无效该函数返回NULL。
-
-## Example
+## 语法
 
 ```Plain Text
+DATETIME CONVERT_TZ(DATE|DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)
+```
+
+## 参数说明
+
+- `dt`：需要转化的时间。支持的数据类型为 DATE 和 DATETIME。
+- `from_tz`：源时区名称。支持的数据类型为 VARCHAR。时区可以使用两种格式：时区信息数据库（Time Zone Database，比如 Asia/Shanghai），或 UTC 偏移量（例如+08: 00）。
+- `to_tz`：目标时区名称。支持的数据类型为 VARCHAR。格式同参数 `from_tz`。
+
+## 返回值说明
+
+返回值的数据类型为 DATETIME。如果输入值为 DATE，默认基于00:00:00进行转换。如果输入值类型不合法，返回`NULL`。
+
+## 注意事项
+
+各时区对应的时区信息数据库，请参见[时区数据库](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)（来源：维基百科）。
+
+## 示例
+
+示例1：将上海时间转化为洛杉矶时间。
+
+```Plain Text
+
 MySQL > select convert_tz('2019-08-01 13:21:03', 'Asia/Shanghai', 'America/Los_Angeles');
 +---------------------------------------------------------------------------+
 | convert_tz('2019-08-01 13:21:03', 'Asia/Shanghai', 'America/Los_Angeles') |
 +---------------------------------------------------------------------------+
 | 2019-07-31 22:21:03                                                       |
 +---------------------------------------------------------------------------+
+1 row in set (0.00 sec)
+```
 
+示例2：将东八区时间转化为洛杉矶时间。
+
+```Plain Text
 MySQL > select convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles');
 +--------------------------------------------------------------------+
 | convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles') |
 +--------------------------------------------------------------------+
 | 2019-07-31 22:21:03                                                |
 +--------------------------------------------------------------------+
+1 row in set (0.00 sec)
+```
+
+示例3：将DATE类型的日期`2019-08-01`进行转化。
+
+```Plain Text
+MySQL [(none)]> select convert_tz('2019-08-01', 'Asia/Shanghai', 'America/Los_Angeles');
++------------------------------------------------------------------+
+| convert_tz('2019-08-01', 'Asia/Shanghai', 'America/Los_Angeles') |
++------------------------------------------------------------------+
+| 2019-07-31 09:00:00                                              |
++------------------------------------------------------------------+
+1 row in set (0.00 sec)
 ```
