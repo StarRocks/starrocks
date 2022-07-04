@@ -6,6 +6,7 @@ import com.sleepycat.je.DatabaseEntry;
 import com.sleepycat.je.LockMode;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.impl.RepGroupImpl;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.journal.JournalException;
 import org.apache.commons.io.FileUtils;
@@ -293,11 +294,11 @@ public class BDBEnvironmentTest {
             FileUtils.copyDirectory(followerPath, dst);
         }
 
-        // master write 100 lines in new db and quit
+        // master write 2 * txn_rollback_limit lines in new db and quit
         Long DB_INDEX_NEW = 1L;
         String DB_NAME_NEW = String.valueOf(DB_INDEX_NEW);
         masterDb = masterEnvironment.openDatabase(DB_NAME_NEW);
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < Config.txn_rollback_limit * 2; i++) {
             masterDb.put(null, randomEntry(), randomEntry());
         }
         Assert.assertEquals(2, masterEnvironment.getDatabaseNames().size());
