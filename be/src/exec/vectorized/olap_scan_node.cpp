@@ -311,9 +311,13 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
             _close_pending_scanners();
         }
     } else {
-        scanner->close(runtime_state());
-        _closed_scanners.fetch_add(1, std::memory_order_release);
-        _close_pending_scanners();
+        if (scanner != nullptr) {
+            scanner->close(runtime_state());
+            _closed_scanners.fetch_add(1, std::memory_order_release);
+            _close_pending_scanners();
+        } else {
+            _close_pending_scanners();
+        }
     }
 
     if (_closed_scanners.load(std::memory_order_acquire) == _num_scanners) {
