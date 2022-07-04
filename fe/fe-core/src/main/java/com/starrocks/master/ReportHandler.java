@@ -44,6 +44,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Daemon;
