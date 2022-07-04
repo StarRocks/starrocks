@@ -33,6 +33,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class RecoverDbStmt extends DdlStmt {
     private String dbName;
@@ -43,6 +44,10 @@ public class RecoverDbStmt extends DdlStmt {
 
     public String getDbName() {
         return dbName;
+    }
+
+    public void setDbName(String dbname) {
+        this.dbName = dbname;
     }
 
     @Override
@@ -65,5 +70,15 @@ public class RecoverDbStmt extends DdlStmt {
     @Override
     public String toSql() {
         return "RECOVER DATABASE " + dbName;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitRecoverDbStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }
