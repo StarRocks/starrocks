@@ -73,6 +73,7 @@ private:
     Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
+    void _close_chunk_source(RuntimeState* state, int index);
     void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
                                    int64_t scan_bytes);
     void _merge_chunk_source_profiles();
@@ -111,8 +112,11 @@ private:
     int32_t _io_task_retry_cnt = 0;
     PriorityThreadPool* _io_threads = nullptr;
     std::atomic<int> _num_running_io_tasks = 0;
+
+    mutable std::shared_mutex _task_mutex; // Protects the chunk-source from concurrent close and read
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
+
     mutable SpinLock _scan_status_mutex;
     Status _scan_status;
     // we should hold a weak ptr because query context may be released before running io task
