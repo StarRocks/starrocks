@@ -91,19 +91,19 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setDefinition(status.getDefinition());
         // copy a ConnectContext to avoid concurrency leading to abnormal results.
         ConnectContext runCtx = new ConnectContext(null);
-        if (ctx == null) {
-            ctx = new ConnectContext(null);
-            ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
-            ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            ctx.setDatabase(task.getDbName());
-            ctx.setQualifiedUser(Auth.ROOT_USER);
-            ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        if (buildCtx == null) {
+            buildCtx = new ConnectContext(null);
+            buildCtx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
+            buildCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+            buildCtx.setDatabase(task.getDbName());
+            buildCtx.setQualifiedUser(Auth.ROOT_USER);
+            buildCtx.setCurrentUserIdentity(UserIdentity.ROOT);
         }
-        runCtx.setCluster(ctx.getClusterName());
-        runCtx.setGlobalStateMgr(ctx.getGlobalStateMgr());
+        runCtx.setCluster(buildCtx.getClusterName());
+        runCtx.setGlobalStateMgr(buildCtx.getGlobalStateMgr());
         runCtx.setDatabase(task.getDbName());
-        runCtx.setQualifiedUser(ctx.getQualifiedUser());
-        runCtx.setCurrentUserIdentity(ctx.getCurrentUserIdentity());
+        runCtx.setQualifiedUser(buildCtx.getQualifiedUser());
+        runCtx.setCurrentUserIdentity(buildCtx.getCurrentUserIdentity());
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
