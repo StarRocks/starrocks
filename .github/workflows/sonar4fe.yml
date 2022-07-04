@@ -40,7 +40,7 @@ jobs:
           
       - name: Changed Java Files
         id: java-changes
-        uses: tj-actions/changed-files@23.1
+        uses: tj-actions/changed-files@main
         with:
           sha: "${{ github.pull_request.sha }}"
           base_sha: "${{ github.sha }}"
