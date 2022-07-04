@@ -4,6 +4,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
@@ -110,6 +111,14 @@ public class ShowStmtAnalyzer {
                 }
             }
             return db;
+        }
+
+        @Override
+        public Void visitShowCreateDbStatement(ShowCreateDbStmt node, ConnectContext context) {
+            String dbName = node.getDb();
+            dbName = getFullDatabaseName(dbName, context);
+            node.setDb(dbName);
+            return null;
         }
     }
 }

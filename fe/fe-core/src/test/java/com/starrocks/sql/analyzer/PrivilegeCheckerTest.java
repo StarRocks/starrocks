@@ -51,6 +51,30 @@ public class PrivilegeCheckerTest {
         testUser2.analyze("default_cluster");
     }
 
+
+    @Test
+    public void testShowCreateDb() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        db1TablePattern.analyze("default_cluster");
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        String sql = "show create database db1";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertTrue(statementBase.isSupportNewPlanner());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+        String sql2 = "show create database";
+        Assert.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql2, starRocksAssert.getCtx()));
+    }
+
     @Test
     public void testCreateDb() throws Exception {
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
