@@ -17,8 +17,8 @@
 
 namespace starrocks::lake {
 
-Status apply_txn_log(const lake::TxnLog& log, lake::TabletMetadata* metadata);
-Status publish(lake::Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns, int txns_size);
+Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata);
+Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns, int txns_size);
 
 TabletManager::TabletManager(GroupAssigner* group_assigner, int64_t cache_capacity)
         : _group_assigner(group_assigner), _metacache(new_lru_cache(cache_capacity)) {}
@@ -407,7 +407,7 @@ Status TabletManager::publish_version(int64_t tablet_id, int64_t base_version, i
     return publish(&tablet, base_version, new_version, txns, txns_size);
 }
 
-Status apply_txn_log(const lake::TxnLog& log, lake::TabletMetadata* metadata) {
+Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata) {
     if (log.has_op_write()) {
         if (log.op_write().has_rowset() && log.op_write().rowset().segments_size() > 0) {
             auto rowset = metadata->add_rowsets();
@@ -428,7 +428,7 @@ Status apply_txn_log(const lake::TxnLog& log, lake::TabletMetadata* metadata) {
     return Status::OK();
 }
 
-Status publish(lake::Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns, int txns_size) {
+Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns, int txns_size) {
     // Read base version metadata
     auto res = tablet->get_metadata(base_version);
     if (!res.ok()) {
@@ -441,10 +441,10 @@ Status publish(lake::Tablet* tablet, int64_t base_version, int64_t new_version, 
         LOG(WARNING) << "Fail to get " << tablet->metadata_path(base_version) << ": " << res.status();
         return res.status();
     }
-    const lake::TabletMetadataPtr& base_metadata = res.value();
+    const TabletMetadataPtr& base_metadata = res.value();
 
     // make a copy of metadata
-    auto new_metadata = std::make_shared<lake::TabletMetadata>(*base_metadata);
+    auto new_metadata = std::make_shared<TabletMetadata>(*base_metadata);
     new_metadata->set_version(new_version);
 
     // Apply txn logs
