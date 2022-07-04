@@ -328,6 +328,7 @@
       + [array_sort](/sql-reference/sql-functions/array-functions/array_sort.md)
       + [array_sum](/sql-reference/sql-functions/array-functions/array_sum.md)
       + [arrays_overlap](/sql-reference/sql-functions/array-functions/arrays_overlap.md)
+      + [array_to_bitmap](/sql-reference/sql-functions/array-functions/array_to_bitmap.md)
       + [reverse](/sql-reference/sql-functions/array-functions/reverse.md)
     + [cast function](/sql-reference/sql-functions/cast.md)
     + [hash function](/sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
