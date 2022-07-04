@@ -36,15 +36,13 @@ jobs:
           
       - name: Install thrift
         run: |
-          #sudo apt-get install libboost-dev libboost-test-dev libboost-program-options-dev libevent-dev automake libtool flex bison pkg-config g++ libssl-dev
-          #wget http://archive.apache.org/dist/thrift/0.13.0/thrift-0.13.0.tar.gz
-          #tar -xvzf thrift-0.13.0.tar.gz 
-          #cd thrift-0.13.0
-          #./configure
-          #make 
-          #sudo make install
-          sudo apt-get update
-          sudo apt-get install thrift
+          sudo apt-get install libboost-dev libboost-test-dev libboost-program-options-dev libevent-dev automake libtool flex bison pkg-config g++ libssl-dev
+          wget http://archive.apache.org/dist/thrift/0.13.0/thrift-0.13.0.tar.gz
+          tar -xvzf thrift-0.13.0.tar.gz 
+          cd thrift-0.13.0
+          ./configure
+          make -j 2
+          sudo make install
           thrift -version
           
       - name: Build and analyze
