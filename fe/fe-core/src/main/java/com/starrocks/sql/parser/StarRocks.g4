@@ -15,12 +15,12 @@ statement
     // Query Statement
     : queryStatement                                                                        #query
 
-    | showCreateDbStatement                                                                 #showCreateDb
     // Database Statement
     | createDbStatement                                                                     #createDb
     | dropDbStatement                                                                       #dropDb
-
+    | showCreateDbStatement                                                                 #showCreateDb
     | alterDatabaseRename                                                                   #databaseRename
+    | recoverDbStmt                                                                         #revoverDb
 
 
     // Table Statement
@@ -121,6 +121,11 @@ showCreateDbStatement
 
 alterDatabaseRename
     : ALTER DATABASE identifier RENAME identifier
+    ;
+
+
+recoverDbStmt
+    : RECOVER (DATABASE | SCHEMA) identifier
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------

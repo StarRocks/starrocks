@@ -58,6 +58,7 @@ import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
@@ -294,8 +295,11 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-
     public R visitAlterDatabaseRename(AlterDatabaseRename statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitRecoverDbStmt(RecoverDbStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

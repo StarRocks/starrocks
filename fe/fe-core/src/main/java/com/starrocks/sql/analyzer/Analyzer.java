@@ -22,6 +22,7 @@ import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
@@ -288,10 +289,15 @@ public class Analyzer {
             return null;
         }
 
-
         @Override
         public Void visitAlterDatabaseRename(AlterDatabaseRename statement, ConnectContext context) {
             AlterDatabaseRenameAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitRecoverDbStmt(RecoverDbStmt statement, ConnectContext context) {
+            RecoverDbAnalyzer.analyze(statement, context);
             return null;
         }
 

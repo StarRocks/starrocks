@@ -22,6 +22,7 @@ import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
@@ -464,11 +465,25 @@ public class PrivilegeChecker {
         }
 
 
+        @Override
         public Void visitAlterDatabaseRename(AlterDatabaseRename statement, ConnectContext session) {
             String dbName = statement.getDbName();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName,
                     PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
                                     Privilege.ALTER_PRIV),
+                            CompoundPredicate.Operator.OR))) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), dbName);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitRecoverDbStmt(RecoverDbStmt statement, ConnectContext session) {
+            String dbName = statement.getDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName,
+                    PrivPredicate.of(PrivBitSet.of(Privilege.ALTER_PRIV,
+                                    Privilege.CREATE_PRIV,
+                                    Privilege.ADMIN_PRIV),
                             CompoundPredicate.Operator.OR))) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), dbName);
             }
