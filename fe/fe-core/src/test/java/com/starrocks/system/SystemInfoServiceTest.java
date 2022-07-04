@@ -2,26 +2,26 @@
 
 package com.starrocks.system;
 
-import java.lang.reflect.Field;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.util.List;
-
 import com.starrocks.analysis.ModifyBackendAddressClause;
+import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
-
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.lang.reflect.Field;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.util.List;
 
 public class SystemInfoServiceTest {
     
@@ -107,6 +107,65 @@ public class SystemInfoServiceTest {
         Assert.assertTrue(newBe.getHost().equals("newHost"));
     }
 
+    @Test
+    public void testDropBackend() throws Exception {
+        Config.integrate_starmgr = true;
+        Backend be = new Backend(10001, "newHost", 1000);
+        service.addBackend(be);
+
+        new Expectations() {
+            {
+                service.getBackendWithHeartbeatPort("newHost", 1000);
+                minTimes = 0;
+                result = be;
+
+                globalStateMgr.getCluster(anyString);
+                minTimes = 0;
+                result = new Cluster("cluster", 1);
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "starletPort has not been updated by heartbeat from this backend",
+                () -> service.dropBackend("newHost", 1000, false));
+
+
+        service.addBackend(be);
+        be.setStarletPort(1001);
+        service.dropBackend("newHost", 1000, false);
+        Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
+        Assert.assertTrue(beIP == null);
+
+        Config.integrate_starmgr = false;
+    }
+
+    @Test
+    public void testReplayDropBackend() throws Exception {
+        Config.integrate_starmgr = true;
+        Backend be = new Backend(10001, "newHost", 1000);
+        be.setStarletPort(1001);
+
+        new Expectations() {
+            {
+                service.getBackendWithHeartbeatPort("newHost", 1000);
+                minTimes = 0;
+                result = be;
+
+                globalStateMgr.getCluster(anyString);
+                minTimes = 0;
+                result = new Cluster("cluster", 1);
+            }
+        };
+
+        service.addBackend(be);
+        service.replayDropBackend(be);
+        Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
+        Assert.assertTrue(beIP == null);
+
+        Config.integrate_starmgr = false;
+    }
+
+
     @Mocked
     InetAddress addr;
     private void mockNet() {
@@ -160,5 +219,14 @@ public class SystemInfoServiceTest {
         service.addBackend(be);
         List<Backend> bes = service.getBackendOnlyWithHost("newHost");
         Assert.assertTrue(bes.size() == 1);
+    }
+
+    @Test
+    public void testGetBackendIdWithStarletPort() throws Exception {
+        Backend be = new Backend(10001, "newHost", 1000);
+        be.setStarletPort(10001);
+        service.addBackend(be);
+        long backendId = service.getBackendIdWithStarletPort("newHost",10001);
+        Assert.assertEquals(be.getId(), backendId);
     }
 }

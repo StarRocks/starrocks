@@ -164,5 +164,6 @@ add_library(Storage STATIC
     lake/starlet_group_assigner.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp
+    lake/tablet_reader.cpp
     lake/metadata_iterator.cpp
 )

@@ -20,6 +20,7 @@
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
 #include "exec/vectorized/cross_join_node.h"
+#include "exec/vectorized/olap_scan_node.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gutil/casts.h"
@@ -236,6 +237,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
     const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
     const auto& params = request.params;
     const auto& fragment = request.fragment;
+    const auto dop = _calc_dop(exec_env, request);
 
     // Set up plan
     RETURN_IF_ERROR(ExecNode::create_tree(runtime_state, obj_pool, fragment.plan, desc_tbl, &_fragment_ctx->plan()));
@@ -256,16 +258,32 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
     // set scan ranges
     std::vector<ExecNode*> scan_nodes;
     std::vector<TScanRangeParams> no_scan_ranges;
+    std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
     plan->collect_scan_nodes(&scan_nodes);
 
-    MorselQueueMap& morsel_queues = _fragment_ctx->morsel_queues();
+    bool enable_shared_scan = false;
+    if (request.__isset.enable_shared_scan) {
+        enable_shared_scan = request.enable_shared_scan;
+    }
+
+    MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
     for (auto& i : scan_nodes) {
-        ScanNode* scan_node = down_cast<ScanNode*>(i);
+        auto* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
-        ASSIGN_OR_RETURN(MorselQueuePtr morsel_queue,
-                         scan_node->convert_scan_range_to_morsel_queue(scan_ranges, scan_node->id(), request));
-        morsel_queues.emplace(scan_node->id(), std::move(morsel_queue));
+        auto& scan_ranges_per_driver_seq = params.__isset.node_to_per_driver_seq_scan_ranges
+                                                   ? FindWithDefault(params.node_to_per_driver_seq_scan_ranges,
+                                                                     scan_node->id(), no_scan_ranges_per_driver_seq)
+                                                   : no_scan_ranges_per_driver_seq;
+
+        ASSIGN_OR_RETURN(auto morsel_queue_factory,
+                         scan_node->convert_scan_range_to_morsel_queue_factory(scan_ranges, scan_ranges_per_driver_seq,
+                                                                               scan_node->id(), request, dop));
+        morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
+
+        if (auto* olap_scan = dynamic_cast<vectorized::OlapScanNode*>(scan_node)) {
+            olap_scan->enable_shared_scan(enable_shared_scan);
+        }
     }
 
     return Status::OK();
@@ -278,7 +296,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
     ExecNode* plan = _fragment_ctx->plan();
 
     Drivers drivers;
-    MorselQueueMap& morsel_queues = _fragment_ctx->morsel_queues();
+    MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
     auto* runtime_state = _fragment_ctx->runtime_state();
     const auto& pipelines = _fragment_ctx->pipelines();
 
@@ -314,15 +332,16 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
         setup_profile_hierarchy(runtime_state, pipeline);
         if (pipeline->source_operator_factory()->with_morsels()) {
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
-            DCHECK(morsel_queues.count(source_id));
-            auto& morsel_queue = morsel_queues[source_id];
-            DCHECK(morsel_queue->num_morsels() == 0 || cur_pipeline_dop <= morsel_queue->num_morsels());
+            DCHECK(morsel_queue_factories.count(source_id));
+            auto& morsel_queue_factory = morsel_queue_factories[source_id];
+            // DOP of OlapScanPrepareOperator is always 1.
+            DCHECK(cur_pipeline_dop == 1 || cur_pipeline_dop == morsel_queue_factory->size());
 
             for (size_t i = 0; i < cur_pipeline_dop; ++i) {
                 auto&& operators = pipeline->create_operators(cur_pipeline_dop, i);
                 DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx,
                                                                     _fragment_ctx.get(), driver_id++);
-                driver->set_morsel_queue(morsel_queue.get());
+                driver->set_morsel_queue(morsel_queue_factory->create(i));
                 if (auto* scan_operator = driver->source_scan_operator()) {
                     if (_wg != nullptr) {
                         // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.

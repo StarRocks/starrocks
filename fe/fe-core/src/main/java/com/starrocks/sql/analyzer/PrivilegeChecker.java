@@ -6,19 +6,25 @@ import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
+import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
+import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.StatementBase;
@@ -27,7 +33,9 @@ import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -240,6 +248,15 @@ public class PrivilegeChecker {
         }
 
         @Override
+        public Void visitShowDeleteStmt(ShowDeleteStmt statement, ConnectContext session) {
+            String db = statement.getDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), db, PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
+            }
+            return null;
+        }
+
+        @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, ConnectContext session) {
             if (!checkTblPriv(session, statement.getTableName(), PrivPredicate.CREATE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
@@ -408,6 +425,52 @@ public class PrivilegeChecker {
             if (!checkTblPriv(session, tableName, PrivPredicate.LOAD)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
                         session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateDbStatement(ShowCreateDbStmt statement, ConnectContext session) {
+            String db = statement.getDb();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), db,
+                    PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
+                                    Privilege.ALTER_PRIV,
+                                    Privilege.CREATE_PRIV,
+                                    Privilege.DROP_PRIV),
+                            CompoundPredicate.Operator.OR))) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateDbStatement(CreateDbStmt statement, ConnectContext session) {
+            String dbName = statement.getFullDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkDbPriv(session, dbName, PrivPredicate.CREATE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), dbName);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropDbStatement(DropDbStmt statement, ConnectContext session) {
+            String dbName = statement.getDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().
+                    checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), dbName);
+            }
+            return null;
+        }
+
+
+        public Void visitAlterDatabaseRename(AlterDatabaseRename statement, ConnectContext session) {
+            String dbName = statement.getDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName,
+                    PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
+                                    Privilege.ALTER_PRIV),
+                            CompoundPredicate.Operator.OR))) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), dbName);
             }
             return null;
         }

@@ -49,22 +49,23 @@ public:
     virtual void do_close(RuntimeState* state) = 0;
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
 
-    virtual int64_t get_last_scan_rows_num() {
-        int64_t scan_rows_num = _last_scan_rows_num;
-        _last_scan_rows_num = 0;
-        return scan_rows_num;
-    }
+    int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
+    int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
 
-    virtual int64_t get_last_scan_bytes() {
-        int64_t res = _last_scan_bytes;
-        _last_scan_bytes = 0;
-        return res;
-    }
+    // It takes effect, only when it is positive.
+    virtual size_t max_scan_concurrency() const { return 0; }
 
-    virtual size_t max_scan_concurrency() const {
-        // It takes effect, only when it is positive.
-        return 0;
-    }
+protected:
+    static constexpr int MAX_IO_TASKS_PER_OP = 4;
+    const size_t _buffer_size = config::pipeline_io_buffer_size;
+
+    // Shared scan
+    virtual void attach_chunk_source(int32_t source_index) = 0;
+    virtual void detach_chunk_source(int32_t source_index) {}
+    virtual bool has_shared_chunk_source() const = 0;
+    virtual bool has_buffer_output() const = 0;
+    virtual bool has_available_buffer() const = 0;
+    virtual ChunkPtr get_chunk_from_buffer() = 0;
 
 private:
     // This method is only invoked when current morsel is reached eof
@@ -72,6 +73,8 @@ private:
     Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
+    void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
+                                   int64_t scan_bytes);
     void _merge_chunk_source_profiles();
 
     inline void _set_scan_status(const Status& status) {
@@ -105,10 +108,6 @@ protected:
     std::atomic<int>& _num_committed_scan_tasks;
 
 private:
-    static constexpr int MAX_IO_TASKS_PER_OP = 4;
-
-    const size_t _buffer_size = config::pipeline_io_buffer_size;
-
     int32_t _io_task_retry_cnt = 0;
     PriorityThreadPool* _io_threads = nullptr;
     std::atomic<int> _num_running_io_tasks = 0;
@@ -137,6 +136,9 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
+    bool need_local_shuffle() const override { return _need_local_shuffle; }
+    void set_need_local_shuffle(bool need_local_shuffle) { _need_local_shuffle = need_local_shuffle; }
+
     // interface for different scan node
     virtual Status do_prepare(RuntimeState* state) = 0;
     virtual void do_close(RuntimeState* state) = 0;
@@ -144,6 +146,7 @@ public:
 
 protected:
     ScanNode* const _scan_node;
+    bool _need_local_shuffle = true;
 
     std::atomic<int> _num_committed_scan_tasks{0};
 };

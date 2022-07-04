@@ -171,7 +171,8 @@ public class MaterializedViewAnalyzer {
             List<String> columnOutputNames = queryRelation.getColumnOutputNames();
             List<Expr> outputExpression = queryRelation.getOutputExpression();
             for (int i = 0; i < outputExpression.size(); ++i) {
-                Column column = new Column(columnOutputNames.get(i), outputExpression.get(i).getType());
+                Column column = new Column(columnOutputNames.get(i), outputExpression.get(i).getType(),
+                        outputExpression.get(i).isNullable());
                 // set default aggregate type, look comments in class Column
                 column.setAggregationType(AggregateType.NONE, false);
                 mvColumns.add(column);

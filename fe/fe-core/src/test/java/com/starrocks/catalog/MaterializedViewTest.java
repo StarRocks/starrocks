@@ -219,7 +219,8 @@ public class MaterializedViewTest {
         Assert.assertEquals("mv_name", tableDescriptor.getTableName());
     }
 
-    @Test
+    // This test is temporarily removed because it is unstable,
+    // and it will be added back when the cause of the problem is found and fixed.
     public void testSinglePartitionSerialization(@Mocked GlobalStateMgr globalStateMgr,
                                                  @Mocked Database database) throws Exception {
         new Expectations() {
