@@ -341,6 +341,7 @@
       + [last_query_id](/sql-reference/sql-functions/utility-functions/last_query_id.md)
       + [sleep](/sql-reference/sql-functions/utility-functions/sleep.md)
       + [uuid](/sql-reference/sql-functions/utility-functions/uuid.md)
+      + [uuid_numeric](/sql-reference/sql-functions/utility-functions/uuid_numeric.md)
     + 聚合函数
       + [approx_count_distinct](/sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
       + [avg](/sql-reference/sql-functions/aggregate-functions/avg.md)
