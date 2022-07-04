@@ -5,6 +5,7 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DistributionDesc;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
@@ -40,7 +41,9 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     // for create column in mv
     private List<Column> mvColumnItems = Lists.newArrayList();
     private Set<Long> baseTableIds;
-    private Column basePartitionColumn;
+    private Column partitionColumn;
+    // record expression which related with partition by clause
+    private Expr partitionRefTableExprs;
 
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, String comment,
                                            RefreshSchemeDesc refreshSchemeDesc, ExpressionPartitionDesc expressionPartitionDesc,
@@ -152,12 +155,20 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.baseTableIds = baseTableIds;
     }
 
-    public Column getBasePartitionColumn() {
-        return basePartitionColumn;
+    public Column getPartitionColumn() {
+        return partitionColumn;
     }
 
-    public void setBasePartitionColumn(Column basePartitionColumn) {
-        this.basePartitionColumn = basePartitionColumn;
+    public void setPartitionColumn(Column partitionColumn) {
+        this.partitionColumn = partitionColumn;
+    }
+
+    public Expr getPartitionRefTableExprs() {
+        return partitionRefTableExprs;
+    }
+
+    public void setPartitionRefTableExprs(Expr partitionRefTableExprs) {
+        this.partitionRefTableExprs = partitionRefTableExprs;
     }
 
     @Override

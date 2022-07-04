@@ -2797,7 +2797,7 @@ public class LocalMetastore implements ConnectorMetadata {
         PartitionInfo partitionInfo;
         if (partitionDesc != null) {
             partitionInfo = partitionDesc.toPartitionInfo(
-                    Arrays.asList(stmt.getBasePartitionColumn()),
+                    Arrays.asList(stmt.getPartitionColumn()),
                     Maps.newHashMap(), false);
         } else {
             partitionInfo = new SinglePartitionInfo();
@@ -2831,14 +2831,15 @@ public class LocalMetastore implements ConnectorMetadata {
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
         MaterializedView materializedView =
                 new MaterializedView(mvId, db.getId(), mvName, baseSchema, stmt.getKeysType(), partitionInfo,
-                        distributionInfo,
-                        mvRefreshScheme);
+                        distributionInfo, mvRefreshScheme);
         // set comment
         materializedView.setComment(stmt.getComment());
         // set baseTableIds
         materializedView.setBaseTableIds(stmt.getBaseTableIds());
         // set viewDefineSql
         materializedView.setViewDefineSql(stmt.getInlineViewDef());
+        // set partitionRefTableExprs
+        materializedView.setPartitionRefTableExprs(Lists.newArrayList(stmt.getPartitionRefTableExprs()));
         // set base index id
         long baseIndexId = getNextId();
         materializedView.setBaseIndexId(baseIndexId);

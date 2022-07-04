@@ -92,11 +92,11 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                 ((ExpressionRangePartitionInfo) partitionInfo);
         // currently, mv only supports one expression
         Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
-        Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
-        Column partitionColumn = expressionRangePartitionInfo.getPartitionColumns().get(0);
         // 1. scan base table, get table id which used in partition
+        Expr partitionExpr = materializedView.getPartitionRefTableExprs().get(0);
         Map<Long, OlapTable> olapTables = Maps.newHashMap();
         OlapTable partitionTable = null;
+        Column partitionColumn = null;
         List<SlotRef> slotRefs = Lists.newArrayList();
         partitionExpr.collect(SlotRef.class, slotRefs);
         // if partitionExpr is FunctionCallExpr, get first SlotRef
@@ -106,6 +106,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
             if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(olapTable.getName())) {
                 partitionTable = olapTable;
+                partitionColumn = partitionTable.getColumn(slotRef.getColumnName());
             }
             olapTables.put(baseTableId, olapTable);
         }

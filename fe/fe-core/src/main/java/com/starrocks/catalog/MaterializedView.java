@@ -210,6 +210,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "mvTablePartitionNameRefMap")
     private Map<String, Set<String>> mvTablePartitionNameRefMap = new HashMap<>();
 
+    // record expression table column
+    @SerializedName(value = "partitionRefTableExprs")
+    private List<Expr> partitionRefTableExprs;
+
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
         this.clusterId = GlobalStateMgr.getCurrentState().getClusterId();
@@ -254,6 +258,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public void setBaseTableIds(Set<Long> baseTableIds) {
         this.baseTableIds = baseTableIds;
+    }
+
+    public void setPartitionRefTableExprs(List<Expr> partitionRefTableExprs) {
+        this.partitionRefTableExprs = partitionRefTableExprs;
+    }
+
+    public List<Expr> getPartitionRefTableExprs() {
+        return partitionRefTableExprs;
     }
 
     public MvRefreshScheme getRefreshScheme() {
