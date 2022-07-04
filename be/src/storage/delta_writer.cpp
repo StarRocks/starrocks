@@ -95,8 +95,8 @@ Status DeltaWriter::_init() {
         }
         if (_tablet->updates()->is_error()) {
             _set_state(kUninitialized);
-            auto msg = fmt::format("Tablet is in error state. This is a primary key table. tablet_id: {}",
-                                   _tablet->tablet_id());
+            auto msg = fmt::format("Tablet is in error state, tablet_id: {} {}", _tablet->tablet_id(),
+                                   _tablet->updates()->get_error_msg());
             return Status::ServiceUnavailable(msg);
         }
     }
