@@ -24,6 +24,9 @@ statement
     | recoverDbStmt                                                                         #revoverDb
 
 
+    | alterDatabaseRename                                                                   #databaseRename
+
+
     // Table Statement
     | createTableStatement                                                                  #createTable
     | createTableAsSelectStatement                                                          #createTableAsSelect
@@ -133,6 +136,11 @@ alterDatabaseRename
 
 recoverDbStmt
     : RECOVER (DATABASE | SCHEMA) identifier
+    ;
+
+
+alterDatabaseRename
+    : ALTER DATABASE identifier RENAME identifier
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------

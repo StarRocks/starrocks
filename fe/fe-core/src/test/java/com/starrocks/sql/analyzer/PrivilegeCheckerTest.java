@@ -207,7 +207,6 @@ public class PrivilegeCheckerTest {
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
         db1TablePattern.analyze("default_cluster");
-
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
         String sql = "create database if not exists db1 ";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -231,7 +230,6 @@ public class PrivilegeCheckerTest {
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
         db1TablePattern.analyze("default_cluster");
-
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.DROP_PRIV), true);
         String sql = "drop database if exists db1 force";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -242,6 +240,30 @@ public class PrivilegeCheckerTest {
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
         String sql2 = "drop database if exist information_schema";
+        Assert.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql2, starRocksAssert.getCtx()));
+    }
+
+
+    @Test
+    public void testRenameDb() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        db1TablePattern.analyze("default_cluster");
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ALTER_PRIV), true);
+        String sql = "alter database db1 rename db01";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertTrue(statementBase.isSupportNewPlanner());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ALTER_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+        String sql2 = "alter database db1 rename 1db";
         Assert.assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql2, starRocksAssert.getCtx()));
     }
