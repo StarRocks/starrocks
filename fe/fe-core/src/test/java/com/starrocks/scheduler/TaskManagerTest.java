@@ -30,6 +30,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.spark_project.guava.collect.MinMaxPriorityQueue;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -39,6 +40,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Deque;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
@@ -126,7 +128,7 @@ public class TaskManagerTest {
         TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
-        taskRunManager.submitTaskRun(taskRun, Constants.TaskRunPriority.LOWEST.value());
+        taskRunManager.submitTaskRun(taskRun, new ExecuteOption());
         List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
         Constants.TaskRunState state = null;
 
@@ -230,7 +232,7 @@ public class TaskManagerTest {
 
     @Test
     public void testTaskRunPriority() {
-        PriorityBlockingQueue<TaskRun> queue = Queues.newPriorityBlockingQueue();
+        MinMaxPriorityQueue<TaskRun> queue = MinMaxPriorityQueue.orderedBy(TaskRun::compareTo).create();
         long now = System.currentTimeMillis();
         Task task = new Task();
         task.setName("test");
@@ -268,4 +270,83 @@ public class TaskManagerTest {
         Assert.assertEquals(get4.getPriority(), 0);
 
     }
+
+    @Test
+    public void testTaskRunMergeOK() {
+
+        TaskRunManager taskRunManager = new TaskRunManager();
+        Task task = new Task();
+        task.setName("test");
+
+        long taskId = 1;
+
+        TaskRun taskRun1 = TaskRunBuilder.newBuilder(task).build();
+        long now = System.currentTimeMillis();
+        taskRun1.setTaskId(taskId);
+        taskRun1.initStatus("1", now);
+        taskRun1.getStatus().setDefinition("select 1");
+        taskRun1.getStatus().setPriority(0);
+
+        TaskRun taskRun2 = TaskRunBuilder.newBuilder(task).build();
+        taskRun2.setTaskId(taskId);
+        taskRun2.initStatus("2", now);
+        taskRun2.getStatus().setDefinition("select 1");
+        taskRun2.getStatus().setPriority(10);
+
+        TaskRun taskRun3 = TaskRunBuilder.newBuilder(task).build();
+        taskRun3.setTaskId(taskId);
+        taskRun3.initStatus("3", now + 10);
+        taskRun3.getStatus().setDefinition("select 1");
+        taskRun3.getStatus().setPriority(10);
+
+
+        taskRunManager.arrangeTaskRun(taskRun2, true);
+        taskRunManager.arrangeTaskRun(taskRun1, false);
+        taskRunManager.arrangeTaskRun(taskRun3, true);
+
+        Map<Long, MinMaxPriorityQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
+        Assert.assertEquals(pendingTaskRunMap.get(taskId).size(), 2);
+        MinMaxPriorityQueue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
+        Assert.assertEquals(now + 10, taskRuns.peekLast().getStatus().getCreateTime());
+
+    }
+
+    @Test
+    public void testTaskRunNotMerge() {
+
+        TaskRunManager taskRunManager = new TaskRunManager();
+        Task task = new Task();
+        task.setName("test");
+
+        long taskId = 1;
+
+        TaskRun taskRun1 = TaskRunBuilder.newBuilder(task).build();
+        long now = System.currentTimeMillis();
+        taskRun1.setTaskId(taskId);
+        taskRun1.initStatus("1", now);
+        taskRun1.getStatus().setDefinition("select 1");
+        taskRun1.getStatus().setPriority(0);
+
+        TaskRun taskRun2 = TaskRunBuilder.newBuilder(task).build();
+        taskRun2.setTaskId(taskId);
+        taskRun2.initStatus("2", now);
+        taskRun2.getStatus().setDefinition("select 1");
+        taskRun2.getStatus().setPriority(10);
+
+        TaskRun taskRun3 = TaskRunBuilder.newBuilder(task).build();
+        taskRun3.setTaskId(taskId);
+        taskRun3.initStatus("3", now + 10);
+        taskRun3.getStatus().setDefinition("select 1");
+        taskRun3.getStatus().setPriority(10);
+
+        taskRunManager.arrangeTaskRun(taskRun2, false);
+        taskRunManager.arrangeTaskRun(taskRun1, false);
+        taskRunManager.arrangeTaskRun(taskRun3, false);
+
+        Map<Long, MinMaxPriorityQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
+        Assert.assertEquals(pendingTaskRunMap.get(taskId).size(), 3);
+
+    }
+
+
 }
