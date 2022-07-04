@@ -64,5 +64,5 @@ DROP INDEX index_name ON [db_name.]table_name;
 
 1. 对于明细模型，所有列都可以建Bitmap 索引；对于聚合模型，只有Key列可以建Bitmap 索引。
 2. Bitmap索引, 应该在取值为枚举型、 取值大量重复、 较低基数、 并且用作等值条件查询或者可转化为等值条件查询的列上时进行创建。
-3. 不支持对Float、Double、Decimal 等类型的列上创建Bitmap 索引。
+3. 不支持为 FLOAT、DOUBLE、BOOLEAN 和 DECIMAL 类型的列建 bitmap 索引。
 4. 如果要查看某个查询是否命中了Bitmap索引，可以通过查询的[Profile](https://docs.starrocks.com/zh-cn/main/administration/Query_planning#profile%E5%88%86%E6%9E%90)信息来进行查看（通过查询信息中rollup所展示的信息去核对物化视图是否命中或者命中正确）。
