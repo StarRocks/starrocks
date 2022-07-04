@@ -166,7 +166,7 @@ public class RollupJobV2Test extends DDLTestBase {
         MaterializedIndex shadowIndex =
                 testPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).get(0);
         for (Tablet shadowTablet : shadowIndex.getTablets()) {
-            for (Replica shadowReplica : ((LocalTablet) shadowTablet).getReplicas()) {
+            for (Replica shadowReplica : ((LocalTablet) shadowTablet).getImmutableReplicas()) {
                 shadowReplica.updateRowCount(testPartition.getVisibleVersion(),
                         shadowReplica.getDataSize(),
                         shadowReplica.getRowCount());
@@ -200,7 +200,7 @@ public class RollupJobV2Test extends DDLTestBase {
         assertEquals(OlapTableState.ROLLUP, olapTable.getState());
 
         LocalTablet baseTablet = (LocalTablet) baseIndex.getTablets().get(0);
-        List<Replica> replicas = baseTablet.getReplicas();
+        List<Replica> replicas = baseTablet.getImmutableReplicas();
         Replica replica1 = replicas.get(0);
 
         assertEquals(1, replica1.getVersion());
@@ -237,7 +237,7 @@ public class RollupJobV2Test extends DDLTestBase {
         MaterializedIndex shadowIndex =
                 testPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).get(0);
         for (Tablet shadowTablet : shadowIndex.getTablets()) {
-            for (Replica shadowReplica : ((LocalTablet) shadowTablet).getReplicas()) {
+            for (Replica shadowReplica : ((LocalTablet) shadowTablet).getImmutableReplicas()) {
                 shadowReplica.updateRowCount(testPartition.getVisibleVersion(),
                         shadowReplica.getDataSize(),
                         shadowReplica.getRowCount());

@@ -371,7 +371,7 @@ public class MaterializedViewHandler extends AlterHandler {
                 addedTablets.add(newTablet);
 
                 mvJob.addTabletIdMap(partitionId, mvTabletId, baseTabletId);
-                List<Replica> baseReplicas = ((LocalTablet) baseTablet).getReplicas();
+                List<Replica> baseReplicas = ((LocalTablet) baseTablet).getImmutableReplicas();
 
                 int healthyReplicaNum = 0;
                 for (Replica baseReplica : baseReplicas) {

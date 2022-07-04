@@ -491,6 +491,30 @@ public class TabletInvertedIndex {
         }
     }
 
+    /**
+     * For each tabletId in the tablet_id list, get the replica on specified backend or null, return as a list.
+     *
+     * @param tabletIds tablet_id list
+     * @param backendId backendid
+     * @return list of replica or null if backend not found
+     */
+    public List<Replica> getReplicasOnBackendByTabletIds(List<Long> tabletIds, long backendId) {
+        readLock();
+        try {
+            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
+            if (replicaMetaWithBackend != null) {
+                List<Replica> replicas = Lists.newArrayList();
+                for (long tabletId : tabletIds) {
+                    replicas.add(replicaMetaWithBackend.get(tabletId));
+                }
+                return replicas;
+            }
+            return null;
+        } finally {
+            readUnlock();
+        }
+    }
+
     public List<Long> getTabletIdsByBackendId(long backendId) {
         List<Long> tabletIds = Lists.newArrayList();
         readLock();

@@ -110,6 +110,9 @@ public class DatabaseTransactionMgr {
     // to store transtactionStates with final status
     private ArrayDeque<TransactionState> finalStatusTransactionStateDeque = new ArrayDeque<>();
 
+    // store committed transactions' dependency relationships
+    private TransactionGraph transactionGraph = new TransactionGraph();
+
     // label -> txn ids
     // this is used for checking if label already used. a label may correspond to multiple txns,
     // and only one is success.
@@ -436,7 +439,7 @@ public class DatabaseTransactionMgr {
             tableListString.append(table.getName());
             stateListeners.add(listener);
         }
-
+        transactionState.buildFinishChecker(db);
         txnSpan.setAttribute("tables", tableListString.toString());
 
         // before state transform
@@ -763,6 +766,16 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    public List<TransactionState> getReadyToPublishTxnList() {
+        readLock();
+        try {
+            List<Long> txnIds = transactionGraph.getTxnsWithoutDependency();
+            return txnIds.stream().map(id -> idToRunningTransactionState.get(id)).collect(Collectors.toList());
+        } finally {
+            readUnlock();
+        }
+    }
+
     // check whether transaction can be finished or not
     // for each tablet of load txn, if most replicas version publish successed
     // the trasaction can be treated as successful and can be finished
@@ -804,7 +817,7 @@ public class DatabaseTransactionMgr {
                             int successHealthyReplicaNum = 0;
                             // if most replica's version have been updated to version published
                             // which means publish version task finished in replica  
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 if (!errReplicas.contains(replica.getId())) {
                                     // success healthy replica condition:
                                     // 1. version is equal to partition's visible version
@@ -938,7 +951,7 @@ public class DatabaseTransactionMgr {
                     for (MaterializedIndex index : allIndices) {
                         for (Tablet tablet : index.getTablets()) {
                             int healthReplicaNum = 0;
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 if (!errorReplicaIds.contains(replica.getId())
                                         && replica.getLastFailedVersion() < 0) {
                                     // this means the replica is a healthy replica,
@@ -1171,6 +1184,9 @@ public class DatabaseTransactionMgr {
                     runningTxnNums++;
                 }
             }
+            if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+                transactionGraph.add(transactionState.getTransactionId(), transactionState.getTableIdList());
+            }
         } else {
             if (idToRunningTransactionState.remove(transactionState.getTransactionId()) != null) {
                 if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK) {
@@ -1179,6 +1195,7 @@ public class DatabaseTransactionMgr {
                     runningTxnNums--;
                 }
             }
+            transactionGraph.remove(transactionState.getTransactionId());
             idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState);
             finalStatusTransactionStateDeque.add(transactionState);
         }
@@ -1505,7 +1522,7 @@ public class DatabaseTransactionMgr {
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             Table table = db.getTable(tableCommitInfo.getTableId());
             TransactionLogApplier applier = txnLogApplierFactory.create(table);
-            applier.applyVisibleLog(transactionState, tableCommitInfo);
+            applier.applyVisibleLog(transactionState, tableCommitInfo, db);
         }
         return true;
     }
@@ -1633,4 +1650,51 @@ public class DatabaseTransactionMgr {
     GlobalStateMgr getGlobalStateMgr() {
         return globalStateMgr;
     }
+
+    public void finishTransactionNew(TransactionState transactionState, Set<Long> publishErrorReplicas) throws UserException {
+        Database db = globalStateMgr.getDb(transactionState.getDbId());
+        if (db == null) {
+            writeLock();
+            try {
+                transactionState.setTransactionStatus(TransactionStatus.ABORTED);
+                transactionState.setReason("db is dropped");
+                LOG.warn("db is dropped during transaction, abort transaction {}", transactionState);
+                unprotectUpsertTransactionState(transactionState, false);
+                return;
+            } finally {
+                writeUnlock();
+            }
+        }
+        Span finishSpan = TraceManager.startSpan("finishTransaction", transactionState.getTxnSpan());
+        db.writeLock();
+        finishSpan.addEvent("db_lock");
+        try {
+            boolean txnOperated = false;
+            writeLock();
+            finishSpan.addEvent("txnmgr_lock");
+            try {
+                transactionState.setErrorReplicas(publishErrorReplicas);
+                transactionState.setFinishTime(System.currentTimeMillis());
+                transactionState.clearErrorMsg();
+                transactionState.setNewFinish();
+                transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
+                unprotectUpsertTransactionState(transactionState, false);
+                txnOperated = true;
+            } finally {
+                writeUnlock();
+                transactionState.afterStateTransform(TransactionStatus.VISIBLE, txnOperated);
+            }
+            Span updateCatalogSpan = TraceManager.startSpan("updateCatalogAfterVisible", finishSpan);
+            try {
+                updateCatalogAfterVisible(transactionState, db);
+            } finally {
+                updateCatalogSpan.end();
+            }
+        } finally {
+            db.writeUnlock();
+            finishSpan.end();
+        }
+        LOG.info("finish transaction {} successfully", transactionState);
+    }
+
 }

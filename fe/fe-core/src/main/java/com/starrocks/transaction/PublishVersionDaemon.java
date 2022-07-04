@@ -75,7 +75,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
     protected void runAfterCatalogReady() {
         try {
             GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
-            List<TransactionState> readyTransactionStates = globalTransactionMgr.getReadyToPublishTransactions();
+            List<TransactionState> readyTransactionStates =
+                    globalTransactionMgr.getReadyToPublishTransactions(Config.enable_new_publish_mechanism);
             if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
                 return;
             }
@@ -132,6 +133,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
             AgentTaskExecutor.submit(batchTask);
         }
 
+        if (Config.enable_new_publish_mechanism) {
+            publishVersionNew(globalTransactionMgr, readyTransactionStates);
+            return;
+        }
+
         // try to finish the transaction, if failed just retry in next loop
         for (TransactionState transactionState : readyTransactionStates) {
             Map<Long, PublishVersionTask> transTasks = transactionState.getPublishVersionTasks();
@@ -142,7 +148,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 if (publishVersionTask.isFinished()) {
                     // sometimes backend finish publish version task, but it maybe failed to change transactionid to version for some tablets
                     // and it will upload the failed tabletinfo to fe and fe will deal with them
-                    Set<Long> errReplicas = publishVersionTask.collectErrorReplicas();
+                    Set<Long> errReplicas = publishVersionTask.getErrorReplicas();
                     if (!errReplicas.isEmpty()) {
                         publishErrorReplicaIds.addAll(errReplicas);
                     }
@@ -179,6 +185,33 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 }
             }
         } // end for readyTransactionStates
+    }
+
+    private void publishVersionNew(GlobalTransactionMgr globalTransactionMgr, List<TransactionState> txns) {
+        for (TransactionState transactionState : txns) {
+            Set<Long> publishErrorReplicas = Sets.newHashSet();
+            if (!transactionState.allPublishTasksFinishedOrQuorumWaitTimeout(publishErrorReplicas)) {
+                continue;
+            }
+            try {
+                if (transactionState.checkCanFinish()) {
+                    globalTransactionMgr.finishTransactionNew(transactionState, publishErrorReplicas);
+                }
+                if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
+                    transactionState.updateSendTaskTime();
+                    LOG.debug("publish version for transation {} failed, has {} error replicas during publish",
+                            transactionState, transactionState.getErrorReplicas().size());
+                } else {
+                    for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
+                        AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.PUBLISH_VERSION, task.getSignature());
+                    }
+                    // clear publish version tasks to reduce memory usage when state changed to visible.
+                    transactionState.clearPublishVersionTasks();
+                }
+            } catch (UserException e) {
+                LOG.error("errors while publish version to all backends", e);
+            }
+        }
     }
 
     // TODO: support mix OlapTable with LakeTable
