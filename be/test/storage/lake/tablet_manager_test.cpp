@@ -15,25 +15,12 @@
 #include "storage/lake/group_assigner.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/test_group_assigner.h"
 #include "storage/options.h"
 #include "testutil/assert.h"
 #include "util/filesystem_util.h"
 
 namespace starrocks {
-
-class LocalGroupAssigner : public lake::GroupAssigner {
-public:
-    LocalGroupAssigner(const std::string& dir) : _local_dir(dir){};
-
-    StatusOr<std::string> get_group(int64_t tablet_id) override { return _local_dir; };
-
-    Status list_group(std::set<std::string>* groups) override {
-        return Status::NotSupported("LocalGroupAssigner::list_group");
-    };
-
-private:
-    std::string _local_dir;
-};
 
 class LakeTabletManagerTest : public testing::Test {
 public:
@@ -44,12 +31,11 @@ public:
         starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
         _test_dir = paths[0].path + "/lake";
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_test_dir));
-        _group_assigner = new LocalGroupAssigner(_test_dir);
+        _group_assigner = new lake::TestGroupAssigner(_test_dir);
         _tabletManager = new starrocks::lake::TabletManager(_group_assigner, 16384);
     }
-    std::string tablet_group(std::string_view prefix, int64_t tablet_id) {
-        ASSIGN_OR_ABORT(auto group_path, _group_assigner->get_group(tablet_id));
-        auto tablet_group = fmt::format("{}/{}", group_path, prefix);
+    std::string tablet_group(int64_t tablet_id) {
+        ASSIGN_OR_ABORT(auto tablet_group, _group_assigner->get_group(tablet_id));
         FileSystemUtil::create_directory(tablet_group);
         return tablet_group;
     }
@@ -64,7 +50,7 @@ public:
 
 private:
     std::string _test_dir;
-    LocalGroupAssigner* _group_assigner;
+    lake::GroupAssigner* _group_assigner;
 };
 
 TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
@@ -76,7 +62,7 @@ TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
     rowset_meta_pb->set_overlapped(false);
     rowset_meta_pb->set_data_size(1024);
     rowset_meta_pb->set_num_rows(5);
-    auto group = tablet_group("shard1", 12345);
+    auto group = tablet_group(12345);
     EXPECT_OK(_tabletManager->put_tablet_metadata(group, metadata));
     auto res = _tabletManager->get_tablet_metadata(group, 12345, 2);
     EXPECT_TRUE(res.ok());
@@ -91,7 +77,7 @@ TEST_F(LakeTabletManagerTest, txnlog_write_and_read) {
     starrocks::lake::TxnLog txnLog;
     txnLog.set_tablet_id(12345);
     txnLog.set_txn_id(2);
-    auto group = tablet_group("shard1", 12345);
+    auto group = tablet_group(12345);
     EXPECT_OK(_tabletManager->put_txn_log(group, txnLog));
     auto res = _tabletManager->get_txn_log(group, 12345, 2);
     EXPECT_TRUE(res.ok());
@@ -136,7 +122,7 @@ TEST_F(LakeTabletManagerTest, list_tablet_meta) {
     rowset_meta_pb->set_overlapped(false);
     rowset_meta_pb->set_data_size(1024);
     rowset_meta_pb->set_num_rows(5);
-    auto group = tablet_group("shard1", 12345);
+    auto group = tablet_group(12345);
     EXPECT_OK(_tabletManager->put_tablet_metadata(group, metadata));
 
     metadata.set_version(3);
@@ -146,7 +132,7 @@ TEST_F(LakeTabletManagerTest, list_tablet_meta) {
     metadata.set_version(2);
     EXPECT_OK(_tabletManager->put_tablet_metadata(group, metadata));
 
-    ASSIGN_OR_ABORT(auto metaIter, _tabletManager->list_tablet_metadata(group));
+    ASSIGN_OR_ABORT(auto metaIter, _tabletManager->list_tablet_metadata(23456, false));
 
     std::vector<std::string> objects;
     while (metaIter.has_next()) {
@@ -162,7 +148,7 @@ TEST_F(LakeTabletManagerTest, list_tablet_meta) {
     iter = std::find(objects.begin(), objects.end(), "tbl_0000000000005BA0_0000000000000002");
     EXPECT_TRUE(iter != objects.end());
 
-    ASSIGN_OR_ABORT(metaIter, _tabletManager->list_tablet_metadata(group, 12345));
+    ASSIGN_OR_ABORT(metaIter, _tabletManager->list_tablet_metadata(12345, true));
 
     objects.clear();
     while (metaIter.has_next()) {
@@ -181,7 +167,7 @@ TEST_F(LakeTabletManagerTest, list_txn_log) {
     starrocks::lake::TxnLog txnLog;
     txnLog.set_tablet_id(12345);
     txnLog.set_txn_id(2);
-    auto group = tablet_group("shard1", 12345);
+    auto group = tablet_group(12345);
     EXPECT_OK(_tabletManager->put_txn_log(group, txnLog));
 
     txnLog.set_txn_id(3);
@@ -191,7 +177,7 @@ TEST_F(LakeTabletManagerTest, list_txn_log) {
     txnLog.set_txn_id(3);
     EXPECT_OK(_tabletManager->put_txn_log(group, txnLog));
 
-    ASSIGN_OR_ABORT(auto metaIter, _tabletManager->list_txn_log(group));
+    ASSIGN_OR_ABORT(auto metaIter, _tabletManager->list_txn_log(23456, false));
 
     std::vector<std::string> txnlogs;
     while (metaIter.has_next()) {
@@ -207,7 +193,7 @@ TEST_F(LakeTabletManagerTest, list_txn_log) {
     iter = std::find(txnlogs.begin(), txnlogs.end(), "txn_0000000000005BA0_0000000000000003");
     EXPECT_TRUE(iter != txnlogs.end());
 
-    ASSIGN_OR_ABORT(metaIter, _tabletManager->list_txn_log(group, 12345));
+    ASSIGN_OR_ABORT(metaIter, _tabletManager->list_txn_log(12345, true));
 
     txnlogs.clear();
     while (metaIter.has_next()) {
@@ -226,7 +212,7 @@ TEST_F(LakeTabletManagerTest, put_get_tabletmetadata_witch_cache_evict) {
     int64_t tablet_id = 23456;
     std::vector<lake::TabletMetadataPtr> vec;
 
-    auto group = tablet_group("shard1", tablet_id);
+    auto group = tablet_group(tablet_id);
 
     // we set meta cache capacity to 16K, and each meta here cost 232 bytes,putting 64 tablet meta will fill up the cache space.
     for (int i = 0; i < 64; ++i) {
@@ -309,7 +295,7 @@ TEST_F(LakeTabletManagerTest, tablet_schema_load) {
         c1->set_is_key(false);
         c1->set_is_nullable(false);
     }
-    auto group = tablet_group("", 12345);
+    auto group = tablet_group(12345);
     _tabletManager->put_tablet_metadata(group, metadata);
 
     const TabletSchema* ptr = nullptr;

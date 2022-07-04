@@ -54,8 +54,8 @@ public:
 
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
     StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
-            const std::vector<TScanRangeParams>& scan_ranges, int node_id,
-            const TExecPlanFragmentParams& request) override;
+            const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams& request,
+            size_t num_total_scan_ranges) override;
 
     void debug_string(int indentation_level, std::stringstream* out) const override {
         *out << "vectorized::OlapScanNode";
@@ -65,6 +65,9 @@ public:
     Status set_scan_ranges(const std::vector<TInternalScanRange>& ranges);
 
     Status set_scan_range(const TInternalScanRange& range);
+
+    // TODO: support more share_scan strategy
+    void enable_shared_scan(bool enable);
 
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
@@ -134,8 +137,8 @@ private:
     void _estimate_scan_and_output_row_bytes();
 
     StatusOr<bool> _could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
-                                                   const TExecPlanFragmentParams& request, int64_t* scan_dop,
-                                                   int64_t* splitted_scan_rows) const;
+                                                   const TExecPlanFragmentParams& request, size_t num_total_scan_ranges,
+                                                   int64_t* scan_dop, int64_t* splitted_scan_rows) const;
     StatusOr<bool> _could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const;
 
 private:
@@ -175,6 +178,8 @@ private:
     // of the left table are compacted at building the right hash table. Therefore, reference
     // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
+
+    bool _enable_shared_scan = false;
 
     // profile
     RuntimeProfile* _scan_profile = nullptr;

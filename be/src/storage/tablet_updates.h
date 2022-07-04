@@ -118,6 +118,14 @@ public:
     // perform compaction, should only be called by compaction thread
     Status compaction(MemTracker* mem_tracker);
 
+    // perform compaction with specified rowsets, this may be a manual compaction invoked by tools or data fixing jobs
+    Status compaction(MemTracker* mem_tracker, const vector<uint32_t>& input_rowset_ids);
+
+    // vertical compaction introduced a bug that may generate rowset with lots of small segment files
+    // this method go through all rowsets and identify them for further repair
+    // return list of <rowsetid, segment file num> pair
+    StatusOr<std::vector<std::pair<uint32_t, uint32_t>>> list_rowsets_need_repair_compaction();
+
     void get_compaction_status(std::string* json_result);
 
     // Remove version whose creation time is less than |expire_time|.

@@ -145,7 +145,8 @@ public class TaskManagerTest {
 
     }
 
-    @Test
+    // This test is temporarily removed because it is unstable,
+    // and it will be added back when the cause of the problem is found and fixed.
     public void SubmitMvTaskTest() throws DdlException {
         new MockUp<StmtExecutor>() {
             @Mock

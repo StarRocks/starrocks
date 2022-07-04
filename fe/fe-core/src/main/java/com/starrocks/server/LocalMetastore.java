@@ -603,12 +603,16 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Same database name");
         }
 
-        Database db = null;
-        Cluster cluster = null;
+        Database db;
+        Cluster cluster;
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
+            cluster = nameToCluster.get(SystemInfoService.DEFAULT_CLUSTER);
+            if (cluster == null) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_EXISTS, SystemInfoService.DEFAULT_CLUSTER);
+            }
             // check if db exists
             db = fullNameToDb.get(fullDbName);
             if (db == null) {
@@ -619,7 +623,6 @@ public class LocalMetastore implements ConnectorMetadata {
             if (fullNameToDb.get(newFullDbName) != null) {
                 throw new DdlException("Database name[" + newFullDbName + "] is already used");
             }
-
             cluster.removeDb(db.getFullName(), db.getId());
             cluster.addDb(newFullDbName, db.getId());
             // 1. rename db
