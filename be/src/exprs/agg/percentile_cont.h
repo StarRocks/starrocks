@@ -108,7 +108,7 @@ public:
         double u = (new_vector.size() - 1) * rate;
         int index = (int)u;
 
-        ResultType result;
+        [[maybe_unused]] ResultType result;
         if constexpr (pt_is_datetime<PT>) {
             result.from_unix_second(
                     new_vector[index].to_unix_second() +
