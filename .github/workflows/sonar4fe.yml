@@ -47,5 +47,4 @@ jobs:
           sleep 10 && echo "initialize docker container-----"
           #docker exec --privileged temp /bin/bash -c "cd /root/starrocks; ./build.sh --clean --fe;"
           #echo "script run over-----"
-          cd fe
-          mvn -B clean -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks
+          mvn -B clean -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks -Dsonar.sources=fe
