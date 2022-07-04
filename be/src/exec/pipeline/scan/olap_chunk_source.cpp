@@ -24,13 +24,14 @@
 namespace starrocks::pipeline {
 using namespace vectorized;
 
-OlapChunkSource::OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+OlapChunkSource::OlapChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                                  vectorized::OlapScanNode* scan_node, OlapScanContext* scan_ctx)
-        : ChunkSource(runtime_profile, std::move(morsel)),
+        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel)),
           _scan_node(scan_node),
           _scan_ctx(scan_ctx),
           _limit(scan_node->limit()),
-          _scan_range(down_cast<ScanMorsel*>(_morsel.get())->get_olap_scan_range()) {}
+          _scan_range(down_cast<ScanMorsel*>(_morsel.get())->get_olap_scan_range()),
+          _chunk_buffer(scan_ctx->get_chunk_buffer()) {}
 
 OlapChunkSource::~OlapChunkSource() {
     _reader.reset();
@@ -42,8 +43,6 @@ void OlapChunkSource::close(RuntimeState* state) {
     _prj_iter->close();
     _reader.reset();
     _predicate_free_pool.clear();
-    _chunk_buffer.shutdown();
-    _chunk_buffer.clear();
 }
 
 Status OlapChunkSource::prepare(RuntimeState* state) {
@@ -284,16 +283,20 @@ bool OlapChunkSource::has_next_chunk() const {
 }
 
 bool OlapChunkSource::has_output() const {
-    return !_chunk_buffer.empty();
+    return !_chunk_buffer.empty(_scan_operator_seq);
+}
+
+bool OlapChunkSource::has_shared_output() const {
+    return !_chunk_buffer.all_empty();
 }
 
 size_t OlapChunkSource::get_buffer_size() const {
-    return _chunk_buffer.get_size();
+    return _chunk_buffer.size(_scan_operator_seq);
 }
 
 StatusOr<vectorized::ChunkPtr> OlapChunkSource::get_next_chunk_from_buffer() {
     vectorized::ChunkPtr chunk = nullptr;
-    _chunk_buffer.try_get(&chunk);
+    _chunk_buffer.try_get(_scan_operator_seq, &chunk);
     return chunk;
 }
 
@@ -310,12 +313,12 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, Run
         if (!_status.ok()) {
             // end of file is normal case, need process chunk
             if (_status.is_end_of_file()) {
-                _chunk_buffer.put(std::move(chunk));
+                _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
             }
             break;
         }
 
-        _chunk_buffer.put(std::move(chunk));
+        _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
     }
 
     return _status;
@@ -341,13 +344,13 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
                     ++(*num_read_chunks);
-                    _chunk_buffer.put(std::move(chunk));
+                    _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
                 }
                 break;
             }
 
             ++(*num_read_chunks);
-            _chunk_buffer.put(std::move(chunk));
+            _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
         }
 
         if (time_spent >= YIELD_MAX_TIME_SPENT) {

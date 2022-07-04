@@ -296,6 +296,9 @@ struct TExecPlanFragmentParams {
   53: optional WorkGroup.TWorkGroup workgroup
   54: optional bool enable_resource_group
   55: optional i32 func_version
+  
+  // Sharing data between drivers of same scan operator
+  56: optional bool enable_shared_scan
 }
 
 struct TExecPlanFragmentResult {

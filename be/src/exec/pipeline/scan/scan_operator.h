@@ -55,6 +55,18 @@ public:
     // It takes effect, only when it is positive.
     virtual size_t max_scan_concurrency() const { return 0; }
 
+protected:
+    static constexpr int MAX_IO_TASKS_PER_OP = 4;
+    const size_t _buffer_size = config::pipeline_io_buffer_size;
+
+    // Shared scan
+    virtual void attach_chunk_source(int32_t source_index) = 0;
+    virtual void detach_chunk_source(int32_t source_index) {}
+    virtual bool has_shared_chunk_source() const = 0;
+    virtual bool has_buffer_output() const = 0;
+    virtual bool has_available_buffer() const = 0;
+    virtual ChunkPtr get_chunk_from_buffer() = 0;
+
 private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
@@ -96,10 +108,6 @@ protected:
     std::atomic<int>& _num_committed_scan_tasks;
 
 private:
-    static constexpr int MAX_IO_TASKS_PER_OP = 4;
-
-    const size_t _buffer_size = config::pipeline_io_buffer_size;
-
     int32_t _io_task_retry_cnt = 0;
     PriorityThreadPool* _io_threads = nullptr;
     std::atomic<int> _num_running_io_tasks = 0;
