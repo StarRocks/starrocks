@@ -148,6 +148,15 @@ void TransactionStreamLoadAction::handle(HttpRequest* req) {
         }
     }
 
+    // Append buffer to the pipe on every http request finishing.
+    // For CSV, it supports parsing in stream.
+    // For JSON, now the buffer contains a complete json.
+    if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
+        ctx->buffer->flip();
+        ctx->body_sink->append(std::move(ctx->buffer));
+        ctx->buffer = nullptr;
+    }
+
     auto resp = _exec_env->transaction_mgr()->_build_reply(TXN_LOAD, ctx);
     ctx->lock.unlock();
     _send_reply(req, resp);
@@ -412,23 +421,53 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
     auto evbuf = evhttp_request_get_input_buffer(ev_req);
 
     int64_t start_read_data_time = MonotonicNanos();
-    while (evbuffer_get_length(evbuf) > 0) {
-        ByteBufferPtr bb = ByteBuffer::allocate(4096);
+
+    size_t len = 0;
+    while ((len = evbuffer_get_length(evbuf)) > 0) {
+        if (ctx->buffer == nullptr) {
+            // Initialize buffer.
+            ctx->buffer = ByteBuffer::allocate(
+                    ctx->format == TFileFormatType::FORMAT_JSON ? std::max(len, ctx->kDefaultBufferSize) : len);
+
+        } else if (ctx->buffer->remaining() < len) {
+            if (ctx->format == TFileFormatType::FORMAT_JSON) {
+                // For json format, we need build a complete json before we push the buffer to the pipe.
+                // buffer capacity is not enough, so we try to expand the buffer.
+                auto data_sz = ctx->buffer->pos + len;
+                if (data_sz >= ctx->kJSONMaxBufferSize) {
+                    auto err_msg = fmt::format("payload size [{}] of single write beyond the JSON payload limit [{}]",
+                                               data_sz, ctx->kJSONMaxBufferSize);
+                    LOG(WARNING) << err_msg;
+                    ctx->status = Status::MemoryLimitExceeded(err_msg);
+                    return;
+                }
+                ByteBufferPtr buf = ByteBuffer::allocate(BitUtil::RoundUpToPowerOfTwo(data_sz));
+                buf->put_bytes(ctx->buffer->ptr, ctx->buffer->pos);
+                std::swap(buf, ctx->buffer);
+
+            } else {
+                // For non-json format, we could push buffer to the body_sink in streaming mode.
+                // buffer capacity is not enough, so we push the buffer to the pipe and allocate new one.
+                ctx->buffer->flip();
+                auto st = ctx->body_sink->append(std::move(ctx->buffer));
+                if (!st.ok()) {
+                    LOG(WARNING) << "append body content failed. errmsg=" << st << " context=" << ctx->brief();
+                    ctx->status = st;
+                    return;
+                }
+
+                ctx->buffer = ByteBuffer::allocate(std::max(len, ctx->kDefaultBufferSize));
+            }
+        }
+
         int remove_bytes;
         {
             // The memory is applied for in http server thread,
             // so the release of this memory must be recorded in ProcessMemTracker
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-            remove_bytes = evbuffer_remove(evbuf, bb->ptr, bb->capacity);
+            remove_bytes = evbuffer_remove(evbuf, ctx->buffer->ptr + ctx->buffer->pos, ctx->buffer->remaining());
         }
-        bb->pos = remove_bytes;
-        bb->flip();
-        auto st = ctx->body_sink->append(std::move(bb));
-        if (!st.ok()) {
-            LOG(WARNING) << "append body content failed. errmsg=" << st.get_error_msg() << ctx->brief();
-            ctx->status = st;
-            return;
-        }
+        ctx->buffer->pos += remove_bytes;
         ctx->receive_bytes += remove_bytes;
     }
     ctx->received_data_cost_nanos = ctx->last_active_ts - start_read_data_time;
