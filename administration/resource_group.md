@@ -46,7 +46,7 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
   This parameter specifies the percentage of memory that can be used for queries in the total memory that is provided by the BE. Unit: %. Valid values: (0, 1).
 
-  > Note: The amount of memory that can be used for queries is indicated by the `query_pool` parameter. For more information about the parameter, see [Memory management](https://starrocks.feishu.cn/docs/Memory_management.md).
+  > Note: The amount of memory that can be used for queries is indicated by the `query_pool` parameter. For more information about the parameter, see [Memory management](Memory_management.md).
 
 - `concurrency_limit`
   This parameter specifies the upper limit of concurrent queries in a resource group. It is used to avoid system overload caused by too many concurrent queries.
