@@ -138,6 +138,10 @@ int64_t FileDataSource::num_bytes_read() const {
     return _counter.num_bytes_read;
 }
 
+int64_t FileDataSource::cpu_time_spent() const {
+    return _counter.total_ns;
+}
+
 void FileDataSource::_init_counter() {
     // Profile
     _scanner_total_timer = ADD_TIMER(_runtime_profile, "ScannerTotalTime");

@@ -98,6 +98,7 @@ enum ConnectorType {
     JDBC = 2,
     MYSQL = 3,
     FILE = 4,
+    LAKE = 5,
 };
 
 class Connector {

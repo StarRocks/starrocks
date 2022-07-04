@@ -76,7 +76,6 @@ public:
         _runtime_state->set_be_number(_request.backend_num);
         _pool = _runtime_state->obj_pool();
 
-        
         _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism));
         _builder = _pool->add(new PipelineBuilder(*_context));
     }
@@ -278,8 +277,8 @@ void PipeLineFileScanNodeTest::generate_morse_queue(std::vector<starrocks::vecto
     std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
     for (auto& i : scan_nodes) {
         ScanNode* scan_node = (ScanNode*)(i);
-        auto morsel_queue_factory =
-                scan_node->convert_scan_range_to_morsel_queue_factory(scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), request, degree_of_parallelism);
+        auto morsel_queue_factory = scan_node->convert_scan_range_to_morsel_queue_factory(
+                scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), request, degree_of_parallelism);
         DCHECK(morsel_queue_factory.ok());
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory).value());
     }
