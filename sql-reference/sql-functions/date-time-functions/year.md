@@ -44,6 +44,18 @@ MySQL > select year(now());
 1 row in set (0.00 sec)
 ```
 
+示例2：返回当前年份。
+
+```Plain Text
+MySQL > select year(now());
++-------------+
+| year(now()) |
++-------------+
+|        2022 |
++-------------+
+1 row in set (0.00 sec)
+```
+
 ## keyword
 
 YEAR
