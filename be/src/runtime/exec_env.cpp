@@ -165,7 +165,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     // query_context_mgr keeps slotted map with 64 slot to reduce contention
     _query_context_mgr = new pipeline::QueryContextManager(6);
     RETURN_IF_ERROR(_query_context_mgr->init());
-    _thread_pool = new PriorityThreadPool("olap_scan_io", // olap scan io
+    _thread_pool = new PriorityThreadPool("table_scan_io", // olap/external table scan thread pool
                                           config::doris_scanner_thread_pool_thread_num,
                                           config::doris_scanner_thread_pool_queue_size);
 
