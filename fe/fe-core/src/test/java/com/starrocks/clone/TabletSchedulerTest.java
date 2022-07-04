@@ -10,6 +10,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -20,6 +21,8 @@ import com.starrocks.task.CloneTask;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Delegate;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.commons.lang3.tuple.Triple;
 import org.junit.Assert;
@@ -30,6 +33,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 
 public class TabletSchedulerTest {
     @Mocked
@@ -86,30 +90,22 @@ public class TabletSchedulerTest {
                     100000);
             allTasks.add(cloneTask);
         }
-        List<AgentTask> addTaskList = new ArrayList<>();
         new Expectations() {
             {
-                AgentTaskQueue.addTask((AgentTask)any);
-                minTimes = 0;
-                result = new Delegate() {
-                    boolean addTask(AgentTask task) {
-                        addTaskList.add(task);
-                        return true;
-                    }
-                };
-
-                AgentTaskExecutor.submit((AgentBatchTask)any);
-                minTimes = 0;
+                AgentTaskExecutor.submit((AgentBatchTask) any);
+                times = 2;
             }
         };
+
         long almostExpireTime = System.currentTimeMillis() + (Config.catalog_trash_expire_second - 1) * 1000L;
         TabletScheduler tabletScheduler = new TabletScheduler(globalStateMgr, systemInfoService, tabletInvertedIndex, tabletSchedulerStat);
-        tabletScheduler.submitBatchTaskIfNotExpired(allTasks, recycleBin, almostExpireTime);
-        Assert.assertEquals(4, addTaskList.size());
-        addTaskList.clear();
+        AgentBatchTask tasks = tabletScheduler.submitBatchTaskIfNotExpired(allTasks, recycleBin, almostExpireTime);
+        Assert.assertEquals(4, tasks.getTaskNum());
 
-        long expireTime = System.currentTimeMillis() + (Config.catalog_trash_expire_second + 100) * 1000L;
-        tabletScheduler.submitBatchTaskIfNotExpired(allTasks, recycleBin, expireTime);
-        Assert.assertEquals(1, addTaskList.size());
+        long expireTime = System.currentTimeMillis() + (Config.catalog_trash_expire_second + 600) * 1000L;
+        tasks = tabletScheduler.submitBatchTaskIfNotExpired(allTasks, recycleBin, expireTime);
+        Assert.assertEquals(1, tasks.getTaskNum());
+
+        AgentTaskQueue.clearAllTasks();
     }
 }

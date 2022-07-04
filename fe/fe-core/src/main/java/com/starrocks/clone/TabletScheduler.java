@@ -1445,8 +1445,9 @@ public class TabletScheduler extends MasterDaemon {
 
     /**
      * submit batch tasks only if no expired db/table/partiton involved
+     * the return value is only for test
      */
-    protected void submitBatchTaskIfNotExpired(
+    protected AgentBatchTask submitBatchTaskIfNotExpired(
             List<AgentTask> tasks, CatalogRecycleBin recycleBin, long currentTimeMs) {
         AgentBatchTask batchTask = new AgentBatchTask();
         // must send task after adding tablet info to runningTablets.
@@ -1472,12 +1473,13 @@ public class TabletScheduler extends MasterDaemon {
             batchTask.addTask(task);
             if (AgentTaskQueue.addTask(task)) {
                 stat.counterCloneTask.incrementAndGet();
-                LOG.info("add clone task to agent task queue: {}", task);
             }
+            LOG.info("add clone task to agent task queue: {}", task);
         }
 
         // send task immediately
         AgentTaskExecutor.submit(batchTask);
+        return batchTask;
     }
 
     /**
