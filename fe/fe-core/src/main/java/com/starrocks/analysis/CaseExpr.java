@@ -29,7 +29,6 @@ import com.starrocks.thrift.TCaseExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -159,94 +158,6 @@ public class CaseExpr extends Expr {
 
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
-
-    // this method just compare literal value and not completely consistent with be,for two cases
-    // 1 not deal float
-    // 2 just compare literal value with same type. for a example sql 'select case when 123 then '1' else '2' end as col'
-    //      for be will return '1', because be only regard 0 as false
-    //      but for current LiteralExpr.compareLiteral, `123`' won't be regard as true
-    //  the case which two values has different type left to be
-    public Expr computeCaseExpr(CaseExpr expr) {
-        LiteralExpr caseExpr;
-        int startIndex = 0;
-        int endIndex = expr.getChildren().size();
-        if (expr.hasCaseExpr()) {
-            // just deal literal here
-            // and avoid `float compute` in java,float should be dealt in be
-            Expr caseChildExpr = expr.getChild(0);
-            if (!caseChildExpr.isLiteral()
-                    || caseChildExpr instanceof DecimalLiteral || caseChildExpr instanceof FloatLiteral) {
-                return expr;
-            }
-            caseExpr = (LiteralExpr) expr.getChild(0);
-            startIndex++;
-        } else {
-            caseExpr = new BoolLiteral(true);
-        }
-
-        if (caseExpr instanceof NullLiteral) {
-            if (expr.hasElseExpr) {
-                return expr.getChild(expr.getChildren().size() - 1);
-            } else {
-                return new NullLiteral();
-            }
-        }
-
-        if (expr.hasElseExpr) {
-            endIndex--;
-        }
-
-        // early return when the `when expr` can't be converted to constants
-        Expr startExpr = expr.getChild(startIndex);
-        if ((!startExpr.isLiteral() || startExpr instanceof DecimalLiteral || startExpr instanceof FloatLiteral)
-                || (!(startExpr instanceof NullLiteral) &&
-                !startExpr.getClass().toString().equals(caseExpr.getClass().toString()))) {
-            return expr;
-        }
-
-        for (int i = startIndex; i < endIndex; i = i + 2) {
-            Expr currentWhenExpr = expr.getChild(i);
-            // skip null literal
-            if (currentWhenExpr instanceof NullLiteral) {
-                continue;
-            }
-            // stop convert in three cases
-            // 1 not literal
-            // 2 float
-            // 3 `case expr` and `when expr` don't have same type
-            if ((!currentWhenExpr.isLiteral() || currentWhenExpr instanceof DecimalLiteral ||
-                    currentWhenExpr instanceof FloatLiteral)
-                    || !currentWhenExpr.getClass().toString().equals(caseExpr.getClass().toString())) {
-                // remove the expr which has been evaluated
-                List<Expr> exprLeft = new ArrayList<>();
-                if (expr.hasCaseExpr()) {
-                    exprLeft.add(caseExpr);
-                }
-                for (int j = i; j < expr.getChildren().size(); j++) {
-                    exprLeft.add(expr.getChild(j));
-                }
-                Expr retCaseExpr = expr.clone();
-                retCaseExpr.getChildren().clear();
-                retCaseExpr.addChildren(exprLeft);
-                return retCaseExpr;
-            } else if (caseExpr.compareLiteral((LiteralExpr) currentWhenExpr) == 0) {
-                return expr.getChild(i + 1);
-            }
-        }
-
-        if (expr.hasElseExpr) {
-            return expr.getChild(expr.getChildren().size() - 1);
-        } else {
-            return new NullLiteral();
-        }
-    }
-
-    @Override
-    public Expr getResultValue() throws AnalysisException {
-        recursiveResetChildrenResult();
-        return computeCaseExpr(this);
     }
 
     @Override

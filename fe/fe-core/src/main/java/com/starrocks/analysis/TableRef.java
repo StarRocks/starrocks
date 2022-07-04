@@ -32,7 +32,6 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.rewrite.ExprRewriter;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -318,11 +317,6 @@ public class TableRef implements ParseNode, Writable {
      * and the TupleDescriptor (desc) of this table has been created.
      */
     public void analyzeJoin(Analyzer analyzer) throws AnalysisException {
-    }
-
-    public void rewriteExprs(ExprRewriter rewriter, Analyzer analyzer)
-            throws AnalysisException {
-        Preconditions.checkState(isAnalyzed);
     }
 
     private String joinOpToSql() {

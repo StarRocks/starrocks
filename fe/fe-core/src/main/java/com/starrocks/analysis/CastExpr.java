@@ -223,49 +223,6 @@ public class CastExpr extends Expr {
     }
 
     @Override
-    public Expr getResultValue() throws AnalysisException {
-        recursiveResetChildrenResult();
-        final Expr value = children.get(0);
-        if (!(value instanceof LiteralExpr)) {
-            return this;
-        }
-        Expr targetExpr;
-        try {
-            targetExpr = castTo((LiteralExpr) value);
-        } catch (AnalysisException ae) {
-            targetExpr = this;
-        } catch (NumberFormatException nfe) {
-            targetExpr = new NullLiteral();
-        }
-        return targetExpr;
-    }
-
-    private Expr castTo(LiteralExpr value) throws AnalysisException {
-        if (value instanceof NullLiteral) {
-            return value;
-        } else if (type.isIntegerType()) {
-            return new IntLiteral(value.getLongValue(), type);
-        } else if (type.isLargeIntType()) {
-            return new LargeIntLiteral(value.getStringValue());
-        } else if (type.isDecimalOfAnyVersion()) {
-            // Inside DecimalLiteral constructor, narrowest decimal type is used instead, so use
-            // uncheckedCastTo to make decimal literals use specified type.
-            DecimalLiteral decimalLiteral = new DecimalLiteral(value.getStringValue(), type);
-            decimalLiteral.uncheckedCastTo(type);
-            return decimalLiteral;
-        } else if (type.isFloatingPointType()) {
-            return new FloatLiteral(value.getDoubleValue(), type);
-        } else if (type.isStringType()) {
-            return new StringLiteral(value.getStringValue());
-        } else if (type.isDateType()) {
-            return new DateLiteral(value.getStringValue(), type);
-        } else if (type.isBoolean()) {
-            return new BoolLiteral(value.getStringValue());
-        }
-        return this;
-    }
-
-    @Override
     public boolean isNullable() {
         return true;
     }
