@@ -101,6 +101,7 @@ import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
@@ -226,6 +227,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
 
     // ---------------------------------------- Database Statement -----------------------------------------------------
+    
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
@@ -241,6 +243,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.IF() != null,
                 dbName,
                 context.FORCE() != null);
+    }
+    
+    @Override
+    public ParseNode visitShowCreateDbStatement(StarRocksParser.ShowCreateDbStatementContext context) {
+        String dbName = ((Identifier) visit(context.identifier())).getValue();
+        return new ShowCreateDbStmt(dbName);
     }
 
 
