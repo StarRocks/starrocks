@@ -120,6 +120,7 @@ public:
             result = new_vector[index] + (u - (double)index) * (new_vector[index + 1] - new_vector[index]);
         } else {
             LOG(ERROR) << "Invalid PrimitiveTypes for percentile_cont function";
+            return;
         }
 
         column->append(result);
