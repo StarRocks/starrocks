@@ -19,7 +19,6 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.connector.ConnectorDatabaseId;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.external.hive.HiveColumnStats;
-import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HivePartitionStats;
 import com.starrocks.external.hive.HiveTableStats;
@@ -330,7 +329,7 @@ public class HiveMetaStoreTableUtils {
 
     public static HudiTable convertHudiConnTableToSRTable(Table hmsTable, String resourceName)
             throws DdlException {
-        Schema hudiSchema = HiveMetaCache.loadHudiSchema(hmsTable);
+        Schema hudiSchema = HudiTable.loadHudiSchema(hmsTable);
         List<Schema.Field> allHudiColumns = hudiSchema.getFields();
         List<Column> fullSchema = Lists.newArrayList();
         for (Schema.Field fieldSchema : allHudiColumns) {

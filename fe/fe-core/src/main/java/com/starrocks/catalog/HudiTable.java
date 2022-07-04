@@ -100,7 +100,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
     public HudiTable(long id, String name, List<Column> schema, Map<String, String> properties) throws DdlException {
         super(id, name, TableType.HUDI, schema);
-        validate(properties);
+        initProps(properties);
         initHmsTableInfo();
     }
 
@@ -225,7 +225,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return HiveMetaStoreTableUtils.getPartitionStatsRowCount(hmsTableInfo, partitions);
     }
 
-    private void validate(Map<String, String> properties) throws DdlException {
+    private void initProps(Map<String, String> properties) throws DdlException {
         if (properties == null) {
             throw new DdlException("Please set properties of hudi table.");
         }
@@ -253,10 +253,10 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             throw new DdlException("Resource [" + resourceName + "] is not hudi resource");
         }
 
-        org.apache.hadoop.hive.metastore.api.Table metastoreTable = GlobalStateMgr.getCurrentState().getHiveRepository()
-                .getTable(resourceName, this.db, this.table);
-
         this.resourceName = resourceName;
+
+        org.apache.hadoop.hive.metastore.api.Table metastoreTable =
+                HudiTable.validate(resourceName, this.db, this.table, this.fullSchema);
 
         String hudiBasePath = metastoreTable.getSd().getLocation();
         if (!Strings.isNullOrEmpty(hudiBasePath)) {
@@ -267,6 +267,13 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         HoodieTableMetaClient metaClient =
                 HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
         HoodieTableConfig hudiTableConfig = metaClient.getTableConfig();
+
+        Schema tableSchema;
+        try {
+            tableSchema = loadHudiSchema(metastoreTable);
+        } catch (Exception e) {
+            throw new DdlException("Cannot get hudi table schema.");
+        }
 
         org.apache.hudi.common.model.HoodieTableType hudiTableType = hudiTableConfig.getTableType();
         if (hudiTableType == org.apache.hudi.common.model.HoodieTableType.MERGE_ON_READ) {
@@ -287,14 +294,6 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         HoodieFileFormat hudiBaseFileFormat = hudiTableConfig.getBaseFileFormat();
         hudiProperties.put(HUDI_TABLE_BASE_FILE_FORMAT, hudiBaseFileFormat.name());
 
-        TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
-        Schema tableSchema;
-        try {
-            tableSchema = HoodieAvroUtils.createHoodieWriteSchema(schemaUtil.getTableAvroSchema());
-        } catch (Exception e) {
-            throw new DdlException("Cannot get hudi table schema.");
-        }
-
         Option<String[]> hudiPartitionFields = hudiTableConfig.getPartitionFields();
         if (hudiPartitionFields.isPresent()) {
             for (String partField : hudiPartitionFields.get()) {
@@ -306,13 +305,27 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                 }
             }
         }
+
         for (Schema.Field hudiField : tableSchema.getFields()) {
             if (this.partColumnNames.stream().noneMatch(p -> p.equals(hudiField.name()))) {
                 this.dataColumnNames.add(hudiField.name());
             }
         }
 
-        for (Column column : this.fullSchema) {
+
+        if (!copiedProps.isEmpty()) {
+            throw new DdlException("Unknown table properties: " + copiedProps);
+        }
+    }
+
+    public static org.apache.hadoop.hive.metastore.api.Table validate(String resourceName,
+                  String db, String table, List<Column> fullSchema) throws DdlException {
+        org.apache.hadoop.hive.metastore.api.Table metastoreTable = GlobalStateMgr.getCurrentState().getHiveRepository()
+                .getTable(resourceName, db, table);
+
+        Schema tableSchema = HudiTable.loadHudiSchema(metastoreTable);
+
+        for (Column column : fullSchema) {
             if (!column.isAllowNull()) {
                 throw new DdlException(
                         "Hudi extern table does not support no-nullable column: [" + column.getName() + "]");
@@ -326,13 +339,25 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                         "to starrocks type [" + column.getPrimitiveType() + "], column name: " + column.getName());
             }
         }
-
-        if (!copiedProps.isEmpty()) {
-            throw new DdlException("Unknown table properties: " + copiedProps);
-        }
+        return metastoreTable;
     }
 
-    private boolean validColumnType(Schema avroSchema, Type srType) throws DdlException {
+    public static Schema loadHudiSchema(org.apache.hadoop.hive.metastore.api.Table hiveTable) throws DdlException {
+        String hudiBasePath = hiveTable.getSd().getLocation();
+        Configuration conf = new Configuration();
+        HoodieTableMetaClient metaClient =
+                HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
+        TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
+        Schema hudiTable;
+        try {
+            hudiTable = HoodieAvroUtils.createHoodieWriteSchema(schemaUtil.getTableAvroSchema());
+        } catch (Exception e) {
+            throw new DdlException("Cannot get hudi table schema.");
+        }
+        return hudiTable;
+    }
+
+    public static boolean validColumnType(Schema avroSchema, Type srType) throws DdlException {
         Schema.Type columnType = avroSchema.getType();
         if (columnType == null) {
             return false;
