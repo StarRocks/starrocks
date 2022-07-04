@@ -36,7 +36,13 @@ jobs:
           
       - name: Install thrift
         run: |
-          sudo apt-get install -y thrift
+          wget http://archive.apache.org/dist/thrift/0.13.0/thrift-0.13.0.tar.gz
+          tar -xvzf thrift-0.13.0.tar.gz 
+          cd thrift-0.13.0
+          ./configure
+          make 
+          sudo make install
+          thrift -version
           
       - name: Build and analyze
         env:
