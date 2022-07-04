@@ -23,6 +23,9 @@ Before deploying StarRocks, make sure the following requirements are satisfied.
 |Software|Install the following on all nodes: <ul><li><a href="https://www.oracle.com/java/technologies/downloads/">Oracle Java</a> (1.8 or later)</li><li><a href="https://www.mysql.com/downloads/">MySQL client</a> (5.5 or later)</li></ul>|  |
 |System environment|<ul><li>Clock within the cluster must be synced.</li> <li>You must have the privilege to set <code>ulimit -n</code>.</li> </ul> | |
 
+> Note
+> StarRocks can handle 10M-100M rows per second per CPU thread according to the complexity of your workload. You can estimate how many CPU threads do you need in your cluster. StarRocks leverage column-store and compress when storing data, which can got a 4-10x compression ration. You can estimate your storage volume with the compression ration.
+
 Other system configurations:
 
 * It is recommended to disable swappiness to reduce the impact on performance.
