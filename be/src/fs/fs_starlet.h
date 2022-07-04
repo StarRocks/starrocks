@@ -5,6 +5,8 @@
 
 namespace starrocks {
 
+const char* const kStarletPrefix = "staros://";
+
 std::unique_ptr<FileSystem> new_fs_starlet();
 
 } // namespace starrocks

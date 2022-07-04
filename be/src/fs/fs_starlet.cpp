@@ -1,5 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#include "fs/fs_starlet.h"
+
 #include <fmt/core.h>
 #include <fslib/configuration.h>
 #include <fslib/file.h>
@@ -32,8 +34,6 @@ using staros::starlet::fslib::kS3AccessKeyId;
 using staros::starlet::fslib::kS3AccessKeySecret;
 using staros::starlet::fslib::kS3OverrideEndpoint;
 using staros::starlet::fslib::kSysRoot;
-
-static const char* const kStarletPrefix = "staros://";
 
 static Status to_status(absl::Status absl_status) {
     switch (absl_status.code()) {

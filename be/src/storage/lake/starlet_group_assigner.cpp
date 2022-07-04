@@ -6,11 +6,10 @@
 
 #include <fmt/format.h>
 
+#include "fs/fs_starlet.h"
 #include "service/staros_worker.h"
 
 namespace starrocks::lake {
-
-static const char* const kStarletPrefix = "staros://";
 
 static std::string normalize_group(const std::string& group) {
     if (group.back() != '/') {
