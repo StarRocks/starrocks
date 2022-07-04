@@ -48,6 +48,10 @@ public class SemiReorderRule extends TransformationRule {
         }
 
         LogicalJoinOperator bottomJoin = (LogicalJoinOperator) input.getInputs().get(0).getOp();
+        if (!topJoin.getJoinHint().isEmpty() || !bottomJoin.getJoinHint().isEmpty()) {
+            return false;
+        }
+
         if (bottomJoin.getJoinType().isOuterJoin()) {
             return false;
         }
