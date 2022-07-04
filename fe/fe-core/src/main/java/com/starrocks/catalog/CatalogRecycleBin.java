@@ -474,7 +474,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         }
 
         idToDatabase.remove(dbId);
-        removeRecycleMarkers(dbId);
+        idToRecycleTime.remove(dbId);
 
         return dbInfo.getDb();
     }
@@ -536,7 +536,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         db.createTable(table);
         nameToTableInfo.row(dbId).remove(table.getName());
         idToTableInfoDbLevel.remove(tableId);
-        removeRecycleMarkers(tableInfo.getTable().getId());
+        idToRecycleTime.remove(tableInfo.getTable().getId());
         LOG.info("replay recover table[{}-{}] finished", tableId, tableInfo.getTable().getName());
     }
 
@@ -614,7 +614,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             rangePartitionInfo.setIsInMemory(partitionId, partitionInfo.isInMemory());
 
             iterator.remove();
-            removeRecycleMarkers(partitionId);
+            idToRecycleTime.remove(partitionId);
 
             LOG.info("replay recover partition[{}-{}] finished", partitionId, partitionInfo.getPartition().getName());
             break;
