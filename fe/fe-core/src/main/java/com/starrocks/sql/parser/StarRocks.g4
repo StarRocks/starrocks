@@ -17,6 +17,7 @@ statement
 
     | showCreateDbStatement                                                                 #showCreateDb
     // Database Statement
+    | alterDbQuotaStmt                                                                      #alterDbQuota
     | createDbStatement                                                                     #createDb
     | dropDbStatement                                                                       #dropDb
 
@@ -106,6 +107,11 @@ statement
 
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
+alterDbQuotaStmt
+    : ALTER DATABASE identifier SET DATA QUOTA identifier
+    | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
+    ;
+
 createDbStatement
     : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? identifier
     ;

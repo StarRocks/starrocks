@@ -16,6 +16,7 @@ import com.starrocks.analysis.AdminShowConfigStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
+import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
@@ -228,7 +229,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
 
     // ---------------------------------------- Database Statement -----------------------------------------------------
-    
+    @Override
+    public ParseNode visitAlterDbQuotaStmt(StarRocksParser.AlterDbQuotaStmtContext context) {
+        String dbName = ((Identifier) visit(context.identifier(0))).getValue();
+        if (context.DATA() != null) {
+            String quotaValue = ((Identifier) visit(context.identifier(1))).getValue();
+            return new AlterDatabaseQuotaStmt(dbName,
+                    AlterDatabaseQuotaStmt.QuotaType.DATA,
+                    quotaValue);
+        } else {
+            String quotaValue = context.INTEGER_VALUE().getText();
+            return new AlterDatabaseQuotaStmt(dbName,
+                    AlterDatabaseQuotaStmt.QuotaType.REPLICA,
+                    quotaValue);
+        }
+    }
+
+
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
         String dbName = ((Identifier) visit(context.identifier())).getValue();

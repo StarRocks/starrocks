@@ -6,6 +6,7 @@ import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
+import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
@@ -284,6 +285,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowCreateDbStatement(ShowCreateDbStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    public R visitAlterDbQuotaStmt(AlterDatabaseQuotaStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     public R visitCreateDbStatement(CreateDbStmt statement, C context) {
