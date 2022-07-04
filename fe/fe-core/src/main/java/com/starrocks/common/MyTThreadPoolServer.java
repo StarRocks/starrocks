@@ -28,9 +28,18 @@ public class MyTThreadPoolServer extends TThreadPoolServer {
 
                 super.execute();
             } catch (OutOfMemoryError error) {
-                LOG.error("thrift server accept failed, will retry", error);
+                if (error.getMessage() != null &&
+                        error.getMessage().toLowerCase().contains("unable to create new native thread")) {
+                    LOG.error("Fail to accept new connection, " +
+                            "please set the max user processes to a bigger value using `ulimit -u`. will retry", error);
+                } else {
+                    LOG.error("Fail to accept new connection, " +
+                            "please set the jvm heap size to a bigger value. will exit", error);
+                    System.exit(-1);
+                }
             } catch (Throwable t) {
-                LOG.error("thrift server accept failed, will exit", t);
+                LOG.error("Fail to accept new connection. will exit", t);
+                System.exit(-1);
             }
         }
     }
