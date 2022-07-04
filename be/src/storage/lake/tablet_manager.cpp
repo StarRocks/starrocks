@@ -24,40 +24,24 @@ TabletManager::TabletManager(GroupAssigner* group_assigner, int64_t cache_capaci
 
 // path $bucket:/$ServiceID/$GroupID/tbl_${TabletID}_${version}
 std::string TabletManager::tablet_metadata_path(const std::string& group, int64_t tablet_id, int64_t verson) {
-    if (group.back() != '/') {
-        return fmt::format("{}/tbl_{:016X}_{:016X}", group, tablet_id, verson);
-    } else {
-        return fmt::format("{}tbl_{:016X}_{:016X}", group, tablet_id, verson);
-    }
+    return fmt::format("{}/tbl_{:016X}_{:016X}", group, tablet_id, verson);
 }
 
 std::string TabletManager::tablet_metadata_path(const std::string& group, const std::string& metadata_path) {
-    if (group.back() != '/') {
-        return fmt::format("{}/{}", group, metadata_path);
-    } else {
-        return fmt::format("{}{}", group, metadata_path);
-    }
+    return fmt::format("{}/{}", group, metadata_path);
 }
 
 std::string TabletManager::tablet_metadata_cache_key(int64_t tablet_id, int64_t version) {
     return fmt::format("tbl_{:016X}_{:016X}", tablet_id, version);
 }
 
-// trnslog path rule $Bucket:/$ServiceID/$GroupID/txn_${TabletID}_${TxnID}
+// txnslog path rule $Bucket:/$ServiceID/$GroupID/txn_${TabletID}_${TxnID}
 std::string TabletManager::txn_log_path(const std::string& group, int64_t tablet_id, int64_t txn_id) {
-    if (group.back() != '/') {
-        return fmt::format("{}/txn_{:016X}_{:016X}", group, tablet_id, txn_id);
-    } else {
-        return fmt::format("{}txn_{:016X}_{:016X}", group, tablet_id, txn_id);
-    }
+    return fmt::format("{}/txn_{:016X}_{:016X}", group, tablet_id, txn_id);
 }
 
 std::string TabletManager::txn_log_path(const std::string& group, const std::string& txnlog_path) {
-    if (group.back() != '/') {
-        return fmt::format("{}/{}", group, txnlog_path);
-    } else {
-        return fmt::format("{}{}", group, txnlog_path);
-    }
+    return fmt::format("{}/{}", group, txnlog_path);
 }
 
 std::string TabletManager::txn_log_cache_key(int64_t tablet_id, int64_t txn_id) {
@@ -66,6 +50,10 @@ std::string TabletManager::txn_log_cache_key(int64_t tablet_id, int64_t txn_id) 
 
 std::string TabletManager::tablet_schema_cache_key(int64_t tablet_id) {
     return fmt::format("schema_{:016X}", tablet_id);
+}
+
+std::string TabletManager::path_assemble(const std::string& path, int64_t tablet_id) {
+    return _group_assigner->path_assemble(path, tablet_id);
 }
 
 static void tablet_metadata_deleter(const CacheKey& key, void* value) {
@@ -178,10 +166,10 @@ Status TabletManager::drop_tablet(int64_t tablet_id) {
     //drop tablet schema from metacache;
     erase_metacache(tablet_schema_cache_key(tablet_id));
 
-    RETURN_IF_ERROR(fs->iterate_dir(_group_assigner->path_assemble(group_path, tablet_id), scan_cb));
+    RETURN_IF_ERROR(fs->iterate_dir(path_assemble(group_path, tablet_id), scan_cb));
     for (const auto& obj : objects) {
         erase_metacache(obj);
-        (void)fs->delete_file(_group_assigner->path_assemble(fmt::format("{}/{}", group_path, obj), tablet_id));
+        (void)fs->delete_file(path_assemble(fmt::format("{}/{}", group_path, obj), tablet_id));
     }
 
     return Status::OK();
@@ -190,7 +178,7 @@ Status TabletManager::drop_tablet(int64_t tablet_id) {
 Status TabletManager::put_tablet_metadata(const std::string& group, TabletMetadataPtr metadata) {
     auto metadata_path = tablet_metadata_path(group, metadata->id(), metadata->version());
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_group_assigner->get_fs_prefix()));
-    ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(_group_assigner->path_assemble(metadata_path, metadata->id())));
+    ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(path_assemble(metadata_path, metadata->id())));
     RETURN_IF_ERROR(wf->append(metadata->SerializeAsString()));
     RETURN_IF_ERROR(wf->close());
 
@@ -213,7 +201,7 @@ Status TabletManager::put_tablet_metadata(const std::string& group, const Tablet
 StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_path, int64_t tablet_id) {
     std::string read_buf;
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_group_assigner->get_fs_prefix()));
-    ASSIGN_OR_RETURN(auto rf, fs->new_random_access_file(_group_assigner->path_assemble(metadata_path, tablet_id)));
+    ASSIGN_OR_RETURN(auto rf, fs->new_random_access_file(path_assemble(metadata_path, tablet_id)));
 
     ASSIGN_OR_RETURN(auto size, rf->get_size());
     raw::stl_string_resize_uninitialized(&read_buf, size);
@@ -266,7 +254,7 @@ Status TabletManager::delete_tablet_metadata(const std::string& group, int64_t t
 
     auto metadata_path = tablet_metadata_path(group, tablet_id, version);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_group_assigner->get_fs_prefix()));
-    return fs->delete_file(_group_assigner->path_assemble(metadata_path, tablet_id));
+    return fs->delete_file(path_assemble(metadata_path, tablet_id));
 }
 
 StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_id, bool filter_tablet) {
@@ -287,14 +275,14 @@ StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_
         return true;
     };
 
-    RETURN_IF_ERROR(fs->iterate_dir(_group_assigner->path_assemble(group, tablet_id), scan_cb));
+    RETURN_IF_ERROR(fs->iterate_dir(path_assemble(group, tablet_id), scan_cb));
     return TabletMetadataIter{this, std::move(group), std::move(objects)};
 }
 
 StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txnlog_path, int64_t tablet_id) {
     std::string read_buf;
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_group_assigner->get_fs_prefix()));
-    ASSIGN_OR_RETURN(auto rf, fs->new_random_access_file(_group_assigner->path_assemble(txnlog_path, tablet_id)));
+    ASSIGN_OR_RETURN(auto rf, fs->new_random_access_file(path_assemble(txnlog_path, tablet_id)));
 
     ASSIGN_OR_RETURN(auto size, rf->get_size());
     raw::stl_string_resize_uninitialized(&read_buf, size);
@@ -342,7 +330,7 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& group, int64_t
 Status TabletManager::put_txn_log(const std::string& group, TxnLogPtr log) {
     auto txnlog_path = txn_log_path(group, log->tablet_id(), log->txn_id());
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_group_assigner->get_fs_prefix()));
-    ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(_group_assigner->path_assemble(txnlog_path, log->tablet_id())));
+    ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(path_assemble(txnlog_path, log->tablet_id())));
     RETURN_IF_ERROR(wf->append(log->SerializeAsString()));
     RETURN_IF_ERROR(wf->close());
 
@@ -369,7 +357,7 @@ Status TabletManager::delete_txn_log(const std::string& group, int64_t tablet_id
 
     auto txnlog_path = txn_log_path(group, tablet_id, txn_id);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_group_assigner->get_fs_prefix()));
-    return fs->delete_file(_group_assigner->path_assemble(txnlog_path, tablet_id));
+    return fs->delete_file(path_assemble(txnlog_path, tablet_id));
 }
 
 StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_tablet) {
@@ -391,7 +379,7 @@ StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_
         return true;
     };
 
-    RETURN_IF_ERROR(fs->iterate_dir(_group_assigner->path_assemble(group, tablet_id), scan_cb));
+    RETURN_IF_ERROR(fs->iterate_dir(path_assemble(group, tablet_id), scan_cb));
     return TxnLogIter{this, group, std::move(objects)};
 }
 

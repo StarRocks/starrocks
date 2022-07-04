@@ -32,13 +32,15 @@ public:
 
 TEST_F(StarletGroupAssignerTest, starlet_group_test) {
     {
-        staros::starlet::ShardInfo shardInfo = {12345, {""}};
-        shardInfo.properties.emplace("storageGroup", "s3://starlet_test/1001");
+        staros::starlet::S3ObjectStoreInfo s3_store_info;
+        s3_store_info.uri = "s3://starlet_test/1001";
+        staros::starlet::ShardInfo shardInfo = {12345, {ObjectStoreType::S3, s3_store_info}, {}};
         (void)g_worker->add_shard(shardInfo);
     }
     {
-        staros::starlet::ShardInfo shardInfo = {23456, {""}};
-        shardInfo.properties.emplace("storageGroup", "s3://starlet_test/1001");
+        staros::starlet::S3ObjectStoreInfo s3_store_info;
+        s3_store_info.uri = "s3://starlet_test/1001/";
+        staros::starlet::ShardInfo shardInfo = {23456, {ObjectStoreType::S3, s3_store_info}, {}};
         (void)g_worker->add_shard(shardInfo);
     }
 
@@ -52,8 +54,9 @@ TEST_F(StarletGroupAssignerTest, starlet_group_test) {
     EXPECT_TRUE(res.status().is_not_found());
 
     {
-        staros::starlet::ShardInfo shardInfo = {34567, {""}};
-        shardInfo.properties.emplace("storageGroup", "s3://starlet_test/1002");
+        staros::starlet::S3ObjectStoreInfo s3_store_info;
+        s3_store_info.uri = "s3://starlet_test/1002/";
+        staros::starlet::ShardInfo shardInfo = {34567, {ObjectStoreType::S3, s3_store_info}, {}};
         (void)g_worker->add_shard(shardInfo);
     }
 

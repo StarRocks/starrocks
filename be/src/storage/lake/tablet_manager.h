@@ -81,6 +81,8 @@ private:
     std::string tablet_schema_cache_key(int64_t tablet_id);
     TabletSchemaPtr lookup_tablet_schema(const std::string& key);
 
+    std::string path_assemble(const std::string& path, int64_t tablet_id);
+
     GroupAssigner* _group_assigner;
     std::unique_ptr<Cache> _metacache;
 };

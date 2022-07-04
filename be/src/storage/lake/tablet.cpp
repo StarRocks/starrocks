@@ -92,8 +92,9 @@ StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     std::vector<RowsetPtr> rowsets;
     for (const auto& rowset_metadata : tablet_metadata->rowsets()) {
-        rowsets.emplace_back(std::make_shared<Rowset>(_group, tablet_schema,
-                                                      std::make_shared<const RowsetMetadata>(rowset_metadata)));
+        auto rowset = std::make_shared<Rowset>(this, std::make_shared<const RowsetMetadata>(rowset_metadata));
+        RETURN_IF_ERROR(rowset->init());
+        rowsets.emplace_back(std::move(rowset));
     }
     return rowsets;
 }
@@ -104,6 +105,15 @@ std::string Tablet::metadata_path(int64_t version) const {
 
 std::string Tablet::txn_log_path(int64_t txn_id) const {
     return _mgr->txn_log_path(_group, _id, txn_id);
+}
+
+std::string Tablet::segment_path_assemble(const std::string& segment_name) const {
+    auto path = fmt::format("{}/{}", _group, segment_name);
+    return _mgr->path_assemble(path, _id);
+}
+
+std::string Tablet::group_assemble() const {
+    return _mgr->path_assemble(_group, _id);
 }
 
 } // namespace starrocks::lake

@@ -39,7 +39,9 @@ OlapChunkSource::~OlapChunkSource() {
 }
 
 void OlapChunkSource::close(RuntimeState* state) {
-    _update_counter();
+    if (_reader) {
+        _update_counter();
+    }
     if (_prj_iter) {
         _prj_iter->close();
     }

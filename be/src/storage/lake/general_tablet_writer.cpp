@@ -46,12 +46,11 @@ Status GeneralTabletWriter::finish() {
 void GeneralTabletWriter::close() {
     if (!_finished && !_files.empty()) {
         // Delete files
-        auto group = _tablet.group();
-        auto maybe_fs = FileSystem::CreateSharedFromString(group);
+        auto maybe_fs = FileSystem::CreateSharedFromString(_tablet.group_assemble());
         if (maybe_fs.ok()) {
             auto fs = std::move(maybe_fs).value();
             for (const auto& name : _files) {
-                auto path = fmt::format("{}/{}", group, name);
+                auto path = _tablet.segment_path_assemble(name);
                 (void)fs->delete_file(path);
             }
         }
@@ -62,8 +61,7 @@ void GeneralTabletWriter::close() {
 
 Status GeneralTabletWriter::reset_segment_writer() {
     auto name = fmt::format("{}.dat", generate_uuid_string());
-    auto path = fmt::format("{}/{}", _tablet.group(), name);
-    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(path));
+    ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.segment_path_assemble(name)));
     SegmentWriterOptions opts;
     opts.storage_format_version = 2;
     _seg_writer = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema.get(), opts);
