@@ -671,7 +671,7 @@ public class QueryAnalyzer {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tbName);
             }
 
-            if (table.getType() == Table.TableType.OLAP &&
+            if (table.isNativeTable() &&
                     (((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE
                             || ((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE_WITH_LOAD)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");
