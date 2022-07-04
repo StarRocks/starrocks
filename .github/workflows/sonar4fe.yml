@@ -40,8 +40,8 @@ jobs:
           wget http://archive.apache.org/dist/thrift/0.13.0/thrift-0.13.0.tar.gz
           tar -xvzf thrift-0.13.0.tar.gz 
           cd thrift-0.13.0
-          ./configure
-          make -j 2
+          sudo ./configure
+          sudo make -j 2
           sudo make install
           thrift -version
           
