@@ -21,6 +21,7 @@
 
 package com.starrocks.common.util;
 
+import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -52,7 +53,11 @@ public class MasterDaemon extends Daemon {
             try {
                 // not return, but sleep a while. to avoid some thread with large running interval will
                 // wait for a long time to start again.
-                Thread.sleep(10 * 1000);
+                long millis = 10 * 1000;
+                if (FeConstants.runningUnitTest) {
+                    millis = 10000 * 1000;
+                }
+                Thread.sleep(millis);
             } catch (InterruptedException e) {
                 LOG.warn("interrupted exception. thread: {}", getName(), e);
             }
