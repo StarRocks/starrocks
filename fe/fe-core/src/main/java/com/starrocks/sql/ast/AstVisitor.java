@@ -52,6 +52,7 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.KillStmt;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
@@ -305,6 +306,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitRecoverDbStmt(RecoverDbStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitKillStatement(KillStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
