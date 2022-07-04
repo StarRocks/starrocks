@@ -17,19 +17,17 @@
 
 package com.starrocks.journal;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.io.DataOutputBuffer;
-import com.starrocks.common.io.Writable;
 
 import java.util.List;
 
 public interface Journal {
 
     // Open the journal environment
-    public void open();
+    public void open() throws InterruptedException, JournalException;
 
     // Roll Edit file or database
-    public void rollJournal(long journalId);
+    public void rollJournal(long journalId) throws JournalException;
 
     // Get the newest journal id 
     public long getMaxJournalId();
@@ -40,17 +38,9 @@ public interface Journal {
     // Close the environment
     public void close();
 
-    // Get the journal which id = journalId
-    public JournalEntity read(long journalId);
-
     // Get all the journals whose id: fromKey <= id <= toKey
     // toKey = -1 means toKey = Long.Max_Value
     public JournalCursor read(long fromKey, long toKey) throws JournalException;
-
-    // Write a journal and sync to disk
-    // Only keep this method for test, will remove in next PR
-    @VisibleForTesting
-    public void write(short op, Writable writable);
 
     // Delete journals whose max id is less than deleteToJournalId
     public void deleteJournals(long deleteJournalToId);

@@ -15,8 +15,6 @@ import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
@@ -33,12 +31,7 @@ import java.util.List;
  * <p>
  * TODO: Dictionary pruning
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class HdfsScanNode extends ScanNode {
-    private static final Logger LOG = LogManager.getLogger(HdfsScanNode.class);
-
     private RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
 
     private HiveTable hiveTable = null;

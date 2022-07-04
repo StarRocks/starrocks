@@ -52,7 +52,7 @@ public class SetUserPropertyStmt extends DdlStmt {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
+    public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
         if (Strings.isNullOrEmpty(user)) {
             // If param 'user' is not set, use the login user name.
@@ -61,7 +61,7 @@ public class SetUserPropertyStmt extends DdlStmt {
         } else {
             // If param 'user' is set, check if it need to be full-qualified
             if (!user.equals(Auth.ROOT_USER) && !user.equals(Auth.ADMIN_USER)) {
-                user = ClusterNamespace.getFullName(getClusterName(), user);
+                user = ClusterNamespace.getFullName(user);
             }
         }
 
@@ -71,7 +71,7 @@ public class SetUserPropertyStmt extends DdlStmt {
 
         boolean isSelf = user.equals(ConnectContext.get().getQualifiedUser());
         for (SetVar var : propertyList) {
-            ((SetUserPropertyVar) var).analyze(analyzer, isSelf);
+            ((SetUserPropertyVar) var).analyze(isSelf);
         }
     }
 

@@ -168,6 +168,11 @@ public class StreamLoadPlanner {
         // OlapTableSink can dispatch data to corresponding node.
         PlanFragment fragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.UNPARTITIONED);
         fragment.setSink(olapTableSink);
+        // At present, we only support dop=1 for olap table sink.
+        // because tablet writing needs to know the number of senders in advance
+        // and guaranteed order of data writing
+        // It can be parallel only in some scenes, for easy use 1 dop now.
+        fragment.setPipelineDop(1);
         // After data loading, we need to check the global dict for low cardinality string column
         // whether update.
         fragment.setLoadGlobalDicts(globalDicts);
@@ -201,7 +206,9 @@ public class StreamLoadPlanner {
         queryOptions.setQuery_type(TQueryType.LOAD);
         queryOptions.setQuery_timeout(streamLoadTask.getTimeout());
         queryOptions.setTransmission_compression_type(streamLoadTask.getTransmisionCompressionType());
-        if (streamLoadTask.getLoadParallelRequestNum() != 0) {
+        // Disable load_dop for LakeTable temporary, because BE's `LakeTabletsChannel` does not support
+        // parallel send from a single sender.
+        if (streamLoadTask.getLoadParallelRequestNum() != 0 && !destTable.isLakeTable()) {
             // only dup_keys can use parallel write since other table's the order of write is important
             if (destTable.getKeysType() == KeysType.DUP_KEYS) {
                 queryOptions.setLoad_dop(streamLoadTask.getLoadParallelRequestNum());

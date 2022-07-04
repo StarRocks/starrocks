@@ -83,6 +83,7 @@ Status JDBCDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk
         return Status::EndOfFile("");
     }
     _rows_read += (*chunk)->num_rows();
+    _bytes_read += (*chunk)->bytes_usage();
     return Status::OK();
 }
 
@@ -91,6 +92,13 @@ int64_t JDBCDataSource::raw_rows_read() const {
 }
 int64_t JDBCDataSource::num_rows_read() const {
     return _rows_read;
+}
+int64_t JDBCDataSource::num_bytes_read() const {
+    return _bytes_read;
+}
+int64_t JDBCDataSource::cpu_time_spent() const {
+    // TODO: calculte the real cputime
+    return 0;
 }
 
 Status JDBCDataSource::_create_scanner(RuntimeState* state) {

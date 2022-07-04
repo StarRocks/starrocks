@@ -388,7 +388,7 @@ public class WorkGroupMgr implements Writable {
                 if (twg.getVersion() < minVersion) {
                     continue;
                 }
-                if (!activeWorkGroup.containsKey(twg.getId()) ||
+                if ((!activeWorkGroup.containsKey(twg.getId()) && id2WorkGroupMap.containsKey(twg.getId())) ||
                         twg.getVersion() > activeWorkGroup.get(twg.getId()).getVersion()) {
                     currentWorkGroupOps.add(op);
                 }
@@ -437,10 +437,7 @@ public class WorkGroupMgr implements Writable {
         if (classifierList.isEmpty()) {
             return null;
         } else {
-            WorkGroup workGroup = id2WorkGroupMap.get(classifierList.get(classifierList.size() - 1).getWorkgroupId());
-            ctx.getAuditEventBuilder().setResourceGroup(workGroup.getName());
-            ctx.setWorkGroup(workGroup);
-            return workGroup;
+            return id2WorkGroupMap.get(classifierList.get(classifierList.size() - 1).getWorkgroupId());
         }
     }
 

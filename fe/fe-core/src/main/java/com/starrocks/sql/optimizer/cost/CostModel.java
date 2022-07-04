@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
@@ -295,6 +296,17 @@ public class CostModel {
                         0, 0);
 
             }
+        }
+
+        @Override
+        public CostEstimate visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator join, ExpressionContext context) {
+            Statistics leftStatistics = context.getChildStatistics(0);
+            Statistics rightStatistics = context.getChildStatistics(1);
+
+            double leftSize = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
+            double rightSize = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
+            return CostEstimate.of(leftSize * rightSize,
+                    rightSize * Constants.CrossJoinCostPenalty * 2, 0);
         }
 
         @Override

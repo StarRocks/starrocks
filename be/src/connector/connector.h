@@ -33,8 +33,12 @@ public:
 
     // how many rows read from storage
     virtual int64_t raw_rows_read() const = 0;
-    // how mnay rows returned after filtering.
+    // how many rows returned after filtering.
     virtual int64_t num_rows_read() const = 0;
+    // how many bytes read from external
+    virtual int64_t num_bytes_read() const = 0;
+    // CPU time of this data source
+    virtual int64_t cpu_time_spent() const = 0;
 
     // following fields are set by framework
     // 1. runtime profile: any metrics you want to record
@@ -95,6 +99,7 @@ public:
     static const std::string ES;
     static const std::string JDBC;
     static const std::string MYSQL;
+    static const std::string LAKE;
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.

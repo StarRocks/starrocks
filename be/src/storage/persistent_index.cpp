@@ -185,83 +185,69 @@ struct MoveDest {
     bool operator<(const MoveDest& rhs) const { return npack < rhs.npack; }
 };
 
-static Status find_buckets_to_move(uint32_t pageid, size_t min_pack_to_move, const uint8_t* bucket_packs_in_page,
-                                   std::vector<BucketToMove>* buckets_to_move) {
-    std::vector<int> bucketid_ordered_by_packs(bucket_per_page);
-    for (int i = 0; i < bucket_per_page; i++) {
-        bucketid_ordered_by_packs[i] = i;
-    }
-    std::sort(bucketid_ordered_by_packs.begin(), bucketid_ordered_by_packs.end(),
-              [&](const int& l, const int& r) -> bool { return bucket_packs_in_page[l] < bucket_packs_in_page[r]; });
-    // try find solution of moving 1 bucket
-    for (int oi = 0; oi < bucket_per_page; oi++) {
-        int i = bucketid_ordered_by_packs[oi];
-        auto bucket_packs = bucket_packs_in_page[i];
-        if (bucket_packs >= min_pack_to_move) {
-            buckets_to_move->emplace_back(bucket_packs, pageid, i);
-            return Status::OK();
+static std::vector<int8_t> get_move_buckets(size_t target, const uint8_t* bucket_packs_in_page) {
+    vector<int8_t> idxes;
+    idxes.reserve(bucket_per_page);
+    int32_t total_buckets = 0;
+    for (int8_t i = 0; i < bucket_per_page; i++) {
+        if (bucket_packs_in_page[i] > 0) {
+            idxes.push_back(i);
         }
+        total_buckets += bucket_packs_in_page[i];
     }
-    // try find solution of moving 2 bucket
-    std::array<int, 3> move2_min = {INT_MAX, -1, -1};
-    for (int oi = 0; oi < bucket_per_page; oi++) {
-        int i = bucketid_ordered_by_packs[oi];
-        if (bucket_packs_in_page[i] == 0) {
-            continue;
+    std::sort(idxes.begin(), idxes.end(),
+              [&](int8_t lhs, int8_t rhs) { return bucket_packs_in_page[lhs] < bucket_packs_in_page[rhs]; });
+    // store idx if this sum value uses bucket_packs_in_page[idx], or -1
+    std::vector<int8_t> dp(total_buckets + 1, -1);
+    dp[0] = bucket_per_page;           // assign an id that will never be used but >= 0
+    int32_t valid_sum = total_buckets; // total_buckets is already a valid solution
+    auto get_list_from_dp = [&] {
+        vector<int8_t> ret;
+        ret.reserve(16);
+        while (valid_sum > 0) {
+            ret.emplace_back(dp[valid_sum]);
+            valid_sum -= bucket_packs_in_page[dp[valid_sum]];
         }
-        for (int oj = oi + 1; oj < bucket_per_page; oj++) {
-            int j = bucketid_ordered_by_packs[oj];
-            auto bucket_packs = bucket_packs_in_page[i] + bucket_packs_in_page[j];
-            if (bucket_packs == min_pack_to_move) {
-                buckets_to_move->emplace_back(bucket_packs_in_page[i], pageid, i);
-                buckets_to_move->emplace_back(bucket_packs_in_page[j], pageid, j);
-                return Status::OK();
-            } else if (bucket_packs > min_pack_to_move && bucket_packs < move2_min[0]) {
-                move2_min = {bucket_packs, i, j};
-                break;
+        return ret;
+    };
+    int32_t max_sum = 0; // current max sum
+    for (int8_t idx = 0; idx < idxes.size(); idx++) {
+        int8_t i = idxes[idx];
+        for (int32_t v = 0; v <= max_sum; v++) {
+            if (dp[v] < 0 || dp[v] == i) {
+                continue;
             }
-        }
-    }
-    if (move2_min[2] >= 0) {
-        for (int i = 1; i < 3; i++) {
-            auto bucketid = move2_min[i];
-            buckets_to_move->emplace_back(bucket_packs_in_page[bucketid], pageid, bucketid);
-        }
-        return Status::OK();
-    }
-    // try find solution of moving 3 bucket
-    std::array<int, 4> move3_min = {INT_MAX, -1, -1, -1};
-    for (int oi = 0; oi < bucket_per_page; oi++) {
-        int i = bucketid_ordered_by_packs[oi];
-        if (bucket_packs_in_page[i] == 0) {
-            continue;
-        }
-        for (int oj = oi + 1; oj < bucket_per_page; oj++) {
-            int j = bucketid_ordered_by_packs[oj];
-            for (int ok = oj + 1; ok < bucket_per_page; ok++) {
-                int k = bucketid_ordered_by_packs[ok];
-                auto bucket_packs = bucket_packs_in_page[i] + bucket_packs_in_page[j] + bucket_packs_in_page[k];
-                if (bucket_packs == min_pack_to_move) {
-                    buckets_to_move->emplace_back(bucket_packs_in_page[i], pageid, i);
-                    buckets_to_move->emplace_back(bucket_packs_in_page[j], pageid, j);
-                    buckets_to_move->emplace_back(bucket_packs_in_page[k], pageid, k);
-                    return Status::OK();
-                } else if (bucket_packs > min_pack_to_move && bucket_packs < move3_min[0]) {
-                    move3_min = {bucket_packs, i, j, k};
-                    break;
+            int32_t nv = v + bucket_packs_in_page[i];
+            if (dp[nv] >= 0) {
+                continue;
+            }
+            dp[nv] = i;
+            if (nv > max_sum) {
+                max_sum = nv;
+            }
+            if (nv >= target) {
+                valid_sum = std::min(valid_sum, nv);
+                if (valid_sum == target) {
+                    return get_list_from_dp();
                 }
             }
         }
     }
-    if (move3_min[2] >= 0) {
-        for (int i = 1; i < 4; i++) {
-            auto bucketid = move3_min[i];
-            buckets_to_move->emplace_back(bucket_packs_in_page[bucketid], pageid, bucketid);
-        }
-        return Status::OK();
+    return get_list_from_dp();
+}
+
+static Status find_buckets_to_move(uint32_t pageid, size_t min_pack_to_move, const uint8_t* bucket_packs_in_page,
+                                   std::vector<BucketToMove>* buckets_to_move) {
+    auto ret = get_move_buckets(min_pack_to_move, bucket_packs_in_page);
+
+    size_t move_packs = 0;
+    for (int32_t i = 0; i < ret.size(); ++i) {
+        buckets_to_move->emplace_back(bucket_packs_in_page[ret[i]], pageid, ret[i]);
+        move_packs += bucket_packs_in_page[ret[i]];
     }
-    // TODO: current algorithm is sub-optimal, find buckets to move using DP
-    return Status::InternalError("find_buckets_to_move");
+    DCHECK(move_packs >= min_pack_to_move);
+
+    return Status::OK();
 }
 
 struct BucketMovement {
@@ -410,6 +396,7 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_
             copy_kv_to_page(kv_size, bucket_info.size, bucket_kv_ptrs_tags[bid].first.data(),
                             bucket_kv_ptrs_tags[bid].second.data(), page.pack(cur_packid));
             cur_packid += bucket_packs[bid];
+            //LOG(INFO) << "cur_packid is " << cur_packid;
             DCHECK(cur_packid <= page_size / pack_size);
         }
         for (auto& move : moves) {
@@ -543,7 +530,7 @@ public:
                 not_found->hashes.emplace_back(hash);
             } else {
                 values[i] = iter->second;
-                nfound += (iter->second != NullIndexValue);
+                nfound += (iter->second.get_value() != NullIndexValue);
             }
         }
         *num_found = nfound;
@@ -565,7 +552,7 @@ public:
             } else {
                 auto old_value = p.first->second;
                 old_values[i] = old_value;
-                nfound += (old_value != NullIndexValue);
+                nfound += (old_value.get_value() != NullIndexValue);
                 p.first->second = v;
             }
         }
@@ -588,7 +575,7 @@ public:
             } else {
                 // key exist
                 auto old_value = p.first->second;
-                nfound += (old_value != NullIndexValue);
+                nfound += (old_value.get_value() != NullIndexValue);
                 p.first->second = v;
             }
         }
@@ -634,7 +621,7 @@ public:
         for (size_t i = 0; i < n; i++) {
             const auto& key = fkeys[i];
             uint64_t hash = FixedKeyHash<KeySize>()(key);
-            auto p = _map.emplace_with_hash(hash, key, NullIndexValue);
+            auto p = _map.emplace_with_hash(hash, key, IndexValue(NullIndexValue));
             if (p.second) {
                 // key not exist previously
                 old_values[i] = NullIndexValue;
@@ -643,7 +630,7 @@ public:
             } else {
                 // key exist
                 old_values[i] = p.first->second;
-                nfound += (p.first->second != NullIndexValue);
+                nfound += (p.first->second.get_value() != NullIndexValue);
                 p.first->second = NullIndexValue;
             }
         }
@@ -691,7 +678,7 @@ public:
         }
         auto hasher = FixedKeyHash<KeySize>();
         for (const auto& e : _map) {
-            if (without_null && e.second == NullIndexValue) {
+            if (without_null && e.second.get_value() == NullIndexValue) {
                 continue;
             }
             const auto& k = e.first;
@@ -1090,7 +1077,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
             size_t buf_offset = 0;
             for (size_t j = 0; j < batch_num; ++j) {
                 memcpy(keys + j * key_size, buff.data() + buf_offset, key_size);
-                IndexValue val = UNALIGNED_LOAD64(buff.data() + buf_offset + key_size);
+                uint64_t val = UNALIGNED_LOAD64(buff.data() + buf_offset + key_size);
                 values.emplace_back(val);
                 buf_offset += kv_size;
             }
@@ -1536,13 +1523,13 @@ Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue
     std::vector<IndexValue> found_values;
     found_values.reserve(n);
     RETURN_IF_ERROR(get(n, keys, found_values.data()));
-    uint32_t rowid_start = (uint32_t)(values[0] & 0xFFFFFFFF);
     std::vector<size_t> replace_idxes;
     for (size_t i = 0; i < n; ++i) {
-        if (found_values[i] != NullIndexValue && ((uint32_t)(found_values[i] >> 32)) == src_rssid[i]) {
+        if (values[i].get_value() != NullIndexValue &&
+            ((uint32_t)(found_values[i].get_value() >> 32)) == src_rssid[i]) {
             replace_idxes.emplace_back(i);
         } else {
-            failed->emplace_back(rowid_start + i);
+            failed->emplace_back(values[i].get_value() & 0xFFFFFFFF);
         }
     }
     RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
@@ -1554,7 +1541,7 @@ Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue
         fixed_buf.reserve(replace_idxes.size() * (_key_size + sizeof(IndexValue)));
         for (size_t i = 0; i < replace_idxes.size(); ++i) {
             fixed_buf.append(fkeys + replace_idxes[i] * _key_size, _key_size);
-            put_fixed64_le(&fixed_buf, values[replace_idxes[i]]);
+            put_fixed64_le(&fixed_buf, values[replace_idxes[i]].get_value());
         }
         RETURN_IF_ERROR(_index_file->append(fixed_buf));
         _page_size += fixed_buf.size();
@@ -1567,9 +1554,9 @@ Status PersistentIndex::_append_wal(size_t n, const void* keys, const IndexValue
     faststring fixed_buf;
     fixed_buf.reserve(n * (_key_size + sizeof(IndexValue)));
     for (size_t i = 0; i < n; i++) {
-        const auto v = (values != nullptr) ? values[i] : NullIndexValue;
+        const auto v = (values != nullptr) ? values[i] : IndexValue(NullIndexValue);
         fixed_buf.append(fkeys + i * _key_size, _key_size);
-        put_fixed64_le(&fixed_buf, v);
+        put_fixed64_le(&fixed_buf, v.get_value());
     }
     RETURN_IF_ERROR(_index_file->append(fixed_buf));
     _page_size += fixed_buf.size();
@@ -1707,7 +1694,7 @@ Status merge_shard_kvs_fixed_len(std::vector<KVRef>& l0_kvs, std::vector<KVRef>&
         }
     }
     for (auto& kv : l0_kvs) {
-        IndexValue v = UNALIGNED_LOAD64(kv.kv_pos + KeySize);
+        uint64_t v = UNALIGNED_LOAD64(kv.kv_pos + KeySize);
         if (v == NullIndexValue) {
             // delete
             kvs_set.erase(kv);
@@ -1818,6 +1805,10 @@ Status PersistentIndex::_merge_compaction() {
         }
     }
     return writer.finish();
+}
+
+std::vector<int8_t> PersistentIndex::test_get_move_buckets(size_t target, const uint8_t* bucket_packs_in_page) {
+    return get_move_buckets(target, bucket_packs_in_page);
 }
 
 } // namespace starrocks

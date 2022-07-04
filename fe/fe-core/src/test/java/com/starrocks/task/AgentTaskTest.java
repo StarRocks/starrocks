@@ -22,7 +22,6 @@
 package com.starrocks.task;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Range;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -36,8 +35,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.thrift.TAgentTaskRequest;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TKeysType;
-import com.starrocks.thrift.TPriority;
-import com.starrocks.thrift.TPushType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
@@ -86,16 +83,11 @@ public class AgentTaskTest {
     private List<Column> columns;
     private MarkedCountDownLatch<Long, Long> latch = new MarkedCountDownLatch<Long, Long>(3);
 
-    private Range<PartitionKey> range1;
-    private Range<PartitionKey> range2;
-
     private AgentTask createReplicaTask;
     private AgentTask dropTask;
-    private AgentTask pushTask;
     private AgentTask cloneTask;
     private AgentTask rollupTask;
     private AgentTask schemaChangeTask;
-    private AgentTask cancelDeleteTask;
     private AgentTask modifyEnablePersistentIndexTask1;
     private AgentTask modifyEnablePersistentIndexTask2;
     private AgentTask modifyInMemoryTask;
@@ -111,10 +103,8 @@ public class AgentTaskTest {
         PartitionKey pk1 = PartitionKey.createInfinityPartitionKey(Arrays.asList(columns.get(0)), false);
         PartitionKey pk2 =
                 PartitionKey.createPartitionKey(Arrays.asList(new PartitionValue("10")), Arrays.asList(columns.get(0)));
-        range1 = Range.closedOpen(pk1, pk2);
 
         PartitionKey pk3 = PartitionKey.createInfinityPartitionKey(Arrays.asList(columns.get(0)), true);
-        range2 = Range.closedOpen(pk2, pk3);
 
         // create tasks
 
@@ -128,12 +118,6 @@ public class AgentTaskTest {
 
         // drop
         dropTask = new DropReplicaTask(backendId1, tabletId1, schemaHash1, false);
-
-        // push
-        pushTask =
-                new PushTask(null, backendId1, dbId, tableId, partitionId, indexId1, tabletId1,
-                        replicaId1, schemaHash1, version, 200, 80000L,
-                        TPushType.LOAD_V2, null, TPriority.NORMAL, TTaskType.PUSH, -1, tabletId1);
 
         // clone
         cloneTask =
@@ -218,12 +202,6 @@ public class AgentTaskTest {
         Assert.assertEquals(TTaskType.DROP, request2.getTask_type());
         Assert.assertEquals(dropTask.getSignature(), request2.getSignature());
         Assert.assertNotNull(request2.getDrop_tablet_req());
-
-        // push
-        TAgentTaskRequest request3 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, pushTask);
-        Assert.assertEquals(TTaskType.PUSH, request3.getTask_type());
-        Assert.assertEquals(pushTask.getSignature(), request3.getSignature());
-        Assert.assertNotNull(request3.getPush_req());
 
         // clone
         TAgentTaskRequest request4 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, cloneTask);

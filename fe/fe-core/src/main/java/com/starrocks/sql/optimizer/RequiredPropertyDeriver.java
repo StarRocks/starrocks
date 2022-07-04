@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
@@ -130,6 +131,14 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         physicalPropertySets.get(1).setSortProperty(rightSortProperty);
         requiredProperties.add(physicalPropertySets);
 
+        return null;
+    }
+
+    @Override
+    public Void visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator node, ExpressionContext context) {
+        PhysicalPropertySet rightBroadcastProperty =
+                new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
+        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty));
         return null;
     }
 

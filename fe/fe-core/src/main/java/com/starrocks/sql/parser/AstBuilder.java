@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AddBackendClause;
+import com.starrocks.analysis.AddComputeNodeClause;
 import com.starrocks.analysis.AddFollowerClause;
 import com.starrocks.analysis.AddObserverClause;
 import com.starrocks.analysis.AddRollupClause;
@@ -34,6 +35,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -46,6 +48,8 @@ import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropBackendClause;
+import com.starrocks.analysis.DropComputeNodeClause;
+import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -92,7 +96,9 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
+import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
@@ -159,6 +165,7 @@ import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.Relation;
@@ -169,6 +176,7 @@ import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
+import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
@@ -213,6 +221,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSingleStatement(StarRocksParser.SingleStatementContext context) {
         return visit(context.statement());
+    }
+
+    // ---------------------------------------- Database Statement -----------------------------------------------------
+    @Override
+    public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
+        String dbName = ((Identifier) visit(context.identifier())).getValue();
+        return new CreateDbStmt(
+                context.IF() != null,
+                dbName);
+    }
+
+    @Override
+    public ParseNode visitDropDbStatement(StarRocksParser.DropDbStatementContext context) {
+        String dbName = ((Identifier) visit(context.identifier())).getValue();
+        return new DropDbStmt(
+                context.IF() != null,
+                dbName,
+                context.FORCE() != null);
     }
 
     // ------------------------------------------- Table Statement -----------------------------------------------------
@@ -404,6 +430,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 createTableStmt,
                 columns == null ? null : columns.stream().map(Identifier::getValue).collect(toList()),
                 (QueryStatement) visit(context.queryStatement()));
+    }
+
+    @Override
+    public ParseNode visitAddComputeNodeClause(StarRocksParser.AddComputeNodeClauseContext context) {
+        List<String> hostPorts =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        return new AddComputeNodeClause(hostPorts);
+    }
+
+    @Override
+    public ParseNode visitDropComputeNodeClause(StarRocksParser.DropComputeNodeClauseContext context) {
+        List<String> hostPorts =
+                context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        return new DropComputeNodeClause(hostPorts);
+    }
+
+    @Override
+    public ParseNode visitShowComputeNodes(StarRocksParser.ShowComputeNodesContext context) {
+        return new ShowComputeNodesStmt();
     }
 
     @Override
@@ -728,6 +773,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new AlterMaterializedViewStatement(mvName, newMvName, refreshSchemeDesc);
     }
 
+    @Override
+    public ParseNode visitRefreshMaterializedViewStatement(
+            StarRocksParser.RefreshMaterializedViewStatementContext context) {
+        QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
+        TableName mvName = qualifiedNameToTableName(mvQualifiedName);
+        return new RefreshMaterializedViewStatement(mvName);
+    }
+
     // ------------------------------------------- Cluster Management Statement -----------------------------------------
 
     @Override
@@ -811,16 +864,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAddBackendClause(StarRocksParser.AddBackendClauseContext context) {
-        List<String> clusters =
+        List<String> backends =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
-        if (context.TO() != null) {
-            Identifier identifier = (Identifier) visit(context.identifier());
-            return new AddBackendClause(clusters, identifier.getValue());
-        }
-        if (context.FREE() != null) {
-            return new AddBackendClause(clusters, true);
-        }
-        return new AddBackendClause(clusters, false);
+        return new AddBackendClause(backends);
     }
 
     @Override
@@ -1693,6 +1739,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String configValue = property.getValue();
         configs.put(configKey, configValue);
         return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs);
+    }
+
+    @Override public ParseNode visitSetVar(StarRocksParser.SetVarContext ctx) {
+        Expr expr = (Expr) visit(ctx.expression());
+        String variable = ctx.IDENTIFIER().getText();
+        if (ctx.varType() != null) {
+            return new SetVar(getVariableType(ctx.varType()), variable, expr);
+        }
+        return new SetVar(variable, expr);
+    }
+
+    @Override
+    public ParseNode visitSetStmt(StarRocksParser.SetStmtContext ctx) {
+        List<SetVar> propertyList = visit(ctx.setVarList().setVar(), SetVar.class);
+        return new SetStmt(propertyList);
     }
 
     @Override

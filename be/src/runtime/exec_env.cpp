@@ -23,6 +23,8 @@
 
 #include <thread>
 
+#include "agent/agent_server.h"
+#include "agent/master_info.h"
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/logging.h"
@@ -84,12 +86,15 @@ public:
 
     ~FixedGroupAssigner() override = default;
 
+    std::string get_fs_prefix() override { return "posix://"; }
+
     StatusOr<std::string> get_group(int64_t /*tablet_id*/) override { return _path; }
 
     [[maybe_unused]] Status list_group(std::set<std::string>* groups) override {
         groups->emplace(_path);
         return Status::OK();
     }
+    std::string path_assemble(const std::string& path, int64_t tablet_id) { return path; }
 
 private:
     std::string _path;
@@ -216,7 +221,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _wg_driver_executor->initialize(_max_executor_threads);
     starrocks::workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
-    _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
     _broker_mgr = new BrokerMgr(this);
     _bfd_parser = BfdParser::create();
@@ -274,11 +278,15 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     RETURN_IF_ERROR(_load_channel_mgr->init(_load_mem_tracker));
     _heartbeat_flags = new HeartbeatFlags();
+
+    _agent_server = new AgentServer(this);
+    _agent_server->init_or_die();
+
     return Status::OK();
 }
 
-const std::string& ExecEnv::token() const {
-    return _master_info->token;
+std::string ExecEnv::token() const {
+    return get_master_token();
 }
 
 void ExecEnv::add_rf_event(const RfTracePoint& pt) {
@@ -367,6 +375,10 @@ Status ExecEnv::_init_storage_page_cache() {
 }
 
 void ExecEnv::_destroy() {
+    if (_agent_server) {
+        delete _agent_server;
+        _agent_server = nullptr;
+    }
     if (_runtime_filter_worker) {
         delete _runtime_filter_worker;
         _runtime_filter_worker = nullptr;
@@ -418,10 +430,6 @@ void ExecEnv::_destroy() {
     if (_load_path_mgr) {
         delete _load_path_mgr;
         _load_path_mgr = nullptr;
-    }
-    if (_master_info) {
-        delete _master_info;
-        _master_info = nullptr;
     }
     if (_driver_executor) {
         delete _driver_executor;

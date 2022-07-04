@@ -115,9 +115,6 @@ public class ListPartitionInfo extends PartitionInfo {
      */
     @Override
     public void write(DataOutput out) throws IOException {
-        super.write(out);
-
-        //target to serialize member partitionColumns,idToMultiValues,idToValues
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
@@ -129,32 +126,24 @@ public class ListPartitionInfo extends PartitionInfo {
      * @throws IOException
      */
     public static PartitionInfo read(DataInput in) throws IOException {
-        PartitionInfo list = new ListPartitionInfo();
-        list.readFields(in);
-
-        //target to deserialize member partitionColumns,idToMultiValues,idToValues
         String json = Text.readString(in);
-        ListPartitionInfo partitionInfo = GsonUtils.GSON.fromJson(json, ListPartitionInfo.class);
-        list.idToInMemory.forEach((k, v) -> partitionInfo.setIsInMemory(k, v));
-        list.idToDataProperty.forEach((k, v) -> partitionInfo.setDataProperty(k, v));
-        list.idToReplicationNum.forEach((k, v) -> partitionInfo.setReplicationNum(k, v));
-        list.idToTabletType.forEach((k, v) -> partitionInfo.setTabletType(k, v));
-        partitionInfo.setIsMultiColumnPartition();
-        partitionInfo.type = list.getType();
+        return GsonUtils.GSON.fromJson(json, ListPartitionInfo.class);
+    }
 
+    @Override
+    public void gsonPostProcess() throws IOException {
         try {
-            Map<Long, List<String>> idToValuesMap = partitionInfo.getIdToValues();
+            Map<Long, List<String>> idToValuesMap = this.getIdToValues();
             for (Map.Entry<Long, List<String>> entry : idToValuesMap.entrySet()) {
-                partitionInfo.setLiteralExprValues(entry.getKey(), entry.getValue());
+                this.setLiteralExprValues(entry.getKey(), entry.getValue());
             }
-            Map<Long, List<List<String>>> idToMultiValuesMap = partitionInfo.getIdToMultiValues();
+            Map<Long, List<List<String>>> idToMultiValuesMap = this.getIdToMultiValues();
             for (Map.Entry<Long, List<List<String>>> entry : idToMultiValuesMap.entrySet()) {
-                partitionInfo.setMultiLiteralExprValues(entry.getKey(), entry.getValue());
+                this.setMultiLiteralExprValues(entry.getKey(), entry.getValue());
             }
         } catch (AnalysisException e) {
             LOG.error("deserialize PartitionInfo error", e);
         }
-        return partitionInfo;
     }
 
     @Override

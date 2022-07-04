@@ -21,14 +21,9 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public abstract class Predicate extends Expr {
     protected boolean isEqJoinConjunct;
 
@@ -48,16 +43,6 @@ public abstract class Predicate extends Expr {
 
     @Override
     protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        type = Type.BOOLEAN;
-        // values: true/false/null
-        numDistinctValues = 3;
-
-        for (Expr expr : children) {
-            if (expr.getType().isOnlyMetricType() ||
-                    (expr.getType() instanceof ArrayType && !(this instanceof IsNullPredicate))) {
-                throw new AnalysisException("HLL, BITMAP, PERCENTILE and ARRAY type couldn't as Predicate");
-            }
-        }
     }
 
     /**

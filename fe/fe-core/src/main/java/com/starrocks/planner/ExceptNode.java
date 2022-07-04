@@ -21,24 +21,13 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
-import java.util.List;
-
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class ExceptNode extends SetOperationNode {
     public ExceptNode(PlanNodeId id, TupleId tupleId) {
         super(id, tupleId, "EXCEPT");
-    }
-
-    protected ExceptNode(PlanNodeId id, TupleId tupleId,
-                         List<Expr> setOpResultExprs, boolean isInSubplan) {
-        super(id, tupleId, "EXCEPT", setOpResultExprs, isInSubplan);
     }
 
     @Override

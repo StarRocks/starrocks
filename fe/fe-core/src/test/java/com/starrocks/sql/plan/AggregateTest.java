@@ -205,8 +205,8 @@ public class AggregateTest extends PlanTestBase {
                         + "  |  group by: 2: v2\n"
                         + "  |  \n"
                         + "  0:OlapScanNode"));
-                Assert.assertEquals(expectedTotalDop, aggPlan.getParallelExecNum());
-                Assert.assertEquals(1, aggPlan.getPipelineDop());
+                Assert.assertEquals(expectedTotalDop, aggPlan.getPipelineDop());
+                Assert.assertEquals(1, aggPlan.getParallelExecNum());
             }
 
             // Manually set dop
@@ -689,7 +689,6 @@ public class AggregateTest extends PlanTestBase {
         explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: k3 <=> 17: k3"));
     }
@@ -861,7 +860,6 @@ public class AggregateTest extends PlanTestBase {
                     "  |  \n" +
                     "  3:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                    "  |  hash predicates:\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 1: v1 = 4: v4");
         }
@@ -879,7 +877,6 @@ public class AggregateTest extends PlanTestBase {
                     "  |  \n" +
                     "  3:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                    "  |  hash predicates:\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 1: v1 = 4: v4");
         }
@@ -902,7 +899,6 @@ public class AggregateTest extends PlanTestBase {
                     "  |  \n" +
                     "  2:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (COLOCATE)\n" +
-                    "  |  hash predicates:\n" +
                     "  |  colocate: true\n" +
                     "  |  equal join conjunct: 1: v1 = 4: v4");
         }
@@ -920,7 +916,6 @@ public class AggregateTest extends PlanTestBase {
                     "  |  \n" +
                     "  3:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                    "  |  hash predicates:\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 1: v4 = 4: v1");
         }
@@ -946,9 +941,9 @@ public class AggregateTest extends PlanTestBase {
                 "  6:Project\n" +
                 "  |  <slot 8> : if(1: v4 = 4: v1, 1: v4, NULL)\n" +
                 "  |  \n" +
-                "  5:CROSS JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.\n" +
+                "  5:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
                 "  |    \n" +
@@ -1236,9 +1231,9 @@ public class AggregateTest extends PlanTestBase {
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 09\n" +
                 "    RANDOM");
-        assertContains(plan, "  18:CROSS JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.");
+        assertContains(plan, "  18:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n");
         assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: 13: t1b");
@@ -1365,7 +1360,7 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testMultiDistinctAggregate() throws Exception {
         connectContext.getSessionVariable().setCboCteReuse(true);
-        String sql =  "select count(distinct t1b), count(distinct t1b, t1c) from test_all_type";
+        String sql = "select count(distinct t1b), count(distinct t1b, t1c) from test_all_type";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
@@ -1374,23 +1369,21 @@ public class AggregateTest extends PlanTestBase {
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 09\n" +
                 "    RANDOM");
-        assertContains(plan, "18:CROSS JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates is NULL.");
+        assertContains(plan, "  18:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n");
 
-        sql =  "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a";
+        sql = "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a";
         plan = getFragmentPlan(sql);
         assertContains(plan, " 13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 15: t1a <=> 13: t1a");
 
-        sql =  "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a,t1b,t1c";
+        sql = "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a,t1b,t1c";
         plan = getFragmentPlan(sql);
         assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 13: t1a <=> 16: t1a\n" +
                 "  |  equal join conjunct: 14: t1b <=> 17: t1b\n" +
@@ -1400,12 +1393,10 @@ public class AggregateTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 20: t1c <=> 15: t1c");
         assertContains(plan, "21:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 15: t1c <=> 17: t1c");
 
@@ -1417,7 +1408,6 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 11> : CAST(2: t1b AS INT) + 1");
         assertContains(plan, "22:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: t1c <=> 19: t1c\n" +
                 "  |  equal join conjunct: 17: expr <=> 20: expr");
@@ -1505,21 +1495,13 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
-    public void testAvgCountDistinctWithMultiColumns() throws Exception {
-        expectedException.expect(StarRocksPlannerException.class);
-        expectedException.expectMessage(
-                "The query contains multi count distinct or sum distinct, each can't have multi columns");
-        String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal,s_nationkey) from supplier;";
-        getFragmentPlan(sql);
-    }
-
-    @Test
     public void testAvgCountDistinctWithHaving() throws Exception {
         String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal) " +
                 "from supplier having avg(distinct s_suppkey) > 3 ;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  16:CROSS JOIN\n" +
-                "  |  cross join:\n" +
-                "  |  predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0");
+        assertContains(plan, "  16:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0\n");
     }
 }

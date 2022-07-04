@@ -5,7 +5,6 @@ package com.starrocks.statistic;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
@@ -23,16 +22,18 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -119,10 +120,9 @@ public class StatisticsMetaManager extends MasterDaemon {
     private boolean createDatabase() {
         LOG.info("create statistics db start");
         CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
-        dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
-            GlobalStateMgr.getCurrentState().createDb(dbStmt);
-        } catch (DdlException e) {
+            GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
+        } catch (UserException e) {
             LOG.warn("Failed to create database " + e.getMessage());
             return false;
         }
@@ -197,14 +197,7 @@ public class StatisticsMetaManager extends MasterDaemon {
                 properties,
                 null,
                 "");
-        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(),
-                StatisticUtils.buildConnectContext());
-        try {
-            stmt.analyze(analyzer);
-        } catch (UserException e) {
-            LOG.warn("Failed to create table when analyze " + e.getMessage());
-            return false;
-        }
+        Analyzer.analyze(stmt, StatisticUtils.buildConnectContext());
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
         } catch (DdlException e) {
@@ -212,6 +205,13 @@ public class StatisticsMetaManager extends MasterDaemon {
             return false;
         }
         LOG.info("create statistics table done");
+        for (Map.Entry<Long, BasicStatsMeta> entry :
+                GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
+            BasicStatsMeta basicStatsMeta = entry.getValue();
+            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
+                    basicStatsMeta.getDbId(), basicStatsMeta.getTableId(),
+                    basicStatsMeta.getType(), LocalDateTime.MIN, basicStatsMeta.getProperties()));
+        }
         return checkTableExist(Constants.SampleStatisticsTableName);
     }
 
@@ -231,14 +231,7 @@ public class StatisticsMetaManager extends MasterDaemon {
                 properties,
                 null,
                 "");
-        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(),
-                StatisticUtils.buildConnectContext());
-        try {
-            stmt.analyze(analyzer);
-        } catch (UserException e) {
-            LOG.warn("Failed to create table when analyze " + e.getMessage());
-            return false;
-        }
+        Analyzer.analyze(stmt, StatisticUtils.buildConnectContext());
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
         } catch (DdlException e) {
@@ -246,6 +239,13 @@ public class StatisticsMetaManager extends MasterDaemon {
             return false;
         }
         LOG.info("create statistics table done");
+        for (Map.Entry<Long, BasicStatsMeta> entry :
+                GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
+            BasicStatsMeta basicStatsMeta = entry.getValue();
+            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
+                    basicStatsMeta.getDbId(), basicStatsMeta.getTableId(),
+                    basicStatsMeta.getType(), LocalDateTime.MIN, basicStatsMeta.getProperties()));
+        }
         return checkTableExist(Constants.FullStatisticsTableName);
     }
 
@@ -265,14 +265,7 @@ public class StatisticsMetaManager extends MasterDaemon {
                 properties,
                 null,
                 "");
-        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(),
-                StatisticUtils.buildConnectContext());
-        try {
-            stmt.analyze(analyzer);
-        } catch (UserException e) {
-            LOG.warn("Failed to create table when analyze " + e.getMessage());
-            return false;
-        }
+        Analyzer.analyze(stmt, StatisticUtils.buildConnectContext());
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
         } catch (DdlException e) {
@@ -280,6 +273,13 @@ public class StatisticsMetaManager extends MasterDaemon {
             return false;
         }
         LOG.info("create statistics table done");
+        for (Map.Entry<Pair<Long, String>, HistogramStatsMeta> entry :
+                GlobalStateMgr.getCurrentAnalyzeMgr().getHistogramStatsMetaMap().entrySet()) {
+            HistogramStatsMeta histogramStatsMeta = entry.getValue();
+            GlobalStateMgr.getCurrentAnalyzeMgr().addHistogramStatsMeta(new HistogramStatsMeta(
+                    histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn(),
+                    histogramStatsMeta.getType(), LocalDateTime.MIN, histogramStatsMeta.getProperties()));
+        }
         return checkTableExist(Constants.HistogramStatisticsTableName);
     }
 

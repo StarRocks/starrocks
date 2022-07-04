@@ -2,19 +2,20 @@
 
 package com.starrocks.metric;
 
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Snapshot;
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.SessionVariable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 public class ResourceGroupMetricMgr {
     private static final Logger LOG = LogManager.getLogger(ResourceGroupMetricMgr.class);
@@ -22,14 +23,9 @@ public class ResourceGroupMetricMgr {
     private static final String QUERY_RESOURCE_GROUP = "query_resource_group";
     private static final String QUERY_RESOURCE_GROUP_LATENCY = "query_resource_group_latency";
     private static final String QUERY_RESOURCE_GROUP_ERR = "query_resource_group_err";
-
-    private static final String[] QUERY_LATENCY_LABLE =
-            {"mean", "50_quantile", "75_quantile", "90_quantile", "95_quantile", "99_quantile", "999_quantile"};
-    private static final double[] QUERY_LATENCY_QUANTILE = {0.0 /*Useless*/, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999};
-
     private static final ConcurrentHashMap<String, LongCounterMetric> RESOURCE_GROUP_QUERY_COUNTER_MAP
             = new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<String, List<GaugeMetricImpl>> RESOURCE_GROUP_QUERY_LATENCY_MAP
+    private static final ConcurrentHashMap<String, QueryResourceGroupLatencyMetrics> RESOURCE_GROUP_QUERY_LATENCY_MAP
             = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, LongCounterMetric> RESOURCE_GROUP_QUERY_ERR_COUNTER_MAP
             = new ConcurrentHashMap<>();
@@ -54,65 +50,27 @@ public class ResourceGroupMetricMgr {
         }
     }
 
-    //starrocks_fe_query_resource_group_latency
-    public static void updateQueryLatency(List<QueryDetail> queryList) {
-        Map<String, List<Long>> latencyMap = new HashMap<>();
-        Map<String, Long> latencySumMap = new HashMap<>();
-        for (QueryDetail queryDetail : queryList) {
-            String workGroupName = queryDetail.getWorkGroupName();
-            if (queryDetail.isQuery()
-                    && queryDetail.getState() == QueryDetail.QueryMemState.FINISHED
-                    && workGroupName != null
-                    && !workGroupName.isEmpty()) {
-                if (!latencyMap.containsKey(workGroupName)) {
-                    latencyMap.put(workGroupName, new ArrayList<>());
-                    latencySumMap.put(workGroupName, 0L);
-                }
-                latencyMap.get(workGroupName).add(queryDetail.getLatency());
-                latencySumMap.put(workGroupName, latencySumMap.get(workGroupName) + queryDetail.getLatency());
-            }
+    public static void visitQueryLatency() {
+        for (String resourceGroupName : RESOURCE_GROUP_QUERY_LATENCY_MAP.keySet()) {
+            QueryResourceGroupLatencyMetrics metrics = RESOURCE_GROUP_QUERY_LATENCY_MAP.get(resourceGroupName);
+            metrics.update();
         }
-        for (String resourceGroupName : latencyMap.keySet()) {
-            List<Long> latencyList = latencyMap.get(resourceGroupName);
-            Long latencySum = latencySumMap.get(resourceGroupName);
+    }
 
-            if (!RESOURCE_GROUP_QUERY_LATENCY_MAP.containsKey(resourceGroupName)) {
-                createQueryResourceGroupLatency(resourceGroupName);
-            }
-            List<GaugeMetricImpl> metricList = RESOURCE_GROUP_QUERY_LATENCY_MAP.get(resourceGroupName);
-            if (latencyList.size() > 0) {
-                latencyList.sort(Comparator.naturalOrder());
-
-                for (int index = 0; index < QUERY_LATENCY_LABLE.length; index++) {
-                    double value = 0.0;
-                    if (index == 0) {
-                        value = latencySum / latencyList.size();
-                    } else {
-                        value = latencyList.get(
-                                (int) Math.round((latencyList.size() - 1) * QUERY_LATENCY_QUANTILE[index]));
-                    }
-                    metricList.get(index).setValue(value);
-                }
-            } else {
-                for (GaugeMetricImpl metrics : metricList) {
-                    metrics.setValue(0.0);
-                }
-            }
+    //starrocks_fe_query_resource_group_latency
+    public static void updateQueryLatency(ConnectContext ctx, Long elapseMs) {
+        QueryResourceGroupLatencyMetrics metrics = createQueryResourceGroupLatencyMetrics(ctx);
+        if (metrics != null) {
+            metrics.histogram.update(elapseMs);
         }
     }
 
     private static LongCounterMetric createQeuryResourceGroupMetrics(Map cacheMap, String metricsName,
                                                                      String metricsMsg, ConnectContext ctx) {
-        SessionVariable sessionVariable = ctx.getSessionVariable();
-        if (!sessionVariable.isEnableResourceGroup()) {
+        String resourceGroupName = checkAndGetWorkGroupName(ctx);
+        if (resourceGroupName == null || resourceGroupName.isEmpty()) {
             return null;
         }
-        WorkGroup workGroup = ctx.getWorkGroup();
-        if (workGroup == null) {
-            LOG.warn("The resource group for calculating query metrics is empty");
-            return null;
-        }
-        String resourceGroupName = workGroup.getName();
         if (!cacheMap.containsKey(resourceGroupName)) {
             synchronized (cacheMap) {
                 if (!cacheMap.containsKey(resourceGroupName)) {
@@ -128,18 +86,75 @@ public class ResourceGroupMetricMgr {
         return (LongCounterMetric) cacheMap.get(resourceGroupName);
     }
 
-    private static void createQueryResourceGroupLatency(String resourceGroupName) {
-        List<GaugeMetricImpl> metricsList = new ArrayList<>();
-        for (String label : QUERY_LATENCY_LABLE) {
-            GaugeMetricImpl<Double> metrics =
-                    new GaugeMetricImpl<>(QUERY_RESOURCE_GROUP_LATENCY, Metric.MetricUnit.MILLISECONDS,
-                            label + " of resource group query latency");
-            metrics.addLabel(new MetricLabel("type", label));
-            metrics.addLabel(new MetricLabel("name", resourceGroupName));
-            metrics.setValue(0.0);
-            MetricRepo.addMetric(metrics);
-            metricsList.add(metrics);
+    private static String checkAndGetWorkGroupName(ConnectContext ctx) {
+        SessionVariable sessionVariable = ctx.getSessionVariable();
+        if (!sessionVariable.isEnableResourceGroup() || !sessionVariable.isEnablePipelineEngine()) {
+            return null;
         }
-        RESOURCE_GROUP_QUERY_LATENCY_MAP.put(resourceGroupName, metricsList);
+        WorkGroup workGroup = ctx.getWorkGroup();
+        return workGroup == null ? "default_wg" : workGroup.getName();
+    }
+
+    private static QueryResourceGroupLatencyMetrics createQueryResourceGroupLatencyMetrics(ConnectContext ctx) {
+        String resourceGroupName = checkAndGetWorkGroupName(ctx);
+        if (resourceGroupName == null || resourceGroupName.isEmpty()) {
+            return null;
+        }
+        RESOURCE_GROUP_QUERY_LATENCY_MAP.computeIfAbsent(resourceGroupName, RESOURCE_GROUP_LATENCY_METRICS_FUNCTION);
+        return RESOURCE_GROUP_QUERY_LATENCY_MAP.get(resourceGroupName);
+    }
+
+    private static final Function<String, QueryResourceGroupLatencyMetrics> RESOURCE_GROUP_LATENCY_METRICS_FUNCTION =
+            new Function<String, QueryResourceGroupLatencyMetrics>() {
+                @Override
+                public QueryResourceGroupLatencyMetrics apply(String resourceGroupName) {
+                    return new QueryResourceGroupLatencyMetrics(QUERY_RESOURCE_GROUP_LATENCY, resourceGroupName);
+                }
+            };
+
+    private static final class QueryResourceGroupLatencyMetrics {
+        private static final String[] QUERY_LATENCY_LABLE =
+                {"mean", "75_quantile", "95_quantile", "98_quantile", "99_quantile", "999_quantile"};
+
+        private MetricRegistry metricRegistry;
+        private volatile Histogram histogram;
+        private List<GaugeMetricImpl> metricsList;
+        private String metricsName;
+
+        private QueryResourceGroupLatencyMetrics(String metricsName, String resourceGroupName) {
+            this.metricsName = metricsName;
+            this.metricRegistry = new MetricRegistry();
+            initHistogram(metricsName);
+            this.metricsList = new ArrayList<>();
+            for (String label : QUERY_LATENCY_LABLE) {
+                GaugeMetricImpl<Double> metrics =
+                        new GaugeMetricImpl<>(metricsName, Metric.MetricUnit.MILLISECONDS,
+                                label + " of resource group query latency");
+                metrics.addLabel(new MetricLabel("type", label));
+                metrics.addLabel(new MetricLabel("name", resourceGroupName));
+                metrics.setValue(0.0);
+                MetricRepo.addMetric(metrics);
+                LOG.info("Add {} metric, resource group name is {}", QUERY_RESOURCE_GROUP_LATENCY, resourceGroupName);
+                this.metricsList.add(metrics);
+            }
+        }
+
+        private void initHistogram(String metricsName) {
+            this.histogram = this.metricRegistry.histogram(metricsName);
+        }
+
+        private void update() {
+            Histogram oldHistogram = this.histogram;
+            this.metricRegistry.remove(this.metricsName);
+            initHistogram(metricsName);
+
+            Snapshot snapshot = oldHistogram.getSnapshot();
+            metricsList.get(0).setValue(snapshot.getMedian());
+            metricsList.get(1).setValue(snapshot.get75thPercentile());
+            metricsList.get(2).setValue(snapshot.get95thPercentile());
+            metricsList.get(3).setValue(snapshot.get98thPercentile());
+            metricsList.get(4).setValue(snapshot.get99thPercentile());
+            metricsList.get(5).setValue(snapshot.get999thPercentile());
+        }
     }
 }

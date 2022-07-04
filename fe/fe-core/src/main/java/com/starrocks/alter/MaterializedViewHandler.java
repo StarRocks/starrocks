@@ -1152,7 +1152,7 @@ public class MaterializedViewHandler extends AlterHandler {
     }
 
     @Override
-    public ShowResultSet process(List<AlterClause> alterClauses, String clusterName, Database db, OlapTable olapTable)
+    public ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
             throws DdlException, AnalysisException, MetaNotFoundException {
 
         if (olapTable.existTempPartitions()) {

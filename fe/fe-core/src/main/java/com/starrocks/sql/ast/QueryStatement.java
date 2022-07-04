@@ -38,6 +38,11 @@ public class QueryStatement extends StatementBase {
 
     @Override
     public RedirectStatus getRedirectStatus() {
-        return null;
+        return RedirectStatus.NO_FORWARD;
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

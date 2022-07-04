@@ -25,20 +25,19 @@
 
 #include <filesystem>
 #include <string>
+#include <vector>
 
-#include "agent/status.h"
+#include "agent/master_info.h"
 #include "agent/task_worker_pool.h"
 #include "common/logging.h"
 #include "common/status.h"
-#include "gen_cpp/MasterService_types.h"
+#include "gen_cpp/AgentService_types.h"
+#include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
 #include "util/phmap/phmap.h"
-
-using std::string;
-using std::vector;
+#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -46,18 +45,62 @@ const uint32_t REPORT_TASK_WORKER_COUNT = 1;
 const uint32_t REPORT_DISK_STATE_WORKER_COUNT = 1;
 const uint32_t REPORT_OLAP_TABLE_WORKER_COUNT = 1;
 const uint32_t REPORT_WORKGROUP_WORKER_COUNT = 1;
-const uint32_t TASK_FINISH_MAX_RETRY = 3;
-const uint32_t ALTER_FINISH_TASK_MAX_RETRY = 10;
 
-FrontendServiceClientCache g_master_service_client_cache;
+class AgentServer::Impl {
+public:
+    explicit Impl(ExecEnv* exec_env) : _exec_env(exec_env) {}
 
-AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
-        : _exec_env(exec_env),
-          _master_info(master_info),
-          _master_client(new MasterServerClient(master_info, &g_master_service_client_cache)) {
-    for (auto& path : exec_env->store_paths()) {
+    ~Impl();
+
+    void init_or_die();
+
+    void submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks);
+
+    void make_snapshot(TAgentResult& agent_result, const TSnapshotRequest& snapshot_request);
+
+    void release_snapshot(TAgentResult& agent_result, const std::string& snapshot_path);
+
+    void publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request);
+
+    ThreadPool* get_thread_pool(int type) const;
+
+    DISALLOW_COPY_AND_MOVE(Impl);
+
+private:
+    ExecEnv* _exec_env;
+
+    std::unique_ptr<ThreadPool> _thread_pool_publish_version;
+
+    std::unique_ptr<TaskWorkerPool> _create_tablet_workers;
+    std::unique_ptr<TaskWorkerPool> _drop_tablet_workers;
+    std::unique_ptr<TaskWorkerPool> _push_workers;
+    std::unique_ptr<TaskWorkerPool> _publish_version_workers;
+    std::unique_ptr<TaskWorkerPool> _clear_transaction_task_workers;
+    std::unique_ptr<TaskWorkerPool> _delete_workers;
+    std::unique_ptr<TaskWorkerPool> _alter_tablet_workers;
+    std::unique_ptr<TaskWorkerPool> _clone_workers;
+    std::unique_ptr<TaskWorkerPool> _storage_medium_migrate_workers;
+    std::unique_ptr<TaskWorkerPool> _check_consistency_workers;
+
+    // These 3 worker-pool do not accept tasks from FE.
+    // It is self triggered periodically and reports to Fe master
+    std::unique_ptr<TaskWorkerPool> _report_task_workers;
+    std::unique_ptr<TaskWorkerPool> _report_disk_state_workers;
+    std::unique_ptr<TaskWorkerPool> _report_tablet_workers;
+    std::unique_ptr<TaskWorkerPool> _report_workgroup_workers;
+
+    std::unique_ptr<TaskWorkerPool> _upload_workers;
+    std::unique_ptr<TaskWorkerPool> _download_workers;
+    std::unique_ptr<TaskWorkerPool> _make_snapshot_workers;
+    std::unique_ptr<TaskWorkerPool> _release_snapshot_workers;
+    std::unique_ptr<TaskWorkerPool> _move_dir_workers;
+    std::unique_ptr<TaskWorkerPool> _update_tablet_meta_info_workers;
+};
+
+void AgentServer::Impl::init_or_die() {
+    for (auto& path : _exec_env->store_paths()) {
         try {
-            string dpp_download_path_str = path.path + DPP_PREFIX;
+            std::string dpp_download_path_str = path.path + DPP_PREFIX;
             std::filesystem::path dpp_download_path(dpp_download_path_str);
             if (std::filesystem::exists(dpp_download_path)) {
                 std::filesystem::remove_all(dpp_download_path);
@@ -67,12 +110,23 @@ AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
         }
     }
 
+    auto st =
+            ThreadPoolBuilder("publish_version")
+                    .set_min_threads(config::transaction_publish_version_worker_count)
+                    .set_max_threads(config::transaction_publish_version_worker_count)
+                    // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
+                    // But it seems that there's no limit for the number of tablets of a partition.
+                    // Since a large queue size brings a little overhead, a big one is chosen here.
+                    .set_max_queue_size(2048)
+                    .build(&_thread_pool_publish_version);
+    CHECK(st.ok()) << st;
+
     // It is the same code to create workers of each type, so we use a macro
     // to make code to be more readable.
 
 #ifndef BE_TEST
-#define CREATE_AND_START_POOL(type, pool_name, worker_num)                                                  \
-    pool_name.reset(new TaskWorkerPool(this, TaskWorkerPool::TaskWorkerType::type, _exec_env, worker_num)); \
+#define CREATE_AND_START_POOL(type, pool_name, worker_num)                                            \
+    pool_name.reset(new TaskWorkerPool(TaskWorkerPool::TaskWorkerType::type, _exec_env, worker_num)); \
     pool_name->start();
 
 #else
@@ -107,11 +161,14 @@ AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
 #undef CREATE_AND_START_POOL
 }
 
-AgentServer::~AgentServer() {
-#ifndef STOP_POOL
-#define STOP_POOL(type, pool_name) pool_name->stop();
-#endif
+AgentServer::Impl::~Impl() {
+    _thread_pool_publish_version->shutdown();
 
+#ifndef BE_TEST
+#define STOP_POOL(type, pool_name) pool_name->stop();
+#else
+#define STOP_POOL(type, pool_name)
+#endif // BE_TEST
     STOP_POOL(CREATE_TABLE, _create_tablet_workers);
     STOP_POOL(DROP_TABLE, _drop_tablet_workers);
     // Both PUSH and REALTIME_PUSH type use _push_workers
@@ -134,16 +191,17 @@ AgentServer::~AgentServer() {
     STOP_POOL(MOVE, _move_dir_workers);
     STOP_POOL(UPDATE_TABLET_META_INFO, _update_tablet_meta_info_workers);
 #undef STOP_POOL
+
+    _thread_pool_publish_version->wait();
 }
 
 // TODO(lingbin): each task in the batch may have it own status or FE must check and
 // resend request when something is wrong(BE may need some logic to guarantee idempotence.
-void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks) {
+void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks) {
     Status ret_st;
-
-    // TODO check master_info here if it is the same with that of heartbeat rpc
-    if (_master_info.network_address.hostname == "" || _master_info.network_address.port == 0) {
-        Status ret_st = Status::Cancelled("Have not get FE Master heartbeat yet");
+    auto master_address = get_master_address();
+    if (master_address.hostname.empty() || master_address.port == 0) {
+        ret_st = Status::Cancelled("Have not get FE Master heartbeat yet");
         ret_st.to_thrift(&agent_result.status);
         return;
     }
@@ -184,7 +242,6 @@ void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAg
                         update_tablet_meta_info_req);
 
         case TTaskType::REALTIME_PUSH:
-        case TTaskType::PUSH:
             if (!task.__isset.push_req) {
                 ret_st = Status::InvalidArgument(
                         strings::Substitute("task(signature=$0) has wrong request member", signature));
@@ -315,8 +372,8 @@ void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAg
     ret_st.to_thrift(&agent_result.status);
 }
 
-void AgentServer::make_snapshot(TAgentResult& t_agent_result, const TSnapshotRequest& snapshot_request) {
-    string snapshot_path;
+void AgentServer::Impl::make_snapshot(TAgentResult& t_agent_result, const TSnapshotRequest& snapshot_request) {
+    std::string snapshot_path;
     auto st = SnapshotManager::instance()->make_snapshot(snapshot_request, &snapshot_path);
     if (!st.ok()) {
         LOG(WARNING) << "fail to make_snapshot. tablet_id:" << snapshot_request.tablet_id << " msg:" << st.to_string();
@@ -330,7 +387,7 @@ void AgentServer::make_snapshot(TAgentResult& t_agent_result, const TSnapshotReq
     t_agent_result.__set_allow_incremental_clone(true);
 }
 
-void AgentServer::release_snapshot(TAgentResult& t_agent_result, const std::string& snapshot_path) {
+void AgentServer::Impl::release_snapshot(TAgentResult& t_agent_result, const std::string& snapshot_path) {
     Status ret_st = SnapshotManager::instance()->release_snapshot(snapshot_path);
     if (!ret_st.ok()) {
         LOG(WARNING) << "Fail to release_snapshot. snapshot_path:" << snapshot_path;
@@ -340,44 +397,73 @@ void AgentServer::release_snapshot(TAgentResult& t_agent_result, const std::stri
     ret_st.to_thrift(&t_agent_result.status);
 }
 
-void AgentServer::publish_cluster_state(TAgentResult& t_agent_result, const TAgentPublishRequest& request) {
+void AgentServer::Impl::publish_cluster_state(TAgentResult& t_agent_result, const TAgentPublishRequest& request) {
     Status status = Status::NotSupported("deprecated method(publish_cluster_state) was invoked");
     status.to_thrift(&t_agent_result.status);
 }
 
-void AgentServer::finish_task(const TFinishTaskRequest& finish_task_request) {
-    // Return result to FE
-    TMasterResult result;
-    uint32_t try_time = 0;
-    int32_t sleep_time_second = config::sleep_one_second;
-    int32_t max_retry_times = TASK_FINISH_MAX_RETRY;
-
-    while (try_time < max_retry_times) {
-        StarRocksMetrics::instance()->finish_task_requests_total.increment(1);
-        AgentStatus client_status = _master_client->finish_task(finish_task_request, &result);
-
-        if (client_status == STARROCKS_SUCCESS) {
-            // This means FE alter thread pool is full, all alter finish request to FE is meaningless
-            // so that we will sleep && retry 10 times
-            if (result.status.status_code == TStatusCode::TOO_MANY_TASKS &&
-                finish_task_request.task_type == TTaskType::ALTER) {
-                max_retry_times = ALTER_FINISH_TASK_MAX_RETRY;
-                sleep_time_second = sleep_time_second * 2;
-            } else {
-                break;
-            }
-        }
-        try_time += 1;
-        StarRocksMetrics::instance()->finish_task_requests_failed.increment(1);
-        LOG(WARNING) << "finish task failed retry: " << try_time << "/" << TASK_FINISH_MAX_RETRY
-                     << "client_status: " << client_status << " status_code: " << result.status.status_code;
-
-        sleep(sleep_time_second);
+ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
+    // TODO: more thread pools.
+    switch (type) {
+    case TTaskType::PUBLISH_VERSION:
+        return _thread_pool_publish_version.get();
+    case TTaskType::CREATE:
+    case TTaskType::DROP:
+    case TTaskType::PUSH:
+    case TTaskType::CLONE:
+    case TTaskType::STORAGE_MEDIUM_MIGRATE:
+    case TTaskType::ROLLUP:
+    case TTaskType::SCHEMA_CHANGE:
+    case TTaskType::CANCEL_DELETE:
+    case TTaskType::MAKE_SNAPSHOT:
+    case TTaskType::RELEASE_SNAPSHOT:
+    case TTaskType::CHECK_CONSISTENCY:
+    case TTaskType::UPLOAD:
+    case TTaskType::DOWNLOAD:
+    case TTaskType::CLEAR_REMOTE_FILE:
+    case TTaskType::MOVE:
+    case TTaskType::REALTIME_PUSH:
+    case TTaskType::CLEAR_ALTER_TASK:
+    case TTaskType::CLEAR_TRANSACTION_TASK:
+    case TTaskType::RECOVER_TABLET:
+    case TTaskType::STREAM_LOAD:
+    case TTaskType::UPDATE_TABLET_META_INFO:
+    case TTaskType::ALTER:
+    case TTaskType::INSTALL_PLUGIN:
+    case TTaskType::UNINSTALL_PLUGIN:
+    case TTaskType::NUM_TASK_TYPE:
+    default:
+        break;
     }
+    return nullptr;
 }
 
-AgentStatus AgentServer::report_task(const TReportRequest& request, TMasterResult* result) {
-    return _master_client->report(request, result);
+AgentServer::AgentServer(ExecEnv* exec_env) : _impl(std::make_unique<AgentServer::Impl>(exec_env)) {}
+
+AgentServer::~AgentServer() = default;
+
+void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks) {
+    _impl->submit_tasks(agent_result, tasks);
+}
+
+void AgentServer::make_snapshot(TAgentResult& agent_result, const TSnapshotRequest& snapshot_request) {
+    _impl->make_snapshot(agent_result, snapshot_request);
+}
+
+void AgentServer::release_snapshot(TAgentResult& agent_result, const std::string& snapshot_path) {
+    _impl->release_snapshot(agent_result, snapshot_path);
+}
+
+void AgentServer::publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request) {
+    _impl->publish_cluster_state(agent_result, request);
+}
+
+ThreadPool* AgentServer::get_thread_pool(int type) const {
+    return _impl->get_thread_pool(type);
+}
+
+void AgentServer::init_or_die() {
+    return _impl->init_or_die();
 }
 
 } // namespace starrocks

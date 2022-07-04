@@ -22,10 +22,10 @@
 package com.starrocks.alter;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJob.JobState;
 import com.starrocks.analysis.AddBackendClause;
+import com.starrocks.analysis.AddComputeNodeClause;
 import com.starrocks.analysis.AddFollowerClause;
 import com.starrocks.analysis.AddObserverClause;
 import com.starrocks.analysis.AlterClause;
@@ -34,6 +34,7 @@ import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelStmt;
 import com.starrocks.analysis.DecommissionBackendClause;
 import com.starrocks.analysis.DropBackendClause;
+import com.starrocks.analysis.DropComputeNodeClause;
 import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.ModifyBackendAddressClause;
@@ -44,8 +45,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -130,26 +129,14 @@ public class SystemHandler extends AlterHandler {
 
     @Override
     // add synchronized to avoid process 2 or more stmts at same time
-    public synchronized ShowResultSet process(List<AlterClause> alterClauses, String clusterName, Database dummyDb,
+    public synchronized ShowResultSet process(List<AlterClause> alterClauses, Database dummyDb,
                                      OlapTable dummyTbl) throws UserException {
         Preconditions.checkArgument(alterClauses.size() == 1);
         AlterClause alterClause = alterClauses.get(0);
         if (alterClause instanceof AddBackendClause) {
             // add backend
             AddBackendClause addBackendClause = (AddBackendClause) alterClause;
-            final String destClusterName = addBackendClause.getDestCluster();
-
-            if ((!Strings.isNullOrEmpty(destClusterName) || addBackendClause.isFree()) &&
-                    Config.disable_cluster_feature) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_INVALID_OPERATION, "ADD BACKEND TO CLUSTER");
-            }
-
-            if (!Strings.isNullOrEmpty(destClusterName)
-                    && GlobalStateMgr.getCurrentState().getCluster(destClusterName) == null) {
-                throw new DdlException("Cluster: " + destClusterName + " does not exist.");
-            }
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(addBackendClause.getHostPortPairs(),
-                    addBackendClause.isFree(), addBackendClause.getDestCluster());
+            GlobalStateMgr.getCurrentSystemInfo().addBackends(addBackendClause.getHostPortPairs());
         } else if (alterClause instanceof ModifyBackendAddressClause) {
             // update Backend Address
             ModifyBackendAddressClause modifyBackendAddressClause = (ModifyBackendAddressClause) alterClause;
@@ -197,6 +184,12 @@ public class SystemHandler extends AlterHandler {
         } else if (alterClause instanceof AlterLoadErrorUrlClause) {
             AlterLoadErrorUrlClause clause = (AlterLoadErrorUrlClause) alterClause;
             GlobalStateMgr.getCurrentState().getLoadInstance().setLoadErrorHubInfo(clause.getProperties());
+        } else if (alterClause instanceof AddComputeNodeClause) {
+            AddComputeNodeClause addComputeNodeClause = (AddComputeNodeClause) alterClause;
+            GlobalStateMgr.getCurrentSystemInfo().addComputeNodes(addComputeNodeClause.getHostPortPairs());
+        } else if (alterClause instanceof DropComputeNodeClause) {
+            DropComputeNodeClause dropComputeNodeClause = (DropComputeNodeClause) alterClause;
+            GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(dropComputeNodeClause.getHostPortPairs());
         } else {
             Preconditions.checkState(false, alterClause.getClass());
         }

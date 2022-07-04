@@ -23,6 +23,7 @@ package com.starrocks.cluster;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -49,6 +50,8 @@ public class Cluster implements Writable {
     private String name;
     // backend which cluster own
     private Set<Long> backendIdSet = ConcurrentHashMap.newKeySet();
+    // compute node which cluster own
+    private Set<Long> computeNodeIdSet = ConcurrentHashMap.newKeySet();
 
     private ConcurrentHashMap<String, LinkDbInfo> linkDbNames = new ConcurrentHashMap<>();
     private ConcurrentHashMap<Long, LinkDbInfo> linkDbIds = new ConcurrentHashMap<>();
@@ -113,6 +116,10 @@ public class Cluster implements Writable {
         return SystemInfoService.DEFAULT_CLUSTER.equalsIgnoreCase(name);
     }
 
+    public List<Long> getComputeNodeIdList() {
+        return Lists.newArrayList(computeNodeIdSet);
+    }
+
     public void setBackendIdList(List<Long> backendIdList) {
         if (backendIdList == null) {
             return;
@@ -121,8 +128,16 @@ public class Cluster implements Writable {
         backendIdSet.addAll(backendIdList);
     }
 
+    public void addComputeNode(long computeNodeId) {
+        computeNodeIdSet.add(computeNodeId);
+    }
+
     public void addBackend(long backendId) {
         backendIdSet.add(backendId);
+    }
+
+    public void removeComputeNode(long removedComputeNodeId) {
+        computeNodeIdSet.remove((Long) removedComputeNodeId);
     }
 
     public void removeBackend(long removedBackendId) {
@@ -146,14 +161,14 @@ public class Cluster implements Writable {
         }
 
         int dbCount = dbIds.size();
-        if (dbNames.contains(ClusterNamespace.getFullName(this.name, InfoSchemaDb.DATABASE_NAME))) {
+        if (dbNames.contains(ClusterNamespace.getFullName(InfoSchemaDb.DATABASE_NAME))) {
             dbCount--;
         }
 
         out.writeInt(dbCount);
         // don't persist InfoSchemaDb meta
         for (String name : dbNames) {
-            if (!name.equals(ClusterNamespace.getFullName(this.name, InfoSchemaDb.DATABASE_NAME))) {
+            if (!name.equals(ClusterNamespace.getFullName(InfoSchemaDb.DATABASE_NAME))) {
                 Text.writeString(out, name);
             } else {
                 dbIds.remove(dbNameToIDs.get(name));

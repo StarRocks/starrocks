@@ -88,4 +88,9 @@ public class AdminSetConfigStmt extends DdlStmt {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitAdminSetConfigStatement(this, context);
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdlib>
+
 #include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
@@ -21,7 +23,6 @@
 #include "util/faststring.h"
 
 namespace starrocks {
-
 PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
     using Key = uint64_t;
     vector<Key> keys;
@@ -170,7 +171,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
         ASSERT_TRUE(index.get(keys.size(), keys.data(), get_values.data()).ok());
         ASSERT_EQ(keys.size(), get_values.size());
         for (int i = 0; i < N / 2; i++) {
-            ASSERT_EQ(NullIndexValue, get_values[i]);
+            ASSERT_EQ(NullIndexValue, get_values[i].get_value());
         }
         for (int i = N / 2; i < values.size(); i++) {
             ASSERT_EQ(values[i], get_values[i]);
@@ -187,7 +188,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index_wal) {
         ASSERT_TRUE(new_index.get(keys.size(), keys.data(), get_values.data()).ok());
         ASSERT_EQ(keys.size(), get_values.size());
         for (int i = 0; i < N / 2; i++) {
-            ASSERT_EQ(NullIndexValue, get_values[i]);
+            ASSERT_EQ(NullIndexValue, get_values[i].get_value());
         }
         for (int i = N / 2; i < values.size(); i++) {
             ASSERT_EQ(values[i], get_values[i]);
@@ -394,7 +395,7 @@ void build_persistent_index_from_tablet(size_t N) {
         primary_results.resize(pks.size());
         persistent_results.resize(pks.size());
         primary_index.get(pks, &primary_results);
-        persistent_index.get(pks.size(), pks.raw_data(), persistent_results.data());
+        persistent_index.get(pks.size(), pks.raw_data(), reinterpret_cast<IndexValue*>(persistent_results.data()));
         ASSERT_EQ(primary_results.size(), persistent_results.size());
         for (size_t j = 0; j < primary_results.size(); ++j) {
             ASSERT_EQ(primary_results[i], persistent_results[i]);
@@ -418,7 +419,7 @@ void build_persistent_index_from_tablet(size_t N) {
             primary_results.resize(pks.size());
             persistent_results.resize(pks.size());
             primary_index.get(pks, &primary_results);
-            persistent_index.get(pks.size(), pks.raw_data(), persistent_results.data());
+            persistent_index.get(pks.size(), pks.raw_data(), reinterpret_cast<IndexValue*>(persistent_results.data()));
             ASSERT_EQ(primary_results.size(), persistent_results.size());
             for (size_t j = 0; j < primary_results.size(); ++j) {
                 ASSERT_EQ(primary_results[i], persistent_results[i]);
@@ -508,6 +509,31 @@ PARALLEL_TEST(PersistentIndexTest, test_replace) {
         ASSERT_EQ(values[i], new_get_values[i]);
     }
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+}
+
+PARALLEL_TEST(PersistentIndexTest, test_get_move_buckets) {
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_get_move_buckets";
+    PersistentIndex index(kPersistentIndexDir);
+    std::vector<uint8_t> bucket_packs_in_page;
+    bucket_packs_in_page.reserve(16);
+    srand((int)time(NULL));
+    for (int32_t i = 0; i < 16; ++i) {
+        bucket_packs_in_page.emplace_back(rand() % 32);
+    }
+    int32_t sum = 0;
+    for (int32_t i = 0; i < 16; ++i) {
+        sum += bucket_packs_in_page[i];
+    }
+
+    for (int32_t i = 0; i < 100; ++i) {
+        int32_t target = rand() % sum;
+        auto ret = index.test_get_move_buckets(target, bucket_packs_in_page.data());
+        int32_t find_target = 0;
+        for (int32_t i = 0; i < ret.size(); ++i) {
+            find_target += bucket_packs_in_page[ret[i]];
+        }
+        ASSERT_TRUE(find_target >= target);
+    }
 }
 
 } // namespace starrocks

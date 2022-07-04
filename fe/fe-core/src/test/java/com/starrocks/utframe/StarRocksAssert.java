@@ -40,8 +40,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
+import com.starrocks.common.*;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.execution.DataDefinitionExecutorFactory;
 import com.starrocks.qe.ConnectContext;
@@ -86,11 +85,17 @@ public class StarRocksAssert {
     public StarRocksAssert withDatabase(String dbName) throws Exception {
         DropDbStmt dropDbStmt =
                 (DropDbStmt) UtFrameUtils.parseStmtWithNewParser("drop database if exists " + dbName + ";", ctx);
-        GlobalStateMgr.getCurrentState().dropDb(dropDbStmt);
+        try {
+            GlobalStateMgr.getCurrentState().getMetadata().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
+        } catch (MetaNotFoundException e) {
+            if (!dropDbStmt.isSetIfExists()) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_DB_DROP_EXISTS, dbName);
+            }
+        }
 
         CreateDbStmt createDbStmt =
                 (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt("create database " + dbName + ";", ctx);
-        GlobalStateMgr.getCurrentState().createDb(createDbStmt);
+        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
         return this;
     }
 
@@ -111,8 +116,7 @@ public class StarRocksAssert {
 
     public StarRocksAssert withDatabaseWithoutAnalyze(String dbName) throws Exception {
         CreateDbStmt dbStmt = new CreateDbStmt(false, dbName);
-        dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
-        GlobalStateMgr.getCurrentState().createDb(dbStmt);
+        GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
         return this;
     }
 
@@ -122,7 +126,7 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert useDatabase(String dbName) {
-        ctx.setDatabase(ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName));
+        ctx.setDatabase(ClusterNamespace.getFullName(dbName));
         return this;
     }
 
@@ -161,7 +165,7 @@ public class StarRocksAssert {
     public StarRocksAssert dropDatabase(String dbName) throws Exception {
         DropDbStmt dropDbStmt =
                 (DropDbStmt) UtFrameUtils.parseAndAnalyzeStmt("drop database " + dbName + ";", ctx);
-        GlobalStateMgr.getCurrentState().dropDb(dropDbStmt);
+        GlobalStateMgr.getCurrentState().getMetadata().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
         return this;
     }
 

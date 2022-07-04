@@ -66,6 +66,7 @@ import mockit.Expectations;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
 
 public class CatalogMocker {
     // user
@@ -437,7 +438,7 @@ public class CatalogMocker {
 
                     globalStateMgr.getEditLog();
                     minTimes = 0;
-                    result = new EditLog("name");
+                    result = new EditLog(new ArrayBlockingQueue<>(100));
 
                     globalStateMgr.changeCatalogDb((ConnectContext) any, WRONG_DB);
                     minTimes = 0;

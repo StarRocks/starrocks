@@ -35,9 +35,6 @@ import java.util.ArrayList;
  * the row descriptor must still include a materialized tuple so that the backend can
  * construct a valid row empty batch.
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class EmptySetNode extends PlanNode {
     public EmptySetNode(PlanNodeId id, ArrayList<TupleId> tupleIds) {
         super(id, tupleIds, "EMPTYSET");
@@ -53,16 +50,6 @@ public class EmptySetNode extends PlanNode {
 
     @Override
     public void init(Analyzer analyzer) {
-        Preconditions.checkState(conjuncts.isEmpty());
-        // If the physical output tuple produced by an AnalyticEvalNode wasn't created
-        // the logical output tuple is returned by getMaterializedTupleIds(). It needs
-        // to be set as materialized (even though it isn't) to avoid failing precondition
-        // checks generating the thrift for slot refs that may reference this tuple.
-        for (TupleId id : tupleIds) {
-            analyzer.getTupleDesc(id).setIsMaterialized(true);
-        }
-        computeMemLayout(analyzer);
-        computeStats(analyzer);
     }
 
     @Override

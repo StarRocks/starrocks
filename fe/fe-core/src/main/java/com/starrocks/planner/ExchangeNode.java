@@ -39,8 +39,6 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TSortInfo;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Objects;
@@ -57,12 +55,7 @@ import java.util.Objects;
  * inputs on the parameters specified in the SortInfo object. It is assumed that the
  * inputs are also sorted individually on the same SortInfo parameter.
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class ExchangeNode extends PlanNode {
-    private static final Logger LOG = LogManager.getLogger(ExchangeNode.class);
-
     // The parameters based on which sorted input streams are merged by this
     // exchange node. Null if this exchange does not merge sorted streams
     private SortInfo mergeInfo;
@@ -126,6 +119,10 @@ public class ExchangeNode extends PlanNode {
 
     public boolean isMerge() {
         return mergeInfo != null;
+    }
+
+    public void setReceiveColumns(List<Integer> receiveColumns) {
+        this.receiveColumns = receiveColumns;
     }
 
     public List<Integer> getReceiveColumns() {

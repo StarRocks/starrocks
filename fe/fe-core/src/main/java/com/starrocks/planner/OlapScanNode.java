@@ -33,7 +33,6 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -628,7 +627,6 @@ public class OlapScanNode extends ScanNode {
             PlanNodeId id, TupleDescriptor desc, String planNodeName, List<TScanRangeLocations> locationsList) {
         OlapScanNode olapScanNode = new OlapScanNode(id, desc, planNodeName);
         olapScanNode.numInstances = 1;
-
         olapScanNode.selectedIndexId = olapScanNode.olapTable.getBaseIndexId();
         olapScanNode.selectedPartitionNum = 1;
         olapScanNode.selectedTabletsNum = 1;
@@ -638,11 +636,6 @@ public class OlapScanNode extends ScanNode {
         olapScanNode.result.addAll(locationsList);
 
         return olapScanNode;
-    }
-
-    public TupleId getTupleId() {
-        Preconditions.checkNotNull(desc);
-        return desc.getId();
     }
 
     @Override

@@ -2,9 +2,12 @@
 
 #include "storage/lake/tablet.h"
 
+#include "column/schema.h"
 #include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/metadata_iterator.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reader.h"
 #include "storage/lake/txn_log.h"
 #include "storage/tablet_schema_map.h"
 
@@ -23,7 +26,7 @@ StatusOr<TabletMetadataPtr> Tablet::get_metadata(int64_t version) {
 }
 
 StatusOr<TabletMetadataIter> Tablet::list_metadata() {
-    return _mgr->list_tablet_metadata(_group, _id);
+    return _mgr->list_tablet_metadata(_id, true);
 }
 
 Status Tablet::delete_metadata(int64_t version) {
@@ -57,12 +60,16 @@ StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer() {
     return std::make_unique<GeneralTabletWriter>(*this);
 }
 
+StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, vectorized::Schema schema) {
+    return std::make_shared<TabletReader>(*this, version, std::move(schema));
+}
+
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
     auto tablet_schema_key = _mgr->tablet_schema_cache_key(_id);
     auto ptr = _mgr->lookup_tablet_schema(tablet_schema_key);
     RETURN_IF(ptr != nullptr, ptr);
 
-    ASSIGN_OR_RETURN(TabletMetadataIter metadata_iter, _mgr->list_tablet_metadata(_group, _id));
+    ASSIGN_OR_RETURN(TabletMetadataIter metadata_iter, _mgr->list_tablet_metadata(_id, true));
     if (!metadata_iter.has_next()) {
         return Status::NotFound(fmt::format("tablet {} metadata not found", _id));
     }
@@ -78,6 +85,17 @@ StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
         (void)_mgr->fill_metacache(tablet_schema_key, static_cast<void*>(value_ptr), 0);
     }
     return result.first;
+}
+
+StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
+    ASSIGN_OR_RETURN(auto tablet_metadata, get_metadata(version));
+    ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
+    std::vector<RowsetPtr> rowsets;
+    for (const auto& rowset_metadata : tablet_metadata->rowsets()) {
+        rowsets.emplace_back(std::make_shared<Rowset>(_group, tablet_schema,
+                                                      std::make_shared<const RowsetMetadata>(rowset_metadata)));
+    }
+    return rowsets;
 }
 
 std::string Tablet::metadata_path(int64_t version) const {

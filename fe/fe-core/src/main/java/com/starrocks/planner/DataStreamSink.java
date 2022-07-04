@@ -72,10 +72,6 @@ public class DataStreamSink extends DataSink {
         this.outputColumnIds = outputColumnIds;
     }
 
-    public List<Integer> getOutputColumnIds() {
-        return outputColumnIds;
-    }
-
     @Override
     public String getExplainString(String prefix, TExplainLevel explainLevel) {
         StringBuilder strBuilder = new StringBuilder();

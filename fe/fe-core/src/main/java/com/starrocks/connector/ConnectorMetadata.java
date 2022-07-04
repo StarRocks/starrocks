@@ -6,12 +6,10 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
-import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
@@ -20,6 +18,7 @@ import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
@@ -60,9 +59,9 @@ public interface ConnectorMetadata {
         return null;
     }
 
-    default void createDb(CreateDbStmt stmt) throws DdlException {}
+    default void createDb(String dbName) throws  DdlException, AlreadyExistsException {}
 
-    default void dropDb(DropDbStmt stmt) throws DdlException {}
+    default void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {}
 
     default List<Long> getDbIds() {
         return Lists.newArrayList();
@@ -104,6 +103,9 @@ public interface ConnectorMetadata {
 
     default void alterMaterializedView(AlterMaterializedViewStatement stmt)
             throws DdlException, MetaNotFoundException, AnalysisException {}
+
+    default void refreshMaterializedView(String dbName, String mvName, int priority)
+            throws DdlException, MetaNotFoundException {}
 
     default void createView(CreateViewStmt stmt) throws DdlException {}
 

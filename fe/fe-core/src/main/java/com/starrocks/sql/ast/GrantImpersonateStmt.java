@@ -11,4 +11,9 @@ public class GrantImpersonateStmt extends BaseGrantRevokeImpersonateStmt {
     public GrantImpersonateStmt(UserIdentity authorizedUser, UserIdentity securedUser) {
         super(authorizedUser, securedUser, "GRANT", "TO");
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

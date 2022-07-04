@@ -2,13 +2,12 @@
 
 #include "storage/delta_writer.h"
 
-#include "common/tracer.h"
 #include "runtime/current_thread.h"
+#include "runtime/descriptors.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/rowset/rowset_factory.h"
-#include "storage/schema.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
@@ -86,7 +85,7 @@ Status DeltaWriter::_init() {
         auto tracker = _storage_engine->update_manager()->mem_tracker();
         if (tracker->limit_exceeded()) {
             _set_state(kUninitialized);
-            auto msg = Substitute(
+            auto msg = strings::Substitute(
                     "Primary-key index exceeds the limit. tablet_id: $0, consumption: $1, limit: $2."
                     " Memory stats of top five tablets: $3",
                     _opt.tablet_id, tracker->consumption(), tracker->limit(),
@@ -274,8 +273,15 @@ void DeltaWriter::_reset_mem_table() {
 }
 
 Status DeltaWriter::commit() {
-    auto scoped =
-            trace::Scope(Tracer::Instance().start_trace_txn_tablet("delta_writer_commit", _opt.txn_id, _opt.tablet_id));
+    Span span;
+    if (_opt.parent_span) {
+        span = Tracer::Instance().add_span("delta_writer_commit", _opt.parent_span);
+        span->SetAttribute("txn_id", _opt.txn_id);
+        span->SetAttribute("tablet_id", _opt.tablet_id);
+    } else {
+        span = Tracer::Instance().start_trace_txn_tablet("delta_writer_commit", _opt.txn_id, _opt.tablet_id);
+    }
+    auto scoped = trace::Scope(span);
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     auto state = _get_state();
     switch (state) {

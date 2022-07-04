@@ -160,6 +160,32 @@ public:
         }
     }
 
+    // try remove object by key
+    // return true if object not exist or be removed
+    // if no one use this object, object will be removed
+    // otherwise do not remove the object, return false
+    bool try_remove_by_key(const Key& key) {
+        std::lock_guard<std::mutex> lg(_lock);
+        auto itr = _map.find(key);
+        if (itr == _map.end()) {
+            return true;
+        }
+        auto v = itr->second;
+        auto entry = *v;
+        if (entry->_ref != 1) {
+            VLOG(1) << "try_remove_by_key() failed: cache entry ref != 1 " << entry->_value;
+            return false;
+        } else {
+            _map.erase(itr);
+            _list.erase(v);
+            _object_size--;
+            _size -= entry->_size;
+            if (_mem_tracker) _mem_tracker->release(entry->_size);
+            delete entry;
+        }
+        return true;
+    }
+
     // remove object by key
     // return true if object exist and is removed
     bool remove_by_key(const Key& key) {

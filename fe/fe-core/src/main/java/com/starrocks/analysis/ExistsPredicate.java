@@ -25,18 +25,8 @@ import com.google.common.base.Preconditions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-/**
- * Class representing a [NOT] EXISTS predicate.
- */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class ExistsPredicate extends Predicate {
-    private static final Logger LOG = LoggerFactory.getLogger(
-            ExistsPredicate.class);
     private boolean notExists = false;
 
     public boolean isNotExists() {

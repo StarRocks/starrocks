@@ -85,6 +85,8 @@ public:
 
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
 
+    Span get_span() { return _span; }
+
 private:
     friend class RefCountedThreadSafe<LoadChannel>;
     ~LoadChannel();

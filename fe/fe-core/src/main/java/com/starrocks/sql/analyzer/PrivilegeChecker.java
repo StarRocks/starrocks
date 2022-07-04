@@ -10,10 +10,12 @@ import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
@@ -40,7 +42,9 @@ import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.Map;
@@ -78,6 +82,16 @@ public class PrivilegeChecker {
     private static class PrivilegeCheckerVisitor extends AstVisitor<Void, ConnectContext> {
         public void check(StatementBase statement, ConnectContext session) {
             visit(statement, session);
+        }
+
+        @Override
+        public Void visitShowComputeNodes(ShowComputeNodesStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)
+                    && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
+                    PrivPredicate.OPERATOR)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN/OPERATOR");
+            }
+            return null;
         }
 
         @Override
@@ -255,6 +269,16 @@ public class PrivilegeChecker {
         }
 
         @Override
+        public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement,
+                                                          ConnectContext context) {
+            if (!checkTblPriv(ConnectContext.get(), statement.getMvName(), PrivPredicate.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
+            }
+            return null;
+
+        }
+
+        @Override
         public Void visitAlterSystemStmt(AlterSystemStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.OPERATOR)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
@@ -386,6 +410,26 @@ public class PrivilegeChecker {
             if (!checkTblPriv(session, tableName, PrivPredicate.LOAD)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
                         session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateDbStatement(CreateDbStmt statement, ConnectContext session) {
+            String dbName = statement.getFullDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkDbPriv(session, dbName, PrivPredicate.CREATE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), dbName);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropDbStatement(DropDbStmt statement, ConnectContext session) {
+            String dbName = statement.getDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().
+                    checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), dbName);
             }
             return null;
         }

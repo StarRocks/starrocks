@@ -27,24 +27,17 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TupleId;
-import com.starrocks.catalog.ColumnStats;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.thrift.THashJoinNode;
 import com.starrocks.thrift.TJoinDistributionMode;
-import com.starrocks.thrift.TPlanNode;
-import com.starrocks.thrift.TPlanNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -57,9 +50,6 @@ import java.util.stream.Collectors;
  * The right child must be a leaf node, ie, can only materialize
  * a single input tuple.
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNode {
     private static final Logger LOG = LogManager.getLogger(JoinNode.class);
 
@@ -74,8 +64,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     protected String colocateReason = ""; // if can not do colocate join, set reason here
     // the flag for local bucket shuffle join
     protected boolean isLocalHashBucket = false;
-    // the flag for runtime bucket shuffle join
-    protected boolean isShuffleHashBucket = false;
 
     protected final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
     protected final List<Integer> filter_null_value_columns = Lists.newArrayList();
@@ -126,7 +114,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     public JoinNode(String planNodename, PlanNodeId id, PlanNode outer, PlanNode inner, JoinOperator joinOp,
                     List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
         super(id, planNodename);
-        Preconditions.checkArgument(eqJoinConjuncts != null && !eqJoinConjuncts.isEmpty());
+//        Preconditions.checkArgument(eqJoinConjuncts != null && !eqJoinConjuncts.isEmpty());
         Preconditions.checkArgument(otherJoinConjuncts != null);
         tupleIds.addAll(outer.getTupleIds());
         tupleIds.addAll(inner.getTupleIds());
@@ -162,7 +150,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         JoinOperator joinOp = getJoinOp();
         PlanNode inner = getChild(1);
-        if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin()) {
+        if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin() && !joinOp.isCrossJoin()) {
             return;
         }
 
@@ -180,8 +168,8 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             BinaryPredicate joinConjunct = eqJoinConjuncts.get(i);
             Preconditions.checkArgument(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct) ||
                     BinaryPredicate.IS_EQ_PREDICATE.apply(joinConjunct));
+
             RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
-            rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
             rf.setBuildPlanNodeId(this.id.asInt());
             rf.setExprOrder(i);
             rf.setJoinMode(distrMode);
@@ -191,20 +179,37 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
             Expr left = joinConjunct.getChild(0);
             Expr right = joinConjunct.getChild(1);
-            ArrayList<TupleId> buildTupleIds = inner.getTupleIds();
-            // swap left and right if necessary, and always push down right.
-            if (!left.isBoundByTupleIds(buildTupleIds)) {
-                Expr temp = left;
-                left = right;
-                right = temp;
-            }
+            if (!joinOp.isCrossJoin()) {
+                rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
+                ArrayList<TupleId> buildTupleIds = inner.getTupleIds();
+                // swap left and right if necessary, and always push down right.
+                if (!left.isBoundByTupleIds(buildTupleIds)) {
+                    Expr temp = left;
+                    left = right;
+                    right = temp;
+                }
 
-            // push down rf to left child node, and build it only when it
-            // can be accepted by left child node.
-            rf.setBuildExpr(left);
-            boolean accept = getChild(0).pushDownRuntimeFilters(rf, right);
-            if (accept) {
-                buildRuntimeFilters.add(rf);
+                // push down rf to left child node, and build it only when it
+                // can be accepted by left child node.
+                rf.setBuildExpr(left);
+                if (getChild(0).pushDownRuntimeFilters(rf, right)) {
+                    buildRuntimeFilters.add(rf);
+                }
+            } else {
+                // For cross-join, the filter could only be pushdown to left side
+                if (!(left instanceof SlotRef)) {
+                    continue;
+                }
+                if (!right.isBoundByTupleIds(getChild(1).getTupleIds())) {
+                    continue;
+                }
+
+                rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
+                rf.setBuildExpr(right);
+                rf.setOnlyLocal(true);
+                if (getChild(0).pushDownRuntimeFilters(rf, left)) {
+                    this.getBuildRuntimeFilters().add(rf);
+                }
             }
         }
     }
@@ -264,24 +269,12 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         return false;
     }
 
-    public List<BinaryPredicate> getEqJoinConjuncts() {
-        return eqJoinConjuncts;
-    }
-
     public JoinOperator getJoinOp() {
         return joinOp;
     }
 
-    public TableRef getInnerRef() {
-        return innerRef;
-    }
-
     public void setDistributionMode(DistributionMode distrMode) {
         this.distrMode = distrMode;
-    }
-
-    public DistributionMode getDistributionMode() {
-        return this.distrMode;
     }
 
     public boolean isBroadcast() {
@@ -307,86 +300,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
     @Override
     public void init(Analyzer analyzer) throws UserException {
-        assignConjuncts(analyzer);
-
-        // Set smap to the combined children's smaps and apply that to all conjuncts_.
-        createDefaultSmap(analyzer);
-
-        computeStats(analyzer);
-
-        ExprSubstitutionMap combinedChildSmap = getCombinedChildWithoutTupleIsNullSmap();
-        List<Expr> newEqJoinConjuncts =
-                Expr.substituteList(eqJoinConjuncts, combinedChildSmap, analyzer, false);
-        eqJoinConjuncts = newEqJoinConjuncts.stream()
-                .map(entity -> (BinaryPredicate) entity).collect(Collectors.toList());
-        otherJoinConjuncts =
-                Expr.substituteList(otherJoinConjuncts, combinedChildSmap, analyzer, false);
     }
 
     @Override
     public void computeStats(Analyzer analyzer) {
-        super.computeStats(analyzer);
-
-        // For a join between child(0) and child(1), we look for join conditions "L.c = R.d"
-        // (with L being from child(0) and R from child(1)) and use as the cardinality
-        // estimate the maximum of
-        //   child(0).cardinality * R.cardinality / # distinct values for R.d
-        //     * child(1).cardinality / R.cardinality
-        // across all suitable join conditions, which simplifies to
-        //   child(0).cardinality * child(1).cardinality / # distinct values for R.d
-        // The reasoning is that
-        // - each row in child(0) joins with R.cardinality/#DV_R.d rows in R
-        // - each row in R is 'present' in child(1).cardinality / R.cardinality rows in
-        //   child(1)
-        //
-        // This handles the very frequent case of a fact table/dimension table join
-        // (aka foreign key/primary key join) if the primary key is a single column, with
-        // possible additional predicates against the dimension table. An example:
-        // FROM FactTbl F JOIN Customers C D ON (F.cust_id = C.id) ... WHERE C.region = 'US'
-        // - if there are 5 regions, the selectivity of "C.region = 'US'" would be 0.2
-        //   and the output cardinality of the Customers scan would be 0.2 * # rows in
-        //   Customers
-        // - # rows in Customers == # of distinct values for Customers.id
-        // - the output cardinality of the join would be F.cardinality * 0.2
-
-        long maxNumDistinct = 0;
-        for (BinaryPredicate eqJoinPredicate : eqJoinConjuncts) {
-            Expr lhsJoinExpr = eqJoinPredicate.getChild(0);
-            Expr rhsJoinExpr = eqJoinPredicate.getChild(1);
-            if (lhsJoinExpr.unwrapSlotRef() == null) {
-                continue;
-            }
-            SlotRef rhsSlotRef = rhsJoinExpr.unwrapSlotRef();
-            if (rhsSlotRef == null) {
-                continue;
-            }
-            SlotDescriptor slotDesc = rhsSlotRef.getDesc();
-            if (slotDesc == null) {
-                continue;
-            }
-            ColumnStats stats = slotDesc.getStats();
-            if (!stats.hasNumDistinctValues()) {
-                continue;
-            }
-            long numDistinct = stats.getNumDistinctValues();
-            maxNumDistinct = Math.max(maxNumDistinct, numDistinct);
-            LOG.debug("min slotref: {}, #distinct: {}", rhsSlotRef.toSql(), numDistinct);
-        }
-
-        if (maxNumDistinct == 0) {
-            // if we didn't find any suitable join predicates or don't have stats
-            // on the relevant columns, we very optimistically assume we're doing an
-            // FK/PK join (which doesn't alter the cardinality of the left-hand side)
-            cardinality = getChild(0).cardinality;
-        } else {
-            cardinality = Math.round((double) getChild(0).cardinality * (double) getChild(
-                    1).cardinality / (double) maxNumDistinct);
-            if (cardinality < -1) {
-                cardinality = Long.MAX_VALUE;
-            }
-            LOG.debug("lhs card: {}, rhs card: {}", getChild(0).cardinality, getChild(1).cardinality);
-        }
-        LOG.debug("stats HashJoin: cardinality {}", cardinality);
     }
 
     @Override
@@ -425,8 +342,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         String distrModeStr =
                 (distrMode != DistributionMode.NONE) ? (" (" + distrMode.toString() + ")") : "";
         StringBuilder output = new StringBuilder().append(
-                detailPrefix + "join op: " + joinOp.toString() + distrModeStr + "\n").append(
-                detailPrefix + "hash predicates:\n");
+                detailPrefix + "join op: " + joinOp.toString() + distrModeStr + "\n");
 
         output.append(detailPrefix).append("colocate: ").append(isColocate)
                 .append(isColocate ? "" : ", reason: " + colocateReason).append("\n");

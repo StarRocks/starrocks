@@ -30,6 +30,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 // DROP DB Statement
 public class DropDbStmt extends DdlStmt {
@@ -51,6 +52,10 @@ public class DropDbStmt extends DdlStmt {
         return this.dbName;
     }
 
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
+    }
+
     public boolean isForceDrop() {
         return this.forceDrop;
     }
@@ -61,9 +66,9 @@ public class DropDbStmt extends DdlStmt {
         if (Strings.isNullOrEmpty(dbName)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
         }
-        dbName = ClusterNamespace.getFullName(getClusterName(), dbName);
+        dbName = ClusterNamespace.getFullName(dbName);
         // Don't allowed to drop 'information_schema'
-        if (dbName.equalsIgnoreCase(ClusterNamespace.getFullName(getClusterName(), InfoSchemaDb.DATABASE_NAME))) {
+        if (dbName.equalsIgnoreCase(ClusterNamespace.getFullName(InfoSchemaDb.DATABASE_NAME))) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_DB_ACCESS_DENIED, analyzer.getQualifiedUser(), dbName);
         }
 
@@ -83,6 +88,16 @@ public class DropDbStmt extends DdlStmt {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropDbStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
 }

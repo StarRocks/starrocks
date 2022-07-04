@@ -40,8 +40,6 @@ import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -84,12 +82,7 @@ import java.util.stream.Collectors;
  * it impossible search for things within a fragment (using TreeNode functions);
  * fix that
  */
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class PlanFragment extends TreeNode<PlanFragment> {
-    private static final Logger LOG = LogManager.getLogger(PlanFragment.class);
-
     // id for this plan fragment
     protected final PlanFragmentId fragmentId;
 
@@ -130,13 +123,16 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     protected int pipelineDop = 1;
     protected boolean dopEstimated = false;
 
+    // Enable shared_scan for this fragment: OlapScanOperator could share the output data to avoid data skew
+    protected boolean enableSharedScan = true;
+
     protected final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
     protected final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
 
     protected List<Pair<Integer, ColumnDict>> queryGlobalDicts = Lists.newArrayList();
     protected List<Pair<Integer, ColumnDict>> loadGlobalDicts = Lists.newArrayList();
 
-    private Set<Integer> runtimeFilterBuildNodeIds = Sets.newHashSet();
+    private final Set<Integer> runtimeFilterBuildNodeIds = Sets.newHashSet();
 
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
@@ -226,10 +222,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return destNode;
     }
 
-    public ArrayList<Expr> getOutputExprs() {
-        return outputExprs;
-    }
-
     public DataPartition getOutputPartition() {
         return outputPartition;
     }
@@ -243,6 +235,18 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public int getPipelineDop() {
         return pipelineDop;
+    }
+
+    public void setPipelineDop(int dop) {
+        this.pipelineDop = dop;
+    }
+
+    public void setEnableSharedScan(boolean enable) {
+        this.enableSharedScan = enable;
+    }
+
+    public boolean isEnableSharedScan() {
+        return enableSharedScan;
     }
 
     public void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {
@@ -450,10 +454,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return (dataPartition.getType() != TPartitionType.UNPARTITIONED);
     }
 
-    public boolean isHashPartitioned() {
-        return (dataPartition.getType() == TPartitionType.HASH_PARTITIONED);
-    }
-
     public PlanFragment getDestFragment() {
         if (destNode == null) {
             return null;
@@ -485,17 +485,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         setFragmentInPlanTree(planRoot);
     }
 
-    /**
-     * Adds a node as the new root to the plan tree. Connects the existing
-     * root as the child of newRoot.
-     */
-    public void addPlanRoot(PlanNode newRoot) {
-        Preconditions.checkState(newRoot.getChildren().size() == 1);
-        newRoot.setChild(0, planRoot);
-        planRoot = newRoot;
-        planRoot.setFragment(this);
-    }
-
     public DataSink getSink() {
         return sink;
     }
@@ -508,10 +497,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public PlanFragmentId getFragmentId() {
         return fragmentId;
-    }
-
-    public void setTransferQueryStatisticsWithEveryBatch(boolean value) {
-        transferQueryStatisticsWithEveryBatch = value;
     }
 
     public boolean isTransferQueryStatisticsWithEveryBatch() {

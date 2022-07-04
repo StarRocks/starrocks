@@ -13,9 +13,15 @@ namespace starrocks {
 
 class StarOSWorker : public staros::starlet::Worker {
 public:
+    using ServiceId = staros::starlet::ServiceId;
+    using WorkerId = staros::starlet::WorkerId;
     using ShardId = staros::starlet::ShardId;
     using ShardInfo = staros::starlet::ShardInfo;
     using WorkerInfo = staros::starlet::WorkerInfo;
+
+    StarOSWorker() : _service_id(0), _worker_id(0) {}
+
+    ~StarOSWorker() override = default;
 
     absl::Status add_shard(const ShardInfo& shard) override;
 
@@ -23,12 +29,16 @@ public:
 
     absl::StatusOr<WorkerInfo> worker_info() override;
 
+    absl::Status update_worker_info(const WorkerInfo& info) override;
+
     StatusOr<ShardInfo> get_shard_info(ShardId id);
 
     std::vector<ShardInfo> shards();
 
 private:
     std::mutex _mtx;
+    ServiceId _service_id;
+    WorkerId _worker_id;
     std::unordered_map<ShardId, ShardInfo> _shards;
 };
 

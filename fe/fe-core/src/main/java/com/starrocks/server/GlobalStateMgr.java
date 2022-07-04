@@ -51,13 +51,11 @@ import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.ColumnRenameClause;
-import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
@@ -145,6 +143,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.Util;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
@@ -156,10 +155,13 @@ import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.MasterInfo;
+import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
+import com.starrocks.journal.JournalFactory;
 import com.starrocks.journal.JournalInconsistentException;
+import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
@@ -250,6 +252,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -265,11 +268,9 @@ public class GlobalStateMgr {
     public static final long NEXT_ID_INIT_VALUE = 10000;
     private static final int STATE_CHANGE_CHECK_INTERVAL_MS = 100;
     private static final int REPLAY_INTERVAL_MS = 1;
-    private static final String BDB_DIR = "/bdb";
     private static final String IMAGE_DIR = "/image";
 
     private String metaDir;
-    private String bdbDir;
     private String imageDir;
 
     private MetaContext metaContext;
@@ -326,6 +327,7 @@ public class GlobalStateMgr {
     private CatalogIdGenerator idGenerator = new CatalogIdGenerator(NEXT_ID_INIT_VALUE);
 
     private EditLog editLog;
+    private Journal journal;
     // For checkpoint and observer memory replayed marker
     private AtomicLong replayedJournalId;
 
@@ -460,6 +462,10 @@ public class GlobalStateMgr {
 
     public long getFeStartTime() {
         return feStartTime;
+    }
+
+    public ConnectorMetadata getLocalMetastore() {
+        return localMetastore;
     }
 
     private static class SingletonHolder {
@@ -716,6 +722,10 @@ public class GlobalStateMgr {
         return metadataMgr;
     }
 
+    public ConnectorMetadata getMetadata() {
+        return localMetastore;
+    }
+
     @VisibleForTesting
     public void setMetadataMgr(MetadataMgr metadataMgr) {
         this.metadataMgr = metadataMgr;
@@ -764,17 +774,12 @@ public class GlobalStateMgr {
         }
     }
 
-    public String getBdbDir() {
-        return bdbDir;
-    }
-
     public String getImageDir() {
         return imageDir;
     }
 
     private void setMetaDir() {
         this.metaDir = Config.meta_dir;
-        this.bdbDir = this.metaDir + BDB_DIR;
         this.imageDir = this.metaDir + IMAGE_DIR;
         nodeMgr.setImageDir(imageDir);
     }
@@ -792,11 +797,6 @@ public class GlobalStateMgr {
 
         // 1. create dirs and files
         if (Config.edit_log_type.equalsIgnoreCase("bdb")) {
-            File bdbDir = new File(this.bdbDir);
-            if (!bdbDir.exists()) {
-                bdbDir.mkdirs();
-            }
-
             File imageDir = new File(this.imageDir);
             if (!imageDir.exists()) {
                 imageDir.mkdirs();
@@ -811,18 +811,12 @@ public class GlobalStateMgr {
         auditEventProcessor.start();
 
         // 2. get cluster id and role (Observer or Follower)
-        nodeMgr.getClusterIdAndRole();
+        nodeMgr.getClusterIdAndRoleOnStartup();
 
         // 3. Load image first and replay edits
-        this.editLog = new EditLog(nodeMgr.getNodeName());
+        initJournal();
         loadImage(this.imageDir); // load image file
 
-        editLog.open(); // open bdb env
-        this.globalTransactionMgr.setEditLog(editLog);
-        this.idGenerator.setEditLog(editLog);
-        this.localMetastore.setEditLog(editLog);
-        // init journal writer
-        journalWriter = new JournalWriter(this.editLog.getJournal(), this.editLog.getJournalQueue());
 
         // 4. create load and export job label cleaner thread
         createLabelCleaner();
@@ -836,6 +830,17 @@ public class GlobalStateMgr {
         // 7. start state listener thread
         createStateListener();
         listener.start();
+    }
+
+    protected void initJournal() throws JournalException, InterruptedException {
+        BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
+        journal = JournalFactory.create(nodeMgr.getNodeName());
+        journalWriter = new JournalWriter(journal, journalQueue);
+
+        editLog = new EditLog(journalQueue);
+        this.globalTransactionMgr.setEditLog(editLog);
+        this.idGenerator.setEditLog(editLog);
+        this.localMetastore.setEditLog(editLog);
     }
 
     // wait until FE is ready.
@@ -881,22 +886,27 @@ public class GlobalStateMgr {
         isReady.set(false);
         canRead.set(false);
 
-        editLog.open();
+        // setup for journal
+        try {
+            journal.open();
+            if (!haProtocol.fencing()) {
+                throw new Exception("fencing failed. will exit");
+            }
+            long replayStartTime = System.currentTimeMillis();
+            // replay journals. -1 means replay all the journals larger than current journal id.
+            replayJournal(-1);
+            long replayEndTime = System.currentTimeMillis();
+            LOG.info("finish replay in " + (replayEndTime - replayStartTime) + " msec");
 
-        if (!haProtocol.fencing()) {
-            LOG.error("fencing failed. will exit.");
+            nodeMgr.checkCurrentNodeExist();
+
+            journalWriter.init(journal.getMaxJournalId());
+        } catch (Exception e) {
+            // TODO: gracefully exit
+            LOG.error("failed to init journal after transfer to master! will exit", e);
             System.exit(-1);
         }
 
-        long replayStartTime = System.currentTimeMillis();
-        // replay journals. -1 means replay all the journals larger than current journal id.
-        replayJournal(-1);
-        long replayEndTime = System.currentTimeMillis();
-        LOG.info("finish replay in " + (replayEndTime - replayStartTime) + " msec");
-
-        nodeMgr.checkCurrentNodeExist();
-
-        journalWriter.init(editLog.getMaxJournalId());
         journalWriter.startDaemon();
 
         // Set the feType to MASTER before writing edit log, because the feType must be Master when writing edit log.
@@ -955,8 +965,13 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startMasterOnlyDaemonThreads() {
+        if (Config.integrate_starmgr) {
+            // register service to starMgr
+            getStarOSAgent().registerAndBootstrapService();
+        }
+
         // start checkpoint thread
-        checkpointer = new Checkpoint(editLog);
+        checkpointer = new Checkpoint(journal);
         checkpointer.setMetaContext(metaContext);
         // set "checkpointThreadId" before the checkpoint thread start, because the thread
         // need to check the "checkpointThreadId" when running.
@@ -1009,11 +1024,6 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
-        // register service to starMgr
-        if (Config.integrate_starmgr) {
-            int clusterId = getCurrentState().getClusterId();
-            getStarOSAgent().registerAndBootstrapService(Integer.toString(clusterId));
-        }
     }
 
     // start threads that should running on all FE
@@ -1043,11 +1053,6 @@ public class GlobalStateMgr {
             // not set canRead here, leave canRead as what is was.
             // if meta out of date, canRead will be set to false in replayer thread.
             metaReplayState.setTransferToUnknown();
-            // get serviceId from starMgr
-            if (Config.integrate_starmgr) {
-                int clusterId = getCurrentState().getClusterId();
-                getStarOSAgent().getServiceId(Integer.toString(clusterId));
-            }
             return;
         }
 
@@ -1090,7 +1095,7 @@ public class GlobalStateMgr {
         DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
 
         long checksum = 0;
-        long remoteChecksum = 0;
+        long remoteChecksum = -1;  // in case of empty image file checksum match
         try {
             checksum = loadHeader(dis, checksum);
             checksum = nodeMgr.loadMasterInfo(dis, checksum);
@@ -1132,6 +1137,8 @@ public class GlobalStateMgr {
             checksum = catalogMgr.loadCatalogs(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = loadInsertOverwriteJobs(dis, checksum);
+            checksum = nodeMgr.loadComputeNodes(dis, checksum);
+            remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1380,6 +1387,8 @@ public class GlobalStateMgr {
             checksum = catalogMgr.saveCatalogs(dos, checksum);
             dos.writeLong(checksum);
             checksum = saveInsertOverwriteJobs(dos, checksum);
+            checksum = nodeMgr.saveComputeNodes(dos, checksum);
+            dos.writeLong(checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -1665,7 +1674,7 @@ public class GlobalStateMgr {
         listener.setMetaContext(metaContext);
     }
 
-    public synchronized boolean replayJournal(long toJournalId) {
+    public synchronized boolean replayJournal(long toJournalId) throws JournalException {
         long newToJournalId = toJournalId;
         if (newToJournalId == -1) {
             newToJournalId = getMaxJournalId();
@@ -1677,7 +1686,7 @@ public class GlobalStateMgr {
         LOG.info("replayed journal id is {}, replay to journal id is {}", replayedJournalId, newToJournalId);
         JournalCursor cursor = null;
         try {
-            cursor = editLog.read(replayedJournalId.get() + 1, newToJournalId);
+            cursor = journal.read(replayedJournalId.get() + 1, newToJournalId);
         } catch (JournalException e) {
             LOG.warn("failed to get cursor from {} to {}", replayedJournalId.get() + 1, newToJournalId, e);
             return false;
@@ -1689,8 +1698,8 @@ public class GlobalStateMgr {
             JournalEntity entity = null;
             try {
                 entity = cursor.next();
-            } catch (InterruptedException | JournalException | JournalInconsistentException e) {
-                LOG.warn("got exception when get next, will exit, ", e);
+            } catch (InterruptedException | JournalInconsistentException e) {
+                LOG.warn("got interrupt exception or inconsistent exception when get next, will exit, ", e);
                 // TODO exit gracefully
                 Util.stdoutWithTime(e.getMessage());
                 System.exit(-1);
@@ -1758,28 +1767,6 @@ public class GlobalStateMgr {
 
     public int getFollowerCnt() {
         return nodeMgr.getFollowerCnt();
-    }
-
-    // The interface which DdlExecutor needs.
-    public void createDb(CreateDbStmt stmt) throws DdlException {
-        localMetastore.createDb(stmt);
-    }
-
-    // For replay edit log, needn't lock metadata
-    public void unprotectCreateDb(Database db) {
-        localMetastore.unprotectCreateDb(db);
-    }
-
-    public void replayCreateDb(Database db) {
-        localMetastore.replayCreateDb(db);
-    }
-
-    public void dropDb(DropDbStmt stmt) throws DdlException {
-        localMetastore.dropDb(stmt);
-    }
-
-    public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {
-        localMetastore.replayDropDb(dbName, isForceDrop);
     }
 
     public void recoverDatabase(RecoverDbStmt recoverStmt) throws DdlException {
@@ -1913,7 +1900,7 @@ public class GlobalStateMgr {
             }
             // There MUST BE 2 space in front of each column description line
             // sqlalchemy requires this to parse SHOW CREATE TAEBL stmt.
-            if (table.getType() == TableType.OLAP || table.getType() == TableType.OLAP_EXTERNAL) {
+            if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
                     sb.append("  ").append(column.toSqlWithoutAggregateTypeName());
@@ -1924,7 +1911,7 @@ public class GlobalStateMgr {
                 sb.append("  ").append(column.toSql());
             }
         }
-        if (table.getType() == TableType.OLAP || table.getType() == TableType.OLAP_EXTERNAL) {
+        if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
             if (CollectionUtils.isNotEmpty(olapTable.getIndexes())) {
                 for (Index index : olapTable.getIndexes()) {
@@ -1934,9 +1921,13 @@ public class GlobalStateMgr {
             }
         }
         sb.append("\n) ENGINE=");
-        sb.append(table.getType().name()).append(" ");
+        if (table.isLakeTable()) {
+            sb.append(CreateTableStmt.LAKE_ENGINE_NAME.toUpperCase()).append(" ");
+        } else {
+            sb.append(table.getType().name()).append(" ");
+        }
 
-        if (table.getType() == TableType.OLAP || table.getType() == TableType.OLAP_EXTERNAL) {
+        if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
 
             // keys
@@ -2102,7 +2093,9 @@ public class GlobalStateMgr {
             sb.append("\"user\" = \"").append(esTable.getUserName()).append("\",\n");
             sb.append("\"password\" = \"").append(hidePassword ? "" : esTable.getPasswd()).append("\",\n");
             sb.append("\"index\" = \"").append(esTable.getIndexName()).append("\",\n");
-            sb.append("\"type\" = \"").append(esTable.getMappingType()).append("\",\n");
+            if (esTable.getMappingType() != null) {
+                sb.append("\"type\" = \"").append(esTable.getMappingType()).append("\",\n");
+            }
             sb.append("\"transport\" = \"").append(esTable.getTransport()).append("\",\n");
             sb.append("\"enable_docvalue_scan\" = \"").append(esTable.isDocValueScanEnable()).append("\",\n");
             sb.append("\"max_docvalue_fields\" = \"").append(esTable.maxDocValueFields()).append("\",\n");
@@ -2329,6 +2322,10 @@ public class GlobalStateMgr {
         return editLog;
     }
 
+    public Journal getJournal() {
+        return journal;
+    }
+
     // Get the next available, need't lock because of nextId is atomic.
     public long getNextId() {
         return idGenerator.getNextId();
@@ -2419,7 +2416,7 @@ public class GlobalStateMgr {
     }
 
     public Long getMaxJournalId() {
-        return this.editLog.getMaxJournalId();
+        return this.journal.getMaxJournalId();
     }
 
     public long getEpoch() {
@@ -2505,6 +2502,10 @@ public class GlobalStateMgr {
     public void setEditLog(EditLog editLog) {
         this.editLog = editLog;
         localMetastore.setEditLog(editLog);
+    }
+
+    public void setJournal(Journal journal) {
+        this.journal = journal;
     }
 
     public void setNextId(long id) {
@@ -2751,12 +2752,12 @@ public class GlobalStateMgr {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
         } else if (parts.length == 1) {
             dbName = CatalogMgr.isInternalCatalog(currentCatalogName) ?
-                    ClusterNamespace.getFullName(ctx.getClusterName(), identifier) : identifier;
+                    ClusterNamespace.getFullName(identifier) : identifier;
         } else {
             String newCatalogName = parts[0];
             if (catalogMgr.catalogExists(newCatalogName)) {
                 dbName = CatalogMgr.isInternalCatalog(newCatalogName) ?
-                        ClusterNamespace.getFullName(ctx.getClusterName(), parts[1]) : parts[1];
+                        ClusterNamespace.getFullName(parts[1]) : parts[1];
             } else {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
             }

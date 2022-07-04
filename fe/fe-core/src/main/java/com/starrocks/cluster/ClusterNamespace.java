@@ -23,6 +23,7 @@ package com.starrocks.cluster;
 
 import com.google.common.base.Strings;
 import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.system.SystemInfoService;
 
 /**
  * used to isolate the use for the database name and user name in the globalStateMgr,
@@ -35,8 +36,8 @@ public class ClusterNamespace {
 
     public static final String CLUSTER_DELIMITER = ":";
 
-    public static String getFullName(String cluster, String name) {
-        return linkString(cluster, name);
+    public static String getFullName(String name) {
+        return linkString(SystemInfoService.DEFAULT_CLUSTER, name);
     }
 
     public static String getClusterNameFromFullName(String fullName) {
@@ -58,7 +59,7 @@ public class ClusterNamespace {
             return false;
         }
         final String[] ele = str.split(CLUSTER_DELIMITER);
-        return (ele.length > 1) ? true : false;
+        return ele.length > 1;
     }
 
     private static String linkString(String cluster, String name) {
@@ -69,9 +70,7 @@ public class ClusterNamespace {
                 || name.equalsIgnoreCase(Auth.ADMIN_USER)) {
             return name;
         }
-        final StringBuilder sb = new StringBuilder(cluster);
-        sb.append(CLUSTER_DELIMITER).append(name);
-        return sb.toString();
+        return cluster + CLUSTER_DELIMITER + name;
     }
 
     private static String extract(String fullName, int index) {

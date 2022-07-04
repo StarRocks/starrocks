@@ -76,6 +76,8 @@ bool OlapScanOperator::is_finished() const {
 Status OlapScanOperator::do_prepare(RuntimeState*) {
     auto* max_scan_concurrency_counter = ADD_COUNTER(_unique_metrics, "DefaultMaxScanConcurrency", TUnit::UNIT);
     COUNTER_SET(max_scan_concurrency_counter, static_cast<int64_t>(_default_max_scan_concurrency));
+    bool shared_scan = _ctx->is_shared_scan();
+    _unique_metrics->add_info_string("SharedScan", shared_scan ? "True" : "False");
 
     return Status::OK();
 }
@@ -87,8 +89,37 @@ void OlapScanOperator::do_close(RuntimeState* state) {
 
 ChunkSourcePtr OlapScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* olap_scan_node = down_cast<vectorized::OlapScanNode*>(_scan_node);
-    return std::make_shared<OlapChunkSource>(_chunk_source_profiles[chunk_source_index].get(), std::move(morsel),
-                                             olap_scan_node, _ctx.get());
+    return std::make_shared<OlapChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
+                                             std::move(morsel), olap_scan_node, _ctx.get());
+}
+
+void OlapScanOperator::attach_chunk_source(int32_t source_index) {
+    _ctx->attach_shared_input(_driver_sequence, source_index);
+}
+
+void OlapScanOperator::detach_chunk_source(int32_t source_index) {
+    _ctx->detach_shared_input(_driver_sequence, source_index);
+}
+
+bool OlapScanOperator::has_shared_chunk_source() const {
+    return _ctx->has_active_input();
+}
+
+bool OlapScanOperator::has_buffer_output() const {
+    return !_ctx->get_chunk_buffer().empty(_driver_sequence);
+}
+
+ChunkPtr OlapScanOperator::get_chunk_from_buffer() {
+    vectorized::ChunkPtr chunk = nullptr;
+    if (_ctx->get_chunk_buffer().try_get(_driver_sequence, &chunk)) {
+        return chunk;
+    }
+    return nullptr;
+}
+
+bool OlapScanOperator::has_available_buffer() const {
+    // TODO: consider the global buffer
+    return _ctx->get_chunk_buffer().size(_driver_sequence) <= _buffer_size;
 }
 
 size_t OlapScanOperator::max_scan_concurrency() const {

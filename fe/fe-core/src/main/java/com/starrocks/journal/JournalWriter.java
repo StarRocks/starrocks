@@ -50,7 +50,7 @@ public class JournalWriter {
     /**
      * reset journal id & roll journal as a start
      */
-    public void init(long maxJournalId) {
+    public void init(long maxJournalId) throws JournalException {
         this.nextVisibleJournalId = maxJournalId + 1;
         this.journal.rollJournal(this.nextVisibleJournalId);
     }
@@ -209,9 +209,17 @@ public class JournalWriter {
     private void rollJournalAfterBatch() {
         rollJournalCounter += currentBatchTasks.size();
         if (rollJournalCounter >= Config.edit_log_roll_num) {
-            LOG.info("rollEditCounter {} is equal to or larger than edit_log_roll_num {}, will roll edit.",
+            try {
+                journal.rollJournal(nextVisibleJournalId);
+            } catch (JournalException e) {
+                String msg = String.format("failed to roll journal %d, will exit", nextVisibleJournalId);
+                LOG.error(msg, e);
+                Util.stdoutWithTime(msg);
+                // TODO exit gracefully
+                System.exit(-1);
+            }
+            LOG.info("rolled edig log because rollEditCounter {} >= edit_log_roll_num {}.",
                     rollJournalCounter, Config.edit_log_roll_num);
-            journal.rollJournal(nextVisibleJournalId);
             rollJournalCounter = 0;
         }
     }

@@ -43,4 +43,9 @@ public class UseStmt extends StatementBase {
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.NO_FORWARD;
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

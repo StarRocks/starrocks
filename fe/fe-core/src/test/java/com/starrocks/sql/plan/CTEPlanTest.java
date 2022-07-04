@@ -91,7 +91,6 @@ public class CTEPlanTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  3:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 7: v4 = 10: v1"));
         Assert.assertFalse(plan.contains("MultiCastDataSinks"));
@@ -375,7 +374,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "  ) t1";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  33:Project\n" +
-                "  |  <slot 12> : CAST((7: expr) AND (CASE WHEN (16: countRows IS NULL) OR (16: countRows = 0) THEN FALSE WHEN CAST(CAST(1: v4 AS FLOAT) AS DOUBLE) IS NULL THEN NULL WHEN 14: cast IS NOT NULL THEN TRUE WHEN 17: countNulls < 16: countRows THEN NULL ELSE FALSE END) AS INT)\n");
+                "  |  <slot 12> : CAST((7: expr) AND (CASE WHEN (16: countRows IS NULL) OR (16: countRows = 0) THEN FALSE WHEN CAST(CAST(1: v4 AS FLOAT) AS DOUBLE) IS NULL THEN NULL WHEN 14: cast IS NOT NULL THEN TRUE WHEN 17: countNotNulls < 16: countRows THEN NULL ELSE FALSE END) AS INT)\n");
     }
 
     @Test
@@ -407,5 +406,16 @@ public class CTEPlanTest extends PlanTestBase {
                 "  RESULT SINK\n" +
                 "\n" +
                 "  2:AGGREGATE (update finalize)\n");
+    }
+
+    @Test
+    public void testCTEExchangePruneColumn() throws Exception {
+        String sql = "WITH w_t0 as (SELECT * FROM t0) \n" +
+                "SELECT x0.v1, x1.v2 FROM  w_t0 x0, w_t0 x1";
+
+        String thrift = getThriftPlan(sql);
+        assertContains(thrift, "TMultiCastDataStreamSink");
+        assertContains(thrift, "dest_dop:0, output_columns:[1]");
+        assertContains(thrift, "dest_dop:0, output_columns:[2]");
     }
 }

@@ -115,7 +115,7 @@ public class Alter {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
         // check cluster capacity
-        GlobalStateMgr.getCurrentSystemInfo().checkClusterCapacity(stmt.getClusterName());
+        GlobalStateMgr.getCurrentSystemInfo().checkClusterCapacity();
         // check db quota
         db.checkQuota();
 
@@ -322,7 +322,6 @@ public class Alter {
     public void processAlterTable(AlterTableStmt stmt) throws UserException {
         TableName dbTableName = stmt.getTbl();
         String dbName = dbTableName.getDb();
-        final String clusterName = stmt.getClusterName();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
@@ -336,7 +335,7 @@ public class Alter {
 
         // check cluster capacity and db quota, only need to check once.
         if (currentAlterOps.needCheckCapacity()) {
-            GlobalStateMgr.getCurrentSystemInfo().checkClusterCapacity(clusterName);
+            GlobalStateMgr.getCurrentSystemInfo().checkClusterCapacity();
             db.checkQuota();
         }
 
@@ -362,9 +361,9 @@ public class Alter {
 
             if (currentAlterOps.hasSchemaChangeOp()) {
                 // if modify storage type to v2, do schema change to convert all related tablets to segment v2 format
-                schemaChangeHandler.process(alterClauses, clusterName, db, olapTable);
+                schemaChangeHandler.process(alterClauses, db, olapTable);
             } else if (currentAlterOps.hasRollupOp()) {
-                materializedViewHandler.process(alterClauses, clusterName, db, olapTable);
+                materializedViewHandler.process(alterClauses, db, olapTable);
             } else if (currentAlterOps.hasPartitionOp()) {
                 Preconditions.checkState(alterClauses.size() == 1);
                 AlterClause alterClause = alterClauses.get(0);
@@ -604,7 +603,7 @@ public class Alter {
     }
 
     public ShowResultSet processAlterCluster(AlterSystemStmt stmt) throws UserException {
-        return clusterHandler.process(Arrays.asList(stmt.getAlterClause()), stmt.getClusterName(), null, null);
+        return clusterHandler.process(Arrays.asList(stmt.getAlterClause()), null, null);
     }
 
     private void processRename(Database db, OlapTable table, List<AlterClause> alterClauses) throws DdlException {

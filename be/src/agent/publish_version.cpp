@@ -35,7 +35,7 @@ struct TabletPublishVersionTask {
     int64_t max_continuous_version{0}; // max continuous version after publish is done
 };
 
-void run_publish_version_task(ThreadPool& threadpool, const TAgentTaskRequest& publish_version_task,
+void run_publish_version_task(ThreadPoolToken* token, const TAgentTaskRequest& publish_version_task,
                               TFinishTaskRequest& finish_task, std::unordered_set<DataDir*>& affected_dirs) {
     int64_t start_ts = MonotonicMillis();
     auto& publish_version_req = publish_version_task.publish_version_req;
@@ -73,7 +73,7 @@ void run_publish_version_task(ThreadPool& threadpool, const TAgentTaskRequest& p
         uint32_t retry_time = 0;
         Status st;
         while (retry_time++ < PUBLISH_VERSION_SUBMIT_MAX_RETRY) {
-            st = threadpool.submit_func([&, i]() {
+            st = token->submit_func([&, i]() {
                 auto& task = tablet_tasks[i];
                 auto tablet_span = Tracer::Instance().add_span("tablet_publish_txn", span);
                 auto scoped_tablet_span = trace::Scope(tablet_span);
@@ -129,7 +129,7 @@ void run_publish_version_task(ThreadPool& threadpool, const TAgentTaskRequest& p
         }
     }
     span->AddEvent("all_task_submitted");
-    threadpool.wait();
+    token->wait();
     span->AddEvent("all_task_finished");
 
     Status st;

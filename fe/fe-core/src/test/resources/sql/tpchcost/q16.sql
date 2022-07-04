@@ -79,7 +79,6 @@ HASH_PARTITIONED: 10: P_BRAND, 11: P_TYPE, 12: P_SIZE
 |
 8:HASH JOIN
 |  join op: NULL AWARE LEFT ANTI JOIN (BROADCAST)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 2: PS_SUPPKEY = 17: S_SUPPKEY
 |
@@ -93,7 +92,6 @@ HASH_PARTITIONED: 10: P_BRAND, 11: P_TYPE, 12: P_SIZE
 |
 3:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
-|  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 1: PS_PARTKEY = 7: P_PARTKEY
 |

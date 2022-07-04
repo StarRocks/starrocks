@@ -21,7 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -31,10 +30,12 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.system.SystemInfoService;
 
 public class SetPassVar extends SetVar {
     private UserIdentity userIdent;
-    private String passwdParam;
+    private final String passwdParam;
     private byte[] passwdBytes;
 
     // The password in parameter is a hashed password.
@@ -53,10 +54,11 @@ public class SetPassVar extends SetVar {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(analyzer.getClusterName())) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER);
-        }
+        analyze();
+    }
 
+    @Override
+    public void analyze() {
         boolean isSelf = false;
         ConnectContext ctx = ConnectContext.get();
         if (userIdent == null) {
@@ -64,14 +66,22 @@ public class SetPassVar extends SetVar {
             userIdent = ctx.getCurrentUserIdentity();
             isSelf = true;
         } else {
-            userIdent.analyze(analyzer.getClusterName());
+            try {
+                userIdent.analyze(SystemInfoService.DEFAULT_CLUSTER);
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+
             if (userIdent.equals(ctx.getCurrentUserIdentity())) {
                 isSelf = true;
             }
         }
 
-        // Check password
-        passwdBytes = MysqlPassword.checkPassword(passwdParam);
+        try {
+            passwdBytes = MysqlPassword.checkPassword(passwdParam);
+        } catch (AnalysisException e) {
+            throw new SemanticException(e.getMessage());
+        }
 
         // check privs.
         // 1. this is user itself
@@ -82,12 +92,12 @@ public class SetPassVar extends SetVar {
         // 2. No user can set password for root expect for root user itself
         if (userIdent.getQualifiedUser().equals(Auth.ROOT_USER)
                 && !ClusterNamespace.getNameFromFullName(ctx.getQualifiedUser()).equals(Auth.ROOT_USER)) {
-            throw new AnalysisException("Can not set password for root user, except root itself");
+            throw new SemanticException("Can not set password for root user, except root itself");
         }
 
         // 3. user has grant privs
         if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
         }
     }
 
@@ -100,7 +110,7 @@ public class SetPassVar extends SetVar {
     public String toSql() {
         StringBuilder sb = new StringBuilder("SET PASSWORD");
         if (userIdent != null) {
-            sb.append(" FOR ").append(userIdent.toString());
+            sb.append(" FOR ").append(userIdent);
         }
         sb.append(" = '*XXX'");
         return sb.toString();

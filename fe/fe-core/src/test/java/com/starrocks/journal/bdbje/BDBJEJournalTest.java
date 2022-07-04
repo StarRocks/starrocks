@@ -16,18 +16,16 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.NetUtils;
-import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalException;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
@@ -38,6 +36,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
 
 public class BDBJEJournalTest {
     private static final Logger LOG = LogManager.getLogger(BDBJEJournalTest.class);
@@ -109,83 +109,6 @@ public class BDBJEJournalTest {
         return Text.readString(in);
     }
 
-    /**
-     * write() vs BatchWrite()
-     * @throws Exception
-     */
-    @Ignore
-    @Test
-    public void writeProfile() throws Exception {
-        long LOG_COUNT = Long.valueOf(System.getenv().getOrDefault(
-                "BDB_PUT_PROFILE_TEST_LOG_COUNT", "1000"));
-        int VALUE_SIZE = Integer.valueOf(System.getenv().getOrDefault(
-                "BDB_PUT_PROFILE_TEST_VALUE_SIZE", "4096"));
-        int BATCH_SIZE = Integer.valueOf(System.getenv().getOrDefault(
-                "BDB_PUT_PROFILE_TEST_BATCH_SIZE", "4"));
-        String data = StringUtils.repeat("x", VALUE_SIZE - 4);
-        Writable writable = new Writable() {
-            @Override
-            public void write(DataOutput out) throws IOException {
-                Text.writeString(out, data);
-            }
-        };
-
-        BDBEnvironment notxnEnvironment = initBDBEnv("notxn");
-        Database notxnDatabase = notxnEnvironment.openDatabase("testDb").getDb();
-        Journal nonTxnJournal = new BDBJEJournal(notxnEnvironment, new CloseSafeDatabase(notxnDatabase));
-        BDBEnvironment txnEnvironment = initBDBEnv("txn");
-        Database txnDatabase = txnEnvironment.openDatabase("testDb").getDb();
-        Journal txnJournal = new BDBJEJournal(txnEnvironment, new CloseSafeDatabase(txnDatabase));
-        long startTime, endTime;
-
-        LOG.info("================= TEST START ==========================");
-
-        // 1. no txn
-        startTime = System.currentTimeMillis();
-        LOG.info("notxn: start to wrote {} lines, value size {}", LOG_COUNT, VALUE_SIZE);
-        for (long i = 0; i != LOG_COUNT; ++i) {
-            nonTxnJournal.write((short)(i % 128), writable);
-        }
-        endTime = System.currentTimeMillis();
-        LOG.info("notxn: wrote {} lines, value size {} took {} seconds", LOG_COUNT, VALUE_SIZE, (endTime - startTime)/1000.0);
-
-        // 2. with txn
-        DataOutputBuffer buffer = new DataOutputBuffer();
-        writable.write(buffer);
-        startTime = System.currentTimeMillis();
-        txnJournal.batchWriteBegin();
-        LOG.info("txn: start to wrote {} lines, value size {}, BATCH size {}", LOG_COUNT, VALUE_SIZE, BATCH_SIZE);
-        for (long i = 0; i != LOG_COUNT; ++ i) {
-            txnJournal.batchWriteAppend(i, buffer);
-            if (i % BATCH_SIZE == BATCH_SIZE - 1) {
-                txnJournal.batchWriteCommit();
-                txnJournal.batchWriteBegin();
-            }
-        }
-        if (LOG_COUNT % BATCH_SIZE != 0){
-            txnJournal.batchWriteCommit();
-        } else {
-            txnJournal.batchWriteAbort();
-        }
-        endTime = System.currentTimeMillis();
-        LOG.info("txn: wrote {} lines, value size {}, batch size {}, took {} seconds",
-                LOG_COUNT, VALUE_SIZE, BATCH_SIZE, (endTime - startTime)/1000.0);
-
-        // 3. read and check
-        notxnEnvironment.close();
-        txnEnvironment.close();
-        txnEnvironment = initBDBEnv("txn");
-        txnDatabase = txnEnvironment.openDatabase("testDb").getDb();
-        startTime = System.currentTimeMillis();
-        LOG.info("txn: start to read {} lines, value size {}", LOG_COUNT, VALUE_SIZE);
-        for (long i = 0; i != LOG_COUNT; ++ i) {
-            String value = readDBStringValue(i, txnDatabase);
-            Assert.assertEquals(data, value);
-        }
-        endTime = System.currentTimeMillis();
-        LOG.info("txn: read {} lines, value size {}, took {} seconds",
-                LOG_COUNT, VALUE_SIZE, (endTime - startTime)/1000);
-    }
 
     @Test
     public void testWrieNoMock() throws Exception {
@@ -507,7 +430,7 @@ public class BDBJEJournalTest {
     // you can count on me. -- abort
     @Test
     public void testAbort() throws Exception {
-        BDBEnvironment environment = initBDBEnv("testWrieNormal");
+        BDBEnvironment environment = initBDBEnv("testAbort");
         CloseSafeDatabase database = environment.openDatabase("testWrieNormal");
         BDBJEJournal journal = new BDBJEJournal(environment, database);
         String data = "petals on a wet black bough";
@@ -538,4 +461,299 @@ public class BDBJEJournalTest {
         Assert.assertNull(journal.currentTrasaction);
     }
 
+
+    // test open for the first time, will open a new db with replayedJournalId + 1
+    @Test
+    public void testOpenFirstTime(
+            @Mocked CloseSafeDatabase database,
+            @Mocked BDBEnvironment environment,
+            @Mocked GlobalStateMgr globalStateMgr) throws Exception {
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                times = 1;
+                result = globalStateMgr;
+            }
+        };
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getReplayedJournalId();
+                times = 1;
+                result = 10;
+            }
+        };
+
+        new Expectations(environment) {
+            {
+                environment.getDatabaseNames();
+                times = 1;
+                result = new ArrayList();
+
+                environment.openDatabase("11");
+                times = 1;
+                result = database;
+            }
+        };
+
+        BDBJEJournal journal = new BDBJEJournal(environment);
+        journal.open();
+    }
+
+
+    @Test
+    public void testOpenNormal(@Mocked CloseSafeDatabase database,
+                           @Mocked BDBEnvironment environment) throws Exception {
+
+        new Expectations(environment) {
+            {
+                environment.getDatabaseNames();
+                times = 1;
+                result = Arrays.asList(3L, 23L, 45L);
+
+                environment.openDatabase("45");
+                times = 1;
+                result = database;
+            }
+        };
+
+        BDBJEJournal journal = new BDBJEJournal(environment);
+        journal.open();
+    }
+
+    @Test(expected = JournalException.class)
+    public void testOpenGetNamesFails(@Mocked BDBEnvironment environment) throws Exception {
+        new Expectations(environment) {
+            {
+                environment.getDatabaseNames();
+                times = 1;
+                result = null;
+            }
+        };
+
+        BDBJEJournal journal = new BDBJEJournal(environment);
+        journal.open();
+    }
+
+    @Test(expected = JournalException.class)
+    public void testOpenFailManyTimes(@Mocked BDBEnvironment environment) throws Exception {
+        new Expectations(){
+            {
+                Thread.sleep(anyLong);
+                times = BDBJEJournal.RETRY_TIME - 1;
+                result = null;
+            }
+        };
+        new Expectations(environment) {
+            {
+                environment.getDatabaseNames();
+                times = BDBJEJournal.RETRY_TIME;
+                result = new DatabaseNotFoundException("mock mock");
+            }
+        };
+
+        BDBJEJournal journal = new BDBJEJournal(environment);
+        journal.open();
+    }
+
+    @Test
+    public void testOpenDbFailRetrySucceed(@Mocked CloseSafeDatabase database,
+                                           @Mocked BDBEnvironment environment)  throws Exception {
+        new Expectations(){
+            {
+                Thread.sleep(anyLong);
+                times = 1;
+                result = null;
+            }
+        };
+        new Expectations(environment) {
+            {
+                environment.getDatabaseNames();
+                times = 3;
+                result = Arrays.asList(3L, 23L, 45L);
+
+                environment.openDatabase("45");
+                times = 3;
+                result = null;
+                result = new DatabaseNotFoundException("mock mock");
+                result = database;
+            }
+        };
+        BDBJEJournal journal = new BDBJEJournal(environment);
+        journal.open();
+    }
+
+    @Test
+    public void testDeleteJournals(@Mocked BDBEnvironment environment)  throws Exception {
+        BDBJEJournal journal = new BDBJEJournal(environment);
+
+        // failed to get database names; do nothing
+        new Expectations(environment) {
+            {
+                environment.getDatabaseNames();
+                times = 1;
+                result = null;
+            }
+        };
+        journal.deleteJournals(11);
+
+        // 2. find journal and delete
+        // current db (3, 23, 45) checkpoint is made on 44, should remove 3, 23
+        new Expectations(environment) {
+            {
+                environment.getDatabaseNames();
+                times = 1;
+                result = Arrays.asList(3L, 23L, 45L);
+
+                environment.removeDatabase("3");
+                times = 1;
+                environment.removeDatabase("23");
+                times = 1;
+            }
+        };
+        journal.deleteJournals(45);
+    }
+
+    @Test
+    public void testGetMaxJournalId(@Mocked CloseSafeDatabase closeSafeDatabase,
+                                    @Mocked BDBEnvironment environment,
+                                    @Mocked Database database) throws Exception {
+        BDBJEJournal journal = new BDBJEJournal(environment);
+
+        // failed to get database names; return -1
+        new Expectations(environment) {
+            {
+                environment.getDatabaseNames();
+                times = 1;
+                result = null;
+            }
+        };
+        Assert.assertEquals(-1, journal.getMaxJournalId());
+
+        // no databases; return -1
+        new Expectations(environment) {
+            {
+                environment.getDatabaseNames();
+                times = 1;
+                result = new ArrayList<>();
+            }
+        };
+        Assert.assertEquals(-1, journal.getMaxJournalId());
+
+        // db 3, 23, 45; open 45 get its size 10
+        new Expectations(environment) {
+            {
+                environment.getDatabaseNames();
+                times = 1;
+                result = Arrays.asList(3L, 23L, 45L);
+
+                environment.openDatabase("45");
+                times = 1;
+                result = closeSafeDatabase;
+            }
+        };
+        new Expectations(closeSafeDatabase) {
+            {
+                closeSafeDatabase.getDb();
+                times = 1;
+                result = database;
+            }
+        };
+        new Expectations(database) {
+            {
+                database.count();
+                times = 1;
+                result = 10;
+            }
+        };
+        Assert.assertEquals(54, journal.getMaxJournalId());
+    }
+
+    @Test(expected = JournalException.class)
+    public void testRollJournal(@Mocked CloseSafeDatabase closeSafeDatabase,
+                                    @Mocked BDBEnvironment environment,
+                                    @Mocked Database database) throws Exception {
+        new Expectations(closeSafeDatabase) {
+            {
+                closeSafeDatabase.getDb();
+                minTimes = 0;
+                result = database;
+            }
+        };
+        BDBJEJournal journal = new BDBJEJournal(environment, closeSafeDatabase);
+
+        // 1. no data, do nothing and return
+        new Expectations(database) {
+            {
+                database.count();
+                times = 1;
+                result = 0;
+            }
+        };
+        journal.rollJournal(111);
+
+
+        // 2. normal cases, current db is 9, has 10 logs, new log expect 19
+        new Expectations(database) {
+            {
+                database.count();
+                times = 2;
+                result = 10;
+
+                database.getDatabaseName();
+                times = 1;
+                result = 9;
+            }
+        };
+        journal.rollJournal(19);
+
+        // 3. exception  current db is 9, has 10 logs, new log expect 19
+        new Expectations(database) {
+            {
+                database.count();
+                times = 2;
+                result = 10;
+
+                database.getDatabaseName();
+                times = 1;
+                result = 9;
+            }
+        };
+        journal.rollJournal(18);
+        Assert.fail();
+     }
+
+    @Test
+    public void testVerifyId() throws Exception {
+        String data = "petals on a wet black bough";
+        Writable writable = new Writable() {
+            @Override
+            public void write(DataOutput out) throws IOException {
+                Text.writeString(out, data);
+            }
+        };
+        DataOutputBuffer buffer = new DataOutputBuffer();
+        writable.write(buffer);
+
+        BDBEnvironment environment = initBDBEnv("testVerifyId");
+        BDBJEJournal journal = new BDBJEJournal(environment);
+
+        journal.open();
+        journal.batchWriteBegin();
+        journal.batchWriteAppend(1, buffer);
+        journal.batchWriteAppend(2, buffer);
+        journal.batchWriteCommit();
+
+        journal.rollJournal(3);
+        journal.open();
+        journal.batchWriteBegin();
+        journal.batchWriteAppend(3, buffer);
+        journal.batchWriteAppend(4, buffer);
+        journal.batchWriteCommit();
+
+        Assert.assertEquals(2, journal.getFinalizedJournalId());
+        Assert.assertEquals(4, journal.getMaxJournalId());
+        Assert.assertEquals(1, journal.getMinJournalId());
+     }
 }

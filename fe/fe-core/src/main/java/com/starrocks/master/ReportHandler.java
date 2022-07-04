@@ -66,14 +66,12 @@ import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.task.DropReplicaTask;
 import com.starrocks.task.MasterTask;
 import com.starrocks.task.PublishVersionTask;
-import com.starrocks.task.PushTask;
 import com.starrocks.task.StorageMediaMigrationTask;
 import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TPartitionVersionInfo;
-import com.starrocks.thrift.TPushType;
 import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -411,10 +409,7 @@ public class ReportHandler extends Daemon {
             // 1. CREATE
             // 2. SYNC DELETE
             // 3. CHECK_CONSISTENCY
-            if (task.getTaskType() == TTaskType.CREATE
-                    || (task.getTaskType() == TTaskType.PUSH && ((PushTask) task).getPushType() == TPushType.DELETE
-                    && ((PushTask) task).isSyncDelete())
-                    || task.getTaskType() == TTaskType.CHECK_CONSISTENCY) {
+            if (task.getTaskType() == TTaskType.CREATE || task.getTaskType() == TTaskType.CHECK_CONSISTENCY) {
                 continue;
             }
 
@@ -731,8 +726,15 @@ public class ReportHandler extends Daemon {
                             continue;
                         }
 
-                        tablet.deleteReplicaByBackendId(backendId);
-                        ++deleteCounter;
+                        // Defer the meta delete to next tablet report, see `Replica.deferReplicaDeleteToNextReport`
+                        // for details.
+                        if (replica.getDeferReplicaDeleteToNextReport()) {
+                            replica.setDeferReplicaDeleteToNextReport(false);
+                            continue;
+                        } else {
+                            tablet.deleteReplicaByBackendId(backendId);
+                            ++deleteCounter;
+                        }
 
                         // remove replica related tasks
                         AgentTaskQueue.removeReplicaRelatedTasks(backendId, tabletId);
@@ -742,9 +744,9 @@ public class ReportHandler extends Daemon {
                                 indexId, tabletId, backendId);
 
                         GlobalStateMgr.getCurrentState().getEditLog().logDeleteReplica(info);
-                        LOG.warn("delete replica[{}] in tablet[{}] from meta. backend[{}], report version: {}"
-                                        + ", current report version: {}",
-                                replica.getId(), tabletId, backendId, backendReportVersion,
+                        LOG.warn("delete replica[{}] with state[{}] in tablet[{}] from meta. backend[{}]," +
+                                        " report version: {}, current report version: {}",
+                                replica.getId(), replica.getState().name(), tabletId, backendId, backendReportVersion,
                                 currentBackendReportVersion);
 
                         // check for clone
@@ -769,6 +771,15 @@ public class ReportHandler extends Daemon {
         }
     }
 
+    private static void addDropReplicaTask(AgentBatchTask batchTask, long backendId,
+                                           long tabletId, int schemaHash, String reason) {
+        DropReplicaTask task =
+                new DropReplicaTask(backendId, tabletId, schemaHash, false);
+        batchTask.addTask(task);
+        LOG.warn("delete tablet[{}] from backend[{}] because {}",
+                tabletId, backendId, reason);
+    }
+
     private static void deleteFromBackend(Map<Long, TTablet> backendTablets,
                                           Set<Long> foundTabletsWithValidSchema,
                                           Map<Long, TTabletInfo> foundTabletsWithInvalidSchema,
@@ -780,7 +791,18 @@ public class ReportHandler extends Daemon {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         for (Long tabletId : backendTablets.keySet()) {
             TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
-            if (tabletMeta == null || tabletMeta.isUseStarOS()) {
+            if (tabletMeta == null) {
+                // We need to clean these ghost tablets from current backend, or else it will
+                // continue to report them to FE forever and add some processing overhead(the tablet report
+                // process is protected with DB S lock).
+                addDropReplicaTask(batchTask, backendId, tabletId,
+                        -1 /* Unknown schema hash */, "not found in meta");
+                ++deleteFromBackendCounter;
+                --maxTaskSendPerBe;
+                continue;
+            }
+
+            if (tabletMeta.isUseStarOS()) {
                 continue;
             }
 
@@ -807,11 +829,8 @@ public class ReportHandler extends Daemon {
 
                 if (needDelete && maxTaskSendPerBe > 0) {
                     // drop replica
-                    DropReplicaTask task =
-                            new DropReplicaTask(backendId, tabletId, backendTabletInfo.getSchema_hash(), false);
-                    batchTask.addTask(task);
-                    LOG.warn("delete tablet[" + tabletId + "] from backend[" + backendId +
-                            "] because not found in meta");
+                    addDropReplicaTask(batchTask, backendId, tabletId,
+                            backendTabletInfo.getSchema_hash(), "not found in meta");
                     ++deleteFromBackendCounter;
                     --maxTaskSendPerBe;
                 }
@@ -821,10 +840,8 @@ public class ReportHandler extends Daemon {
                 // this tablet is found in meta but with invalid schema hash.
                 // delete it.
                 int schemaHash = foundTabletsWithInvalidSchema.get(tabletId).getSchema_hash();
-                DropReplicaTask task = new DropReplicaTask(backendId, tabletId, schemaHash, false);
-                batchTask.addTask(task);
-                LOG.warn("delete tablet[" + tabletId + " - " + schemaHash + "] from backend[" + backendId
-                        + "] because invalid schema hash");
+                addDropReplicaTask(batchTask, backendId, tabletId, schemaHash,
+                        "invalid schema hash: " + schemaHash);
                 ++deleteFromBackendCounter;
                 --maxTaskSendPerBe;
             }

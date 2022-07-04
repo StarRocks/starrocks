@@ -21,6 +21,7 @@
 
 #include "runtime/stream_load/stream_load_executor.h"
 
+#include "agent/master_info.h"
 #include "common/status.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
@@ -81,11 +82,6 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                         status = Status::InternalError("too many filtered rows");
                     }
 
-                    if (ctx->number_filtered_rows > 0 &&
-                        !executor->runtime_state()->get_error_log_file_path().empty()) {
-                        ctx->error_url = to_load_error_http_path(executor->runtime_state()->get_error_log_file_path());
-                    }
-
                     if (status.ok()) {
                         StarRocksMetrics::instance()->stream_receive_bytes_total.increment(ctx->receive_bytes);
                         StarRocksMetrics::instance()->stream_load_rows_total.increment(ctx->number_loaded_rows);
@@ -110,6 +106,10 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                 }
                 ctx->write_data_cost_nanos = MonotonicNanos() - ctx->start_write_data_nanos;
                 ctx->promise.set_value(status);
+
+                if (!executor->runtime_state()->get_error_log_file_path().empty()) {
+                    ctx->error_url = to_load_error_http_path(executor->runtime_state()->get_error_log_file_path());
+                }
 
                 if (ctx->unref()) {
                     delete ctx;
@@ -142,7 +142,7 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
     }
     request.__set_request_id(ctx->id.to_thrift());
 
-    TNetworkAddress master_addr = _exec_env->master_info()->network_address;
+    TNetworkAddress master_addr = get_master_address();
     TLoadTxnBeginResult result;
 #ifndef BE_TEST
     RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
@@ -185,7 +185,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
         request.__isset.txnCommitAttachment = true;
     }
 
-    TNetworkAddress master_addr = _exec_env->master_info()->network_address;
+    TNetworkAddress master_addr = get_master_address();
     TLoadTxnCommitResult result;
 #ifndef BE_TEST
     RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
@@ -213,7 +213,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
 Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
     StarRocksMetrics::instance()->txn_rollback_request_total.increment(1);
 
-    TNetworkAddress master_addr = _exec_env->master_info()->network_address;
+    TNetworkAddress master_addr = get_master_address();
     TLoadTxnRollbackRequest request;
     set_request_auth(&request, ctx->auth);
     request.db = ctx->db;

@@ -30,4 +30,9 @@ public class ShowCatalogsStmt extends ShowStmt {
         return visitor.visitShowCatalogsStmt(this, context);
     }
 
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+
 }

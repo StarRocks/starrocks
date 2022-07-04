@@ -28,8 +28,18 @@ enum PersistentIndexFileVersion {
     PERSISTENT_INDEX_VERSION_1,
 };
 
-using IndexValue = uint64_t;
-static constexpr IndexValue NullIndexValue = -1;
+static constexpr uint64_t NullIndexValue = -1;
+
+// Use `uint8_t[8]` to store the value of a `uint64_t` to reduce memory cost in phmap
+struct IndexValue {
+    uint8_t v[8];
+    IndexValue() = default;
+    explicit IndexValue(const uint64_t val) { UNALIGNED_STORE64(v, val); }
+
+    uint64_t get_value() const { return UNALIGNED_LOAD64(v); }
+    bool operator==(const IndexValue& rhs) const { return memcmp(v, rhs.v, 8) == 0; }
+    void operator=(uint64_t rhs) { return UNALIGNED_STORE64(v, rhs); }
+};
 
 class ImmutableIndexShard;
 
@@ -300,6 +310,8 @@ public:
     size_t mutable_index_size();
 
     size_t mutable_index_capacity();
+
+    std::vector<int8_t> test_get_move_buckets(size_t target, const uint8_t* bucket_packs_in_page);
 
 private:
     std::string _get_l0_index_file_name(std::string& dir, const EditVersion& version);

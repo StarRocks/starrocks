@@ -96,7 +96,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         String sql = "select t1a,v1 from test_all_type, t0";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("3:CROSS JOIN"));
+        Assert.assertTrue(planFragment.contains("3:NESTLOOP JOIN"));
 
         setTableStatistics(table2, 10000);
         setTableStatistics(t0, 10000);
@@ -340,7 +340,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  4:HASH JOIN\n"
                 + "  |  join op: INNER JOIN (PARTITIONED)\n"
-                + "  |  hash predicates:\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 2: v2 = 7: t1d\n"
                 + "  |  \n"
@@ -366,7 +365,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  3:HASH JOIN\n"
                 + "  |  join op: INNER JOIN (BROADCAST)\n"
-                + "  |  hash predicates:\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 2: v2 = 7: t1d\n"
                 + "  |  \n"
@@ -385,7 +383,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  3:HASH JOIN\n"
                 + "  |  join op: INNER JOIN (BROADCAST)\n"
-                + "  |  hash predicates:\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 7: t1d = 1: v1\n"
                 + "  |  \n"
@@ -497,12 +494,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  11:HASH JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN (REPLICATED)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 14: PS_PARTKEY = 20: P_PARTKEY"));
         Assert.assertTrue(plan.contains("  14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 32: L_PARTKEY = 14: PS_PARTKEY\n" +
                 "  |  equal join conjunct: 33: L_SUPPKEY = 15: PS_SUPPKEY\n" +
@@ -1006,5 +1001,61 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String plan = getCostExplain(sql);
         assertContains(plan, "  |  join op: INNER JOIN (COLOCATE)");
         assertContains(plan, "k3-->[NaN, NaN, 0.0, 4.0, 1.0] ESTIMATE");
+    }
+
+    @Test
+    public void testPruneShuffleColumns() throws Exception {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t1");
+
+        StatisticStorage ss = globalStateMgr.getCurrentStatisticStorage();
+        new Expectations(ss) {
+            {
+                ss.getColumnStatistic(t0, "v1");
+                result = new ColumnStatistic(1, 2, 0, 4, 3);
+
+                ss.getColumnStatistic(t0, "v2");
+                result = new ColumnStatistic(1, 4000000, 0, 4, 4000000);
+
+                ss.getColumnStatistic(t0, "v3");
+                result = new ColumnStatistic(1, 2000000, 0, 4, 2000000);
+
+                ss.getColumnStatistic(t1, "v4");
+                result = new ColumnStatistic(1, 2, 0, 4, 3);
+
+                ss.getColumnStatistic(t1, "v5");
+                result = new ColumnStatistic(1, 100000, 0, 4, 100000);
+
+                ss.getColumnStatistic(t1, "v6");
+                result = new ColumnStatistic(1, 200000, 0, 4, 200000);
+            }
+        };
+
+        setTableStatistics(t0, 4000000);
+        setTableStatistics(t1, 100000);
+
+        String sql = "select * from t0 join[shuffle] t1 on t0.v2 = t1.v5 and t0.v3 = t1.v6";
+        String plan = getFragmentPlan(sql);
+
+        assertContains(plan, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    HASH_PARTITIONED: 3: v3");
+
+        assertContains(plan, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    HASH_PARTITIONED: 6: v6");
+
+        sql = "select * from t0 join[shuffle] t1 on t0.v2 = t1.v5 and t0.v3 = t1.v6 " +
+                "               join[broadcast] t2 on t0.v2 = t2.v8";
+
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    HASH_PARTITIONED: 3: v3");
+
+        assertContains(plan, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    HASH_PARTITIONED: 6: v6");
     }
 }

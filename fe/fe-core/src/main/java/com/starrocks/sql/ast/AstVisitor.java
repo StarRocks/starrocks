@@ -24,6 +24,8 @@ import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.ComputeNodeClause;
+import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -33,6 +35,7 @@ import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
@@ -54,6 +57,7 @@ import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
@@ -112,6 +116,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitAdminSetConfigStatement(AdminSetConfigStmt statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    public R visitSetStatement(SetStmt stmt, C context) {
+        return visitStatement(stmt, context);
     }
 
     public R visitAdminShowConfigStatement(AdminShowConfigStmt statement, C context) {
@@ -178,6 +186,10 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    public R visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     public R visitCreateViewStatement(CreateViewStmt statement, C context) {
         return visitBaseViewStatement(statement, context);
     }
@@ -192,6 +204,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitDropWorkGroupStatement(DropWorkGroupStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+
+    public R visitShowComputeNodes(ShowComputeNodesStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     public R visitQueryStatement(QueryStatement statement, C context) {
@@ -258,6 +274,14 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitCreateDbStatement(CreateDbStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropDbStatement(DropDbStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ----------------- Catalog Clause -------------
 
     public R visitCreateCatalogStatement(CreateCatalogStmt statement, C context) {
@@ -290,6 +314,9 @@ public abstract class AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    public R visitComputeNodeClause(ComputeNodeClause clause, C context) {
+        return visitNode(clause, context);
+    }
 
     public R visitFrontendClause(FrontendClause clause, C context) {
         return visitNode(clause, context);

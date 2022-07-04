@@ -210,7 +210,9 @@ public class StreamLoadScanNode extends LoadScanNode {
                     if (dstSlotDesc.getColumn().isAllowNull()) {
                         srcSlotDesc.setIsNullable(true);
                     }
-                    expr = new SlotRef(srcSlotDesc);
+                    SlotRef slotRef = new SlotRef(srcSlotDesc);
+                    slotRef.setColumnName(dstSlotDesc.getColumn().getName());
+                    expr = slotRef;
                 } else {
                     Column column = dstSlotDesc.getColumn();
                     Column.DefaultValueType defaultValueType = column.getDefaultValueType();
@@ -249,7 +251,7 @@ public class StreamLoadScanNode extends LoadScanNode {
 
             if (negative && dstSlotDesc.getColumn().getAggregationType() == AggregateType.SUM) {
                 expr = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, expr, new IntLiteral(-1));
-                expr.analyze(analyzer);
+                expr = Expr.analyzeAndCastFold(expr);
             }
             expr = castToSlot(dstSlotDesc, expr);
 

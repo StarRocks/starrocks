@@ -140,9 +140,9 @@ public class GlobalTransactionMgr implements Writable {
         TBeginRemoteTxnResponse response;
         try {
             response = FrontendServiceProxy.call(addr,
-                            Config.thrift_rpc_timeout_ms,
-                            Config.thrift_rpc_retry_times,
-                            client -> client.beginRemoteTxn(request));
+                    Config.thrift_rpc_timeout_ms,
+                    Config.thrift_rpc_retry_times,
+                    client -> client.beginRemoteTxn(request));
         } catch (Exception e) {
             LOG.warn("call fe {} beginRemoteTransaction rpc method failed, label: {}", addr, label, e);
             throw new BeginTransactionException(e.getMessage());
@@ -180,9 +180,9 @@ public class GlobalTransactionMgr implements Writable {
         TCommitRemoteTxnResponse response;
         try {
             response = FrontendServiceProxy.call(addr,
-                            Config.thrift_rpc_timeout_ms,
-                            Config.thrift_rpc_retry_times,
-                            client -> client.commitRemoteTxn(request));
+                    Config.thrift_rpc_timeout_ms,
+                    Config.thrift_rpc_retry_times,
+                    client -> client.commitRemoteTxn(request));
         } catch (Exception e) {
             LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn_id: {} e: {}", addr, transactionId, e);
             throw new TransactionCommitFailedException(e.getMessage());
@@ -216,9 +216,9 @@ public class GlobalTransactionMgr implements Writable {
         TAbortRemoteTxnResponse response;
         try {
             response = FrontendServiceProxy.call(addr,
-                            Config.thrift_rpc_timeout_ms,
-                            Config.thrift_rpc_retry_times,
-                            client -> client.abortRemoteTxn(request));
+                    Config.thrift_rpc_timeout_ms,
+                    Config.thrift_rpc_retry_times,
+                    client -> client.abortRemoteTxn(request));
         } catch (Exception e) {
             LOG.warn("call fe {} abortRemoteTransaction rpc method failed, txn_id: {} e: {}", addr, transactionId, e);
             throw new AbortTransactionException(e.getMessage());
@@ -357,7 +357,7 @@ public class GlobalTransactionMgr implements Writable {
             return false;
         }
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(db.getId());
-        return dbTransactionMgr.publishTransaction(db, transactionId, publishTimeoutMillis);
+        return dbTransactionMgr.waitTransactionVisible(db, transactionId, publishTimeoutMillis);
     }
 
     public void abortTransaction(long dbId, long transactionId, String reason) throws UserException {
@@ -488,7 +488,6 @@ public class GlobalTransactionMgr implements Writable {
         } catch (AnalysisException e) {
             LOG.warn("replay upsert transaction [" + transactionState.getTransactionId() + "] failed", e);
         }
-
     }
 
     public void replayDeleteTransactionState(TransactionState transactionState) {

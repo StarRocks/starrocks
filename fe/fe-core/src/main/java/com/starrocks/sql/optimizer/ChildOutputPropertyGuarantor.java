@@ -18,6 +18,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.List;
@@ -111,6 +112,17 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         }
 
         return true;
+    }
+
+    private void enforceChildBroadcastDistribution(GroupExpression child, PhysicalPropertySet childOutputProperty,
+                                                   int childIndex) {
+        DistributionSpec enforceDistributionSpec = DistributionSpec.createReplicatedDistributionSpec();
+
+        enforceChildDistribution(enforceDistributionSpec, child, childOutputProperty);
+
+        PhysicalPropertySet newChildInputProperty = createPropertySetByDistribution(enforceDistributionSpec);
+        requiredChildrenProperties.set(childIndex, newChildInputProperty);
+        childrenOutputProperties.set(childIndex, newChildInputProperty);
     }
 
     // enforce child SHUFFLE type distribution
@@ -244,6 +256,11 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         return visitPhysicalJoin(node, context);
     }
 
+    @Override
+    public Void visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator node, ExpressionContext context) {
+        return visitPhysicalJoin(node, context);
+    }
+
     public Void visitPhysicalJoin(PhysicalJoinOperator node, ExpressionContext context) {
         Preconditions.checkState(childrenOutputProperties.size() == 2);
 
@@ -287,16 +304,16 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
 
             // 2.1 respect the hint
             if ("SHUFFLE".equalsIgnoreCase(hint)) {
-                if (leftDistributionDesc.isLocalShuffle()) {
+                if (leftDistributionDesc.isLocal()) {
                     enforceChildShuffleDistribution(leftShuffleColumns, leftChild, leftChildOutputProperty, 0);
                 }
-                if (rightDistributionDesc.isLocalShuffle()) {
+                if (rightDistributionDesc.isLocal()) {
                     enforceChildShuffleDistribution(rightShuffleColumns, rightChild, rightChildOutputProperty, 1);
                 }
                 return visitOperator(node, context);
             }
 
-            if (leftDistributionDesc.isLocalShuffle() && rightDistributionDesc.isLocalShuffle()) {
+            if (leftDistributionDesc.isLocal() && rightDistributionDesc.isLocal()) {
                 // colocate join
                 if ("BUCKET".equalsIgnoreCase(hint) ||
                         !canColocateJoin(leftDistributionSpec, rightDistributionSpec, leftShuffleColumns,
@@ -304,11 +321,11 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                     transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);
                 }
                 return visitOperator(node, context);
-            } else if (leftDistributionDesc.isLocalShuffle() && rightDistributionDesc.isShuffle()) {
+            } else if (leftDistributionDesc.isLocal() && rightDistributionDesc.isShuffle()) {
                 // bucket join
                 transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);
                 return visitOperator(node, context);
-            } else if (leftDistributionDesc.isShuffle() && rightDistributionDesc.isLocalShuffle()) {
+            } else if (leftDistributionDesc.isShuffle() && rightDistributionDesc.isLocal()) {
                 // coordinator can not bucket shuffle data from left to right, so we need to adjust to shuffle join
                 enforceChildShuffleDistribution(rightShuffleColumns, rightChild, rightChildOutputProperty, 1);
                 return visitOperator(node, context);

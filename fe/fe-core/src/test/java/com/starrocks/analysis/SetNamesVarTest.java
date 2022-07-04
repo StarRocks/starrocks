@@ -18,41 +18,35 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 public class SetNamesVarTest {
-    private Analyzer analyzer;
-
-    @Before
-    public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
-    }
 
     @Test
     public void testNormal() throws AnalysisException {
         SetNamesVar var = new SetNamesVar(null, null);
-        var.analyze(analyzer);
+        var.analyze();
         Assert.assertEquals("utf8", var.getCharset().toLowerCase());
 
         Assert.assertEquals("NAMES 'utf8' COLLATE DEFAULT", var.toString());
 
         var = new SetNamesVar("UTf8", null);
-        var.analyze(analyzer);
+        var.analyze();
         Assert.assertEquals("utf8", var.getCharset().toLowerCase());
         Assert.assertEquals("NAMES 'utf8' COLLATE DEFAULT", var.toString());
 
         var = new SetNamesVar("UTf8", "aBc");
-        var.analyze(analyzer);
+        var.analyze();
         Assert.assertEquals("utf8", var.getCharset().toLowerCase());
         Assert.assertEquals("NAMES 'utf8' COLLATE 'abc'", var.toString());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testUnsupported() throws AnalysisException {
+    @Test(expected = SemanticException.class)
+    public void testUnsupported()  {
         SetNamesVar var = new SetNamesVar("gbk");
-        var.analyze(analyzer);
+        var.analyze();
         Assert.fail("No exception throws.");
     }
 }

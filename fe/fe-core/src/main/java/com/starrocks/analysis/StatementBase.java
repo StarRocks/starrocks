@@ -23,20 +23,16 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.OriginStatement;
-import com.starrocks.rewrite.ExprRewriter;
 
 import java.util.Collections;
 import java.util.List;
 
 public abstract class StatementBase implements ParseNode {
-
-    private String clusterName;
 
     public enum ExplainLevel {
         NORMAL,
@@ -94,7 +90,6 @@ public abstract class StatementBase implements ParseNode {
         if (Strings.isNullOrEmpty(analyzer.getClusterName())) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER);
         }
-        this.clusterName = analyzer.getClusterName();
     }
 
     public Analyzer getAnalyzer() {
@@ -143,66 +138,12 @@ public abstract class StatementBase implements ParseNode {
     }
 
     /**
-     * Sets the column labels of this statement, if applicable. No-op of the statement does
-     * not produce an output result set.
-     */
-    public void setColLabels(List<String> colLabels) {
-        List<String> oldLabels = getColLabels();
-        if (oldLabels == colLabels) {
-            return;
-        }
-        oldLabels.clear();
-        oldLabels.addAll(colLabels);
-    }
-
-    /**
      * Returns the unresolved result expressions of this statement, if applicable, or an
      * empty list if not applicable (not all statements produce an output result set).
      * Subclasses must override this as necessary.
      */
     public List<Expr> getResultExprs() {
         return Collections.<Expr>emptyList();
-    }
-
-    /**
-     * Casts the result expressions and derived members (e.g., destination column types for
-     * CTAS) to the given types. No-op if this statement does not have result expressions.
-     * Throws when casting fails. Subclasses may override this as necessary.
-     */
-    public void castResultExprs(List<Type> types) throws AnalysisException {
-        List<Expr> resultExprs = getResultExprs();
-        Preconditions.checkNotNull(resultExprs);
-        Preconditions.checkState(resultExprs.size() == types.size());
-        for (int i = 0; i < types.size(); ++i) {
-            //The specific type of the date type is determined by the 
-            //actual type of the return value, not by the function return value type in FE Function
-            //such as the result of str_to_date may be either DATE or DATETIME
-            if (resultExprs.get(i).getType().isDateType() && types.get(i).isDateType()) {
-                continue;
-            }
-            if (!resultExprs.get(i).getType().matchesType(types.get(i))) {
-                resultExprs.set(i, resultExprs.get(i).castTo(types.get(i)));
-            }
-        }
-    }
-
-    /**
-     * Uses the given 'rewriter' to transform all Exprs in this statement according
-     * to the rules specified in the 'rewriter'. Replaces the original Exprs with the
-     * transformed ones in-place. Subclasses that have Exprs to be rewritten must
-     * override this method. Valid to call after analyze().
-     */
-    public void rewriteExprs(ExprRewriter rewriter) throws AnalysisException {
-        throw new IllegalStateException(
-                "rewriteExprs() not implemented for this stmt: " + getClass().getSimpleName());
-    }
-
-    public String getClusterName() {
-        return clusterName;
-    }
-
-    public void setClusterName(String clusterName) {
-        this.clusterName = clusterName;
     }
 
     public void setOrigStmt(OriginStatement origStmt) {
@@ -242,6 +183,10 @@ public abstract class StatementBase implements ParseNode {
     // Override this method and return true
     // if the stmt contains some information which need to be encrypted in audit log
     public boolean needAuditEncryption() {
+        return false;
+    }
+
+    public boolean isSupportNewPlanner() {
         return false;
     }
 

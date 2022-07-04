@@ -58,7 +58,7 @@ public class CancelBackupStmt extends CancelStmt {
                 throw new AnalysisException("No database selected");
             }
         } else {
-            dbName = ClusterNamespace.getFullName(getClusterName(), dbName);
+            dbName = ClusterNamespace.getFullName(dbName);
         }
 
         // check auth

@@ -42,9 +42,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
-// Our new cost based query optimizer is more powerful and stable than old query optimizer,
-// The old query optimizer related codes could be deleted safely.
-// TODO: Remove old query optimizer related codes before 2021-09-30
 public class SlotRef extends Expr {
     private static final Logger LOG = LogManager.getLogger(SlotRef.class);
     private TableName tblName;
@@ -149,20 +146,6 @@ public class SlotRef extends Expr {
 
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        desc = analyzer.registerColumnRef(tblName, col);
-        type = desc.getType();
-        originType = desc.getOriginType();
-        if (this.type.isChar()) {
-            this.type = Type.VARCHAR;
-        }
-        if (!type.isSupported()) {
-            throw new AnalysisException(
-                    "Unsupported type '" + type.toString() + "' in '" + toSql() + "'.");
-        }
-        numDistinctValues = desc.getStats().getNumDistinctValues();
-        if (type.isBoolean()) {
-            selectivity = DEFAULT_SELECTIVITY;
-        }
     }
 
     @Override

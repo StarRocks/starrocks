@@ -10,15 +10,18 @@ import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.BaseViewStmt;
+import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UpdateStmt;
@@ -37,6 +40,7 @@ import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
@@ -48,7 +52,6 @@ public class Analyzer {
 
     private static class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         public void analyze(StatementBase statement, ConnectContext session) {
-            statement.setClusterName(session.getClusterName());
             visit(statement, session);
         }
 
@@ -152,6 +155,12 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitSetStatement(SetStmt stmt, ConnectContext session) {
+            stmt.analyze();
+            return null;
+        }
+
+        @Override
         public Void visitAdminShowConfigStatement(AdminShowConfigStmt adminShowConfigStmt, ConnectContext session) {
             AdminStmtAnalyzer.analyze(adminShowConfigStmt, session);
             return null;
@@ -231,6 +240,12 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement, ConnectContext context) {
+            MaterializedViewAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
         public Void visitAlterSystemStmt(AlterSystemStmt statement, ConnectContext context) {
             AlterSystemStmtAnalyzer.analyze(statement, context);
             return null;
@@ -257,6 +272,18 @@ public class Analyzer {
         @Override
         public Void visitRefreshTableStatement(RefreshTableStmt statement, ConnectContext context) {
             RefreshTableStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateDbStatement(CreateDbStmt statement, ConnectContext context) {
+            CreateDbAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropDbStatement(DropDbStmt statement, ConnectContext context) {
+            DropStmtAnalyzer.analyze(statement, context);
             return null;
         }
 

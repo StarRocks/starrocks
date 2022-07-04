@@ -49,6 +49,8 @@ import java.util.List;
 public class SessionVariable implements Serializable, Writable, Cloneable {
     private static final Logger LOG = LogManager.getLogger(SessionVariable.class);
 
+    public static final String USE_COMPUTE_NODES = "use_compute_nodes";
+    public static final String PREFER_COMPUTE_NODE = "prefer_compute_node";
     public static final String EXEC_MEM_LIMIT = "exec_mem_limit";
 
     /**
@@ -150,6 +152,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
 
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
+    public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
 
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
@@ -201,6 +204,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
+    public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -254,6 +258,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
 
+    @VariableMgr.VarAttr(name = USE_COMPUTE_NODES)
+    private int useComputeNodes = -1;
+
+    @VariableMgr.VarAttr(name = PREFER_COMPUTE_NODE)
+    private boolean preferComputeNode = false;
+
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
 
@@ -262,6 +272,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_TABLET_INTERNAL_PARALLEL)
     private boolean enableTabletInternalParallel = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_SHARED_SCAN)
+    private boolean enableSharedScan = true;
 
     // max memory used on every backend.
     public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;
@@ -541,6 +554,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_SHOW_ALL_VARIABLES, flag = VariableMgr.INVISIBLE)
     private boolean enableShowAllVariables = false;
 
+    @VarAttr(name = CBO_PRUNE_SHUFFLE_COLUMN_RATE, flag = VariableMgr.INVISIBLE)
+    private double cboPruneShuffleColumnRate = 0.1;
+
+    public double getCboPruneShuffleColumnRate() {
+        return cboPruneShuffleColumnRate;
+    }
+
+    public void setCboPruneShuffleColumnRate(double cboPruneShuffleColumnRate) {
+        this.cboPruneShuffleColumnRate = cboPruneShuffleColumnRate;
+    }
+
     public boolean isEnableShowAllVariables() {
         return enableShowAllVariables;
     }
@@ -551,6 +575,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getStatisticCollectParallelism() {
         return statisticCollectParallelism;
+    }
+
+    public int getUseComputeNodes() {
+        return useComputeNodes;
+    }
+
+    public void setUseComputeNodes(int useComputeNodes) {
+        this.useComputeNodes = useComputeNodes;
+    }
+
+    public boolean isPreferComputeNode() {
+        return preferComputeNode;
+    }
+
+    public void setPreferComputeNode(boolean preferComputeNode) {
+        this.preferComputeNode = preferComputeNode;
     }
 
     public boolean enableHiveColumnStats() {
@@ -856,6 +896,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getPipelineDop() {
         return this.pipelineDop;
+    }
+
+    public boolean isEnableSharedScan() {
+        return enableSharedScan;
     }
 
     public int getWorkGroupId() {

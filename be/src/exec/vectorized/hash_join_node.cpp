@@ -421,10 +421,6 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
 
         num_left_partitions = context->degree_of_parallelism();
         bool force_local_passthrough = false;
-        if (auto* scan_op = dynamic_cast<ScanOperatorFactory*>(lhs_operators[0].get())) {
-            const auto* morsel_queue = context->morsel_queue_of_source_operator(scan_op);
-            force_local_passthrough = morsel_queue->need_rebalance();
-        }
         lhs_operators = context->maybe_interpolate_local_passthrough_exchange(
                 runtime_state(), lhs_operators, num_left_partitions, force_local_passthrough);
     } else {
@@ -447,32 +443,11 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
             // there is no need to perform local shuffle again at receiver side
             // 2. Otherwise, add LocalExchangeOperator
             // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into HashJoin{Build, Probe}Operator.
-            TPartitionType::type part_type = TPartitionType::type::HASH_PARTITIONED;
-            bool rhs_need_local_shuffle = true;
-            if (auto* exchange_op = dynamic_cast<ExchangeSourceOperatorFactory*>(rhs_operators[0].get());
-                exchange_op != nullptr) {
-                auto& texchange_node = exchange_op->texchange_node();
-                DCHECK(texchange_node.__isset.partition_type);
-                if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
-                    texchange_node.partition_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
-                    part_type = texchange_node.partition_type;
-                    rhs_need_local_shuffle = false;
-                }
-            }
-            bool lhs_need_local_shuffle = true;
-            if (auto* exchange_op = dynamic_cast<ExchangeSourceOperatorFactory*>(lhs_operators[0].get());
-                exchange_op != nullptr) {
-                auto& texchange_node = exchange_op->texchange_node();
-                DCHECK(texchange_node.__isset.partition_type);
-                if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
-                    texchange_node.partition_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
-                    part_type = texchange_node.partition_type;
-                    lhs_need_local_shuffle = false;
-                }
-            }
+            TPartitionType::type part_type =
+                    down_cast<SourceOperatorFactory*>(rhs_operators[0].get())->partition_type();
 
             // Make sure that local shuffle use the same hash function as the remote exchange sink do
-            if (rhs_need_local_shuffle) {
+            if (context->need_local_shuffle(rhs_operators)) {
                 if (part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
                     DCHECK(!_build_equivalence_partition_expr_ctxs.empty());
                     rhs_operators = context->maybe_interpolate_local_shuffle_exchange(
@@ -482,7 +457,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                                                                                       _build_expr_ctxs, part_type);
                 }
             }
-            if (lhs_need_local_shuffle) {
+            if (context->need_local_shuffle(lhs_operators)) {
                 if (part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
                     DCHECK(!_probe_equivalence_partition_expr_ctxs.empty());
                     lhs_operators = context->maybe_interpolate_local_shuffle_exchange(

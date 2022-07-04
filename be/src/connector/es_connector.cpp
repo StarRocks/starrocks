@@ -78,6 +78,12 @@ int64_t ESDataSource::raw_rows_read() const {
 int64_t ESDataSource::num_rows_read() const {
     return _rows_return_number;
 }
+int64_t ESDataSource::num_bytes_read() const {
+    return _bytes_read;
+}
+int64_t ESDataSource::cpu_time_spent() const {
+    return _cpu_time_ns;
+}
 
 Status ESDataSource::_build_conjuncts() {
     Status status = Status::OK();
@@ -214,6 +220,8 @@ Status ESDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) 
                 return Status::EndOfFile("");
             }
         }
+
+        SCOPED_RAW_TIMER(&_cpu_time_ns);
         {
             SCOPED_TIMER(_materialize_timer);
             RETURN_IF_ERROR(_es_scroll_parser->fill_chunk(state, chunk, &_line_eof));
@@ -224,6 +232,7 @@ Status ESDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) 
             int64_t before = ck->num_rows();
             COUNTER_UPDATE(_rows_read_counter, before);
             _rows_read_number += before;
+            _bytes_read += ck->bytes_usage();
 
             ExecNode::eval_conjuncts(_conjunct_ctxs, ck);
 

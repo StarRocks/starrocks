@@ -84,8 +84,14 @@ CONF_Int32(drop_tablet_worker_count, "3");
 CONF_Int32(push_worker_count_normal_priority, "3");
 // The count of thread to high priority batch load.
 CONF_Int32(push_worker_count_high_priority, "3");
+
+#ifdef BE_TEST
+CONF_Int32(transaction_publish_version_worker_count, "1");
+#else
 // The count of thread to publish version per transaction
 CONF_Int32(transaction_publish_version_worker_count, "8");
+#endif
+
 // The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
 // The count of thread to delete.
@@ -279,6 +285,8 @@ CONF_mInt32(cumulative_compaction_skip_window_seconds, "30");
 CONF_mInt32(update_compaction_check_interval_seconds, "60");
 CONF_Int32(update_compaction_num_threads_per_disk, "1");
 CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
+
+CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 
 // if compaction of a tablet failed, this tablet should not be chosen to
 // compaction until this interval passes.
@@ -708,8 +716,10 @@ CONF_Bool(enable_orc_late_materialization, "true");
 // orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
 CONF_Int32(orc_file_cache_max_size, "2097152");
 // parquet reader, each column will reserve X bytes for read
+// but with coalesce read enabled, this value is not used.
 CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
 CONF_mBool(parquet_coalesce_read_enable, "true");
+CONF_mInt32(parquet_header_max_size, "16384");
 
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");

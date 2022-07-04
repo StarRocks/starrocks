@@ -35,8 +35,8 @@
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/types.h"
-#include "util/block_compression.h"
 #include "util/coding.h"
+#include "util/compression/block_compression.h"
 
 namespace starrocks {
 

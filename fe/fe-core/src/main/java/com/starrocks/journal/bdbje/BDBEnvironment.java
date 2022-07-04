@@ -29,7 +29,6 @@ import com.sleepycat.je.Durability;
 import com.sleepycat.je.Durability.ReplicaAckPolicy;
 import com.sleepycat.je.Durability.SyncPolicy;
 import com.sleepycat.je.EnvironmentConfig;
-import com.sleepycat.je.EnvironmentFailureException;
 import com.sleepycat.je.TransactionConfig;
 import com.sleepycat.je.rep.InsufficientLogException;
 import com.sleepycat.je.rep.NetworkRestore;
@@ -39,19 +38,25 @@ import com.sleepycat.je.rep.NodeType;
 import com.sleepycat.je.rep.RepInternal;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.ReplicationConfig;
-import com.sleepycat.je.rep.RollbackException;
-import com.sleepycat.je.rep.StateChangeListener;
+import com.sleepycat.je.rep.ReplicationNode;
+import com.sleepycat.je.rep.RestartRequiredException;
+import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.DbResetRepGroup;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.BDBStateChangeListener;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
+import com.starrocks.journal.JournalException;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -68,10 +73,14 @@ import java.util.logging.Level;
  */
 public class BDBEnvironment {
     private static final Logger LOG = LogManager.getLogger(BDBEnvironment.class);
-    private static final int RETRY_TIME = 3;
+    protected static int RETRY_TIME = 3;
+    protected static int SLEEP_INTERVAL_SEC = 5;
     private static final int MEMORY_CACHE_PERCENT = 20;
+    // wait at most 10 seconds after environment initialized for state change
+    private static final int INITAL_STATE_CHANGE_WAIT_SEC = 10;
 
     public static final String STARROCKS_JOURNAL_GROUP = "PALO_JOURNAL_GROUP";
+    private static final String BDB_DIR = "/bdb";
 
     private ReplicatedEnvironment replicatedEnvironment;
     private EnvironmentConfig environmentConfig;
@@ -95,7 +104,53 @@ public class BDBEnvironment {
     private final String helperHostPort;
     private final boolean isElectable;
 
-    public BDBEnvironment(File envHome, String selfNodeName, String selfNodeHostPort,
+    /**
+     * init & return bdb environment
+     * @param nodeName
+     * @return
+     * @throws JournalException
+     */
+    public static BDBEnvironment initBDBEnvironment(String nodeName) throws JournalException, InterruptedException {
+        // check for port use
+        Pair<String, Integer> selfNode = GlobalStateMgr.getCurrentState().getSelfNode();
+        try {
+            if (NetUtils.isPortUsing(selfNode.first, selfNode.second)) {
+                String errMsg = String.format("edit_log_port %d is already in use. will exit.", selfNode.second);
+                LOG.error(errMsg);
+                throw new JournalException(errMsg);
+            }
+        } catch (IOException e) {
+            String errMsg = String.format("failed to check if %s:%s is used!", selfNode.first, selfNode.second);
+            LOG.error(errMsg, e);
+            JournalException journalException = new JournalException(errMsg);
+            journalException.initCause(e);
+            throw journalException;
+        }
+
+        // constructor
+        String selfNodeHostPort = selfNode.first + ":" + selfNode.second;
+
+        File dbEnv = new File(getBdbDir());
+        if (!dbEnv.exists()) {
+            dbEnv.mkdirs();
+        }
+
+        Pair<String, Integer> helperNode = GlobalStateMgr.getCurrentState().getHelperNode();
+        String helperHostPort = helperNode.first + ":" + helperNode.second;
+
+        BDBEnvironment bdbEnvironment = new BDBEnvironment(dbEnv, nodeName, selfNodeHostPort,
+                helperHostPort, GlobalStateMgr.getCurrentState().isElectable());
+
+        // setup
+        bdbEnvironment.setup();
+        return bdbEnvironment;
+    }
+
+    public static String getBdbDir() {
+        return Config.meta_dir + BDB_DIR;
+    }
+
+    protected BDBEnvironment(File envHome, String selfNodeName, String selfNodeHostPort,
                           String helperHostPort, boolean isElectable) {
         this.envHome = envHome;
         this.selfNodeName = selfNodeName;
@@ -107,15 +162,20 @@ public class BDBEnvironment {
     }
 
     // The setup() method opens the environment and database
-    public void setup() {
-
+    protected void setup() throws JournalException, InterruptedException {
         this.closing = false;
+        ensureHelperInLocal();
+        initConfigs(isElectable);
+        setupEnvironment();
+    }
 
+    protected void initConfigs(boolean isElectable) throws JournalException {
         // Almost never used, just in case the master can not restart
         if (Config.metadata_failure_recovery.equals("true")) {
             if (!isElectable) {
-                LOG.error("Current node is not in the electable_nodes list. will exit");
-                System.exit(-1);
+                String errMsg = "Current node is not in the electable_nodes list. will exit";
+                LOG.error(errMsg);
+                throw new JournalException(errMsg);
             }
             DbResetRepGroup resetUtility = new DbResetRepGroup(envHome, STARROCKS_JOURNAL_GROUP, selfNodeName,
                     selfNodeHostPort);
@@ -182,11 +242,17 @@ public class BDBEnvironment {
                     getSyncPolicy(Config.replica_sync_policy),
                     getAckPolicy(Config.replica_ack_policy)));
         }
+    }
 
+    protected void setupEnvironment() throws JournalException, InterruptedException {
         // open environment and epochDB
+        JournalException exception = null;
         for (int i = 0; i < RETRY_TIME; i++) {
+            if (i > 0) {
+                Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+            }
             try {
-                // open the environment
+                LOG.info("start to setup bdb environment for {} times", i + 1);
                 replicatedEnvironment = new ReplicatedEnvironment(envHome, replicationConfig, environmentConfig);
 
                 // get replicationGroupAdmin object.
@@ -198,7 +264,7 @@ public class BDBEnvironment {
                 adminNodes.add(helper);
                 LOG.info("add helper[{}] as ReplicationGroupAdmin", helperHostPort);
                 // 2. add self if is electable
-                if (!selfNodeHostPort.equals(helperHostPort) && GlobalStateMgr.getCurrentState().isElectable()) {
+                if (!selfNodeHostPort.equals(helperHostPort) && isElectable) {
                     HostAndPort selfNodeAddress = HostAndPort.fromString(selfNodeHostPort);
                     InetSocketAddress self = new InetSocketAddress(selfNodeAddress.getHost(),
                             selfNodeAddress.getPort());
@@ -213,34 +279,152 @@ public class BDBEnvironment {
                 GlobalStateMgr.getCurrentState().setHaProtocol(protocol);
 
                 // start state change listener
-                StateChangeListener listener = new BDBStateChangeListener();
+                BDBStateChangeListener listener = new BDBStateChangeListener(isElectable);
                 replicatedEnvironment.setStateChangeListener(listener);
+
+                LOG.info("replicated environment is all set, wait for state change...");
+                // wait for master change, otherwise a ReplicaWriteException exception will be thrown
+                for (int j = 0; j < INITAL_STATE_CHANGE_WAIT_SEC; j++) {
+                    if (FrontendNodeType.UNKNOWN != listener.getNewType()) {
+                        break;
+                    }
+                    Thread.sleep(1000);
+                }
+                LOG.info("state change done, current role {}", listener.getNewType());
 
                 // open epochDB. the first parameter null means auto-commit
                 epochDB = new CloseSafeDatabase(replicatedEnvironment.openDatabase(null, "epochDB", dbConfig));
-                break;
-            } catch (InsufficientLogException insufficientLogEx) {
-                LOG.warn("insufficient exception, refresh and setup again", insufficientLogEx);
-                refreshLog(insufficientLogEx);
-                close();
-            } catch (RollbackException exception) {
-                LOG.warn("rollback exception, setup again", exception);
+                LOG.info("end setup bdb environment after {} times", i + 1);
+                return;
+            } catch (RestartRequiredException e) {
+                String errMsg = String.format(
+                        "catch a RestartRequiredException when setup environment after retried %d times, refresh and setup again",
+                        i + 1);
+                LOG.warn(errMsg, e);
+                exception = new JournalException(errMsg);
+                exception.initCause(e);
+                if (e instanceof InsufficientLogException) {
+                    refreshLog((InsufficientLogException) e);
+                }
                 close();
             } catch (DatabaseException e) {
-                LOG.warn("database exception", e);
-                if (i < RETRY_TIME - 1) {
-                    try {
-                        Thread.sleep(5 * 1000);
-                    } catch (InterruptedException e1) {
-                        e1.printStackTrace();
-                    }
+                if (i == 0 && e instanceof UnknownMasterException) {
+                    // The node may be unable to join the group because the Master could not be determined because a
+                    // master was present but lacked a {@link QuorumPolicy#SIMPLE_MAJORITY} needed to update the
+                    // environment with information about this node, if it's a new node and is joining the group for
+                    // the first time.
+                    LOG.warn("failed to setup environment because of UnknowMasterException for the first time, ignore it.");
                 } else {
-                    LOG.error("error to open replicated environment. will exit.", e);
-                    System.exit(-1);
+                    String errMsg = String.format("failed to setup environment after retried %d times", i + 1);
+                    LOG.error(errMsg, e);
+                    exception = new JournalException(errMsg);
+                    exception.initCause(e);
                 }
             }
         }
+
+        // failed after retry
+        throw exception;
     }
+
+    /**
+     * This method is used to check if the local replicated environment matches that of the helper.
+     * This could happen in a situation like this:
+     * 1. User adds a follower and starts the new follower without helper.
+     *    --> The new follower will run as a master in a standalone environment.
+     * 2. User restarts this follower with a helper.
+     *    --> Sometimes this new follower will join the group successfully, making master crash.
+     *
+     * This method only init the replicated environment through a handshake.
+     * It will not read or write any data.
+     */
+    protected void ensureHelperInLocal() throws JournalException, InterruptedException {
+        if (!isElectable) {
+            LOG.info("skip check local environment for observer");
+            return;
+        }
+
+        if (selfNodeHostPort.equals(helperHostPort)) {
+            LOG.info("skip check local environment because helper node and local node are identical.");
+            return;
+        }
+
+        // Almost never used, just in case the master can not restart
+        if (Config.metadata_failure_recovery.equals("true")) {
+            LOG.info("skip check local environment because metadata_failure_recovery = true");
+            return;
+        }
+
+        LOG.info("start to check if local replica environment from {} contains {}", envHome, helperHostPort);
+
+        // 1. init environment as an observer
+        initConfigs(false);
+
+        HostAndPort hostAndPort = HostAndPort.fromString(helperHostPort);
+
+        JournalException exception = null;
+        for (int i = 0; i < RETRY_TIME; i++) {
+            if (i > 0) {
+                Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+            }
+
+            try {
+                // 2. get local nodes
+                replicatedEnvironment = new ReplicatedEnvironment(envHome, replicationConfig, environmentConfig);
+                Set<ReplicationNode> localNodes = replicatedEnvironment.getGroup().getNodes();
+                if (localNodes.isEmpty()) {
+                    LOG.info("skip check empty environment");
+                    return;
+                }
+
+                // 3. found if match
+                for (ReplicationNode node : localNodes) {
+                    if (node.getHostName().equals(hostAndPort.getHost()) && node.getPort() == hostAndPort.getPort()) {
+                        LOG.info("found {} in local environment!", helperHostPort);
+                        return;
+                    }
+                }
+
+                // 4. helper not found in local, raise exception
+                throw new JournalException(
+                        String.format("bad environment %s! helper host %s not in local %s",
+                                envHome, helperHostPort, localNodes));
+            } catch (RestartRequiredException e) {
+                String errMsg = String.format(
+                        "catch a RestartRequiredException when checking if helper in local after retried %d times, " +
+                        "refresh and check again",
+                        i + 1);
+                LOG.warn(errMsg, e);
+                exception = new JournalException(errMsg);
+                exception.initCause(e);
+                if (e instanceof InsufficientLogException) {
+                    refreshLog((InsufficientLogException) e);
+                }
+            } catch (DatabaseException e) {
+                if (i == 0 && e instanceof UnknownMasterException) {
+                    // The node may be unable to join the group because the Master could not be determined because a
+                    // master was present but lacked a {@link QuorumPolicy#SIMPLE_MAJORITY} needed to update the
+                    // environment with information about this node, if it's a new node and is joining the group for
+                    // the first time.
+                    LOG.warn(
+                            "failed to check if helper in local because of UnknowMasterException for the first time, ignore it.");
+                } else {
+                    String errMsg = String.format("failed to check if helper in local after retried %d times", i + 1);
+                    LOG.error(errMsg, e);
+                    exception = new JournalException(errMsg);
+                    exception.initCause(e);
+                }
+            } finally {
+                if (replicatedEnvironment != null) {
+                    replicatedEnvironment.close();
+                }
+            }
+        }
+
+        // failed after retry
+        throw exception;
+    }
+
 
     public void refreshLog(InsufficientLogException insufficientLogEx) {
         try {
@@ -327,6 +511,7 @@ public class BDBEnvironment {
             try {
                 db = new CloseSafeDatabase(replicatedEnvironment.openDatabase(null, dbName, dbConfig));
                 openedDatabases.add(db);
+                LOG.info("successfully open new db {}", db);
             } catch (Exception e) {
                 LOG.warn("catch an exception when open database {}", dbName, e);
             }
@@ -372,56 +557,23 @@ public class BDBEnvironment {
     }
 
     // get journal db names and sort the names
+    // let the caller retry from outside.
+    // return null only if environment is closing
     public List<Long> getDatabaseNames() {
-        List<Long> ret = new ArrayList<Long>();
         if (closing) {
-            return ret;
+            return null;
         }
 
-        List<String> names = null;
-        int tried = 0;
-        while (true) {
-            try {
-                names = replicatedEnvironment.getDatabaseNames();
-                break;
-            } catch (InsufficientLogException e) {
-                // for InsufficientLogException we should refresh the log and
-                // then exit the process because we may have read dirty data.
-                LOG.warn("catch insufficient log exception. please restart.", e);
-                refreshLog(e);
-                System.exit(-1);
-            } catch (RollbackException exception) {
-                // for RollbackException we should exit the process because we may have read dirty data.
-                LOG.warn("catch rollback exception, please restart", exception);
-                System.exit(-1);
-            } catch (EnvironmentFailureException e) {
-                tried++;
-                if (tried == RETRY_TIME) {
-                    LOG.error("bdb environment failure exception.", e);
-                    System.exit(-1);
-                }
-                LOG.warn("bdb environment failure exception. will retry", e);
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e1) {
-                    e1.printStackTrace();
-                }
-            } catch (DatabaseException e) {
-                LOG.warn("catch an exception when calling getDatabaseNames", e);
-                return null;
+        List<Long> ret = new ArrayList<Long>();
+        List<String> names = replicatedEnvironment.getDatabaseNames();
+        for (String name : names) {
+            // We don't count epochDB
+            if (name.equals("epochDB")) {
+                continue;
             }
-        }
 
-        if (names != null) {
-            for (String name : names) {
-                // We don't count epochDB
-                if (name.equals("epochDB")) {
-                    continue;
-                }
-
-                long db = Long.parseLong(name);
-                ret.add(db);
-            }
+            long db = Long.parseLong(name);
+            ret.add(db);
         }
 
         Collections.sort(ret);
