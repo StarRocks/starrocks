@@ -127,23 +127,27 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
                 _ordinal_index_meta.reset(index_meta->release_ordinal_index());
                 _ordinal_index = std::make_unique<OrdinalIndexReader>();
                 mem_tracker()->consume(_ordinal_index_meta->SpaceUsedLong());
+                mem_tracker()->consume(_ordinal_index->mem_usage());
                 break;
             case ZONE_MAP_INDEX:
                 _zonemap_index_meta.reset(index_meta->release_zone_map_index());
                 _zonemap_index = std::make_unique<ZoneMapIndexReader>();
                 _segment_zone_map.reset(_zonemap_index_meta->release_segment_zone_map());
                 mem_tracker()->consume(_zonemap_index_meta->SpaceUsedLong());
+                mem_tracker()->consume(_zonemap_index->mem_usage());
                 mem_tracker()->consume(_segment_zone_map->SpaceUsedLong());
                 break;
             case BITMAP_INDEX:
                 _bitmap_index_meta.reset(index_meta->release_bitmap_index());
                 _bitmap_index = std::make_unique<BitmapIndexReader>();
                 mem_tracker()->consume(_bitmap_index_meta->SpaceUsedLong());
+                mem_tracker()->consume(_bitmap_index->mem_usage());
                 break;
             case BLOOM_FILTER_INDEX:
                 _bloom_filter_index_meta.reset(index_meta->release_bloom_filter_index());
                 _bloom_filter_index = std::make_unique<BloomFilterIndexReader>();
                 mem_tracker()->consume(_bloom_filter_index_meta->SpaceUsedLong());
+                mem_tracker()->consume(_bloom_filter_index->mem_usage());
                 break;
             case UNKNOWN_INDEX_TYPE:
                 return Status::Corruption(fmt::format("Bad file {}: unknown index type", file_name()));
@@ -289,10 +293,11 @@ Status ColumnReader::_load_ordinal_index() {
     auto meta = _ordinal_index_meta.get();
     auto use_page_cache = !config::disable_storage_page_cache;
     auto kept_in_memory = keep_in_memory();
+    int64_t unloaded_mem_usage = _ordinal_index->mem_usage();
     ASSIGN_OR_RETURN(auto first_load,
                      _ordinal_index->load(fs, file_name(), *meta, num_rows(), use_page_cache, kept_in_memory));
     if (UNLIKELY(first_load)) {
-        mem_tracker()->consume(_ordinal_index->mem_usage());
+        mem_tracker()->consume(_ordinal_index->mem_usage() - unloaded_mem_usage);
         mem_tracker()->release(_ordinal_index_meta->SpaceUsedLong());
         _ordinal_index_meta.reset();
     }
@@ -306,9 +311,10 @@ Status ColumnReader::_load_zonemap_index() {
     auto meta = _zonemap_index_meta.get();
     auto use_page_cache = !config::disable_storage_page_cache;
     auto kept_in_memory = keep_in_memory();
+    int64_t unloaded_mem_usage = _zonemap_index->mem_usage();
     ASSIGN_OR_RETURN(auto first_load, _zonemap_index->load(fs, file_name(), *meta, use_page_cache, kept_in_memory));
     if (UNLIKELY(first_load)) {
-        mem_tracker()->consume(_zonemap_index->mem_usage());
+        mem_tracker()->consume(_zonemap_index->mem_usage() - unloaded_mem_usage);
         mem_tracker()->release(_zonemap_index_meta->SpaceUsedLong());
         _zonemap_index_meta.reset();
     }
@@ -322,9 +328,10 @@ Status ColumnReader::_load_bitmap_index() {
     auto meta = _bitmap_index_meta.get();
     auto use_page_cache = !config::disable_storage_page_cache;
     auto kept_in_memory = keep_in_memory();
+    int64_t unloaded_mem_usage = _bitmap_index->mem_usage();
     ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(fs, file_name(), *meta, use_page_cache, kept_in_memory));
     if (UNLIKELY(first_load)) {
-        mem_tracker()->consume(_bitmap_index->mem_usage());
+        mem_tracker()->consume(_bitmap_index->mem_usage() - unloaded_mem_usage);
         mem_tracker()->release(_bitmap_index_meta->SpaceUsedLong());
         _bitmap_index_meta.reset();
     }
@@ -338,10 +345,11 @@ Status ColumnReader::_load_bloom_filter_index() {
     auto meta = _bloom_filter_index_meta.get();
     auto use_page_cache = !config::disable_storage_page_cache;
     auto kept_in_memory = keep_in_memory();
+    int64_t unloaded_mem_usage = _bloom_filter_index->mem_usage();
     ASSIGN_OR_RETURN(auto first_load,
                      _bloom_filter_index->load(fs, file_name(), *meta, use_page_cache, kept_in_memory));
     if (UNLIKELY(first_load)) {
-        mem_tracker()->consume(_bloom_filter_index->mem_usage());
+        mem_tracker()->consume(_bloom_filter_index->mem_usage() - unloaded_mem_usage);
         mem_tracker()->release(_bloom_filter_index_meta->SpaceUsedLong());
         _bloom_filter_index_meta.reset();
     }
