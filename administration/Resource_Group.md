@@ -91,9 +91,10 @@ classifier D (user='Alice', query_type in ('insert','select', 'ctas')）
 
 ### 开启资源组
 
-通过设置相应会话变量开启资源组功能。
+通过设置相应会话变量开启 Pipeline 引擎以及资源组功能。
 
 ```sql
+SET enable_pipeline_engine = true;
 SET enable_resource_group = true;
 ```
 
