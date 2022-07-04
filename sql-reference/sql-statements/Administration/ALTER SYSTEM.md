@@ -152,11 +152,11 @@ ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES ("key" = "value"[, ...]);
     ```sql
     ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES
     ("type"= "broker",
-    "name" = "bos",
-    "path" = "bos://backup-cmy/logs",
-    "bos_endpoint" = "http://gz.bcebos.com",
-    "bos_accesskey" = "069fc278xxxxxx24ddb522",
-    "bos_secret_accesskey"="700adb0c6xxxxxx74d59eaa980a"
+    "name" = "oss",
+    "path" = "oss://backup-cmy/logs",
+    "fs.oss.accessKeyId" = "xxx",
+    "fs.oss.accessKeySecret" = "yyy",
+    "fs.oss.endpoint" = "oss-cn-beijing.aliyuncs.com"
     );
     ```
 

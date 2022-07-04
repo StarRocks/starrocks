@@ -18,8 +18,8 @@ DROP REPOSITORY `repo_name`;
 
 ## 示例
 
-1. 删除名为 bos_repo 的仓库。
+1. 删除名为 oss_repo 的仓库。
 
     ```sql
-    DROP REPOSITORY `bos_repo`;
+    DROP REPOSITORY `oss_repo`;
     ```
