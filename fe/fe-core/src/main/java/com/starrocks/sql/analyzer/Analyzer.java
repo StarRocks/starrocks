@@ -6,6 +6,7 @@ import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
+import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
@@ -273,6 +274,12 @@ public class Analyzer {
         @Override
         public Void visitRefreshTableStatement(RefreshTableStmt statement, ConnectContext context) {
             RefreshTableStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterDbQuotaStmt(AlterDatabaseQuotaStmt statement, ConnectContext context) {
+            AlterDbQuotaAnalyzer.analyze(statement, context);
             return null;
         }
 
