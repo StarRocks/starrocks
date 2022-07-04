@@ -34,16 +34,21 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
           
-      - name: Install thrift
-        run: |
-          sudo apt-get install libboost-dev libboost-test-dev libboost-program-options-dev libevent-dev automake libtool flex bison pkg-config g++ libssl-dev libslf4j-java
-          wget http://archive.apache.org/dist/thrift/0.13.0/thrift-0.13.0.tar.gz
-          tar -xvzf thrift-0.13.0.tar.gz 
-          cd thrift-0.13.0
-          sudo ./configure
-          sudo make -j 2
-          sudo make install
-          thrift -version
+      - name: Setup thrift
+        uses: dodopizza/setup-thrift@v1
+        with:
+          version: 0.13.0
+
+#      - name: Install thrift
+#        run: |
+#          sudo apt-get install libboost-dev libboost-test-dev libboost-program-options-dev libevent-dev automake libtool flex bison pkg-config g++ libssl-dev libslf4j-java
+#          wget http://archive.apache.org/dist/thrift/0.13.0/thrift-0.13.0.tar.gz
+#          tar -xvzf thrift-0.13.0.tar.gz 
+#          cd thrift-0.13.0
+#          sudo ./configure
+#          sudo make -j 2
+#          sudo make install
+#          thrift -version
           
       - name: Build and analyze
         env:
@@ -51,6 +56,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_REF_NAME: ${GITHUB_ACTION_PATH}
         run: |
+          thrift -version
           docker run --privileged -v "/home/runner"/.m2:/root/.m2 -v ${{ github.workspace }}:/root/starrocks -v /etc/timezone:/etc/timezone:ro -v /etc/localtime:/etc/localtime:ro --name temp -d starrocks/dev-env:${GITHUB_REF_NAME} /bin/bash -c "while true;do echo hello;sleep 1;done"
           sleep 10 && echo "initialize docker container-----"
           #docker exec --privileged temp /bin/bash -c "cd /root/starrocks; ./build.sh --clean --fe;"
