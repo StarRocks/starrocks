@@ -231,6 +231,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
 
     // ---------------------------------------- Database Statement -----------------------------------------------------
+    
     @Override
     public ParseNode visitAlterDbQuotaStmt(StarRocksParser.AlterDbQuotaStmtContext context) {
         String dbName = ((Identifier) visit(context.identifier(0))).getValue();
