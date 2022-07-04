@@ -28,6 +28,15 @@ public:
     void SetUp() override {
         config::vector_chunk_size = 1024;
 
+        setup_normal();
+        setup_ranking();
+
+        _runtime_state = _create_runtime_state();
+    }
+
+    void TearDown() override {}
+
+    void setup_normal() {
         const auto& int_type_desc = TypeDescriptor(TYPE_INT);
         const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
         ColumnPtr col_cust_key_1 = ColumnHelper::create_column(int_type_desc, false);
@@ -141,10 +150,52 @@ public:
         _expr_mkt_sgmt = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 3); // refer to mkt_sgmt
         _expr_constant = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_SMALLINT),
                                                      4); // refer to constant value
-        _runtime_state = _create_runtime_state();
     }
 
-    void TearDown() override {}
+    void setup_ranking() {
+        const auto& int_type_desc = TypeDescriptor(TYPE_INT);
+
+        ColumnPtr col_ranking1 = ColumnHelper::create_column(int_type_desc, false);
+        ColumnPtr col_ranking2 = ColumnHelper::create_column(int_type_desc, false);
+
+        col_ranking1->append_datum(Datum(int32_t(7)));
+        col_ranking1->append_datum(Datum(int32_t(7)));
+        col_ranking1->append_datum(Datum(int32_t(7)));
+        col_ranking1->append_datum(Datum(int32_t(6)));
+        col_ranking1->append_datum(Datum(int32_t(6)));
+        col_ranking1->append_datum(Datum(int32_t(6)));
+        col_ranking1->append_datum(Datum(int32_t(5)));
+        col_ranking1->append_datum(Datum(int32_t(4)));
+        col_ranking1->append_datum(Datum(int32_t(3)));
+        col_ranking1->append_datum(Datum(int32_t(2)));
+        col_ranking1->append_datum(Datum(int32_t(1)));
+
+        col_ranking2->append_datum(Datum(int32_t(11)));
+        col_ranking2->append_datum(Datum(int32_t(12)));
+        col_ranking2->append_datum(Datum(int32_t(13)));
+        col_ranking2->append_datum(Datum(int32_t(14)));
+        col_ranking2->append_datum(Datum(int32_t(15)));
+        col_ranking2->append_datum(Datum(int32_t(16)));
+        col_ranking2->append_datum(Datum(int32_t(16)));
+        col_ranking2->append_datum(Datum(int32_t(16)));
+        col_ranking2->append_datum(Datum(int32_t(17)));
+        col_ranking2->append_datum(Datum(int32_t(17)));
+        col_ranking2->append_datum(Datum(int32_t(17)));
+
+        Columns columns1 = {col_ranking1};
+        Columns columns2 = {col_ranking2};
+
+        Chunk::SlotHashMap map;
+        map.reserve(columns1.size() * 2);
+        for (int i = 0; i < columns1.size(); ++i) {
+            map[i] = i;
+        }
+
+        _chunk_ranking_1 = std::make_shared<Chunk>(columns1, map);
+        _chunk_ranking_2 = std::make_shared<Chunk>(columns2, map);
+
+        _expr_ranking_key = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0);
+    }
 
 protected:
     std::shared_ptr<RuntimeState> _create_runtime_state() {
@@ -160,6 +211,9 @@ protected:
     std::shared_ptr<RuntimeState> _runtime_state;
     ChunkPtr _chunk_1, _chunk_2, _chunk_3;
     std::unique_ptr<ColumnRef> _expr_cust_key, _expr_nation, _expr_region, _expr_mkt_sgmt, _expr_constant;
+
+    ChunkPtr _chunk_ranking_1, _chunk_ranking_2;
+    std::unique_ptr<ColumnRef> _expr_ranking_key;
 };
 
 static void clear_sort_exprs(std::vector<ExprContext*>& exprs) {
@@ -383,6 +437,52 @@ TEST_F(ChunksSorterTest, topn_sort_with_limit) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(ChunksSorterTest, rank_topn) {
+    std::vector<bool> is_asc{true};
+    std::vector<bool> is_null_first{true};
+    std::vector<ExprContext*> sort_exprs;
+    sort_exprs.push_back(new ExprContext(_expr_ranking_key.get()));
+
+    std::vector<int32_t> expected_perm = {1, 2, 3, 4, 5, 6, 6, 6, 7, 7, 7, 11, 12, 13, 14, 15, 16, 16, 16, 17, 17, 17};
+    std::vector<int32_t> res_num_rows_by_limit = {-1, 1,  2,  3,  4,  5,  8,  8,  8,  11, 11, 11,
+                                                  12, 13, 14, 15, 16, 19, 19, 19, 22, 22, 22};
+
+    for (int i = 0; i < 2; ++i) {
+        bool ranking1_first = true;
+        if (i == 1) {
+            ranking1_first = false;
+        }
+        for (int limit = 1; limit <= 22; limit++) {
+            std::cerr << fmt::format("order by column {} limit {}", "ranking_key", limit) << std::endl;
+            ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 0, limit,
+                                    TTopNType::RANK, 1);
+            if (ranking1_first) {
+                sorter.update(_runtime_state.get(), ChunkPtr(_chunk_ranking_1->clone_unique().release()));
+                sorter.update(_runtime_state.get(), ChunkPtr(_chunk_ranking_2->clone_unique().release()));
+            } else {
+                sorter.update(_runtime_state.get(), ChunkPtr(_chunk_ranking_2->clone_unique().release()));
+                sorter.update(_runtime_state.get(), ChunkPtr(_chunk_ranking_1->clone_unique().release()));
+            }
+            sorter.done(_runtime_state.get());
+
+            ChunkPtr page = consume_page_from_sorter(sorter);
+            int res_num_rows = res_num_rows_by_limit[limit];
+
+            ASSERT_EQ(res_num_rows, page->num_rows());
+            std::vector<int32_t> permutation = expected_perm;
+            std::vector<int32_t> result;
+            for (size_t i = 0; i < page->num_rows(); ++i) {
+                result.push_back(page->get(i).get(0).get_int32());
+            }
+            permutation.resize(res_num_rows);
+            EXPECT_EQ(permutation, result);
+        }
+    }
+
+    clear_sort_exprs(sort_exprs);
+}
+
+// NOLINTNEXTLINE
 TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_first) {
     std::vector<bool> is_asc, is_null_first;
     is_asc.push_back(false); // region
@@ -411,7 +511,6 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_first) {
         result.push_back(page_1->get(i).get(0).get_int32());
     }
     EXPECT_EQ(permutation, result);
-    fmt::print("result: {}\n", fmt::join(result, ","));
 
     clear_sort_exprs(sort_exprs);
 }
