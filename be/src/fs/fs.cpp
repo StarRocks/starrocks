@@ -68,7 +68,10 @@ inline bool is_posix_uri(std::string_view uri) {
 }
 
 inline bool is_staros_uri(std::string_view uri) {
-    return starts_with(uri, "staros_");
+#ifdef USE_STAROS
+    return starts_with(uri, kStarletPrefix);
+#endif
+    return false;
 }
 
 StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::string_view uri) {

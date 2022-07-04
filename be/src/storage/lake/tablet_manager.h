@@ -40,6 +40,9 @@ public:
 
     Status drop_tablet(int64_t tablet_id);
 
+    Status publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version, const int64_t* txns,
+                           int txns_size);
+
     Status put_tablet_metadata(const std::string& group, const TabletMetadata& metadata);
     Status put_tablet_metadata(const std::string& group, TabletMetadataPtr metadata);
     StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& group, int64_t tablet_id, int64_t version);
@@ -80,6 +83,8 @@ private:
 
     std::string tablet_schema_cache_key(int64_t tablet_id);
     TabletSchemaPtr lookup_tablet_schema(const std::string& key);
+
+    std::string path_assemble(const std::string& path, int64_t tablet_id);
 
     GroupAssigner* _group_assigner;
     std::unique_ptr<Cache> _metacache;

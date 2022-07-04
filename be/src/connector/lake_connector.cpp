@@ -203,7 +203,9 @@ Status LakeDataSource::open(RuntimeState* state) {
 }
 
 void LakeDataSource::close(RuntimeState* state) {
-    update_counter();
+    if (_reader) {
+        update_counter();
+    }
     if (_prj_iter) {
         _prj_iter->close();
     }

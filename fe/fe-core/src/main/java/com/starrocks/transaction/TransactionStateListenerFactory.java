@@ -11,7 +11,7 @@ public class TransactionStateListenerFactory {
         if (table.isLakeTable()) {
             return new LakeTableTxnStateListener(dbTxnMgr, (LakeTable) table);
         }
-        if (table.isNativeTable()) {
+        if (table.isLocalTable()) {
             return new OlapTableTxnStateListener(dbTxnMgr, (OlapTable) table);
         }
         return null;

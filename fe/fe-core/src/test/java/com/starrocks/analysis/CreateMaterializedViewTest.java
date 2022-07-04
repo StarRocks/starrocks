@@ -360,7 +360,7 @@ public class CreateMaterializedViewTest {
         String sql = "create materialized view mv1 " +
                 "partition by s1 " +
                 "distributed by hash(s2) " +
-                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 5 SECOND) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
@@ -393,6 +393,11 @@ public class CreateMaterializedViewTest {
             assertEquals(materializedView.getType(), Table.TableType.MATERIALIZED_VIEW); //TableTypeMATERIALIZED_VIEW
             assertEquals(materializedView.getRelatedMaterializedViews().size(), 0);
             assertEquals(materializedView.getBaseSchema().size(), 2);
+            MaterializedView.AsyncRefreshContext asyncRefreshContext =
+                    materializedView.getRefreshScheme().getAsyncRefreshContext();
+            assertTrue(asyncRefreshContext.getStartTime() > 0);
+            assertEquals(asyncRefreshContext.getTimeUnit(), "SECOND");
+            assertEquals(asyncRefreshContext.getStep(), 5);
             assertTrue(materializedView.isActive());
             // test sync
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
