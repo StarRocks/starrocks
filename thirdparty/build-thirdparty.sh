@@ -423,7 +423,7 @@ build_curl() {
 
     LDFLAGS="-L${TP_LIB_DIR}" LIBS="-lcrypto -lssl -ldl" \
     ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static \
-    --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 --disable-ldap --enable-ipv6
+    --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 --without-libgsasl --disable-ldap --enable-ipv6
     make -j$PARALLEL
     make install
 }
@@ -787,15 +787,26 @@ build_hyperscan() {
 build_mariadb() {
     OLD_FLAGS=$CXXFLAGS
     OLD_CFLAGS=$CFLAGS
+    OLD_CMAKE_GENERATOR=${CMAKE_GENERATOR}
+    OLD_BUILD_SYSTEM=${BUILD_SYSTEM}
 
     unset CXXFLAGS
     unset CPPFLAGS
     export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
 
+    # force use make build system, since ninja doesn't support install only headers
+    CMAKE_GENERATOR="Unix Makefiles"
+    BUILD_SYSTEM='make'
+
     check_if_source_exist $MARIADB_SOURCE
     cd $TP_SOURCE_DIR/$MARIADB_SOURCE
     mkdir -p build && cd build
-    $CMAKE_CMD .. -G "${CMAKE_GENERATOR}" -DCMAKE_BUILD_TYPE=Release \
+
+    $CMAKE_CMD .. -G "${CMAKE_GENERATOR}" -DCMAKE_BUILD_TYPE=Release    \
+                  -DWITH_UNIT_TESTS=OFF                                 \
+                  -DBUILD_SHARED_LIBS=OFF                               \
+                  -DOPENSSL_ROOT_DIR=${TP_INSTALL_DIR}                  \
+                  -DOPENSSL_USE_STATIC_LIBS=TRUE                        \
                   -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
     # we only need build libmariadbclient and headers
     ${BUILD_SYSTEM} -j$PARALLEL mariadbclient
@@ -809,6 +820,8 @@ build_mariadb() {
     export CXXFLAGS=$OLD_FLAGS
     export CPPFLAGS=$OLD_FLAGS
     export CFLAGS=$OLD_CFLAGS
+    export CMAKE_GENERATOR=$OLD_CMAKE_GENERATOR
+    export BUILD_SYSTEM=$OLD_BUILD_SYSTEM
 }
 
 # aliyun_oss_jars
@@ -825,7 +838,12 @@ build_aws_cpp_sdk() {
                -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DENABLE_TESTING=OFF \
                -G "${CMAKE_GENERATOR}" \
                -D_POSIX_C_SOURCE=200112L \
-               -DCURL_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libcurl.a -DZLIB_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libz.a
+               -DCURL_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libcurl.a   \
+               -DZLIB_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libz.a      \
+               -DOPENSSL_ROOT_DIR=${TP_INSTALL_DIR}                     \
+               -DOPENSSL_USE_STATIC_LIBS=TRUE                           \
+               -Dcrypto_LIBRARY=${TP_INSTALL_DIR}/lib/libcrypto.a
+
     cd build
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
