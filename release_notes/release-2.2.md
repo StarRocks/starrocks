@@ -1,5 +1,30 @@
 # StarRocks version 2.2
 
+## 2.2.2
+
+Release date: July 1, 2022
+
+### Improvements
+
+- UDFs can be used across databases. [#6865](https://github.com/StarRocks/starrocks/pull/6865) [#7211](https://github.com/StarRocks/starrocks/pull/7211)
+
+- Optimized concurrency control for internal processing such as schema change. This reduces pressure on FE metadata management. In addition, the possibility that load jobs may pile up or slow down is reduced in scenarios where huge volume of data needs to be loaded at high concurrency. [#6838](https://github.com/StarRocks/starrocks/pull/6838)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- The number of replicas (`replication_num`) created by using CTAS is incorrect. [#7036](https://github.com/StarRocks/starrocks/pull/7036)
+- Metadata may be lost after ALTER ROUTINE LOAD is performed. [#7068](https://github.com/StarRocks/starrocks/pull/7068)
+- Runtime filters fail to be pushed down. [#7206](https://github.com/StarRocks/starrocks/pull/7206) [#7258](https://github.com/StarRocks/starrocks/pull/7258)
+- Pipeline issues that may cause memory leaks.  [#7295](https://github.com/StarRocks/starrocks/pull/7295)
+
+- Deadlock may occur when a Routine Load job is aborted. [#6849](https://github.com/StarRocks/starrocks/pull/6849)
+
+- Some profile statistics information is inaccurate. [#7074](https://github.com/StarRocks/starrocks/pull/7074) [#6789](https://github.com/StarRocks/starrocks/pull/6789)
+
+- The get_json_string function incorrectly processes JSON arrays.
+
 ## 2.2.1
 
 Release date: June 2, 2022
