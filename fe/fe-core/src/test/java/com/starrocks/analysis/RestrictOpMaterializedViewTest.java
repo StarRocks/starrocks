@@ -131,7 +131,6 @@ public class RestrictOpMaterializedViewTest {
     public void testBrokerLoad() {
         String sql1 = "LOAD LABEL db1.label0 (DATA INFILE('/path/file1') INTO TABLE mv1) with broker 'broker0';";
         try {
-            Thread.sleep(10*1000);
             SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql1)));
             LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
             Deencapsulation.setField(loadStmt, "label", new LabelName("default_cluster:db1", "mv1"));
