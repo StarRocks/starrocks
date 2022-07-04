@@ -19,6 +19,9 @@ statement
     | createDbStatement                                                                     #createDb
     | dropDbStatement                                                                       #dropDb
 
+    | alterDatabaseRename                                                                   #databaseRename
+
+
     // Table Statement
     | createTableStatement                                                                  #createTable
     | createTableAsSelectStatement                                                          #createTableAsSelect
@@ -106,6 +109,11 @@ createDbStatement
 
 dropDbStatement
     : DROP (DATABASE | SCHEMA) (IF EXISTS)? identifier FORCE?
+    ;
+
+
+alterDatabaseRename
+    : ALTER DATABASE identifier RENAME identifier
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
