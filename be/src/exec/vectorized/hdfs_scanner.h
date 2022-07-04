@@ -44,6 +44,12 @@ struct HdfsScanStats {
     int64_t group_chunk_read_ns = 0;
     int64_t group_dict_filter_ns = 0;
     int64_t group_dict_decode_ns = 0;
+
+    int64_t get_cpu_time_ns() const {
+        // TODO: make it more accurate
+        return expr_filter_ns + column_convert_ns + level_decode_ns + value_decode_ns + group_dict_filter_ns +
+               group_dict_decode_ns;
+    }
 };
 
 class HdfsParquetProfile;
@@ -53,9 +59,6 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* rows_read_counter = nullptr;
     RuntimeProfile::Counter* bytes_read_counter = nullptr;
     RuntimeProfile::Counter* scan_timer = nullptr;
-    RuntimeProfile::Counter* scanner_queue_counter = nullptr;
-    RuntimeProfile::Counter* scanner_queue_timer = nullptr;
-    RuntimeProfile::Counter* scan_ranges_counter = nullptr;
     RuntimeProfile::Counter* scan_files_counter = nullptr;
     RuntimeProfile::Counter* reader_init_timer = nullptr;
     RuntimeProfile::Counter* open_file_timer = nullptr;
@@ -191,6 +194,7 @@ public:
     int64_t num_bytes_read() const { return _stats.bytes_read; }
     int64_t raw_rows_read() const { return _stats.raw_rows_read; }
     int64_t num_rows_read() const { return _stats.num_rows_read; }
+    int64_t cpu_time_spent() const { return _stats.get_cpu_time_ns(); }
     void set_keep_priority(bool v) { _keep_priority = v; }
     bool keep_priority() const { return _keep_priority; }
     void update_counter();

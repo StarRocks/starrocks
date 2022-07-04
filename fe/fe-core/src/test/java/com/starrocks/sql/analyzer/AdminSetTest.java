@@ -18,9 +18,7 @@ public class AdminSetTest {
     @Test
     public void TestAdminSetConfig() {
         analyzeSuccess("admin set frontend config(\"alter_table_timeout_second\" = \"60\");");
-
-        analyzeFail("admin set frontend config;",
-                "mismatched input '<EOF>' expecting '('");
+        analyzeFail("admin set frontend config;", "You have an error in your SQL syntax");
     }
 
     @Test
@@ -38,6 +36,4 @@ public class AdminSetTest {
         analyzeFail("admin set replica status properties(\"unknown_config\" = \"10003\");",
                 "Unknown property: unknown_config");
     }
-
-
 }

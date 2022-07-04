@@ -60,6 +60,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
+import com.starrocks.thrift.TLakeScanNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TOlapScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -282,7 +283,6 @@ public class OlapScanNode extends ScanNode {
         String schemaHashStr = String.valueOf(schemaHash);
         long visibleVersion = partition.getVisibleVersion();
         String visibleVersionStr = String.valueOf(visibleVersion);
-        boolean useStarOS = partition.isUseStarOS();
 
         for (Tablet tablet : tablets) {
             long tabletId = tablet.getId();
@@ -305,7 +305,7 @@ public class OlapScanNode extends ScanNode {
                 LOG.error("no queryable replica found in tablet {}. visible version {}",
                         tabletId, visibleVersion);
                 if (LOG.isDebugEnabled()) {
-                    if (useStarOS) {
+                    if (olapTable.isLakeTable()) {
                         LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((LakeTablet) tablet).getShardId(),
                                 tablet.getBackendIds());
                     } else {
@@ -601,24 +601,46 @@ public class OlapScanNode extends ScanNode {
                 keyColumnTypes.add(col.getPrimitiveType().toThrift());
             }
         }
-        msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
-        msg.olap_scan_node =
-                new TOlapScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
-        msg.olap_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
-        if (!conjuncts.isEmpty()) {
-            msg.olap_scan_node.setSql_predicates(getExplainString(conjuncts));
-        }
-        if (null != sortColumn) {
-            msg.olap_scan_node.setSort_column(sortColumn);
-        }
-        if (ConnectContext.get() != null) {
-            msg.olap_scan_node.setEnable_column_expr_predicate(
-                    ConnectContext.get().getSessionVariable().isEnableColumnExprPredicate());
-        }
-        msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
+        if (olapTable.isLakeTable()) {
+            msg.node_type = TPlanNodeType.LAKE_SCAN_NODE;
+            msg.lake_scan_node =
+                    new TLakeScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
+            msg.lake_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
+            if (!conjuncts.isEmpty()) {
+                msg.lake_scan_node.setSql_predicates(getExplainString(conjuncts));
+            }
+            if (null != sortColumn) {
+                msg.lake_scan_node.setSort_column(sortColumn);
+            }
+            if (ConnectContext.get() != null) {
+                msg.lake_scan_node.setEnable_column_expr_predicate(
+                        ConnectContext.get().getSessionVariable().isEnableColumnExprPredicate());
+            }
+            msg.lake_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
 
-        if (!olapTable.hasDelete()) {
-            msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
+            if (!olapTable.hasDelete()) {
+                msg.lake_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
+            }
+        } else {
+            msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
+            msg.olap_scan_node =
+                    new TOlapScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
+            msg.olap_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
+            if (!conjuncts.isEmpty()) {
+                msg.olap_scan_node.setSql_predicates(getExplainString(conjuncts));
+            }
+            if (null != sortColumn) {
+                msg.olap_scan_node.setSort_column(sortColumn);
+            }
+            if (ConnectContext.get() != null) {
+                msg.olap_scan_node.setEnable_column_expr_predicate(
+                        ConnectContext.get().getSessionVariable().isEnableColumnExprPredicate());
+            }
+            msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
+
+            if (!olapTable.hasDelete()) {
+                msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
+            }
         }
     }
 

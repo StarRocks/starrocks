@@ -470,7 +470,7 @@ public class DatabaseTransactionMgr {
         LOG.info("transaction:[{}] successfully committed", transactionState);
     }
 
-    public boolean publishTransaction(Database db, long transactionId, long timeoutMillis)
+    public boolean waitTransactionVisible(Database db, long transactionId, long timeoutMillis)
             throws TransactionCommitFailedException {
         TransactionState transactionState = null;
         readLock();
@@ -491,12 +491,11 @@ public class DatabaseTransactionMgr {
 
         long currentTimeMillis = System.currentTimeMillis();
         long timeoutTimeMillis = currentTimeMillis + timeoutMillis;
-        while (currentTimeMillis < timeoutTimeMillis &&
-                transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+        while (currentTimeMillis < timeoutTimeMillis && transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
             try {
                 transactionState.waitTransactionVisible(timeoutMillis);
             } catch (InterruptedException e) {
-                LOG.info("timed out while waiting for transaction {} to be visible", transactionId);
+                LOG.info("thread interrupted while waiting for transaction {} to be visible", transactionId);
             }
             currentTimeMillis = System.currentTimeMillis();
         }
@@ -1189,6 +1188,8 @@ public class DatabaseTransactionMgr {
             TransactionLogApplier applier = txnLogApplierFactory.create(table);
             applier.applyCommitLog(transactionState, tableCommitInfo);
         }
+
+        GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows(transactionState);
     }
 
     private boolean updateCatalogAfterVisible(TransactionState transactionState, Database db) {

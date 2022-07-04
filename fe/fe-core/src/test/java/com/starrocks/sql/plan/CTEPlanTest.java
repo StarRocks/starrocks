@@ -407,4 +407,15 @@ public class CTEPlanTest extends PlanTestBase {
                 "\n" +
                 "  2:AGGREGATE (update finalize)\n");
     }
+
+    @Test
+    public void testCTEExchangePruneColumn() throws Exception {
+        String sql = "WITH w_t0 as (SELECT * FROM t0) \n" +
+                "SELECT x0.v1, x1.v2 FROM  w_t0 x0, w_t0 x1";
+
+        String thrift = getThriftPlan(sql);
+        assertContains(thrift, "TMultiCastDataStreamSink");
+        assertContains(thrift, "dest_dop:0, output_columns:[1]");
+        assertContains(thrift, "dest_dop:0, output_columns:[2]");
+    }
 }

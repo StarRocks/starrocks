@@ -6,10 +6,10 @@
 
 #include <memory>
 
-#include "exec/decompressor.h"
 #include "io/string_input_stream.h"
 #include "testutil/assert.h"
 #include "util/compression/block_compression.h"
+#include "util/compression/stream_compression.h"
 #include "util/random.h"
 
 namespace starrocks::io {
@@ -43,10 +43,10 @@ protected:
         return std::shared_ptr<InputStream>(new StringInputStream(std::move(compressed_data)));
     }
 
-    std::shared_ptr<Decompressor> LZ4F_decompressor() {
-        std::unique_ptr<Decompressor> dec;
-        CHECK(Decompressor::create_decompressor(CompressionTypePB::LZ4_FRAME, &dec).ok());
-        return std::shared_ptr<Decompressor>(dec.release());
+    std::shared_ptr<StreamCompression> LZ4F_decompressor() {
+        std::unique_ptr<StreamCompression> dec;
+        CHECK(StreamCompression::create_decompressor(CompressionTypePB::LZ4_FRAME, &dec).ok());
+        return std::shared_ptr<StreamCompression>(dec.release());
     }
 
     void test(const TestCase& t) {

@@ -1,6 +1,5 @@
 package com.starrocks.scheduler;
 
-import com.google.common.collect.Maps;
 import com.starrocks.analysis.DmlStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -22,7 +21,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Collection;
-import java.util.Map;
 
 public class MvTaskRunProcessorTest {
 

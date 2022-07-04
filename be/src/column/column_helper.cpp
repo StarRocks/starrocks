@@ -209,10 +209,6 @@ struct ColumnBuilder {
 
 ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size) {
     auto type = type_desc.type;
-    if (VLOG_ROW_IS_ON) {
-        VLOG_ROW << "PrimitiveType " << type << " nullable " << nullable << " is_const " << is_const;
-    }
-
     if (is_const && (nullable || type == TYPE_NULL)) {
         return ColumnHelper::create_const_null_column(size);
     } else if (type == TYPE_NULL) {

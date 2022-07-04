@@ -34,6 +34,7 @@ set(UTIL_FILES
   bitmap.cpp
   compression/block_compression.cpp
   compression/compression_context_pool_singletons.cpp
+  compression/stream_compression.cpp
   coding.cpp
   cpu_info.cpp
   crc32c.cpp

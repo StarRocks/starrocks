@@ -121,7 +121,7 @@ public class ShowDataStmt extends ShowStmt {
                 }
 
                 for (Table table : sortedTables) {
-                    if (table.getType() != TableType.OLAP) {
+                    if (!table.isNativeTable()) {
                         continue;
                     }
 

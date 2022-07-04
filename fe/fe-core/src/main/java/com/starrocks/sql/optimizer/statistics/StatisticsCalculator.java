@@ -510,7 +510,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private long getTableRowCount(Table table, Operator node) {
-        if (Table.TableType.OLAP == table.getType()) {
+        if (table.isNativeTable()) {
             OlapTable olapTable = (OlapTable) table;
             List<Partition> selectedPartitions;
             if (node.isLogical()) {
@@ -798,8 +798,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 computeNullFractionForOuterJoin(leftRowCount, innerRowCount, rightStatistics, joinStatsBuilder);
                 break;
             case LEFT_SEMI_JOIN:
+                joinStatsBuilder = Statistics.buildFrom(StatisticsEstimateUtils.adjustStatisticsByRowCount(
+                        innerJoinStats, Math.min(leftRowCount, innerRowCount)));
+                break;
             case RIGHT_SEMI_JOIN:
-                joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
+                joinStatsBuilder = Statistics.buildFrom(StatisticsEstimateUtils.adjustStatisticsByRowCount(
+                        innerJoinStats, Math.min(rightRowCount, innerRowCount)));
                 break;
             case LEFT_ANTI_JOIN:
             case NULL_AWARE_LEFT_ANTI_JOIN:

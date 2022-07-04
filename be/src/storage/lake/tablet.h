@@ -7,11 +7,16 @@
 
 #include "common/statusor.h"
 #include "storage/lake/metadata_iterator.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 
 namespace starrocks {
 class TabletSchema;
+}
+
+namespace starrocks::vectorized {
+class Schema;
 }
 
 namespace starrocks::lake {
@@ -42,6 +47,8 @@ public:
 
     std::string group() const { return _group; }
 
+    std::string group_assemble() const;
+
     Status put_metadata(const TabletMetadata& metadata);
 
     Status put_metadata(TabletMetadataPtr metadata);
@@ -64,11 +71,17 @@ public:
 
     StatusOr<std::unique_ptr<TabletWriter>> new_writer();
 
+    StatusOr<std::shared_ptr<TabletReader>> new_reader(int64_t version, vectorized::Schema schema);
+
     StatusOr<std::shared_ptr<const TabletSchema>> get_schema();
+
+    StatusOr<std::vector<RowsetPtr>> get_rowsets(int64_t version);
 
     std::string metadata_path(int64_t version) const;
 
     std::string txn_log_path(int64_t txn_id) const;
+
+    std::string segment_path_assemble(const std::string& segment_name) const;
 
 private:
     TabletManager* _mgr;

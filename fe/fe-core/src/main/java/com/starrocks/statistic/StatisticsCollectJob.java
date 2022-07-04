@@ -13,6 +13,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.parser.SqlParser;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 
@@ -21,6 +23,8 @@ import java.util.List;
 import java.util.Set;
 
 public abstract class StatisticsCollectJob {
+    private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
+
     protected final AnalyzeJob analyzeJob;
     protected final Database db;
     protected final OlapTable table;
@@ -61,6 +65,8 @@ public abstract class StatisticsCollectJob {
     }
 
     public void collectStatisticSync(String sql) throws Exception {
+
+        LOG.debug("statistics collect sql : " + sql);
         ConnectContext context = StatisticUtils.buildConnectContext();
         StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);

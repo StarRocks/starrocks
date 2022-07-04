@@ -70,16 +70,8 @@ public final class AnalyticInfo extends AggregateInfoBase {
         commonPartitionExprs_ = Expr.cloneList(other.commonPartitionExprs_);
     }
 
-    public ArrayList<Expr> getAnalyticExprs() {
-        return analyticExprs_;
-    }
-
     public ExprSubstitutionMap getSmap() {
         return analyticTupleSmap_;
-    }
-
-    public List<Expr> getCommonPartitionExprs() {
-        return commonPartitionExprs_;
     }
 
     /**
@@ -136,23 +128,6 @@ public final class AnalyticInfo extends AggregateInfoBase {
             }
         }
         return result;
-    }
-
-    @Override
-    public void materializeRequiredSlots(Analyzer analyzer, ExprSubstitutionMap smap) {
-        materializedAggSlots.clear();
-        List<Expr> exprs = Lists.newArrayList();
-        for (int i = 0; i < analyticExprs_.size(); ++i) {
-            SlotDescriptor outputSlotDesc = outputTupleDesc_.getSlots().get(i);
-            if (!outputSlotDesc.isMaterialized()) {
-                continue;
-            }
-            intermediateTupleDesc_.getSlots().get(i).setIsMaterialized(true);
-            exprs.add(analyticExprs_.get(i));
-            materializedAggSlots.add(i);
-        }
-        List<Expr> resolvedExprs = Expr.substituteList(exprs, smap, analyzer, false);
-        analyzer.materializeSlots(resolvedExprs);
     }
 
     @Override

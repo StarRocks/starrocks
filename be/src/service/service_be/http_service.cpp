@@ -180,6 +180,14 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::POST, "/api/compact", run_compaction_action);
     _http_handlers.emplace_back(run_compaction_action);
 
+    CompactionAction* show_repair_action = new CompactionAction(CompactionActionType::SHOW_REPAIR);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/compaction/show_repair", show_repair_action);
+    _http_handlers.emplace_back(show_repair_action);
+
+    CompactionAction* submit_repair_action = new CompactionAction(CompactionActionType::SUBMIT_REPAIR);
+    _ev_http_server->register_handler(HttpMethod::PUT, "/api/compaction/submit_repair", submit_repair_action);
+    _http_handlers.emplace_back(submit_repair_action);
+
     UpdateConfigAction* update_config_action = new UpdateConfigAction(_env);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/update_config", update_config_action);
     _http_handlers.emplace_back(update_config_action);

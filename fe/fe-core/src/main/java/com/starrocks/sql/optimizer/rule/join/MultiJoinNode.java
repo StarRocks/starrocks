@@ -66,7 +66,7 @@ public class MultiJoinNode {
         }
 
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
-        if (!joinOperator.isInnerOrCrossJoin()) {
+        if (!joinOperator.isInnerOrCrossJoin() || !joinOperator.getJoinHint().isEmpty()) {
             atoms.add(node);
             return;
         }

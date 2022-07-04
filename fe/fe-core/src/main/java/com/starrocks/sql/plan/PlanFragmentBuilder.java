@@ -1293,9 +1293,8 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
-            // One phase aggregation prefer the inter-instance parallel to avoid local shuffle
-            if (node.isOnePhaseAgg()) {
-                estimateDopOfOnePhaseAgg(inputFragment);
+            if (node.isOnePhaseAgg() && aggregationNode.isColocate()) {
+                inputFragment.setEnableSharedScan(false);
             }
 
             inputFragment.setPlanRoot(aggregationNode);
@@ -1532,7 +1531,6 @@ public class PlanFragmentBuilder {
             sortNode.computeStatistics(optExpr.getStatistics());
 
             inputFragment.setPlanRoot(sortNode);
-            estimateDopOfTopN(inputFragment);
             return inputFragment;
         }
 
@@ -1542,52 +1540,6 @@ public class PlanFragmentBuilder {
             node.setIsPushDown(ConnectContext.get().getSessionVariable().isHashJoinPushDownRightTable()
                     && (node.getJoinOp().isInnerJoin() || node.getJoinOp().isLeftSemiJoin() ||
                     node.getJoinOp().isRightJoin()));
-        }
-
-        private boolean isDopAutoEstimate() {
-            return (ConnectContext.get() != null &&
-                    ConnectContext.get().getSessionVariable().isEnablePipelineEngine() &&
-                    ConnectContext.get().getSessionVariable().getPipelineDop() == 0);
-        }
-
-        private void estimateDopOfTopN(PlanFragment fragment) {
-            if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
-                return;
-            }
-            fragment.preferPipelineParallel();
-        }
-
-        /**
-         * Broadcast join and duplicate join should use pipeline parallel not fragment instance parallel,
-         * because there is no local shuffle for these joins.
-         *
-         * @param fragment The fragment which needs to estimate DOP.
-         */
-        private void estimateDopOfBroadcastAndReplicatedJoinInPipeline(PlanFragment fragment) {
-            if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
-                return;
-            }
-            fragment.preferPipelineParallel();
-        }
-
-        /**
-         * Local bucket shuffle join and colocate join should use fragment instance parallel not pipeline parallel,
-         * to avoid local shuffle and too large in-filter in the left scan node.
-         *
-         * @param fragment The fragment which needs to estimate DOP.
-         */
-        private void estimateDopOfColocateAndLocalBucketJoinInPipeline(PlanFragment fragment) {
-            if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
-                return;
-            }
-            fragment.preferInstanceParallel();
-        }
-
-        private void estimateDopOfOnePhaseAgg(PlanFragment fragment) {
-            if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
-                return;
-            }
-            fragment.preferInstanceParallel();
         }
 
         // when enable_pipeline_engine=true and enable_global_runtime_filter=false, global runtime filter
@@ -1847,7 +1799,6 @@ public class PlanFragmentBuilder {
                     leftFragment.setPlanRoot(joinNode);
                     leftFragment.addChild(rightFragment.getChild(0));
                     leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
-                    estimateDopOfBroadcastAndReplicatedJoinInPipeline(leftFragment);
                     return leftFragment;
                 } else if (distributionMode.equals(JoinNode.DistributionMode.PARTITIONED)) {
                     DataPartition lhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
@@ -1885,17 +1836,18 @@ public class PlanFragmentBuilder {
                     joinNode.setChild(0, leftFragment.getPlanRoot());
                     joinNode.setChild(1, rightFragment.getPlanRoot());
                     leftFragment.setPlanRoot(joinNode);
+                    leftFragment.addChildren(rightFragment.getChildren());
                     context.getFragments().remove(rightFragment);
 
                     context.getFragments().remove(leftFragment);
                     context.getFragments().add(leftFragment);
 
                     leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
+
                     if (distributionMode.equals(HashJoinNode.DistributionMode.COLOCATE)) {
-                        estimateDopOfColocateAndLocalBucketJoinInPipeline(leftFragment);
-                    } else {
-                        estimateDopOfBroadcastAndReplicatedJoinInPipeline(leftFragment);
+                        leftFragment.setEnableSharedScan(false);
                     }
+
                     return leftFragment;
                 } else if (distributionMode.equals(JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
                     setJoinPushDown(joinNode);
@@ -1906,6 +1858,7 @@ public class PlanFragmentBuilder {
                         joinNode.setChild(0, leftFragment.getPlanRoot());
                         joinNode.setChild(1, rightFragment.getPlanRoot());
                         leftFragment.setPlanRoot(joinNode);
+                        leftFragment.addChildren(rightFragment.getChildren());
                         context.getFragments().remove(rightFragment);
 
                         context.getFragments().remove(leftFragment);
@@ -1933,7 +1886,9 @@ public class PlanFragmentBuilder {
                         leftFragment = computeBucketShufflePlanFragment(context, leftFragment,
                                 rightFragment, joinNode);
                     }
-                    estimateDopOfColocateAndLocalBucketJoinInPipeline(leftFragment);
+
+                    leftFragment.setEnableSharedScan(false);
+
                     return leftFragment;
                 }
             }
@@ -2318,6 +2273,8 @@ public class PlanFragmentBuilder {
             MultiCastPlanFragment cteFragment = (MultiCastPlanFragment) context.getCteProduceFragments().get(cteId);
             ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
                     cteFragment.getPlanRoot(), false, DistributionSpec.DistributionType.SHUFFLE);
+            exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
+                    .map(ColumnRefOperator::getId).collect(Collectors.toList()));
 
             exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());
 
@@ -2325,7 +2282,7 @@ public class PlanFragmentBuilder {
                     cteFragment.getDataPartition());
 
             Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
-            consume.getCteOutputColumnRefMap().forEach(projectMap::put);
+            projectMap.putAll(consume.getCteOutputColumnRefMap());
             consumeFragment = buildProjectNode(optExpression, new Projection(projectMap), consumeFragment, context);
             consumeFragment.setQueryGlobalDicts(cteFragment.getQueryGlobalDicts());
             consumeFragment.setLoadGlobalDicts(cteFragment.getLoadGlobalDicts());
