@@ -5,6 +5,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
+#include "storage/lake/tablet.h"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
@@ -44,13 +45,16 @@ private:
     vectorized::ChunkIteratorPtr _iter;
 };
 
-Rowset::Rowset(std::string group, TabletSchemaPtr tablet_schema, RowsetMetadataPtr rowset_metadata)
-        : _group(std::move(group)),
-          _tablet_schema(std::move(tablet_schema)),
-          _rowset_metadata(std::move(rowset_metadata)) {}
+Rowset::Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata)
+        : _tablet(tablet), _rowset_metadata(std::move(rowset_metadata)) {}
 
 Rowset::~Rowset() {
     _segments.clear();
+}
+
+Status Rowset::init() {
+    ASSIGN_OR_RETURN(_tablet_schema, _tablet->get_schema());
+    return load_segments();
 }
 
 // TODO: support
@@ -59,10 +63,8 @@ Rowset::~Rowset() {
 //  3. rowid range and short key range
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators(const vectorized::Schema& schema,
                                                                       const vectorized::RowsetReadOptions& options) {
-    RETURN_IF_ERROR(load_segments());
-
     vectorized::SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_group));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet->group_assemble()));
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
     seg_options.predicates = options.predicates;
@@ -134,11 +136,11 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators(const vect
 Status Rowset::load_segments() {
     _segments.clear();
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_group));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_tablet->group_assemble()));
     size_t footer_size_hint = 16 * 1024;
     uint32_t seg_id = 0;
     for (const auto& seg_name : _rowset_metadata->segments()) {
-        auto seg_path = fmt::format("{}/{}", _group, seg_name);
+        auto seg_path = _tablet->segment_path_assemble(seg_name);
         auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path, seg_id++,
                                  _tablet_schema.get(), &footer_size_hint);
         if (!res.ok()) {
