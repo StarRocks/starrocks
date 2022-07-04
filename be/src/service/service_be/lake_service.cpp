@@ -85,7 +85,7 @@ inline void PublishVersionTask::run() {
     auto st = _context->_env->lake_tablet_manager()->publish_version(_tablet_id, base_version, new_version, txns,
                                                                      txns_size);
     if (!st.ok()) {
-        LOG(WARNING) << "Fail to get tablet " << _tablet_id << ": " << st;
+        LOG(WARNING) << "Fail to publish version for tablet " << _tablet_id << ": " << st;
         std::lock_guard l(_context->_response_mtx);
         _context->_response->add_failed_tablets(_tablet_id);
     }
