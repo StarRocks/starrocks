@@ -191,6 +191,7 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk) {
 #ifndef NDEBUG
     if (chunk != nullptr) {
         chunk->check_or_die();
+        CHECK(!chunk->is_empty());
     }
 #endif
     try {

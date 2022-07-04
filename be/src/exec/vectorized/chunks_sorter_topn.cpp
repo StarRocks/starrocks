@@ -258,7 +258,7 @@ Status ChunksSorterTopn::_filter_and_sort_data(RuntimeState* state, std::pair<Pe
             permutations.first.resize(smaller_num);
             // `SMALLER_THAN_MIN_OF_SEGMENT` part is enough, so we ignore the `INCLUDE_IN_SEGMENT` part.
             if (smaller_num >= rows_to_sort) {
-                // use filter_array to set permutations.first.
+                // Use filter_array to set permutations.first.
                 _set_permutation_before(permutations.first, segments.size(), filter_array);
             } else if (rows_to_sort > 1 || _topn_type == TTopNType::RANK) {
                 // If rows_to_sort == 1, here are two cases:
@@ -342,10 +342,15 @@ Status ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& s
     ChunkPtr right_chunk = big_chunk->clone_empty(permutation_second.size());
     append_by_permutation(right_chunk.get(), right_chunks, permutation_second);
     Columns right_columns;
-    for (auto expr : *_sort_exprs) {
-        auto maybe_column = expr->evaluate(right_chunk.get());
-        RETURN_IF_ERROR(maybe_column);
-        right_columns.push_back(maybe_column.value());
+    // ExprContext::evaluate may report error if input chunk is empty
+    if (right_chunk->is_empty()) {
+        right_columns.assign(_sort_exprs->size(), nullptr);
+    } else {
+        for (auto expr : *_sort_exprs) {
+            auto maybe_column = expr->evaluate(right_chunk.get());
+            RETURN_IF_ERROR(maybe_column);
+            right_columns.push_back(maybe_column.value());
+        }
     }
 
     ChunkPtr left_chunk = _merged_segment.chunk;
@@ -406,7 +411,7 @@ Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Perm
     // case1: rows_to_keep == 0, which measn `SMALLER_THAN_MIN_OF_SEGMENT` part itself suffice, we can ignore both
     // `INCLUDE_IN_SEGMENT` part and _merged_segment
     // case2: rows_to_keep > 0, which means `SMALLER_THAN_MIN_OF_SEGMENT` part itself not suffice, we need to get more elements
-    // from both `INCLUDE_IN_SEGMENT` part and _merged_segment.
+    // from both `INCLUDE_IN_SEGMENT` part and _merged_segment. And notice that `INCLUDE_IN_SEGMENT` part may be empty
     if (rows_to_keep > 0) {
         if (big_chunk == nullptr) {
             big_chunk.reset(segments[new_permutation.second[0].chunk_index].chunk->clone_empty(rows_to_keep).release());
