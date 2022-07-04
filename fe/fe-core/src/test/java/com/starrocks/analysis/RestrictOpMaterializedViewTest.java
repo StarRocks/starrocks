@@ -32,6 +32,7 @@ public class RestrictOpMaterializedViewTest {
     public static void setUp() throws Exception {
         FeConstants.runningUnitTest = true;
         FeConstants.default_scheduler_interval_millisecond = 100;
+        FeConstants.master_daemon_wait_serving_ready_sleep_mills = 10000*1000;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_experimental_mv = true;
@@ -130,6 +131,7 @@ public class RestrictOpMaterializedViewTest {
     public void testBrokerLoad() {
         String sql1 = "LOAD LABEL db1.label0 (DATA INFILE('/path/file1') INTO TABLE mv1) with broker 'broker0';";
         try {
+            Thread.sleep(10*1000);
             SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql1)));
             LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
             Deencapsulation.setField(loadStmt, "label", new LabelName("default_cluster:db1", "mv1"));

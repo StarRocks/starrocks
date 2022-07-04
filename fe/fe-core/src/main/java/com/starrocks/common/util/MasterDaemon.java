@@ -53,11 +53,7 @@ public class MasterDaemon extends Daemon {
             try {
                 // not return, but sleep a while. to avoid some thread with large running interval will
                 // wait for a long time to start again.
-                long millis = 10 * 1000;
-                if (FeConstants.runningUnitTest) {
-                    millis = 10000 * 1000;
-                }
-                Thread.sleep(millis);
+                Thread.sleep(FeConstants.master_daemon_wait_serving_ready_sleep_mills);
             } catch (InterruptedException e) {
                 LOG.warn("interrupted exception. thread: {}", getName(), e);
             }
