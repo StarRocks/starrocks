@@ -2,9 +2,9 @@
 
 #include "exprs/vectorized/runtime_filter.h"
 
-#include "exec/decompressor.h"
 #include "gen_cpp/types.pb.h"
 #include "util/compression/block_compression.h"
+#include "util/compression/stream_compression.h"
 namespace starrocks::vectorized {
 
 void SimdBlockFilter::init(size_t nums) {

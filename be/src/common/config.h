@@ -178,9 +178,9 @@ CONF_Bool(serialize_batch, "false");
 CONF_mInt32(status_report_interval, "5");
 // Local directory to copy UDF libraries from HDFS into.
 CONF_String(local_library_dir, "${UDF_RUNTIME_DIR}");
-// Number of olap scanner thread pool size.
+// Number of olap/external scanner thread pool size.
 CONF_mInt32(doris_scanner_thread_pool_thread_num, "48");
-// Number of olap scanner thread pool size.
+// Number of olap/external scanner thread pool size.
 CONF_Int32(doris_scanner_thread_pool_queue_size, "102400");
 CONF_mDouble(scan_use_query_mem_ratio, "0.25");
 // Number of etl thread pool size.
@@ -285,6 +285,8 @@ CONF_mInt32(cumulative_compaction_skip_window_seconds, "30");
 CONF_mInt32(update_compaction_check_interval_seconds, "60");
 CONF_Int32(update_compaction_num_threads_per_disk, "1");
 CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
+
+CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 
 // if compaction of a tablet failed, this tablet should not be chosen to
 // compaction until this interval passes.

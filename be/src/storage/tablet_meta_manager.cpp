@@ -1019,6 +1019,12 @@ Status TabletMetaManager::clear_del_vector(DataDir* store, WriteBatch* batch, TT
     return to_status(batch->DeleteRange(h, lower, upper));
 }
 
+Status TabletMetaManager::clear_persistent_index(DataDir* store, WriteBatch* batch, TTabletId tablet_id) {
+    auto k = encode_persistent_index_key(tablet_id);
+    auto h = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+    return to_status(batch->Delete(h, k));
+}
+
 Status TabletMetaManager::remove_tablet_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id,
                                              TSchemaHash schema_hash) {
     auto k = encode_tablet_meta_key(tablet_id, schema_hash);

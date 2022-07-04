@@ -52,4 +52,9 @@ public class CreateIndexClause extends AlterTableClause {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateIndexClause(this, context);
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

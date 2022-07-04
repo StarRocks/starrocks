@@ -15,6 +15,14 @@ statement
     // Query Statement
     : queryStatement                                                                        #query
 
+    | showCreateDbStatement                                                                 #showCreateDb
+    // Database Statement
+    | createDbStatement                                                                     #createDb
+    | dropDbStatement                                                                       #dropDb
+
+    | alterDatabaseRename                                                                   #databaseRename
+
+
     // Table Statement
     | createTableStatement                                                                  #createTable
     | createTableAsSelectStatement                                                          #createTableAsSelect
@@ -27,6 +35,7 @@ statement
     | createIndexStatement                                                                  #createIndex
     | dropIndexStatement                                                                    #dropIndex
     | refreshTableStatement                                                                 #refreshTable
+    | showDeleteStatement                                                                   #showDelete
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -96,6 +105,23 @@ statement
     ;
 
 
+// ---------------------------------------- DataBase Statement ---------------------------------------------------------
+createDbStatement
+    : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? identifier
+    ;
+
+dropDbStatement
+    : DROP (DATABASE | SCHEMA) (IF EXISTS)? identifier FORCE?
+    ;
+    
+showCreateDbStatement
+    : SHOW CREATE (DATABASE | SCHEMA) identifier
+    ;
+
+
+alterDatabaseRename
+    : ALTER DATABASE identifier RENAME identifier
+    ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
@@ -220,6 +246,10 @@ showTableStatusStatement
 
 refreshTableStatement
     : REFRESH EXTERNAL TABLE qualifiedName (PARTITION '(' string (',' string)* ')')?
+    ;
+
+showDeleteStatement
+    : SHOW DELETE ((FROM | IN) db=qualifiedName)?
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------

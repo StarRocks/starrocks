@@ -62,6 +62,7 @@ enum TPlanNodeType {
   TABLE_FUNCTION_NODE,
   DECODE_NODE,
   JDBC_SCAN_NODE,
+  LAKE_SCAN_NODE
 }
 
 // phases of an execution node
@@ -328,6 +329,20 @@ struct TJDBCScanNode {
   5: optional i64 limit
 }
 
+struct TLakeScanNode {
+  1: required Types.TTupleId tuple_id
+  2: required list<string> key_column_name
+  3: required list<Types.TPrimitiveType> key_column_type
+  4: required bool is_preaggregation
+  5: optional string sort_column
+  // For profile attributes' printing: `Rollup` `Predicates`
+  6: optional string rollup_name
+  7: optional string sql_predicates
+  8: optional bool enable_column_expr_predicate
+  9: optional map<i32, i32> dict_string_id_to_int_ids
+  // which columns only be used to filter data in the stage of scan data
+  10: optional list<string> unused_output_column_name
+}
 
 struct TEqJoinCondition {
   // left-hand side of "<a> = <b>"
@@ -891,6 +906,8 @@ struct TPlanNode {
   61: optional TConnectorScanNode connector_scan_node;
 
   62: optional TCrossJoinNode cross_join_node;
+
+  63: optional TLakeScanNode lake_scan_node
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

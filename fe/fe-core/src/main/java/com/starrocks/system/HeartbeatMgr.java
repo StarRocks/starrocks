@@ -194,12 +194,12 @@ public class HeartbeatMgr extends MasterDaemon {
                                     .abortTxnWhenCoordinateBeDown(computeNode.getHost(), 100);
                         }
                     } else {
-                        if (Config.integrate_starmgr) {
+                        if (Config.integrate_starmgr && !isReplay) {
                             // addWorker
                             int starletPort = computeNode.getStarletPort();
                             if (starletPort != 0) {
-                                String starletHost = computeNode.getHost() + ":" + starletPort;
-                                GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(computeNode.getId(), starletHost);
+                                String workerAddr = computeNode.getHost() + ":" + starletPort;
+                                GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(computeNode.getId(), workerAddr);
                             }
                         }
                     }

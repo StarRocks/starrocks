@@ -6,6 +6,7 @@
 
 #include "exec/olap_common.h"
 #include "exec/olap_utils.h"
+#include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/chunk_source.h"
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exec/workgroup/work_group_fwd.h"
@@ -32,8 +33,8 @@ class OlapScanContext;
 
 class OlapChunkSource final : public ChunkSource {
 public:
-    OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, vectorized::OlapScanNode* scan_node,
-                    OlapScanContext* scan_ctx);
+    OlapChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                    vectorized::OlapScanNode* scan_node, OlapScanContext* scan_ctx);
 
     ~OlapChunkSource() override;
 
@@ -45,6 +46,8 @@ public:
 
     bool has_output() const override;
 
+    bool has_shared_output() const override;
+
     virtual size_t get_buffer_size() const override;
 
     StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer() override;
@@ -53,8 +56,6 @@ public:
     Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, RuntimeState* state,
                                                            size_t* num_read_chunks, int worker_id,
                                                            workgroup::WorkGroupPtr running_wg) override;
-
-    int64_t last_spent_cpu_time_ns() override;
 
 private:
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
@@ -78,8 +79,6 @@ private:
     void _update_realtime_counter(vectorized::Chunk* chunk);
     void _decide_chunk_size();
 
-    void _update_avg_row_bytes(vectorized::Chunk* chunk, size_t chunk_index, size_t batch_size);
-
 private:
     vectorized::TabletReaderParams _params{};
     vectorized::OlapScanNode* _scan_node;
@@ -89,7 +88,7 @@ private:
     TInternalScanRange* _scan_range;
 
     Status _status = Status::OK();
-    UnboundedBlockingQueue<vectorized::ChunkPtr> _chunk_buffer;
+    BalancedChunkBuffer& _chunk_buffer;
     vectorized::ConjunctivePredicates _not_push_down_predicates;
     std::vector<uint8_t> _selection;
 
@@ -117,12 +116,11 @@ private:
 
     // The following are profile meatures
     int64_t _num_rows_read = 0;
-    int64_t _raw_rows_read = 0;
-    int64_t _compressed_bytes_read = 0;
-    int64_t _last_spent_cpu_time_ns = 0;
 
+    // Local counters for row-size estimation, will be reset after a batch
     size_t _local_sum_row_bytes = 0;
     size_t _local_num_rows = 0;
+    size_t _local_sum_chunks = 0;
 
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;

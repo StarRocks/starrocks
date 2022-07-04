@@ -29,7 +29,7 @@ import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.proto.PTriggerProfileReportResult;
-import com.starrocks.rpc.BackendServiceProxy;
+import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
 import com.starrocks.rpc.PFetchDataRequest;
@@ -124,7 +124,7 @@ public class MockedBackend {
         ((MockGenericPool) ClientPool.heartbeatPool).register(this);
         ((MockGenericPool) ClientPool.backendPool).register(this);
 
-        new MockUp<BackendServiceProxy>() {
+        new MockUp<BackendServiceClient>() {
             @Mock
             protected synchronized PBackendService getProxy(TNetworkAddress address) {
                 return pbService;
