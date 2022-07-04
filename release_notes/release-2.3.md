@@ -29,7 +29,7 @@
 - 新增如下函数：
   - [window_funnel](../sql-reference/sql-functions/aggregate-functions/window_funnel.md)
   - [ntile](../using_starrocks/Window_function.md)
-  - [bitmap_union_count](../sql-reference/sql-functions/bitmap-functions/bitmap_union_count.md)、[base64_to_bitmap](../sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
+  - [bitmap_union_count](../sql-reference/sql-functions/bitmap-functions/bitmap_union_count.md)、[base64_to_bitmap](../sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)、[array_to_bitmap](../sql-reference/sql-functions/array-functions/array_to_bitmap.md)
   - [week](../sql-reference/sql-functions/date-time-functions/week.md)、[time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md)
 
 - 新增 [EXECUTE AS](../sql-reference/sql-statements/account-management/EXECUTE%20AS.md) 语句。使用 GRANT 语句授予某用户指定权限后，您可以使用 EXECUTE AS 语句将当前会话的执行上下文切换到该用户。
