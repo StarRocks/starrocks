@@ -43,7 +43,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          docker run --privileged -v "/home/runner"/.m2:/root/.m2 -v ${{ github.workspace }}:/root/starrocks -v /etc/timezone:/etc/timezone:ro -v /etc/localtime:/etc/localtime:ro --name temp -d starrocks/dev-env:${{ github.ref_name }} /bin/bash -c "while true;do echo hello;sleep 1;done"
+          docker run --privileged -v "/home/runner"/.m2:/root/.m2 -v ${{ github.workspace }}:/root/starrocks -v /etc/timezone:/etc/timezone:ro -v /etc/localtime:/etc/localtime:ro --name temp -d starrocks/dev-env:${{ github.ref }} /bin/bash -c "while true;do echo hello;sleep 1;done"
           sleep 10 && echo "initialize docker container-----"
           #docker exec --privileged temp /bin/bash -c "cd /root/starrocks; ./build.sh --clean --fe;"
           #echo "script run over-----"
