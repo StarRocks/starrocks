@@ -66,7 +66,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(CatalogRecycleBin.class);
     // erase meta at least after MIN_ERASE_LATENCY milliseconds
     // to avoid erase log ahead of drop log
-    private static final long MIN_ERASE_LATENCY = 10 * 60 * 1000;  // 10 min
+    protected static final long MIN_ERASE_LATENCY = 10 * 60 * 1000;  // 10 min
     // Maximum value of a batch of operations for actually delete database(table/partition)
     // The erase operation will be locked, so one batch can not be too many.
     private static final int MAX_ERASE_OPERATIONS_PER_CYCLE = 500;
@@ -82,9 +82,9 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
     // you can only enable once.
     // This is useful when tablet scheduler repair a tablet that is about to expire
     // We can make the db/table/partition infomation stay logger until the asynchronized agent task finish.
-    private static int LATE_RECYCLE_INTERVAL_SECONDS = 10;
-    private Map<Long, Long> idToRecycleTime;
-    private Set<Long> enableEraseLater;
+    protected static int LATE_RECYCLE_INTERVAL_SECONDS = 10;
+    protected Map<Long, Long> idToRecycleTime;
+    protected Set<Long> enableEraseLater;
 
     public CatalogRecycleBin() {
         super("recycle bin");
@@ -94,6 +94,11 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         idToPartition = Maps.newHashMap();
         idToRecycleTime = Maps.newHashMap();
         enableEraseLater = new HashSet<>();
+    }
+
+    private void removeRecycleMarkers(Long id) {
+        idToRecycleTime.remove(id);
+        enableEraseLater.remove(id);
     }
 
     public synchronized boolean recycleDatabase(Database db, Set<String> tableNames) {
@@ -238,30 +243,27 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
     }
 
     /**
-     * if this instance is expire soon and is about to erase
+     * make sure there are still some time before the subject is erased
      */
-    public synchronized boolean aboutToErase(long id, long currentTimeMs) {
-        long latency = currentTimeMs - idToRecycleTime.get(id) + LATE_RECYCLE_INTERVAL_SECONDS;
-        return latency > MIN_ERASE_LATENCY && latency > Config.catalog_trash_expire_second * 1000L;
-    }
-
-    /**
-     * set late expire
-     */
-    public synchronized boolean eraseLater(long id) {
-        // 1. not in idToRecycleTime, maybe already erased
+    public synchronized boolean ensureEraseLater(long id, long currentTimeMs) {
+        // 1. not in idToRecycleTime, maybe already erased, sorry it's too late!
         if (!idToRecycleTime.containsKey(id)) {
             return false;
         }
-        // 2. already set, can't set it twice
-        if (enableEraseLater.contains(id)) {
-            return false;
+        // 2. will expire after quite a long time, don't worry
+        long latency = currentTimeMs - idToRecycleTime.get(id);
+        if (latency < (Config.catalog_trash_expire_second - LATE_RECYCLE_INTERVAL_SECONDS) * 1000L) {
+            return true;
         }
         enableEraseLater.add(id);
+        // 3. still expire after adding recycle time, sorry.
+        if (latency - LATE_RECYCLE_INTERVAL_SECONDS * 1000L > Config.catalog_trash_expire_second * 1000L) {
+            return false;
+        }
         return true;
     }
 
-    private synchronized void eraseDatabase(long currentTimeMs) {
+    protected synchronized void eraseDatabase(long currentTimeMs) {
         Iterator<Map.Entry<Long, RecycleDatabaseInfo>> dbIter = idToDatabase.entrySet().iterator();
         int currentEraseOpCnt = 0;
         while (dbIter.hasNext()) {
@@ -271,7 +273,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             if (canErase(db.getId(), currentTimeMs)) {
                 // erase db
                 dbIter.remove();
-                idToRecycleTime.remove(entry.getKey());
+                removeRecycleMarkers(entry.getKey());
 
                 GlobalStateMgr.getCurrentState().onEraseDatabase(db.getId());
                 GlobalStateMgr.getCurrentState().getEditLog().logEraseDb(db.getId());
@@ -292,7 +294,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             Database db = dbInfo.getDb();
             if (db.getFullName().equals(dbName)) {
                 iterator.remove();
-                idToRecycleTime.remove(entry.getKey());
+                removeRecycleMarkers(entry.getKey());
 
                 GlobalStateMgr.getCurrentState().onEraseDatabase(db.getId());
                 LOG.info("erase database[{}-{}], because db with the same name db is recycled", db.getId(), dbName);
@@ -302,7 +304,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
     public synchronized void replayEraseDatabase(long dbId) {
         idToDatabase.remove(dbId);
-        idToRecycleTime.remove(dbId);
+        removeRecycleMarkers(dbId);
 
         GlobalStateMgr.getCurrentState().onEraseDatabase(dbId);
         LOG.info("replay erase db[{}] finished", dbId);
@@ -333,7 +335,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             for (RecycleTableInfo tableInfo : tableToRemove) {
                 Table table = tableInfo.getTable();
                 long tableId = table.getId();
-                idToRecycleTime.remove(tableId);
+                removeRecycleMarkers(tableId);
                 nameToTableInfo.remove(tableInfo.dbId, table.getName());
                 idToTableInfo.remove(tableInfo.dbId, tableId);
                 tableIdList.add(tableId);
@@ -353,7 +355,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         Table table = tableInfo.getTable();
         nameToTableInfoDBLevel.remove(tableName);
         idToTableInfo.row(dbId).remove(table.getId());
-        idToRecycleTime.remove(table.getId());
+        removeRecycleMarkers(table.getId());
         LOG.info("erase table[{}-{}], because table with the same name is recycled", table.getId(), tableName);
         return table;
     }
@@ -373,11 +375,11 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 }
             }
         }
-        idToRecycleTime.remove(tableId);
+        removeRecycleMarkers(tableId);
         LOG.info("replay erase table[{}] finished", tableId);
     }
 
-    private synchronized void erasePartition(long currentTimeMs) {
+    protected synchronized void erasePartition(long currentTimeMs) {
         Iterator<Map.Entry<Long, RecyclePartitionInfo>> iterator = idToPartition.entrySet().iterator();
         int currentEraseOpCnt = 0;
         while (iterator.hasNext()) {
@@ -390,7 +392,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 GlobalStateMgr.getCurrentState().onErasePartition(partition);
                 // erase partition
                 iterator.remove();
-                idToRecycleTime.remove(partitionId);
+                removeRecycleMarkers(partitionId);
 
                 // log
                 GlobalStateMgr.getCurrentState().getEditLog().logErasePartition(partitionId);
@@ -416,7 +418,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             if (partition.getName().equals(partitionName)) {
                 GlobalStateMgr.getCurrentState().onErasePartition(partition);
                 iterator.remove();
-                idToRecycleTime.remove(entry.getKey());
+                removeRecycleMarkers(entry.getKey());
 
                 LOG.info("erase partition[{}-{}] finished, because partition with the same name is recycled",
                         partition.getId(), partitionName);
@@ -426,7 +428,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
     public synchronized void replayErasePartition(long partitionId) {
         RecyclePartitionInfo partitionInfo = idToPartition.remove(partitionId);
-        idToRecycleTime.remove(partitionId);
+        removeRecycleMarkers(partitionId);
 
         Partition partition = partitionInfo.getPartition();
         if (!isCheckpointThread()) {
@@ -457,7 +459,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         Database db = dbInfo.getDb();
         // 2. remove db from idToDatabase and idToRecycleTime
         idToDatabase.remove(db.getId());
-        idToRecycleTime.remove(db.getId());
+        removeRecycleMarkers(db.getId());
 
         return db;
     }
@@ -473,7 +475,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         }
 
         idToDatabase.remove(dbId);
-        idToRecycleTime.remove(dbId);
+        removeRecycleMarkers(dbId);
 
         return dbInfo.getDb();
     }
@@ -494,7 +496,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             db.createTable(table);
             LOG.info("recover db[{}] with table[{}]: {}", dbId, table.getId(), table.getName());
             iterator.remove();
-            idToRecycleTime.remove(table.getId());
+            removeRecycleMarkers(table.getId());
             tableNames.remove(table.getName());
         }
 
@@ -516,7 +518,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         db.createTable(table);
         nameToTableInfoDbLevel.remove(tableName);
         idToTableInfo.row(dbId).remove(table.getId());
-        idToRecycleTime.remove(table.getId());
+        removeRecycleMarkers(table.getId());
 
         // log
         RecoverInfo recoverInfo = new RecoverInfo(dbId, table.getId(), -1L);
@@ -535,7 +537,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         db.createTable(table);
         nameToTableInfo.row(dbId).remove(table.getName());
         idToTableInfoDbLevel.remove(tableId);
-        idToRecycleTime.remove(tableInfo.getTable().getId());
+        removeRecycleMarkers(tableInfo.getTable().getId());
         LOG.info("replay recover table[{}-{}] finished", tableId, tableInfo.getTable().getName());
     }
 
@@ -585,7 +587,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
         // remove from recycle bin
         idToPartition.remove(partitionId);
-        idToRecycleTime.remove(partitionId);
+        removeRecycleMarkers(partitionId);
 
         // log
         RecoverInfo recoverInfo = new RecoverInfo(dbId, table.getId(), partitionId);
@@ -613,7 +615,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             rangePartitionInfo.setIsInMemory(partitionId, partitionInfo.isInMemory());
 
             iterator.remove();
-            idToRecycleTime.remove(partitionId);
+            removeRecycleMarkers(partitionId);
 
             LOG.info("replay recover partition[{}-{}] finished", partitionId, partitionInfo.getPartition().getName());
             break;

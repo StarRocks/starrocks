@@ -416,13 +416,14 @@ public class TabletScheduler extends MasterDaemon {
             LOG.debug("get {} tablets to schedule", currentBatch.size());
         }
 
-        AgentBatchTask batchTask = new AgentBatchTask();
+        // store temporary agent tasks
+        AgentBatchTask tmpBatchTask = new AgentBatchTask();
         for (TabletSchedCtx tabletCtx : currentBatch) {
             try {
                 // reset errMsg for new scheduler round
                 tabletCtx.setErrMsg(null);
 
-                scheduleTablet(tabletCtx, batchTask);
+                scheduleTablet(tabletCtx, tmpBatchTask);
             } catch (SchedException e) {
                 tabletCtx.increaseFailedSchedCounter();
                 tabletCtx.setErrMsg(e.getMessage());
@@ -478,7 +479,9 @@ public class TabletScheduler extends MasterDaemon {
             addToRunningTablets(tabletCtx);
         }
 
-        submitBatchTask(batchTask);
+        // check all tasks, only submit the tasks on tablets that won't expired and erased
+        submitBatchTaskIfNotExpired(
+                tmpBatchTask.getAllTasks(), GlobalStateMgr.getCurrentRecycleBin(), System.currentTimeMillis());
 
         long cost = System.currentTimeMillis() - start;
         stat.counterTabletScheduleCostMs.addAndGet(cost);
@@ -1440,41 +1443,37 @@ public class TabletScheduler extends MasterDaemon {
                 + runningTablets.values().stream().filter(t -> t.getType() == Type.BALANCE).count();
     }
 
-    private void submitBatchTask(AgentBatchTask batchTask) {
-        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentRecycleBin();
-        long now = System.currentTimeMillis();
-
+    /**
+     * submit batch tasks only if no expired db/table/partiton involved
+     */
+    protected void submitBatchTaskIfNotExpired(
+            List<AgentTask> tasks, CatalogRecycleBin recycleBin, long currentTimeMs) {
+        AgentBatchTask batchTask = new AgentBatchTask();
         // must send task after adding tablet info to runningTablets.
-        for (AgentTask task : batchTask.getAllTasks()) {
+        for (AgentTask task : tasks) {
             // check if about to erase
             long dbId = task.getDbId();
-            if (recycleBin.getDatabase(dbId) != null
-                    && recycleBin.aboutToErase(dbId, now)
-                    && !recycleBin.eraseLater(dbId)) {
-                LOG.warn(
-                        "discard clone task because db {} is about to erase and cannot erase later anymore: {}",
-                        dbId, task);
+            if (recycleBin.getDatabase(dbId) != null && !recycleBin.ensureEraseLater(dbId, currentTimeMs)) {
+                LOG.warn("discard clone task because db {} will erase soon: {}", dbId, task);
                 continue;
             }
             long tableId = task.getTableId();
-            if (recycleBin.getTable(dbId, tableId) != null && recycleBin.aboutToErase(tableId, now) && !recycleBin.eraseLater(tableId)) {
-                LOG.warn(
-                        "discard clone task because table {} is about to erase and cannot erase later anymore: {}",
-                        tableId, task);
+            if (recycleBin.getTable(dbId, tableId) != null && !recycleBin.ensureEraseLater(tableId, currentTimeMs)) {
+                LOG.warn("discard clone task because table {} will erase soon: {}", tableId, task);
                 continue;
             }
             long partitionId = task.getPartitionId();
-            if (recycleBin.getPartition(partitionId) != null && recycleBin.aboutToErase(partitionId, now) && !recycleBin.eraseLater(partitionId)) {
-                LOG.warn(
-                        "discard clone task because partition {} is about to erase and cannot erase later anymore: {}",
-                        partitionId, task);
+            if (recycleBin.getPartition(partitionId) != null
+                    && !recycleBin.ensureEraseLater(partitionId, currentTimeMs)) {
+                LOG.warn("discard clone task because partition {} will erase soon: {}", partitionId, task);
                 continue;
             }
 
+            batchTask.addTask(task);
             if (AgentTaskQueue.addTask(task)) {
                 stat.counterCloneTask.incrementAndGet();
+                LOG.info("add clone task to agent task queue: {}", task);
             }
-            LOG.info("add clone task to agent task queue: {}", task);
         }
 
         // send task immediately
