@@ -44,7 +44,7 @@ jobs:
           #make 
           #sudo make install
           sudo apt-get update
-          sudo apt-get install thrift@0.13.0
+          sudo apt-get install thrift
           thrift -version
           
       - name: Build and analyze
