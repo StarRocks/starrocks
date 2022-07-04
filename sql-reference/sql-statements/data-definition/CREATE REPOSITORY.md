@@ -2,7 +2,7 @@
 
 ## 功能
 
-该语句用于创建仓库。仓库用于 [备份恢复](/administration/Backup_and_restore.md) 数据库数据。仅 root 或 superuser 用户可以创建仓库。
+该语句用于创建仓库。仓库用于 [备份恢复](../administration/Backup_and_restore.md) 数据库数据。仅 root 或 superuser 用户可以创建仓库。
 
 删除 REPOSITORY 操作请参考 [DROP REPOSITORY](../data-definition/DROP%20REPOSITORY.md) 章节。
 
