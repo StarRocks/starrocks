@@ -146,10 +146,7 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
             suggest_flush = true;
         }
     }
-    if (is_full()) {
-        suggest_flush = true;
-    }
-
+    
     return suggest_flush;
 }
 
