@@ -443,7 +443,7 @@ public:
 
 private:
     void get_s3_store_conf(const staros::starlet::ShardInfo& shard_info, Configuration* conf) {
-        const auto&& s3_store_info = shard_info.get_s3_store_info();
+        auto&& s3_store_info = shard_info.get_s3_store_info();
         conf->emplace(std::make_pair("scheme", "s3://"));
         conf->emplace(std::make_pair(kSysRoot, s3_store_info.uri));
         conf->emplace(std::make_pair(kS3AccessKeyId, s3_store_info.access_key));
@@ -454,7 +454,7 @@ private:
     StatusOr<Configuration> get_shard_config(int64_t shard_id) {
         Configuration conf;
         ASSIGN_OR_RETURN(auto shard_info, g_worker->get_shard_info(shard_id));
-        const auto&& scheme = shard_info.get_object_store_scheme();
+        auto&& scheme = shard_info.get_object_store_scheme();
         if (scheme == staros::starlet::ObjectStoreType::S3) {
             get_s3_store_conf(shard_info, &conf);
         } else {
