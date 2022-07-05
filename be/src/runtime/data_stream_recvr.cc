@@ -125,8 +125,8 @@ private:
         // A Request may have multiple Chunks, so only when the last Chunk of the Request is consumed,
         // the callback is closed- >run() Let the sender continue to send data
         google::protobuf::Closure* closure = nullptr;
-        // Time in nano of saveing closure
-        int64_t enter_time;
+        // Time in nano of saving closure
+        int64_t start_time;
     };
 
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
@@ -185,7 +185,7 @@ void DataStreamRecvr::SenderQueue::short_circuit_for_pipeline(const int32_t driv
     while (iter != _chunk_queue.end()) {
         if (_is_pipeline_level_shuffle && iter->driver_sequence == driver_sequence) {
             if (iter->closure != nullptr) {
-                _recvr->_closure_block_timer->update(MonotonicNanos() - iter->enter_time);
+                _recvr->_closure_block_timer->update(MonotonicNanos() - iter->start_time);
                 iter->closure->Run();
             }
             iter = _chunk_queue.erase(iter);
@@ -273,11 +273,11 @@ bool DataStreamRecvr::SenderQueue::try_get_chunk(vectorized::Chunk** chunk) {
         *chunk = _chunk_queue.front().chunk_ptr.release();
         _recvr->_num_buffered_bytes -= _chunk_queue.front().chunk_bytes;
         auto* closure = _chunk_queue.front().closure;
-        auto enter_time = _chunk_queue.front().enter_time;
+        auto start_time = _chunk_queue.front().start_time;
         VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
         _chunk_queue.pop_front();
         if (closure != nullptr) {
-            _recvr->_closure_block_timer->update(MonotonicNanos() - enter_time);
+            _recvr->_closure_block_timer->update(MonotonicNanos() - start_time);
             closure->Run();
         }
         return true;
@@ -303,14 +303,14 @@ Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
 
     *chunk = _chunk_queue.front().chunk_ptr.release();
     auto* closure = _chunk_queue.front().closure;
-    auto enter_time = _chunk_queue.front().enter_time;
+    auto start_time = _chunk_queue.front().start_time;
 
     _recvr->_num_buffered_bytes -= _chunk_queue.front().chunk_bytes;
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
     _chunk_queue.pop_front();
 
     if (closure != nullptr) {
-        _recvr->_closure_block_timer->update(MonotonicNanos() - enter_time);
+        _recvr->_closure_block_timer->update(MonotonicNanos() - start_time);
         // When the execution thread is blocked and the Chunk queue exceeds the memory limit,
         // the execution thread will hold done and will not return, block brpc from sending packets,
         // and the execution thread will call run() to let brpc continue to send packets,
@@ -342,13 +342,13 @@ Status DataStreamRecvr::SenderQueue::get_chunk_for_pipeline(vectorized::Chunk** 
         if (!_is_pipeline_level_shuffle || iter->driver_sequence == driver_sequence) {
             *chunk = iter->chunk_ptr.release();
             auto* closure = iter->closure;
-            auto enter_time = iter->enter_time;
+            auto start_time = iter->start_time;
             _recvr->_num_buffered_bytes -= iter->chunk_bytes;
             VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
             _chunk_queue.erase(iter);
 
             if (closure != nullptr) {
-                _recvr->_closure_block_timer->update(MonotonicNanos() - enter_time);
+                _recvr->_closure_block_timer->update(MonotonicNanos() - start_time);
                 // When the execution thread is blocked and the Chunk queue exceeds the memory limit,
                 // the execution thread will hold done and will not return, block brpc from sending packets,
                 // and the execution thread will call run() to let brpc continue to send packets,
@@ -542,7 +542,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
         bool has_new_chunks = _chunk_queue.size() > original_size;
         if (has_new_chunks && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             _chunk_queue.back().closure = *done;
-            _chunk_queue.back().enter_time = MonotonicNanos();
+            _chunk_queue.back().start_time = MonotonicNanos();
             *done = nullptr;
         }
 
@@ -666,7 +666,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
 
         if (!local_chunk_queue.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             local_chunk_queue.back().closure = *done;
-            local_chunk_queue.back().enter_time = MonotonicNanos();
+            local_chunk_queue.back().start_time = MonotonicNanos();
             *done = nullptr;
         }
 
@@ -695,7 +695,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
                         // We may buffered closure in last reception, but the branch of the driver_sequence may
                         // become short-circuit now, so we make sure to invoke the closure
                         if (item.closure != nullptr) {
-                            _recvr->_closure_block_timer->update(MonotonicNanos() - item.enter_time);
+                            _recvr->_closure_block_timer->update(MonotonicNanos() - item.start_time);
                             item.closure->Run();
                         }
                         continue;
@@ -800,7 +800,7 @@ void DataStreamRecvr::SenderQueue::close() {
 void DataStreamRecvr::SenderQueue::clean_buffer_queues() {
     for (auto& item : _chunk_queue) {
         if (item.closure != nullptr) {
-            _recvr->_closure_block_timer->update(MonotonicNanos() - item.enter_time);
+            _recvr->_closure_block_timer->update(MonotonicNanos() - item.start_time);
             item.closure->Run();
         }
     }
@@ -809,7 +809,7 @@ void DataStreamRecvr::SenderQueue::clean_buffer_queues() {
         for (auto& [_, chunk_queue] : chunk_queues) {
             for (auto& item : chunk_queue) {
                 if (item.closure != nullptr) {
-                    _recvr->_closure_block_timer->update(MonotonicNanos() - item.enter_time);
+                    _recvr->_closure_block_timer->update(MonotonicNanos() - item.start_time);
                     item.closure->Run();
                 }
             }
