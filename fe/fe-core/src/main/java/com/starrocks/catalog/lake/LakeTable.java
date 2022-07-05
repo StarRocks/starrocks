@@ -22,7 +22,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
@@ -34,9 +33,9 @@ public class LakeTable extends OlapTable implements GsonPreProcessable {
     // Currently, storage group is table level, which stores all the tablets data and metadata of this table.
     // Format: service storage uri (from StarOS) + table id
     //
-    // "shardStorageInfoStr" is used for serialization of "shardStorageInfo".
-    @SerializedName(value = "shardStorageInfoStr")
-    private String shardStorageInfoStr;
+    // "shardStorageInfoBytes" is used for serialization of "shardStorageInfo".
+    @SerializedName(value = "shardStorageInfoBytes")
+    private byte[] shardStorageInfoBytes;
     private ShardStorageInfo shardStorageInfo;
 
     public LakeTable(long id, String tableName, List<Column> baseSchema, KeysType keysType, PartitionInfo partitionInfo,
@@ -83,14 +82,13 @@ public class LakeTable extends OlapTable implements GsonPreProcessable {
 
     @Override
     public void gsonPreProcess() throws IOException {
-        shardStorageInfoStr = new String(shardStorageInfo.toByteArray(), StandardCharsets.UTF_8);
+        shardStorageInfoBytes = shardStorageInfo.toByteArray();
     }
 
     @Override
     public void gsonPostProcess() throws IOException {
         super.gsonPostProcess();
-
-        shardStorageInfo = ShardStorageInfo.parseFrom(shardStorageInfoStr.getBytes(StandardCharsets.UTF_8));
+        shardStorageInfo = ShardStorageInfo.parseFrom(shardStorageInfoBytes);
     }
 
     @Override
