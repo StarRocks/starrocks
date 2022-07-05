@@ -69,9 +69,9 @@ public:
             v = down_cast<const ColumnType*>(columns[0])->get_data()[row_num];
         }
 
-        if (this->data(state).buckets.size() == 0) {
+        if (this->data(state).buckets.is_empty()) {
             Bucket<T> bucket(v, v, 1, 1);
-            this->data(state).buckets.push_back(bucket);
+            this->data(state).buckets.emplace_back(bucket);
         } else {
             Bucket<T>* lastBucket = &this->data(state).buckets.back();
 
