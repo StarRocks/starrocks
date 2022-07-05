@@ -207,8 +207,6 @@ std::shared_ptr<CompactionTask> CompactionScheduler::_try_get_next_compaction_ta
     std::vector<CompactionCandidate> tmp_candidates;
     CompactionCandidate compaction_candidate;
     bool found = false;
-    int64_t tablet_id;
-    CompactionType compaction_type;
     std::shared_ptr<CompactionTask> compaction_task;
     while (true) {
         if (!_can_schedule_next()) {
@@ -222,8 +220,9 @@ std::shared_ptr<CompactionTask> CompactionScheduler::_try_get_next_compaction_ta
             LOG(INFO) << "do not get a qualified candidate";
             break;
         }
-        tablet_id = compaction_candidate.tablet->tablet_id();
-        compaction_type = compaction_candidate.type;
+
+        int64_t tablet_id = compaction_candidate.tablet->tablet_id();
+        CompactionType compaction_type = compaction_candidate.type;
         VLOG(2) << "try tablet:" << tablet_id << ", compaction type:" << to_string(compaction_type);
         bool need_reschedule = true;
         found = _can_do_compaction(compaction_candidate, &need_reschedule, &compaction_task);
@@ -233,14 +232,14 @@ std::shared_ptr<CompactionTask> CompactionScheduler::_try_get_next_compaction_ta
             DCHECK(found);
         }
         if (found) {
+            VLOG(2) << "get a qualified tablet:" << tablet_id << ", compaction type:" << to_string(compaction_type)
+                    << ", compaction task:" << compaction_task->get_task_info();
             break;
         }
     }
     VLOG(2) << "tmp tablets size:" << tmp_candidates.size();
     StorageEngine::instance()->compaction_manager()->insert_candidates(std::move(tmp_candidates));
     if (found) {
-        VLOG(2) << "get a qualified tablet:" << tablet_id << ", compaction type:" << to_string(compaction_type)
-                << ", compaction task:" << compaction_task->get_task_info();
         return compaction_task;
     } else {
         VLOG(2) << "no qualified tablet.";
