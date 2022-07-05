@@ -43,9 +43,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
@@ -291,7 +293,7 @@ public class TaskManagerTest {
 
     @Test
     public void testTaskRunPriority() {
-        MinMaxPriorityQueue<TaskRun> queue = MinMaxPriorityQueue.orderedBy(TaskRun::compareTo).create();
+        PriorityBlockingQueue<TaskRun> queue = Queues.newPriorityBlockingQueue();
         long now = System.currentTimeMillis();
         Task task = new Task();
         task.setName("test");
@@ -344,29 +346,31 @@ public class TaskManagerTest {
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now);
         taskRun1.getStatus().setDefinition("select 1");
-        taskRun1.getStatus().setPriority(0);
+        taskRun1.getStatus().setPriority(10);
 
         TaskRun taskRun2 = TaskRunBuilder.newBuilder(task).build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setDefinition("select 1");
-        taskRun2.getStatus().setPriority(10);
+        taskRun2.getStatus().setPriority(0);
 
         TaskRun taskRun3 = TaskRunBuilder.newBuilder(task).build();
         taskRun3.setTaskId(taskId);
         taskRun3.initStatus("3", now + 10);
         taskRun3.getStatus().setDefinition("select 1");
-        taskRun3.getStatus().setPriority(10);
+        taskRun3.getStatus().setPriority(0);
 
 
         taskRunManager.arrangeTaskRun(taskRun2, true);
         taskRunManager.arrangeTaskRun(taskRun1, false);
         taskRunManager.arrangeTaskRun(taskRun3, true);
 
-        Map<Long, MinMaxPriorityQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
+        Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(pendingTaskRunMap.get(taskId).size(), 2);
-        MinMaxPriorityQueue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
-        Assert.assertEquals(now + 10, taskRuns.peekLast().getStatus().getCreateTime());
+        PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
+        String queryId = taskRuns.poll().getStatus().getQueryId();
+        Assert.assertEquals(queryId, "1");
+        Assert.assertEquals(now + 10, taskRuns.poll().getStatus().getCreateTime());
 
     }
 
@@ -402,7 +406,7 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun1, false);
         taskRunManager.arrangeTaskRun(taskRun3, false);
 
-        Map<Long, MinMaxPriorityQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
+        Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(pendingTaskRunMap.get(taskId).size(), 3);
 
     }

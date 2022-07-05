@@ -3,6 +3,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Queues;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.UUIDUtil;
@@ -12,12 +13,12 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.spark_project.guava.collect.MinMaxPriorityQueue;
 
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.Future;
+import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 public class TaskRunManager {
@@ -26,7 +27,7 @@ public class TaskRunManager {
 
     // taskId -> pending TaskRun Queue, for each Task only support 1 running taskRun currently,
     // so the map value is priority queue need to be sorted by priority from large to small
-    private final Map<Long, MinMaxPriorityQueue<TaskRun>> pendingTaskRunMap = Maps.newConcurrentMap();
+    private final Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = Maps.newConcurrentMap();
 
     // taskId -> running TaskRun, for each Task only support 1 running taskRun currently,
     // so the map value is not queue
@@ -78,18 +79,15 @@ public class TaskRunManager {
         }
         try {
             long taskId = taskRun.getTaskId();
-            MinMaxPriorityQueue<TaskRun> taskRuns = pendingTaskRunMap.computeIfAbsent(taskId,
-                    u -> MinMaxPriorityQueue.orderedBy(TaskRun::compareTo).create());
-            if (mergeRedundant && taskRuns.size() >= 1) {
-                TaskRun lastTaskRun = taskRuns.peekLast();
-                if (lastTaskRun.getStatus().getDefinition().equals(taskRun.getStatus().getDefinition())) {
-                    lastTaskRun.getStatus().setCreateTime(taskRun.getStatus().getCreateTime());
-                } else {
-                    taskRuns.offer(taskRun);
-                }
-            } else {
-                taskRuns.offer(taskRun);
+            PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.computeIfAbsent(taskId,
+                    u -> Queues.newPriorityBlockingQueue());
+            if (mergeRedundant) {
+                // The remove here is actually remove the old TaskRun.
+                // Note that the old TaskRun and new TaskRun may have the same priority and definition,
+                // but other attributes may be different, such as creation time.
+                taskRuns.remove(taskRun);
             }
+            taskRuns.offer(taskRun);
         } finally {
             taskRunUnlock();
         }
@@ -169,7 +167,7 @@ public class TaskRunManager {
         this.taskRunLock.unlock();
     }
 
-    public Map<Long, MinMaxPriorityQueue<TaskRun>> getPendingTaskRunMap() {
+    public Map<Long, PriorityBlockingQueue<TaskRun>> getPendingTaskRunMap() {
         return pendingTaskRunMap;
     }
 
