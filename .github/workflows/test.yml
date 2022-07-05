@@ -14,20 +14,9 @@ jobs:
           fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
           
 
-      - name: Get specific changed files
-        id: changed-files
-        uses: tj-actions/changed-files@v14
-        with:
-          files: |
-            **/test_hy
- #         sha: "${{ github.pull_request.sha }}"
- #         base_sha: "${{ github.sha }}"
- #         files: |
- #           conf/**
-
-            
-      - name: List all changed files
-        run: |
-          for file in ${{ steps.changed-files.outputs.any_changed }}; do
-            echo "$file was changed"
-          done
+      - id: files
+        uses: jitterbit/get-changed-files@v1
+      - run: |
+         for changed_file in ${{ steps.files.outputs.all }}; do
+            echo "Do something with this ${changed_file}."
+         done
