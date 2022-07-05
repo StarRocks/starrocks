@@ -1,15 +1,55 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.optimizer.statistics;
 
-import com.starrocks.sql.optimizer.statistics.Bucket;
-
 import java.util.List;
 
 public class Histogram {
+    private double min;
+    private boolean containMin;
+    private double max;
+    private boolean containMax;
     private final List<Bucket> buckets;
 
     public Histogram(List<Bucket> buckets) {
         this.buckets = buckets;
+        this.min = Double.MIN_VALUE;
+        this.containMin = false;
+        this.max = Double.MAX_VALUE;
+        this.containMax = false;
+    }
+
+    public Histogram(List<Bucket> buckets, double min, boolean containMin, double max, boolean containMax) {
+        this.buckets = buckets;
+        this.min = min;
+        this.containMin = containMin;
+        this.max = max;
+        this.containMax = containMax;
+    }
+
+    public void setMin(double min, boolean containMin) {
+        this.min = min;
+        this.containMin = containMin;
+    }
+
+    public double getMin() {
+        return min;
+    }
+
+    public boolean isContainMin() {
+        return containMin;
+    }
+
+    public void setMax(double max, boolean containMax) {
+        this.max = max;
+        this.containMax = containMax;
+    }
+
+    public double getMax() {
+        return max;
+    }
+
+    public boolean isContainMax() {
+        return containMax;
     }
 
     public List<Bucket> getBuckets() {
