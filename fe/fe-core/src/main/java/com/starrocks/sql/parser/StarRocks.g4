@@ -96,6 +96,7 @@ statement
     | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
+    | killStatement                                                                         #kill
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -487,6 +488,10 @@ showDatabasesStatement
 
 showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+killStatement
+    : KILL (CONNECTION? | QUERY) INTEGER_VALUE
     ;
 
 showNodesStatement
