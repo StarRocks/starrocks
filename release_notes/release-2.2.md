@@ -23,7 +23,7 @@ The following bugs are fixed:
 
 - Some profile statistics information is inaccurate. [#7074](https://github.com/StarRocks/starrocks/pull/7074) [#6789](https://github.com/StarRocks/starrocks/pull/6789)
 
-- The get_json_string function incorrectly processes JSON arrays.
+- The get_json_string function incorrectly processes JSON arrays. [#7671](https://github.com/StarRocks/starrocks/pull/7671)
 
 ## 2.2.1
 
