@@ -516,7 +516,7 @@ public class CreateMaterializedViewTest {
             Assert.assertFalse(partitionExpDesc.isFunction());
             Assert.assertTrue(partitionExpDesc.getExpr() instanceof SlotRef);
             Assert.assertEquals(partitionExpDesc.getSlotRef().getColumnName(), "ss");
-            Assert.assertEquals(partitionExpDesc.getSlotRef().getTblNameWithoutAnalyzed(), null);
+            Assert.assertEquals(partitionExpDesc.getSlotRef().getTblNameWithoutAnalyzed().getTbl(), "mv1");
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -540,7 +540,7 @@ public class CreateMaterializedViewTest {
             Assert.assertTrue(partitionExpDesc.getExpr() instanceof FunctionCallExpr);
             Assert.assertEquals(partitionExpDesc.getExpr().getChild(1), partitionExpDesc.getSlotRef());
             Assert.assertEquals(partitionExpDesc.getSlotRef().getColumnName(), "ss");
-            Assert.assertEquals(partitionExpDesc.getSlotRef().getTblNameWithoutAnalyzed(), null);
+            Assert.assertEquals(partitionExpDesc.getSlotRef().getTblNameWithoutAnalyzed().getTbl(), "mv1");
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -564,7 +564,7 @@ public class CreateMaterializedViewTest {
             Assert.assertTrue(partitionExpDesc.getExpr() instanceof FunctionCallExpr);
             Assert.assertEquals(partitionExpDesc.getExpr().getChild(1), partitionExpDesc.getSlotRef());
             Assert.assertEquals(partitionExpDesc.getSlotRef().getColumnName(), "k1");
-            Assert.assertEquals(partitionExpDesc.getSlotRef().getTblNameWithoutAnalyzed(), null);
+            Assert.assertEquals(partitionExpDesc.getSlotRef().getTblNameWithoutAnalyzed().getTbl(), "mv1");
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -588,7 +588,7 @@ public class CreateMaterializedViewTest {
             Assert.assertTrue(partitionExpDesc.getExpr() instanceof SlotRef);
             Assert.assertEquals(partitionExpDesc.getExpr(), partitionExpDesc.getSlotRef());
             Assert.assertEquals(partitionExpDesc.getSlotRef().getColumnName(), "k1");
-            Assert.assertEquals(partitionExpDesc.getSlotRef().getTblNameWithoutAnalyzed(), null);
+            Assert.assertEquals(partitionExpDesc.getSlotRef().getTblNameWithoutAnalyzed().getTbl(), "mv1");
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }

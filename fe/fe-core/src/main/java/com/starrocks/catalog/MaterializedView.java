@@ -413,7 +413,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 new Scope(RelationId.anonymous(),
                         new RelationFields(this.getBaseSchema().stream()
                                 .map(col -> new Field(col.getName(), col.getType(),
-                                        new TableName(null, this.name), null))
+                                        new TableName(db.getFullName(), this.name), null))
                                 .collect(Collectors.toList()))), connectContext);
     }
 
