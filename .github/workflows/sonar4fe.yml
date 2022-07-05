@@ -5,9 +5,9 @@ on:
       - main
   pull_request_target: 
     paths:
-      - '**.java'
-      - '**.xml'
-      - 'test_hy'
+    - '**.java'
+    - '**.xml'
+    - 'test_hy'
       
 #  pull_request:
 #    types: [opened, synchronize, reopened]
