@@ -293,15 +293,15 @@ StarRocks has started to support the Primary Key model since v1.19. When you cre
 
   - The table contains both fast-changing data and slow-changing data. Fast-changing data is frequently updated over the most recent days, whereas slow-changing data is rarely updated. Suppose that you need to synchronize a MySQL order table to StarRocks in real time for analytics and queries. In this example, the data of the table is partitioned by day, and most updates are performed on orders that are created within the most recent days. Historical orders are no longer updated after they are completed. When you run a data load job, the primary key index is not loaded into the memory and only the index entries of the recently updated orders are loaded into the memory.
 
-  As shown in the following figure, the data in the table is partitioned by day, and the data in the most recent two partitions is frequently updated.
+    As shown in the following figure, the data in the table is partitioned by day, and the data in the most recent two partitions is frequently updated.
 
-  ![Primary index -1](/assets/3.2-1.png)
+    ![Primary index -1](/assets/3.2-1.png)
 
   - The table is a flat table that is composed of hundreds or thousands of columns. The primary key comprises only a small portion of the table data and consumes only a small amount of memory. For example, a user status or profile table consists of a large number of columns but only tens to hundreds of millions of users. In this situation, the amount of memory consumed by the primary key is controllable.
 
-  As shown in the following figure, the table contains only a few rows, and the primary key of the table comprises only a small portion of the table.
+    As shown in the following figure, the table contains only a few rows, and the primary key of the table comprises only a small portion of the table.
 
-![Primary index -2](/assets/3.2.4-2.png)
+    ![Primary index -2](/assets/3.2.4-2.png)
 
 ### Principes
 
