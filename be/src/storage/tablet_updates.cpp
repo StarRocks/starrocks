@@ -755,12 +755,11 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
 
     std::lock_guard lg(_index_lock);
     // 2. load index
-    bool enable_persistent_index = _tablet.get_enable_persistent_index();
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
     index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
     auto& index = index_entry->value();
     // empty rowset does not need to load in-memory primary index, so skip it
-    if (rowset->has_data_files() || enable_persistent_index) {
+    if (rowset->has_data_files() || _tablet.get_enable_persistent_index()) {
         auto st = index.load(&_tablet);
         manager->index_cache().update_object_size(index_entry, index.memory_usage());
         if (!st.ok()) {
@@ -772,6 +771,9 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             return;
         }
     }
+    // `enable_persistent_index` of tablet maybe change by alter, we should get `enable_persistent_index` from index to
+    // avoid inconsistency between persistent index file and PersistentIndexMeta
+    bool enable_persistent_index = index.enable_persistent_index();
     st = index.prepare(version);
     if (!st.ok()) {
         manager->index_cache().remove(index_entry);
@@ -932,7 +934,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         }
         // 4. write meta
         st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version, new_del_vecs,
-                                                    index_meta, _tablet.get_enable_persistent_index());
+                                                    index_meta, enable_persistent_index);
         if (!st.ok()) {
             std::string msg = Substitute("_apply_rowset_commit error: write meta failed: $0 $1", st.to_string(),
                                          _debug_string(false));
@@ -1238,11 +1240,14 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     LOG(INFO) << "apply_compaction_commit start tablet:" << tablet_id << " version:" << version_info.version.to_string()
               << " rowset:" << rowset_id;
     // 1. load index
-    bool enable_persistent_index = _tablet.get_enable_persistent_index();
+    std::lock_guard lg(_index_lock);
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
     index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
     auto& index = index_entry->value();
     auto st = index.load(&_tablet);
+    // `enable_persistent_index` of tablet maybe change by alter, we should get `enable_persistent_index` from index to
+    // avoid inconsistency between persistent index file and PersistentIndexMeta
+    bool enable_persistent_index = index.enable_persistent_index();
     if (!st.ok()) {
         manager->index_cache().remove(index_entry);
         _compaction_state.reset();
@@ -1292,12 +1297,14 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     int64_t t_index_delvec = MonotonicMillis();
 
     PersistentIndexMetaPB index_meta;
-    st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
-    if (!st.ok() && !st.is_not_found()) {
-        std::string msg = Substitute("get persistent index meta failed: $0", st.to_string());
-        LOG(ERROR) << msg;
-        _set_error(msg);
-        return;
+    if (enable_persistent_index) {
+        st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
+        if (!st.ok() && !st.is_not_found()) {
+            std::string msg = Substitute("get persistent index meta failed: $0", st.to_string());
+            LOG(ERROR) << msg;
+            _set_error(msg);
+            return;
+        }
     }
     st = index.commit(&index_meta);
     if (!st.ok()) {
@@ -1315,7 +1322,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         }
         // 3. write meta
         st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version_info.version,
-                                                    delvecs, index_meta, _tablet.get_enable_persistent_index());
+                                                    delvecs, index_meta, enable_persistent_index);
         if (!st.ok()) {
             manager->index_cache().release(index_entry);
             std::string msg = Substitute("_apply_compaction_commit error: write meta failed: $0 $1", st.to_string(),
