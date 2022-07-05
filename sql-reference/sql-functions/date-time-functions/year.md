@@ -1,16 +1,18 @@
 # year
 
-## description
+## 功能
 
-### Syntax
+返回指定日期中的年份。
+
+## 语法
 
 ```Haskell
-INT YEAR(DATETIME date)
+INT YEAR(DATE|DATETIME date)
 ```
 
-返回date类型的year部分，范围从1000-9999
+## 参数说明
 
-参数为Date或者Datetime类型
+`date`: 必填。支持DATE和DATETIME类型。
 
 ## 返回值说明
 
@@ -43,19 +45,3 @@ MySQL > select year(now());
 +-------------+
 1 row in set (0.00 sec)
 ```
-
-示例2：返回当前年份。
-
-```Plain Text
-MySQL > select year(now());
-+-------------+
-| year(now()) |
-+-------------+
-|        2022 |
-+-------------+
-1 row in set (0.00 sec)
-```
-
-## keyword
-
-YEAR
