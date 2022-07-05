@@ -246,8 +246,10 @@ public class WindowTransformer {
                         SqlToScalarOperatorTranslator.translate(analyticExpr, subOpt.getExpressionMapping());
                 ColumnRefOperator columnRefOperator =
                         columnRefFactory.create(agg.toString(), agg.getType(), agg.isNullable());
-                analyticCall.put(columnRefOperator, (CallOperator) agg);
-                subOpt.getExpressionMapping().put(analyticExpr, columnRefOperator);
+                if (agg instanceof CallOperator) {
+                    analyticCall.put(columnRefOperator, (CallOperator) agg);
+                    subOpt.getExpressionMapping().put(analyticExpr, columnRefOperator);
+                }
             }
 
             List<ScalarOperator> partitions = new ArrayList<>();
