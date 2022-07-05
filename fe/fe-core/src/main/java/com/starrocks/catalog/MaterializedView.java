@@ -6,6 +6,7 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
@@ -14,13 +15,13 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
-import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.parser.ParsingException;
-import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -331,7 +332,15 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return basePartitionInfoMap.get(baseTablePartition.getName()) == null;
     }
 
-    public void addOrUpdateBasePartition(long baseTableId, Partition baseTablePartition) {
+    public void addBasePartition(long baseTableId, Partition baseTablePartition) {
+        Map<String, BasePartitionInfo> basePartitionInfoMap = this.getRefreshScheme().getAsyncRefreshContext()
+                .getBaseTableVisibleVersionMap()
+                .computeIfAbsent(baseTableId, k -> Maps.newHashMap());
+        basePartitionInfoMap.put(baseTablePartition.getName(),
+                new BasePartitionInfo(baseTablePartition.getId(), Partition.PARTITION_INIT_VERSION));
+    }
+
+    public void updateBasePartition(long baseTableId, Partition baseTablePartition) {
         Map<String, BasePartitionInfo> basePartitionInfoMap = this.getRefreshScheme().getAsyncRefreshContext()
                 .getBaseTableVisibleVersionMap()
                 .computeIfAbsent(baseTableId, k -> Maps.newHashMap());
@@ -400,16 +409,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
         // currently, mv only supports one expression
         Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
-        try {
-            QueryStatement queryStatement = ((QueryStatement) SqlParser.parse(
-                    this.viewDefineSql, connectContext.getSessionVariable().getSqlMode()).get(0));
-            Analyzer.analyze(queryStatement, connectContext);
-            MaterializedViewAnalyzer.analyzeExp(partitionExpr, queryStatement, connectContext);
-        } catch (ParsingException parsingException) {
-            LOG.warn("Parsing viewDefineSql:{} failed, exception:{}", this.viewDefineSql, parsingException.getMessage());
-        } catch (SemanticException semanticException) {
-            LOG.warn("Analyzing viewDefineSql:{} failed, exception:{}", this.viewDefineSql, semanticException.getMessage());
-        }
+        ExpressionAnalyzer.analyzeExpression(partitionExpr, new AnalyzeState(),
+                new Scope(RelationId.anonymous(),
+                        new RelationFields(this.getBaseSchema().stream()
+                                .map(col -> new Field(col.getName(), col.getType(),
+                                        new TableName(null, this.name), null))
+                                .collect(Collectors.toList()))), connectContext);
     }
 
     @Override

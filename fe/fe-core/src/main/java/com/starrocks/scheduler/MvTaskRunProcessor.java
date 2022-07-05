@@ -77,7 +77,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                 for (Partition partition : partitions) {
                     if (materializedView.needRefreshPartition(baseTableId, partition)) {
                         needRefresh = true;
-                        materializedView.addOrUpdateBasePartition(baseTableId, partition);
+                        materializedView.updateBasePartition(baseTableId, partition);
                     }
                 }
             }
@@ -160,7 +160,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             if (!materializedView.needAddBasePartition(baseTableId, basePartition)) {
                 continue;
             }
-            materializedView.addOrUpdateBasePartition(baseTableId, basePartition);
+            materializedView.addBasePartition(baseTableId, basePartition);
             Range<PartitionKey> basePartitionRange = baseRangePartitionInfo.getRange(basePartitionId);
             List<Column> basePartitionColumns = baseRangePartitionInfo.getPartitionColumns();
             int basePartitionIndex = -1;
@@ -210,7 +210,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             if (materializedView.needRefreshPartition(baseTableId, partition)) {
                 needRefreshPartitionNames.addAll(
                         materializedView.getMvPartitionNameByTable(basePartitionName));
-                materializedView.addOrUpdateBasePartition(baseTableId, partition);
+                materializedView.updateBasePartition(baseTableId, partition);
             }
         }
     }
@@ -222,7 +222,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         for (Partition basePartition : basePartitions) {
             if (materializedView.needRefreshPartition(baseTableId, basePartition)) {
                 refreshAllPartitions = true;
-                materializedView.addOrUpdateBasePartition(baseTableId, basePartition);
+                materializedView.updateBasePartition(baseTableId, basePartition);
             }
         }
         return refreshAllPartitions;

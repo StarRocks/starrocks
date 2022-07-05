@@ -43,7 +43,6 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.TableRelation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,23 +59,6 @@ public class MaterializedViewAnalyzer {
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
-    }
-
-    public static void analyzeExp(Expr expr, QueryStatement queryStatement, ConnectContext context) {
-        Map<String, TableRelation> tableRelations =
-                AnalyzerUtils.collectAllTableRelation(queryStatement);
-        List<Field> fields = Lists.newArrayList();
-        for (TableRelation value : tableRelations.values()) {
-            fields.addAll(value.getRelationFields().getAllFields());
-        }
-        Scope scope = new Scope(RelationId.anonymous(), new RelationFields(fields));
-        if (expr instanceof FunctionCallExpr) {
-            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-            if (functionCallExpr.getFn() == null) {
-                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(),
-                        scope, context);
-            }
-        }
     }
 
     static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
@@ -151,6 +133,14 @@ public class MaterializedViewAnalyzer {
                 checkPartitionExpParams(statement);
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, tableNameTableMap);
+                // analyze partition by expression
+                ExpressionAnalyzer.analyzeExpression(statement.getPartitionExpDesc().getExpr(),
+                        new AnalyzeState(),
+                        new Scope(RelationId.anonymous(),
+                                new RelationFields(statement.getMvColumnItems().stream()
+                                        .map(col -> new Field(col.getName(), col.getType(),
+                                                statement.getTableName(), null))
+                                        .collect(Collectors.toList()))), context);
             }
             // check and analyze distribution
             checkDistribution(statement, tableNameTableMap);
@@ -253,8 +243,6 @@ public class MaterializedViewAnalyzer {
                 }
                 SlotRef slotRef = getSlotRef(functionCallExpr);
                 slotRef.setType(partitionColumn.getType());
-                // analyze function, must after update child
-                FunctionAnalyzer.analyze(functionCallExpr);
                 // copy function and set it into partitionRefTableExprs
                 Expr partitionRefTableExprs = functionCallExpr.clone();
                 List<Expr> children = partitionRefTableExprs.getChildren();
