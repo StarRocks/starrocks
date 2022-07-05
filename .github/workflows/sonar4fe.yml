@@ -69,7 +69,7 @@ jobs:
         with:
           args:  >
             -Dsonar.projectKey=dulong41_starrocks
-            -Dsonar.pullrequest.github.repository=starrocks
+            -Dsonar.organization=starrocks
           
         
 #      - name: Build and analyze
