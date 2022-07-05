@@ -47,7 +47,7 @@ broker;
     ```plain text
     column_separator: 指定导出的列分隔符，默认为\t。
     line_delimiter: 指定导出的行分隔符，默认为\n。
-    exec_mem_limit: 导出在单个 BE 节点的内存使用上限，默认为 2GB，单位为字节。
+    load_mem_limit: 导出在单个 BE 节点的内存使用上限，默认为 2GB，单位为字节。
     timeout：导入作业的超时时间，默认为1天，单位是「秒」。
     include_query_id: 导出文件名中是否包含 query id，默认为 true。
     ```
