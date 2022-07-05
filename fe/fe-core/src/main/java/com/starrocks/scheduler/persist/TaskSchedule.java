@@ -3,6 +3,7 @@
 package com.starrocks.scheduler.persist;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.sql.optimizer.Utils;
 
 import java.util.concurrent.TimeUnit;
 
@@ -46,5 +47,10 @@ public class TaskSchedule {
 
     public void setTimeUnit(TimeUnit timeUnit) {
         this.timeUnit = timeUnit;
+    }
+
+    public String toString() {
+        return " (START " + Utils.getDatetimeFromLong(startTime)
+                + " EVERY(" + period + " " + timeUnit + "))";
     }
 }
