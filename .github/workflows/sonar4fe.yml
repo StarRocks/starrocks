@@ -5,7 +5,7 @@ on:
       - main
   pull_request_target:
     paths:
-      - 'conf/**_hy'
+      - 'conf/**.java'
       
 #  pull_request:
 #    types: [opened, synchronize, reopened]
