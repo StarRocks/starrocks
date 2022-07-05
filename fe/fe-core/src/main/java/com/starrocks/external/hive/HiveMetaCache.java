@@ -450,8 +450,13 @@ public class HiveMetaCache {
     public void refreshConnectorTable(String db, String name) throws TException, DdlException, ExecutionException {
         HiveTableName hiveTableName = HiveTableName.of(db, name);
         refreshConnectorTableSchema(hiveTableName);
-        HiveTable newHiveTable = (HiveTable) tableCache.get(hiveTableName);
-        refreshTable(newHiveTable.getHmsTableInfo());
+        if (tableCache.get(hiveTableName) instanceof HiveTable) {
+            HiveTable hiveTable = (HiveTable) tableCache.get(hiveTableName);
+            refreshTable(hiveTable.getHmsTableInfo());
+        } else if (tableCache.get(hiveTableName) instanceof HudiTable) {
+            HudiTable hudiTable = (HudiTable) tableCache.get(hiveTableName);
+            refreshTable(hudiTable.getHmsTableInfo());
+        }
     }
 
     public void refreshConnectorTableSchema(HiveTableName hiveTableName) throws TException, DdlException {

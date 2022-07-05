@@ -19,6 +19,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
+import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.external.hive.HiveTableStats;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
@@ -128,6 +129,10 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return table;
     }
 
+    public HiveMetaStoreTableInfo getHmsTableInfo() {
+        return hmsTableInfo;
+    }
+
     @Override
     public List<Column> getPartitionColumns() {
         return HiveMetaStoreTableUtils.getPartitionColumns(hmsTableInfo);
@@ -183,7 +188,20 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public void refreshTableCache(String dbName, String tableName) throws DdlException {
-        GlobalStateMgr.getCurrentState().getHiveRepository().refreshTableCache(hmsTableInfo);
+        HiveRepository hiveRepository = GlobalStateMgr.getCurrentState().getHiveRepository();
+        try {
+            if (HiveMetaStoreTableUtils.isInternalCatalog(resourceName)) {
+                hiveRepository.refreshTableCache(hmsTableInfo);
+            } else {
+                hiveRepository.refreshConnectorTable(resourceName, dbName, tableName);
+            }
+            GlobalStateMgr.getCurrentState().getHiveRepository().refreshTableCache(hmsTableInfo);
+        } catch (Exception e) {
+            hiveRepository.clearCache(hmsTableInfo);
+            LOG.warn("Failed to refresh [{}.{}.{}]. Invalidate all cache on it",
+                    resourceName, dbName, tableName);
+            throw new DdlException(e.getMessage());
+        }
     }
 
     @Override
@@ -230,7 +248,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         if (hudiResource == null && isInternalCatalog(resourceName)) {
             throw new DdlException("Hudi resource [" + resourceName + "] does NOT exists");
         }
-        if ((resourceName == null || isInternalCatalog(resourceName)) && hudiResource.getType() != Resource.ResourceType.HUDI) {
+        if ((resourceName == null || isInternalCatalog(resourceName)) &&
+                hudiResource.getType() != Resource.ResourceType.HUDI) {
             throw new DdlException("Resource [" + resourceName + "] is not hudi resource");
         }
 
@@ -462,7 +481,6 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                 }
             }
         }
-        initHmsTableInfo();
     }
 
     @Override
