@@ -115,7 +115,7 @@ public class SRTThreadPoolServer extends TServer {
     }
 
     // Executor service for handling client connections
-    private final ExecutorService executorService_;
+    private final ExecutorService executorService;
 
     private final TimeUnit stopTimeoutUnit;
 
@@ -138,7 +138,7 @@ public class SRTThreadPoolServer extends TServer {
         requestTimeout = args.requestTimeout;
         beBackoffSlotInMillis = args.beBackoffSlotLengthUnit.toMillis(args.beBackoffSlotLength);
 
-        executorService_ = args.executorService != null ?
+        executorService = args.executorService != null ?
                 args.executorService : createDefaultExecutorService(args);
     }
 
@@ -189,11 +189,11 @@ public class SRTThreadPoolServer extends TServer {
 
                 int retryCount = 0;
                 long remainTimeInMillis = requestTimeoutUnit.toMillis(requestTimeout);
-                while(true) {
+                while (true) {
                     try {
-                        executorService_.execute(wp);
+                        executorService.execute(wp);
                         break;
-                    } catch(Throwable t) {
+                    } catch (Throwable t) {
                         if (t instanceof RejectedExecutionException) {
                             retryCount++;
                             try {
@@ -235,7 +235,7 @@ public class SRTThreadPoolServer extends TServer {
     }
 
     protected void waitForShutdown() {
-        executorService_.shutdown();
+        executorService.shutdown();
 
         // Loop until awaitTermination finally does return without a interrupted
         // exception. If we don't do this, then we'll shut down prematurely. We want
@@ -245,7 +245,7 @@ public class SRTThreadPoolServer extends TServer {
         long now = System.currentTimeMillis();
         while (timeoutMS >= 0) {
             try {
-                executorService_.awaitTermination(timeoutMS, TimeUnit.MILLISECONDS);
+                executorService.awaitTermination(timeoutMS, TimeUnit.MILLISECONDS);
                 break;
             } catch (InterruptedException ix) {
                 long newnow = System.currentTimeMillis();
@@ -265,7 +265,7 @@ public class SRTThreadPoolServer extends TServer {
         /**
          * Client that this services.
          */
-        private final TTransport client_;
+        private final TTransport client;
 
         /**
          * Default constructor.
@@ -273,7 +273,7 @@ public class SRTThreadPoolServer extends TServer {
          * @param client Transport to process
          */
         private WorkerProcess(TTransport client) {
-            client_ = client;
+            this.client = client;
         }
 
         /**
@@ -290,9 +290,9 @@ public class SRTThreadPoolServer extends TServer {
             ServerContext connectionContext = null;
 
             try {
-                processor = processorFactory_.getProcessor(client_);
-                inputTransport = inputTransportFactory_.getTransport(client_);
-                outputTransport = outputTransportFactory_.getTransport(client_);
+                processor = processorFactory_.getProcessor(client);
+                inputTransport = inputTransportFactory_.getTransport(client);
+                outputTransport = outputTransportFactory_.getTransport(client);
                 inputProtocol = inputProtocolFactory_.getProtocol(inputTransport);
                 outputProtocol = outputProtocolFactory_.getProtocol(outputTransport);
 
@@ -331,8 +331,8 @@ public class SRTThreadPoolServer extends TServer {
                 if (outputTransport != null) {
                     outputTransport.close();
                 }
-                if (client_.isOpen()) {
-                    client_.close();
+                if (client.isOpen()) {
+                    client.close();
                 }
             }
         }
@@ -341,14 +341,13 @@ public class SRTThreadPoolServer extends TServer {
             TTransportException tTransportException = null;
 
             if (x instanceof TTransportException) {
-                tTransportException = (TTransportException)x;
-            }
-            else if (x.getCause() instanceof TTransportException) {
-                tTransportException = (TTransportException)x.getCause();
+                tTransportException = (TTransportException) x;
+            } else if (x.getCause() instanceof TTransportException) {
+                tTransportException = (TTransportException) x.getCause();
             }
 
             if (tTransportException != null) {
-                switch(tTransportException.getType()) {
+                switch (tTransportException.getType()) {
                     case TTransportException.END_OF_FILE:
                     case TTransportException.TIMED_OUT:
                         return true;
