@@ -303,12 +303,11 @@ public class ExportStmt extends StatementBase {
         this.columnSeparator = Delimiter.convertDelimiter(this.columnSeparator);
         this.rowDelimiter = PropertyAnalyzer.analyzeRowDelimiter(properties, ExportStmt.DEFAULT_LINE_DELIMITER);
         this.rowDelimiter = Delimiter.convertDelimiter(this.rowDelimiter);
-        // exec_mem_limit
         if (properties.containsKey(LoadStmt.LOAD_MEM_LIMIT)) {
             try {
                 Long.parseLong(properties.get(LoadStmt.LOAD_MEM_LIMIT));
             } catch (NumberFormatException e) {
-                throw new AnalysisException("Invalid exec_mem_limit value: " + e.getMessage());
+                throw new AnalysisException("Invalid load_mem_limit value: " + e.getMessage());
             }
         } else {
             // use session variables
