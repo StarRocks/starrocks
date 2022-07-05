@@ -72,14 +72,14 @@ select v1 from t0 inner join t1 on v3 = v4 where v2 = 2 or (v2 = 3 and v3 = 3) o
 INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 2 OR 2: v2 = 3 AND 3: v3 = 3 OR 2: v2 = 4 AND 3: v3 = 4 AND 2: v2 IN (2, 3, 4)])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v4] predicate[null])
+        SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
 [end]
 
 [sql]
 select v1 from t0 inner join t1 on v3 = v4 where (v2 = 2 or v2 = 3);
 [result]
 INNER JOIN (join-predicate [4: v4 = 3: v3] post-join-predicate [null])
-    SCAN (columns[4: v4] predicate[null])
+    SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
     EXCHANGE SHUFFLE[3]
         SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 IN (2, 3)])
 [end]
@@ -88,7 +88,7 @@ INNER JOIN (join-predicate [4: v4 = 3: v3] post-join-predicate [null])
 select v1 from t0 inner join t1 on v3 = v4 where (v2 = 2 or v2 = 3) and (v3 = 3 or v4 = 4);
 [result]
 INNER JOIN (join-predicate [4: v4 = 3: v3 AND 3: v3 = 3 OR 4: v4 = 4] post-join-predicate [null])
-    SCAN (columns[4: v4] predicate[null])
+    SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
     EXCHANGE SHUFFLE[3]
         SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 IN (2, 3)])
 [end]
@@ -99,7 +99,7 @@ select v1 from t0 inner join t1 on v3 = v4 where  v2 = 2 or (v2 = 3 and v3 = 3) 
 INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 2 OR 2: v2 = 3 AND 3: v3 = 3 OR 2: v2 = 4 AND 3: v3 = 4 AND 3: v3 = 5 AND 2: v2 IN (2, 3, 4)])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v4] predicate[null])
+        SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
 [end]
 
 [sql]
@@ -108,7 +108,7 @@ select v1 from t0 inner join t1 on v3 = v4 where  v2 = 2 or (v2 = 3 and v3 = 3) 
 INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 2 OR 2: v2 = 3 AND 3: v3 = 3 OR 2: v2 = 4 AND 3: v3 = 4 OR 2: v2 = 5 AND 2: v2 IN (2, 3, 4, 5)])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v4] predicate[null])
+        SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
 [end]
 
 [sql]
@@ -117,7 +117,7 @@ select v1 from t0 inner join t1 on v3 = v4 where  v2 in (1,2) or (v2 = 3 and v3 
 INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 IN (1, 2) OR 2: v2 = 3 AND 3: v3 = 3 OR 2: v2 IN (4, 5) AND 3: v3 = 4 AND 2: v2 = 6 AND 2: v2 IN (1, 2, 3)])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v4] predicate[null])
+        SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
 [end]
 
 [sql]
@@ -126,7 +126,7 @@ select v1 from t0 inner join t1 on v3 = v4 where  v2 = 2 or (v2 = 3 and v3 = 3) 
 INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 2 OR 2: v2 = 3 AND 3: v3 = 3 OR 2: v2 = 4 AND 3: v3 = 4 OR 2: v2 IN (6, 7, 8) AND 3: v3 = 6 AND 2: v2 IN (2, 3, 4, 6, 7, 8)])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v4] predicate[null])
+        SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
 [end]
 
 [sql]
@@ -135,14 +135,14 @@ select v1 from t0 inner join t1 on v3 = v4 where  v2 = 2 or (v2 = 3 and v3 = 3) 
 INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 2 OR 2: v2 = 3 AND 3: v3 = 3 OR 3: v3 = 4 OR 2: v2 IN (6, 7, 8) AND 3: v3 = 6])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v4] predicate[null])
+        SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
 [end]
 
 [sql]
 select v1 from t0 inner join t1 on v3 = v4 where (v1 = 1 AND v2 = 2) OR (v1 = 3 AND v2 = 4 AND v1 != 5)
 [result]
 INNER JOIN (join-predicate [4: v4 = 3: v3] post-join-predicate [null])
-    SCAN (columns[4: v4] predicate[null])
+    SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
     EXCHANGE SHUFFLE[3]
         SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 = 1 AND 2: v2 = 2 OR 1: v1 = 3 AND 2: v2 = 4 AND 1: v1 != 5 AND 1: v1 IN (1, 3) AND 2: v2 IN (2, 4)])
 [end]
@@ -153,14 +153,14 @@ select v1 from t0 inner join t1 on v3 = v4 where (v1 = 1 AND v2 = 2) OR (v2 = 4 
 INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 = 1 AND 2: v2 = 2 OR 2: v2 = 4 AND 1: v1 = 3: v3 AND 2: v2 IN (2, 4)])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v4] predicate[null])
+        SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
 [end]
 
 [sql]
 select v1 from t0 inner join t1 on v3 = v4 where (v1 = 1 AND v2 = 2) OR (v2 = 4 AND v1 not in (1,2))
 [result]
 INNER JOIN (join-predicate [4: v4 = 3: v3] post-join-predicate [null])
-    SCAN (columns[4: v4] predicate[null])
+    SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
     EXCHANGE SHUFFLE[3]
         SCAN (columns[1: v1, 2: v2, 3: v3] predicate[1: v1 = 1 AND 2: v2 = 2 OR 2: v2 = 4 AND 1: v1 NOT IN (1, 2) AND 2: v2 IN (2, 4)])
 [end]

@@ -135,7 +135,9 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
             root = OptExpression.create(newJoin, input.getInputs());
         }
 
-        deriveIsNotNullPredicate(eqConjuncts, root, leftPushDown, rightPushDown);
+        if (!join.hasDeriveIsNotNullPredicate()) {
+            deriveIsNotNullPredicate(eqConjuncts, root, leftPushDown, rightPushDown);
+        }
         return pushDownPredicate(root, leftPushDown, rightPushDown);
     }
 
@@ -205,12 +207,14 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
             }
         }
 
-        JoinOperator joinType = ((LogicalJoinOperator) join.getOp()).getJoinType();
+        LogicalJoinOperator joinOp = ((LogicalJoinOperator) join.getOp());
+        JoinOperator joinType = joinOp.getJoinType();
         if ((joinType.isInnerJoin() || joinType.isRightSemiJoin()) && leftPushDown.isEmpty()) {
             leftEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone())).forEach(leftPushDown::add);
         }
         if ((joinType.isInnerJoin() || joinType.isLeftSemiJoin()) && rightPushDown.isEmpty()) {
             rightEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone())).forEach(rightPushDown::add);
         }
+        joinOp.setHasDeriveIsNotNullPredicate(true);
     }
 }

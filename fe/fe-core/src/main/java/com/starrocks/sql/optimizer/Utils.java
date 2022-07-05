@@ -551,4 +551,11 @@ public class Utils {
         }
         return Optional.empty();
     }
+
+    public static ScalarOperator transTrue2Null(ScalarOperator predicates) {
+        if (ConstantOperator.TRUE.equals(predicates)) {
+            return null;
+        }
+        return predicates;
+    }
 }

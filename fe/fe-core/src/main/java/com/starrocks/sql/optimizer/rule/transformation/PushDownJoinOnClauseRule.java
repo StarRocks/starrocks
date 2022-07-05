@@ -25,7 +25,7 @@ public class PushDownJoinOnClauseRule extends PushDownJoinPredicateBase {
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
 
-        if (joinOperator.isHasPushDownJoinOnClause()) {
+        if (joinOperator.hasPushDownJoinOnClause()) {
             return false;
         }
         return joinOperator.getOnPredicate() != null;

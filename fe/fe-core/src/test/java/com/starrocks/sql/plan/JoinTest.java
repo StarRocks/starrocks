@@ -666,7 +666,7 @@ public class JoinTest extends PlanTestBase {
                 "             AND (v3 IN (SELECT v1 FROM t0)));";
         // check no exception
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "13:HASH JOIN\n" +
+        assertContains(plan, "11:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 5: v2 = 24: v1");

@@ -14,7 +14,7 @@ select t0.v1 from t0 where exists (select t3.v11 from t3 where t0.v3 = t3.v12)
 LEFT SEMI JOIN (join-predicate [3: v3 = 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[6: v12] predicate[null])
+        SCAN (columns[6: v12] predicate[6: v12 IS NOT NULL])
 [end]
 
 [sql]
@@ -44,7 +44,7 @@ select t0.v1 from t0 where exists (select t3.v11 from t3 where t0.v3 = t3.v12) a
 LEFT SEMI JOIN (join-predicate [3: v3 = 6: v12] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[6: v12] predicate[null])
+        SCAN (columns[6: v12] predicate[6: v12 IS NOT NULL])
 [end]
 
 [sql]

@@ -196,13 +196,12 @@ public class PushDownPredicateJoinRule extends PushDownJoinPredicateBase {
         OptExpression joinOpt = input.getInputs().get(0);
         LogicalJoinOperator join = (LogicalJoinOperator) joinOpt.getOp();
 
-        OptExpression result;
         if (join.getJoinType().isCrossJoin() || join.getJoinType().isInnerJoin()) {
             // The effect will be better, first do the range derive, and then do the equivalence derive
             ScalarOperator predicate =
                     rangePredicateDerive(Utils.compoundAnd(join.getOnPredicate(), filter.getPredicate()));
             predicate = equivalenceDerive(predicate, true);
-            result = pushDownOnPredicate(input.getInputs().get(0), predicate);
+            return Lists.newArrayList(pushDownOnPredicate(input.getInputs().get(0), predicate));
         } else {
             if (join.getJoinType().isOuterJoin()) {
                 convertOuterToInner(input);
@@ -213,19 +212,16 @@ public class PushDownPredicateJoinRule extends PushDownJoinPredicateBase {
                 ScalarOperator predicate =
                         rangePredicateDerive(Utils.compoundAnd(join.getOnPredicate(), filter.getPredicate()));
                 predicate = equivalenceDerive(predicate, true);
-                result = pushDownOnPredicate(input.getInputs().get(0), predicate);
+                return Lists.newArrayList(pushDownOnPredicate(input.getInputs().get(0), predicate));
             } else {
                 ScalarOperator predicate = rangePredicateDerive(filter.getPredicate());
                 List<ScalarOperator> leftPushDown = Lists.newArrayList();
                 List<ScalarOperator> rightPushDown = Lists.newArrayList();
                 equivalenceDeriveOnOuterOrSemi(Utils.compoundAnd(join.getOnPredicate(), predicate), joinOpt, join,
                         leftPushDown, rightPushDown);
-                result = pushDownOuterOrSemiJoin(input, predicate, leftPushDown, rightPushDown);
+                return Lists.newArrayList(pushDownOuterOrSemiJoin(input, predicate, leftPushDown, rightPushDown));
             }
         }
-
-        ((LogicalJoinOperator) result.getOp()).setHasPushDownJoinOnClause(true);
-        return Lists.newArrayList(result);
     }
 
     private void equivalenceDeriveOnOuterOrSemi(ScalarOperator predicate, OptExpression joinOpt,
