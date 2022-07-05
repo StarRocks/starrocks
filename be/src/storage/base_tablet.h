@@ -73,7 +73,7 @@ public:
     void set_tablet_meta(const TabletMetaSharedPtr& tablet_meta) { _tablet_meta = tablet_meta; }
 
     TabletUid tablet_uid() const;
-    int64_t table_id() const;
+    int64_t belonged_table_id() const;
     // Returns a string can be used to uniquely identify a tablet.
     // The result string will often be printed to the log.
     const std::string full_name() const;
@@ -120,7 +120,7 @@ inline TabletUid BaseTablet::tablet_uid() const {
     return _tablet_meta->tablet_uid();
 }
 
-inline int64_t BaseTablet::table_id() const {
+inline int64_t BaseTablet::belonged_table_id() const {
     return _tablet_meta->table_id();
 }
 
