@@ -69,7 +69,7 @@ jobs:
         with:
           args:  >
             -Dsonar.projectKey=dulong41_starrocks
-            -Dsonar.organization=starrocks
+            -Dsonar.organization=dulong41
           
         
 #      - name: Build and analyze
