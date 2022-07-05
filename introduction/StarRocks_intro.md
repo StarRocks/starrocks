@@ -76,6 +76,7 @@
 - [Apache Iceberg](/using_starrocks/External_table#apache-iceberg-%E5%A4%96%E8%A1%A8)
 - [MySQL](/using_starrocks/External_table#mysql-%E5%A4%96%E9%83%A8%E8%A1%A8)
 - [Elasticsearch](/using_starrocks/External_table#elasticsearch-%E5%A4%96%E9%83%A8%E8%A1%A8)
+- [更多数据库 (JDBC)](/using_starrocks/External_table#JDBC-%E5%A4%96%E9%83%A8%E8%A1%A8)
 
 </NavBoxPartItem>
 </NavBoxPart>
