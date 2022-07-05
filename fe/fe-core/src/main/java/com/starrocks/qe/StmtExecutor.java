@@ -193,6 +193,21 @@ public class StmtExecutor {
         long cpuCostNs = statistics == null || statistics.cpuCostNs == null ? 0 : statistics.cpuCostNs;
         summaryProfile.addInfoString(ProfileManager.QUERY_CPU_COST, DebugUtil.getPrettyStringNs(cpuCostNs));
         summaryProfile.addInfoString(ProfileManager.QUERY_MEM_COST, DebugUtil.getPrettyStringBytes(memCostBytes));
+
+        // Add some import variables in profile
+        SessionVariable variables = context.getSessionVariable();
+        if (variables != null) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
+                    .append(variables.getParallelExecInstanceNum()).append(",");
+            sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
+            if (context.getWorkGroup() != null) {
+                sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getWorkGroup().getName()).append(",");
+            }
+            sb.deleteCharAt(sb.length() - 1);
+            summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
+        }
+
         profile.addChild(summaryProfile);
         if (coord != null) {
             coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
@@ -970,10 +985,7 @@ public class StmtExecutor {
         } else {
             sql = originStmt.originStmt;
         }
-        boolean isQuery = false;
-        if (parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) {
-            isQuery = true;
-        }
+        boolean isQuery = parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement;
         QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(context.getQueryId()),
                 isQuery,
