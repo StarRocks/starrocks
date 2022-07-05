@@ -80,7 +80,7 @@ jobs:
           sha: "${{ github.pull_request.sha }}"
           base_sha: "${{ github.sha }}"
           files: |
-            test_hy
+            **/*_hy
 
       - name: List all changed files
         run: |
