@@ -147,6 +147,7 @@ Status StorageEngine::start_bg_threads() {
     }
     LOG(INFO) << "update compaction threads started. number: " << update_compaction_num_threads;
     _repair_compaction_thread = std::thread([this] { _repair_compaction_thread_callback(nullptr); });
+    Thread::set_thread_name(_repair_compaction_thread, "repair_compact");
     LOG(INFO) << "repair compaction thread started";
 
     // tablet checkpoint thread
