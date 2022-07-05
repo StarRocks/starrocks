@@ -41,7 +41,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
 
     @Override
     public void collect() throws Exception {
-        for (String columnName : analyzeJob.getColumns()) {
+        for (String columnName : columns) {
             String sql = buildSampleInsertSQL(db.getId(), table.getId(), Lists.newArrayList(columnName),
                     analyzeJob.getSampleCollectRows());
             collectStatisticSync(sql);

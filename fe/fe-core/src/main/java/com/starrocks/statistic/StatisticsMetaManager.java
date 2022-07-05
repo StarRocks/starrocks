@@ -142,7 +142,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
         int total = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false).size();
         // maybe cluster just shutdown, ignore
-        if (aliveSize < total / 2) {
+        if (aliveSize <= total / 2) {
             lossTableCount = 0;
             return true;
         }
@@ -207,13 +207,7 @@ public class StatisticsMetaManager extends MasterDaemon {
             return false;
         }
         LOG.info("create statistics table done");
-        for (Map.Entry<Long, BasicStatsMeta> entry :
-                GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
-            BasicStatsMeta basicStatsMeta = entry.getValue();
-            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
-                    basicStatsMeta.getDbId(), basicStatsMeta.getTableId(),
-                    basicStatsMeta.getType(), LocalDateTime.MIN, basicStatsMeta.getProperties()));
-        }
+        refreshAnalyzeJob();
         return checkTableExist(Constants.SampleStatisticsTableName);
     }
 
@@ -241,13 +235,7 @@ public class StatisticsMetaManager extends MasterDaemon {
             return false;
         }
         LOG.info("create statistics table done");
-        for (Map.Entry<Long, BasicStatsMeta> entry :
-                GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
-            BasicStatsMeta basicStatsMeta = entry.getValue();
-            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
-                    basicStatsMeta.getDbId(), basicStatsMeta.getTableId(),
-                    basicStatsMeta.getType(), LocalDateTime.MIN, basicStatsMeta.getProperties()));
-        }
+        refreshAnalyzeJob();
         return checkTableExist(Constants.FullStatisticsTableName);
     }
 
@@ -283,6 +271,21 @@ public class StatisticsMetaManager extends MasterDaemon {
                     histogramStatsMeta.getType(), LocalDateTime.MIN, histogramStatsMeta.getProperties()));
         }
         return checkTableExist(Constants.HistogramStatisticsTableName);
+    }
+
+    private void refreshAnalyzeJob() {
+        for (Map.Entry<Long, BasicStatsMeta> entry :
+                GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
+            BasicStatsMeta basicStatsMeta = entry.getValue();
+            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
+                    basicStatsMeta.getDbId(), basicStatsMeta.getTableId(),
+                    basicStatsMeta.getType(), LocalDateTime.MIN, basicStatsMeta.getProperties()));
+        }
+
+        for (AnalyzeJob analyzeJob : GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList()) {
+            analyzeJob.setWorkTime(LocalDateTime.MIN);
+            GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(analyzeJob);
+        }
     }
 
     private boolean dropTable(String tableName) {
