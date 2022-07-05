@@ -191,28 +191,17 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |----18:EXCHANGE\n" +
                 "  |    \n" +
                 "  1:OlapScanNode\n" +
-                "     TABLE: t1\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     partitions=1/1\n" +
-                "     rollup: t1\n" +
-                "     tabletRatio=3/3\n" +
-                "     tabletList=10015,10017,10019\n" +
-                "     cardinality=10\n" +
-                "     avgRowSize=2.0\n" +
-                "     numNodes=0\n"));
+                "     TABLE: t1\n"));
 
         // Right sub join tree (a)
-        Assert.assertTrue(planFragment, planFragment.contains("  16:NESTLOOP JOIN\n" +
+        assertContains(planFragment, "  16:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----15:EXCHANGE\n" +
                 "  |    \n" +
-                "  13:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(10: count)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  12:EXCHANGE\n"));
+                "  2:OlapScanNode\n" +
+                "     TABLE: t0");
     }
 
     @Test
@@ -415,7 +404,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "     numNodes=0\n"));
 
         // Right sub join tree (a)
-        Assert.assertTrue(planFragment, planFragment.contains("  STREAM DATA SINK\n" +
+        assertContains(planFragment, "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 18\n" +
                 "    UNPARTITIONED\n" +
                 "\n" +
@@ -428,11 +417,8 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |  \n" +
                 "  |----15:EXCHANGE\n" +
                 "  |    \n" +
-                "  13:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(10: count)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  12:EXCHANGE\n"));
+                "  2:OlapScanNode\n" +
+                "     TABLE: t0\n");
     }
 
     @Test

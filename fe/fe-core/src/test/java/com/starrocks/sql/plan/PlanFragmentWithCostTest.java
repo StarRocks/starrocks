@@ -759,30 +759,31 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         // === check union plan ====
         {
             String unionPlan = plans.get(0);
-            Assert.assertTrue(unionPlan.contains("  0:UNION\n" +
+            assertContains(unionPlan, "  0:UNION\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
                     "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
-                    "  |  pass-through-operands: all\n" +
-                    "  |  cardinality: 800000"));
-            Assert.assertTrue(unionPlan.contains("  4:OlapScanNode\n" +
+                    "  |  pass-through-operands: all\n");
+            assertContains(unionPlan, "  4:OlapScanNode\n" +
                     "     table: t1, rollup: t1\n" +
                     "     preAggregation: on\n" +
+                    "     Predicates: 5: v4 + 2 IS NOT NULL\n" +
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=10015,10017,10019\n" +
                     "     actualRows=0, avgRowSize=4.0\n" +
-                    "     cardinality: 400000\n" +
+                    "     cardinality: 360000\n" +
                     "     probe runtime filters:\n" +
-                    "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
-            Assert.assertTrue(unionPlan.contains("  1:OlapScanNode\n" +
+                    "     - filter_id = 0, probe_expr = (5: v4 + 2)");
+            assertContains(unionPlan, "  1:OlapScanNode\n" +
                     "     table: t0, rollup: t0\n" +
                     "     preAggregation: on\n" +
+                    "     Predicates: 1: v1 + 1 IS NOT NULL\n" +
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=10006,10008,10010\n" +
                     "     actualRows=0, avgRowSize=4.0\n" +
-                    "     cardinality: 400000\n" +
+                    "     cardinality: 360000\n" +
                     "     probe runtime filters:\n" +
-                    "     - filter_id = 0, probe_expr = (1: v1 + 1)"));
+                    "     - filter_id = 0, probe_expr = (1: v1 + 1)");
         }
         // === check except plan ===
         {
@@ -790,25 +791,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             Assert.assertTrue(exceptPlan.contains("  0:EXCEPT\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
-                    "  |  cardinality: 800000"));
-            Assert.assertTrue(exceptPlan.contains("  4:OlapScanNode\n" +
-                    "     table: t1, rollup: t1\n" +
-                    "     preAggregation: on\n" +
-                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
-                    "     tabletList=10015,10017,10019\n" +
-                    "     actualRows=0, avgRowSize=4.0\n" +
-                    "     cardinality: 400000\n" +
-                    "     probe runtime filters:\n" +
+                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n"));
+            Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
-            Assert.assertTrue(exceptPlan.contains("  1:OlapScanNode\n" +
-                    "     table: t0, rollup: t0\n" +
-                    "     preAggregation: on\n" +
-                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
-                    "     tabletList=10006,10008,10010\n" +
-                    "     actualRows=0, avgRowSize=4.0\n" +
-                    "     cardinality: 800000\n" +
-                    "     probe runtime filters:\n" +
+            Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (1: v1 + 1)"));
         }
         // === check intersect plan ====
@@ -817,25 +803,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             Assert.assertTrue(intersectPlan.contains("  0:INTERSECT\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
-                    "  |  cardinality: 400000"));
-            Assert.assertTrue(intersectPlan.contains("  4:OlapScanNode\n" +
-                    "     table: t1, rollup: t1\n" +
-                    "     preAggregation: on\n" +
-                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
-                    "     tabletList=10015,10017,10019\n" +
-                    "     actualRows=0, avgRowSize=4.0\n" +
-                    "     cardinality: 400000\n" +
-                    "     probe runtime filters:\n" +
+                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n"));
+            Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
-            Assert.assertTrue(intersectPlan.contains("  1:OlapScanNode\n" +
-                    "     table: t0, rollup: t0\n" +
-                    "     preAggregation: on\n" +
-                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
-                    "     tabletList=10006,10008,10010\n" +
-                    "     actualRows=0, avgRowSize=4.0\n" +
-                    "     cardinality: 400000\n" +
-                    "     probe runtime filters:\n" +
+            Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (1: v1 + 1)"));
         }
     }
@@ -1040,11 +1011,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         assertContains(plan, "STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 01\n" +
-                "    HASH_PARTITIONED: 3: v3");
+                "    HASH_PARTITIONED: 2: v2");
 
         assertContains(plan, "STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 03\n" +
-                "    HASH_PARTITIONED: 6: v6");
+                "    HASH_PARTITIONED: 5: v5");
 
         sql = "select * from t0 join[shuffle] t1 on t0.v2 = t1.v5 and t0.v3 = t1.v6 " +
                 "               join[broadcast] t2 on t0.v2 = t2.v8";
@@ -1052,11 +1023,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 01\n" +
-                "    HASH_PARTITIONED: 3: v3");
+                "    HASH_PARTITIONED: 2: v2");
 
         assertContains(plan, "STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 03\n" +
-                "    HASH_PARTITIONED: 6: v6");
+                "    HASH_PARTITIONED: 5: v5");
     }
 
     @Test
