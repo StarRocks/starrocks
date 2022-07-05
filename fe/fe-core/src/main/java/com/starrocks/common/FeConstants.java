@@ -48,7 +48,7 @@ public class FeConstants {
     // set to true to skip some step when running FE unit test
     public static boolean runningUnitTest = false;
 
-    //some ut need this time very long
+    // some ut need this time very long
     public static long master_daemon_wait_serving_ready_sleep_mills = 10000;
 
     // default scheduler interval is 10 seconds
