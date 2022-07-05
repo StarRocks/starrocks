@@ -38,6 +38,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TPartitionVersionInfo;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -110,8 +111,7 @@ public class TransactionState implements Writable {
         TIMEOUT,
         OFFSET_OUT_OF_RANGE,
         PAUSE,
-        NO_PARTITIONS,
-        UNRECOVERABLE_ERROR;
+        NO_PARTITIONS;
 
         public static TxnStatusChangeReason fromString(String reasonString) {
             if (Strings.isNullOrEmpty(reasonString)) {
@@ -119,7 +119,7 @@ public class TransactionState implements Writable {
             }
 
             // Pause on unrecoverable error.
-            if (reasonString.contains(UNRECOVERABLE_ERROR.toString())) {
+            if (reasonString.contains(TStatusCode.UNRECOVERABLE_ERROR.toString())) {
                 return PAUSE;
             }
 
@@ -138,8 +138,6 @@ public class TransactionState implements Writable {
                     return "Offset out of range";
                 case NO_PARTITIONS:
                     return "all partitions have no load data";
-                case UNRECOVERABLE_ERROR:
-                    return "Unrecoverable error";
                 default:
                     return this.name();
             }
