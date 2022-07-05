@@ -75,7 +75,7 @@ jobs:
           
       - name: Get specific changed files
         id: changed-files-specific
-        uses: tj-actions/changed-files@v10
+        uses: tj-actions/changed-files@v23.1
         with:
           sha: "${{ github.pull_request.sha }}"
           base_sha: "${{ github.sha }}"
