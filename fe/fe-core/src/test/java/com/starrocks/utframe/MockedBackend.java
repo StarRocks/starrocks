@@ -27,9 +27,9 @@ import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PQueryStatistics;
-import com.starrocks.proto.StatusPB;
 import com.starrocks.proto.PTriggerProfileReportResult;
-import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.proto.StatusPB;
+import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
 import com.starrocks.rpc.PFetchDataRequest;
@@ -124,9 +124,9 @@ public class MockedBackend {
         ((MockGenericPool) ClientPool.heartbeatPool).register(this);
         ((MockGenericPool) ClientPool.backendPool).register(this);
 
-        new MockUp<BackendServiceClient>() {
+        new MockUp<BrpcProxy>() {
             @Mock
-            protected synchronized PBackendService getProxy(TNetworkAddress address) {
+            protected synchronized PBackendService getBackendService(TNetworkAddress address) {
                 return pbService;
             }
         };
