@@ -1916,8 +1916,8 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo1;
                 minTimes = 0;
 
-                olapTable1.getType();
-                result = Table.TableType.OLAP;
+                olapTable1.isNativeTable();
+                result = true;
                 minTimes = 0;
             }
 
@@ -1938,8 +1938,8 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo2;
                 minTimes = 0;
 
-                olapTable2.getType();
-                result = Table.TableType.OLAP;
+                olapTable2.isNativeTable();
+                result = true;
                 minTimes = 0;
             }
         };
@@ -2029,8 +2029,8 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo1;
                 minTimes = 0;
 
-                olapTable1.getType();
-                result = Table.TableType.OLAP;
+                olapTable1.isNativeTable();
+                result = true;
                 minTimes = 0;
             }
 
@@ -2051,8 +2051,8 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo2;
                 minTimes = 0;
 
-                olapTable2.getType();
-                result = Table.TableType.OLAP;
+                olapTable2.isNativeTable();
+                result = true;
                 minTimes = 0;
             }
         };
@@ -2118,8 +2118,8 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo1;
                 minTimes = 0;
 
-                olapTable1.getType();
-                result = Table.TableType.OLAP;
+                olapTable1.isNativeTable();
+                result = true;
                 minTimes = 0;
             }
 
@@ -2140,8 +2140,8 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo2;
                 minTimes = 0;
 
-                olapTable2.getType();
-                result = Table.TableType.OLAP;
+                olapTable2.isNativeTable();
+                result = true;
                 minTimes = 0;
             }
         };

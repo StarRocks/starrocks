@@ -201,7 +201,8 @@ public class StmtExecutor {
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Query");
         summaryProfile.addInfoString(ProfileManager.QUERY_STATE, context.getState().toString());
-        summaryProfile.addInfoString("StarRocks Version", Version.STARROCKS_VERSION);
+        summaryProfile.addInfoString("StarRocks Version",
+                String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);

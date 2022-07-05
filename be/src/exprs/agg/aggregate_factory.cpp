@@ -24,6 +24,7 @@
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/percentile_approx.h"
+#include "exprs/agg/percentile_cont.h"
 #include "exprs/agg/retention.h"
 #include "exprs/agg/sum.h"
 #include "exprs/agg/variance.h"
@@ -186,6 +187,11 @@ AggregateFunctionPtr AggregateFactory::MakePercentileApproxAggregateFunction() {
 
 AggregateFunctionPtr AggregateFactory::MakePercentileUnionAggregateFunction() {
     return std::make_shared<PercentileUnionAggregateFunction>();
+}
+
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakePercentileContAggregateFunction() {
+    return std::make_shared<PercentileContAggregateFunction<PT>>();
 }
 
 template <PrimitiveType PT>
@@ -471,6 +477,10 @@ public:
                 auto array_agg = AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<ArrayAggAggregateState<ArgPT>, false>(
                         array_agg);
+            } else if (name == "percentile_cont") {
+                auto percentile_cont = AggregateFactory::MakePercentileContAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionVariadic<PercentileContState<ArgPT>>(
+                        percentile_cont);
             }
         } else {
             if (name == "count") {
@@ -507,6 +517,8 @@ public:
                 return AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
             } else if (name == "array_agg") {
                 return AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
+            } else if (name == "percentile_cont") {
+                return AggregateFactory::MakePercentileContAggregateFunction<ArgPT>();
             }
         }
 
@@ -578,6 +590,10 @@ public:
                 auto array_agg_value = AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<ArrayAggAggregateState<ArgPT>, false>(
                         array_agg_value);
+            } else if (name == "percentile_cont") {
+                auto percentile_cont = AggregateFactory::MakePercentileContAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionVariadic<PercentileContState<ArgPT>>(
+                        percentile_cont);
             }
         } else {
             if (name == "avg") {
@@ -596,6 +612,8 @@ public:
                 return AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
             } else if (name == "array_agg") {
                 return AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
+            } else if (name == "percentile_cont") {
+                return AggregateFactory::MakePercentileContAggregateFunction<ArgPT>();
             }
         }
 
@@ -925,6 +943,10 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_object_mapping<TYPE_DOUBLE, TYPE_DOUBLE>("percentile_approx");
 
     add_object_mapping<TYPE_PERCENTILE, TYPE_PERCENTILE>("percentile_union");
+
+    add_aggregate_mapping<TYPE_DOUBLE, TYPE_DOUBLE>("percentile_cont");
+    add_aggregate_mapping<TYPE_DATE, TYPE_DATE>("percentile_cont");
+    add_aggregate_mapping<TYPE_DATETIME, TYPE_DATETIME>("percentile_cont");
 
     add_array_mapping<TYPE_ARRAY, TYPE_VARCHAR>("dict_merge");
     add_array_mapping<TYPE_ARRAY, TYPE_ARRAY>("retention");

@@ -1024,13 +1024,13 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
             itr->close();
         }
     }
-    _table_id = tablet->table_id();
+    _table_id = tablet->belonged_table_id();
     _tablet_id = tablet->tablet_id();
     if (size() != total_rows - total_dels) {
         LOG(WARNING) << Substitute("load primary index row count not match tablet:$0 index:$1 != stats:$2", _tablet_id,
                                    size(), total_rows - total_dels);
     }
-    LOG(INFO) << "load primary index finish table:" << tablet->table_id() << " tablet:" << tablet->tablet_id()
+    LOG(INFO) << "load primary index finish table:" << tablet->belonged_table_id() << " tablet:" << tablet->tablet_id()
               << " version:" << apply_version << " #rowset:" << rowsets.size() << " #segment:" << total_segments
               << " data_size:" << total_data_size << " rowsets:" << int_list_to_string(rowset_ids) << " size:" << size()
               << " capacity:" << capacity() << " memory:" << memory_usage()

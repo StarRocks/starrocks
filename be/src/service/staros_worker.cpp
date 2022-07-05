@@ -17,7 +17,7 @@
 namespace starrocks {
 
 std::ostream& operator<<(std::ostream& os, const staros::starlet::ShardInfo& shard) {
-    return os << "Shard{.id=" << shard.id << " .uri=" << shard.obj_store_info.uri << "}";
+    return os << "Shard{.id=" << shard.id << " .uri=" << shard.obj_store_info.s3_obj_store.uri << "}";
 }
 
 absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {

@@ -255,7 +255,7 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
 
         auto st = tablet->data_dir()->get_meta()->flush();
         if (!st.ok()) {
-            LOG(WARNING) << "Failed to persist tablet meta, tablet_id: " << tablet->table_id() << " res: " << st;
+            LOG(WARNING) << "Failed to persist tablet meta, tablet_id: " << tablet->tablet_id() << " res: " << st;
             return st;
         }
         persisted.insert(path);

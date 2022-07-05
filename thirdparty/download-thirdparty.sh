@@ -367,6 +367,8 @@ if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.9.179" ]; th
         touch prefetch_crt_dep_ok
     fi
     patch -p0 < $TP_PATCH_DIR/aws-sdk-cpp-1.9.179.patch    
+    # Fix crt BB, refer to https://github.com/aws/s2n-tls/issues/3166
+    patch -p1 -f -i $TP_PATCH_DIR/aws-sdk-cpp-patch-1.9.179-s2n-compile-error.patch
     touch $PATCHED_MARK
     echo "Finished patching $AWS_SDK_CPP_SOURCE"
 else

@@ -355,12 +355,30 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Statistics.Builder estimateScanColumns(Table table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Statistics.Builder builder = Statistics.builder();
         List<ColumnRefOperator> requiredColumns = new ArrayList<>(colRefToColumnMetaMap.keySet());
-        List<ColumnStatistic> columnStatisticList =
-                GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table,
-                        requiredColumns.stream().map(ColumnRefOperator::getName).collect(Collectors.toList()));
+        List<ColumnStatistic> columnStatisticList = GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(
+                table, requiredColumns.stream().map(ColumnRefOperator::getName).collect(Collectors.toList()));
         Preconditions.checkState(requiredColumns.size() == columnStatisticList.size());
+
+        List<ColumnRefOperator> columnHasHistogram = new ArrayList<>();
+        for (ColumnRefOperator columnRefOperator : requiredColumns) {
+            if (GlobalStateMgr.getCurrentAnalyzeMgr().getHistogramStatsMetaMap()
+                    .get(new Pair<>(table.getId(), columnRefOperator.getName())) != null) {
+                columnHasHistogram.add(columnRefOperator);
+            }
+        }
+
+        Map<ColumnRefOperator, Histogram> histogramStatistics =
+                GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columnHasHistogram);
+
         for (int i = 0; i < requiredColumns.size(); ++i) {
-            builder.addColumnStatistic(requiredColumns.get(i), columnStatisticList.get(i));
+            ColumnStatistic columnStatistic;
+            if (histogramStatistics.containsKey(requiredColumns.get(i))) {
+                columnStatistic = ColumnStatistic.buildFrom(columnStatisticList.get(i)).setHistogram(
+                        histogramStatistics.get(requiredColumns.get(i))).build();
+            } else {
+                columnStatistic = columnStatisticList.get(i);
+            }
+            builder.addColumnStatistic(requiredColumns.get(i), columnStatistic);
             optimizerContext.getDumpInfo()
                     .addTableStatistics(table, requiredColumns.get(i).getName(), columnStatisticList.get(i));
         }
@@ -510,7 +528,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private long getTableRowCount(Table table, Operator node) {
-        if (Table.TableType.OLAP == table.getType()) {
+        if (table.isNativeTable()) {
             OlapTable olapTable = (OlapTable) table;
             List<Partition> selectedPartitions;
             if (node.isLogical()) {

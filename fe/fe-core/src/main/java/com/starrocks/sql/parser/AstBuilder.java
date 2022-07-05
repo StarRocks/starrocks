@@ -16,6 +16,7 @@ import com.starrocks.analysis.AdminShowConfigStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
+import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
@@ -75,6 +76,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.KeysDesc;
+import com.starrocks.analysis.KillStmt;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
@@ -95,6 +97,7 @@ import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RangePartitionDesc;
+import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetStmt;
@@ -229,7 +232,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
 
     // ---------------------------------------- Database Statement -----------------------------------------------------
-    
+    @Override
+    public ParseNode visitAlterDbQuotaStmt(StarRocksParser.AlterDbQuotaStmtContext context) {
+        String dbName = ((Identifier) visit(context.identifier(0))).getValue();
+        if (context.DATA() != null) {
+            String quotaValue = ((Identifier) visit(context.identifier(1))).getValue();
+            return new AlterDatabaseQuotaStmt(dbName,
+                    AlterDatabaseQuotaStmt.QuotaType.DATA,
+                    quotaValue);
+        } else {
+            String quotaValue = context.INTEGER_VALUE().getText();
+            return new AlterDatabaseQuotaStmt(dbName,
+                    AlterDatabaseQuotaStmt.QuotaType.REPLICA,
+                    quotaValue);
+        }
+    }
+
+
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
@@ -259,6 +278,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String dbName = ((Identifier) visit(context.identifier(0))).getValue();
         String newName = ((Identifier) visit(context.identifier(1))).getValue();
         return new AlterDatabaseRename(dbName, newName);
+    }
+
+    @Override
+    public ParseNode visitRecoverDbStmt(StarRocksParser.RecoverDbStmtContext context) {
+        String dbName = ((Identifier) visit(context.identifier())).getValue();
+        return new RecoverDbStmt(dbName);
     }
 
     // ------------------------------------------- Table Statement -----------------------------------------------------
@@ -1772,6 +1797,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new UseStmt(parts.get(0), parts.get(1));
         } else {
             throw new ParsingException("error catalog.database");
+        }
+    }
+
+    @Override
+    public ParseNode visitKillStatement(StarRocksParser.KillStatementContext context) {
+        long id = Long.parseLong(context.INTEGER_VALUE().getText());
+        if (context.QUERY() != null) {
+            return new KillStmt(false, id);
+        } else {
+            return new KillStmt(true, id);
         }
     }
 

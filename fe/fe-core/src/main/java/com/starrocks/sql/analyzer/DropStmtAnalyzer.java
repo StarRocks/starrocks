@@ -6,6 +6,7 @@ import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InfoSchemaDb;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.cluster.ClusterNamespace;
@@ -51,6 +52,13 @@ public class DropStmtAnalyzer {
                         return null;
                     } else {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+                    }
+                } else {
+                    if (table instanceof MaterializedView) {
+                        throw new SemanticException(
+                                "The data of '%s' cannot be dropped because '%s' is a materialized view," +
+                                        "use 'drop materialized view %s' to drop it.",
+                                tableName, tableName, tableName);
                     }
                 }
             } finally {
