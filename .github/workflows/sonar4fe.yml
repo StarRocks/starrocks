@@ -75,10 +75,16 @@ jobs:
       - name: Get specific changed files
         id: changed-files-specific
         uses: tj-actions/changed-files@v23.1
-        with:
-          files: |
-            conf/test_hy
-            
+#        with:
+#          files: |
+#            conf/test_hy
+
+      - name: List all changed files
+        run: |
+          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+            echo "$file was changed"
+          done
+          
       - name: Build and analyze
         if: steps.changed-files-specific.outputs.any_modified == 'true'
         env:
