@@ -1,0 +1,28 @@
+name: FE Build
+on:
+  push:
+    branches:
+      - main
+  pull_request_target:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+          
+
+     - name: Get specific changed files
+        id: changed-files-specific
+        uses: tj-actions/changed-files@v23.1
+        with:
+          files: |
+            conf/**
+            
+      - name: List all changed files
+        run: |
+          for file in ${{ steps.changed-files.outputs.files_changed }}; do
+            echo "$file was changed"
+          done
