@@ -3,9 +3,11 @@ on:
   push:
     branches:
       - main
-  pull_request_target:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  pull_request_target: 
+    paths: 
+      conf
+#  pull_request:
+#    types: [opened, synchronize, reopened]
 jobs:
   build:
     runs-on: ubuntu-latest
