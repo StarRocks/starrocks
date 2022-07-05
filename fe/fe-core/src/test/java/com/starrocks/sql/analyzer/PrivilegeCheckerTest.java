@@ -12,6 +12,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
+import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.utframe.StarRocksAssert;
@@ -33,6 +34,7 @@ public class PrivilegeCheckerTest {
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db1");
+        starRocksAssert.withDatabase("db2");
         starRocksAssert.withTable(createTblStmtStr);
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
 
@@ -125,7 +127,7 @@ public class PrivilegeCheckerTest {
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
-        String sql2 = "create database if not exist 1db";
+        String sql2 = "create database if not exists 1db";
         Assert.assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql2, starRocksAssert.getCtx()));
     }
@@ -659,14 +661,36 @@ public class PrivilegeCheckerTest {
 
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.LOAD_PRIV), true);
-        String sql = "analyze table tbl1;";
+        String sql = "analyze table db1.tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        sql = "create analyze full all";
+        CreateAnalyzeJobStmt createAnalyzeJobStmt =
+                (CreateAnalyzeJobStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class, () ->
+                PrivilegeChecker.check(createAnalyzeJobStmt, starRocksAssert.getCtx()));
+
+        sql = "create analyze database db1";
+        CreateAnalyzeJobStmt createAnalyzeJobStmt1 =
+                (CreateAnalyzeJobStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(createAnalyzeJobStmt1, starRocksAssert.getCtx());
+
+        sql = "create analyze database db2";
+        CreateAnalyzeJobStmt createAnalyzeJobStmt2 =
+                (CreateAnalyzeJobStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class, () -> PrivilegeChecker.check(createAnalyzeJobStmt2, starRocksAssert.getCtx()));
+
+        sql = "create analyze table tbl1";
+        CreateAnalyzeJobStmt createAnalyzeJobStmt3 =
+                (CreateAnalyzeJobStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(createAnalyzeJobStmt3, starRocksAssert.getCtx());
 
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
     }
+
 
     @Test
     public void testShowDelete() throws Exception {
