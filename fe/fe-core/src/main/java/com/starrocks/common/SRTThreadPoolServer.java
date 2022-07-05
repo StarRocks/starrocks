@@ -1,6 +1,3 @@
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/thrift/blob/master/lib/java/src/main/java/org/apache/thrift/server/TThreadPoolServer.java
-
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
 // distributed with this work for additional information
