@@ -70,6 +70,7 @@ jobs:
           args:  >
             -Dsonar.projectKey=dulong41_starrocks
             -Dsonar.organization=dulong41
+            -Dsonar.sources=bin
           
         
 #      - name: Build and analyze
