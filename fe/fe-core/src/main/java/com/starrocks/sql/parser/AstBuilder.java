@@ -76,6 +76,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.KeysDesc;
+import com.starrocks.analysis.KillStmt;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
@@ -1781,6 +1782,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new UseStmt(parts.get(0), parts.get(1));
         } else {
             throw new ParsingException("error catalog.database");
+        }
+    }
+
+    @Override
+    public ParseNode visitKillStatement(StarRocksParser.KillStatementContext context) {
+        long id = Long.parseLong(context.INTEGER_VALUE().getText());
+        if (context.QUERY() != null) {
+            return new KillStmt(false, id);
+        } else {
+            return new KillStmt(true, id);
         }
     }
 
