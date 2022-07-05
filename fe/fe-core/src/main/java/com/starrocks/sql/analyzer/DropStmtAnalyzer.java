@@ -57,7 +57,7 @@ public class DropStmtAnalyzer {
                     if (table instanceof MaterializedView) {
                         throw new SemanticException(
                                 "The data of '%s' cannot be dropped because '%s' is a materialized view," +
-                                        "you can use drop materialized %s to drop it.",
+                                        "use 'drop materialized view %s' to drop it.",
                                 tableName, tableName, tableName);
                     }
                 }
