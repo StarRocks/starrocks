@@ -17,11 +17,11 @@ jobs:
       - name: Get specific changed files
         id: changed-files-specific
         uses: tj-actions/changed-files@v14
-        with:
-          sha: "${{ github.pull_request.sha }}"
-          base_sha: "${{ github.sha }}"
-          files: |
-            conf/**
+ #       with:
+ #         sha: "${{ github.pull_request.sha }}"
+ #         base_sha: "${{ github.sha }}"
+ #         files: |
+ #           conf/**
 
             
       - name: List all changed files
