@@ -56,6 +56,11 @@ protected:
     // chunk depicted by dest_slot_descriptors
     StatusOr<ChunkPtr> materialize(const starrocks::vectorized::ChunkPtr& src, starrocks::vectorized::ChunkPtr& cast);
 
+    // Attention: The error message "Unrecoverable error" is used in FE to check whether the routine load should be paused.
+    static Status UnrecoverableError(const Status& st) {
+        return st.clone_and_prepend(to_string(TStatusCode::UNRECOVERABLE_ERROR));
+    }
+
 protected:
     RuntimeState* _state;
     RuntimeProfile* _profile;

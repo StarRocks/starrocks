@@ -86,5 +86,6 @@ enum TStatusCode {
 
     TXN_NOT_EXISTS = 51,
     TXN_IN_PROCESSING = 52
+    UNRECOVERABLE_ERROR = 53
 }
 
