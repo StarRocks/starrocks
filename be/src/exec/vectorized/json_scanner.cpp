@@ -80,13 +80,13 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
     } catch (simdjson::simdjson_error& e) {
         auto err_msg = "Unrecognized json format, stop json loader.";
         LOG(WARNING) << err_msg;
-        return Status::DataQualityError(err_msg);
+        status = Status::DataQualityError(err_msg);
     }
     if (!status.ok()) {
         if (status.is_end_of_file()) {
             _cur_file_eof = true;
         } else {
-            return status;
+            return FileScanner::UnrecoverableError(status);
         }
     }
 
