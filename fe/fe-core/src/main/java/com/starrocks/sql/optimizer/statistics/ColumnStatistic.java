@@ -16,14 +16,15 @@ public class ColumnStatistic {
 
     // Used for the column statistics which we could not get from the statistics storage or
     // can not compute the actual column statistics for now
-    private static final ColumnStatistic
-            UNKNOWN = new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 1, 1, StatisticType.UNKNOWN);
+    private static final ColumnStatistic UNKNOWN =
+            new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 1, 1, null, StatisticType.UNKNOWN);
 
     private final double minValue;
     private final double maxValue;
     private final double nullsFraction;
     private final double averageRowSize;
     private final double distinctValuesCount;
+    private final Histogram histogram;
     private final StatisticType type;
 
     // TODO deal with string max, min
@@ -33,12 +34,14 @@ public class ColumnStatistic {
             double nullsFraction,
             double averageRowSize,
             double distinctValuesCount,
+            Histogram histogram,
             StatisticType type) {
         this.minValue = minValue;
         this.maxValue = maxValue;
         this.nullsFraction = nullsFraction;
         this.averageRowSize = averageRowSize;
         this.distinctValuesCount = distinctValuesCount;
+        this.histogram = histogram;
         this.type = type;
     }
 
@@ -47,7 +50,7 @@ public class ColumnStatistic {
                            double nullsFraction,
                            double averageRowSize,
                            double distinctValuesCount) {
-        this(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, StatisticType.ESTIMATE);
+        this(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, null, StatisticType.ESTIMATE);
     }
 
     public double getMinValue() {
@@ -68,6 +71,10 @@ public class ColumnStatistic {
 
     public double getDistinctValuesCount() {
         return distinctValuesCount;
+    }
+
+    public Histogram getHistogram() {
+        return histogram;
     }
 
     public static ColumnStatistic unknown() {
@@ -141,13 +148,15 @@ public class ColumnStatistic {
         private double nullsFraction = NaN;
         private double averageRowSize = NaN;
         private double distinctValuesCount = NaN;
+        private Histogram histogram;
         private StatisticType type = StatisticType.ESTIMATE;
 
         private Builder() {
         }
 
         private Builder(double minValue, double maxValue, double nullsFraction, double averageRowSize,
-                        double distinctValuesCount, StatisticType type) {
+                        double distinctValuesCount,
+                        StatisticType type) {
             this.minValue = minValue;
             this.maxValue = maxValue;
             this.nullsFraction = nullsFraction;
@@ -186,13 +195,18 @@ public class ColumnStatistic {
             return this;
         }
 
+        public Builder setHistogram(Histogram histogram) {
+            this.histogram = histogram;
+            return this;
+        }
+
         public Builder setType(StatisticType type) {
             this.type = type;
             return this;
         }
 
         public ColumnStatistic build() {
-            return new ColumnStatistic(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, type);
+            return new ColumnStatistic(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, histogram, type);
         }
     }
 }
