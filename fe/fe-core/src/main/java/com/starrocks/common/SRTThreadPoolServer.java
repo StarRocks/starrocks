@@ -1,4 +1,3 @@
-// This file is made available under Elastic License 2.0.
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/thrift/blob/master/lib/java/src/main/java/org/apache/thrift/server/TThreadPoolServer.java
 
@@ -221,7 +220,7 @@ public class SRTThreadPoolServer extends TServer {
                         } else {
                             client.close();
                             wp = null;
-                            LOG.warn("ExecutorService threw error: " + t, t);
+                            LOG.error("ExecutorService threw error: " + t, t);
                             break;
                         }
                     }
