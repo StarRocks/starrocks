@@ -81,11 +81,11 @@ enum TStatusCode {
     DATA_QUALITY_ERROR  = 46,
     DUPLICATE_RPC_INVOCATION        = 47,
     GLOBAL_DICT_ERROR = 48,
+    
+    UNKNOWN = 50,
 
-   UNKNOWN = 50,
-
-    // To be compatible with newer version,  we skip code 51/52
-   UNRECOVERABLE_ERROR = 53
+    // To be compatible with newer version, we skip code 51/52
+    UNRECOVERABLE_ERROR = 53
 }
 
 struct TStatus {

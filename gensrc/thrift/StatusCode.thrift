@@ -84,7 +84,7 @@ enum TStatusCode {
 
     UNKNOWN = 50,
 
-   // To be compatible with newer version,  we skip code 51/52
-   UNRECOVERABLE_ERROR = 53
+    // To be compatible with newer version, we skip code 51/52
+    UNRECOVERABLE_ERROR = 53
 }
 
