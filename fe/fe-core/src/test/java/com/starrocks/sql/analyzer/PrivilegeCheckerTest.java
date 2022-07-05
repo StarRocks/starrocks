@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateUserStmt;
+import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
@@ -12,6 +13,8 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
@@ -196,6 +199,48 @@ public class PrivilegeCheckerTest {
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
+    @Test
+    public void testShowData() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        starRocksAssert.getCtx().setDatabase("");
+        String sql1 = "show data"; // db is null
+        Assert.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql1, starRocksAssert.getCtx()));
+
+        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        db1TablePattern.analyze("default_cluster");
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
+
+        starRocksAssert.useDatabase("db1");
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) statementBase);
+        ShowResultSet resultSet = executor.execute();
+        System.out.print(resultSet.getResultRows());
+        Assert.assertEquals(resultSet.getResultRows().toArray().length, 4);
+        Assert.assertEquals(resultSet.getResultRows().get(0).get(0), "tbl1");
+
+        String sql2 = "show data from db1.tbl1";
+        StatementBase statementBase2 = UtFrameUtils.parseStmtWithNewParser(sql2, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx());
+
+        ShowExecutor executor2 = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) statementBase2);
+        ShowResultSet resultSet2 = executor2.execute();
+        System.out.print(resultSet2.getResultRows());
+        Assert.assertEquals(resultSet2.getResultRows().toArray().length, 2);
+        Assert.assertEquals(resultSet2.getResultRows().get(0).get(0), "tbl1");
+
+        String sql3 = "show data from dbNoExist.tbl1"; // dbNoExist no exist
+        StatementBase dbNoExist = UtFrameUtils.parseStmtWithNewParser(sql3, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(dbNoExist, starRocksAssert.getCtx()));
     }
 
     @Test

@@ -22,7 +22,7 @@ statement
     | showCreateDbStatement                                                                 #showCreateDb
     | alterDatabaseRename                                                                   #databaseRename
     | recoverDbStmt                                                                         #revoverDb
-
+    | showDataStmt                                                                          #showData
 
     // Table Statement
     | createTableStatement                                                                  #createTable
@@ -133,6 +133,11 @@ alterDatabaseRename
 
 recoverDbStmt
     : RECOVER (DATABASE | SCHEMA) identifier
+    ;
+
+showDataStmt
+    : SHOW DATA
+    | SHOW DATA FROM qualifiedName
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
