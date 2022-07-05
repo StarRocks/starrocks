@@ -6,7 +6,7 @@
 
 ### 数据模型
 
-StarRocks 支持四种数据模型，分别是明细模型 (Duplicate Key Model)、聚合模型 (Aggregate Key Model)、更新模型 (Unique Key Model) 和聚合模型 (Primary Key Model)。这四种数据模型能够支持多种数据分析场景，例如日志分析、数据汇总分析、实时分析等。
+StarRocks 支持四种数据模型，分别是明细模型 (Duplicate Key Model)、聚合模型 (Aggregate Key Model)、更新模型 (Unique Key Model) 和主键模型 (Primary Key Model)。这四种数据模型能够支持多种数据分析场景，例如日志分析、数据汇总分析、实时分析等。
 
 ### 排序键
 
@@ -341,8 +341,12 @@ PROPERTIES("replication_num" = "3",
     - 假设存在主键模型，排序键为`dt`、`id`，数据类型为 DATE（4 个字节）、BIGINT（8 个字节）。则排序键占 12 个字节。
     - 假设该表的热数据有 1000 万行，存储为三个副本。
     - 则内存占用的计算方式：`(12 + 9(每行固定开销) ) * 1000W * 3 * 1.5（哈希表平均额外开销) = 945 M`
-- `enable_persistent_index`：是否持久化主键索引，同时使用磁盘和内存存储主键索引，避免主键索引占用过大内存空间。取值为 `true` 或者 `false`。如果磁盘为固态硬盘 SSD，则建议设置为 `true`。
-   > 自 2.3.0 版本起，StarRocks 支持配置该参数。
+- `enable_persistent_index`：是否持久化主键索引，同时使用磁盘和内存存储主键索引，避免主键索引占用过大内存空间。取值为 `true` 或者 `false`。通常情况下，持久化主键索引后，主键索引所占内存为之前的 1/10。
+
+   > - 主键必须为定长的数据类型，不支持为可变长的数据类型（例如 VARCHAR）。
+   > - 如果磁盘为固态硬盘 SSD，则建议设置为 `true`。
+   > - 自 2.3.0 版本起，StarRocks 支持配置该参数。
+
 - 创建表时，支持为指标列创建 BITMAP、Bloom Filter 等索引。
 
 - 主键模型目前不支持物化视图。
