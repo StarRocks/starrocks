@@ -7,8 +7,6 @@ on:
     paths:
       - 'fe/**.java'
       - 'fe/**.xml'
-#  pull_request:
-#    types: [opened, synchronize, reopened]
   
 jobs:
   build:
