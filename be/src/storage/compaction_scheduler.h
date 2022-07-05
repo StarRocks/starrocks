@@ -32,24 +32,24 @@ private:
     // wait until current running tasks are below max_concurrent_num
     void _wait_to_run();
 
-    bool _can_schedule_next();
+    static bool _can_schedule_next();
 
-    std::shared_ptr<CompactionTask> _try_get_next_compaction_task();
+    std::shared_ptr<CompactionTask> _try_get_next_compaction_task() const;
 
-    bool _can_do_compaction(const CompactionCandidate& candidate, bool* need_reschedule,
+    static bool _can_do_compaction(const CompactionCandidate& candidate, bool* need_reschedule,
                             std::shared_ptr<CompactionTask>* compaction_task);
 
     // if check fails, should not reschedule the tablet
-    bool _check_precondition(const CompactionCandidate& candidate);
+    static bool _check_precondition(const CompactionCandidate& candidate);
 
-    bool _can_do_compaction_task(Tablet* tablet, CompactionTask* compaction_task);
+    static bool _can_do_compaction_task(Tablet* tablet, CompactionTask* compaction_task);
 
 private:
     std::unique_ptr<ThreadPool> _compaction_pool;
 
     std::mutex _mutex;
     std::condition_variable _cv;
-    uint64_t _round;
+    uint64_t _round = 0;
 };
 
 } // namespace starrocks
