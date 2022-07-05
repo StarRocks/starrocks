@@ -34,7 +34,6 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     col_name：列名称
     ```
 
-    ```plain text
     col_type：列类型
 
     具体的列类型以及范围等信息如下：
@@ -84,7 +83,9 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     * BITMAP
     bitmap列类型，不需要指定长度和默认值。表示整型的集合，元素最大支持到2^64 - 1
-    ```
+
+    * ARRAY
+    支持在一个数组中嵌套子数组，最多可嵌套 14 层。您必须使用尖括号（`<` 和 `>`）来声明 ARRAY 类型，如 ARRAY<INT>。目前不支持将数组中的元素声明为 [Fast Decimal](../data-types/DECIMAL.md) 类型。
 
     ```plain text
     agg_type：聚合类型，如果不指定，则该列为 key 列。否则，该列为 value 列
