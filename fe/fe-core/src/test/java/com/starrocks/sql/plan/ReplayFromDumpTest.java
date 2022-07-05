@@ -444,4 +444,14 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second.contains(" 38:Project\n" +
                 "  |  <slot 1> : 1: c_0_0"));
     }
+
+    @Test
+    public void testMultiViewPruneColumns() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_prune_columns"), null, TExplainLevel.NORMAL);
+        // check without exception
+        Assert.assertTrue(replayPair.second.contains(" 200:Project\n" +
+                "  |  <slot 1> : 1: c_1_0"));
+        System.out.println(replayPair.second);
+    }
 }
