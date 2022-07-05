@@ -5,7 +5,7 @@ on:
       - main
   pull_request_target:
     paths:
-      conf
+      conf/test_hy
 
 jobs:
   build:
