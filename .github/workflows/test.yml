@@ -18,6 +18,8 @@ jobs:
         id: changed-files-specific
         uses: tj-actions/changed-files@v14
         with:
+          sha: "${{ github.pull_request.sha }}"
+          base_sha: "${{ github.sha }}"
           files: |
             conf/**
 
