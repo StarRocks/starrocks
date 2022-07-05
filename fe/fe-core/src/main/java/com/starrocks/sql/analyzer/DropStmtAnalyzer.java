@@ -57,8 +57,8 @@ public class DropStmtAnalyzer {
                     if (table instanceof MaterializedView) {
                         throw new SemanticException(
                                 "The data of '%s' cannot be dropped because '%s' is a materialized view," +
-                                        "and the data of materialized view must be consistent with the base table.",
-                                statement.getTbl().getTbl(), statement.getTbl().getTbl());
+                                        "you can use drop materialized %s to drop it.",
+                                tableName, tableName, tableName);
                     }
                 }
             } finally {
