@@ -72,8 +72,15 @@ jobs:
 #            -Dsonar.organization=dulong41
 #            -Dsonar.sources=bin
           
-        
+      - name: Get specific changed files
+        id: changed-files-specific
+        uses: tj-actions/changed-files@v23.1
+        with:
+          files: |
+            *_hy
+            
       - name: Build and analyze
+        if: steps.changed-files-specific.outputs.any_changed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
