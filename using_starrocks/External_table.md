@@ -230,9 +230,9 @@ select * from es_table where esquery(k4, ' {
 * Elasticsearch clusters with HTTP basic authentication enabled are supported.
 * Querying data from StarRocks may not be as fast as directly querying data from Elasticsearch, such as count-related queries. The reason is that Elasticsearch directly reads the metadata of target documents without the need to filter the real data, which accelerates the count query.
 
-## External table for databases that support JDBC drivers
+## External table for a JDBC-compatible database
 
-Since 2.3.0 version, StarRocks provides external tables to query databases that support JDBC drivers. This way, you can analyze the data of such databases in a blazing fast manner without the need to import the data into StarRocks.  This topic describes how to create an external table in StarRocks and query data in databases that support JDBC drivers.
+Since 2.3.0 version, StarRocks provides external tables to query JDBC-compatible databases. This way, you can analyze the data of such databases in a blazing fast manner without the need to import the data into StarRocks.  This topic describes how to create an external table in StarRocks and query data in JDBC-compatible databases.
 
 ### Prerequisites
 
