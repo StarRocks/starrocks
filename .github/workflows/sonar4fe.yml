@@ -4,8 +4,9 @@ on:
     branches:
       - main
   pull_request_target:
-#  pull_request:
-#    types: [opened, synchronize, reopened]
+    paths:
+      - 'fe/**.java'
+      - 'fe/**.xml'
   
 jobs:
   build:
@@ -40,18 +41,7 @@ jobs:
         with:
           version: 0.13.0
           
-      - name: Changed Java Files
-        id: java-changes
-        uses: tj-actions/changed-files@main
-        with:
-          sha: "${{ github.pull_request.sha }}"
-          base_sha: "${{ github.sha }}"
-          files: |
-            **/*.java
-            **/*.xml
-          
       - name: Analyze FE
-        if: steps.java-changes.outputs.any_changed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
