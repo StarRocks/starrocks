@@ -76,19 +76,19 @@ jobs:
           
       - name: Get specific changed files
         id: changed-files-specific
-        uses: tj-actions/changed-files@v23.1
+        uses: tj-actions/verify-changed-files@v10
 #        with:
 #          files: |
 #            conf/test_hy
 
       - name: List all changed files
         run: |
-          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+          for file in ${{ steps.changed-files.outputs.files_changed }}; do
             echo "$file was changed"
           done
           
       - name: Build and analyze
-        if: steps.changed-files-specific.outputs.any_modified == 'true'
+        if: steps.changed-files-specific.outputs.files_changed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
