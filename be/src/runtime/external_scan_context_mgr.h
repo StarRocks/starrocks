@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <condition_variable>
 #include <ctime>
 #include <map>
 #include <memory>
@@ -51,7 +52,7 @@ class ExternalScanContextMgr {
 public:
     ExternalScanContextMgr(ExecEnv* exec_env);
 
-    ~ExternalScanContextMgr() {}
+    ~ExternalScanContextMgr();
 
     Status create_scan_context(std::shared_ptr<ScanContext>* p_context);
 
@@ -64,7 +65,10 @@ private:
     std::map<std::string, std::shared_ptr<ScanContext>> _active_contexts;
     void gc_expired_context();
     std::unique_ptr<std::thread> _keep_alive_reaper;
+
     std::mutex _lock;
+    std::condition_variable _cv;
+    bool _closing = false;
 };
 
 } // namespace starrocks

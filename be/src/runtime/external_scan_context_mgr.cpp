@@ -39,11 +39,20 @@ ExternalScanContextMgr::ExternalScanContextMgr(ExecEnv* exec_env) : _exec_env(ex
     _keep_alive_reaper = std::make_unique<std::thread>(
             std::bind<void>(std::mem_fn(&ExternalScanContextMgr::gc_expired_context), this));
     Thread::set_thread_name(_keep_alive_reaper.get()->native_handle(), "kepalive_reaper");
-    _keep_alive_reaper->detach();
     REGISTER_GAUGE_STARROCKS_METRIC(active_scan_context_count, [this]() {
         std::lock_guard<std::mutex> l(_lock);
         return _active_contexts.size();
     });
+}
+
+ExternalScanContextMgr::~ExternalScanContextMgr() {
+    {
+        std::lock_guard<std::mutex> l(_lock);
+        _closing = true;
+    }
+    // Only _keep_alive_reaper is expected to be waiting for _cv.
+    _cv.notify_one();
+    _keep_alive_reaper->join();
 }
 
 Status ExternalScanContextMgr::create_scan_context(std::shared_ptr<ScanContext>* p_context) {
@@ -102,11 +111,16 @@ Status ExternalScanContextMgr::clear_scan_context(const std::string& context_id)
 void ExternalScanContextMgr::gc_expired_context() {
 #ifndef BE_TEST
     while (true) {
-        std::this_thread::sleep_for(std::chrono::seconds(starrocks::config::scan_context_gc_interval_min * 60));
         time_t current_time = time(nullptr);
         std::vector<std::shared_ptr<ScanContext>> expired_contexts;
         {
-            std::lock_guard<std::mutex> l(_lock);
+            std::unique_lock<std::mutex> l(_lock);
+            _cv.wait_for(l, std::chrono::seconds(starrocks::config::scan_context_gc_interval_min * 60));
+
+            if (_closing) {
+                return;
+            }
+
             for (auto iter = _active_contexts.begin(); iter != _active_contexts.end();) {
                 auto context = iter->second;
                 if (context == nullptr) {
