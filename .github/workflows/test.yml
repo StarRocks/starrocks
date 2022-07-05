@@ -16,7 +16,7 @@ jobs:
 
       - name: Get specific changed files
         id: changed-files-specific
-        uses: tj-actions/changed-files@v22
+        uses: tj-actions/changed-files@v14
         with:
           files: |
             conf/**
