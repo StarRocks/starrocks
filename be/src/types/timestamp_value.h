@@ -109,6 +109,9 @@ public:
 
     bool is_valid() const;
 
+    // date_valid function needs this method, in TimestampValue is_valid_non_strict is equivalent to is_valid.
+    bool is_valid_non_strict() const;
+
     // direct return microsecond will over int64
     int64_t diff_microsecond(TimestampValue other) const;
 

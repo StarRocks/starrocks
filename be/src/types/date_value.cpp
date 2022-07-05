@@ -132,6 +132,11 @@ bool DateValue::is_valid() const {
     return (_julian >= date::MIN_DATE) & (_julian <= date::MAX_DATE);
 }
 
+bool DateValue::is_valid_non_strict() const {
+    static const JulianDate zero_day = date::from_date(0, 0, 0);
+    return is_valid() || _julian == zero_day;
+}
+
 std::string DateValue::month_name() const {
     int year, month, day;
     date::to_date_with_cache(_julian, &year, &month, &day);
