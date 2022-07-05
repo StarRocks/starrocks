@@ -1245,14 +1245,14 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         return Status::InternalError("base tablet get migration r_lock failed");
     }
     if (Tablet::check_migrate(base_tablet)) {
-        return Status::InternalError(Substitute("tablet $0 is doing disk balance", base_tablet->table_id()));
+        return Status::InternalError(Substitute("tablet $0 is doing disk balance", base_tablet->tablet_id()));
     }
     std::shared_lock new_migration_rlock(new_tablet->get_migration_lock(), std::try_to_lock);
     if (!new_migration_rlock.owns_lock()) {
         return Status::InternalError("new tablet get migration r_lock failed");
     }
     if (Tablet::check_migrate(new_tablet)) {
-        return Status::InternalError(Substitute("tablet $0 is doing disk balance", new_tablet->table_id()));
+        return Status::InternalError(Substitute("tablet $0 is doing disk balance", new_tablet->tablet_id()));
     }
 
     SchemaChangeParams sc_params;
