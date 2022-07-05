@@ -34,6 +34,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.external.HiveMetaStoreTableUtils.isInternalCatalog;
+
 public class IcebergTable extends Table {
     private static final Logger LOG = LogManager.getLogger(IcebergTable.class);
 
@@ -44,12 +46,12 @@ public class IcebergTable extends Table {
     private static final String JSON_KEY_RESOURCE_NAME = "resource";
     private static final String JSON_KEY_ICEBERG_PROPERTIES = "icebergProperties";
 
-    private static final String ICEBERG_CATALOG = "starrocks.catalog-type";
-    private static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
+    public static final String ICEBERG_CATALOG = "starrocks.catalog-type";
+    public static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
     private static final String ICEBERG_IMPL = "iceberg.catalog-impl";
-    private static final String ICEBERG_DB = "database";
-    private static final String ICEBERG_TABLE = "table";
-    private static final String ICEBERG_RESOURCE = "resource";
+    public static final String ICEBERG_DB = "database";
+    public static final String ICEBERG_TABLE = "table";
+    public static final String ICEBERG_RESOURCE = "resource";
 
     private org.apache.iceberg.Table icbTbl; // actual iceberg table
 
@@ -68,6 +70,11 @@ public class IcebergTable extends Table {
 
     public IcebergTable(long id, String name, List<Column> schema, Map<String, String> properties) throws DdlException {
         super(id, name, TableType.ICEBERG, schema);
+        String metastoreURI = properties.get(ICEBERG_METASTORE_URIS);
+        if (null != metastoreURI && !isInternalCatalog(metastoreURI)) {
+            setHiveCatalogProperties(properties, metastoreURI);
+            return;
+        }
         validate(properties);
     }
 
@@ -123,6 +130,13 @@ public class IcebergTable extends Table {
             throw e;
         }
         return icbTbl;
+    }
+
+    private void setHiveCatalogProperties(Map<String, String> properties, String metastoreURI) {
+        db = properties.get(ICEBERG_DB);
+        table = properties.get(ICEBERG_TABLE);
+        icebergProperties.put(ICEBERG_METASTORE_URIS, metastoreURI);
+        icebergProperties.put(ICEBERG_CATALOG, "HIVE_CATALOG");
     }
 
     private void validate(Map<String, String> properties) throws DdlException {
