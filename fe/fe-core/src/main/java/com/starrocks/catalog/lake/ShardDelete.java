@@ -13,7 +13,7 @@ import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.lake.proto.DropTabletRequest;
 import com.starrocks.lake.proto.DropTabletResponse;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.rpc.BackendServiceProxy;
+import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -68,7 +68,7 @@ public class ShardDelete extends MasterDaemon implements Writable {
                 Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
                 address.setHostname(backend.getHost());
                 address.setPort(backend.getBrpcPort());
-                LakeService lakeService = BackendServiceProxy.getInstance().getLakeService(address);
+                LakeService lakeService = BrpcProxy.getInstance().getLakeService(address);
 
                 DropTabletRequest request = new DropTabletRequest();
                 List<Long> tabletIds = Lists.newArrayList();;
