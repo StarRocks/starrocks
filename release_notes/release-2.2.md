@@ -2,7 +2,7 @@
 
 ## 2.2.2
 
-Release date: July 1, 2022
+Release date: June 29, 2022
 
 ### Improvements
 
