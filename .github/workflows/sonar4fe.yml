@@ -61,26 +61,26 @@ jobs:
 #      -Dsonar.test.exclusions=tests/**
 #      -Dsonar.tests=tests/
 #      -Dsonar.verbose=true
-      - name: SonarCloud Scan
-        uses: sonarsource/sonarcloud-github-action@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          args:  >
-            -Dsonar.projectKey=dulong41_starrocks
-            -Dsonar.organization=dulong41
-            -Dsonar.sources=bin
+#      - name: SonarCloud Scan
+#        uses: sonarsource/sonarcloud-github-action@master
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+#        with:
+#          args:  >
+#            -Dsonar.projectKey=dulong41_starrocks
+#            -Dsonar.organization=dulong41
+#            -Dsonar.sources=bin
           
         
-#      - name: Build and analyze
-#        env:
-#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
-#          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-#        run: |
+      - name: Build and analyze
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
           #docker run --privileged -v "/home/runner"/.m2:/root/.m2 -v ${{ github.workspace }}:/root/starrocks -v /etc/timezone:/etc/timezone:ro -v /etc/localtime:/etc/localtime:ro --name temp -d starrocks/dev-env:${GITHUB_REF_NAME} /bin/bash -c "while true;do echo hello;sleep 1;done"
           #sleep 10 && echo "initialize docker container-----"
           #docker exec --privileged temp /bin/bash -c "cd /root/starrocks; ./build.sh --clean --fe;"
           #echo "script run over-----"
- #         cd fe
- #         mvn -B clean -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=dulong41_starrocks -Dsonar.pullrequest.github.repository=starrocks -Dsonar.pullrequest.base=main -Dsonar.pullrequest.key=${{ github.event.number }}
+          cd fe
+          mvn -B clean -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=dulong41_starrocks -Dsonar.pullrequest.github.repository=starrocks -Dsonar.pullrequest.base=main -Dsonar.pullrequest.key=${{ github.event.number }}
