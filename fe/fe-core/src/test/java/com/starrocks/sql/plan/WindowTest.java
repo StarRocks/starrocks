@@ -8,6 +8,17 @@ import org.junit.Assert;
 import org.junit.Test;
 
 public class WindowTest extends PlanTestBase {
+
+    @Test
+    public void testIdenticalWindowFunctions() throws Exception {
+        String sql = "select sum(v1) over(order by v2 rows between 1 preceding and 1 following) as sum_v1_1," +
+                " sum(v1) over(order by v2 rows between 1 preceding and 1 following) as sum_v1_2 from t0;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:Project\n" +
+                "  |  <slot 4> : 4: sum(1: v1)\n" +
+                "  |  <slot 5> : 5: sum(1: v1)");
+    }
+
     @Test
     public void testLagWindowFunction() throws Exception {
         String sql = "select lag(id_datetime, 1, '2020-01-01') over(partition by t1c) from test_all_type;";
