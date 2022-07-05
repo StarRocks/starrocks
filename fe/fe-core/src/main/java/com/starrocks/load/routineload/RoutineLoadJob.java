@@ -925,6 +925,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                                 updateState(JobState.PAUSED,
                                         new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg),
                                         false /* not replay */);
+                                setErrorLogURL(txnState);
                                 return;
                             default:
                                 break;
@@ -1009,6 +1010,24 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             } else if (txnStatus == TransactionStatus.COMMITTED) {
                 // this txn is just COMMITTED, create new task when the this txn is VISIBLE
                 // or if publish version task has some error, there will be lots of COMMITTED txns in GlobalTransactionMgr
+            }
+        }
+    }
+
+    private void setErrorLogURL(TransactionState txnState) {
+        if (txnState == null) {
+            return;
+        }
+        if (txnState.getTxnCommitAttachment() instanceof RLTaskTxnCommitAttachment) {
+
+            RLTaskTxnCommitAttachment rlTaskTxnCommitAttachment =
+                    (RLTaskTxnCommitAttachment) txnState.getTxnCommitAttachment();
+            if (rlTaskTxnCommitAttachment == null) {
+                return;
+            }
+
+            if (!Strings.isNullOrEmpty(rlTaskTxnCommitAttachment.getErrorLogUrl())) {
+                errorLogUrls.add(rlTaskTxnCommitAttachment.getErrorLogUrl());
             }
         }
     }
