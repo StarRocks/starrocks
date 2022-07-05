@@ -238,6 +238,9 @@ public class Optimizer {
             requiredColumns.union(cteContext.getAllRequiredColumns());
             rootTaskContext.setRequiredColumns(requiredColumns);
             ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+            // After prune columns, the output column in the logical property may outdated, because of the following rule
+            // will use the output column, we need to derive the logical property here.
+            memo.deriveAllGroupLogicalProperty();
 
             if (cteContext.needPushLimit() || cteContext.needPushPredicate()) {
                 ruleRewriteOnlyOnce(memo, rootTaskContext, new PushLimitAndFilterToCTEProduceRule());
