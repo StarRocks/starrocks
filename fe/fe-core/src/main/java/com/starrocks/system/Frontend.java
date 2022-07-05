@@ -147,10 +147,10 @@ public class Frontend implements Writable {
             } else {
                 if (isAlive) {
                     isAlive = false;
-                    isChanged = true;
                 }
                 heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
             }
+            isChanged = true;
         }
         return isChanged;
     }

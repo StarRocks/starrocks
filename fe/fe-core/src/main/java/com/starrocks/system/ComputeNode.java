@@ -401,13 +401,12 @@ public class ComputeNode implements IComputable, Writable {
                 this.heartbeatRetryTimes++;
             } else {
                 if (isAlive.compareAndSet(true, false)) {
-                    isChanged = true;
                     LOG.info("{} is dead,", this.toString());
                 }
-
                 heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
                 lastMissingHeartbeatTime = System.currentTimeMillis();
             }
+            isChanged = true;
         }
 
         return isChanged;
