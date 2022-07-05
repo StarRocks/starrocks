@@ -120,6 +120,7 @@
       + [ALTER ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/alter-routine-load.md)
       + [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)
       + [CANCEL LOAD](/sql-reference/sql-statements/data-manipulation/CANCEL%20LOAD.md)
+      + [CANCEL EXPORT](/sql-reference/sql-statements/data-manipulation/CANCEL%20EXPORT.md)
       + [DELETE](/sql-reference/sql-statements/data-manipulation/DELETE.md)
       + [EXPORT](/sql-reference/sql-statements/data-manipulation/EXPORT.md)
       + [GROUP BY](/sql-reference/sql-statements/data-manipulation/GROUP%20BY.md)
