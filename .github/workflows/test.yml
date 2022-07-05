@@ -17,9 +17,7 @@ jobs:
       - name: Get specific changed files
         id: changed-files-specific
         uses: tj-actions/changed-files@v23.1
-        with:
-          files: |
-            conf/**
+
             
       - name: List all changed files
         run: |
