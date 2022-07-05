@@ -1030,6 +1030,7 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
+        shardDelete.start();
     }
 
     // start threads that should running on all FE

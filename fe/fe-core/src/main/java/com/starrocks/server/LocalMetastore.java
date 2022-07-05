@@ -2368,6 +2368,8 @@ public class LocalMetastore implements ConnectorMetadata {
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
+        // for debug
+        LOG.info("call dropTable");
         db.dropTable(tableName, stmt.isSetIfExists(), stmt.isForceDrop());
     }
 
@@ -4149,6 +4151,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
                         // drop shard and lake tablet
                         if (olapTable.isLakeTable()) {
+                            // for debug
+                            LOG.info("onEraseOlapTable, isLakeTable");
                             GlobalStateMgr.getCurrentState().getShardDelete().addShardId(tabletId, (LakeTablet) tablet);
                         }
                         

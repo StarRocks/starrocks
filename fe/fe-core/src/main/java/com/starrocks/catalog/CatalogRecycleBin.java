@@ -30,6 +30,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.lake.LakeTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -328,9 +329,12 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             RecycleTableInfo tableInfo = idToTableInfo.remove(dbId, tableId);
             if (tableInfo != null) {
                 Table table = tableInfo.getTable();
+                TableType tableType = table.getType();
                 nameToTableInfo.remove(dbId, table.getName());
-                if (table.getType() == TableType.OLAP && !isCheckpointThread()) {
+                if (tableType == TableType.OLAP && !isCheckpointThread()) {
                     GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) table, true);
+                } else if (tableType == TableType.LAKE && !isCheckpointThread()) {
+                    GlobalStateMgr.getCurrentState().onEraseOlapTable((LakeTable) table, true);
                 }
             }
         }
@@ -697,10 +701,13 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         for (RecycleTableInfo tableInfo : tableToRemove) {
             Table table = tableInfo.getTable();
             long tableId = table.getId();
-            if (table.getType() == TableType.OLAP) {
+            TableType tableType = table.getType();
+            if (tableType == TableType.OLAP) {
                 HashMap<Long, AgentBatchTask> batchTaskMap =
                         GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) table, false);
                 GlobalStateMgr.getCurrentState().sendDropTabletTasks(batchTaskMap);
+            } else if (tableType == TableType.LAKE) {
+                GlobalStateMgr.getCurrentState().onEraseOlapTable((LakeTable) table, true);
             }
             LOG.info("erased table [{}-{}].", tableId, table.getName());
         }

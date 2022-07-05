@@ -3,7 +3,9 @@
 
 package com.starrocks.catalog.lake;
 
+
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
@@ -36,31 +38,26 @@ public class ShardDelete extends MasterDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(ShardDelete.class);
 
     @SerializedName(value = "shardIdToTablet")
-    private Map<Long, LakeTablet> shardIdToTablet;
+    private Map<Long, LakeTablet> shardIdToTablet = Maps.newHashMap();
 
     public void addShardId(long shardId, LakeTablet tablet) {
+        // for debug
+        LOG.info("add shardId {} in ShardDelete", shardId);
         shardIdToTablet.put(shardId, tablet);
     }
 
     @Override
     protected void runAfterCatalogReady() {
+        // for debuggit 
+        LOG.info("runAfterCatalogReady of ShardDelete");
         // delete shard and drop lakeTablet
         Iterator<Map.Entry<Long, LakeTablet>> iterator = shardIdToTablet.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<Long, LakeTablet> entry = iterator.next();
-            // 1. delete shard
-            long shardId = entry.getKey();
-            try {
-                Set<Long> shardIds = new HashSet<>();
-                shardIds.add(shardId);
-                GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(shardIds);
-            } catch (DdlException e) {
-                LOG.warn("failed to delete shard from starMgr");
-                break;
-            }
-
-            // 2. drop tablet
+        
+            // 1. drop tablet
             boolean finished = true;
+            long shardId = entry.getKey();
             try {
                 TNetworkAddress address = new TNetworkAddress();
                 LakeTablet tablet = entry.getValue();
@@ -76,6 +73,7 @@ public class ShardDelete extends MasterDaemon implements Writable {
                 request.tabletIds = tabletIds;
 
                 Future<DropTabletResponse> responseFuture = lakeService.dropTablet(request);
+
                 try {
                     DropTabletResponse response = responseFuture.get();
                     if (!response.failedTablets.isEmpty()) {
@@ -88,6 +86,17 @@ public class ShardDelete extends MasterDaemon implements Writable {
 
             } catch (UserException e) {
                 LOG.warn("failed to get primary backendId");
+                finished = false;
+            }
+
+            // 2. delete shard
+            try {
+                Set<Long> shardIds = new HashSet<>();
+                shardIds.add(shardId);
+                GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(shardIds);
+            } catch (DdlException e) {
+                LOG.warn("failed to delete shard from starMgr");
+                continue;
             }
 
             // 3.succ both, remove from the map
