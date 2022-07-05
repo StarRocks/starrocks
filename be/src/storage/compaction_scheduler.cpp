@@ -71,7 +71,7 @@ bool CompactionScheduler::_can_schedule_next() {
 void CompactionScheduler::_wait_to_run() {
     std::unique_lock<std::mutex> lk(_mutex);
     // check _can_schedule_next every five second to avoid deadlock and support modifying config online
-    while (!_cv.wait_for(lk, 5000ms, [this] { return _can_schedule_next(); })) {
+    while (!_cv.wait_for(lk, 5000ms, [] { return _can_schedule_next(); })) {
     }
 }
 
@@ -87,7 +87,7 @@ bool CompactionScheduler::_can_do_compaction_task(Tablet* tablet, CompactionTask
     });
     // to compatible with old compaction framework
     // TODO: can be optimized to use just one lock
-    int64_t last_failure_ms = 0;
+    int64_t last_failure_ms;
     DataDir* data_dir = tablet->data_dir();
     if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
         std::unique_lock lk(tablet->get_cumulative_lock(), std::try_to_lock);
@@ -200,7 +200,7 @@ bool CompactionScheduler::_can_do_compaction(const CompactionCandidate& candidat
     }
 }
 
-std::shared_ptr<CompactionTask> CompactionScheduler::_try_get_next_compaction_task() {
+std::shared_ptr<CompactionTask> CompactionScheduler::_try_get_next_compaction_task() const {
     VLOG(2) << "try to get next qualified tablet for round:" << _round
             << ", current candidates size:" << StorageEngine::instance()->compaction_manager()->candidates_size();
     // tmp_tablets save the tmp picked candidates tablets
@@ -220,8 +220,10 @@ std::shared_ptr<CompactionTask> CompactionScheduler::_try_get_next_compaction_ta
             LOG(INFO) << "do not get a qualified candidate";
             break;
         }
-        VLOG(2) << "try tablet:" << compaction_candidate.tablet->tablet_id()
-                << ", compaction type:" << to_string(compaction_candidate.type);
+
+        int64_t tablet_id = compaction_candidate.tablet->tablet_id();
+        CompactionType compaction_type = compaction_candidate.type;
+        VLOG(2) << "try tablet:" << tablet_id << ", compaction type:" << to_string(compaction_type);
         bool need_reschedule = true;
         found = _can_do_compaction(compaction_candidate, &need_reschedule, &compaction_task);
         if (need_reschedule) {
@@ -230,15 +232,14 @@ std::shared_ptr<CompactionTask> CompactionScheduler::_try_get_next_compaction_ta
             DCHECK(found);
         }
         if (found) {
+            VLOG(2) << "get a qualified tablet:" << tablet_id << ", compaction type:" << to_string(compaction_type)
+                    << ", compaction task:" << compaction_task->get_task_info();
             break;
         }
     }
     VLOG(2) << "tmp tablets size:" << tmp_candidates.size();
     StorageEngine::instance()->compaction_manager()->insert_candidates(std::move(tmp_candidates));
     if (found) {
-        VLOG(2) << "get a qualified tablet:" << compaction_candidate.tablet->tablet_id()
-                << ", compaction type:" << to_string(compaction_candidate.type)
-                << ", compaction task:" << compaction_task->get_task_info();
         return compaction_task;
     } else {
         VLOG(2) << "no qualified tablet.";
