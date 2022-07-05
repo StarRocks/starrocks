@@ -270,13 +270,12 @@ public class Config extends ConfigBase {
      *  If read_hdfs_directly is set, we will read through lib hdfs directly
      */
     @ConfField(mutable = true)
-    public static boolean read_hdfs_directly = false;
+    public static boolean read_hdfs_directly = true;
 
     /**
      * only works when read_hdfs_directly is set true, 
      * hdfs_read_buffer_size_kb for reading through lib hdfs directly
      */
-    @ConfField(mutable = true)
     public static int hdfs_read_buffer_size_kb = 8192;
 
     /**
