@@ -77,7 +77,7 @@ jobs:
         uses: tj-actions/changed-files@v23.1
         with:
           files: |
-            **/*_hy
+             test_hy
             
       - name: Build and analyze
         if: steps.changed-files-specific.outputs.any_changed == 'true'
