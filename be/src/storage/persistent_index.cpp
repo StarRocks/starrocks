@@ -1387,6 +1387,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         data->set_offset(0);
         data->set_size(0);
         l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_1);
+        // if _flushed is true, we will create a new empty _l0 file, set _offset to 0
         _offset = 0;
         _page_size = 0;
         // clear _l0 and reload _l1
@@ -1414,7 +1415,8 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         data->set_offset(0);
         data->set_size(snapshot_size);
         l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_1);
-        _offset += snapshot_size;
+        // if _dump_snapshot is true, we will dump a snapshot to new _l0 file, set _offset to snapshot_size
+        _offset = snapshot_size;
         _page_size = 0;
     } else {
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
