@@ -279,11 +279,11 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     语法：
 
     ```sql
-    `DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]`
+    DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
     ```
 
     说明：
-    使用指定的 key 列进行哈希分桶。默认分桶数为10
+    使用指定的 key 列进行哈希分桶。默认分桶数为10。`DISTRIBUTED BY` 为必填字段。
 
     建议:建议使用Hash分桶方式
 
