@@ -571,6 +571,15 @@ public class DecodeRewriteTest extends PlanTestBase {
         String sql;
         String plan;
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql =
+                "select count(*) from supplier l join [shuffle] (select max(S_ADDRESS) as S_ADDRESS from supplier) r on l.S_ADDRESS = r.S_ADDRESS;";
+        plan = getVerboseExplain(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+        sql =
+                "select count(*) from supplier l join [broadcast] (select max(S_ADDRESS) as S_ADDRESS from supplier) r on l.S_ADDRESS = r.S_ADDRESS;";
+        plan = getVerboseExplain(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+
         sql = "select *\n" +
                 "from(\n" +
                 "        select S_SUPPKEY,\n" +
@@ -586,7 +595,7 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "    and l.S_NATIONKEY = r.MS;";
         plan = getVerboseExplain(sql);
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
-        Assert.assertTrue(plan.contains("OutPut Partition: HASH_PARTITIONED: 9: S_SUPPKEY, 21: S_ADDRESS"));
+        Assert.assertTrue(plan.contains("OutPut Partition: HASH_PARTITIONED: 9: S_SUPPKEY, 17"));
 
         sql = "select * from test.join1 right join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         plan = getFragmentPlan(sql);
@@ -862,4 +871,50 @@ public class DecodeRewriteTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  2:Project\n" +
                 "  |  <slot 16> : 16: t1a"));
     }
+<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/sql/plan/DecodeRewriteTest.java
+=======
+
+    @Test
+    public void testCTEWithDecode() throws Exception {
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        connectContext.getSessionVariable().setEnablePipelineEngine(true);
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        String sql =
+                "with v1 as( select S_ADDRESS a, count(*) b from supplier group by S_ADDRESS) select x1.a, x1.b from v1 x1 join v1 x2 on x1.a=x2.a";
+        String plan = getThriftPlan(sql);
+        Assert.assertTrue(
+                plan.contains("query_global_dicts:[TGlobalDict(columnId:28, strings:[6D 6F 63 6B], ids:[1])"));
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        connectContext.getSessionVariable().setEnablePipelineEngine(false);
+    }
+
+    @Test
+    public void testMetaScan() throws Exception {
+        String sql = "select max(v1), min(v1) from t0 [_META_]";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  0:MetaScan\n" +
+                "     <id 6> : max_v1\n" +
+                "     <id 7> : min_v1"));
+
+        String thrift = getThriftPlan(sql);
+        Assert.assertTrue(thrift.contains("id_to_names:{6=max_v1, 7=min_v1}"));
+    }
+
+    @Test
+    public void testMetaScan2() throws Exception {
+        String sql = "select max(t1c), min(t1d), dict_merge(t1a) from test_all_type [_META_]";
+        String plan = getFragmentPlan(sql);
+
+        Assert.assertTrue(plan.contains("  0:MetaScan\n" +
+                "     <id 16> : dict_merge_t1a\n" +
+                "     <id 14> : max_t1c\n" +
+                "     <id 15> : min_t1d"));
+
+        String thrift = getThriftPlan(sql);
+        Assert.assertTrue(thrift.contains("TFunctionName(function_name:dict_merge), " +
+                "binary_type:BUILTIN, arg_types:[TTypeDesc(types:[TTypeNode(type:ARRAY), " +
+                "TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))])]"));
+    }
+
+>>>>>>> 9322dc542 ([Bugfix] disable lowcardinality optimize in join conjuncts (#8303)):fe/fe-core/src/test/java/com/starrocks/sql/plan/LowCardinalityTest.java
 }

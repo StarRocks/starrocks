@@ -190,7 +190,16 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     public void fillDisableDictOptimizeColumns(ColumnRefSet resultSet, Set<Integer> dictColIds) {
         ColumnRefSet dictSet = new ColumnRefSet();
         dictColIds.forEach(dictSet::union);
+<<<<<<< HEAD
         getAggregations().values().forEach((v) -> {
+=======
+        final ScalarOperator predicate = getPredicate();
+        getAggregations().forEach((k, v) -> {
+            if (resultSet.contains(k.getId())) {
+                resultSet.union(v.getUsedColumns());
+            }
+
+>>>>>>> 9322dc542 ([Bugfix] disable lowcardinality optimize in join conjuncts (#8303))
             if (!couldApplyStringDict(v, dictSet)) {
                 resultSet.union(v.getUsedColumns());
             }
