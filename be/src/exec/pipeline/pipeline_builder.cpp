@@ -2,6 +2,11 @@
 
 #include "exec/pipeline/pipeline_builder.h"
 
+#include "exec/cache/cache_manager.h"
+#include "exec/cache/cache_operator.h"
+#include "exec/cache/conjugate_operator.h"
+#include "exec/cache/lane_arbiter.h"
+#include "exec/cache/multilane_operator.h"
 #include "exec/exec_node.h"
 
 namespace starrocks::pipeline {
@@ -172,6 +177,55 @@ MorselQueueFactory* PipelineBuilderContext::morsel_queue_factory_of_source_opera
 
 bool PipelineBuilderContext::need_local_shuffle(OpFactories ops) const {
     return down_cast<SourceOperatorFactory*>(ops[0].get())->need_local_shuffle();
+}
+
+bool PipelineBuilderContext::should_interpolate_cache_operator(OpFactoryPtr& source_op, int32_t plan_node_id) {
+    if (!_fragment_context->enable_cache()) {
+        return false;
+    }
+    const auto& cache_param = _fragment_context->cache_param();
+    if (cache_param.plan_node_id != plan_node_id) {
+        return false;
+    }
+    return dynamic_cast<pipeline::OlapScanOperatorFactory*>(source_op.get()) != nullptr;
+}
+
+OpFactories PipelineBuilderContext::interpolate_cache_operator(
+        OpFactories& upstream_pipeline, OpFactories& downstream_pipeline,
+        std::function<std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(bool)> merge_operators_generator) {
+    DCHECK(should_interpolate_cache_operator(upstream_pipeline[0], downstream_pipeline[0]->plan_node_id()));
+
+    const auto& cache_param = _fragment_context->cache_param();
+
+    auto sink_op = upstream_pipeline.back();
+    upstream_pipeline.pop_back();
+    auto source_op = downstream_pipeline.front();
+    downstream_pipeline.clear();
+
+    auto dop = dynamic_cast<SourceOperatorFactory*>(source_op.get())->degree_of_parallelism();
+    auto conjugate_op = std::make_shared<cache::ConjugateOperatorFactory>(sink_op, source_op);
+    upstream_pipeline.push_back(conjugate_op);
+
+    auto last_ml_op_idx = upstream_pipeline.size() - 1;
+    for (auto i = 1; i < upstream_pipeline.size(); ++i) {
+        auto& op = upstream_pipeline[i];
+        auto ml_op = std::make_shared<cache::MultilaneOperatorFactory>(next_operator_id(), op, cache_param.num_lanes);
+        // only last multilane operator in the pipeline driver can work in passthrough mode
+        auto can_passthrough = i == last_ml_op_idx;
+        ml_op->set_can_passthrough(can_passthrough);
+        upstream_pipeline[i] = std::move(ml_op);
+    }
+
+    auto cache_mgr = ExecEnv::GetInstance()->cache_mgr();
+    auto cache_op = std::make_shared<cache::CacheOperatorFactory>(next_operator_id(), next_pseudo_plan_node_id(),
+                                                                  cache_mgr, cache_param);
+    upstream_pipeline.push_back(cache_op);
+
+    auto merge_operators = merge_operators_generator(true);
+    upstream_pipeline.push_back(std::move(std::get<0>(merge_operators)));
+    downstream_pipeline.push_back(std::move(std::get<1>(merge_operators)));
+    dynamic_cast<SourceOperatorFactory*>(downstream_pipeline.front().get())->set_degree_of_parallelism(dop);
+    return downstream_pipeline;
 }
 
 Pipelines PipelineBuilder::build(const FragmentContext& fragment, ExecNode* exec_node) {

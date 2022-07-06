@@ -113,7 +113,14 @@ struct WindowFunnelState {
         }
 
         std::vector<TimestampEvent> other_list;
-        window_size = ColumnHelper::get_const_value<TYPE_BIGINT>(ctx->get_constant_column(1));
+        //TODO(by satanson): It is a very ugly trick to bypass different signatures of window_funnel in update
+        // and merge mode. window_size is a constant parameter placed into constant columns of the FunctionContext,
+        // but in merge mode, this constant parameter is indexed at position 0, while in update mode, it is at
+        // position 1. merge method also will be invoked when the window_funnel is planned to be update mode originally
+        // in the situation that query cache enabled. the number of constant columns in FunctionContext can be an
+        // indicator of the position of the window size: 3 means the position is 1 while 4 means position 0.
+        auto window_size_idx = (ctx->get_num_constant_columns() == 3) ? 1 : 0;
+        window_size = ColumnHelper::get_const_value<TYPE_BIGINT>(ctx->get_constant_column(window_size_idx));
         mode = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(2));
 
         events_size = (uint8_t)array[0];

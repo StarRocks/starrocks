@@ -101,6 +101,8 @@ public:
     // Push chunk to this operator
     virtual Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) = 0;
 
+    virtual Status reset_state(std::vector<ChunkPtr>&& chunks) { return Status::OK(); }
+
     int32_t get_id() const { return _id; }
 
     int32_t get_plan_node_id() const { return _plan_node_id; }
@@ -110,6 +112,8 @@ public:
     virtual std::string get_name() const {
         return strings::Substitute("$0_$1_$2($3)", _name, _plan_node_id, this, is_finished() ? "X" : "O");
     }
+
+    std::string get_raw_name() const { return _name; }
 
     const LocalRFWaitingSet& rf_waiting_set() const;
 
@@ -157,6 +161,9 @@ public:
     RuntimeState* runtime_state() const;
 
     void set_prepare_time(int64_t cost_ns);
+
+    // Multilane operator return true, including cache::CacheOperator and cache::MultilaneOperator
+    virtual bool is_multilane() const { return false; }
 
 protected:
     OperatorFactory* _factory;
@@ -220,11 +227,12 @@ public:
     // For some operators, when share some status, need to know the degree_of_parallelism
     virtual OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) = 0;
     virtual bool is_source() const { return false; }
+    int32_t id() const { return _id; }
     int32_t plan_node_id() const { return _plan_node_id; }
     virtual Status prepare(RuntimeState* state);
     virtual void close(RuntimeState* state);
     std::string get_name() const { return _name + "_" + std::to_string(_plan_node_id); }
-
+    std::string get_raw_name() const { return _name; }
     // Local rf that take effects on this operator, and operator must delay to schedule to execution on core
     // util the corresponding local rf generated.
     const LocalRFWaitingSet& rf_waiting_set() const { return _rf_waiting_set; }

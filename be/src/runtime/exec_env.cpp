@@ -290,6 +290,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     RETURN_IF_ERROR(_load_channel_mgr->init(_load_mem_tracker));
     _heartbeat_flags = new HeartbeatFlags();
+    _cache_mgr = std::make_shared<cache::CacheManager>(512L << 20);
     return Status::OK();
 }
 
@@ -483,6 +484,9 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_lake_tablet_manager);
     SAFE_DELETE(_lake_location_provider);
 
+    if (_cache_mgr) {
+        _cache_mgr.reset();
+    }
     _metrics = nullptr;
 }
 

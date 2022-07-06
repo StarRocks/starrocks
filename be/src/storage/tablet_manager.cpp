@@ -367,6 +367,19 @@ TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, bool include_dele
     return _get_tablet_unlocked(tablet_id, include_deleted, err);
 }
 
+StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(TTabletId tablet_id, int64_t from_version,
+                                                                     int64_t to_version) {
+    std::string err;
+    auto tablet = get_tablet(tablet_id, true, &err);
+    if (!tablet) {
+        std::string errmsg = strings::Substitute("Failed to get tablet(tablet_id=$0),reason=$1", tablet_id, err);
+        return Status::InternalError(errmsg);
+    }
+    std::vector<RowsetSharedPtr> rowsets;
+    RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version{from_version, to_version}, &rowsets));
+    return std::make_tuple(std::move(tablet), std::move(rowsets));
+}
+
 TabletSharedPtr TabletManager::_get_tablet_unlocked(TTabletId tablet_id, bool include_deleted, std::string* err) {
     TabletSharedPtr tablet = _get_tablet_unlocked(tablet_id);
     if (tablet == nullptr && include_deleted) {

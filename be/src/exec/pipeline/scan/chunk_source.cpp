@@ -55,6 +55,8 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
     }
 
     int64_t time_spent_ns = 0;
+    size_t num_read_chunks = 0;
+    auto [tablet_id, version] = _morsel->get_lane_owner_and_version();
     for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         {
             SCOPED_RAW_TIMER(&time_spent_ns);
@@ -65,14 +67,23 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
 
             ChunkPtr chunk;
             _status = _read_chunk(state, &chunk);
+            // we always output a empty chunk instead of nullptr, because we need set tablet_id and is_last_chunk flag
+            // in the chunk.
+            if (chunk == nullptr) {
+                chunk = std::make_shared<vectorized::Chunk>();
+            }
             if (!_status.ok()) {
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
+                    ++num_read_chunks;
+                    chunk->set_tablet_id(tablet_id, true);
                     _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
                 }
                 break;
             }
 
+            ++num_read_chunks;
+            chunk->set_tablet_id(tablet_id, false);
             _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
         }
 

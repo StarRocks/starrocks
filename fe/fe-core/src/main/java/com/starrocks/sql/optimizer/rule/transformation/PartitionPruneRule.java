@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -14,6 +15,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -28,6 +30,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -59,13 +62,17 @@ public class PartitionPruneRule extends TransformationRule {
                     partitionPrune(table, (RangePartitionInfo) partitionInfo, olapScanOperator);
         }
 
+        boolean disableTest =
+                ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnableTestMode();
+        Predicate<? super Partition> hasData = disableTest ? Partition::hasData : Predicates.alwaysTrue();
         if (selectedPartitionIds == null) {
             selectedPartitionIds =
-                    table.getPartitions().stream().filter(Partition::hasData).map(Partition::getId).collect(
+                    table.getPartitions().stream().filter(hasData).map(Partition::getId).collect(
                             Collectors.toList());
+            // some test cases need to perceive partitions pruned, so we can not filter empty partitions.
         } else {
             selectedPartitionIds = selectedPartitionIds.stream()
-                    .filter(id -> table.getPartition(id).hasData()).collect(Collectors.toList());
+                    .filter(id -> hasData.test(table.getPartition(id))).collect(Collectors.toList());
         }
 
         if (isNeedFurtherPrune(selectedPartitionIds, olapScanOperator, partitionInfo)) {

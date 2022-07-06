@@ -202,7 +202,10 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     if (res == nullptr) {
         return nullptr;
     }
+    auto tablet_id = res->tablet_id();
+    auto is_last_chunk = res->is_last_chunk();
     eval_runtime_bloom_filters(res.get());
+    res->set_tablet_id(tablet_id, is_last_chunk);
     return res;
 }
 
@@ -381,6 +384,30 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     });
 
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
+
+    if (_lane_arbiter != nullptr) {
+        while (morsel != nullptr) {
+            auto [lane_owner, version] = morsel->get_lane_owner_and_version();
+            auto acquire_result = _lane_arbiter->try_acquire_lane(lane_owner);
+            if (acquire_result == cache::AR_BUSY) {
+                _morsel_queue->unget(std::move(morsel));
+                return Status::OK();
+            } else if (acquire_result == cache::AR_PROBE) {
+                auto hit = _cache_operator->probe_cache(lane_owner, version);
+                RETURN_IF_ERROR(_cache_operator->reset_lane(lane_owner));
+                if (hit) {
+                    ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
+                } else {
+                    break;
+                }
+            } else if (acquire_result == cache::AR_SKIP) {
+                ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
+            } else if (acquire_result == cache::AR_IO) {
+                break;
+            }
+        }
+    }
+
     if (morsel != nullptr) {
         COUNTER_UPDATE(_morsels_counter, 1);
 
