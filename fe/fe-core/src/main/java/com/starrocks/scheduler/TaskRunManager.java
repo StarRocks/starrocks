@@ -13,6 +13,7 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Iterator;
 import java.util.Map;
@@ -82,21 +83,13 @@ public class TaskRunManager {
             PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.computeIfAbsent(taskId,
                     u -> Queues.newPriorityBlockingQueue());
             if (mergeRedundant) {
-                // Because java PriorityQueue does not provide an interface for searching by element,
-                // so find it by code O(n), which can be optimized later
-                TaskRun oldTaskRun = null;
-                for (TaskRun run : taskRuns) {
-                    if (run.equals(taskRun)) {
-                        oldTaskRun = run;
-                        break;
-                    }
-                }
+                TaskRun oldTaskRun = getTaskRun(taskRuns, taskRun);
                 if (oldTaskRun != null) {
-
                     // The remove here is actually remove the old TaskRun.
                     // Note that the old TaskRun and new TaskRun may have the same definition,
                     // but other attributes may be different, such as priority, creation time.
-                    // merge priority higher and create time lower and queryId will be change.
+                    // higher priority and create time will be result after merge is complete
+                    // and queryId will be change.
                     boolean isRemove = taskRuns.remove(taskRun);
                     if (!isRemove) {
                         LOG.warn("failed to remove TaskRun definition is [{}]",
@@ -114,6 +107,20 @@ public class TaskRunManager {
         } finally {
             taskRunUnlock();
         }
+    }
+
+    // Because java PriorityQueue does not provide an interface for searching by element,
+    // so find it by code O(n), which can be optimized later
+    @Nullable
+    private TaskRun getTaskRun(PriorityBlockingQueue<TaskRun> taskRuns, TaskRun taskRun) {
+        TaskRun oldTaskRun = null;
+        for (TaskRun run : taskRuns) {
+            if (run.equals(taskRun)) {
+                oldTaskRun = run;
+                break;
+            }
+        }
+        return oldTaskRun;
     }
 
     // check if a running TaskRun is complete and remove it from running TaskRun map
