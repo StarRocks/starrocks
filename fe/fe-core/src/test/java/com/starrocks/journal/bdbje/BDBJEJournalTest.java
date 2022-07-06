@@ -171,6 +171,8 @@ public class BDBJEJournalTest {
         journal.batchWriteAppend(4, buffer);
         journal.batchWriteAbort();
         Assert.assertFalse(checkKeyExists(4, database.getDb()));
+
+        journal.close();
     }
 
     @Test
@@ -497,8 +499,16 @@ public class BDBJEJournalTest {
             }
         };
 
+        new Expectations(database) {
+            {
+                database.close();
+                times = 1;
+            }
+        };
+
         BDBJEJournal journal = new BDBJEJournal(environment);
         journal.open();
+        journal.close();
     }
 
 
@@ -534,6 +544,7 @@ public class BDBJEJournalTest {
 
         BDBJEJournal journal = new BDBJEJournal(environment);
         journal.open();
+        Assert.fail();
     }
 
     @Test(expected = JournalException.class)
@@ -555,6 +566,7 @@ public class BDBJEJournalTest {
 
         BDBJEJournal journal = new BDBJEJournal(environment);
         journal.open();
+        Assert.fail();
     }
 
     @Test
@@ -580,8 +592,18 @@ public class BDBJEJournalTest {
                 result = database;
             }
         };
+
+
+        new Expectations(database) {
+            {
+                database.close();
+                times = 1;
+            }
+        };
+
         BDBJEJournal journal = new BDBJEJournal(environment);
         journal.open();
+        journal.close();
     }
 
     @Test
@@ -613,6 +635,7 @@ public class BDBJEJournalTest {
             }
         };
         journal.deleteJournals(45);
+        journal.close();  // no db will closed
     }
 
     @Test
@@ -658,6 +681,8 @@ public class BDBJEJournalTest {
                 closeSafeDatabase.getDb();
                 times = 1;
                 result = database;
+                closeSafeDatabase.close();
+                times = 1;
             }
         };
         new Expectations(database) {
@@ -668,6 +693,7 @@ public class BDBJEJournalTest {
             }
         };
         Assert.assertEquals(54, journal.getMaxJournalId());
+        journal.close();  // no db will closed
     }
 
     @Test(expected = JournalException.class)
@@ -757,6 +783,6 @@ public class BDBJEJournalTest {
 
         Assert.assertEquals(2, journal.getFinalizedJournalId());
         Assert.assertEquals(4, journal.getMaxJournalId());
-        Assert.assertEquals(1, journal.getMinJournalId());
+        journal.close();
      }
 }

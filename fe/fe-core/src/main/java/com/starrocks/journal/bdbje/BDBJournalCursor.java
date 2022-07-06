@@ -41,67 +41,95 @@ import java.io.IOException;
 import java.util.List;
 
 public class BDBJournalCursor implements JournalCursor {
-    private static final Logger LOG = LogManager.getLogger(JournalCursor.class);
+    private static final Logger LOG = LogManager.getLogger(BDBJournalCursor.class);
     private static final int RETRY_TIME = 3;
     private static final long SLEEP_INTERVAL_SEC = 3;
 
     private long toKey;
     private long currentKey;
     private BDBEnvironment environment;
-    private List<Long> dbNames;
-    private CloseSafeDatabase database = null;
-    private int nextDbPositionIndex;
+    // names of all local databases, will set on initialization, and will update every time `prelong()` is called
+    protected List<Long> dbNames = null;
+    // index of next db to be opened
+    protected int nextDbPositionIndex = -1;
+    // the database of current log
+    protected CloseSafeDatabase currentDatabase = null;
 
-    public static BDBJournalCursor getJournalCursor(BDBEnvironment env, long fromKey, long toKey) throws
-            JournalException {
-        if (toKey < fromKey || fromKey < 0) {
+    /**
+     * init journal cursor
+     * if toKey = -1(CUROSR_END_KEY), it will automatically search the end.
+     */
+    public static BDBJournalCursor getJournalCursor(BDBEnvironment env, long fromKey, long toKey)
+            throws JournalException {
+        if (fromKey < 0 || toKey > 0 && toKey < fromKey || toKey <= 0 && toKey != JournalCursor.CUROSR_END_KEY) {
             throw new JournalException(String.format("Invalid key range! fromKey %s toKey %s", fromKey, toKey));
         }
-        return new BDBJournalCursor(env, fromKey, toKey);
+        BDBJournalCursor cursor = new BDBJournalCursor(env, fromKey, toKey);
+        cursor.refresh();
+        return cursor;
     }
 
-    protected BDBJournalCursor(BDBEnvironment env, long fromKey, long toKey) throws JournalException {
-        this.environment = env;
-        this.toKey = toKey;
-        this.currentKey = fromKey;
-        this.dbNames = env.getDatabaseNames();
-        if (dbNames == null) {
-            throw new JournalException("failed to get db names!");
-        }
-        this.nextDbPositionIndex = 0;
-
+    protected void calculateNextDbIndex() throws JournalException {
+        int dbIndex = 0;
         // find the db which may contain the fromKey
         String dbName = null;
         for (long db : dbNames) {
-            if (fromKey >= db) {
+            if (currentKey >= db) {
                 dbName = Long.toString(db);
-                nextDbPositionIndex++;
+                dbIndex++;
             } else {
                 break;
             }
         }
-        nextDbPositionIndex -= 1;
-
         if (dbName == null) {
-            throw new JournalException(String.format("Can not find the key:%d, fail to get journal cursor!", fromKey));
+            throw new JournalException(String.format("Can not find the key:%d, fail to get journal cursor!", currentKey));
+        }
+        if (currentDatabase != null) {
+            nextDbPositionIndex = dbIndex;
+        } else {
+            // will open current db in next()
+            nextDbPositionIndex = dbIndex - 1;
+        }
+        LOG.info("currentKey {}, currentDatabase {}, index of next opened db is {}",
+                currentKey, currentDatabase, nextDbPositionIndex);
+    }
+
+    protected BDBJournalCursor(BDBEnvironment env, long fromKey, long toKey) {
+        this.environment = env;
+        this.currentKey = fromKey;
+        this.toKey = toKey;
+    }
+
+    @Override
+    public void refresh() throws JournalException {
+        List<Long> dbNames = environment.getDatabaseNames();
+        if (dbNames == null) {
+            throw new JournalException("failed to get db names!");
+        }
+        if (! dbNames.equals(this.dbNames)) {
+            LOG.info("update dbnames {} -> {}", this.dbNames, dbNames);
+            this.dbNames = dbNames;
+            calculateNextDbIndex();
         }
     }
 
     private boolean shouldOpenDatabase() {
         // the very first time
-        if (database == null) {
+        if (currentDatabase == null) {
             return true;
         }
         // if current db does not contain any more data, then we go to search the next db
         return nextDbPositionIndex < dbNames.size() && currentKey == dbNames.get(nextDbPositionIndex);
     }
 
-    protected void openDatabaseIfNecessary() throws InterruptedException, JournalException, JournalInconsistentException {
-        if (!shouldOpenDatabase()) {
-            return;
+    protected void openDatabaseIfNecessary()
+            throws InterruptedException, JournalException, JournalInconsistentException {
+        // close previous db
+        if (currentDatabase != null) {
+            currentDatabase.close();
+            currentDatabase = null;
         }
-
-        String dbName = Long.toString(dbNames.get(nextDbPositionIndex));
+        Long dbName = dbNames.get(nextDbPositionIndex);
         JournalException exception = null;
         for (int i = 0; i < RETRY_TIME; ++ i) {
             try {
@@ -109,15 +137,12 @@ public class BDBJournalCursor implements JournalCursor {
                     Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
                 }
 
-                if (database != null) {
-                    database.close();
-                }
-                database = environment.openDatabase(dbName);
-                nextDbPositionIndex++;
+                currentDatabase = environment.openDatabase(Long.toString(dbName));
+                LOG.info("open next database {}", currentDatabase);
                 return;
             } catch (RestartRequiredException e) {
                 String errMsg = String.format(
-                        "failed to open database because of RestartRequiredException, will exit. db[%s]", database);
+                        "failed to open database because of RestartRequiredException, will exit. db[%s]", dbName);
                 LOG.warn(errMsg, e);
                 if (e instanceof InsufficientLogException) {
                     // for InsufficientLogException we should refresh the log and
@@ -159,12 +184,16 @@ public class BDBJournalCursor implements JournalCursor {
     @Override
     public JournalEntity next() throws InterruptedException, JournalException, JournalInconsistentException {
         // EOF
-        if (currentKey > toKey) {
+        if (toKey > 0 && currentKey > toKey) {
+            LOG.info("cursor reaches the end: current key {} > to key {}", currentKey, toKey);
             return null;
         }
 
         // if current db does not contain any more data, then we go to search the next db
-        openDatabaseIfNecessary();
+        if (shouldOpenDatabase()) {
+            openDatabaseIfNecessary();
+            nextDbPositionIndex += 1;
+        }
 
         // make the key
         Long key = currentKey;
@@ -182,7 +211,7 @@ public class BDBJournalCursor implements JournalCursor {
 
             // 2. read from bdb & error handling
             try {
-                OperationStatus operationStatus = database.get(null, theKey, theData, LockMode.READ_COMMITTED);
+                OperationStatus operationStatus = currentDatabase.get(null, theKey, theData, LockMode.READ_COMMITTED);
 
                 if (operationStatus == OperationStatus.SUCCESS) {
                     // 3. serialized
@@ -190,6 +219,10 @@ public class BDBJournalCursor implements JournalCursor {
                     currentKey++;
                     return entity;
                 } else if (operationStatus == OperationStatus.NOTFOUND) {
+                    if (toKey == JournalCursor.CUROSR_END_KEY) {
+                        LOG.info("cursor reaches the end: return {} when set toKey {}", operationStatus, toKey);
+                        return null;
+                    }
                     // In the case:
                     // On non-master FE, the replayer will first get the max journal id,
                     // then try to replay logs from current replayed id to the max journal id. But when
@@ -200,19 +233,19 @@ public class BDBJournalCursor implements JournalCursor {
                     // we will get NOTFOUND.
                     // So we simply throw a exception and let the replayer get the max id again.
                     LOG.warn("canot find journal {} in db {}, maybe because master switched, will try again.",
-                            key, database);
+                            key, currentDatabase);
                     return null;
                 } else {
                     // other error status, will record error message and retry
                     String errMsg = String.format("failed to read after retried %d times! key = %d, db = %s, status = %s",
-                            i + 1, key, database, operationStatus);
+                            i + 1, key, currentDatabase, operationStatus);
                     LOG.warn(errMsg);
                     exception = new JournalException(errMsg);
                 }
             } catch (RestartRequiredException e) {
                 String errMsg = String.format(
                         "failed to read next because of RestartRequiredException, will exit. db[%s], current key[%s]",
-                        database, theKey);
+                        currentDatabase, theKey);
                 LOG.warn(errMsg, e);
                 if (e instanceof InsufficientLogException) {
                     // for InsufficientLogException we should refresh the log and
@@ -224,7 +257,7 @@ public class BDBJournalCursor implements JournalCursor {
                 throw journalInconsistentException;
             } catch (DatabaseException e) {
                 String errMsg = String.format("failed to read after retried %d times! key = %d, db = %s",
-                        i + 1, key, database);
+                        i + 1, key, currentDatabase);
                 LOG.error(errMsg, e);
                 exception = new JournalException(errMsg);
                 exception.initCause(e);
@@ -237,5 +270,8 @@ public class BDBJournalCursor implements JournalCursor {
 
     @Override
     public void close() {
+        if (currentDatabase != null) {
+            currentDatabase.close();
+        }
     }
 }

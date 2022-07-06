@@ -85,7 +85,7 @@ public class Checkpoint extends MasterDaemon {
         globalStateMgr.setJournal(journal);
         try {
             globalStateMgr.loadImage(imageDir);
-            globalStateMgr.replayJournal(checkPointVersion);
+            globalStateMgr.replayJournalInner(checkPointVersion);
             if (globalStateMgr.getReplayedJournalId() != checkPointVersion) {
                 LOG.error("checkpoint version should be {}, actual replayed journal id is {}",
                         checkPointVersion, globalStateMgr.getReplayedJournalId());

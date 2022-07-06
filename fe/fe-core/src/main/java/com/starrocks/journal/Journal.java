@@ -32,9 +32,6 @@ public interface Journal {
     // Get the newest journal id 
     public long getMaxJournalId();
 
-    // Get the oldest journal id
-    public long getMinJournalId();
-
     // Close the environment
     public void close();
 

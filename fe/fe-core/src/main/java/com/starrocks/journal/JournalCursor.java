@@ -20,12 +20,17 @@ package com.starrocks.journal;
 // This class is like JDBC ResultSet.
 public interface JournalCursor {
 
+    // meaning read till the end
+    public static long CUROSR_END_KEY = -1;
+
     // Return the next journal.
     // Return null when there is no more journals, or if need to retry from outside.
     // Raise a JournalException if there is an error in reading from the underlying storage.
     // Raise a JournalInconsistentException if read dirty data and need to exit
     public JournalEntity next() throws InterruptedException, JournalException, JournalInconsistentException;
 
-    public void close();
+    // refresh offer a way to update environment, such as update databases in current environment
+    public void refresh() throws JournalException;
 
+    public void close();
 }

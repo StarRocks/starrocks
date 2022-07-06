@@ -44,11 +44,6 @@ public class MockJournal implements Journal {
     }
 
     @Override
-    public long getMinJournalId() {
-        return 1;
-    }
-
-    @Override
     public void close() {
     }
 
@@ -114,13 +109,16 @@ public class MockJournal implements Journal {
     private static class MockJournalCursor implements JournalCursor {
         private final MockJournal instance;
         private long start;
-        private final long end;
+        private long end;
 
         public MockJournalCursor(MockJournal instance, long start, long end) {
             this.instance = instance;
             this.start = start;
             this.end = end;
         }
+
+        @Override
+        public void refresh() {}
 
         @Override
         public JournalEntity next() {

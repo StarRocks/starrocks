@@ -49,7 +49,6 @@ import java.util.List;
  */
 public class BDBJEJournal implements Journal {
     public static final Logger LOG = LogManager.getLogger(BDBJEJournal.class);
-    private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
     static int RETRY_TIME = 3;
     static int SLEEP_INTERVAL_SEC = 5;
 
@@ -100,7 +99,8 @@ public class BDBJEJournal implements Journal {
     }
 
     @Override
-    public JournalCursor read(long fromKey, long toKey) throws JournalException {
+    public JournalCursor read(long fromKey, long toKey)
+            throws JournalException {
         return BDBJournalCursor.getJournalCursor(bdbEnvironment, fromKey, toKey);
     }
 
@@ -119,30 +119,13 @@ public class BDBJEJournal implements Journal {
         String dbName = dbNames.get(index).toString();
         long dbNumberName = dbNames.get(index);
         Database database = bdbEnvironment.openDatabase(dbName).getDb();
-        ret = dbNumberName + database.count() - 1;
+        try {
+            ret = dbNumberName + database.count() - 1;
+        } finally {
+            database.close();
+        }
 
         return ret;
-    }
-
-    @Override
-    public long getMinJournalId() {
-        long ret = -1;
-        if (bdbEnvironment == null) {
-            return ret;
-        }
-        List<Long> dbNames = bdbEnvironment.getDatabaseNames();
-        if (dbNames == null || dbNames.size() == 0) {
-            return ret;
-        }
-
-        String dbName = dbNames.get(0).toString();
-        Database database = bdbEnvironment.openDatabase(dbName).getDb();
-        // The database is empty
-        if (database.count() == 0) {
-            return ret;
-        }
-
-        return dbNames.get(0);
     }
 
     @Override
@@ -150,10 +133,6 @@ public class BDBJEJournal implements Journal {
         if (currentJournalDB != null) {
             currentJournalDB.close();
             currentJournalDB = null;
-        }
-        if (bdbEnvironment != null) {
-            bdbEnvironment.close();
-            bdbEnvironment = null;
         }
     }
 
@@ -163,7 +142,7 @@ public class BDBJEJournal implements Journal {
      * So there's no need to catch RestartRequiredException
      */
     @Override
-    public synchronized void open() throws InterruptedException, JournalException {
+    public void open() throws InterruptedException, JournalException {
         // Open a new journal database or get last existing one as current journal database
         List<Long> dbNames = null;
         JournalException exception = null;
@@ -197,7 +176,6 @@ public class BDBJEJournal implements Journal {
                 if (currentJournalDB != null) {
                     currentJournalDB.close();
                 }
-
                 currentJournalDB = bdbEnvironment.openDatabase(dbName);
                 if (currentJournalDB == null) {
                     LOG.warn("fail to open database {}. retried {} times", dbName, i);
@@ -338,7 +316,7 @@ public class BDBJEJournal implements Journal {
                 if (status != OperationStatus.SUCCESS) {
                     throw new JournalException(String.format(
                             "failed to append journal after retried %d times! status[%s] db[%s] key[%s] data[%s]",
-                            i + 1, status, currentJournalDB, theKey, theData));
+                            i + 1, status.toString(), currentJournalDB.toString(), theKey, theData));
                 }
                 // success
                 uncommitedDatas.add(Pair.create(theKey, theData));
