@@ -4,8 +4,6 @@ Stream Load 是一种同步的导入方式，需要通过发送 HTTP 请求将�
 
 Stream Load 适用于导入数据量小于 10 GB 的本地文件、或通过程序导入数据流的业务场景。
 
-为了支持和其他系统（如 Apache Flink® 和 Apache Kafka®）之间实现跨系统的两阶段提交，并提升高并发 Stream Load 导入场景下的性能，StarRocks 提供了 Stream Load 事务接口。您可以选择使用事务接口来执行 Stream Load 导入。请参阅使用[Stream Load 事务接口导入](/loading/Use_Stream_Load_Transaction_Interface.md)。
-
 ## 支持的数据格式
 
 StarRocks 支持如下数据格式：

@@ -26,7 +26,6 @@
   + [主键模型导入](/loading/PrimaryKeyLoad.md)
   + [MySQL 实时同步](/loading/Flink_cdc_load.md)
   + [使用 flink-connector-starrocks 导入](/loading/Flink-connector-starrocks.md)
-  + [使用 Stream Load 事务接口导入](/loading/Use_Stream_Load_Transaction_Interface.md)
   + [导入过程中完成数据转换](/loading/Etl_in_loading.md)
   + [使用 DataX 导入](/loading/DataX-starrocks-writer.md)
   + [CloudCanal 数据导入](/loading/CloudCanal_loading.md)
