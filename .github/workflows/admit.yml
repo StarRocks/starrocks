@@ -6,6 +6,7 @@ permissions:
   actions: write
   contents: read
   security-events: write
+  pull-requests: write
 jobs:
   Trigger-Admit-Test:
     runs-on: ubuntu-latest
