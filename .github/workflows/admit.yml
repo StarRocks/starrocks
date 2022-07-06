@@ -6,7 +6,7 @@ on:
 jobs:
   Trigger-Admit-Test:
     runs-on: ubuntu-latest
-    permissions: write-all
+    permissions: read-all
     steps:
     - name: Label when approved
       uses: pullreminders/label-when-approved-action@master
