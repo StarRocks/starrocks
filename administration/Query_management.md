@@ -1,83 +1,104 @@
-# 查询管理
+# 管理查询
 
-## 用户连接数
+本文介绍如何管理查询。
 
-Property 是针对用户粒度的属性设置，客户端到 FE 的最大连接数可以通过该命令设置
+## 管理用户连接数
+
+Property 指针对用户粒度的属性的设置项。设置用户的属性，包括分配给用户的资源等。此处的用户属性，是指针对 user，而非 user_identity 的属性。
+
+您可以通过以下命令管理特定用户的客户端到 FE 最大连接数。
 
 ```sql
-SET PROPERTY [FOR 'user'] 'key' = 'value' [, 'key' = 'value']
+SET PROPERTY [FOR 'user'] 'key' = 'value'[, ...];
 ```
 
-设置用户的属性，包括分配给用户的资源等。这里设置的用户属性，是针对 user 的，而不是 user_identity。即假设通过 CREATE USER 语句创建了两个用户 'jack'@'%' 和 'jack'@'192.%'，则使用 SET PROPERTY 语句，只能针对 jack 这个用户，而不是 'jack'@'%' 或 'jack'@'192.%'
-
-例如
+以下示例修改用户 jack 的最大连接数为 1000。
 
 ```sql
--- 修改用户 jack 最大连接数为1000
 SET PROPERTY FOR 'jack' 'max_user_connections' = '1000';
-
--- 查看root用户的连接数限制
-SHOW PROPERTY FOR 'root'; 
 ```
 
-## 查询相关的 session 变量
+您可以通过以下命令查看特定用户的连接数限制。
 
-设置查询相关的 session 级别变量，以调整当前 session 中查询的并发度，内存等，例如：
+```sql
+SHOW PROPERTY FOR 'user';
+```
 
-- 查询并发度相关变量。
-  - Pipeline 执行引擎相关变量（推荐）
-  > 自 StarRocks 2.2 版本，Pipeline 执行引擎已经默认开启。
+## 设置查询相关的 Session 变量
 
-    ```sql
-    set enable_pipeline_engine = true;
-    set pipeline_dop = 0;
-    ```
+您可以设置查询相关的 Session 级别变量，以调整当前 Session 中查询的并发度，内存等。
 
-    参数说明
+### 调整查询并发度
 
-    | 参数                                  | 说明                                                         |
-    | ------------------------------------- | ------------------------------------------------------------ |
-    | `enable_pipeline_engine`              | 是否启用 Pipeline 执行引擎。取值： **true**：启用（默认）。 **false**：不启用。 |
-    | `pipeline_dop`                        | 一个 Pipeline 实例的并行数量。建议设为默认值 **0**，表示自适应调整每个 pipeline 的并行度。 也可以设为大于 **0** 的数值，通常为 BE 节点 CPU 物理核数的一半。 |
+如需调整查询并发度，推荐你您修改 Pipeline 执行引擎相关变量。
 
-  - parallel_fragment_exec_instance_num
+> 注意：自 StarRocks 2.2 版本后，Pipeline 执行引擎已经默认开启。
 
-    一个 Fragment 实例的并行数量。一个 Fragment 实例占用 BE 节点的一个 CPU ，所以一个查询的并行度为一个 Fragment 实例的并行数量。如果您希望提升一个查询的并行度，则可以设置为 BE 的 CPU 核数的一半。
+```sql
+SET enable_pipeline_engine = true;
+SET pipeline_dop = 0;
+```
 
-    > - 实际使用时，一个 Fragment 实例的并行数量存在上限，为一张表在一个 BE 中的 Tablet 数量。比如一张表的 3 个分区，32 个分桶，分布在 4 个 BE 节点上，则一个 BE 的 Tablet 数量为 32 * 3 / 4 = 24，因此该 BE 上一个 Fragment 实例的并行数上限为 24，即使 `set global parallel_fragment_exec_instance_num = 32`，但是实际使用时并行数为 24。
-    > - 在高并发场景下，CPU 资源往往已充分利用，因此建议设置 `set parallel_fragment_exec_instance_num = 1`，以减少不同查询间资源竞争，从而提高整体查询效率。
+| 参数                                 | 说明                                                         |
+| ----------------------------------- | ------------------------------------------------------------ |
+| enable_pipeline_engine              | 是否启用 Pipeline 执行引擎。true：启用（默认），false：不启用。 |
+| pipeline_dop                        | 一个 Pipeline 实例的并行数量。建议设为默认值 0，即系统自适应调整每个 pipeline 的并行度。您也可以设置为大于 0 的数值，通常为 BE 节点 CPU 物理核数的一半。 |
 
-- 内存相关变量包括 exec_mem_limit，表示查询的内存上限。
+您也可通过设置实例的并行数量调整查询并发度。
 
-## 数据库存储容量 Quota
+```sql
+SET GLOBAL parallel_fragment_exec_instance_num = INT;
+```
 
-默认每个 DB 的容量无限制，我们可以通过 alter database 修改
+`parallel_fragment_exec_instance_num`：一个 Fragment 实例的并行数量。一个 Fragment 实例占用 BE 节点的一个 CPU，所以一个查询的并行度为一个 Fragment 实例的并行数量。如果您希望提升一个查询的并行度，则可以设置该参数为 BE 的 CPU 核数的一半。
+
+> 注意：
+>
+> - 实际场景中，一个 Fragment 实例的并行数量存在上限，为一张表在一个 BE 中的 Tablet 数量。例如，一张表的 3 个分区，32 个分桶，分布在 4 个 BE 节点上，则一个 BE 节点的 Tablet 数量为 32 * 3 / 4 = 24，因此该 BE 节点上一个 Fragment 实例的并行数上限为 24，此时即使设置该参数为 `32`，实际使用时并行数仍为 24。
+> - 在高并发场景下，CPU 资源往往已充分利用，因此建议设置 Fragment 实例的并行数量为 `1`，以减少不同查询间资源竞争，从而提高整体查询效率。
+
+### 调整询内存上限
+
+您可以通过以下命令调整询内存上限。
+
+```sql
+SET exec_mem_limit = INT;
+```
+
+`exec_mem_limit`：单个 Instance 的内存限制，单位是 Byte。
+
+## 调整数据库存储容量 Quota
+
+默认设置下，每个数据库的存储容量无限制。您可以通过以下命令调整。
 
 ```sql
 ALTER DATABASE db_name SET DATA QUOTA quota;
 ```
 
-这里 quota 单位为：B/K/KB/M/MB/G/GB/T/TB/P/PB
-例如
+> 说明：`quota` 单位为 `B`，`K`，`KB`，`M`，`MB`，`G`，`GB`，`T`，`TB`，`P`，或 `PB`。
+
+示例：
 
 ```sql
 ALTER DATABASE example_db SET DATA QUOTA 10T;
 ```
 
-更多参考 [ALTER DATABASE](../sql-reference/sql-statements/data-definition/ALTER%20DATABASE.md)
+详细内容，参考 [ALTER DATABASE](../sql-reference/sql-statements/data-definition/ALTER%20DATABASE.md)
 
-## 杀死查询
+## 停止查询
 
-我们可以通过 kill 命令杀掉某一个连接上的查询，其语法是：
+您可以通过以下命令停止某一个连接上的查询。
 
 ```sql
-kill connection_id;
+KILL connection_id;
 ```
 
-connection_id 可以通过 show processlist; 或者 select connection_id(); 查询到
+`connection_id`：特定连接的 ID。您可以通过 `SHOW processlist;` 或者 `select connection_id();` 查看。
+
+示例：
 
 ```plain text
- show processlist;
+mysql> show processlist;
 +------+--------------+---------------------+-----------------+-------------------+---------+------+-------+------+
 | Id   | User         | Host                | Cluster         | Db                | Command | Time | State | Info |
 +------+--------------+---------------------+-----------------+-------------------+---------+------+-------+------+
@@ -103,5 +124,4 @@ mysql> select connection_id();
 
 mysql> kill 114;
 Query OK, 0 rows affected (0.02 sec)
-
 ```
