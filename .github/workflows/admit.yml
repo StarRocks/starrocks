@@ -7,12 +7,6 @@ jobs:
   Trigger-Admit-Test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions-ecosystem/action-add-labels@v1
-      with:
-        labels: bug
-        GITHUB_TOKEN: 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
-        
     - name: Label when approved
       uses: pullreminders/label-when-approved-action@v1.0.7
       env:
