@@ -114,7 +114,6 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.WorkGroupMgr;
-import com.starrocks.catalog.lake.ShardDelete;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
@@ -407,7 +406,7 @@ public class GlobalStateMgr {
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
 
-    private ShardDelete shardDelete;
+    private StarosInfo starosInfo;
 
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
@@ -569,8 +568,7 @@ public class GlobalStateMgr {
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
-
-        this.shardDelete = new ShardDelete();
+        this.starosInfo = new StarosInfo();
     }
 
     public static void destroyCheckpoint() {
@@ -728,8 +726,8 @@ public class GlobalStateMgr {
         return localMetastore;
     }
 
-    public ShardDelete getShardDelete() {
-        return shardDelete;
+    public StarosInfo getStarosInfo() {
+        return starosInfo;
     }
 
     @VisibleForTesting
@@ -1030,7 +1028,7 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
-        shardDelete.start();
+        starosInfo.getShardDelete().start();
     }
 
     // start threads that should running on all FE
@@ -1145,6 +1143,8 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = loadInsertOverwriteJobs(dis, checksum);
             checksum = nodeMgr.loadComputeNodes(dis, checksum);
+            remoteChecksum = dis.readLong();
+            checksum = starosInfo.loadShardDeleteInfo(dis, checksum);
             remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
@@ -1395,6 +1395,8 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = saveInsertOverwriteJobs(dos, checksum);
             checksum = nodeMgr.saveComputeNodes(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = starosInfo.saveShardDeleteInfo(dos, checksum);
             dos.writeLong(checksum);
         }
 

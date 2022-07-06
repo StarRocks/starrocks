@@ -3,7 +3,6 @@
 
 package com.starrocks.catalog.lake;
 
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
@@ -46,15 +45,12 @@ public class ShardDelete extends MasterDaemon implements Writable {
         shardIdToTablet.put(shardId, tablet);
     }
 
-    @Override
-    protected void runAfterCatalogReady() {
-        // for debuggit 
-        LOG.info("runAfterCatalogReady of ShardDelete");
+    private void deleteShard() {
         // delete shard and drop lakeTablet
         Iterator<Map.Entry<Long, LakeTablet>> iterator = shardIdToTablet.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<Long, LakeTablet> entry = iterator.next();
-        
+
             // 1. drop tablet
             boolean finished = true;
             long shardId = entry.getKey();
@@ -106,6 +102,20 @@ public class ShardDelete extends MasterDaemon implements Writable {
                 iterator.remove();
             }
         }
+    }
+
+    @Override
+    protected void runAfterCatalogReady() {
+        // for debug
+        LOG.info("runAfterCatalogReady of ShardDelete");
+        deleteShard();
+        // write edit log
+        GlobalStateMgr.getCurrentState().getEditLog().logShardDelete(this);
+    }
+
+    public void replayDeleteShard(ShardDelete info) {
+        shardIdToTablet = info.shardIdToTablet;
+        deleteShard();
     }
 
     @Override
