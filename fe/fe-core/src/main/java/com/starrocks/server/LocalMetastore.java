@@ -154,6 +154,7 @@ import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
@@ -3019,7 +3020,7 @@ public class LocalMetastore implements ConnectorMetadata {
             Task task = TaskBuilder.buildMvTask(materializedView, dbName);
             taskManager.createTask(task, false);
         }
-        taskManager.executeTask(mvTaskName, priority);
+        taskManager.executeTask(mvTaskName, new ExecuteOption(priority));
     }
 
     /*
