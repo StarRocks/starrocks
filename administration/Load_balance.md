@@ -1,135 +1,108 @@
-# 负载均衡
+# 均衡负载
 
-当部署多个 FE 节点时，用户可以在多个 FE 之上部署负载均衡层来实现 StarRocks 的高可用。
+本文介绍如何通过在多个 FE 节点之上部署负载均衡层以实现 StarRocks 的高可用。
 
-以下提供一些高可用的方案：
+## 通过代码均衡负载
 
-## 代码方式
+您可以在应用层代码进行重试和负载均衡。当特定连接宕机，代码应控制系统自动在其他连接上进行重试。使用该方式，您需要配置多个 StarRocks 前端节点地址。
 
-自己在应用层代码进行重试和负载均衡。比如发现一个连接挂掉，就自动在其他连接上进行重试。应用层代码重试需要应用自己配置多个StarRocks前端节点地址。
+## 通过 JDBC Connector 均衡负载
 
-## JDBC Connector
+如果您使用 MySQL JDBC Connector 连接 StarRocks，可以通过 JDBC 的自动重试机制进行重试和负载均衡。
 
-如果使用 mysql jdbc connector 来连接StarRocks，可以使用 jdbc 的自动重试机制:
-
-~~~sql
+```sql
 jdbc:mysql://[host:port],[host:port].../[database][?propertyName1][=propertyValue1][&propertyName2][=propertyValue2]...
-~~~
+```
 
-## ProxySQL
+## 通过 ProxySQL 均衡负载
 
 ProxySQL 是一个灵活强大的 MySQL 代理层, 可以实现读写分离，支持 Query 路由、SQL Cache，动态加载配置、故障切换和 SQL 过滤等功能。
 
-StarRocks 的 FE 进程负责接收用户连接和查询请求，其本身是可以横向扩展且高可用的，但是需要用户在多个 FE 上架设一层 proxy，来实现自动的连接负载均衡。
+StarRocks 的 FE 进程负责接收用户连接和查询请求，其本身是可以横向扩展且可以部署为高可用集群。您需要在多个 FE 节点上架设一层 Proxy 以实现自动的连接负载均衡。
 
-### 1. 安装相关依赖
+1. 安装相关依赖。
 
-~~~shell
-yum install -y gnutls perl-DBD-MySQL perl-DBI perl-devel
-~~~
+    ```shell
+    yum install -y gnutls perl-DBD-MySQL perl-DBI perl-devel
+    ```
 
-### 2. 下载安装包
+2. 下载并解压 ProxySQL 安装包。
 
-~~~shell
-wget https://github.com/sysown/proxysql/releases/download/v2.0.14/proxysql-2.0.14-1-centos7.x86\_64.rpm
-~~~
+    ```shell
+    wget https://github.com/sysown/proxysql/releases/download/v2.0.14/proxysql-2.0.14-1-centos7.x86\_64.rpm
+    rpm2cpio proxysql-2.0.14-1-centos7.x86_64.rpm | cpio -ivdm
+    ```
 
-### 3. 解压到当前目录
+    > 说明：您可以自行选择下载其他版本的 ProxySQL。
 
-~~~shell
-rpm2cpio proxysql-2.0.14-1-centos7.x86_64.rpm | cpio -ivdm
-~~~
+3. 修改配置文件 **/etc/proxysql.cnf**。
 
-### 4. 修改配置文件
+    修改以下配置项为您有访问权限的目录（绝对路径）。
 
-~~~shell
-vim ./etc/proxysql.cnf 
-~~~
+    ```plain text
+    datadir = "/var/lib/proxysql"
+    errorlog = "/var/lib/proxysql/proxysql.log"
+    ```
 
-修改为用户有权限访问的目录（绝对路径）
+4. 启动 ProxySQL。
 
-~~~vim
-datadir="/var/lib/proxysql"
-errorlog="/var/lib/proxysql/proxysql.log"
-~~~
+    ```shell
+    ./usr/bin/proxysql -c ./etc/proxysql.cnf --no-monitor
+    ```
 
-### 5. 启动
+5. 登录 StarRocks。
 
-~~~shell
-./usr/bin/proxysql -c ./etc/proxysql.cnf --no-monitor
-~~~
+    ```shell
+    mysql -u admin -padmin -h 127.0.0.1 -P6032
+    ```
 
-### 6. 登录
+6. 配置全局日志。
 
-~~~shell
-mysql -u admin -padmin -h 127.0.0.1 -P6032
-~~~
+    ```sql
+    SET mysql-eventslog_filename='proxysql_queries.log';
+    SET mysql-eventslog_default_log=1;
+    SET mysql-eventslog_format=2;
+    LOAD MYSQL VARIABLES TO RUNTIME;
+    SAVE MYSQL VARIABLES TO DISK;
+    ```
 
-### 7. 配置全局日志
+7. 插入主节点以及 Observer 节点并读取配置。
 
-~~~shell
-SET mysql-eventslog_filename='proxysql_queries.log';
-SET mysql-eventslog_default_log=1;
-SET mysql-eventslog_format=2;
-LOAD MYSQL VARIABLES TO RUNTIME;
-SAVE MYSQL VARIABLES TO DISK;
-~~~
+    ```sql
+    insert into mysql_servers(hostgroup_id, hostname, port) values(1, '172.26.92.139', 8533);
+    insert into mysql_servers(hostgroup_id, hostname, port) values(2, '172.26.34.139', 9931);
+    insert into mysql_servers(hostgroup_id, hostname, port) values(2, '172.26.34.140', 9931);
+    load mysql servers to runtime;
+    save mysql servers to disk;
+    ```
 
-### 8. 插入主节点
+8. 配置用户名和密码并读取配置。
 
-~~~sql
-insert into mysql_servers(hostgroup_id, hostname, port) values(1, '172.26.92.139', 8533);
-~~~
+    ```sql
+    insert into mysql_users(username, password, active, default_hostgroup, backend, frontend) 
+    values('root', '*FAAFFE644E901CFAFAEC7562415E5FAEC243B8B2', 1, 1, 1, 1);
+    load mysql users to runtime; 
+    save mysql users to disk;
+    ```
 
-### 9. 插入Observer节点
+    > 注意：这里 `password` 输入值为密文。例如，root 用户密码为 `root123`，则 `password` 输入为 `*FAAFFE644E901CFAFAEC7562415E5FAEC243B8B2`。您可以通过 `password()`函数获取具体输入的加密值。
+    >
+    > 示例：
+    >
+    > ```plain text
+    > mysql> select password('root123');
+    > +---------------------------------------------+
+    > | '*FAAFFE644E901CFAFAEC7562415E5FAEC243B8B2' |
+    > +---------------------------------------------+
+    > | *FAAFFE644E901CFAFAEC7562415E5FAEC243B8B2   |
+    > +---------------------------------------------+
+    > 1 row in set (0.01 sec)
+    > ```
 
-~~~sql
-insert into mysql_servers(hostgroup_id, hostname, port) values(2, '172.26.34.139', 9931);
-insert into mysql_servers(hostgroup_id, hostname, port) values(2, '172.26.34.140', 9931);
-~~~
+9. 写入代理规则并读取配置。
 
-### 10. load 配置
-
-~~~sql
-load mysql servers to runtime;
-save mysql servers to disk;
-~~~
-
-### 11. 配置用户名和密码
-
-~~~sql
-insert into mysql_users(username, password, active, default_hostgroup, backend, frontend) 
-values('root', '*FAAFFE644E901CFAFAEC7562415E5FAEC243B8B2', 1, 1, 1, 1);
-~~~
-
-注：这里password输入值为密文。比如root用户密码为root123,则password输入为'*FAAFFE644E901CFAFAEC7562415E5FAEC243B8B2'。具体输入的加密value可以通过 `password()`函数获取。示例如下：
-
-~~~plain text
-mysql> select password('root123');
-+---------------------------------------------+
-| '*FAAFFE644E901CFAFAEC7562415E5FAEC243B8B2' |
-+---------------------------------------------+
-| *FAAFFE644E901CFAFAEC7562415E5FAEC243B8B2   |
-+---------------------------------------------+
-1 row in set (0.01 sec)
-~~~
-
-### 12. load 配置
-
-~~~sql
-load mysql users to runtime; 
-save mysql users to disk;
-~~~
-
-### 13. 写入代理规则
-
-~~~sql
-insert into mysql_query_rules(rule_id, active, match_digest, destination_hostgroup, mirror_hostgroup, apply) values(1, 1, '.', 1, 2, 1);
-~~~
-
-### 14. load 配置
-
-~~~sql
-load mysql query rules to runtime; 
-save mysql query rules to disk;
-~~~
+    ```sql
+    insert into mysql_query_rules(rule_id, active, match_digest, destination_hostgroup, mirror_hostgroup, apply) values(1, 1, '.', 1, 2, 1);
+    load mysql query rules to runtime; 
+    save mysql query rules to disk;
+    ```
