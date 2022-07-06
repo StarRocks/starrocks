@@ -7,7 +7,7 @@ jobs:
   Trigger-Admit-Test:
     runs-on: ubuntu-latest
     steps:
-    - uses: taichi/approved-event-action@master
+    - uses: taichi/approved-event-action@v1.0.0
       id: approved
       with:
         approvals: '2'
@@ -25,16 +25,13 @@ jobs:
         api_token: 112bc1b04f326123e6668f931a7d26f7dd
         parameter: '{ "GITHUB_PR_NUMBER": "${{ env.GITHUB_PR_NUMBER }}", "GITHUB_PR_TARGET_BRANCH": "${{ env.GITHUB_PR_TARGET_BRANCH}}" }'
         wait: "true"
-        timeout: "3600"
-        
-        
-        
+        timeout: "3600"      
       env:
         GITHUB_PR_NUMBER: ${{github.event.pull_request.number}}
         GITHUB_PR_TARGET_BRANCH: ${{ github.event.pull_request.base.ref }}
-        JENKINS_USER: ${{ secrets.JENKINS_USER }}
-        JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
-        JENKINS_URL: ${{ secrets.JENKINS_URL }}
+#        JENKINS_USER: ${{ secrets.JENKINS_USER }}
+#        JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
+#        JENKINS_URL: ${{ secrets.JENKINS_URL }}
       
 #    - name: trigger jenkins job
 #      if: ${{ steps.approved.outputs.approved == 'true' }}     
