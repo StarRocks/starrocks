@@ -8,7 +8,6 @@
 #include <fslib/file_system.h>
 #include <fslib/fslib_all_initializer.h>
 #include <fslib/stream.h>
-#include <s3_uri.h>
 #include <starlet.h>
 #include <worker.h>
 
