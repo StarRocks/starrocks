@@ -5,7 +5,9 @@
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
+#include "storage/empty_iterator.h"
 #include "storage/lake/tablet.h"
+#include "storage/merge_iterator.h"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
@@ -15,54 +17,17 @@
 
 namespace starrocks::lake {
 
-class SegmentIteratorWrapper : public vectorized::ChunkIterator {
-public:
-    SegmentIteratorWrapper(vectorized::ChunkIteratorPtr iter)
-            : ChunkIterator(iter->schema(), iter->chunk_size()), _iter(std::move(iter)) {}
-
-    void close() override {
-        _iter->close();
-        _iter.reset();
-    }
-
-    Status init_encoded_schema(vectorized::ColumnIdToGlobalDictMap& dict_maps) override {
-        RETURN_IF_ERROR(vectorized::ChunkIterator::init_encoded_schema(dict_maps));
-        return _iter->init_encoded_schema(dict_maps);
-    }
-
-    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
-        ChunkIterator::init_output_schema(unused_output_column_ids);
-        return _iter->init_output_schema(unused_output_column_ids);
-    }
-
-protected:
-    Status do_get_next(vectorized::Chunk* chunk) override { return _iter->get_next(chunk); }
-    Status do_get_next(vectorized::Chunk* chunk, vector<uint32_t>* rowid) override {
-        return _iter->get_next(chunk, rowid);
-    }
-
-private:
-    vectorized::ChunkIteratorPtr _iter;
-};
-
 Rowset::Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata)
         : _tablet(tablet), _rowset_metadata(std::move(rowset_metadata)) {}
 
-Rowset::~Rowset() {
-    _segments.clear();
-}
-
-Status Rowset::init() {
-    ASSIGN_OR_RETURN(_tablet_schema, _tablet->get_schema());
-    return load_segments();
-}
+Rowset::~Rowset() = default;
 
 // TODO: support
 //  1. delete predicates
 //  2. primary key table
 //  3. rowid range and short key range
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators(const vectorized::Schema& schema,
-                                                                      const vectorized::RowsetReadOptions& options) {
+StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema,
+                                        const vectorized::RowsetReadOptions& options) {
     vectorized::SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet->group_assemble()));
     seg_options.stats = options.stats;
@@ -76,24 +41,36 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators(const vect
     seg_options.global_dictmaps = options.global_dictmaps;
     seg_options.unused_output_column_ids = options.unused_output_column_ids;
 
-    auto segment_schema = schema;
+    std::unique_ptr<vectorized::Schema> segment_schema_guard;
+    auto* segment_schema = const_cast<vectorized::Schema*>(&schema);
     // Append the columns with delete condition to segment schema.
     std::set<ColumnId> delete_columns;
     seg_options.delete_predicates.get_column_ids(&delete_columns);
     for (ColumnId cid : delete_columns) {
         const TabletColumn& col = options.tablet_schema->column(cid);
-        if (segment_schema.get_field_by_name(std::string(col.name())) == nullptr) {
-            auto f = vectorized::ChunkHelper::convert_field_to_format_v2(cid, col);
-            segment_schema.append(std::make_shared<vectorized::Field>(std::move(f)));
+        if (segment_schema->get_field_by_name(std::string(col.name())) != nullptr) {
+            continue;
         }
+        // copy on write
+        if (segment_schema == &schema) {
+            segment_schema = new vectorized::Schema(schema);
+            segment_schema_guard.reset(segment_schema);
+        }
+        auto f = vectorized::ChunkHelper::convert_field_to_format_v2(cid, col);
+        segment_schema->append(std::make_shared<vectorized::Field>(std::move(f)));
     }
 
-    std::vector<vectorized::ChunkIteratorPtr> tmp_seg_iters;
-    tmp_seg_iters.reserve(num_segments());
+    std::vector<vectorized::ChunkIteratorPtr> segment_iterators;
+    segment_iterators.reserve(num_segments());
     if (options.stats) {
         options.stats->segments_read_count += num_segments();
     }
-    for (auto& seg_ptr : _segments) {
+
+    std::vector<SegmentPtr> segments;
+    RETURN_IF_ERROR(load_segments(&segments));
+    LOG(INFO) << "#segments=" << segments.size();
+    for (auto& seg_ptr : segments) {
+        LOG(INFO) << "#rows=" << seg_ptr->num_rows();
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
@@ -102,53 +79,41 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators(const vect
             continue;
         }
 
-        auto res = seg_ptr->new_iterator(segment_schema, seg_options);
+        auto res = seg_ptr->new_iterator(*segment_schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;
         }
         if (!res.ok()) {
             return res.status();
         }
-        if (segment_schema.num_fields() > schema.num_fields()) {
-            tmp_seg_iters.emplace_back(vectorized::new_projection_iterator(schema, std::move(res).value()));
+        if (segment_schema != &schema) {
+            segment_iterators.emplace_back(vectorized::new_projection_iterator(schema, std::move(res).value()));
         } else {
-            tmp_seg_iters.emplace_back(std::move(res).value());
+            segment_iterators.emplace_back(std::move(res).value());
         }
     }
-
-    std::vector<ChunkIteratorPtr> segment_iterators;
-    if (tmp_seg_iters.empty()) {
-        // nothing to do
-    } else if (is_overlapped()) {
-        for (auto& iter : tmp_seg_iters) {
-            auto wrapper = std::make_shared<SegmentIteratorWrapper>(std::move(iter));
-            segment_iterators.emplace_back(std::move(wrapper));
-        }
+    if (segment_iterators.empty()) {
+        return vectorized::new_empty_iterator(*segment_schema, options.chunk_size);
+    } else if (segment_iterators.size() == 1) {
+        return segment_iterators[0];
+    } else if (options.sorted) {
+        return vectorized::new_heap_merge_iterator(segment_iterators);
     } else {
-        auto iter = vectorized::new_union_iterator(std::move(tmp_seg_iters));
-        auto wrapper = std::make_shared<SegmentIteratorWrapper>(std::move(iter));
-        segment_iterators.emplace_back(std::move(wrapper));
+        return vectorized::new_union_iterator(segment_iterators);
     }
-    return segment_iterators;
 }
 
 // TODO: load from segment cache
-Status Rowset::load_segments() {
-    _segments.clear();
-
+Status Rowset::load_segments(std::vector<SegmentPtr>* segments) {
+    ASSIGN_OR_RETURN(_tablet_schema, _tablet->get_schema());
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_tablet->group_assemble()));
     size_t footer_size_hint = 16 * 1024;
     uint32_t seg_id = 0;
     for (const auto& seg_name : _rowset_metadata->segments()) {
         auto seg_path = _tablet->segment_path_assemble(seg_name);
-        auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path, seg_id++,
-                                 _tablet_schema.get(), &footer_size_hint);
-        if (!res.ok()) {
-            LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
-            _segments.clear();
-            return res.status();
-        }
-        _segments.push_back(std::move(res).value());
+        ASSIGN_OR_RETURN(auto segment, Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path,
+                                                     seg_id++, _tablet_schema.get(), &footer_size_hint));
+        segments->emplace_back(std::move(segment));
     }
     return Status::OK();
 }

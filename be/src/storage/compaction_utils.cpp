@@ -26,7 +26,7 @@ const char* CompactionUtils::compaction_algorithm_to_string(CompactionAlgorithm 
 
 int32_t CompactionUtils::get_read_chunk_size(int64_t mem_limit, int32_t config_chunk_size, int64_t total_num_rows,
                                              int64_t total_mem_footprint, size_t source_num) {
-    uint64_t chunk_size = config_chunk_size;
+    int32_t chunk_size = config_chunk_size;
     if (mem_limit > 0) {
         int64_t avg_row_size = (total_mem_footprint + 1) / (total_num_rows + 1);
         // The result of the division operation be zero, so added one
