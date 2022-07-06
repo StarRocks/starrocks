@@ -1,7 +1,8 @@
 name: Trigger Jobs
 
 on: 
-  pull_request_target
+  pull_request_target:
+    types: [synchronize]
 
 jobs:
   Trigger-Admit-Test:
