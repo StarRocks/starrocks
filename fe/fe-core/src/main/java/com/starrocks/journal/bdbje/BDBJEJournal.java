@@ -54,7 +54,7 @@ public class BDBJEJournal implements Journal {
     static int SLEEP_INTERVAL_SEC = 5;
 
     private BDBEnvironment bdbEnvironment = null;
-    private CloseSafeDatabase currentJournalDB;
+    private CloseSafeDatabase currentJournalDB = null;
     protected Transaction currentTrasaction = null;
 
     // store uncommitted kv, used for rebuilding txn on commit fails
@@ -88,6 +88,7 @@ public class BDBJEJournal implements Journal {
         long newNameVerify = currentName + currentJournalDB.getDb().count();
         if (newName == newNameVerify) {
             LOG.info("roll edit log. new db name is {}", newName);
+            currentJournalDB.close();
             currentJournalDB = bdbEnvironment.openDatabase(Long.toString(newName));
         } else {
             String msg = String.format("roll journal error! journalId and db journal numbers is not match. "
@@ -146,8 +147,14 @@ public class BDBJEJournal implements Journal {
 
     @Override
     public void close() {
-        bdbEnvironment.close();
-        bdbEnvironment = null;
+        if (currentJournalDB != null) {
+            currentJournalDB.close();
+            currentJournalDB = null;
+        }
+        if (bdbEnvironment != null) {
+            bdbEnvironment.close();
+            bdbEnvironment = null;
+        }
     }
 
     /**
@@ -185,6 +192,10 @@ public class BDBJEJournal implements Journal {
                 } else {
                     // get last database as current journal database
                     dbName = dbNames.get(dbNames.size() - 1).toString();
+                }
+
+                if (currentJournalDB != null) {
+                    currentJournalDB.close();
                 }
 
                 currentJournalDB = bdbEnvironment.openDatabase(dbName);

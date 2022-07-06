@@ -73,6 +73,9 @@ public class BDBJournalCursorTest {
         };
         new Expectations(database) {
             {
+                database.close();
+                times = 1;
+
                 database.get(null, makeKey(11), (DatabaseEntry) any, (LockMode) any);
                 times = 1;
                 result = new Delegate() {
@@ -101,6 +104,9 @@ public class BDBJournalCursorTest {
         };
         new Expectations(database) {
             {
+                database.close();
+                times = 1;
+
                 database.get(null, makeKey(12), (DatabaseEntry) any, (LockMode) any);
                 times = 1;
                 result = new Delegate() {

@@ -679,6 +679,9 @@ public class BDBJEJournalTest {
                 closeSafeDatabase.getDb();
                 minTimes = 0;
                 result = database;
+
+                closeSafeDatabase.close();
+                minTimes = 0;
             }
         };
         BDBJEJournal journal = new BDBJEJournal(environment, closeSafeDatabase);

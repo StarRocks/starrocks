@@ -222,6 +222,7 @@ public class BDBEnvironmentTest {
             Assert.assertEquals(i + 1, masterEnvironment.getDatabaseNames().size());
             Assert.assertEquals(DB_INDEX_ARR[i], masterEnvironment.getDatabaseNames().get(i));
             masterDb.put(null, key, value);
+            masterDb.close();
 
             Thread.sleep(1000);
 
@@ -234,6 +235,7 @@ public class BDBEnvironmentTest {
                 DatabaseEntry newvalue = new DatabaseEntry();
                 followerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
                 Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
+                followerDb.close();
             }
         }
 

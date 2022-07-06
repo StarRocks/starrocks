@@ -49,7 +49,7 @@ public class BDBJournalCursor implements JournalCursor {
     private long currentKey;
     private BDBEnvironment environment;
     private List<Long> dbNames;
-    private CloseSafeDatabase database;
+    private CloseSafeDatabase database = null;
     private int nextDbPositionIndex;
 
     public static BDBJournalCursor getJournalCursor(BDBEnvironment env, long fromKey, long toKey) throws
@@ -109,6 +109,9 @@ public class BDBJournalCursor implements JournalCursor {
                     Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
                 }
 
+                if (database != null) {
+                    database.close();
+                }
                 database = environment.openDatabase(dbName);
                 nextDbPositionIndex++;
                 return;
