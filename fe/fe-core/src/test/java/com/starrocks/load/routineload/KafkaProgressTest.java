@@ -12,6 +12,7 @@ import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -40,6 +41,8 @@ public class KafkaProgressTest {
         };
 
         KafkaProgress progress = new KafkaProgress();
+        // modify offset while paused
+        progress.modifyOffset(Arrays.asList(new Pair<>(3, 20L)));
         progress.addPartitionOffset(new Pair<>(0, -1L));
         progress.addPartitionOffset(new Pair<>(1, -2L));
         progress.addPartitionOffset(new Pair<>(2, 10L));
@@ -47,5 +50,6 @@ public class KafkaProgressTest {
         Assert.assertEquals(100L, (long) progress.getOffsetByPartition(0));
         Assert.assertEquals(1L, (long) progress.getOffsetByPartition(1));
         Assert.assertEquals(10L, (long) progress.getOffsetByPartition(2));
+        Assert.assertEquals(20L, (long) progress.getOffsetByPartition(3));
     }
 }
