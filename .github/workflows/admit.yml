@@ -5,7 +5,10 @@ on:
 
 jobs:
   Trigger-Admit-Test:
-    permissions: write-all
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
