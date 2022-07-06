@@ -44,7 +44,8 @@ uint8_t* ArrayColumn::mutable_raw_data() {
 
 size_t ArrayColumn::byte_size(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
-    return _elements->byte_size(_offsets->get_data()[from], _offsets->get_data()[from + size]) +
+    return _elements->byte_size(_offsets->get_data()[from],
+                                _offsets->get_data()[from + size] - _offsets->get_data()[from]) +
            _offsets->Column::byte_size(from, size);
 }
 
