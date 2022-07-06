@@ -16,3 +16,10 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
+        
+    - run: echo ${{ steps.approved.outputs.approved }} >> /home/runner/pr.env
+        
+    - name: Set Environment Variables
+      uses: tw3lveparsecs/github-actions-setvars@v0.1
+      with:
+        envFilePath: /home/runner/pr.env
