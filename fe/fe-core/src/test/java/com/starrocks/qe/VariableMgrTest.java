@@ -240,7 +240,11 @@ public class VariableMgrTest {
         Assert.assertTrue(vars.toString().contains("cbo_use_correlated_join_estimate"));
 
         vars = VariableMgr.dump(SetType.DEFAULT, null, null);
-        Assert.assertTrue(vars.isEmpty());
+        List<List<String>> vars1 = VariableMgr.dump(SetType.GLOBAL, null, null);
+        Assert.assertTrue(vars.size() < vars1.size());
+
+        List<List<String>> vars2 = VariableMgr.dump(SetType.SESSION, null, null);
+        Assert.assertTrue(vars.size() == vars2.size());
     }
 }
 

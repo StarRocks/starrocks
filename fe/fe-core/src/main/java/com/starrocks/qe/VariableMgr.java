@@ -477,7 +477,7 @@ public class VariableMgr {
         return "";
     }
 
-    // Dump all fields. Used for `show variables`
+    // Dump all fields. Used for `show variables`, but note `sessionVar` would be null.
     public static List<List<String>> dump(SetType type, SessionVariable sessionVar, PatternMatcher matcher) {
         List<List<String>> rows = Lists.newArrayList();
         // Hold the read lock when session dump, because this option need to access global variable.
@@ -495,17 +495,23 @@ public class VariableMgr {
 
                 // For session variables, the flag is VariableMgr.SESSION | VariableMgr.INVISIBLE
                 // For global variables, the flag is VariableMgr.GLOBAL | VariableMgr.INVISIBLE
-                if (sessionVar == null || ((ctx.getFlag() > VariableMgr.INVISIBLE) && !sessionVar.isEnableShowAllVariables())) {
+                if ((ctx.getFlag() > VariableMgr.INVISIBLE) && sessionVar != null &&
+                        !sessionVar.isEnableShowAllVariables()) {
                     continue;
                 }
 
                 List<String> row = Lists.newArrayList();
-
-                row.add(name);
                 if (type != SetType.GLOBAL && ctx.getObj() == defaultSessionVariable) {
                     // In this condition, we may retrieve session variables for caller.
-                    row.add(getValue(sessionVar, ctx.getField()));
+                    if (sessionVar != null) {
+                        row.add(name);
+                        row.add(getValue(sessionVar, ctx.getField()));
+                    } else {
+                        LOG.error("sessionVar is null during dumping session variables.");
+                        continue;
+                    }
                 } else {
+                    row.add(name);
                     row.add(getValue(ctx.getObj(), ctx.getField()));
                 }
 
