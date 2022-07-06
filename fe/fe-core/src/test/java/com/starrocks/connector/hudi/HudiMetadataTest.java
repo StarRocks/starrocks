@@ -1,6 +1,7 @@
 package com.starrocks.connector.hudi;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.hive.HiveMetaStoreThriftClient;
 import mockit.Expectations;
@@ -62,5 +63,21 @@ public class HudiMetadataTest {
         String resourceName = "thrift://127.0.0.1:9083";
         HudiMetadata metadata = new HudiMetadata(resourceName);
         Assert.assertNull(metadata.getTable("db", "tbl"));
+    }
+
+    @Test
+    public void testGetDB(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws Exception {
+        new Expectations() {
+            {
+                metaStoreThriftClient.getDatabase("db1");
+                result = new org.apache.hadoop.hive.metastore.api.Database("db1", "", "", null);
+                minTimes = 0;
+            }
+        };
+
+        String metastoreUris = "thrift://127.0.0.1:9083";
+        HudiMetadata metadata = new HudiMetadata(metastoreUris);
+        Database srDb = metadata.getDb("db1");
+        Assert.assertTrue(srDb.getFullName().equals("db1"));
     }
 }
