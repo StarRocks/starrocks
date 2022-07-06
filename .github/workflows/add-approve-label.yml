@@ -25,7 +25,6 @@ jobs:
       id: approved
       with:
         approvals: '2'
-        sourceRunId: ${{ github.event.workflow_run.id }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
