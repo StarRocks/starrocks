@@ -2,7 +2,7 @@ name: Trigger Jobs
 
 on: 
   pull_request_review
-permissions: write-all
+permissions: read-all|write-all
 
 jobs:
   Trigger-Admit-Test:
