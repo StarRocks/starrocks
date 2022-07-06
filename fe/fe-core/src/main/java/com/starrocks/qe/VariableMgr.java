@@ -495,7 +495,7 @@ public class VariableMgr {
 
                 // For session variables, the flag is VariableMgr.SESSION | VariableMgr.INVISIBLE
                 // For global variables, the flag is VariableMgr.GLOBAL | VariableMgr.INVISIBLE
-                if ((ctx.getFlag() > VariableMgr.INVISIBLE) && !sessionVar.isEnableShowAllVariables()) {
+                if ((ctx.getFlag() > VariableMgr.INVISIBLE) && sessionVar != null && !sessionVar.isEnableShowAllVariables()) {
                     continue;
                 }
 
