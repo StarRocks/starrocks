@@ -14,6 +14,12 @@ jobs:
   Approve:
     runs-on: ubuntu-latest
     steps:
+    - name: "Checkout ${{ github.ref }} ( ${{ github.sha }} )"
+      uses: actions/checkout@v2
+      with:
+        persist-credentials: false
+        submodules: recursive
+        
     - name: "Get information about the original trigger of the run"
       uses: potiuk/get-workflow-origin@v1_2
       id: source-run-info
@@ -25,7 +31,6 @@ jobs:
       id: approved
       with:
         approvals: '2'
-        pullRequestNumber: ${{ steps.workflow-run-info.outputs.pullRequestNumber }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
