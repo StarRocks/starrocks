@@ -208,32 +208,7 @@ public class ExchangeNode extends PlanNode {
             return false;
         }
 
-        boolean crossExchange = false;
-        if (description.canPushAcrossExchangeNode()) {
-            // broadcast or only one RF, always can be cross exchange
-            if (description.isBroadcastJoin() || description.getEqualCount() == 1) {
-                crossExchange = true;
-            } else if (description.getEqualCount() > 1 && dataPartition.getPartitionExprs().size() == 1) {
-                // RF nums > 1 and only partition by one column, only send the RF which RF's column equals partition column
-                Expr pExpr = dataPartition.getPartitionExprs().get(0);
-                if (probeExpr instanceof SlotRef && pExpr instanceof SlotRef &&
-                        ((SlotRef) probeExpr).getSlotId().asInt() == ((SlotRef) pExpr).getSlotId().asInt()) {
-                    crossExchange = true;
-                }
-            }
-        }
-
-        boolean accept = false;
-        if (crossExchange) {
-            description.enterExchangeNode();
-            for (PlanNode node : children) {
-                if (node.pushDownRuntimeFilters(description, probeExpr)) {
-                    description.setHasRemoteTargets(true);
-                    accept = true;
-                }
-            }
-            description.exitExchangeNode();
-        }
+        boolean accept = pushCrossExchange(description, probeExpr);
 
         // if this rf is generate by broadcast or co-location, and this rf is local
         // we'd better to put a rf at exchange node, because underneath scan node has to wait global rf.
@@ -245,6 +220,41 @@ public class ExchangeNode extends PlanNode {
                 accept = true;
             }
         }
+        return accept;
+    }
+
+    private boolean pushCrossExchange(RuntimeFilterDescription description, Expr probeExpr) {
+        if (!description.canPushAcrossExchangeNode()) {
+            return false;
+        }
+
+        boolean crossExchange = false;
+
+        // broadcast or only one RF, always can be cross exchange
+        if (description.isBroadcastJoin() || description.getEqualCount() == 1) {
+            crossExchange = true;
+        } else if (description.getEqualCount() > 1 && dataPartition.getPartitionExprs().size() == 1) {
+            // RF nums > 1 and only partition by one column, only send the RF which RF's column equals partition column
+            Expr pExpr = dataPartition.getPartitionExprs().get(0);
+            if (probeExpr instanceof SlotRef && pExpr instanceof SlotRef &&
+                    ((SlotRef) probeExpr).getSlotId().asInt() == ((SlotRef) pExpr).getSlotId().asInt()) {
+                crossExchange = true;
+            }
+        }
+
+        if (!crossExchange) {
+            return false;
+        }
+
+        boolean accept = false;
+        description.enterExchangeNode();
+        for (PlanNode node : children) {
+            if (node.pushDownRuntimeFilters(description, probeExpr)) {
+                description.setHasRemoteTargets(true);
+                accept = true;
+            }
+        }
+        description.exitExchangeNode();
         return accept;
     }
 
