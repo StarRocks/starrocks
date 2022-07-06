@@ -99,4 +99,4 @@ jobs:
           #docker exec --privileged temp /bin/bash -c "cd /root/starrocks; ./build.sh --clean --fe;"
           #echo "script run over-----"
           cd fe
-          mvn -B clean -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.host.url=https://sonarcloud.io -Dsonar.organization=dulong41 -Dsonar.projectKey=dulong41_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.branch=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
+          mvn -B clean -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.host.url=https://sonarcloud.io -Dsonar.organization=dulong41 -Dsonar.projectKey=dulong41_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.branch=${{ github.event.pull_request.base.ref }} -Dsonar.pullrequest.branch=${{ github.event.pull_request.head.ref }}
