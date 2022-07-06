@@ -14,12 +14,28 @@ jobs:
   Trigger-Admit-Test:
     runs-on: ubuntu-latest
     steps:
-    - name: Label when approved
-      uses: pullreminders/label-when-approved-action@v1.0.7
-      env:
-        APPROVALS: "2"
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        ADD_LABEL: "Approved"
+      - name: "Get information about the original trigger of the run"
+        uses: potiuk/get-workflow-origin@v1_2
+        id: source-run-info
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          sourceRunId: ${{ github.event.workflow_run.id }}
+      - name: Label when approved by anyone
+        uses: TobKed/label-when-approved-action@v1.2
+        id: label-when-approved-by-anyone
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          require_committers_approval: 'true'
+          label: 'Approved'
+          comment: 'PR approved by at least one committer and no changes requested.'
+          pullRequestNumber: ${{ steps.source-run-info.outputs.pullRequestNumber }}
+          
+#  - name: Label when approved
+#      uses: pullreminders/label-when-approved-action@v1.0.7
+#      env:
+#        APPROVALS: "2"
+#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#       ADD_LABEL: "Approved"
     
 #    - uses: taichi/approved-event-action@master
 #      id: approved
