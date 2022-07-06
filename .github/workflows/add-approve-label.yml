@@ -21,7 +21,7 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         sourceRunId: ${{ github.event.workflow_run.id }}
           
-    - uses: luisrjaeger/approved-event-checker@v1.0.0
+    - uses: luisrjaeger/approved-event-checker@master
       id: approved
       with:
         approvals: 2
