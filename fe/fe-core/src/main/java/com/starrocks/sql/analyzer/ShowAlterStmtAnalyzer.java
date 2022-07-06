@@ -7,14 +7,13 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcService;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 
 public class ShowAlterStmtAnalyzer {
-    public static void analyze(ShowAlterStmt statement, ConnectContext context) throws AnalysisException, UserException  {
+    public static void analyze(ShowAlterStmt statement, ConnectContext context) {
         String dbName = statement.getDbName();
         String catalog = context.getCurrentCatalog();
         if (CatalogMgr.isInternalCatalog(catalog)) {
@@ -25,7 +24,7 @@ public class ShowAlterStmtAnalyzer {
 
         Database db = context.getGlobalStateMgr().getDb(dbName);
         if (db == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
         // build proc path
         StringBuilder sb = new StringBuilder();
@@ -35,15 +34,15 @@ public class ShowAlterStmtAnalyzer {
             sb.append("/schema_change");
         } else if (type == ShowAlterStmt.AlterType.ROLLUP || type == ShowAlterStmt.AlterType.MATERIALIZED_VIEW) {
             sb.append("/rollup");
-        } else {
-            throw new UserException("SHOW ALTER " + type.name() + " does not implement yet");
         }
 
         // create show proc stmt
         // '/jobs/db_name/rollup|schema_change/
-        ProcNodeInterface node = ProcService.getInstance().open(sb.toString());
-        if (node == null) {
-            throw new AnalysisException("Failed to show alter table");
+        ProcNodeInterface node = null;
+        try {
+            node = ProcService.getInstance().open(sb.toString());
+        } catch (AnalysisException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_PROC_PATH, sb.toString());
         }
         statement.setNode(node);
     }
