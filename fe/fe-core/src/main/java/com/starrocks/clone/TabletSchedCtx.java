@@ -546,6 +546,10 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             throw new SchedException(Status.UNRECOVERABLE, "unable to find source replica");
         }
 
+        // Sort the candidates by version in desc order, so that replica with higher version
+        // can be used as clone source first.
+        candidates.sort((c1, c2) -> (int) (c2.getVersion() - c1.getVersion()));
+
         // choose a replica which slot is available from candidates.
         for (Replica srcReplica : candidates) {
             PathSlot slot = backendsWorkingSlots.get(srcReplica.getBackendId());
