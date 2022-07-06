@@ -1,6 +1,6 @@
 # 外部表
 
-StarRocks 支持以外部表的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、Elasticsearch、Hive、StarRocks、Apache Iceberg 和 Apache Hudi。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
+StarRocks 支持以外部表的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、Elasticsearch、Apache Hive™、StarRocks、Apache Iceberg 和 Apache Hudi。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
 
 <br/>
 
@@ -685,7 +685,7 @@ Hive Table 的 Partition 统计信息以及 Partition 下面的文件信息可�
 * 手动刷新元数据信息：
   1. hive 中新增或者删除分区时，需要刷新 **表** 的元数据信息：`REFRESH EXTERNAL TABLE hive_t`，其中 hive_t 是 starrocks 中的外表名称。
   2. hive 中向某些 partition 中新增数据时，需要 **指定 partition** 进行刷新：`REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')`，其中 hive_t 是 starrocks 中的外表名称，'k1 = 01/k2 = 02'、 'k1 = 03/k2 = 04'是 hive 中的 partition 名称。
-  3. 在执行 `REFRESH EXTERNAL TABLE hive_t` 命令时，StarRocks 会先检查 Apache Hive™ 外部表中的列信息和 Hive Metastore 返回的 Apache Hive™ 表中的列信息是否一致。若发现 Apache Hive™ 表的 schema 有修改，如增加列或减少列，那么 StarRocks 会将修改的信息同步到 Apache Hive™ 外部表。同步后，Apache Hive™ 外部表的列顺序和 Apache Hive™ 表的列顺序保持一致，且分区列为最后一列。
+  3. 在执行 `REFRESH EXTERNAL TABLE hive_t` 命令时，StarRocks 会先检查 Hive 外部表中的列信息和 Hive Metastore 返回的 Hive 表中的列信息是否一致。若发现 Hive 表的 schema 有修改，如增加列或减少列，那么 StarRocks 会将修改的信息同步到 Hive 外部表。同步后，Hive 外部表的列顺序和 Hive 表的列顺序保持一致，且分区列为最后一列。
   
 #### 自动增量更新元数据缓存
 
@@ -752,7 +752,7 @@ Hive Table 的 Partition 统计信息以及 Partition 下面的文件信息可�
 
 ### 前提条件
 
-确保 StarRocks 有权限访问 Apache Iceberg 依赖的元数据服务（如 Hive metastore）、文件系统（如 HDFS ）和对象存储系统（如 Amazon S3 和阿里云对象存储 OSS）。
+确保 StarRocks 有权限访问 Iceberg 依赖的元数据服务（如 Hive metastore）、文件系统（如 HDFS ）和对象存储系统（如 Amazon S3 和阿里云对象存储 OSS）。
 
 ### 注意事项
 
@@ -766,7 +766,7 @@ Hive Table 的 Partition 统计信息以及 Partition 下面的文件信息可�
 
 #### 步骤一：创建  Iceberg 资源
 
-在创建外部表之前，需先创建 Iceberg 资源，以用来管理 Apache Iceberg 的访问信息。此外，在创建Iceberg 外部表时也需要指定引用的 Iceberg 资源。您可以根据业务需求创建不同 catalog 类型的资源：
+在创建外部表之前，需先创建 Iceberg 资源，以用来管理 Iceberg 的访问信息。此外，在创建Iceberg 外部表时也需要指定引用的 Iceberg 资源。您可以根据业务需求创建不同 catalog 类型的资源：
 
 * 如果 Iceberg 表的元数据是从 Hive metastore 获取的，则可以创建 catalog 类型为 `HIVE` 的资源。
 * 如果 Iceberg 表的元数据是从其他服务获取的，则可以开发一个 custom catalog （即自定义 catalog），然后创建 catalog 类型为 `CUSTOM` 的资源。
@@ -938,11 +938,11 @@ select count(*) from iceberg_tbl;
 
 ## Apache Hudi 外表
 
-StarRocks 支持通过外表的方式查询 Apache Hudi 数据湖中的数据，帮助您实现对数据湖的极速分析。本文介绍如何在 StarRock 创建外表，查询 Apache Hudi 中的数据。
+StarRocks 支持通过外表的方式查询 Hudi 数据湖中的数据，帮助您实现对数据湖的极速分析。本文介绍如何在 StarRock 创建外表，查询 Hudi 中的数据。
 
 ### 前提条件
 
-请确认 StarRocks 有权限访问 Apache Hudi 对应的 Hive Metastore、HDFS 集群或者对象存储的 Bucket。
+请确认 StarRocks 有权限访问 Hudi 对应的 Hive Metastore、HDFS 集群或者对象存储的 Bucket。
 
 ### 注意事项
 
@@ -986,7 +986,7 @@ SHOW RESOURCES;
 DROP RESOURCE "hudi0";
 ~~~~
 
-> 删除 Hudi 资源会导致其包含的所有 Hudi 外表不可用，但 Apache Hudi 中的数据并不会丢失。如果您仍需要通过 StarRocks 查询 Hudi 的数据，请重新创建 Hudi 资源，Hudi 数据库和外表。
+> 删除 Hudi 资源会导致其包含的所有 Hudi 外表不可用，但 Hudi 中的数据并不会丢失。如果您仍需要通过 StarRocks 查询 Hudi 的数据，请重新创建 Hudi 资源，Hudi 数据库和外表。
 
 #### 步骤二：创建 Hudi 数据库
 
@@ -1041,7 +1041,7 @@ PROPERTIES (
 | ARRAY                        | ARRAY                   |
 | DECIMAL                      | DECIMAL                 |
 
-> 如果 Apache Hudi 部分列的数据类型为 FIXED, ENUM, UNION, MAP, BYTES，则 StarRocks 暂不支持通过 Hudi 关联外表的方式访问此数据类型。
+> 如果 Hudi 部分列的数据类型为 FIXED, ENUM, UNION, MAP, BYTES，则 StarRocks 暂不支持通过 Hudi 关联外表的方式访问此数据类型。
 
 #### 步骤四：查询 Hudi 外表
 
