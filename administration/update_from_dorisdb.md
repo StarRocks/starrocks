@@ -1,90 +1,110 @@
-# 标准版 DorisDB-x 升级到社区版 StarRocks-x
+# 升级标准版 DorisDB 至社区版 StarRocks
 
-> 注意：StarRocks 可以做到前向兼容，所以在升级的时候可以做到灰度升级，但是一定是先升级 BE 再升级 FE。(标准版安装包命名为 DorisDB *, 社区版安装包命名格式为 StarRocks*)
+本文介绍如何将标准版 DorisDB 升级至社区版 StarRocks。标准版 DorisDB 包括安装包命名格式为 DorisDB-x 的版本, 社区版 StarRocks 包含安装包命名格式为 StarRocks-x 的版本。
+
+StarRocks 支持前向兼容，因此您可以灰度升级。
+
+> 注意：
+>
+> * 因为 StarRocks 支持 BE 后向兼容 FE，所以请务必**先升级 BE 节点，再升级 FE 节点**。错误的升级顺序可能导致新旧 FE、BE 节点不兼容，进而导致 BE 节点停止服务。
+> * 请谨慎跨版本升级。如需跨版本升级，建议您在测试环境验证无误后再升级生产环境。DorisDB 升级至 Starrocks-2.x 版本时需要前置开启 CBO，因此您需要先将 DorisDB 升级至 StarRocks 1.19.x 版本。您可以在[官网](https://www.starrocks.com/zh-CN/download)获取 1.19.x 版本的安装包。
 
 ## 准备升级环境
 
-> 注意：请留意环境变量配置准确
+> 注意：请务必确保环境变量配置准确。
 
-1. 创建操作目录，准备环境
-  
+1. 创建操作目录，设定 DorisDB 相关环境变量。
+
     ```bash
-    # 创建升级操作目录用来保存备份数据，并进入当前目录
+    # 创建升级操作目录用来保存备份数据，并进入当前目录。
     mkdir DorisDB-upgrade-$(date +"%Y-%m-%d") && cd DorisDB-upgrade-$(date +"%Y-%m-%d")
-    # 设置当前目录路径作为环境变量，方便后续编写命令
+    # 设置当前目录路径作为环境变量，方便后续编写命令。
     export DSDB_UPGRADE_HOME=`pwd`
-    # 将您当前已经安装的标准版（DorisDB）路径设置为环境变量
-    export DSDB_HOME=标准版的安装路径，形如"xxx/DorisDB-SE-1.17.6"
+    # 将您当前已经安装的标准版 DorisDB 路径设置为环境变量。
+    export DSDB_HOME=/path/to/DorisDB-x
     ```
 
-2. 下载社区版（StarRocks）安装包，并解压，解压文件根据您下载版本进行重命名
-  
+    > 说明：将以上 `/path/to/DorisDB-x` 修改为标准版 DorisDB 的本地安装路径，例如，`xxx/DorisDB-SE-1.17.6`。
+
+2. 下载并解压社区版 StarRocks 安装包，根据下载版本重命名解压后的路径，设定 StarRocks 相关环境变量。
+
     ```bash
-    wget "https://xxx.StarRocks-SE-1.18.4.tar.gz" -O StarRocks-1.18.4.tar.gz
-    tar -zxvf StarRocks-1.18.4.tar.gz
-    # 将社区版的解压文件路径设置为环境变量
-    export STARROCKS_HOME= 社区版的解压安装路径，形如"xxx/StarRocks-1.18.4"
+    wget "https://xxx.StarRocks-SE-x.tar.gz" -O StarRocks-x.tar.gz
+    tar -zxvf StarRocks-x.tar.gz
+    # 将社区版 StarRocks 的解压文件路径设置为环境变量。
+    export STARROCKS_HOME=/path/to/StarRocks-x
     ```
 
-## 升级 BE
+    > 说明：将以上 `https://xxx.StarRocks-SE-x.tar.gz` 修改为社区版 StarRocks 的下载路径，并将 `/path/to/StarRocks-x` 修改为社区版 StarRocks 的本地安装路径，例如，`xxx/StarRocks-1.18.4`。
 
-逐台升级 BE，确保每台升级成功，保证对数据没有影响
+## 升级 BE 节点
 
-1. 先将标准版的 BE 停止
+在升级 BE 节点时，你需要逐台升级 BE，以确保每台升级成功。
+
+1. 停止标准版的 BE 停止
 
     ```bash
     # 停止BE
     cd ${DSDB_HOME}/be && ./bin/stop_be.sh
     ```
 
-2. 当前标准版 BE 的 lib 和 bin 移动到备份目录下
+2. 将当前标准版 DorisDB 的 BE 节点安装路径下 **lib** 和 **bin** 目录移动至备份目录下。
 
     ```bash
-    # 在DSDB_UPGRADE_HOME 目录下创建be目录，用于备份当前标准版be的lib
+    # 在 DSDB_UPGRADE_HOME 目录下创建 be 目录，用于备份当前标准版 BE 节点的 lib。
     cd ${DSDB_UPGRADE_HOME} && mkdir -p DorisDB-backups/be
     mv  ${DSDB_HOME}/be/lib DorisDB-backups/be/
     mv  ${DSDB_HOME}/be/bin DorisDB-backups/be/
     ```
 
-3. 拷贝社区版（StarRocks）的 BE 文件到当前标准版(DorisDB)的 BE 的目录下
+3. 拷贝社区版 StarRocks 的 BE 相关目录到当前标准版 DorisDB 的 BE 的目录下。
 
     ```bash
     cp -rf ${STARROCKS_HOME}/be/lib/ ${DSDB_HOME}/be/lib
     cp -rf ${STARROCKS_HOME}/be/bin/ ${DSDB_HOME}/be/bin
     ```
 
-4. 重新启动 BE
+4. 重新启动 BE。
 
     ```bash
     # 启动BE
     cd ${DSDB_HOME}/be && ./bin/start_be.sh --daemon
     ```
 
-5. 验证 BE 是否正确运行  
+5. 验证 BE 运行状态。
 
-    a. 在 MySQL 客户端执行 show backends/show proc '/backends' \G 查看 BE 是否成功启动并且版本是否正确  
+    您可以：
 
-    b. 观察 be/log/be.INFO 的日志是否正常  
+    * 通过 MySQL 客户端查看 BE 运行状态以及版本信息。
 
-    c. 观察 be/log/be.WARNING 是否有异常日志  
+    ```sql
+    # 查看所有 BE 节点。
+    SHOW BACKENDS;
+    # 查看 BE 节点进程。
+    SHOW PROC '/backends'\G;
+    ```
 
-6. 第一台观察 10 分钟后，按照上述流程执行其他 BE 节点
+    * 通过查看 **be/log/be.INFO** 中的日志输出是否正常判断 BE 运行状态。
+    * 通过查看 **be/log/be.WARNING** 中是否有异常日志判断 BE 运行状态。
 
-## 升级 FE
+6. 确认当前 BE 节点运行正常后（推荐时间跨度为 10 分钟），按照上述流程执行其他 BE 节点。
+
+## 升级 FE 节点
+
+在升级 FE 节点时，你需要逐台升级 FE，，以确保每台升级成功。
 
 > 注意：
 >
-> * 逐台升级 FE，先升级 Observer，再升级 Follower，最后升级 Master
->
-> * 请将没有启动 FE 的节点的 FE 同步升级，以防后续这些节点启动 FE 出现 FE 版本不一致的情况
+> * FE 节点升级应按照先升级 Observer，再升级 Follower，最后升级 Master 的顺序。
+> * 请确保同步升级集群中未启动的 FE 节点，以防后续这些节点启动出现 FE 节点版本不一致的情况。
 
-1. 先将当前节点 FE 停止
+1. 停止当前 FE 节点。
 
     ```bash
     cd ${DSDB_HOME}/fe && ./bin/stop_fe.sh
     ```
 
-2. 创建 FE 目录备份标准版的 FE 的 lib 和 bin
+2. 创建 FE 目录以备份标准版 DorisDB 的 FE 节点路径下的 **lib** 和 **bin** 目录。
 
     ```bash
     cd ${DSDB_UPGRADE_HOME} && mkdir -p DorisDB-backups/fe
@@ -92,65 +112,75 @@
     mv ${DSDB_HOME}/fe/lib DorisDB-backups/fe/
     ```
 
-3. 拷贝社区版 FE 的 lib 和 bin 文件到标准版 FE 的目录下  
+3. 拷贝社区版 StarRocks 的 FE 相关目录到当前标准版 DorisDB 的 FE 的目录下。
 
     ```bash
     cp -r ${STARROCKS_HOME}/fe/lib/ ${DSDB_HOME}/fe
     cp -r ${STARROCKS_HOME}/fe/bin/ ${DSDB_HOME}/fe
     ```
 
-4. 备份 meta_dir 元数据信息  
-  
-    a. 将标准版的/fe/conf/fe.conf 中设置的 meta_dir 目录进行备份，如未更改过配置文件中 meta_dir 属性，默认为 "\${DSDB_HOME}/doris-meta"；下例中设置为 "\${DSDB_HOME}/meta",  
-  
-    b. 注意保证 "命令中元数据目录" 和 "元数据实际目录" 还有 "配置文件" 中一致，如您原目录名为 "doris-meta"，建议您将目录重命名，同步需要更改配置文件  
-  
+4. 备份 `meta_dir` 下元数据信息。
+
+    备份标准版 DorisDB 的 **/fe/conf/fe.conf** 中设置项 `meta_dir` 下的目录。默认为 `${DSDB_HOME}/doris-meta`。如果原目录名为 `doris-meta`，建议您将目录重命名，并更改配置文件。以下示例中设置为 `${DSDB_HOME}/meta`。
+
+    > 注意：请确保 **命令中元数据目录** 和 **元数据实际目录** 以及 **配置项 `meta_dir`** 中的内容一致。
+
+    a. 重命名目录。
+
     ```bash
     mv doris-meta/ meta
     ```
-  
-    c. 配置文件示例：
-  
+
+    b. 修改配置文件。
+
     ```bash
     # store metadata, create it if it is not exist.
     # Default value is ${DORIS_HOME}/doris-meta
     # meta_dir = ${DORIS_HOME}/doris-meta
-    meta_dir=xxxxx/DorisDB-SE-1.17.6/meta
+    meta_dir=/path/to/DorisDB-x/meta
     ```
-  
-    其中，meta_dir 设置为创建的元数据存储目录路径
+
+    > 说明：将以上 `/path/to/DorisDB-x/` 修改为标准版 DorisDB 的本地安装路径，例如，`xxx/DorisDB-SE-1.17.6`。
+
+    c. 备份 **meta** 目录下的文件。
 
     ```bash
-    cd "配置文件中设置的meta_dir目录,到meta的上级目录"
-    # 拷贝meta文件，meta为本例中设置路径，请根据您配置文件中设置进行更改
+    cd /path/to/DorisDB-x
     cp -r meta meta-$(date +"%Y-%m-%d")
     ```
-  
-5. 启动 FE 服务
+
+    > 说明：将以上 `/path/to/DorisDB-x` 修改为 **meta** 的上层路径，例如，`xxx/DorisDB-SE-1.17.6`。
+
+5. 启动 FE 节点。
 
     ```bash
     cd ${DSDB_HOME}/fe && ./bin/start_fe.sh --daemon
     ```
 
-6. 验证 FE 是否正确运行  
+6. 验证 FE 运行状态。
 
-    a. 在 MySQL 客户端执行 `show frontends\G` 查看 FE 是否成功启动并且版本是否正确  
+    您可以：
 
-    b. 观察 fe/log/fe.INFO 的日志是否正常  
+    * 通过 MySQL 客户端查看 FE 运行状态以及版本信息。
 
-    c. 观察 fe/log/fe.WARNING 是否有异常日志  
+    ```sql
+    SHOW FRONTENDS\G;
+    ```
 
-7. 第一台观察 10 分钟后，按照上述流程执行其他 FE 节点
+    * 通过查看 **fe/log/fe.INFO** 中的日志输出是否正常判断 BE 运行状态。
+    * 通过查看 **fe/log/fe.WARNING** 中是否有异常日志判断 BE 运行状态。
 
-## 升级 brokers
+7. 确认当前 FE 节点运行正常后（推荐时间跨度为 10 分钟），按照上述流程执行其他 FE 节点。
 
-1. 停止当前节点的 broker
+## 升级 Broker
+
+1. 停止当前 Broker。
 
     ```bash
     cd ${DSDB_HOME}/apache_hdfs_broker && ./bin/stop_broker.sh
     ```
 
-2. 备份当前标准版的 Broker 运行的 lib 和 bin
+2. 备份当前标准版 DorisDB 的 Broker 安装目录下的 **lib** 和 **bin**。
 
     ```bash
     cd ${DSDB_UPGRADE_HOME} && mkdir -p DorisDB-backups/apache_hdfs_broker
@@ -158,37 +188,38 @@
     mv ${DSDB_HOME}/apache_hdfs_broker/bin DorisDB-backups/apache_hdfs_broker/
     ```
 
-3. 拷贝社区版本 Broker 的 lib 和 bin 文件到执行 Broker 的目录下
+3. 拷贝社区版 StarRocks Broker 安装目录下的 **lib** 和 **bin** 到当前 Broker 的目录下。
 
     ```bash
     cp -rf ${STARROCKS_HOME}/apache_hdfs_broker/lib ${DSDB_HOME}/apache_hdfs_broker
     cp -rf ${STARROCKS_HOME}/apache_hdfs_broker/bin ${DSDB_HOME}/apache_hdfs_broker
     ```
 
-4. 启动当前 Broker
+4. 启动当前 Broker。
 
     ```bash
     cd ${DSDB_HOME}/apache_hdfs_broker && ./bin/start_broker.sh --daemon
     ```
 
-5. 验证 Broker 是否正确运行
+5. 验证 Broker 运行状态。
 
-    a. 在 MySQL 客户端执行 show broker 查看 Broker 是否成功启动并且版本是否正确
+    您可以：
 
-    b. 观察 broker/log/broker.INFO 的日志是否正常  
+    * 通过 MySQL 客户端查看 Broker 运行状态以及版本信息。
 
-    c. 观察 broker/log/broker.WARNING 是否有异常日志  
+    ```sql
+    SHOW BROKER;
+    ```
 
-6. 按照上述流程执行其他 Broker 节点
+    * 通过查看 **apache_hdfs_broker/log/broker.INFO** 中的日志输出是否正常判断 BE 运行状态。
+    * 通过查看 **apache_hdfs_broker/log/broker.WARNING** 中是否有异常日志判断 BE 运行状态。
+
+6. 确认当前 Broker 运行正常后（推荐时间跨度为 10 分钟），按照上述流程执行其他 Broker。
 
 ## 回滚方案
 
-> 注意：从标准版 DorisDB 升级至社区版 StarRocks，暂时不支持回滚，建议先在测试环境验证测试没问题后再升级线上。如有遇到问题无法解决，可以添加下面企业微信寻求帮助。
+从标准版 DorisDB 升级的社区版 StarRocks 暂时不支持回滚。建议您在测试环境验证测试成功后再升级至生产环境。
+
+如果遇到无法解决的问题，您可以添加下方企业微信寻求帮助。
 
 ![二维码](../assets/8.3.1.png)
-
-## 注意事项
-
-1. 需要先升级 BE、再升级 FE，因为 Starrocks 的标准版中 BE 是兼容 FE 的。升级 BE 的过程中，需要进行灰度升级，先升级一台 BE，过一天观察无误，再升级其他 FE。
-
-2. 跨版本升级时需要谨慎，测试环境验证后再操作，且升级 Starrocks-2.x 版本时需要前置开启 CBO，需要升级至 2.x 版本的用户需先升级 1.19.x 版本。可在官网获取最新版本的 1.19.x 安装包（1.19.7）。
