@@ -5,6 +5,7 @@ package com.starrocks.catalog.lake;
 
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.MasterDaemon;
@@ -21,29 +22,34 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ShardDeleter extends MasterDaemon {
     private static final Logger LOG = LogManager.getLogger(ShardDeleter.class);
 
     @SerializedName(value = "shardIds")
-    private Set<Long> shardIds = Sets.newHashSet();
+    private Set<Long> shardIds;
 
-    private Map<Long, Set<Long>> shardIdsByBeMap;
+    private ReentrantReadWriteLock rwLock;
 
     public ShardDeleter() {
-        shardIdsByBeMap = new HashMap<>();
+        shardIds = Sets.newHashSet();
+        rwLock = new ReentrantReadWriteLock();
     }
 
     public void addUnusedShardId(Set<Long> tableIds) {
         // for debug
         LOG.info("add shardId {} in ShardDelete", tableIds);
-        shardIds.addAll(tableIds);
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            shardIds.addAll(tableIds);
+        }
     }
 
     private void deleteUnusedShard() {
@@ -54,14 +60,17 @@ public class ShardDeleter extends MasterDaemon {
             return;
         }
 
+        Map<Long, Set<Long>> shardIdsByBeMap = new HashMap<>();
         // group shards by be
-        for (long shardId : shardIds) {
-            try {
-                long backendId = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                        .getPrimaryBackendIdByShard(shardId);
-                shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
-            } catch (UserException e) {
-                continue;
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            for (long shardId : shardIds) {
+                try {
+                    long backendId = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                            .getPrimaryBackendIdByShard(shardId);
+                    shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
+                } catch (UserException e) {
+                    continue;
+                }
             }
         }
 
@@ -85,13 +94,15 @@ public class ShardDeleter extends MasterDaemon {
                 request.tabletIds = tabletIds;
 
                 Future<DropTabletResponse> responseFuture = lakeService.dropTablet(request);
-
                 try {
                     DropTabletResponse response = responseFuture.get();
-                    if (response != null && response.succTablets != null && !response.succTablets.isEmpty()) {
+                    if (response == null || response.succTablets == null || response.succTablets.isEmpty()) {
+                        continue;
+                    } else {
                         // for debug
                         LOG.info("succTablets is {}", response.succTablets);
-                    }   
+                        shards = new HashSet<>(response.succTablets);
+                    }
                 } catch (ExecutionException | InterruptedException e) {
                     LOG.error(e);
                     finished = false;
@@ -113,8 +124,9 @@ public class ShardDeleter extends MasterDaemon {
                 // for debug
                 LOG.info("delete shard {} and drop lake tablet succ.", shards);
                 GlobalStateMgr.getCurrentState().getEditLog().logRemoveDeleteShard(shards);
-                it.remove();
-                shardIds.removeAll(shards);
+                try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+                    shardIds.removeAll(shards);
+                }
             }
         }
     }
@@ -129,7 +141,9 @@ public class ShardDeleter extends MasterDaemon {
     public void replayDeleteUnusedShard(ShardInfo shardInfo) {
         // for debug
         LOG.info("enter replayDeleteShard");
-        this.shardIds = shardInfo.getShardIds();
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            this.shardIds.removeAll(shardInfo.getShardIds());
+        }
     }
 
     public void replayAddUnusedShard(ShardInfo shardInfo) {
