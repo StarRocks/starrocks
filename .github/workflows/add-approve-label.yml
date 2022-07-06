@@ -14,7 +14,7 @@ jobs:
   Approve:
     runs-on: ubuntu-latest
     steps:        
-    - run: echo "approved="$approved
+    - run: echo $GITHUB_ENV
     - name: "Get information about the original trigger of the run"
       uses: potiuk/get-workflow-origin@v1_2
       id: source-run-info
