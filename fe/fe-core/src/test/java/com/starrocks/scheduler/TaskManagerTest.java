@@ -497,7 +497,7 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun3, false);
 
         Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
-        Assert.assertEquals(pendingTaskRunMap.get(taskId).size(), 3);
+        Assert.assertEquals(3, pendingTaskRunMap.get(taskId).size());
 
     }
 

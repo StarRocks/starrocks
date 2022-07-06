@@ -98,6 +98,10 @@ public class TaskRunManager {
                     // but other attributes may be different, such as priority, creation time.
                     // merge priority higher and create time lower and queryId will be change.
                     boolean isRemove = taskRuns.remove(taskRun);
+                    if (!isRemove) {
+                        LOG.warn("failed to remove TaskRun definition is [{}]",
+                                taskRun.getStatus().getDefinition());
+                    }
                     if (oldTaskRun.getStatus().getPriority() > taskRun.getStatus().getPriority()) {
                         taskRun.getStatus().setPriority(oldTaskRun.getStatus().getPriority());
                     }
@@ -168,7 +172,7 @@ public class TaskRunManager {
             if (!taskRunLock.tryLock(5, TimeUnit.SECONDS)) {
                 Thread owner = taskRunLock.getOwner();
                 if (owner != null) {
-                    LOG.warn("task run lock is held by: {}", Util.dumpThread(owner, 50));
+                    LOG.warn("task run lock is held by: {}", () -> Util.dumpThread(owner, 50));
                 } else {
                     LOG.warn("task run lock owner is null");
                 }
@@ -177,6 +181,7 @@ public class TaskRunManager {
             return true;
         } catch (InterruptedException e) {
             LOG.warn("got exception while getting task run lock", e);
+            Thread.currentThread().interrupt();
         }
         return false;
     }
