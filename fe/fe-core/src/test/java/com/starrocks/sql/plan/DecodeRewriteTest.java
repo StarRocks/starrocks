@@ -564,6 +564,11 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "having a < b*1.2 or c not like '%open%'";
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
+
+        // test couldn't push down having predicate
+        sql = "SELECT count(*) a FROM supplier having max(S_ADDRESS)='123'";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
     }
 
     @Test

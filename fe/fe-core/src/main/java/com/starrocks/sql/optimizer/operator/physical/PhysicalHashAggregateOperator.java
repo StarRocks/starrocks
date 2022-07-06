@@ -190,15 +190,20 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     public void fillDisableDictOptimizeColumns(ColumnRefSet resultSet, Set<Integer> dictColIds) {
         ColumnRefSet dictSet = new ColumnRefSet();
         dictColIds.forEach(dictSet::union);
-        getAggregations().values().forEach((v) -> {
+        final ScalarOperator predicate = getPredicate();
+        getAggregations().forEach((k, v) -> {
             if (!couldApplyStringDict(v, dictSet)) {
+                resultSet.union(v.getUsedColumns());
+            }
+
+            // disable DictOptimize when having predicate couldn't push down
+            if (predicate != null && predicate.getUsedColumns().isIntersect(k.getUsedColumns())) {
                 resultSet.union(v.getUsedColumns());
             }
         });
         // Now we disable DictOptimize when group by predicate couldn't push down
-        final ScalarOperator predicate = getPredicate();
         if (predicate != null) {
-            final ColumnRefSet predicateUsedColumns = getPredicate().getUsedColumns();
+            final ColumnRefSet predicateUsedColumns = predicate.getUsedColumns();
             for (Integer dictColId : dictColIds) {
                 if (predicateUsedColumns.contains(dictColId)) {
                     resultSet.union(dictColId);
