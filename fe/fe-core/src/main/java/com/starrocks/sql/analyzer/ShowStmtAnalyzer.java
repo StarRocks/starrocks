@@ -126,11 +126,7 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowAlterStmt(ShowAlterStmt node, ConnectContext context) {
-            try {
-                ShowAlterStmtAnalyzer.analyze(node, context);
-            } catch (UserException e) {
-                throw new RuntimeException(e);
-            }
+            ShowAlterStmtAnalyzer.analyze(node, context);
             return null;
         }
 
