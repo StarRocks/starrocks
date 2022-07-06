@@ -238,6 +238,9 @@ public class VariableMgrTest {
         sv.setEnableShowAllVariables(true);
         vars = VariableMgr.dump(SetType.DEFAULT, sv, null);
         Assert.assertTrue(vars.toString().contains("cbo_use_correlated_join_estimate"));
+
+        vars = VariableMgr.dump(SetType.DEFAULT, null, null);
+        Assert.assertTrue(vars.isEmpty());
     }
 }
 
