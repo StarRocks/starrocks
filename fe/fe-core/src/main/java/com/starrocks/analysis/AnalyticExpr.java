@@ -207,6 +207,7 @@ public class AnalyticExpr extends Expr {
                 && ((AggregateFunction) fn).isAnalyticFn();
     }
 
+<<<<<<< HEAD
     public static boolean isAggregateFn(Function fn) {
         if (fn.functionName().equalsIgnoreCase(SUM) || fn.functionName().equalsIgnoreCase(MIN)
                 || fn.functionName().equalsIgnoreCase(MAX) || fn.functionName().equalsIgnoreCase(COUNT)) {
@@ -216,6 +217,8 @@ public class AnalyticExpr extends Expr {
         return false;
     }
 
+=======
+>>>>>>> 3a9955253 ([BugFix] Fix the problem of identical analytic expressions (#8268))
     public static boolean isOffsetFn(Function fn) {
         if (!isAnalyticFn(fn)) {
             return false;
@@ -248,6 +251,7 @@ public class AnalyticExpr extends Expr {
         return fn.functionName().equalsIgnoreCase(ROWNUMBER);
     }
 
+<<<<<<< HEAD
     private static boolean isRankingFn(Function fn) {
         if (!isAnalyticFn(fn)) {
             return false;
@@ -291,6 +295,8 @@ public class AnalyticExpr extends Expr {
         }
     }
 
+=======
+>>>>>>> 3a9955253 ([BugFix] Fix the problem of identical analytic expressions (#8268))
     /**
      * check the value out of range in lag/lead() function
      */
