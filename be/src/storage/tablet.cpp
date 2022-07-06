@@ -1155,25 +1155,17 @@ void Tablet::on_shutdown() {
 }
 
 size_t Tablet::tablet_footprint() {
-    if (_updates) {
-        return _updates->data_size();
-    } else {
-        // TODO(lingbin): Why other methods that need to get information from _tablet_meta
-        // are not locked, here needs a comment to explain.
-        std::shared_lock rdlock(_meta_lock);
-        return _tablet_meta->tablet_footprint();
-    }
+    // TODO(lingbin): Why other methods that need to get information from _tablet_meta
+    // are not locked, here needs a comment to explain.
+    std::shared_lock rdlock(_meta_lock);
+    return _tablet_meta->tablet_footprint();
 }
 
 size_t Tablet::num_rows() {
-    if (_updates) {
-        return _updates->num_rows();
-    } else {
-        // TODO(lingbin): Why other methods which need to get information from _tablet_meta
-        // are not locked, here needs a comment to explain.
-        std::shared_lock rdlock(_meta_lock);
-        return _tablet_meta->num_rows();
-    }
+    // TODO(lingbin): Why other methods which need to get information from _tablet_meta
+    // are not locked, here needs a comment to explain.
+    std::shared_lock rdlock(_meta_lock);
+    return _tablet_meta->num_rows();
 }
 
 int Tablet::version_count() const {
