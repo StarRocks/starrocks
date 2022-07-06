@@ -11,7 +11,7 @@ permissions:
   pull-requests: write
   
 jobs:
-  Trigger-Admit-Test:
+  Add-Approve-Label:
     runs-on: ubuntu-latest
     steps:
       - name: "Get information about the original trigger of the run"
@@ -20,6 +20,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           sourceRunId: ${{ github.event.workflow_run.id }}
+          
       - name: Label when approved by anyone
         uses: TobKed/label-when-approved-action@v1.2
         id: label-when-approved-by-anyone
