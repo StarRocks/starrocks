@@ -201,7 +201,7 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
             if (join.getChildOutputColumns(0).containsAll(bpo.getChild(0).getUsedColumns())) {
                 leftEQ.add(bpo.getChild(0));
                 rightEQ.add(bpo.getChild(1));
-            } else if (join.getChildOutputColumns(0).containsAll(bpo.getChild(0).getUsedColumns())) {
+            } else if (join.getChildOutputColumns(0).containsAll(bpo.getChild(1).getUsedColumns())) {
                 leftEQ.add(bpo.getChild(1));
                 rightEQ.add(bpo.getChild(0));
             }
