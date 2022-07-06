@@ -1,15 +1,21 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.RangeUtils;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -33,7 +39,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -85,7 +90,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         // base table id -> (partition name -> partition info (id, version))
         // partition id maybe changed after insert overwrite, so use partition name as key.
         // partition id which in BasePartitionInfo can be used to check partition is changed
-        @SerializedName(value = "baseTableVisibleVersionMap")
         private Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap;
 
         @SerializedName(value = "starTime")
@@ -205,12 +209,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "viewDefineSql")
     private String viewDefineSql;
     // table partition name <-> mv partition names
-    @SerializedName(value = "tableMvPartitionNameRefMap")
-    private Map<String, Set<String>> tableMvPartitionNameRefMap = new HashMap<>();
+    private Map<String, Set<String>> tableMvPartitionNameRefMap = Maps.newHashMap();
     // mv partition name <->  table partition names
-    @SerializedName(value = "mvTablePartitionNameRefMap")
-    private Map<String, Set<String>> mvTablePartitionNameRefMap = new HashMap<>();
-
+    private Map<String, Set<String>> mvTablePartitionNameRefMap = Maps.newHashMap();
     // record expression table column
     @SerializedName(value = "partitionRefTableExprs")
     private List<Expr> partitionRefTableExprs;
@@ -277,12 +278,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.refreshScheme = refreshScheme;
     }
 
-    public void addPartitionIdRef(String basePartitionName, String mvPartitionName) {
+    public void addPartitionNameRef(String basePartitionName, String mvPartitionName) {
         tableMvPartitionNameRefMap.computeIfAbsent(basePartitionName, k -> Sets.newHashSet()).add(mvPartitionName);
         mvTablePartitionNameRefMap.computeIfAbsent(mvPartitionName, k -> Sets.newHashSet()).add(basePartitionName);
     }
 
-    public void dropPartitionIdRef(String mvPartitionName) {
+    public void dropPartitionNameRef(String mvPartitionName) {
         Set<String> basePartitionNames = mvTablePartitionNameRefMap.get(mvPartitionName);
         for (String basePartitionName : basePartitionNames) {
             tableMvPartitionNameRefMap.get(basePartitionName).remove(mvPartitionName);
@@ -376,7 +377,17 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @Override
     public void gsonPostProcess() throws IOException {
         super.gsonPostProcess();
+    }
 
+    @Override
+    public void write(DataOutput out) throws IOException {
+        // write type first
+        Text.writeString(out, type.name());
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
+    }
+
+    @Override
+    public void onCreate() {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
@@ -395,6 +406,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             // it is checked when creation
             ((OlapTable) table).addRelatedMaterializedView(id);
         }
+        if (partitionInfo instanceof SinglePartitionInfo) {
+            return;
+        }
         // analyze expression, because it converts to sql for serialize
         ConnectContext connectContext = new ConnectContext();
         connectContext.setCluster(SystemInfoService.DEFAULT_CLUSTER);
@@ -403,9 +417,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         connectContext.setQualifiedUser(Auth.ROOT_USER);
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
         PartitionInfo partitionInfo = this.getPartitionInfo();
-        if (partitionInfo instanceof SinglePartitionInfo) {
-            return;
-        }
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
         // currently, mv only supports one expression
         Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
@@ -417,11 +428,53 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                                 .collect(Collectors.toList()))), connectContext);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        // write type first
-        Text.writeString(out, type.name());
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
+    public void addPartitionRef(Partition mvPartition) {
+        PartitionInfo partitionInfo = this.getPartitionInfo();
+        if (partitionInfo instanceof SinglePartitionInfo) {
+            return;
+        }
+        Range<PartitionKey> mvPartitionKeyRange =
+                ((ExpressionRangePartitionInfo) partitionInfo).getRange(mvPartition.getId());
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        OlapTable baseTable = this.getPartitionTable(db);
+        PartitionInfo baseTablePartitionInfo = baseTable.getPartitionInfo();
+        if (baseTablePartitionInfo instanceof SinglePartitionInfo) {
+            Preconditions.checkState(baseTable.getPartitions().size() == 1);
+            Partition baseTablePartition = baseTable.getPartitions().iterator().next();
+            String baseTablePartitionName = baseTablePartition.getName();
+            this.addPartitionNameRef(baseTablePartitionName, mvPartition.getName());
+        } else {
+            RangePartitionInfo baseRangePartitionInfo = (RangePartitionInfo) baseTable.getPartitionInfo();
+            Map<Long, Range<PartitionKey>> baseTableIdToRange = baseRangePartitionInfo.getIdToRange(false);
+            for (Long baseTablePartitionId : baseTableIdToRange.keySet()) {
+                Partition baseTablePartition = baseTable.getPartition(baseTablePartitionId);
+                Range<PartitionKey> baseTablePartitionKeyRange = baseTableIdToRange.get(baseTablePartitionId);
+                try {
+                    RangeUtils.checkRangeIntersect(baseTablePartitionKeyRange, mvPartitionKeyRange);
+                } catch (DdlException e) {
+                    this.addPartitionNameRef(baseTablePartition.getName(), mvPartition.getName());
+                }
+            }
+        }
+    }
+
+    public OlapTable getPartitionTable(Database database) {
+        Preconditions.checkState(this.getPartitionRefTableExprs().size() == 1);
+        Expr partitionExpr = this.getPartitionRefTableExprs().get(0);
+        OlapTable partitionTable = null;
+        List<SlotRef> slotRefs = Lists.newArrayList();
+        partitionExpr.collect(SlotRef.class, slotRefs);
+        // if partitionExpr is FunctionCallExpr, get first SlotRef
+        Preconditions.checkState(slotRefs.size() == 1);
+        SlotRef slotRef = slotRefs.get(0);
+        for (Long baseTableId : baseTableIds) {
+            OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
+            if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(olapTable.getName())) {
+                partitionTable = olapTable;
+                break;
+            }
+        }
+        return partitionTable;
     }
 
     public static MaterializedView read(DataInput in) throws IOException {

@@ -23,10 +23,15 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.ViewDefBuilder;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -38,6 +43,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class CreateMaterializedViewTest {
@@ -206,14 +212,14 @@ public class CreateMaterializedViewTest {
         testDb = currentState.getDb("default_cluster:test");
     }
 
-    // ========== full test ==========
-
     private void dropMv(String mvName) throws Exception {
         String sql ="drop materialized view " + mvName;
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
         stmtExecutor.execute();
     }
+
+    // ========== full test ==========
 
     @Test
     public void testFullCreate() throws Exception {
@@ -516,7 +522,6 @@ public class CreateMaterializedViewTest {
             Assert.assertFalse(partitionExpDesc.isFunction());
             Assert.assertTrue(partitionExpDesc.getExpr() instanceof SlotRef);
             Assert.assertEquals(partitionExpDesc.getSlotRef().getColumnName(), "ss");
-            Assert.assertEquals(partitionExpDesc.getSlotRef().getTblNameWithoutAnalyzed().getTbl(), "mv1");
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -540,7 +545,6 @@ public class CreateMaterializedViewTest {
             Assert.assertTrue(partitionExpDesc.getExpr() instanceof FunctionCallExpr);
             Assert.assertEquals(partitionExpDesc.getExpr().getChild(1), partitionExpDesc.getSlotRef());
             Assert.assertEquals(partitionExpDesc.getSlotRef().getColumnName(), "ss");
-            Assert.assertEquals(partitionExpDesc.getSlotRef().getTblNameWithoutAnalyzed().getTbl(), "mv1");
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -564,7 +568,6 @@ public class CreateMaterializedViewTest {
             Assert.assertTrue(partitionExpDesc.getExpr() instanceof FunctionCallExpr);
             Assert.assertEquals(partitionExpDesc.getExpr().getChild(1), partitionExpDesc.getSlotRef());
             Assert.assertEquals(partitionExpDesc.getSlotRef().getColumnName(), "k1");
-            Assert.assertEquals(partitionExpDesc.getSlotRef().getTblNameWithoutAnalyzed().getTbl(), "mv1");
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -588,7 +591,6 @@ public class CreateMaterializedViewTest {
             Assert.assertTrue(partitionExpDesc.getExpr() instanceof SlotRef);
             Assert.assertEquals(partitionExpDesc.getExpr(), partitionExpDesc.getSlotRef());
             Assert.assertEquals(partitionExpDesc.getSlotRef().getColumnName(), "k1");
-            Assert.assertEquals(partitionExpDesc.getSlotRef().getTblNameWithoutAnalyzed().getTbl(), "mv1");
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }

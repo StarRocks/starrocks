@@ -298,6 +298,7 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
+            db.getMaterializedViews().stream().forEach(mv -> mv.onCreate());
         }
         LOG.info("finished replay databases from image");
         return newChecksum;
@@ -1137,7 +1138,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 partitionInfo.addPartition(
                         partition.getId(), info.getDataProperty(), info.getReplicationNum(), info.isInMemory());
             }
-
+            if (olapTable.getType() == Table.TableType.MATERIALIZED_VIEW && !info.isTempPartition()) {
+                ((MaterializedView) olapTable).addPartitionRef(partition);
+            }
             if (!isCheckpointThread()) {
                 // add to inverted index
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
@@ -1223,6 +1226,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 olapTable.dropTempPartition(info.getPartitionName(), true);
             } else {
                 olapTable.dropPartition(info.getDbId(), info.getPartitionName(), info.isForceDrop());
+                if (olapTable.getType() == Table.TableType.MATERIALIZED_VIEW) {
+                    ((MaterializedView) olapTable).dropPartitionNameRef(info.getPartitionName());
+                }
             }
         } finally {
             db.writeUnlock();

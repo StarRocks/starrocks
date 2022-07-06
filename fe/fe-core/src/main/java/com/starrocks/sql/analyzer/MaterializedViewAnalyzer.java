@@ -133,14 +133,6 @@ public class MaterializedViewAnalyzer {
                 checkPartitionExpParams(statement);
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, tableNameTableMap);
-                // analyze partition by expression
-                ExpressionAnalyzer.analyzeExpression(statement.getPartitionExpDesc().getExpr(),
-                        new AnalyzeState(),
-                        new Scope(RelationId.anonymous(),
-                                new RelationFields(statement.getMvColumnItems().stream()
-                                        .map(col -> new Field(col.getName(), col.getType(),
-                                                statement.getTableName(), null))
-                                        .collect(Collectors.toList()))), context);
             }
             // check and analyze distribution
             checkDistribution(statement, tableNameTableMap);
