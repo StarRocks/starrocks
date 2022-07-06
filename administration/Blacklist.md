@@ -1,70 +1,64 @@
-# 黑名单管理
+# 管理黑名单
 
-StarRocks的客户可以维护一个SQL黑名单，在某些场景下禁止指定的一类SQL，避免这类SQL导致集群crash或者其他预期之外的行为。
-客户可以自由添加/浏览/删除 SQL黑名单。
+本文介绍如何管理 SQL 黑名单。
 
-## 语法
+您可以在 StarRocks 中维护一个 SQL 黑名单，以在某些场景下禁止特定类型的 SQL，避免此类 SQL 导致集群宕机或者其他预期之外的行为。
 
-这个功能通过FE配置enable_sql_blacklist控制(默认关闭)，开启命令如下：
+> 注意：您需要 ADMIN_PRIV 权限以运行以使用黑名单功能。
 
-~~~sql
-admin set frontend config ("enable_sql_blacklist" = "true")
-~~~
+## 开启黑名单功能
 
-Admin用户(拥有ADMIN_PRIV权限的用户)可以执行以下命令设置黑名单：
+通过以下命令开启黑名单功能。
 
-~~~sql
-ADD SQLBLACKLIST #sql#
-DELETE SQLBLACKLIST #sql#
-SHOW SQLBLACKLISTS
-~~~
+```sql
+ADMIN SET FRONTEND CONFIG ("enable_sql_blacklist" = "true")；
+```
 
-* 当 enable\_sql\_blacklist 为true时，每条查询SQL都会和sqlblacklist进行匹配，对于匹配成功的SQL会直接返回错误信息：通报此条SQL处于黑名单之中；匹配失败的SQL会正常执行并输出结果。错误信息示例如下：
-`ERROR 1064 (HY000): Access denied; sql 'select count (*) from test_all_type_select_2556' is in blacklist`
+## 添加黑名单
 
-## 增加黑名单
+通过以下命令添加 SQL 黑名单。
 
-~~~sql
-ADD SQLBLACKLIST #sql#
-~~~
+```sql
+ADD SQLBLACKLIST "sql";
+```
 
-**#sql#** 是某类sql的正则表达式，由于SQL常用字符里面就包含 "(", ")", "*", "."等字符，这些会和正则表达式中的语义混淆，所以在设置黑名单的时候需要通过转义符作出区分，鉴于"("和")"在SQL中使用频率过高，我们内部进行了处理，设置的时候不需要转义，其他特殊字符需要使用转义字符"\"作为前缀。例如:
+**"sql"**：某类 SQL 的正则表达式。由于 SQL 常用字符里面就包含 `(`、`)`、`*`、`.` 等字符，这些字符会和正则表达式中的语义混淆，硬刺在设置黑名单的时候需要通过转义符作出区分，鉴于 `(` 和 `)` 在SQL中使用频率过高，我们内部进行了处理，设置的时候不需要转义，其他特殊字符需要使用转义字符"\"作为前缀。
 
-* 禁止count(\*):
+示例:
 
-    ~~~sql
+* 禁止 `count(\*)`。
+
+    ```sql
     ADD SQLBLACKLIST "select count\\(\\*\\) from .+";
-    ~~~
+    ```
 
-* 禁止count(distinct ):
+* 禁止 `count(distinct )`。
 
-    ~~~sql
+    ```sql
     ADD SQLBLACKLIST "select count\\(distinct .+\\) from .+";
-    ~~~
+    ```
 
-* 禁止order by limit x, y，1 <= x <=7, 5 <=y <=7:
+* 禁止 `order by limit x, y，1 <= x <=7, 5 <=y <=7`。
 
-    ~~~sql
+    ```sql
     ADD SQLBLACKLIST "select id_int from test_all_type_select1 order by id_int limit [1-7], [5-7]";
-    ~~~
+    ```
 
-* 禁止复杂sql，这里主要是展示要转义的写法"*","-":
+* 禁止复杂 SQL（主要演示 `*` 和 `-` 的转义写法。）。
 
-    ~~~sql
+    ```sql
     ADD SQLBLACKLIST "select id_int \\* 4, id_tinyint, id_varchar from test_all_type_nullable except select id_int, id_tinyint, id_varchar from test_basic except select (id_int \\* 9 \\- 8) \\/ 2, id_tinyint, id_varchar from test_all_type_nullable2 except select id_int, id_tinyint, id_varchar from test_basic_nullable";
-    ~~~
+    ```
 
 ## 展示黑名单列表
 
-~~~sql
+```sql
 SHOW SQLBLACKLIST;
-~~~
+```
 
-结果格式：`Index | Forbidden SQL`
+示例：
 
-比如：
-
-~~~sql
+```plain text
 mysql> show sqlblacklist;
 +-------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | Index | Forbidden SQL                                                                                                                                                                                                                                                                                          |
@@ -75,26 +69,26 @@ mysql> show sqlblacklist;
 | 4     | select count\(distinct .+\) from .+                                                                                                                                                                                                                                                                    |
 +-------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
-~~~
+```
 
-Forbidden SQL中展示的sql对于所有sql语义的字符做了转义处理。
+返回结果包括 `Index` 和 `Forbidden SQL`。其中，`Index` 字段为被禁止的 SQL 黑名单序号，`Forbidden SQL` 字段展示了被禁止的 SQL，对于所有 SQL 语义的字符做了转义处理。
 
 ## 删除黑名单
 
-~~~sql
-DELETE SQLBLACKLIST #indexlist#
-~~~
+您可以通过以下命令删除 SQL 黑名单。
 
-比如对`SHOW SQLBLACKLIST`中的sqlblacklist做delete:
+```sql
+DELETE SQLBLACKLIST index_no;
+```
 
-~~~sql
-delete sqlblacklist  3, 4;   --（#indexlist#是以","分隔的id）
-~~~
+`index_no`：被禁止的 SQL 黑名单序号，您可以通过 `SHOW SQLBLACKLIST;` 命令查询。多个 `index_no` 以 `,` 分隔。
 
-之后剩下的sqlblacklist为：
+示例：
 
-~~~sql
-mysql> show sqlblacklist;
+```plain text
+mysql> delete sqlblacklist  3, 4;
+
+show sqlblacklist;
 +-------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | Index | Forbidden SQL                                                                                                                                                                                                                                                                                          |
 +-------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -102,4 +96,4 @@ mysql> show sqlblacklist;
 | 2     | select id_int \* 4, id_tinyint, id_varchar from test_all_type_nullable except select id_int, id_tinyint, id_varchar from test_basic except select \(id_int \* 9 \- 8\) \/ 2, id_tinyint, id_varchar from test_all_type_nullable2 except select id_int, id_tinyint, id_varchar from test_basic_nullable |
 +-------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
-~~~
+```
