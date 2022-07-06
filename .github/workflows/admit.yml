@@ -1,9 +1,15 @@
 name: Trigger Jobs
 
-on: 
-  pull_request_target:
-    types: [synchronize]
-
+on:
+  workflow_run:
+    workflows: ["Label when reviewed"]
+    types: ['requested']
+permissions:
+  # All other permissions are set to none
+  checks: write
+  contents: read
+  pull-requests: write
+  
 jobs:
   Trigger-Admit-Test:
     runs-on: ubuntu-latest
