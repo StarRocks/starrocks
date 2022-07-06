@@ -1,74 +1,116 @@
-# 扩容缩容
+# 扩容缩容 StarRocks
 
-## FE扩缩容
+本文介绍如何扩容以及缩容 StarRocks 集群。
 
-StarRocks 有两种 FE 节点：Follower 和 Observer。Follower参与选举投票和写入，Observer只用来同步日志，扩展读性能。
+## 扩缩容 FE 集群
 
-FE扩缩容时要注意：
+StarRocks FE 节点分为 Follower 节点和 Observer 节点。Follower 节点参与选举投票和写入，Observer 节点只用来同步日志，扩展读性能。
 
-* `http_port` 必须相同。
-* Follower FE(包括Master)的数量必须为奇数，建议部署3个，组成高可用(HA)模式即可。
-* 当 FE 处于高可用部署时（1个Master，2个Follower），建议通过增加 Observer FE 来扩展 FE 的读服务能力。当然也可以继续增加 Follower FE，但几乎是不必要的。
-* 通常一个 FE 节点可以应对 10-20 台 BE 节点。建议总的 FE 节点数量在 10 个以下。而3个即可满足绝大部分需求。
+> 注意：
+>
+> * 所有 FE 节点的 `http_port` 必须相同。
+> * FE Follower 节点（包括 Leader 节点）的数量必须为奇数。建议部署 3 个 Follower 节点，以组成高可用部署（HA）模式。
+> * 当 FE 集群已经为高可用部署模式时（即包含 1 个 Leader 节点，2 个 Follower 节点），建议您通过增加 Observer 节点来扩展 FE 的读服务能力。
+> * 正常情况下，一个 FE 节点可以应对 10 至 20 台 BE 节点。建议您将 FE 集群节点数量控制在 10 个以下。通常 3 个 FE 节点即可满足绝大部分需求。
 
-### FE扩容
+### 扩容 FE 集群
 
-部署好FE节点，启动完成服务。
+部署并启动新增 FE 节点。详细部署方式参考 [部署 StarRocks](../quick_start/Deploy.md)
 
-~~~sql
-bin/start_fe.sh --helper "fe_host:edit_log_port" --daemon ;
---fe_host为master节点的ip
-~~~
+```bash
+bin/start_fe.sh --helper "fe_master_host:edit_log_port" --daemon
+```
 
-通过命令扩容FE节点。
+`fe_master_host`： FE Master 节点的 IP 地址。
 
-~~~sql
-alter system add follower "fe_host:edit_log_port";
-alter system add observer "fe_host:edit_log_port";
-~~~
+扩容 FE 集群。您可以将新增节点设定为 Follower 或 Observer 节点。
 
-### FE缩容
+* 将新增节点设定为 Follower 节点。
 
-缩容和扩容命令类似
+```sql
+ALTER SYSTEM ADD follower "fe_host:edit_log_port";
+```
 
-~~~sql
-alter system drop follower "fe_host:edit_log_port";
-alter system drop observer "fe_host:edit_log_port";
-~~~
+* 将新增节点设定为 Observer 节点。
 
-扩缩容完成后可以通过 `show proc '/frontends';`查看节点信息
+```sql
+ALTER SYSTEM ADD observer "fe_host:edit_log_port";
+```
 
-## BE扩缩容
+完成后，您可以查看节点信息验证扩容是否成功。
 
-BE 扩缩容后，StarRocks 会自动根据负载情况，进行数据均衡，期间不影响使用。
+```sql
+SHOW PROC '/frontends';
+```
 
-### BE扩容
+### 缩容 FE 集群
 
-* 运行命令进行扩容
+您可以删除 Follower 或 Observer 节点。
 
-~~~sql
-alter system add backend 'be_host:be_heartbeat_service_port';
-~~~
+* 删除 Follower 节点。
 
-* 运行命令查看BE状态
+```sql
+ALTER SYSTEM DROP follower "fe_host:edit_log_port";
+```
 
-~~~sql
-show proc '/backends';
-~~~
+* 删除 Observer 节点。
 
-### BE缩容
+```sql
+ALTER SYSTEM DROP observer "fe_host:edit_log_port";
+```
 
-缩容BE有两种方式： DROP和DECOMMISSION。
+完成后，您可以查看节点信息验证缩容是否成功。
 
-DROP会立刻删除BE节点，丢失的副本由FE调度补齐；DECOMMISSION先保证副本补齐，然后再下掉BE节点。DECOMMISSION方式更加友好一点，建议采用这种方式进行缩容。
+```sql
+SHOW PROC '/frontends';
+```
 
-二者的命令类似：
+## 扩缩容 BE 集群
 
-* `alter system decommission backend "be_host:be_heartbeat_service_port";`
-* `alter system drop backend "be_host:be_heartbeat_service_port";`
+BE 集群成功扩缩容后，StarRocks 会自动根据负载情况，进行数据均衡，此期间系统正常运行。
 
-Drop backend是一个危险操作所以需要二次确认后执行
+### 扩容 BE 集群
 
-* `alter system drop backend "be_host:be_heartbeat_service_port";`
+部署并启动新增 BE 节点。详细部署方式参考 [部署 StarRocks](../quick_start/Deploy.md)
 
-FE和BE扩容之后的状态，也可以通过查看[集群状态](../administration/Cluster_administration.md#确认集群健康状态)一节中的页面进行查看。
+```bash
+bin/start_be.sh --daemon
+```
+
+扩容 BE 集群。
+
+```sql
+ALTER SYSTEM ADD backend 'be_host:be_heartbeat_service_port';
+```
+
+完成后，您可以查看节点信息验证扩容是否成功。
+
+```sql
+SHOW PROC '/backends';
+```
+
+### 缩容 BE 集群
+
+您可以通过 DROP 或 DECOMMISSION 的方式缩容 BE 集群。
+
+DROP 会立刻删除 BE 节点，丢失的副本由 FE 调度补齐，而 DECOMMISSION 先保证副本补齐，然后再删除 BE 节点。建议您通过 DECOMMISSION 方式进行 BE 集群缩容。
+
+* 通过 DECOMMISSION 的方式缩容 BE 集群。
+
+```sql
+ALTER SYSTEM DECOMMISSION backend "be_host:be_heartbeat_service_port";
+```
+
+* 通过 DROP 的方式缩容 BE 集群。
+
+> 警告：如果您需要使用 DROP 方式删除 BE 节点，请确保系统三副本完整。
+
+```sql
+ALTER SYSTEM DROP backend "be_host:be_heartbeat_service_port";
+```
+
+完成后，您可以查看节点信息验证缩容是否成功。
+
+```sql
+SHOW PROC '/backends';
+```
