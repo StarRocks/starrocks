@@ -25,6 +25,7 @@ jobs:
       id: approved
       with:
         approvals: '2'
+        pullRequestNumber: ${{ steps.workflow-run-info.outputs.pullRequestNumber }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
