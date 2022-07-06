@@ -24,6 +24,7 @@ package com.starrocks.rpc;
 import com.baidu.jprotobuf.pbrpc.ProtobufRPC;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PProxyRequest;
@@ -36,6 +37,9 @@ public interface PBackendService {
     @ProtobufRPC(serviceName = "PBackendService", methodName = "exec_plan_fragment",
             attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
     Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request);
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "exec_batch_plan_fragments",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
+    Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(PExecBatchPlanFragmentsRequest request);
 
     @ProtobufRPC(serviceName = "PBackendService", methodName = "cancel_plan_fragment",
             onceTalkTimeout = 5000)

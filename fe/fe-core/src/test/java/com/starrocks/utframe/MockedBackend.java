@@ -22,6 +22,7 @@ import com.starrocks.common.ClientPool;
 import com.starrocks.master.MasterImpl;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PProxyRequest;
@@ -31,6 +32,7 @@ import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.PBackendService;
+import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
 import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.PTriggerProfileReportRequest;
@@ -321,6 +323,18 @@ public class MockedBackend {
         public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
             return executor.submit(() -> {
                 PExecPlanFragmentResult result = new PExecPlanFragmentResult();
+                StatusPB pStatus = new StatusPB();
+                pStatus.statusCode = 0;
+                result.status = pStatus;
+                return result;
+            });
+        }
+
+        @Override
+        public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(
+                PExecBatchPlanFragmentsRequest request) {
+            return executor.submit(() -> {
+                PExecBatchPlanFragmentsResult result = new PExecBatchPlanFragmentsResult();
                 StatusPB pStatus = new StatusPB();
                 pStatus.statusCode = 0;
                 result.status = pStatus;

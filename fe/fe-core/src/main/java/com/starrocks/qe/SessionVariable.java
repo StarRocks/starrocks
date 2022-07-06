@@ -147,6 +147,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
+    public static final String ENABLE_DELIVER_BATCH_FRAGMENTS = "enable_deliver_batch_fragments";
+
     // Use resource group. It will influence the CPU schedule, I/O scheduler, and
     // memory limit etc. in BE.
     public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
@@ -262,6 +264,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PREFER_COMPUTE_NODE)
     private boolean preferComputeNode = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_DELIVER_BATCH_FRAGMENTS)
+    private boolean enableDeliverBatchFragments = true;
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -861,6 +866,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public float getGlobalRuntimeFilterProbeMinSelectivity() {
         return globalRuntimeFilterProbeMinSelectivity;
+    }
+
+    public boolean isEnableDeliverBatchFragments() {
+        return enableDeliverBatchFragments;
     }
 
     public boolean isEnablePipelineEngine() {

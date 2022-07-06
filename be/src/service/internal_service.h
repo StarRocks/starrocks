@@ -31,6 +31,7 @@ class Controller;
 
 namespace starrocks {
 
+class TExecPlanFragmentParams;
 class ExecEnv;
 
 template <typename T>
@@ -52,6 +53,10 @@ public:
 
     void exec_plan_fragment(google::protobuf::RpcController* controller, const PExecPlanFragmentRequest* request,
                             PExecPlanFragmentResult* result, google::protobuf::Closure* done) override;
+
+    void exec_batch_plan_fragments(google::protobuf::RpcController* controller,
+                                   const PExecBatchPlanFragmentsRequest* request, PExecBatchPlanFragmentsResult* result,
+                                   google::protobuf::Closure* done) override;
 
     void cancel_plan_fragment(google::protobuf::RpcController* controller, const PCancelPlanFragmentRequest* request,
                               PCancelPlanFragmentResult* result, google::protobuf::Closure* done) override;
@@ -82,6 +87,10 @@ public:
 
 private:
     Status _exec_plan_fragment(brpc::Controller* cntl);
+    Status _exec_batch_plan_fragments(brpc::Controller* cntl);
+    Status _exec_plan_fragment_by_pipeline(TExecPlanFragmentParams& t_common_request,
+                                           const TExecPlanFragmentParams& t_unique_request);
+    Status _exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request);
 
 protected:
     ExecEnv* _exec_env;
