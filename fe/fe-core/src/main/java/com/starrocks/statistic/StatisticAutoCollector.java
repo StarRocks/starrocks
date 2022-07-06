@@ -176,22 +176,29 @@ public class StatisticAutoCollector extends MasterDaemon {
             } else if ((null == analyzeJob.getColumns() || analyzeJob.getColumns().isEmpty())
                     && AnalyzeJob.DEFAULT_ALL_ID != analyzeJob.getTableId()
                     && AnalyzeJob.DEFAULT_ALL_ID != analyzeJob.getDbId()) {
-                // all column
+                //database or table is null mean database/table has been dropped
                 Database db = GlobalStateMgr.getCurrentState().getDb(analyzeJob.getDbId());
-                if (null == db) {
+                if (db == null) {
+                    continue;
+                }
+                OlapTable olapTable = (OlapTable) db.getTable(analyzeJob.getTableId());
+                if (olapTable == null) {
                     continue;
                 }
 
                 createTableJobs(allTableJobMap, analyzeJob, db, db.getTable(analyzeJob.getTableId()));
             } else if (!analyzeJob.getColumns().isEmpty() && AnalyzeJob.DEFAULT_ALL_ID != analyzeJob.getTableId()
                     && AnalyzeJob.DEFAULT_ALL_ID != analyzeJob.getDbId()) {
-                // some column
+                //database or table is null mean database/table has been dropped
                 Database db = GlobalStateMgr.getCurrentState().getDb(analyzeJob.getDbId());
-                if (null == db) {
+                if (db == null) {
+                    continue;
+                }
+                OlapTable olapTable = (OlapTable) db.getTable(analyzeJob.getTableId());
+                if (olapTable == null) {
                     continue;
                 }
 
-                OlapTable olapTable = (OlapTable) db.getTable(analyzeJob.getTableId());
                 createTableJobs(allTableJobMap, analyzeJob, db, olapTable, analyzeJob.getColumns());
             }
         }
@@ -201,10 +208,6 @@ public class StatisticAutoCollector extends MasterDaemon {
 
     private void createTableJobs(Map<Long, TableCollectJob> tableJobs, AnalyzeJob job,
                                  Database db, Table table) {
-        if (null == table || !Table.TableType.OLAP.equals(table.getType())) {
-            return;
-        }
-
         List<String> columns = table.getFullSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                 .collect(Collectors.toList());
         createTableJobs(tableJobs, job, db, (OlapTable) table, columns);
