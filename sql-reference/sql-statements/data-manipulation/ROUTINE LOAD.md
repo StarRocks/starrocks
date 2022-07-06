@@ -1,14 +1,12 @@
-# CREATE ROUTINE LOAD
+# ROUTINE LOAD
 
 ## 功能
 
-例行导入（Routine Load）功能，支持用户提交一个常驻的导入任务，通过不断的从指定的数据源读取数据，将数据导入到 StarRocks 中。
-目前仅支持通过无认证或者 SSL 认证方式，从 Kakfa 导入文本格式（CSV）的数据。
-该导入方式使用的场景详见 [Routine load](/loading/RoutineLoad.md) 章节。
+例行导入（Routine Load）功能支持用户提交一个常驻的导入任务，通过不断地从指定的数据源读取数据，将数据导入到 StarRocks 中。目前仅支持通过无认证或者 SSL 认证方式，从 Apache Kafka 导入文本格式（CSV）或 JSON 格式数据。Routine Load 的使用场景，请参见 [Routine load](/loading/RoutineLoad.md) 章节。
 
 ## 语法
 
-注：方括号 [] 中内容可省略不写。
+> 说明：方括号 [] 中的内容为可选配置。
 
 ```sql
 CREATE ROUTINE LOAD [db.]job_name ON tbl_name
@@ -18,17 +16,19 @@ FROM data_source
 [data_source_properties]
 ```
 
-1. **[db.] job_name**
+## 参数说明
 
-    导入作业的名称，在同一个 database 内，相同名称只能有一个 job 在运行。
+1. **[db.]job_name**
+
+    必填。导入作业的名称。导入作业的常见命名方式为表名+时间戳。同一数据库内，导入作业的名称必须唯一。您也可以在 `job_name` 前指定导入的数据库名称。
 
 2. **tbl_name**
 
-    指定需要导入的表的名称。
+    必填。数据导入到目标表的名称。
 
 3. **load_properties**
 
-    用于描述导入数据。语法：
+    选填。导入数据的属性。语法：
 
     ```sql
     [COLUMNS TERMINATED BY '<terminator>'],
@@ -37,58 +37,57 @@ FROM data_source
     [PARTITION ([ <partition_name> [, ...] ])]
 
     column_assignment:
-    <column_name> = column_expression
+    <column_name> = column_expression;
     ```
 
-    1. 设置列分隔符
+    1. **COLUMNS TERMINATED BY**
 
-        对于 csv 格式的数据，可以指定列分隔符，例如，将列分隔符指定为逗号 ","。
+       指定列分隔符。对于 CSV 格式的数据，可以指定列分隔符，例如，将列分隔符指定为逗号","。
 
         ```sql
         COLUMNS TERMINATED BY ","
         ```
 
-        默认为：\t
+       默认为：\t。
 
-    2. 指定列映射关系
+    2. **COLUMNS**
 
-        指定源数据中列的映射关系，以及定义衍生列的生成方式。
+       指定源数据中列和目标表中列的映射关系，以及定义衍生列的生成方式。
 
-        1. 映射列：
+        1. 映射列
 
-            按顺序指定，源数据中各个列，对应目的表中的哪些列。对于希望跳过的列，可以指定一个不存在的列名。
-            假设目的表有三列 k1, k2, v1。源数据有 4 列，其中第 1、2、4 列分别对应 k2, k1, v1。则书写如下：
+            按顺序指定源数据中各个列对应目标表中的哪些列。如果希望跳过某些列，可以指定一个不存在的列名。
+            假设目标表有 3 列 k1, k2, v1。源数据有 4 列，其中第 1、2、4 列分别对应 k2, k1, v1。则书写如下：
 
             ```SQL
             COLUMNS (k2, k1, xxx, v1)
             ```
 
-            其中 xxx 为不存在的一列，用于跳过源数据中的第三列。
+            其中 `xxx` 为不存在的列，用于跳过源数据中的第 3 列。
 
-        2. 衍生列：
+        2. 衍生列
 
-            以 col_name = expr 的形式表示的列，我们称为衍生列。即支持通过 expr 计算得出目的表中对应列的值。
-            衍生列通常排列在映射列之后，虽然这不是强制的规定，但是 StarRocks 总是先解析映射列，再解析衍生列。
-            接上一个示例，假设目的表还有第 4 列 v2，v2 由 k1 和 k2 的和产生。则可以书写如下：
+            除了直接读取源数据的列之外，StarRocks 还提供对数据列进行加工操作。上述语法中的`column_assignment`用于指定衍生列。衍生列以 `col_name = expr` 形式表示。即支持通过 `expr` 计算得出目标表中对应列的值。
+            衍生列通常排在映射列之后，虽然不是强制规定，但是 StarRocks 总是先解析映射列，再解析衍生列。
+            接上一个示例，假设目标表还有第 4 列 v2，v2 由 k1 和 k2 的和产生。则可以书写如下：
 
             ```plain text
-            COLUMNS (k2, k1, xxx, v1, v2 = k1 + k2);
+            COLUMNS (k2, k1, xxx, v1, v2 = k1 + k2)
             ```
 
-        对于 csv 格式的数据，COLUMNS 中的映射列的个数必须要与数据中的列个数一致。
+        对于 CSV 格式的数据，`COLUMNS` 中映射列的个数必须要与源数据中的列个数一致。
 
-    3. 指定过滤条件
+    3. WHERE
 
-        用于指定过滤条件，以过滤掉不需要的列。过滤列可以是映射列或衍生列。
-        例如我们只希望导入 k1 大于 100 并且 k2 等于 1000 的列，则书写如下：
+        用于指定过滤条件，只有满足过滤条件的数据才会导入到 StarRocks 中。过滤条件中指定的列可以是映射列或衍生列。例如只希望导入 k1 大于 100 并且 k2 等于 1000 的列，则可以书写如下：
 
         ```plain text
-        WHERE k1 > 100 and k2 = 1000
+        WHERE k1 > 100 and k2 = 1000；
         ```
 
-    4. 指定导入分区
+    4. PARTITION
 
-        指定导入目的表的哪些 partition 中。如果不指定，则会自动导入到对应的 partition 中。
+        指定将数据导入到目标表的哪些分区中。如果不指定分区，则会自动导入到源数据对应的分区中。
         示例：
 
         ```plain text
@@ -97,7 +96,7 @@ FROM data_source
 
 4. **job_properties**
 
-    用于指定例行导入作业的通用参数。
+    用于指定导入作业的通用参数。
 
     语法：
 
@@ -112,60 +111,62 @@ FROM data_source
 
     1. `desired_concurrent_number`
 
-        期望的并发度。一个例行导入作业会被分成多个子任务执行。这个参数指定一个作业最多有多少任务可以同时执行。必须大于 0。默认为 3。
-        这个并发度并不是实际的并发度，实际的并发度，会通过集群的节点数、负载情况，以及数据源的情况综合考虑。
-        例：
+        导入并发度。指定一个例行导入作业最多会被分成多少个子任务执行。取值必须大于 0。默认为 3。
+        该并发度并不是实际的并发度。实际的并发度会由集群的节点数、负载情况、以及数据源的情况综合决定。
+        示例：
 
+        ```plain text
         "desired_concurrent_number" = "3"
+        ```
 
     2. `max_batch_interval`
 
-        任务的调度时间，即任务多久执行一次，默认为 10s。StarRocks 建议导入间隔 10s 以上，过快的导入频率可能会导致版本数过多报错。
-        任务的消费数据时间为 fe.conf 中的 routine_load_task_consume_second，默认为 3s。
-        任务的执行超时时间为 fe.conf 中的 routine_load_task_timeout_second，默认为 15s。
-        例：
+        任务的调度间隔，即任务多久执行一次，单位是「秒」。默认取值为 10s。取值范围： 5-60。建议导入间隔 10s 以上，导入频率过高可能会导致版本数过多报错。
+        任务消费数据的时间由 **fe.conf** 中的 `routine_load_task_consume_second`参数指定，默认为 3s。
+        任务执行超时时间由 **fe.conf** 中的 `routine_load_task_timeout_second`参数指定，默认为 15s。
+        示例：
 
-        "max_batch_interval" = "20"
+        ```plain text
+        "max_batch_interval" = "20";
+        ···
 
     3. `max_error_number/max_batch_rows`
 
-        采样窗口内，允许的最大错误行数。必须大于等于 0。默认是 0，即不允许有错误行。
-        采样窗口为 `max_batch_rows * 10`, 默认为 `(200000 * 10 = 2000000)`。即如果在采样窗口内，错误行数大于 max_error_number，则会导致例行作业被暂停，需要人工介入检查数据质量问题。
-        被 where 条件过滤掉的行不算错误行。
+        采样窗口内，允许的最大错误行数。取值必须大于等于 0。默认为 0，即不允许有错误行。
+        采样窗口由 `max_batch_rows * 10`指定, 默认为 `(200000 * 10 = 2000000)`。即在采样窗口内，如果错误行数大于 `max_error_number`，则会导致例行导入作业被暂停，需要人工检查数据质量问题。
+        > 说明：被 WHERE 条件过滤掉的行不算错误行。
 
     4. `strict_mode`
 
-        是否开启严格模式，默认为关闭。如果开启后，非空原始数据的列类型变换如果结果为 NULL，则会被过滤。指定方式为 "strict_mode" = "true"
+        是否开启严格模式，默认为关闭。开启后，非空原始数据的列类型如果为 NULL，则会被过滤掉。配置方式为 `"strict_mode" = "true"`。
 
     5. `timezone`
 
-        指定导入作业所使用的时区。默认为使用 Session 的 timezone 参数。该参数会影响所有导入涉及的和时区有关的函数结果。
+        指定导入作业所使用的时区。默认为使用 Session 的 `timezone` 参数。该参数会影响所有导入涉及的和时区有关的函数结果。
 
     6. `format`
 
-        指定导入数据格式，默认是 csv，支持 json 格式。
+        指定导入数据的格式，默认是 CSV，支持 JSON 格式。
 
     7. `jsonpaths`
 
-        jsonpaths: 导入 json 方式分为：简单模式和匹配模式。如果设置了 jsonpath 则为匹配模式导入，否则为简单模式导入，具体可参考示例。
+        指定导入 JSON 数据的方式，分为简单模式和匹配模式。如果设置了 `jsonpaths`参数，则为匹配模式导入，否则为简单模式导入，具体可参考示例。
 
     8. `strip_outer_array`
 
-        布尔类型，为 true 表示 json 数据以数组对象开始且将数组对象中进行展平，默认值是 false。
+        BOOLEAN 类型。取值为 `true` 表示 JSON 数据以数组对象开始且将数组对象进行展平，默认值为 `false`。
 
     9. `json_root`
 
-        json_root 为合法的 jsonpath 字符串，用于指定 json document 的根节点，默认值为 ""。
+        `json_root` 为合法的 `jsonpaths` 字符串，用于指定 json document 的根节点，默认值为 ""。
 
 5. **data_source**
 
-    数据源的类型。当前支持：
-
-    KAFKA
+    必填。数据源的类型。当前支持取值为 `KAFKA`。
 
 6. **data_source_properties**
 
-    指定数据源相关的信息。
+    指定数据源相关信息。
 
     语法：
 
@@ -176,111 +177,102 @@ FROM data_source
     )
     ```
 
-    1. KAFKA 数据源
+    参数：
+    1. `kafka_broker_list`
+        Kafka 的 broker 连接信息。格式为 `ip:host`。多个broker之间以逗号分隔。
+        示例：
 
-        1. `kafka_broker_list`
+        ```plaintext
+        "kafka_broker_list" = "broker1:9092,broker2:9092"
+        ```
 
-            ```plain text
-            Kafka 的 broker 连接信息。格式为 ip:host。多个broker之间以逗号分隔。
-            示例：
+    2. `kafka_topic`
+        指定要订阅的 Kafka 的 topic。
+        示例：
 
-            "kafka_broker_list" = "broker1:9092,broker2:9092"
-            ```
+        ```plain text
+        "kafka_topic" = "my_topic"
+        ```
 
-        2. `kafka_topic`
-
-            ```plain text
-            指定要订阅的 Kafka 的 topic。
-            示例：
-
-            "kafka_topic" = "my_topic"
-            ```
-
-        3. `kafka_partitions/kafka_offsets`
-
-            ```plain text
-            指定需要订阅的 kafka partition，以及对应的每个 partition 的起始 offset。
-
-            offset 可以指定从大于等于 0 的具体 offset，或者：
-
+    3. `kafka_partitions/kafka_offsets`
+        指定需要订阅的 kafka partition，以及对应的每个 partition 的起始 offset。offset 可以指定从大于等于 0 的具体 offset，或者：
             1. OFFSET_BEGINNING: 从有数据的位置开始订阅。
             2. OFFSET_END: 从末尾开始订阅。
 
-            如果没有指定，则默认从 OFFSET_END 开始订阅 topic 下的所有 partition。
-            示例：
+        如果没有指定，则默认从 `OFFSET_END` 开始订阅 topic 下的所有 partition。
+        示例：
 
-            "kafka_partitions" = "0,1,2,3",
-            "kafka_offsets" = "101,0,OFFSET_BEGINNING,OFFSET_END"
-            注意：上述属性设置，每设置一个分区需要设置对应分区的偏移量。
-            ```
+        ```plain text
+        "kafka_partitions" = "0,1,2,3",
+        "kafka_offsets" = "101,0,OFFSET_BEGINNING,OFFSET_END"
+        ```
 
-        4. `property`
+        > 注意：上述属性设置，每设置一个分区需要设置对应分区的偏移量。
 
-            ```plain text
-            指定自定义kafka参数。
-            功能等同于kafka shell中 "--property" 参数。
-            当参数的 value 为一个文件时，需要在 value 前加上关键词："FILE:"。
-            关于如何创建文件，请参阅 "HELP CREATE FILE;"
-            更多支持的自定义参数，请参阅 librdkafka 的官方 CONFIGURATION 文档中，client 端的配置项。
+    4. `property`
+        指定自定义 Kafka 参数。功能等同于kafka shell中 `--property` 参数。
+        更多支持的自定义参数，请参阅 [librdkafka] (<https://github.com/edenhill/librdkafka>)  的官方 **CONFIGURATION** 文档中 client 端的配置项。
+        示例:
 
-            示例:
-            "property.client.id" = "12345",
-            "property.ssl.ca.location" = "FILE:ca-cert"
+        ```plain text
+        "property.client.id" = "12345",
+        "property.ssl.ca.location" = "FILE:ca-cert"
+        ```
 
-            1.使用 SSL 连接 Kafka 时，需要指定以下参数：
-            "property.security.protocol" = "ssl",
-            "property.ssl.ca.location" = "FILE:ca-cert",
+        1.使用 SSL 连接 Kafka 时，需要指定以下参数：
+        "property.security.protocol" = "ssl",
+        "property.ssl.ca.location" = "FILE:ca-cert",
 
-            其中:
-            "property.security.protocol" 用于指明连接方式为 SSL。
-            "property.ssl.ca.location" 为 be 访问 kafka 时使用，指定 CA 证书的位置。
+        其中:
+        "property.security.protocol" 用于指定连接方式为 SSL。
+        "property.ssl.ca.location" 为 BE 访问 Kafka 时使用，指定 CA 证书的位置。
 
-            如果 Kafka server 端开启了 client 认证，则还需设置：
-            "property.ssl.certificate.location" = "FILE:client.pem",
-            "property.ssl.key.location" = "FILE:client.key",
-            "property.ssl.key.password" = "abcdefg",
+        如果 Kafka server 端开启了 client 认证，则还需设置：
+        "property.ssl.certificate.location" = "FILE:client.pem",
+        "property.ssl.key.location" = "FILE:client.key",
+        "property.ssl.key.password" = "abcdefg",
 
-            其中:
-            "property.ssl.certificate.location" 指定 client 的 public key 的位置。
-            "property.ssl.key.location" 指定 client 的 private key 的位置。
-            "property.ssl.key.password" 指定 client 的 private key 的密码。
+        其中:
+        "property.ssl.certificate.location" 指定 client 的 public key 的位置。
+        "property.ssl.key.location" 指定 client 的 private key 的位置。
+        "property.ssl.key.password" 指定 client 的 private key 的密码。
 
-            2.使用 SASL 连接 Kafka 时，需要指定以下参数：
-            "property.security.protocol"="SASL_PLAINTEXT",
-            "property.sasl.mechanism"="PLAIN",
-            "property.sasl.username"="admin",
-            "property.sasl.password"="admin"
+        2.使用 SASL 连接 Kafka 时，需要指定以下参数：
+        "property.security.protocol"="SASL_PLAINTEXT",
+        "property.sasl.mechanism"="PLAIN",
+        "property.sasl.username"="admin",
+        "property.sasl.password"="admin"
 
-            其中：
-            "property.security.protocol" 指定协议为 SASL_PLAINTEXT。
-            "property.sasl.mechanism" 指定 sasl 的 认证方式为 PLAIN。
-            "property.sasl.username" 指定 sasl 的用户名。
-            "property.sasl.password" 指定 sasl 的密码。
+        其中：
+        "property.security.protocol" 指定协议为 SASL_PLAINTEXT。
+        "property.sasl.mechanism" 指定 SASL 的 认证方式为 PLAIN。
+        "property.sasl.username" 指定 SASL 的用户名。
+        "property.sasl.password" 指定 SASL 的密码。
 
-            3.指定kafka partition的默认起始offset
-            如果没有指定kafka_partitions/kafka_offsets,默认消费所有分区,此时可以指定kafka_default_offsets指定起始 offset。默认为 OFFSET_END，即从末尾开始订阅。
-            值为
-            1.OFFSET_BEGINNING: 从有数据的位置开始订阅。
-            2.OFFSET_END: 从末尾开始订阅。
-            示例：
-            "property.kafka_default_offsets" = "OFFSET_BEGINNING"
-            ```
+        3.指定Kafka partition的默认起始offset
+        如果没有指定`kafka_partitions/kafka_offsets`，默认消费所有分区，此时可以指定`kafka_default_offsets`起始 offset。默认为 `OFFSET_END`，即从末尾开始订阅。
+        值为
+         1.OFFSET_BEGINNING: 从有数据的位置开始订阅。
+         2.OFFSET_END: 从末尾开始订阅。
+         示例：
+
+        ```plaintext
+        "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+        ```
 
 导入数据格式样例
 
-```plain text
-整型类（TINYINT/SMALLINT/INT/BIGINT/LARGEINT）：1, 1000, 1234。
-浮点类（FLOAT/DOUBLE/DECIMAL）：1.1, 0.23, .356。
-日期类（DATE/DATETIME）：2017-10-03, 2017-06-13 12: 34: 03。
-字符串类（CHAR/VARCHAR）（无引号）：I am a student, a。
-NULL 值：\N
-```
+- 整型类（TINYINT/SMALLINT/INT/BIGINT/LARGEINT）：1, 1000, 1234
+- 浮点类（FLOAT/DOUBLE/DECIMAL）：1.1, 0.23, .356
+- 日期类（DATE/DATETIME）：2017-10-03, 2017-06-13 12: 34: 03
+- 字符串类（CHAR/VARCHAR）（无引号）：I am a student, a
+- NULL 值：\N
 
 ## 示例
 
-### 创建 Routine load 任务消费 Kafka 数据
+### 示例1：创建 Routine Load 任务消费 Kafka 数据
 
-为 example_db 的 example_tbl 创建一个名为 test1 的 Kafka 例行导入任务。指定列分隔符和 group.id 和 client.id，并且自动默认消费所有分区，且从有数据的位置（OFFSET_BEGINNING）开始订阅。
+为 `example_db` 的 `example_tbl` 创建一个名为 `test1` 的 Kafka 例行导入任务。指定列分隔符、 `group.id` 和 `client.id`，默认消费所有分区，且从有数据的位置（`OFFSET_BEGINNING`）开始订阅。
 
 ```sql
 CREATE ROUTINE LOAD example_db.test1 ON example_tbl
@@ -302,9 +294,9 @@ FROM KAFKA
 );
 ```
 
-### 设置导入任务为严格模型
+### 示例2：设置导入任务为严格模式
 
-为 example_db 的 example_tbl 创建一个名为 test1 的 Kafka 例行导入任务。导入任务为严格模式。
+为 `example_db` 的 `example_tbl` 创建一个名为 `test1` 的 Kafka 例行导入任务。导入任务为严格模式。指定消费分区以及offsets。
 
 ```sql
 CREATE ROUTINE LOAD example_db.test1 ON example_tbl
@@ -325,9 +317,9 @@ FROM KAFKA
 );
 ```
 
-### Routine load 任务增加 SSL 认证
+### 示例3：Routine Load 任务增加 SSL 认证
 
-通过 SSL 认证方式，从 Kafka 集群导入数据。同时设置 client.id 参数。导入任务为非严格模式，时区为 Africa/Abidjan
+通过 SSL 认证方式，从 Kafka 集群导入数据。同时设置 `client.id` 参数。导入任务为非严格模式，时区为 `Africa/Abidjan`。
 
 ```sql
 CREATE ROUTINE LOAD example_db.test1 ON example_tbl
@@ -353,9 +345,9 @@ FROM KAFKA
 );
 ```
 
-### 导入 Json 格式数据
+### 示例4：导入 JSON 格式数据
 
-简单模式导入 json，不指定 jsonpaths。
+简单模式导入 JSON 数据，不指定 `jsonpaths`。
 
 ```sql
 CREATE ROUTINE LOAD example_db.test_json_label_1 ON table1
@@ -374,17 +366,18 @@ FROM KAFKA
     "kafka_partitions" = "0,1,2",
     "kafka_offsets" = "0,0,0"
 );
-支持两种json数据格式：
+```
+
+支持两种 JSON 数据格式：
 1）{"category":"a9jadhx","author":"test","price":895}
 2）[
 {"category":"a9jadhx","author":"test","price":895},
 {"category":"axdfa1","author":"EvelynWaugh","price":1299}
 ]
-```
 
-### 指定 jsonpaths 导入 Json 格式数据
+### 示例5：指定 `jsonpaths` 导入 JSON 格式数据
 
-精准导入 json 数据格式
+匹配模式导入 JSON 数据格式。
 
 ```sql
 CREATE TABLE `example_tbl` (
@@ -425,19 +418,20 @@ FROM KAFKA
     "kafka_partitions" = "0,1,2",
     "kafka_offsets" = "0,0,0"
 );
-json数据格式:
+```
+
+JSON数据格式:
 [
 {"category":"11","title":"SayingsoftheCentury","price":895,"timestamp":1589191587},
 {"category":"22","author":"2avc","price":895,"timestamp":1589191487},
 {"category":"33","author":"3avc","title":"SayingsoftheCentury","timestamp":1589191387}
 ]
-```
 
 说明：
-1）如果 json 数据是以数组开始，并且数组中每个对象是一条记录，则需要将 strip_outer_array 设置成 true，表示展平数组。
-2）如果 json 数据是以数组开始，并且数组中每个对象是一条记录，在设置 jsonpath 时，我们的 ROOT 节点实际上是数组中对象。
+1）如果 JSON 数据是以数组开始，并且数组中每个对象是一条记录，则需要将 `strip_outer_array` 设置成 `true`，表示展平数组。
+2）如果 JSON 数据是以数组开始，并且数组中每个对象是一条记录，在设置 `jsonpaths` 时，ROOT 节点实际上是数组中对象。
 
-6.用户指定根节点 json_root
+### 示例6：指定根节点 `json_root`
 
 ```sql
 CREATE ROUTINE LOAD example_db.test1 ON example_tbl
@@ -459,7 +453,9 @@ FROM KAFKA
     "kafka_partitions" = "0,1,2",
     "kafka_offsets" = "0,0,0"
 );
-json数据格式:
+```
+
+JSON 数据格式:
 {
 "RECORDS":[
 {"category":"11","title":"SayingsoftheCentury","price":895,"timestamp":1589191587},
@@ -467,4 +463,3 @@ json数据格式:
 {"category":"33","author":"3avc","title":"SayingsoftheCentury","timestamp":1589191387}
 ]
 }
-```
