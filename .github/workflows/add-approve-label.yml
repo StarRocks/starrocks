@@ -22,7 +22,7 @@ jobs:
         sourceRunId: ${{ github.event.workflow_run.id }}
 
     - name: Label when approved by 2 committers
-      if: ${{ steps.label-when-reviewed.outputs.approved == 'true' }}
+#      if: ${{ steps.label-when-reviewed.outputs.approved == 'true' }}
       uses: dulong41/label-when-approved-action@master
       id: label-when-approved-by-anyone
       with:
