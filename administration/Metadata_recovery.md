@@ -2,14 +2,19 @@
 
 本文介绍如何恢复 StarRocks 中的元数据。
 
-FE 集群可能因某些原因出现 BDBJE 无法启动 或 FE 之间无法同步等问题。故障表现包括无法无法写入元数据、或缺少 Master 节点等等。出现以上问题时，您需要手动恢复 FE。
+当 StarRocks 集群中的 FE 集群出现以下问题时，您可以通过下述方式手动恢复 FE 服务：
+
+- Berkeley DB Java Edition（BDBJE）无法启动。
+- FE 节点之间无法同步数据。
+- 无法向 FE 节点中写入元数据。
+- FE 集群缺少 Leader 节点。
+
+> **注意**
+>
+> - **请谨慎操作元数据。错误的操作可能导致集群数据不可逆丢失。如非集群不可用或 BDBJE 无法选主的情况，请不要参考此文档操作。**
+> - **下述方法无法解决根本问题，仅作为尽快恢复集群运行应急操作。如需彻底修复问题，请联系官方人员协助。**
 
 手动恢复 FE 的原理为先通过当前 `meta_dir` 中留存的元数据启动一个新的 Master 节点，然后逐台添加其他 FE 节点。
-
-> **注意：**
->
-> * **该方法无法解决根本问题，仅作为尽快恢复集群运行应急操作。如需彻底修复问题，请联系官方人员协助。**
-> * **请谨慎操作元数据。错误的操作可能导致集群数据不可逆丢失。如非集群不可用或 BDBJE 无法选主的情况，请不要参考此文档操作。**
 
 请严格按照如下步骤操作。
 
@@ -29,7 +34,7 @@ meta_dir = /home/disk1/sr/StarRocks-1.19.0/fe-3365df09-14bc-44a5-aabc-ccfaa5824d
 
 ![8-2](../assets/8-2.png)
 
-通常情况下，Master FE 节点的元数据为最新。
+通常情况下，FE Leader 节点的元数据为最新。
 
 为确保获取元数据最新的节点，您需要切换到各 FE 节点安装目录下，执行以下操作获取 lastVLSN，该值越大则该节点元数据越新。
 
@@ -37,7 +42,7 @@ meta_dir = /home/disk1/sr/StarRocks-1.19.0/fe-3365df09-14bc-44a5-aabc-ccfaa5824d
 java -jar lib/je-7.3.7.jar DbPrintLog -h meta/bdb/ -vd 
 ```
 
-lastVLSN 内容如下所示：
+查询结果如下所示：
 
 ![8-8](../assets/8-8.png)
 
@@ -79,7 +84,7 @@ lastVLSN 内容如下所示：
     show frontends;
     ```
 
-    您可以看到当前 FE 角色为 Master，以及之前集群所添加的所有 FE 节点。
+    您可以看到当前 FE 角色为 `Master`，以及之前集群所添加的所有 FE 节点。
 5. 【重要】将当前节点 **fe.conf** 中的 `metadata_failure_recovery=true` 配置项删除，或者设置为 `false`，然后重启当前 FE 节点。
 
 ## 基于 OBSERVER 节点恢复
@@ -108,10 +113,11 @@ lastVLSN 内容如下所示：
     show frontends;
     ```
 
-    由于当前使用 OBSERVER 节点恢复，以上命令的返回中您可以看到当前 FE 角色为 OBSERVER，但是 IsMaster 显示为 true。
+    由于当前使用 OBSERVER 节点恢复，以上命令的返回中您可以看到当前 FE 角色为 OBSERVER，但是 `IsMaster` 显示为 `true`。
 6. 将当前节点的 **fe.conf** 中 `metadata_failure_recovery=true` 注释掉。
 
-    > 注意：请不要重启该节点，以防止这个节点再加入集群的时候报错。
+    > 注意
+    > 请不要重启该节点，以防止这个节点在加入集群的时候报错。
 
 7. DROP 当前 OBSERVER 节点以外的所有 FE 节点。
 
@@ -137,7 +143,7 @@ lastVLSN 内容如下所示：
     show frontends;
     ```
 
-    在返回结果中，你可以观察到两个 FE 节点，其中一个是之前的 OBSERVER，另一个是新添加的 FOLLOWER，且此时 OBSERVER 为 Master。
+    在返回结果中，你可以观察到两个 FE 节点，其中一个是之前的 OBSERVER，另一个是新添加的 FOLLOWER，且此时 OBSERVER 为 Leader 节点。
 11. 确认新的 FOLLOWER 是否可以正常工作。观察如图所示的 ID 是否同步完成即可了解新的 FOLLOWER 是否正常工作。
 
     ![8-4](../assets/8-4.png)
@@ -158,6 +164,6 @@ ALTER SYSTEM DROP FOLLOWER/OBSERVER;
 bin/start_fe.sh --helper "fe_host:edit_log_port" --daemon
 ```
 
-如果对应 FE 启动失败，您需要检查当前 Master 节点的 **/fe/meta/bdb** 文件夹大小。如果该文件夹过大，即超过 **fe.conf** 中 jvm 设置的一半，则您需要增大该设置项后重新启动。
+如果对应 FE 启动失败，您需要检查当前 Leader 节点的 **/fe/meta/bdb** 文件夹大小。如果该文件夹过大，即超过 **fe.conf** 中 jvm 设置的一半，则您需要增大该设置项后重新启动。
 
 如果以上操作正常，则元数据恢复完毕。
