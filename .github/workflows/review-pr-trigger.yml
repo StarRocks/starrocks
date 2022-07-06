@@ -1,0 +1,10 @@
+name: Label when reviewed
+on: pull_request_review
+jobs:
+
+  label-when-reviewed:
+    name: "Label PRs when reviewed"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Do nothing. Only trigger corresponding workflow event"
+        run: echo
