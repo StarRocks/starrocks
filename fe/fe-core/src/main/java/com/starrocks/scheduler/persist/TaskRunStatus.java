@@ -48,6 +48,9 @@ public class TaskRunStatus implements Writable {
     @SerializedName("priority")
     private int priority = 0;
 
+    @SerializedName("mergeRedundant")
+    private boolean mergeRedundant = false;
+
     public String getQueryId() {
         return queryId;
     }
@@ -136,6 +139,14 @@ public class TaskRunStatus implements Writable {
         this.priority = priority;
     }
 
+    public boolean isMergeRedundant() {
+        return mergeRedundant;
+    }
+
+    public void setMergeRedundant(boolean mergeRedundant) {
+        this.mergeRedundant = mergeRedundant;
+    }
+
     public static TaskRunStatus read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
@@ -161,6 +172,7 @@ public class TaskRunStatus implements Writable {
                 ", errorMessage='" + errorMessage + '\'' +
                 ", expireTime=" + expireTime +
                 ", priority=" + priority +
+                ", mergeRedundant=" + mergeRedundant +
                 '}';
     }
 }
