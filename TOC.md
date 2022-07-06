@@ -30,7 +30,6 @@
   + [Json Loading](/loading/Json_loading.md)
   + [Synchronize data from MySQL](/loading/Flink_cdc_load.md)
   + [Load data by using flink-connector-starrocks](/loading/Flink-connector-starrocks.md)
-  + [Load data by using Stream Load transaction interface](/loading/Stream_Load_transaction_interface.md)
   + [DataX Writer](/loading/DataX-starrocks-writer.md)
 + Data Export
   + [Export](/unloading/Export.md)

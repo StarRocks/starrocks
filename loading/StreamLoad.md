@@ -4,8 +4,6 @@ StarRocks supports importing data directly from local files in CSV file format. 
 
 Stream Load is a synchronous import method, where the user sends an HTTP request to import a local file or data stream into StarRocks. The return value of the request reflects whether the import was successful or not.
 
-StarRocks provides a Stream Load transaction interface to implement two-phase commit (2PC) of transactions that are run to stream data from external systems such as Apache Flink® and Apache Kafka®. The Stream Load transaction interface helps improve the performance of highly concurrent stream loads. You can optionally run stream load jobs by using the Stream Load transaction interface. For more information, see [Load data by using Stream Load transaction interface](/loading/Stream_Load_transaction_interface.md).
-
 ## Explanation of terms
 
 * **Coordinator**: a coordinating node. Responsible for receiving data, distributing it to other data nodes, and returning the result to the user after the import is complete.
