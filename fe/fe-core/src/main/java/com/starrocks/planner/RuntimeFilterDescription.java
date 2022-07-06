@@ -195,10 +195,6 @@ public class RuntimeFilterDescription {
         }
     }
 
-    public boolean fromBroadcastJoin() {
-        return joinMode == JoinNode.DistributionMode.BROADCAST;
-    }
-
     public void addMergeNode(TNetworkAddress addr) {
         if (mergeNodes.contains(addr)) {
             return;

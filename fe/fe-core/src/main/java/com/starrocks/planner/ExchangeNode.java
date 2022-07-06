@@ -210,9 +210,11 @@ public class ExchangeNode extends PlanNode {
 
         boolean crossExchange = false;
         if (description.canPushAcrossExchangeNode()) {
-            if (description.fromBroadcastJoin() || description.getEqualCount() == 1) {
+            // broadcast or only one RF, always can be cross exchange
+            if (description.isBroadcastJoin() || description.getEqualCount() == 1) {
                 crossExchange = true;
             } else if (description.getEqualCount() > 1 && dataPartition.getPartitionExprs().size() == 1) {
+                // RF nums > 1 and only partition by one column, only send the RF which RF's column equals partition column
                 Expr pExpr = dataPartition.getPartitionExprs().get(0);
                 if (probeExpr instanceof SlotRef && pExpr instanceof SlotRef &&
                         ((SlotRef) probeExpr).getSlotId().asInt() == ((SlotRef) pExpr).getSlotId().asInt()) {
