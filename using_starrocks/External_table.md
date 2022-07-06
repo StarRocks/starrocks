@@ -1,6 +1,6 @@
 # External tables
 
-StarRocks supports access to other data sources by using external tables. External tables are created based on data tables that are stored in other data sources. StarRocks only stores the metadata of the data tables. You can use external tables to directly query data in other data sources. StarRocks supports the following data sources: MySQL, Elasticsearch, Hive, StarRocks, Apache Iceberg, and Apache Hudi. **Currently, you can only insert data from another StarRocks cluster into the current StarRocks cluster. You cannot read data from it. For data sources other than StarRocks, you can only read data from these data sources.**
+StarRocks provide external tables for you to directly query data that is stored in external data sources. External tables are created based on data tables of other data sources. They store only the metadata of these data tables, which reduces the storage cost and simplifies data query. StarRocks supports the following data sources: MySQL, Elasticsearch, Apache Hive™, StarRocks, Apache Iceberg, and Apache Hudi. **Currently, you can only write data from another StarRocks cluster into the current StarRocks cluster. You cannot read data from it. For data sources other than StarRocks, you can only read data from these data sources.**
 
 ## MySQL external table
 
@@ -232,7 +232,7 @@ select * from es_table where esquery(k4, ' {
 
 ## External table for a JDBC-compatible database
 
-Since 2.3.0 version, StarRocks provides external tables to query JDBC-compatible databases. This way, you can analyze the data of such databases in a blazing fast manner without the need to import the data into StarRocks.  This topic describes how to create an external table in StarRocks and query data in JDBC-compatible databases.
+From v2.3.0, StarRocks provides external tables to query JDBC-compatible databases. This way, you can analyze the data of such databases in a blazing fast manner without the need to import the data into StarRocks.  This topic describes how to create an external table in StarRocks and query data in JDBC-compatible databases.
 
 ### Prerequisites
 
@@ -608,7 +608,7 @@ select count(*) from profile_wos_p7;
 
 ## Apache Iceberg external table
 
-To query the data in Iceberg, you need to create an Iceberg external table in StarRocks. When you create the table, you need to map the external table to the Iceberg table you want to query.
+From v2.1.0, StarRocks provides external tables to query data in Apache Iceberg. To query data in Iceberg, you need to create an Iceberg external table in StarRocks. When you create the table, you need to establish mapping between the external table and the Iceberg table you want to query.
 
 ### Before you begin
 
