@@ -1,4 +1,4 @@
-name: Trigger Jobs
+name: Add Label
 
 on:
   workflow_run:
@@ -11,7 +11,7 @@ permissions:
   pull-requests: write
   
 jobs:
-  Add-Approve-Label:
+  Approve:
     runs-on: ubuntu-latest
     steps:
       - name: "Get information about the original trigger of the run"
