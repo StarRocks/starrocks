@@ -71,6 +71,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -451,8 +452,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TTaskInfo info = new TTaskInfo();
             info.setTask_name(task.getName());
             info.setCreate_time(task.getCreateTime() / 1000);
-            // Now there are only MANUAL types of Tasks
-            info.setSchedule("MANUAL");
+            String scheduleStr = task.getType().name();
+            if (task.getType() == Constants.TaskType.PERIODICAL) {
+                scheduleStr += task.getSchedule();
+            }
+            info.setSchedule(scheduleStr);
             info.setDatabase(ClusterNamespace.getNameFromFullName(task.getDbName()));
             info.setDefinition(task.getDefinition());
             info.setExpire_time(task.getExpireTime() / 1000);

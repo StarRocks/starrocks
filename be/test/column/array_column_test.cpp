@@ -144,6 +144,10 @@ PARALLEL_TEST(ArrayColumnTest, test_byte_size) {
     // offset 0 with 4 bytes.
     ASSERT_EQ(16, column->byte_size(0, 1));
     ASSERT_EQ(16, column->byte_size(0));
+
+    // elements 1 with 12 bytes.
+    // offset 1 with 4 bytes.
+    ASSERT_EQ(16, column->byte_size(1, 1));
 }
 
 // NOLINTNEXTLINE

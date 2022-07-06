@@ -15,13 +15,14 @@ statement
     // Query Statement
     : queryStatement                                                                        #query
 
-    | showCreateDbStatement                                                                 #showCreateDb
     // Database Statement
+    | alterDbQuotaStmt                                                                      #alterDbQuota
     | createDbStatement                                                                     #createDb
     | dropDbStatement                                                                       #dropDb
-
+    | showCreateDbStatement                                                                 #showCreateDb
     | alterDatabaseRename                                                                   #databaseRename
-
+    | recoverDbStmt                                                                         #revoverDb
+    | showDataStmt                                                                          #showData
 
     // Table Statement
     | createTableStatement                                                                  #createTable
@@ -95,6 +96,7 @@ statement
     | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
+    | killStatement                                                                         #kill
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -106,6 +108,11 @@ statement
 
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
+alterDbQuotaStmt
+    : ALTER DATABASE identifier SET DATA QUOTA identifier
+    | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
+    ;
+
 createDbStatement
     : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? identifier
     ;
@@ -121,6 +128,16 @@ showCreateDbStatement
 
 alterDatabaseRename
     : ALTER DATABASE identifier RENAME identifier
+    ;
+
+
+recoverDbStmt
+    : RECOVER (DATABASE | SCHEMA) identifier
+    ;
+
+showDataStmt
+    : SHOW DATA
+    | SHOW DATA FROM qualifiedName
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
@@ -476,6 +493,10 @@ showDatabasesStatement
 
 showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+killStatement
+    : KILL (CONNECTION? | QUERY) INTEGER_VALUE
     ;
 
 showNodesStatement

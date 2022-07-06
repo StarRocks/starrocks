@@ -75,7 +75,7 @@ public class SelectRelation extends QueryRelation {
         this.having = having;
     }
 
-    public SelectRelation(List<Expr> outputExpr, List<String> columnOutputNames, boolean isDistinct,
+    public SelectRelation(List<Expr> outputExpr, boolean isDistinct,
                           Scope orderScope, List<Expr> orderSourceExpressions,
                           Relation relation, Expr predicate, LimitElement limit,
                           List<Expr> groupBy, List<FunctionCallExpr> aggregate, List<List<Expr>> groupingSetsList,

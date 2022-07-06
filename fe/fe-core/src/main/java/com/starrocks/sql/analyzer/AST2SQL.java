@@ -494,6 +494,7 @@ public class AST2SQL {
                     + " " + node.getOp() + " " + printWithParentheses(node.getChild(1));
         }
 
+        @Override
         public String visitLiteral(LiteralExpr node, Void context) {
             if (node instanceof DecimalLiteral) {
                 if ((((DecimalLiteral) node).getValue().scale() == 0)) {

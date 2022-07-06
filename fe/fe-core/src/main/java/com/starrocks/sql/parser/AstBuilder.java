@@ -16,6 +16,7 @@ import com.starrocks.analysis.AdminShowConfigStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
+import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
@@ -75,6 +76,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.KeysDesc;
+import com.starrocks.analysis.KillStmt;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
@@ -95,6 +97,7 @@ import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RangePartitionDesc;
+import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetStmt;
@@ -103,6 +106,7 @@ import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
+import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
@@ -228,7 +232,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
 
     // ---------------------------------------- Database Statement -----------------------------------------------------
-    
+    @Override
+    public ParseNode visitAlterDbQuotaStmt(StarRocksParser.AlterDbQuotaStmtContext context) {
+        String dbName = ((Identifier) visit(context.identifier(0))).getValue();
+        if (context.DATA() != null) {
+            String quotaValue = ((Identifier) visit(context.identifier(1))).getValue();
+            return new AlterDatabaseQuotaStmt(dbName,
+                    AlterDatabaseQuotaStmt.QuotaType.DATA,
+                    quotaValue);
+        } else {
+            String quotaValue = context.INTEGER_VALUE().getText();
+            return new AlterDatabaseQuotaStmt(dbName,
+                    AlterDatabaseQuotaStmt.QuotaType.REPLICA,
+                    quotaValue);
+        }
+    }
+
+
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
@@ -245,7 +265,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 dbName,
                 context.FORCE() != null);
     }
-    
+
     @Override
     public ParseNode visitShowCreateDbStatement(StarRocksParser.ShowCreateDbStatementContext context) {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
@@ -258,6 +278,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String dbName = ((Identifier) visit(context.identifier(0))).getValue();
         String newName = ((Identifier) visit(context.identifier(1))).getValue();
         return new AlterDatabaseRename(dbName, newName);
+    }
+
+    @Override
+    public ParseNode visitRecoverDbStmt(StarRocksParser.RecoverDbStmtContext context) {
+        String dbName = ((Identifier) visit(context.identifier())).getValue();
+        return new RecoverDbStmt(dbName);
+    }
+
+    @Override
+    public ParseNode visitShowDataStmt(StarRocksParser.ShowDataStmtContext context) {
+        if (context.FROM() != null) {
+            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+            TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+            return new ShowDataStmt(targetTableName.getDb(), targetTableName.getTbl());
+        } else {
+            return new ShowDataStmt(null, null);
+        }
     }
 
     // ------------------------------------------- Table Statement -----------------------------------------------------
@@ -1761,6 +1798,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitKillStatement(StarRocksParser.KillStatementContext context) {
+        long id = Long.parseLong(context.INTEGER_VALUE().getText());
+        if (context.QUERY() != null) {
+            return new KillStmt(false, id);
+        } else {
+            return new KillStmt(true, id);
+        }
+    }
+
+    @Override
     public ParseNode visitAdminSetConfig(StarRocksParser.AdminSetConfigContext context) {
         Map<String, String> configs = new HashMap<>();
         Property property = (Property) visitProperty(context.property());
@@ -1770,7 +1817,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs);
     }
 
-    @Override public ParseNode visitSetVar(StarRocksParser.SetVarContext ctx) {
+    @Override
+    public ParseNode visitSetVar(StarRocksParser.SetVarContext ctx) {
         Expr expr = (Expr) visit(ctx.expression());
         String variable = ctx.IDENTIFIER().getText();
         if (ctx.varType() != null) {
@@ -2393,14 +2441,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String quotedString;
         if (context.SINGLE_QUOTED_TEXT() != null) {
             quotedString = context.SINGLE_QUOTED_TEXT().getText();
-            return new StringLiteral(escapeBackSlash(quotedString.substring(1, quotedString.length() - 1)));
+            // For support mysql embedded quotation
+            // In a single-quoted string, two single-quotes are combined into one single-quote
+            quotedString = quotedString.substring(1, quotedString.length() - 1).replace("''", "'");
         } else {
             quotedString = context.DOUBLE_QUOTED_TEXT().getText();
             // For support mysql embedded quotation
             // In a double-quoted string, two double-quotes are combined into one double-quote
-            return new StringLiteral(escapeBackSlash(quotedString.substring(1, quotedString.length() - 1))
-                    .replace("\"\"", "\""));
+            quotedString = quotedString.substring(1, quotedString.length() - 1).replace("\"\"", "\"");
         }
+        return new StringLiteral(escapeBackSlash(quotedString));
     }
 
     private static String escapeBackSlash(String str) {

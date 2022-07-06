@@ -167,5 +167,16 @@ public class RestrictOpMaterializedViewTest {
         }
     }
 
+    @Test
+    public void testDropTable() {
+        String sql1 = "drop table db1.mv1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            assertTrue(e.getMessage().contains("is a materialized view,use 'drop materialized view mv1' to drop it."));
+        }
+    }
+
 }
 
