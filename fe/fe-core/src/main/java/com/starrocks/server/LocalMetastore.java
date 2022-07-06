@@ -4153,7 +4153,8 @@ public class LocalMetastore implements ConnectorMetadata {
                         if (olapTable.isLakeTable()) {
                             // for debug
                             LOG.info("onEraseOlapTable, isLakeTable");
-                            GlobalStateMgr.getCurrentState().getShardDelete().addShardId(tabletId, (LakeTablet) tablet);
+                            GlobalStateMgr.getCurrentState().getStarosInfo()
+                                    .getShardDelete().addShardId(tabletId, (LakeTablet) tablet);
                         }
                         
                     } // end for tablets

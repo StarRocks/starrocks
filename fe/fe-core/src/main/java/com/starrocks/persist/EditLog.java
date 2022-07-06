@@ -38,6 +38,7 @@ import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
+import com.starrocks.catalog.lake.ShardDelete;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -880,6 +881,10 @@ public class EditLog {
                     globalStateMgr.getInsertOverwriteJobManager().replayInsertOverwriteStateChange(stateChangeInfo);
                     break;
                 }
+                case OperationType.OP_DELETE_SHARD: {
+                    ShardDelete shardDeleteInfo = (ShardDelete) journal.getData();
+                    globalStateMgr.getStarosInfo().getShardDelete().replayDeleteShard(shardDeleteInfo);
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1486,5 +1491,9 @@ public class EditLog {
 
     public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
         logEdit(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log);
+    }
+
+    public void logShardDelete(ShardDelete info) {
+        logEdit(OperationType.OP_DELETE_SHARD, info);
     }
 }
