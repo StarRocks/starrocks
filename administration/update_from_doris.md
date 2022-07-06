@@ -1,46 +1,40 @@
-# 从 ApacheDoris 升级为 Starrocks 标准版操作手册
+# 升级 Apache Doris 至 StarRocks
 
-## 升级环境
+本文介绍如何将 Apache Doris 升级为 StarRocks。
 
-> 注意：当前只支持从 apache doris 的 0.13.15（不包括）之前的版本升级。0.13.15 版本在升级 fe 时需要修改源码处理，该版本可以联系官方人员协助升级。0.14 及以后的版本暂时不支持升级。
+当前仅支持从 Apache Doris 0.13.15（不包含）以前版本升级至 StarRocks。如果您需要升级 Apache Doris 0.13.15 至 StarRocks，请联系官方人员协助修改源码。当前暂不支持 Apache Doris 0.14 及以后版本升级至 StarRocks。
 
-1. 获取原有集群信息
+> 注意：
+>
+> * 因为 StarRocks 支持 BE 后向兼容 FE，所以请务必**先升级 BE 节点，再升级 FE 节点**。错误的升级顺序可能导致新旧 FE、BE 节点不兼容，进而导致 BE 节点停止服务。
+> * 请谨慎跨版本升级。如需跨版本升级，建议您在测试环境验证无误后再升级生产环境。Apache Doris 升级至 Starrocks-2.x 版本时需要前置开启 CBO，因此您需要先将 Apache Doris 升级至 StarRocks 1.19.x 版本。您可以在[官网](https://www.starrocks.com/zh-CN/download)获取 1.19.x 版本的安装包。
 
-    如果原有集群 FE/BE/broker 信息未给出，可以通过 MySQL 连接到 FE 的方式，并使用以下 SQL 命令查看并确认清楚：
+## 检查升级环境
+
+1. 通过 MySQL 客户端查看原有集群信息。
 
     ```SQL
-    show frontends;
-    show backends;
-    show broker;
+    SHOW FRONTENDS;
+    SHOW BACKENDS;
+    SHOW BROKER;
     ```
 
-    重点关注：
+    记录 FE、BE 的 数量、IP 地址、版本等信息，以及 FE 的 Leader、Follower、Observer 信息。
 
-    a. FE、BE 的 数量/IP/版本 等信息；
-  
-    b. FE 的 Leader、Follower、Observer 情况；  
+2. 确认安装相关路径。
 
-2. 假设
+    以下示例假设原 Apache Doris 目录为 `/home/doris/doris/`，Starrocks 新目录为 `/home/starrocks/starrocks/`。为减少误操作，后续步骤将采用全路径方式。请根据您的实际情况修改示例中的路径信息。
 
-    这里假设原 Apache Doris 目录为 `/home/doris/doris/`, 手工安装的 Starrocks 新目录为 `/home/starrocks/starrocks/`，为了减少操作失误，后续步骤采用全路径方式。如有具体升级中个，存在路径差异，建议统一修改文档中对应路径，然后严格按照操作步骤执行。
+    > 注意：在某些情况下，Apache Doris 目录可能为 `/disk1/doris`。
 
-    有些 `/home/doris` 是软链接，可能会使用 `/disk1/doris` 等，具体情况下得注意
+3. 查看 BE 配置文件。
 
-3. 检查 BE 配置文件
+    检查 **be.conf** 文件中 `default_rowset_type` 配置项的值：
 
-    ```bash
-    # 检查BE 配置文件的一些字段
-    vim /home/doris/doris/be/conf/be.conf
-    ```
+    * 如果该配置项的值为 `ALPHA`，则说明全部数据都使用 segmentV1 格式，需要修改配置项为 BETA，并做后续检查和转换。
+    * 如果该配置项的值为 `BETA`，则说明数据已使用 segmentV2 格式，但可能仍有部分 Tablet 或 Rowset 使用 segmentV1 格式，需要做后续检查和转换。  
 
-    重点是，检查 default_rowset_type = BETA 配置项，确认是否是 BETA 类型：
-
-    a. 如果为 BETA，说明已经开始使用 segmentV2 格式，但还有可能有部分 tablet 或 rowset 还是 segmentV1 格式，也需要检查和转换。  
-
-    b. 如果是 ALPHA，说明全部数据都是 segmentV1 格式，则需要修改配置为 BETA，并做后续检查和转换。  
-
-4. 测试 SQL
-    可以测试下，看看当前数据的情况。
+4. 测试 SQL 情况。
 
     ```SQL
     show databases;
@@ -50,30 +44,23 @@
     select count(*) from {one_table};
     ```
 
-## 升级准备
+## 转化数据格式
 
-1. 检查文件格式
+转换过程将花费较长时间。如果数据中存在大量 segmentV1 格式数据，建议您提前进行转化操作。
 
-    a. 下载文件格式检测工具
+1. 检查文件格式。
 
-    ```bash
-    # git clone 或直接从其他地方下载包
-    http://Starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/show_segment_status.tar.gz
-    ```
-
-    b. 解压 `show_segment_status.tar.gz` 包
+    a. 下载并安装文件格式检测工具。
 
     ```bash
+    # 您也可以通过 git clone 或直接从当前地址直接下载。
+    wget http://Starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/show_segment_status.tar.gz
     tar -zxvf show_segment_status.tar.gz
     ```
 
-    c. 修改 `conf` 文件
+    b. 修改安装路径下的 **conf** 文件，根据实际情况配置以下配置项。
 
-    ```bash
-    vim conf
-
-    进行修改文件
-
+    ```conf
     [cluster]
     fe_host =10.0.2.170
     query_port =9030
@@ -82,209 +69,276 @@
 
     # Following confs are optional
     # select one database
-    db_names =  数据库名
+    db_names =              // 填写数据库名
     # select one table
-    table_names =  表名
+    table_names =           // 填写表名
     # select one be. when value is 0 means all bes
     be_id = 0
     ```
 
-    d. 设置完成后，运行检测脚本，检测是否已经转换为了 segmentV2。
+    c. 设置完成后，运行检测脚本，检测数据格式。
 
     ```bash
     python show_segment_status.py
     ```
 
-    e. 检查工具输出信息：rowset_count 的两个值是否相等，数目不相等时，就说明存在这种 segmentv1 的表，需要进行转换。
+    d. 检查以上工具输出信息 `rowset_count` 的两个值是否相等。如果数目不相等，说明数据中存在 segmentv1 格式的表，需要进行对该部分数据转换。
 
-2. 寻找 segmentv1 的表，进行转换
-    针对每一个有 segmentV1 格式数据的表，进行格式转换：
+2. 转换数据格式。
+
+    a. 转换数据格式为 segmentV1 的表。
 
     ```SQL
-    -- 修改格式
     ALTER TABLE table_name SET ("storage_format" = "v2");
+    ```
 
-    -- 等待任务完成。 status 字段值为 FINISHED 即可
+    b. 查看转化状态。当 `status` 字段值为 `FINISHED` 时，表明格式转换完成。
+
+    ```sql
     SHOW ALTER TABLE column;
     ```
 
-    并再次重复运行 python `show_segment_status.py` 语句来检查：
+    c. 重复运行数据格式检查工具查看数据格式状态。如果已经显示成功设置 `storage_format` 为 `V2` 了，但仍有数据为 segmentV1 格式，您可以通过以下方式进一步检查并转换：
 
-    如果已经显示成功设置 storage_format 为 V2 了，但还是有数据是 v1 格式的，则可以通过以下方式进一步检查：
+      i.   逐个查询所有表，获取表的元数据链接。
 
-    a. 逐个寻找所有表，通过 `show tablet from table_name` 获取表的元数据链接；
+    ```sql
+    SHOW TABLET FROM table_name;
+    ```
 
-    b. 通过 MetaUrl，类似 `wget http://172.26.92.139:8640/api/meta/header/11010/691984191获取tablet` 的元数据；
+      ii.  通过元数据链接获取 Tablet 元数据。
 
-    c. 这时候本地会出现一个 `691984191` 的 JSON 文件，查看其中的 `rowset_type` 看看内容是不是 `ALPHA_ROWSET/BETA_ROWSET`；
+    示例：
 
-    d. 如果是 ALPHA_ROWSET，就表明是 segmentV1 的数据，需要进行转换到 segmentV2。
+    ```shell
+    wget http://172.26.92.139:8640/api/meta/header/11010/691984191
+    ```
 
-    如果直接修改 storage_format 为 v2 的方法执行后，还是有数据为 v1 版本，则需要再使用如下方法处理（但一般不会有问题，这个方法也比较麻烦）：
+      iii. 查看本地的元数据 JSON 文件，确认其中的 `rowset_type` 的值。如果为 `ALPHA_ROWSET`，则表明该数据为 segmentV1 格式，需要进行转换。
+
+      iv.  如果仍有数据为 segmentV1 格式，您需要通过以下示例中的方法转换。
+
+      示例：
 
     ```SQL
-    -- 方法2:参考SQL 通过重新导入数据到临时分区，然后分区替换的方式来处理SegmentV2的转化
-    alter table dwd_user_tradetype_d
+    ALTER TABLE dwd_user_tradetype_d
     ADD TEMPORARY PARTITION p09
-    VALUES [('2020-09-01'), ('2020-10-01'))
+    VALUES [('2020-09-01'), ('2020-10-01')]
     ("replication_num" = "3")
     DISTRIBUTED BY HASH(`dt`, `c`, `city`, `trade_hour`) BUCKETS 16;
 
-    insert into dwd_user_tradetype_d TEMPORARY partition(p09)
+    INSERT INTO dwd_user_tradetype_d TEMPORARY partition(p09)
     select * from dwd_user_tradetype_d partition(p202009);
 
     ALTER TABLE dwd_user_tradetype_d
     REPLACE PARTITION (p202009) WITH TEMPORARY PARTITION (p09);
     ```
 
-## 升级 BE
+## 升级 BE 节点
 
-> 注意：BE 升级采用逐台升级的方式，确保机器升级无误后，隔点时间/隔一天再升级其他机器
+升级遵循**先升级 BE，后升级 FE**的顺序。
 
-准备工作：解压缩 Starrocks，并重命名为 Starrocks；
+> 注意：BE 升级采用逐台升级的方式。完成当前机器升级后，须间隔一定时间（推荐时间间隔为一天）确保当前机器升级无误后，再升级其他机器。
 
-```bash
-cd ~
-tar xzf Starrocks-EE-1.19.6/file/Starrocks-1.19.6.tar.gz
-mv Starrocks-1.19.6/ Starrocks
-```
+1. 下载并解压缩 StarRocks 安装包，并重命名安装路径为 **Starrocks**。
 
-* 比较并拷贝原有 conf/be.conf 的内容到新的 BE 中的 conf/be.conf 中；
+    ```bash
+    cd ~
+    tar xzf Starrocks-EE-1.19.6/file/Starrocks-1.19.6.tar.gz
+    mv Starrocks-1.19.6/ Starrocks
+    ```
 
-```bash
-# 比较并修改和拷贝
-vimdiff /home/doris/Starrocks/be/conf/be.conf /home/doris/doris/be/conf/be.conf
+2. 比较并拷贝原有 **conf/be.conf** 的内容到新的 BE **conf/be.conf** 中。
 
-# 重要关注下面（拷贝此行配置到新 BE 中，一般建议继续使用原数据目录）
-storage_root_path = {data_path}
-```
+    ```bash
+    # 比较并修改和拷贝
+    vimdiff /home/doris/Starrocks/be/conf/be.conf /home/doris/doris/be/conf/be.conf
 
-* 检查是否是用 supervisor 启动的 BE：
-    *如果是 supervisor 启动的，就需要通过 supervisor 发送命令重启 BE
-    *如果没有部署 supervisor, 则需要手动重启 BE
+    # 拷贝以下配置到新 BE 配置文件中，建议您使用原有数据目录。
+    storage_root_path =     // 原有数据目录
+    ```
 
-```bash
-# check 原有进程（原来的是 palo_be)
-ps aux | grep palo_be
-# 检查是否有 supervisor(只需要看 doris 账户下的进程）
-ps aux | grep supervisor
+3. 检查系统是否使用 Supervisor 启动 BE，并关闭 BE。
 
-## 下面 a/b 是二选一
-# a、如果没有supervisor，则直接关闭原有be 进程
-sh /home/doris/doris/be/bin/stop_be.sh
-# b、如果有 supervisor，用 control.sh脚本关闭 be
-cd /home/doris/doris/be && ./control.sh stop && cd -
+    ```bash
+    # 检查原有进程（palo_be)。
+    ps aux | grep palo_be
+    # 检查 doris 账户下是否有 Supervisor 进程。
+    ps aux | grep supervisor
+    ```
 
-# !!！检查： mysql中确保 Alive 为 false，以及 LastStartTime 为最新时间（见下图）
-mysql> show backends;
-# !!!   并且进程不在了（palo_be)
-ps aux | grep be
-ps aux | grep supervisor
+    * 如果已部署并使用 Supervisor 启动 BE，您需要通过 Supervisor 发送命令关闭 BE。
 
-# 启动新 BE
-sh /home/doris/Starrocks/be/bin/start_be.sh --daemon
-# 检查：以及进程存在（新进程名为 Starrocks_be)
-ps aux | grep starrocks_be
-# 检查：mysql 中 alive 为 true（见下图）
-mysql> show backends;
-```
+    ```bash
+    cd /home/doris/doris/be && ./control.sh stop && cd -
+    ```
 
-* 观察升级结果：
-    *观察 be.out，查看是否有异常日志。
-    *观察 be.INFO，查看 heartbeat 是否正常。
-    *观察 be.WARN, 查看有什么异常。
-    *登录集群，发送 show backends, 查看是否 Alive 这一栏是否为 true。
-* 升级 2 个 BE 后，show frontends 下，看 ReplayedJournalId 是否在增长，以说明导入是否没问题。
+    * 如果没有部署 Supervisor, 您需要手动关闭 BE。
 
-## 升级 FE
+    ```bash
+    sh /home/doris/doris/be/bin/stop_be.sh
+    ```
 
-> 注意：FE 升级采用先升级 Observer，再升级 Follower，最后升级 Master 的逻辑。
-> 如果是从 apache doris 0.13.15 版本升级，先要修改 starrocks 的 fe 模块的源码，并重新编译 fe 模块。如果没有编译过 fe 模块，可以找官方技术支持提供帮助。
+4. 查看 BE 进程状态，确认节点 `Alive` 为 `false`，并且 `LastStartTime` 为最新时间。
 
-* 修改 fe 源码(如果不是从 apache doris 0.13.15 版本升级，跳过此步骤)
-    *下载源码 patch
+    ```sql
+    SHOW BACKENDS;
+    ```
+
+    确认 BE 进程已不存在。
+
+    ```bash
+    ps aux | grep be
+    ps aux | grep supervisor
+    ```
+
+5. 启动新的 BE 节点。
+
+    ```bash
+    sh /home/doris/Starrocks/be/bin/start_be.sh --daemon
+    ```
+
+6. 检查升级结果。
+
+    * 查看新 BE 进程状态。
+
+    ```bash
+    ps aux | grep be
+    ps aux | grep supervisor
+    ```
+
+    * 通过 MySQL 客户端查看节点 `Alive` 状态。
+
+    ```sql
+    SHOW BACKENDS;
+    ```
+
+    * 查看 **be.out**，检查是否有异常日志。
+    * 查看 **be.INFO**，检查 heartbeat 是否正常。
+    * 查看 **be.WARN**, 检查是否有异常日志。
+
+> 注意：成功升级 2 个 BE 节点后，您可以通过 `SHOW FRONTENDS;` 查看 `ReplayedJournalId` 是否在增长，以检测导入是否存在问题。
+
+## 升级 FE 节点
+
+成功升级 BE 节点后，您可以继续升级 FE 节点。
+
+> 注意：升级 FE 遵循**先升级 Observer，再升级 Follower，最后升级 Master** 的顺序。
+
+1. 修改 FE 源码（可选，如果您无需从 Apache Doris 0.13.15 版本升级，可以跳过此步骤）。
+
+    a. 下载源码 patch。
 
     ```bash
     wget "http://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/upgrade_from_apache_0.13.15.patch"
     ```
 
-    *git 命令合入 patch
+    b. 合入源码 patch。
+
+    * 通过 Git 合入。
 
     ```bash
     git apply --reject upgrade_from_apache_0.13.15.patch
     ```
 
-    *如果本地代码没有在 git 环境中，也可以根据 patch 的内容手动合入。
+    * 如果本地代码不在 Git 环境中，您也可以根据 patch 的内容手动合入。
 
-    *编译 fe 模块
+    c. 编译 FE 模块。
 
     ```bash
     ./build.sh --fe --clean
     ```
 
-* 登录集群，确定 Master 和 Follower，如果 IsMaster 为 true，代表是 Master。其他的都是 Follower/Observer。
-* 升级 Follower 或者 Master 之前确保备份元数据，这一步非常重要，因为要确保没有问题。
-    *cp doris-meta doris-meta.20210313 用升级的日期做备份时间即可。
-* 比较并拷贝原有 conf/fe.conf 的内容到新的 FE 中的 conf/fe.conf 中；
+2. 通过 MySQL 客户端确定各 FE 节点的 Master 和 Follower 身份。
 
-```bash
-# 比较并修改和拷贝 
-vimdiff /home/doris/Starrocks/fe/conf/fe.conf /home/doris/doris/fe/conf/fe.conf
+    ```sql
+    SHOW FRONTENDS;
+    ```
 
-# 重要关注下面（修改此行配置到新 FE 中，在原 doris 目录，新的 meta 文件（后面会拷贝）)
-meta_dir = /home/doris/doris/fe/doris-meta
-# 维持原有java堆大小等信息
-JAVA_OPTS="-Xmx8192m
-```
+    如果 `IsMaster` 为 `true`，代表该节点为 Master，否则为 Follower 或 Observer。
 
-```bash
-# check 原有进程
-ps aux | grep fe
-# 检查是否有 supervisor(只需要看 doris 账户下的进程）
-ps aux | grep supervisor
+3. 检查系统是否使用 Supervisor 启动的 FE，并关闭 FE。
 
-## 下面 a/b 是二选一
-# a、如果没有supervisor，则直接关闭原有fe 进程
-sh /home/doris/doris/fe/bin/stop_fe.sh
-# b、如果有 supervisor，用 control.sh脚本关闭 fe
-cd /home/doris/doris/fe && ./control.sh stop && cd -
+    ```bash
+    # 查看原有进程。
+    ps aux | grep fe
+    # 检查 Doris 账户下是否有 Supervisor 进程
+    ps aux | grep supervisor
+    ```
 
-# !!！并检查： mysql中确保 Alive 为 false
-mysql> show frontends;
-# !!!   并且进程不在了
-ps aux | grep fe
-ps aux | grep supervisor
+    * 如果已部署并使用 Supervisor 启动 FE，您需要通过 Supervisor 发送命令关闭 FE。
 
-# !!! 如果更改 meta 目录，则需要先停止后，再复制 meta
-cp -r /home/doris/doris/fe/palo-meta /home/doris/doris/fe/doris-meta
+    ```bash
+    cd /home/doris/doris/fe && ./control.sh stop && cd -
+    ```
 
-# 启动新 FE 
-sh /home/doris/Starrocks/fe/bin/start_fe.sh --daemon
-# 检查：进程是否已经存在
-ps aux | grep StarRocksFE
-# 检查：用当前 FE 登录 mysql，并且其中alive 为 true
-#  ，ReplayedJournalId 在同步甚至增长，以及进程存在
-mysql> show frontends;
-```
+    * 如果没有部署 Supervisor, 您需要手动关闭 BE。
 
-* 观察升级结果：
-    *观察 fe.out/fe.log 查看是否有错误信息。
-    *如果 fe.log 始终是 UNKNOWN 状态， 没有变成 Follower、Observer，说明有问题。
-    *fe.out 报各种 Exception，也有问题。
-（注意要先升级 Observer ，再升级 Follower ）
+    ```bash
+    sh /home/doris/doris/fe/bin/stop_fe.sh
+    ```
 
-* 如果是修改源码升级的，需要等元数据产生新 image 之后(meta/image 目录下有 image.xxx 的新文件产生)，将 fe 的 lib 包替换回发布包。
+4. 查看 FE 进程状态，确认节点 `Alive` 为 `false`。
+
+    ```sql
+    SHOW FRONTENDS;
+    ```
+
+    确认 BE 进程已不存在。
+
+    ```bash
+    ps aux | grep fe
+    ps aux | grep supervisor
+    ```
+
+5. 升级 Follower 或者 Master 之前，务必确保备份元数据。您可以使用升级的日期做备份时间。
+
+    ```bash
+    cp -r /home/doris/doris/fe/palo-meta /home/doris/doris/fe/doris-meta
+    ```
+
+6. 比较并拷贝原有 **conf/fe.conf** 的内容到新 FE 的 **conf/fe.conf** 中。
+
+    ```bash
+    # 比较并修改和拷贝。
+    vimdiff /home/doris/Starrocks/fe/conf/fe.conf /home/doris/doris/fe/conf/fe.conf
+
+    # 修改此行配置到新 FE 中，在原 doris 目录，新的 meta 文件（后面会拷贝）。
+    meta_dir = /home/doris/doris/fe/doris-meta
+    # 维持原有java堆大小等信息。
+    JAVA_OPTS="-Xmx8192m
+    ```
+
+7. 启动新的 FE 节点。
+
+    ```bash
+    sh /home/doris/Starrocks/fe/bin/start_fe.sh --daemon
+    ```
+
+8. 检查升级结果。
+
+    * 查看新 FE 进程状态。
+
+    ```bash
+    ps aux | grep be
+    ps aux | grep supervisor
+    ```
+
+    * 通过 MySQL 客户端查看节点 `Alive` 状态。
+
+    ```sql
+    SHOW BACKENDS;
+    ```
+
+    * 查看 **fe.out** 或 **fe.log**，检查是否有异常日志。
+    * 如果 **fe.log** 始终是 UNKNOWN 状态，没有变成 Follower、Observer，说明升级出现问题。
+
+> 注意：如果您通过修改源码升级，需要等元数据产生新 image 之后（既 **meta/image** 目录下有新的 **image.xxx** 文件生成），再将 **fe/lib** 路径替换回新的安装路径。
 
 ## 回滚方案
 
-> 注意：从 ApacheDoris 升级为 Starrocks，暂时不支持回滚，建议先在测试环境验证测试没问题后再升级线上。如有遇到问题无法解决，可以添加下面企业微信寻求帮助。
+从 Apache Doris 升级的 StarRocks 暂时不支持回滚。建议您在测试环境验证测试成功后再升级至生产环境。
+
+如果遇到无法解决的问题，您可以添加下方企业微信寻求帮助。
 
 ![二维码](../assets/8.3.1.png)
-
-## 注意事项
-
-1. segmentV1 转 segmentV2 需要费时间来完成，这个可能需要一定时间，如果存在大量表数据格式为 V1 的话，建议用户平时就可以进行这个操作转换数据格式。
-
-2. 需要先升级 BE、再升级 FE，因为 Starrocks 的标准版中 BE 是兼容 FE 的。升级 BE 的过程中，需要进行灰度升级，先升级一台 BE，过一天观察无误，再升级其他 FE。
-
-3. 跨版本升级时需要谨慎，测试环境验证后再操作，且升级 Starrocks-2.x 版本时需要前置开启 CBO，需要升级至 2.x 版本的用户需先升级 1.19.x 版本。可在官网获取最新版本的 1.19.x 安装包（1.19.7）。
