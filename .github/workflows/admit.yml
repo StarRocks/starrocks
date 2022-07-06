@@ -2,13 +2,12 @@ name: Trigger Jobs
 
 on: 
   pull_request_review
-
+permissions:
+  actions: write
+  contents: read
+  security-events: write
 jobs:
   Trigger-Admit-Test:
-    permissions:
-      actions: read
-      contents: read
-      security-events: write
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
