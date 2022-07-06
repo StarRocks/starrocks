@@ -47,7 +47,7 @@ public enum TransactionStatus {
             case 4:
                 return ABORTED;
             default:
-                return null;
+                return UNKNOWN;
         }
     }
 
