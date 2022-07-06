@@ -80,7 +80,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
     // if enable erase later, the real recycle time is RecycleTime + LATE_RECYCLE_INTERVAL_SECONDS
     // This is only useful on master, when tablet scheduler repair a tablet that is about to expire
-    // We can make the db/table/partition infomation stay logger until the asynchronized agent task finish.
+    // We can make the db/table/partition infomation stay longer until the asynchronized agent task finish.
     protected static int LATE_RECYCLE_INTERVAL_SECONDS = 60;
     protected Map<Long, Long> idToRecycleTime;
     protected Set<Long> enableEraseLater;
