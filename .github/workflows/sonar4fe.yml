@@ -92,7 +92,7 @@ jobs:
 #        if: steps.changed-files-specific.outputs.files_changed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: 23d4ba0aa0f8c547f3db2c329c96546e2e280468 # ${{ secrets.SONAR_TOKEN }}
         run: |
           #docker run --privileged -v "/home/runner"/.m2:/root/.m2 -v ${{ github.workspace }}:/root/starrocks -v /etc/timezone:/etc/timezone:ro -v /etc/localtime:/etc/localtime:ro --name temp -d starrocks/dev-env:${GITHUB_REF_NAME} /bin/bash -c "while true;do echo hello;sleep 1;done"
           #sleep 10 && echo "initialize docker container-----"
