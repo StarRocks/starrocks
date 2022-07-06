@@ -1,200 +1,165 @@
-# Export
+# 数据导出
 
-## Export 总览
+本文介绍如何把 StarRocks 集群中的数据，导出并存储到其他介质上。
 
-StarRocks 拥有 Export 一种将数据导出并存储到其他介质上的功能。该功能可以将用户指定的表或分区的数据，以文本的格式，通过 Broker 进程导出到远端存储上，如 HDFS/阿里云OSS/AWS S3（或者兼容S3协议的对象存储） 等。
+StarRocks 提供的数据导出功能。您可以使用该功能将指定表或分区上的数据，以 CSV 的格式，通过 Broker 程序导出到外部云存储系统，如 HDFS、阿里云 OSS、AWS S3、或其他兼容 S3 协议的对象存储服务。
 
-本章介绍StarRocks数据导出的基本原理、使用方式、最佳实践以及注意事项。
+## 前提条件
 
-## 名词解释
+Broker Load 需要借助 Broker 程序程访问外部云存储系统。因此，使用 Broker Load 前，需要提前部署好 Broker 程序。
 
-* **FE**：Frontend，StarRocks的前端节点。负责元数据管理和请求接入。
-* **BE**：Backend，StarRocks的后端节点。负责查询执行和数据存储。
-* **Broker**：StarRocks 可以通过 Broker 进程对远端存储进行文件操作。
-* **Tablet**：数据分片。一个表会分成 1 个或多个分区，每个分区会划分成多个数据分片。
+有关如何部署 Broker 程序的信息，请参见[部署 Broker 节点](/quick_start/Deploy.md)。
 
-## 原理
+## 注意事项
 
-### 导出作业的执行流程
+- 建议不要一次性导出大量数据。一个导出作业建议的导出数据量最大为几十 GB。一次性导出过量数据可能会导致导出失败，重试的成本也会增加。
 
-用户提交一个**导出作业**后，StarRocks 会统计这个作业涉及的所有 Tablet，然后对这些 Tablet 进行**分组**，**每组生成一个**特殊的**查询计划**。该**查询计划**会读取所包含的 Tablet 上的数据，然后通过 Broker 将数据写到远端存储指定的路径中。
+- 如果表数据量过大，建议按照分区导出。
 
-导出作业的总体处理流程如下:
+- 在导出作业运行过程中，如果 FE 发生重启或切主，会导致导出作业失败，您需要重新提交导出作业。
 
-![asset](../assets/5.3.1-1.png)
+- 导出作业运行完成后（成功或失败），若 FE 发生重启或切主，则 SHOW EXPORT 语句返回的导出作业信息会发生部分丢失，无法查看。
 
-上图描述的处理流程主要包括：
+- 导出作业只会导出原始表 (Base Table) 的数据，不会导出物化视图的数据。
 
-1. 用户提交一个 Export 作业到 FE。
+- 导出作业会扫描数据，占用 I/O 资源，可能会影响系统的查询延迟。
 
-2. PENDING阶段：FE 生成**一个** ExportPendingTask，向 BE 发送 snapshot 命令，对所有涉及到的 Tablet 做一个快照，并生成**多个**查询计划。
+## 导出流程
 
-3. EXPORTING阶段：FE 生成**一个** ExportExportingTask，BE和Broker会根据FE生成的查询计划配合完成数据导出工作。
+提交一个导出作业后，StarRocks 会统计这个作业涉及的所有 Tablet，然后对这些 Tablet 进行分组，每组生成一个特殊的查询计划。该查询计划会读取所包含的 Tablet 上的数据，然后通过 Broker 将数据写到远端存储上指定的路径中。
 
-### 查询计划拆分
+导出作业的总体处理流程如下图所示。
 
-Export 作业会生成多个查询计划，每个查询计划负责扫描一部分 Tablet。每个查询计划中**每个 BE** 扫描的数据量由 FE 配置参数 `export_max_bytes_per_be_per_task` 计算得到，默认为 256M。每个查询计划中每个 BE 最少一个 Tablet，最多导出的数据量不超过配置的参数 `export_max_bytes_per_be_per_task`。
+![导出作业流程图](/assets/5.1-2.png)
 
-一个作业的多个查询计划**并行执行**，任务线程池的大小通过 FE 参数 `export_task_pool_size` 配置，默认为 5。
+导出作业的总体处理流程主要包括以下三个步骤：
 
-### 查询计划执行
+1. 用户提交一个导出作业到 Leader FE。
+2. Leader FE 会先向集群中所有的 BE 发送 `snapshot` 命令，对所有涉及到的 Tablet 做一个快照，以保持导出数据的一致性，并生成多个导出子任务。每个子任务即为一个查询计划，每个查询计划会负责处理一部分 Tablet。
+3. Leader FE 会把一个个导出子任务发送给 BE 执行。
 
-一个查询计划扫描多个分片，将读取的数据以行的形式组织，**每 1024 行**为  **一个** batch，调用 Broker 写入到远端存储上。
+## 基本原理
 
-查询计划遇到错误会整体自动重试 3 次。如果一个查询计划重试 3 次依然失败，则整个作业失败。
+在执行查询计划的时候，StarRocks 会首先在指定的远端存储上的路径中，建立一个名为 `__starrocks_export_tmp_xxx` 的临时目录，其中，`xxx` 为导出作业的查询 ID，例如 `__starrocks_export_tmp_921d8f80-7c9d-11eb-9342-acde48001122`。导出的数据首先会写入这个临时目录。每个查询计划执行成功以后，会写入到这个临时目录下的一个临时文件。
 
-StarRocks 会首先在指定的远端存储的路径中，建立一个名为 `__starrocks_export_tmp_921d8f80-7c9d-11eb-9342-acde48001122` 的临时目录（其中 `921d8f80-7c9d-11eb-9342-acde48001122` 为作业的 query id）。导出的数据首先会写入这个临时目录。导入成功后每个查询计划会生成一个文件，文件名示例：
+当所有数据都导出后，StarRocks 会通过 RENAME 语句把这些文件保存到到指定的路径中。
 
-`lineorder_921d8f80-7c9d-11eb-9342-acde48001122_1_2_0.csv.1615471540361`
+## 相关配置
 
-其中:
+这里主要介绍 FE 和 Broker 上一些跟数据导出有关的参数配置。
 
-* `1615471540361` 为时间戳，用于保证重试生成的文件不冲突。
+### FE 参数配置
 
-当所有数据都导出后，StarRocks 会将这些文件 **rename** 到用户指定的路径中，rename的时候会去掉后面的时间戳。最终导出的文件名示例：
+- `export_checker_interval_second`：导出作业调度器的调度间隔。默认为 5 秒。设置该参数需重启 FE。
+- `export_running_job_num_limit`：正在运行的导出作业数量限制。如果超过这一限制，则作业在执行完 `snapshot` 后进入等待状态。默认为 5。可以在导出作业运行时调整该参数的取值。
+- `export_task_default_timeout_second`：导出作业的超时时间。默认为 2 小时。可以在导出作业运行时调整该参数的取值。
+- `export_max_bytes_per_be_per_task`：每个导出子任务在每个 BE 上导出的最大数据量，用于拆分导出作业并行处理。按压缩后数据量计算，默认为 256 MB。
+- `export_task_pool_size`：导出子任务线程池的大小，即线程池中允许并行执行的最大子任务数。默认为 5。
 
-`lineorder_921d8f80-7c9d-11eb-9342-acde48001122_1_2_0.csv`
+### Broker 参数配置
 
-其中:
+不同的 Broker 提供不同的参数配置，具体请参见 [Broker 配置项](/administration/Configuration.md)。
 
-* `lineorder_`：为导出文件的前缀，由用户指定到导出路径中，不指定默认为`data_`。
-* `921d8f80-7c9d-11eb-9342-acde48001122`：为作业的 query id。文件名默认包含 query id，指定参数 include_query_id = false 后不包含。
-* `1_2_0`：分为三部分，第一部分为**查询计划**对应任务的序号，第二部分为任务中**实例**的序号，第三部分为一个实例中**生成文件**的序号。
-* `csv`：为导出文件格式，目前只支持 csv 格式。
+## 基本操作
 
-#### Broker 参数
+### 提交导出作业
 
-导出作业需要借助 Broker 进程访问远端存储，不同的 Broker 需要提供不同的参数，具体请参阅 [Broker文档](../administration/Configuration.md)。
+可以通过如下命令把 `db1` 数据库中 `tbl1` 表在 `p1` 和 `p2` 分区上 `col1` 和 `col3` 两列的数据导出到 HDFS 存储上的 `export` 目录中：
 
-### 使用示例
-
-#### 提交导出作业
-
-导出作业举例如下：
-
-~~~sql
+```SQL
 EXPORT TABLE db1.tbl1 
+
 PARTITION (p1,p2)
+
 (col1, col3)
-TO "hdfs://host/path/to/export/lineorder_" 
+
+TO "hdfs://HDFS_IP:HDFS_Port/export/lineorder_" 
+
 PROPERTIES
+
 (
+
     "column_separator"=",",
+
     "load_mem_limit"="2147483648",
+
     "timeout" = "3600"
+
 )
-WITH BROKER "hdfs"
+
+WITH BROKER "broker1"
+
 (
+
     "username" = "user",
+
     "password" = "passwd"
+
 );
-~~~
+```
 
-可以指定需要导出的分区，不写默认导出表中所有分区。
+有关 EXPORT 语句的详细语法和参数说明，请参见 [EXPORT](/sql-reference/sql-statements/data-manipulation/EXPORT.md)。
 
-可以指定需要导出的列，顺序可以跟 schema 不同，不写默认导出表中所有列。
+### 获取导出作业的查询 ID
 
-导出路径**如果指定到目录**，需要指定最后的`/`，否则最后的部分会被当做导出文件的前缀。不指定前缀默认为`data_`。
-示例中导出文件会生成到 export 目录中，文件前缀为 `lineorder_`。
+提交导出作业后，可以通过 SELECT LAST_QUERY_ID() 语句获取导出作业的查询 ID。您可以通过查询到的 ID 查看或者取消导出作业。
 
-PROPERTIES如下：
+有关 SELECT LAST_QUERY_ID() 语句的详细语法和参数说明，请参见 [last_query_id](/sql-reference/sql-functions/utility-functions/last_query_id.md)。
 
-* `column_separator`：列分隔符。默认为 `\t`。
-* `line_delimiter`：行分隔符。默认为 `\n`。
-* `load_mem_limit`： 表示 Export 作业中，**一个查询计划**在**单个 BE** 上的内存使用限制。默认 2GB。单位字节。
-* `timeout`：作业超时时间。默认为 2 小时。单位秒。
-* `include_query_id`: 导出文件名中是否包含 query id，默认为 true。
+### 查看导出作业的状态
 
-### 获取导出作业 query id
+提交导出作业后，可以通过 SHOW EXPORT 语句查看导出作业的状态，如下所示：
 
-提交作业后，可以通过 `SELECT LAST_QUERY_ID()` 命令获得导出作业的 query id。用户可以通过 query id 查看或者取消作业。
-
-### 查看导出作业状态
-
-提交作业后，可以通过 `SHOW EXPORT` 命令查询导出作业状态。
-
-~~~sql
+```SQL
 SHOW EXPORT WHERE queryid = "edee47f0-abe1-11ec-b9d1-00163e1e238f";
-~~~
+```
 
-结果举例如下：
+> 说明：上述示例中，`queryid` 为导出作业的 ID。
 
-~~~plain text
+系统返回如下导出结果：
+
+```Plain%20Text
      JobId: 14008
+
      State: FINISHED
+
   Progress: 100%
+
   TaskInfo: {"partitions":["*"],"mem limit":2147483648,"column separator":",","line delimiter":"\n","tablet num":1,"broker":"hdfs","coord num":1,"db":"default_cluster:db1","tbl":"tbl3",columns:["col1", "col3"]}
+
       Path: oss://bj-test/export/
+
 CreateTime: 2019-06-25 17:08:24
+
  StartTime: 2019-06-25 17:08:28
+
 FinishTime: 2019-06-25 17:08:34
+
    Timeout: 3600
+
   ErrorMsg: N/A
-~~~
+```
 
-* JobId：作业的Job ID
-* QueryId：作业的查询ID
-* State：作业状态：
-  * PENDING：作业待调度
-  * EXPORING：数据导出中
-  * FINISHED：作业成功
-  * CANCELLED：作业失败
+有关 SHOW EXPORT 语句的详细语法和参数说明，请参见 [SHOW EXPORT](/sql-reference/sql-statements/data-manipulation/SHOW%20EXPORT.md)。
 
-* Progress：作业进度。该进度以查询计划为单位。假设一共 10 个查询计划，当前已完成 3 个，则进度为 30%。
-* TaskInfo：以 Json 格式展示的作业信息：
-  * db：数据库名
-  * tbl：表名
-  * partitions：指定导出的分区。\*表示所有分区。
-  * mem limit：查询的内存使用限制。单位字节。
-  * column separator：导出文件的列分隔符。
-  * line delimiter：导出文件的行分隔符。
-  * tablet num：涉及的总 Tablet 数量。
-  * broker：使用的 broker 的名称。
-  * coord num：查询计划的个数。
-  * columns：导出的列。
+### 取消导出作业
 
-* Path：远端存储上的导出路径。
-* CreateTime/StartTime/FinishTime：作业的创建时间、开始调度时间和结束时间。
-* Timeout：作业超时时间。单位是「秒」。该时间从 CreateTime 开始计算。
-* ErrorMsg：如果作业出现错误，这里会显示错误原因。
+提交导出作业后，在导出作业执行完成以前，可以通过 CANCEL EXPORT 语句取消导出作业，如下所示：
 
-#### 取消作业
-
-举例如下：
-
-~~~sql
+```SQL
 CANCEL EXPORT WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122";
-~~~
+```
 
-### 最佳实践
+> 说明：上述示例中，`queryid` 为导出作业的 ID。
 
-#### 查询计划的拆分
+有关 CANCEL EXPORT 语句的详细语法和参数说明，请参见 [CANCEL EXPORT](/sql-reference/sql-statements/data-manipulation/CANCEL%20EXPORT.md)。
 
-一个 Export 作业有多少查询计划需要执行，取决于总共有多少 Tablet，以及一个查询计划可以处理的最大数据量。
-作业是按照查询计划来重试的，如果一个查询计划处理更多的数据量，查询计划出错（比如调用 Broker 的 RPC 失败，远端存储出现抖动等），会导致一个查询计划的重试成本变高。每个查询计划中每个 BE 扫描的数据量由 FE 配置参数 `export_max_bytes_per_be_per_task` 计算得到，默认为 256M。每个查询计划中每个 BE 最少一个 Tablet，最多导出的数据量不超过配置的参数 `export_max_bytes_per_be_per_task`。
+## 最佳实践
 
-一个作业的多个查询计划并行执行，任务线程池的大小通过 FE 参数 `export_task_pool_size` 配置，默认为 5。
+### 查询计划的拆分
 
-#### load_mem_limit
+一个导出作业有多少查询计划需要执行，取决于总共有多少 Tablet、以及一个查询计划可以处理的最大数据量。 导出作业是按照查询计划来重试的。如果一个查询计划处理的数据量超过允许的最大数据量，查询计划出错，比如调用 Broker 的 RPC 失败、远端存储出现抖动等。这会导致该查询计划的重试成本变高。每个查询计划中每个 BE 扫描的数据量通过 FE 配置参数 `export_max_bytes_per_be_per_task` 来设置，默认为 256 MB。每个查询计划中每个 BE 最少分配一个 Tablet，导出的最大数据量不超过参数 `export_max_bytes_per_be_per_task` 的取值。
 
-通常一个导出作业的查询计划只有「扫描\-导出」两部分，不涉及需要太多内存的计算逻辑。所以通常 2GB 的默认内存限制可以满足需求。但在某些场景下，比如一个查询计划，在同一个 BE 上需要扫描的 Tablet 过多，或者 Tablet 的数据版本过多时，可能会导致内存不足。此时需要修改这个参数设置更大的内存，比如 4GB、8GB 等。
+一个导出作业的多个查询计划并行执行，子任务线程池的大小通过 FE 配置参数 `export_task_pool_size` 来设置，默认为 5。
 
-### 注意事项
-
-* 不建议一次性导出大量数据。一个 Export 作业建议的导出数据量最大在几十 GB。过大的导出会导致更多的垃圾文件和更高的重试成本。
-* 如果表数据量过大，建议按照分区导出。
-* 在 Export 作业运行过程中，如果 FE 发生重启或切主，则 Export 作业会失败，需要用户重新提交。
-* Export 作业产生的`__starrocks_export_tmp_xxx`临时目录，作业失败或成功后会自动删除。
-* 当 Export 运行完成后（成功或失败），FE 发生重启或切主，则`SHOW EXPORT`展示的作业的部分信息会丢失，无法查看。
-* Export 作业只会导出 Base 表的数据，不会导出 Rollup Index 的数据。
-* Export 作业会扫描数据，占用 IO 资源，可能会影响系统的查询延迟。
-
-### 相关配置
-
-主要介绍 FE 中的相关配置。
-
-* `export_checker_interval_second`：Export 作业调度器的调度间隔，默认为 5 秒。设置该参数需重启 FE。
-* `export_running_job_num_limit`：正在运行的 Export 作业数量限制。如果超过，则作业将等待并处于 PENDING 状态。默认为 5，可以运行时调整。
-* `export_task_default_timeout_second`：Export 作业默认超时时间。默认为 2 小时。可以运行时调整。
-* `export_max_bytes_per_be_per_task`: 每个导出任务在每个 BE 上最多导出的数据量，用于拆分导出作业并行处理。按压缩后数据量计算，默认为 256M。
-* `export_task_pool_size`: 导出任务线程池的大小。默认为 5。
+通常一个导出作业的查询计划只有“扫描”和“导出”两部分，计算逻辑不会消耗太多内存。所以通常 2 GB 的默认内存限制可以满足需求。但在某些场景下，比如一个查询计划，在同一个 BE 上需要扫描的 Tablet 过多、或者 Tablet 的数据版本过多时，可能会导致内存不足。此时需要修改 `load_mem_limit` 参数，设置更大的内存，比如 4 GB、8 GB 等。
