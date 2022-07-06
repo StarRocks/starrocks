@@ -48,7 +48,7 @@ INSERT INTO tj (id, j) VALUES (4, json_object('a', 4, 'b', false));
 
 > PARSE_JSON 函数能够基于字符串类型的数据构造出 JSON 类型的数据。JSON_OBJECT 函数能够构造出 JSON 对象类型的数据，可以将现有的表转成 JSON 类型。更多说明，请参见 [PARSE_JSON](../../sql-functions/json-functions/json-creation-functions/parse_json.md) 和 [JSON_OBJECT](../../sql-functions/json-functions/json-creation-functions/json_object.md)。
 
-- 方式二：通过 Stream Load 的方式导入 JSON 文件并存储为 JSON 类型。导入方式，请参见 [通过 Stream Load 导入 JSON 数据](../../../loading/Json_loading.md#stream-load导入)。
+- 方式二：通过 Stream Load 的方式导入 JSON 文件并存储为 JSON 类型。导入方法请参见 [通过 Stream Load 导入 JSON 数据](../../../loading/StreamLoad.md#导入 JSON 数据)。
   - 如果需要将 JSON 文件中一个 JSON 对象的指定值导入并存储为 JSON 类型，则您需要设置 `jsonpaths` 为$.a（a 代表指定键）。
   - 如果需要将 JSON 文件中的一个 JSON 对象导入并存储为 JSON 类型，则您需要设置 `jsonpaths` 为 $。
 - 方式三：通过 Broker Load 的方式导入 Parquet 文件并存储为 JSON 类型。导入方式，请参见 [Broker Load](../../../loading/BrokerLoad.md)。
