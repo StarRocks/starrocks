@@ -24,7 +24,7 @@ public class HistogramStatsMeta implements Writable {
     private String column;
 
     @SerializedName("type")
-    private Constants.AnalyzeType type;
+    private StatsConstants.AnalyzeType type;
 
     @SerializedName("updateTime")
     private LocalDateTime updateTime;
@@ -33,7 +33,7 @@ public class HistogramStatsMeta implements Writable {
     private Map<String, String> properties;
 
     public HistogramStatsMeta(long dbId, long tableId, String column,
-                              Constants.AnalyzeType type,
+                              StatsConstants.AnalyzeType type,
                               LocalDateTime updateTime,
                               Map<String, String> properties) {
         this.dbId = dbId;
@@ -68,7 +68,7 @@ public class HistogramStatsMeta implements Writable {
         return column;
     }
 
-    public Constants.AnalyzeType getType() {
+    public StatsConstants.AnalyzeType getType() {
         return type;
     }
 

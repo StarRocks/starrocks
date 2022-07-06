@@ -10,6 +10,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import org.apache.velocity.VelocityContext;
 
 import java.util.List;
+import java.util.Map;
 
 public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
@@ -21,9 +22,10 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
     private final List<Long> partitionIdList;
 
-    public FullStatisticsCollectJob(AnalyzeJob analyzeJob, Database db, OlapTable table, List<Long> partitionIdList,
-                                    List<String> columns) {
-        super(analyzeJob, db, table, columns);
+    public FullStatisticsCollectJob(Database db, OlapTable table, List<Long> partitionIdList, List<String> columns,
+                                    StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
+                                    Map<String, String> properties) {
+        super(db, table, columns, type, scheduleType, properties);
         this.partitionIdList = partitionIdList;
     }
 

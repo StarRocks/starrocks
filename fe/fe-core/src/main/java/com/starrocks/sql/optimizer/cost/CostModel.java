@@ -36,7 +36,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.statistic.Constants;
+import com.starrocks.statistic.StatsConstants;
 
 import java.util.List;
 
@@ -216,9 +216,9 @@ public class CostModel {
                             statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum,
                             Math.max(statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum, 1));
                     if (statistics.getOutputSize(outputColumns) > sessionVariable.getMaxExecMemByte()) {
-                        return CostEstimate.of(result.getCpuCost() * Constants.BroadcastJoinMemExceedPenalty,
-                                result.getMemoryCost() * Constants.BroadcastJoinMemExceedPenalty,
-                                result.getNetworkCost() * Constants.BroadcastJoinMemExceedPenalty);
+                        return CostEstimate.of(result.getCpuCost() * StatsConstants.BroadcastJoinMemExceedPenalty,
+                                result.getMemoryCost() * StatsConstants.BroadcastJoinMemExceedPenalty,
+                                result.getNetworkCost() * StatsConstants.BroadcastJoinMemExceedPenalty);
                     }
                     break;
                 case SHUFFLE:
@@ -261,7 +261,7 @@ public class CostModel {
                 return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
                                 + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
                         rightStatistics.getOutputSize(context.getChildOutputColumns(1))
-                                * Constants.CrossJoinCostPenalty, 0);
+                                * StatsConstants.CrossJoinCostPenalty, 0);
             } else {
                 return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
                                 + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
@@ -289,7 +289,7 @@ public class CostModel {
                 return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
                                 + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
                         rightStatistics.getOutputSize(context.getChildOutputColumns(1))
-                                * Constants.CrossJoinCostPenalty * 2, 0);
+                                * StatsConstants.CrossJoinCostPenalty * 2, 0);
             } else {
                 return CostEstimate.of((leftStatistics.getOutputSize(context.getChildOutputColumns(0))
                                 + rightStatistics.getOutputSize(context.getChildOutputColumns(1)) / 2),
@@ -306,7 +306,7 @@ public class CostModel {
             double leftSize = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
             double rightSize = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
             return CostEstimate.of(leftSize * rightSize,
-                    rightSize * Constants.CrossJoinCostPenalty * 2, 0);
+                    rightSize * StatsConstants.CrossJoinCostPenalty * 2, 0);
         }
 
         @Override

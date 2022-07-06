@@ -21,7 +21,7 @@ import java.util.List;
 
 public class StatisticUtils {
     private static final List<String> COLLECT_DATABASES_BLACKLIST = ImmutableList.<String>builder()
-            .add(Constants.StatisticsDBName)
+            .add(StatsConstants.StatisticsDBName)
             .add(SystemInfoService.DEFAULT_CLUSTER + ":starrocks_monitor")
             .add(SystemInfoService.DEFAULT_CLUSTER + ":information_schema").build();
 
@@ -41,7 +41,7 @@ public class StatisticUtils {
         // TODO(kks): remove this if pipeline support STATISTIC result sink type
         context.getSessionVariable().setEnablePipelineEngine(false);
         context.setCluster(SystemInfoService.DEFAULT_CLUSTER);
-        context.setDatabase(Constants.StatisticsDBName);
+        context.setDatabase(StatsConstants.StatisticsDBName);
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         context.setCurrentUserIdentity(UserIdentity.ROOT);
         context.setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
@@ -73,7 +73,7 @@ public class StatisticUtils {
     }
 
     public static boolean checkStatisticTableStateNormal() {
-        Database db = GlobalStateMgr.getCurrentState().getDb(Constants.StatisticsDBName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(StatsConstants.StatisticsDBName);
 
         // check database
         if (db == null) {
@@ -81,7 +81,7 @@ public class StatisticUtils {
         }
 
         // check table
-        OlapTable table = (OlapTable) db.getTable(Constants.SampleStatisticsTableName);
+        OlapTable table = (OlapTable) db.getTable(StatsConstants.SampleStatisticsTableName);
         if (table == null) {
             return false;
         }

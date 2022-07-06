@@ -10,6 +10,7 @@ import org.apache.velocity.VelocityContext;
 
 import java.io.StringWriter;
 import java.util.List;
+import java.util.Map;
 
 public class TableCollectJob extends StatisticsCollectJob {
     private static final String INSERT_SELECT_FULL_TEMPLATE =
@@ -17,8 +18,10 @@ public class TableCollectJob extends StatisticsCollectJob {
                     + "$dataSize, $countDistinctFunction, $countNullFunction, $maxFunction, $minFunction, NOW() "
                     + "FROM $tableName";
 
-    public TableCollectJob(AnalyzeJob analyzeJob, Database db, OlapTable table, List<String> columns) {
-        super(analyzeJob, db, table, columns);
+    public TableCollectJob(Database db, OlapTable table, List<String> columns,
+                           StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
+                           Map<String, String> properties) {
+        super(db, table, columns, type, scheduleType, properties);
     }
 
     @Override

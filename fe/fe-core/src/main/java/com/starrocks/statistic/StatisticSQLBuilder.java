@@ -11,27 +11,27 @@ import java.io.StringWriter;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static com.starrocks.statistic.Constants.STATISTIC_DATA_VERSION;
-import static com.starrocks.statistic.Constants.STATISTIC_HISTOGRAM_VERSION;
+import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION;
+import static com.starrocks.statistic.StatsConstants.STATISTIC_HISTOGRAM_VERSION;
 
 public class StatisticSQLBuilder {
     private static final String QUERY_SAMPLE_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_DATA_VERSION + " as INT), update_time, db_id, table_id, column_name,"
                     + " row_count, data_size, distinct_count, null_count, max, min"
-                    + " FROM " + Constants.SampleStatisticsTableName
+                    + " FROM " + StatsConstants.SampleStatisticsTableName
                     + " WHERE $predicate";
 
     private static final String QUERY_FULL_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_DATA_VERSION + " as INT), $updateTime, db_id, table_id, column_name,"
                     + " sum(row_count), cast(avg(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
                     + " max(max), min(min)"
-                    + " FROM " + Constants.FullStatisticsTableName
+                    + " FROM " + StatsConstants.FullStatisticsTableName
                     + " WHERE $predicate"
                     + " GROUP BY db_id, table_id, column_name";
 
     private static final String QUERY_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_HISTOGRAM_VERSION + " as INT), table_id, column_name, histogram"
-                    + " FROM " + Constants.HistogramStatisticsTableName
+                    + " FROM " + StatsConstants.HistogramStatisticsTableName
                     + " WHERE $predicate";
 
     private static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
