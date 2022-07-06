@@ -8,6 +8,10 @@ jobs:
     permissions: write-all
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v2
+    - uses: actions-ecosystem/action-add-labels@v1
+      with:
+        labels: bug
     - name: Label when approved
       uses: pullreminders/label-when-approved-action@v1.0.7
       env:
