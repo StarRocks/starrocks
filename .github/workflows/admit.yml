@@ -7,7 +7,7 @@ jobs:
   Trigger-Admit-Test:
     runs-on: ubuntu-latest
     steps:
-    - uses: taichi/approved-event-action@v1.2.1
+    - uses: taichi/approved-event-action@master
       id: approved
       with:
         approvals: '2'
