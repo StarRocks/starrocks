@@ -1,87 +1,76 @@
 # 备份与恢复
 
-StarRocks 支持将当前数据以文件的形式，通过 broker 备份到远端存储系统中（Broker 是 StarRocks 集群中一种可选进程，主要用于支持 StarRocks 读写远端存储上的文件和目录，具体请参考[Broker Load文档](../loading/BrokerLoad.md)。之后可以通过恢复命令，从远端存储系统中将数据恢复到任意 StarRocks 集群。通过这个功能，StarRocks 可以支持将数据定期的进行快照备份。也可以通过这个功能，在不同集群间进行数据迁移。
+本文介绍如何备份以及恢复 StarRocks 中的数据。
 
-使用该功能，需要部署对应远端存储的 broker，如 HDFS 等。可以通过 SHOW BROKER; 查看当前部署的 broker。
+StarRocks 支持将数据以文件的形式，通过 Broker 备份到远端存储系统中。备份的数据可以从远端存储系统恢复至任意 StarRocks 集群。通过这个功能，您可以定期为 StarRocks 集群中的数据进行快照备份，或者将数据在不同集群间迁移。
 
-**注意：目前主键模型的表目前不支持备份与恢复**
+Broker 是 StarRocks 集群中一种可选进程，主要用于读写 StarRocks 远端存储上的文件和目录。在使用备份与恢复功能前，您需要部署对应远端存储的 Broker。具体部署步骤，参考[部署 Broker](../quick_start/Deploy.md)
 
-## 原理说明
+> 注意：
+>
+> * 目前暂不支持备份与恢复使用主键模型的表。
+> * 备份与恢复功能目前只允许拥有 ADMIN 权限的用户执行。
+> * 一个 Database 内，只允许有一个正在执行的备份或恢复作业。
 
-### 备份
+## 备份数据
 
-备份（backup）操作是指将指定表或分区的数据，直接以 StarRocks 存储的文件的形式，上传到远端仓库中进行存储。当用户提交 Backup 请求后，系统内部会做如下操作：
+当前 StarRocks 支持最小为分区（Partition）粒度的全量备份。当表的数据量很大时，建议按分区分别执行，以降低失败重试的代价。如果您需要对数据进行定期备份，首先需要在建表时，合理地规划表的分区及分桶（例如，按时间进行分区），从而在后期运维过程中，按照分区粒度进行定期的数据备份。
 
-1. 快照及快照上传
-   * 快照阶段会对指定的表或分区数据文件进行快照。之后，备份都是对快照进行操作。在快照之后，对表进行的更改、导入等操作都不再影响备份的结果。快照只是对当前数据文件产生一个硬链，耗时很少。快照完成后，会开始对这些快照文件进行逐一上传。快照上传由各个 Backend 并发完成。
-  
-2. 元数据准备及上传
-   * 数据文件快照上传完成后，Frontend 会首先将对应元数据写成本地文件，然后通过 broker 将本地元数据文件上传到远端仓库，完成最终备份作业。
-
-### 恢复
-
-恢复（restore）操作需要指定一个远端仓库中已存在的备份，然后将这个备份的内容恢复到本地集群中。当用户提交 Restore 请求后，系统内部会做如下操作：
-
-1. 在本地创建对应的元数据
-   * 这一步首先会在本地集群中，创建恢复对应的表分区等结构。创建完成后，该表可见，但是不可访问。
-
-2. 本地snapshot
-   * 这一步是将上一步创建的表做一个快照。这其实是一个空快照（因为刚创建的表是没有数据的），其目的主要是在 Backend 上产生对应的快照目录，用于之后接收从远端仓库下载的快照文件。
-
-3. 下载快照
-   * 远端仓库中的快照文件，会被下载到对应的上一步生成的快照目录中。这一步由各个 Backend 并发完成。
-
-4. 生效快照
-   * 快照下载完成后，将各个快照映射为当前本地表的元数据。然后重新加载这些快照，使之生效，完成最终的恢复作业。
-
-5. 总体流程
-   * 先创建云端仓库用于备份与恢复(新老集群都要创建云端仓库,REPOSITORY名字要相同，BROKER Name要查看集群的broker名称)，在老集群准备好需要进行迁移备份的表，Backup到云端仓库，再从云端仓库Restore到新集群。
-
-   * 新集群当中不用事先创建好需要备份恢复的表，因为在进行Restore操作会自动创建。
-
-## 使用说明
-
-### 数据备份
-
-当前StarRocks支持最小为分区（Partition）粒度的全量备份。如果需要对数据进行定期备份，首先需要在建表时，合理地规划表的分区及分桶。比如，按时间进行分区。然后在之后的运行过程中，按照分区粒度进行定期的数据备份。
-
-### 数据迁移
-
-用户可以先将数据备份到远端仓库，再通过远端仓库将数据恢复到另一个集群，完成数据迁移。因为数据备份是通过快照的形式完成的，所以，在备份作业的快照阶段之后的新的导入数据，是不会备份的。因此，在快照完成后，到恢复作业完成这期间，在原集群上导入的数据，都需要在新集群上同样导入一遍。建议在迁移完成后，对新旧两个集群并行导入一段时间。完成数据和业务正确性校验后，再将业务迁移到新的集群。
-
-## 重点说明
-
-1. 备份恢复相关的操作目前只允许拥有 ADMIN 权限的用户执行。
-2. 一个 Database 内，只允许有一个正在执行的备份或恢复作业。
-3. 备份和恢复都支持最小为分区（Partition）级别的操作，当表的数据量很大时，建议按分区分别执行，以降低失败重试的代价。
-4. 因为备份恢复，操作的都是实际的数据文件。所以当一个表的分片过多，或者一个分片有过多的小版本时，即使总数据量很小，依然需要备份或恢复很长时间。用户可以通过 SHOW PARTITIONS FROM table_name; 和 SHOW TABLET FROM table_name; 来查看各个分区的分片数量，以及各个分片的文件版本数量，来预估作业执行时间。文件数量对作业执行的时间影响非常大，所以建议在建表时，合理规划分区分桶，以避免过多的分片。
-5. 当通过 SHOW BACKUP 或者 SHOW RESTORE 命令查看作业状态时。有可能会在 TaskErrMsg 一列中看到错误信息。但只要 State 列不为 CANCELLED，则说明作业依然在继续。这些 Task 有可能会重试成功。当然，有些 Task 错误，也会直接导致作业失败。
-6. 如果恢复作业是一次覆盖操作（指定恢复数据到已经存在的表或分区中），那么从恢复作业的 COMMIT 阶段开始，当前集群上被覆盖的数据有可能不能再被还原。此时如果恢复作业失败或被取消，有可能造成之前的数据已损坏且无法访问。这种情况下，只能通过再次执行恢复操作，并等待作业完成。因此，我们建议，如无必要，尽量不要使用覆盖的方式恢复数据，除非确认当前数据已不再使用。覆盖操作会检查快照和已存在的表或分区的元数据是否相同，包括schema和Rollup等信息，如果不同则无法执行恢复操作。
-7. 目前备份的快照数据无法通过StarRocks直接删除，用户可以手动删除备份在远端存储系统的快照路径。
-
-## 相关命令
-
-和备份恢复功能相关的命令如下。以下命令，都可以通过mysql-client连接StarRocks后，使用
+您可以通过查看各个分区的分片数量，以及各个分片的文件版本数量，来预估作业执行时间。
 
 ```sql
-help [CREATE REPOSITORY | BACKUP | SHOW BACKUP | SHOW SNAPSHOT | RESTORE | CANCEL BACKUP | CANCEL RESTORE | DROP REPOSITORY]
+SHOW PARTITIONS FROM table_name;
+SHOW TABLET FROM table_name; 
 ```
 
-的方式查看详细帮助。
+### 创建仓库
 
-CREATE REPOSITORY
+创建仓库以存储需要备份的数据。
 
-* 创建一个远端仓库路径，用于备份或恢复。该命令需要借助 Broker 进程访问远端存储，不同的 Broker 需要提供不同的参数，具体请参阅 [Broker文档](../loading/BrokerLoad.md)。备份集群和恢复集群需要创建相同的仓库，包括仓库路径和仓库名，这样才能使恢复集群读取到备份的快照。
+```sql
+CREATE REPOSITORY repo_name
+WITH BROKER broker_name
+ON LOCATION repo_location
+PROPERTIES ("key"="value", ...);
+```
 
-BACKUP
+> 说明：PROPERTIES 中需要填写相应远端仓库的登录信息。
 
-* 执行一次备份操作。
+您可以通过以下命令删除仓库。
 
-SHOW BACKUP
+```sql
+DROP REPOSITORY repo_name;
+```
 
-查看最近一次 backup 作业的执行情况，包括：
+> 注意：目前备份远在端存储系统中的快照数据无法通过 StarRocks 直接删除，用户需要手动删除备份在远端存储系统的快照路径。
 
-* JobId：本次备份作业的 id。
+### 备份数据
+
+将数据备份至仓库。
+
+```sql
+BACKUP SNAPSHOT snapshot_name
+TO repo_name
+ON (
+table_name [PARTITION (`p1`, ...)], ...
+)
+PROPERTIES ("key"="value", ...);
+```
+
+PROPERTIES：
+
+* `type`：更新模式。默认为 `full`，即全量更新。
+* `timeout`：任务超时时间，默认值为 `86400`，即一天。单位为秒。
+
+您可以通过以下命令查看备份作业状态。
+
+```sql
+SHOW BACKUP;
+```
+
+返回如下：
+
+* JobId：本次备份作业的 ID。
 * SnapshotName：用户指定的本次备份作业的名称（Label）。
 * DbName：备份作业对应的 Database。
 * State：备份作业当前所在阶段：
@@ -98,32 +87,77 @@ SHOW BACKUP
 * SnapshotFinishedTime：快照完成时间。
 * UploadFinishedTime：快照上传完成时间。
 * FinishedTime：本次作业完成时间。
-* UnfinishedTasks：在 SNAPSHOTTING，UPLOADING 等阶段，会有多个子任务在同时进行，这里展示的当前段，未完成子任务的 task id。
+* UnfinishedTasks：在 SNAPSHOTTING，UPLOADING 等阶段，会有多个子任务在同时进行，这里展示的当前段，未完成子任务的 Task ID。
 * TaskErrMsg：如果有子任务执行出错，这里会显示对应子任务的错误信息。
 * Status：用于记录在整个作业过程中，可能出现的一些状态信息。
-* Timeout：作业的超时时间，单位是「秒」。
-SHOW SNAPSHOT
+* Timeout：作业的超时时间，单位为秒。
 
-* 查看远端仓库中已存在的备份。
+> 说明：只有当 `State` 为 `CANCELLED` 时说明作业被中止。返回 `TaskErrMsg` 并不一定会中止作业，当前作业仍会重试，直至成功或中止。
 
-  * Snapshot：备份时指定的该备份的名称（Label）。
-  * Timestamp：备份的时间戳。
-  * Status：该备份是否正常。
+您可以通过以下命令取消备份作业。
 
-* 如果在 SHOW SNAPSHOT 后指定了 where 子句，则可以显示更详细的备份信息。
+```sql
+CANCEL BACKUP FROM db_name;
+```
 
-  * Database：备份时对应的 Database。
-  * Details：展示了该备份完整的数据目录结构。
+## 恢复或迁移数据
 
-RESTORE
+您可以先将备份至远端仓库的数据恢复到当前或其他集群，完成数据恢复或迁移。
 
-执行一次恢复操作。
+> 注意：
+>
+> * 因为数据备份是通过快照的形式完成的，所以在备份数据快照生成之后导入的数据不会被备份。因此，在快照生成至恢复（迁移）作业完成这段期间导入的数据，需要重新导入至集群。建议您在迁移完成后，对新旧两个集群并行导入一段时间，完成数据和业务正确性校验后，再将业务迁移到新的集群。
+> * 如果恢复作业是一次覆盖操作（指定恢复数据到已经存在的表或分区中），那么从恢复作业的 COMMIT 阶段开始，当前集群上被覆盖的数据有可能不能再被还原。此时如果恢复作业失败或被取消，有可能造成之前的数据已损坏且无法访问。这种情况下，只能通过再次执行恢复操作，并等待作业完成。因此，我们建议您，如无必要，不要使用覆盖的方式恢复数据，除非确认当前数据已不再使用。覆盖操作会检查快照和已存在的表或分区的元数据是否相同，包括 schema 和 Rollup 等信息，如果不同则无法执行恢复操作。
 
-SHOW RESTORE
+### 查看备份
 
-查看最近一次 restore 作业的执行情况，包括：
+开始恢复或迁移前，您可以通过以下命令查看备份。
 
-* JobId：本次恢复作业的 id。
+```sql
+SHOW SNAPSHOT ON repo_name;
+```
+
+返回如下：
+
+* Snapshot：备份时指定的该备份的名称（Label）。
+* Timestamp：备份的时间戳。
+* Status：该备份是否正常。
+
+如果在命令后指定了 where 子句，则可以显示更详细的备份信息。
+
+* Database：备份时对应的 Database。
+* Details：展示了该备份完整的数据目录结构。
+
+### 迁移数据
+
+通过以下命令迁移数据。
+
+```sql
+RESTORE SNAPSHOT [db_name].{snapshot_name}
+FROM `repository_name`
+ON (
+`table_name` [PARTITION (`p1`, ...)] [AS `tbl_alias`],
+...
+)
+PROPERTIES ("key"="value", ...);
+```
+
+PROPERTIES：
+
+* `backup_timestamp`：恢复对应备份的时间版本，必填。您可以通过 `SHOW SNAPSHOT ON repo_name;` 命令获得该信息。
+* `replication_num`：恢复的表或分区的副本数。默认为 `3`。若恢复已存在的表或分区，则副本数必须和已存在表或分区的副本数相同。同时，必须有足够的 host 容纳多个副本。
+* `timeout`：任务超时时间，默认值为 `86400`，即一天。单位为秒。
+* `meta_version`：使用指定的 `meta_version` 来读取之前备份的元数据。该参数作为临时方案，仅用于恢复老版本 StarRocks 备份的数据。最新版本的备份数据中已经包含 `meta_version`，无需指定。
+
+您可以通过以下命令查看备份作业状态。
+
+```sql
+SHOW RESTORE;
+```
+
+返回如下：
+
+* JobId：本次恢复作业的 ID。
 * Label：用户指定的仓库中备份的名称（Label）。
 * Timestamp：用户指定的仓库中备份的时间戳。
 * DbName：恢复作业对应的 Database。
@@ -146,19 +180,13 @@ SHOW RESTORE
 * SnapshotFinishedTime：本地快照完成时间。
 * DownloadFinishedTime：远端快照下载完成时间。
 * FinishedTime：本次作业完成时间。
-* UnfinishedTasks：在 SNAPSHOTTING，DOWNLOADING, COMMITTING 等阶段，会有多个子任务在同时进行，这里展示的当前阶段，未完成的子任务的 task id。
+* UnfinishedTasks：在 SNAPSHOTTING，DOWNLOADING, COMMITTING 等阶段，会有多个子任务在同时进行，这里展示的当前阶段，未完成的子任务的 Task ID。
 * TaskErrMsg：如果有子任务执行出错，这里会显示对应子任务的错误信息。
 * Status：用于记录在整个作业过程中，可能出现的一些状态信息。
-* Timeout：作业的超时时间，单位是「秒」。
+* Timeout：作业的超时时间，单位是秒。
 
-CANCEL BACKUP
+您可以通过以下命令取消迁移作业。
 
-取消当前正在执行的备份作业。
-
-CANCEL RESTORE
-
-取消当前正在执行的恢复作业。
-
-DROP REPOSITORY
-
-删除已创建的远端仓库。删除仓库，仅仅是删除该仓库在 StarRocks 中的映射，不会删除实际的仓库数据。
+```sql
+CANCEL RESTORE FROM db_name;
+```
