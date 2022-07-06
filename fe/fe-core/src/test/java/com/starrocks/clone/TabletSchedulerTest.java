@@ -10,19 +10,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.task.AgentBatchTask;
-import com.starrocks.task.AgentTask;
-import com.starrocks.task.AgentTaskExecutor;
-import com.starrocks.task.AgentTaskQueue;
-import com.starrocks.task.CloneTask;
 import com.starrocks.thrift.TStorageMedium;
-import mockit.Delegate;
 import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.commons.lang3.tuple.Triple;
 import org.junit.Assert;
@@ -33,7 +24,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 
 public class TabletSchedulerTest {
     @Mocked
@@ -68,7 +58,7 @@ public class TabletSchedulerTest {
         recycleBin.recyclePartition(goodDB.getId(), goodTable.getId(), badPartition,
                 null, new DataProperty(TStorageMedium.HDD), (short)2, false);
 
-        List<AgentTask> allTasks = new ArrayList<>();
+        List<TabletSchedCtx> allCtxs = new ArrayList<>();
         List<Triple<Database, Table, Partition>> arguments = Arrays.asList(
                 Triple.of(badDb, goodTable, goodPartition), // will discard
                 Triple.of(goodDB, badTable, goodPartition), // will discard
@@ -76,36 +66,30 @@ public class TabletSchedulerTest {
                 Triple.of(goodDB, goodTable, goodPartition) // only submit this
         );
         for (Triple<Database, Table, Partition> triple : arguments) {
-            CloneTask cloneTask = new CloneTask(
-                    1,
+            allCtxs.add(new TabletSchedCtx(
+                    TabletSchedCtx.Type.REPAIR,
+                    SystemInfoService.DEFAULT_CLUSTER,
                     triple.getLeft().getId(),
                     triple.getMiddle().getId(),
                     triple.getRight().getId(),
                     1,
                     1,
-                    1,
-                    null,
-                    TStorageMedium.HDD,
-                    1,
-                    100000);
-            allTasks.add(cloneTask);
+                    System.currentTimeMillis(),
+                    systemInfoService));
         }
-        new Expectations() {
-            {
-                AgentTaskExecutor.submit((AgentBatchTask) any);
-                times = 2;
-            }
-        };
+
+        TabletScheduler tabletScheduler = new TabletScheduler(globalStateMgr, systemInfoService, tabletInvertedIndex, tabletSchedulerStat);
 
         long almostExpireTime = System.currentTimeMillis() + (Config.catalog_trash_expire_second - 1) * 1000L;
-        TabletScheduler tabletScheduler = new TabletScheduler(globalStateMgr, systemInfoService, tabletInvertedIndex, tabletSchedulerStat);
-        AgentBatchTask tasks = tabletScheduler.submitBatchTaskIfNotExpired(allTasks, recycleBin, almostExpireTime);
-        Assert.assertEquals(4, tasks.getTaskNum());
+        for (int i = 0; i != allCtxs.size(); ++ i) {
+            Assert.assertFalse(tabletScheduler.checkIfTabletExpired(allCtxs.get(i), recycleBin, almostExpireTime));
+        }
 
         long expireTime = System.currentTimeMillis() + (Config.catalog_trash_expire_second + 600) * 1000L;
-        tasks = tabletScheduler.submitBatchTaskIfNotExpired(allTasks, recycleBin, expireTime);
-        Assert.assertEquals(1, tasks.getTaskNum());
-
-        AgentTaskQueue.clearAllTasks();
+        for (int i = 0; i != allCtxs.size() - 1; ++ i) {
+            Assert.assertTrue(tabletScheduler.checkIfTabletExpired(allCtxs.get(i), recycleBin, expireTime));
+        }
+        // only the last survive
+        Assert.assertFalse(tabletScheduler.checkIfTabletExpired(allCtxs.get(3), recycleBin, expireTime));
     }
 }

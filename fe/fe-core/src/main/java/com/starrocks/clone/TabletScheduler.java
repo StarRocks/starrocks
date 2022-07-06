@@ -399,6 +399,34 @@ public class TabletScheduler extends MasterDaemon {
         LOG.debug("pending tablets current count: {}\n{}", pendingTablets.size(), sb);
     }
 
+    private boolean checkIfTabletExpired(TabletSchedCtx ctx) {
+        return checkIfTabletExpired(ctx, GlobalStateMgr.getCurrentRecycleBin(), System.currentTimeMillis());
+    }
+
+    /**
+     * make sure tablet won't expired and erased soon
+     */
+    protected boolean checkIfTabletExpired(TabletSchedCtx ctx, CatalogRecycleBin recycleBin, long currentTimeMs) {
+        // check if about to erase
+        long dbId = ctx.getDbId();
+        if (recycleBin.getDatabase(dbId) != null && !recycleBin.ensureEraseLater(dbId, currentTimeMs)) {
+            LOG.warn("discard ctx because db {} will erase soon: {}", dbId, ctx);
+            return true;
+        }
+        long tableId = ctx.getTblId();
+        if (recycleBin.getTable(dbId, tableId) != null && !recycleBin.ensureEraseLater(tableId, currentTimeMs)) {
+            LOG.warn("discard ctx because table {} will erase soon: {}", tableId, ctx);
+            return true;
+        }
+        long partitionId = ctx.getPartitionId();
+        if (recycleBin.getPartition(partitionId) != null
+                && !recycleBin.ensureEraseLater(partitionId, currentTimeMs)) {
+            LOG.warn("discard ctx because partition {} will erase soon: {}", partitionId, ctx);
+            return true;
+        }
+        return false;
+    }
+
     /**
      * get at most BATCH_NUM tablets from queue, and try to schedule them.
      * After handle, the tablet info should be
@@ -416,14 +444,12 @@ public class TabletScheduler extends MasterDaemon {
             LOG.debug("get {} tablets to schedule", currentBatch.size());
         }
 
-        // store temporary agent tasks
-        AgentBatchTask tmpBatchTask = new AgentBatchTask();
+        AgentBatchTask batchTask = new AgentBatchTask();
         for (TabletSchedCtx tabletCtx : currentBatch) {
             try {
                 // reset errMsg for new scheduler round
                 tabletCtx.setErrMsg(null);
-
-                scheduleTablet(tabletCtx, tmpBatchTask);
+                scheduleTablet(tabletCtx, batchTask);
             } catch (SchedException e) {
                 tabletCtx.increaseFailedSchedCounter();
                 tabletCtx.setErrMsg(e.getMessage());
@@ -479,9 +505,16 @@ public class TabletScheduler extends MasterDaemon {
             addToRunningTablets(tabletCtx);
         }
 
-        // check all tasks, only submit the tasks on tablets that won't expired and erased
-        submitBatchTaskIfNotExpired(
-                tmpBatchTask.getAllTasks(), GlobalStateMgr.getCurrentRecycleBin(), System.currentTimeMillis());
+        // must send task after adding tablet info to runningTablets.
+        for (AgentTask task : batchTask.getAllTasks()) {
+            if (AgentTaskQueue.addTask(task)) {
+                stat.counterCloneTask.incrementAndGet();
+            }
+            LOG.info("add clone task to agent task queue: {}", task);
+        }
+
+        // send task immediately
+        AgentTaskExecutor.submit(batchTask);
 
         long cost = System.currentTimeMillis() - start;
         stat.counterTabletScheduleCostMs.addAndGet(cost);
@@ -753,7 +786,7 @@ public class TabletScheduler extends MasterDaemon {
                     tabletCtx.getSrcReplica().getBackendId(), tabletCtx.getDestBackendId());
         } catch (SchedException e) {
             if (e.getStatus() == Status.SCHEDULE_FAILED) {
-                LOG.info("failed to find version incomplete replica from tablet relocating. " +
+                LOG.debug("failed to find version incomplete replica from tablet relocating. " +
                                 "reason: [{}], tablet: [{}], replicas: {} dest:{} try to find a new backend", e.getMessage(),
                         tabletCtx.getTabletId(), tabletCtx.getTablet().getReplicaInfos(),
                         tabletCtx.getDestBackendId());
@@ -1265,6 +1298,10 @@ public class TabletScheduler extends MasterDaemon {
                 // no more tablets
                 break;
             }
+            // ignore tablets that will expire and erase soon
+            if (checkIfTabletExpired(tablet)) {
+                continue;
+            }
             list.add(tablet);
             count--;
         }
@@ -1441,45 +1478,6 @@ public class TabletScheduler extends MasterDaemon {
     public synchronized long getBalanceTabletsNumber() {
         return pendingTablets.stream().filter(t -> t.getType() == Type.BALANCE).count()
                 + runningTablets.values().stream().filter(t -> t.getType() == Type.BALANCE).count();
-    }
-
-    /**
-     * submit batch tasks only if no expired db/table/partiton involved
-     * the return value is only for test
-     */
-    protected AgentBatchTask submitBatchTaskIfNotExpired(
-            List<AgentTask> tasks, CatalogRecycleBin recycleBin, long currentTimeMs) {
-        AgentBatchTask batchTask = new AgentBatchTask();
-        // must send task after adding tablet info to runningTablets.
-        for (AgentTask task : tasks) {
-            // check if about to erase
-            long dbId = task.getDbId();
-            if (recycleBin.getDatabase(dbId) != null && !recycleBin.ensureEraseLater(dbId, currentTimeMs)) {
-                LOG.warn("discard clone task because db {} will erase soon: {}", dbId, task);
-                continue;
-            }
-            long tableId = task.getTableId();
-            if (recycleBin.getTable(dbId, tableId) != null && !recycleBin.ensureEraseLater(tableId, currentTimeMs)) {
-                LOG.warn("discard clone task because table {} will erase soon: {}", tableId, task);
-                continue;
-            }
-            long partitionId = task.getPartitionId();
-            if (recycleBin.getPartition(partitionId) != null
-                    && !recycleBin.ensureEraseLater(partitionId, currentTimeMs)) {
-                LOG.warn("discard clone task because partition {} will erase soon: {}", partitionId, task);
-                continue;
-            }
-
-            batchTask.addTask(task);
-            if (AgentTaskQueue.addTask(task)) {
-                stat.counterCloneTask.incrementAndGet();
-            }
-            LOG.info("add clone task to agent task queue: {}", task);
-        }
-
-        // send task immediately
-        AgentTaskExecutor.submit(batchTask);
-        return batchTask;
     }
 
     /**
