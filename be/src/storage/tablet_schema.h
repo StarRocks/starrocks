@@ -26,11 +26,13 @@
 #include <string_view>
 #include <vector>
 
+#include "column/chunk.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/olap_define.h"
 #include "storage/type_utils.h"
 #include "storage/types.h"
 #include "util/c_string.h"
+#include "util/once.h"
 
 namespace starrocks {
 
@@ -268,6 +270,8 @@ public:
 
     bool shared() const { return _schema_map != nullptr; }
 
+    starrocks::vectorized::Schema* schema() const;
+
 private:
     friend class SegmentReaderWriterTest;
     FRIEND_TEST(SegmentReaderWriterTest, estimate_segment_size);
@@ -275,6 +279,8 @@ private:
 
     friend bool operator==(const TabletSchema& a, const TabletSchema& b);
     friend bool operator!=(const TabletSchema& a, const TabletSchema& b);
+
+    Status _init_schema() const;
 
     SchemaId _id = invalid_id();
     TabletSchemaMap* _schema_map = nullptr;
@@ -293,6 +299,10 @@ private:
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
 
     bool _has_bf_fpp = false;
+
+    mutable std::unique_ptr<starrocks::vectorized::Schema> _schema;
+
+    mutable StarRocksCallOnce<Status> _schema_init;
 };
 
 bool operator==(const TabletSchema& a, const TabletSchema& b);

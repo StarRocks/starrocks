@@ -57,8 +57,8 @@ public class AnalyzeStmtAnalyzer {
             if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
                 throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());
             }
-            if (analyzeTable.getType() != Table.TableType.OLAP) {
-                throw new SemanticException("Table '%s' is not a OLAP table", analyzeTable.getName());
+            if (!analyzeTable.isNativeTable()) {
+                throw new SemanticException("Table '%s' is not a OLAP/LAKE table", analyzeTable.getName());
             }
 
             // Analyze columns mentioned in the statement.

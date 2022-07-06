@@ -1,0 +1,5 @@
+thirdparty
+**/output
+be/cmake-build*
+be/build_*
+be/ut_build_*

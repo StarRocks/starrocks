@@ -27,6 +27,7 @@
 
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "storage/chunk_helper.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/type_utils.h"
 
@@ -437,6 +438,21 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_table
     auto partial_tablet_schema = std::make_shared<TabletSchema>();
     partial_tablet_schema->init_from_pb(partial_tablet_schema_pb);
     return partial_tablet_schema;
+}
+
+Status TabletSchema::_init_schema() const {
+    starrocks::vectorized::Fields fields;
+    for (ColumnId cid = 0; cid < num_columns(); ++cid) {
+        auto f = vectorized::ChunkHelper::convert_field_to_format_v2(cid, column(cid));
+        fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
+    }
+    _schema = std::make_unique<vectorized::Schema>(std::move(fields), keys_type());
+    return Status::OK();
+}
+
+vectorized::Schema* TabletSchema::schema() const {
+    _schema_init.call([this] { return _init_schema(); });
+    return _schema.get();
 }
 
 TabletSchema::~TabletSchema() {

@@ -6,6 +6,8 @@ import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
+import com.starrocks.analysis.AlterDatabaseQuotaStmt;
+import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
@@ -50,6 +52,7 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.KillStmt;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
@@ -57,10 +60,13 @@ import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -238,6 +244,10 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    public R visitShowDeleteStmt(ShowDeleteStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     public R visitShowMaterializedViewStmt(ShowMaterializedViewStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -274,11 +284,32 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+
+    public R visitShowCreateDbStatement(ShowCreateDbStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitAlterDbQuotaStmt(AlterDatabaseQuotaStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitCreateDbStatement(CreateDbStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
     public R visitDropDbStatement(DropDbStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterDatabaseRename(AlterDatabaseRename statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitRecoverDbStmt(RecoverDbStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitKillStatement(KillStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

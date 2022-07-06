@@ -293,6 +293,22 @@ public class ReplayFromDumpTest {
     }
 
     @Test
+    public void testTPCDS54WithJoinHint() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/tpcds54_with_join_hint"), null, TExplainLevel.NORMAL);
+        // checkout join order as hint
+        Assert.assertTrue(replayPair.second.contains(" 19:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 729: ss_sold_date_sk = 750: d_date_sk\n" +
+                "  |  \n" +
+                "  |----18:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: store_sales"));
+    }
+
+    @Test
     public void testCrossReorder() throws Exception {
         RuleSet mockRule = new RuleSet() {
             @Override
@@ -458,5 +474,15 @@ public class ReplayFromDumpTest {
         // check without exception
         Assert.assertTrue(replayPair.second.contains(" 38:Project\n" +
                 "  |  <slot 1> : 1: c_0_0"));
+    }
+
+    @Test
+    public void testMultiViewPruneColumns() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_prune_columns"), null, TExplainLevel.NORMAL);
+        // check without exception
+        Assert.assertTrue(replayPair.second.contains(" 200:Project\n" +
+                "  |  <slot 1> : 1: c_1_0"));
+        System.out.println(replayPair.second);
     }
 }

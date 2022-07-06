@@ -207,6 +207,7 @@ public class FunctionSet {
     public static final String MAX = "max";
     public static final String MIN = "min";
     public static final String PERCENTILE_APPROX = "percentile_approx";
+    public static final String PERCENTILE_CONT = "percentile_cont";
     public static final String RETENTION = "retention";
     public static final String STDDEV = "stddev";
     public static final String STDDEV_POP = "stddev_pop";
@@ -846,6 +847,17 @@ public class FunctionSet {
 
         addBuiltin(AggregateFunction.createBuiltin(RETENTION, Lists.newArrayList(Type.ARRAY_BOOLEAN),
                 Type.ARRAY_BOOLEAN, Type.BIGINT, false, false, false));
+
+        // PercentileCont
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_CONT,
+                Lists.newArrayList(Type.DATE, Type.DOUBLE), Type.DATE, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_CONT,
+                Lists.newArrayList(Type.DATETIME, Type.DOUBLE), Type.DATETIME, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_CONT,
+                Lists.newArrayList(Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARCHAR,
+                false, false, false));
 
         // Avg
         // TODO: switch to CHAR(sizeof(AvgIntermediateType) when that becomes available

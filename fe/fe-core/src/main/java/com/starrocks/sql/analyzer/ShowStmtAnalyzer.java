@@ -4,8 +4,10 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -94,6 +96,14 @@ public class ShowStmtAnalyzer {
             return null;
         }
 
+        @Override
+        public Void visitShowDeleteStmt(ShowDeleteStmt node, ConnectContext context) {
+            String dbName = node.getDbName();
+            dbName = getFullDatabaseName(dbName, context);
+            node.setDbName(dbName);
+            return null;
+        }
+
         String getFullDatabaseName(String db, ConnectContext session) {
             String catalog = session.getCurrentCatalog();
             if (Strings.isNullOrEmpty(db)) {
@@ -110,6 +120,14 @@ public class ShowStmtAnalyzer {
                 }
             }
             return db;
+        }
+
+        @Override
+        public Void visitShowCreateDbStatement(ShowCreateDbStmt node, ConnectContext context) {
+            String dbName = node.getDb();
+            dbName = getFullDatabaseName(dbName, context);
+            node.setDb(dbName);
+            return null;
         }
     }
 }

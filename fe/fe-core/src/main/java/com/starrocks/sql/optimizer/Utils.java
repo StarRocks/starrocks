@@ -313,14 +313,14 @@ public class Utils {
         int count = 0;
         Operator operator = root.getOp();
         for (OptExpression child : root.getInputs()) {
-            if (isInnerOrCrossJoin(operator)) {
+            if (isInnerOrCrossJoin(operator) && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
                 count += countInnerJoinNodeSize(child);
             } else {
                 count = Math.max(count, countInnerJoinNodeSize(child));
             }
         }
 
-        if (isInnerOrCrossJoin(operator)) {
+        if (isInnerOrCrossJoin(operator) && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
             count += 1;
         }
         return count;
@@ -451,7 +451,7 @@ public class Utils {
         int schemaHash = table.getSchemaHashByIndexId(selectedIndexId);
         for (Long partitionId : selectedPartitionId) {
             Partition partition = table.getPartition(partitionId);
-            if (partition.isUseStarOS()) {
+            if (table.isLakeTable()) {
                 // TODO(wyb): necessary to support?
                 return false;
             }

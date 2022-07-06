@@ -53,6 +53,7 @@ public class LakeTableTest {
         long tablet1Id = 10L;
         long tablet2Id = 11L;
         String serviceStorageUri = "s3://bucket/service/";
+        String endpoint = "region.host.com";
 
         // Schema
         List<Column> columns = Lists.newArrayList();
@@ -82,7 +83,8 @@ public class LakeTableTest {
         Deencapsulation.setField(table, "baseIndexId", indexId);
         table.addPartition(partition);
         table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
-        ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder().setObjectUri(serviceStorageUri).build();
+        ObjectStorageInfo objectStorageInfo =
+                ObjectStorageInfo.newBuilder().setObjectUri(serviceStorageUri).setEndpoint(endpoint).build();
         ShardStorageInfo shardStorageInfo =
                 ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
         table.setShardStorageInfo(shardStorageInfo);
@@ -104,6 +106,8 @@ public class LakeTableTest {
         Assert.assertTrue(newTable.isLakeTable());
         LakeTable newLakeTable = (LakeTable) newTable;
         Assert.assertEquals(String.format("%s%d/", serviceStorageUri, tableId), newLakeTable.getStorageGroup());
+        ObjectStorageInfo newObjectStorageInfo = newLakeTable.getShardStorageInfo().getObjectStorageInfo();
+        Assert.assertEquals(endpoint, newObjectStorageInfo.getEndpoint());
 
         Partition p1 = newLakeTable.getPartition(partitionId);
         MaterializedIndex newIndex = p1.getBaseIndex();

@@ -694,6 +694,15 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
+    public static void replayCreateFunctionLog(Function function) {
+        String dbName = function.getFunctionName().getDb();
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        if (db == null) {
+            throw new Error("unknown database when replay log, db=" + dbName);
+        }
+        db.replayAddFunction(function);
+    }
+
     // return true if add success, false
     private void addFunctionImpl(Function function, boolean isReplay) throws UserException {
         String functionName = function.getFunctionName().getFunction();
@@ -732,6 +741,15 @@ public class Database extends MetaObject implements Writable {
         } catch (UserException e) {
             Preconditions.checkArgument(false);
         }
+    }
+
+    public static void replayDropFunctionLog(FunctionSearchDesc functionSearchDesc) {
+        String dbName = functionSearchDesc.getName().getDb();
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        if (db == null) {
+            throw new Error("unknown database when replay log, db=" + dbName);
+        }
+        db.replayDropFunction(functionSearchDesc);
     }
 
     private void dropFunctionImpl(FunctionSearchDesc function) throws UserException {

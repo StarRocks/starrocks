@@ -30,6 +30,7 @@ import com.starrocks.common.util.ParseUtil;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class AlterDatabaseQuotaStmt extends DdlStmt {
     private String dbName;
@@ -55,6 +56,18 @@ public class AlterDatabaseQuotaStmt extends DdlStmt {
 
     public long getQuota() {
         return quota;
+    }
+
+    public String getQuotaValue() {
+        return quotaValue;
+    }
+
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
+    }
+
+    public void setQuota(long quota) {
+        this.quota = quota;
     }
 
     public QuotaType getQuotaType() {
@@ -85,5 +98,15 @@ public class AlterDatabaseQuotaStmt extends DdlStmt {
     public String toSql() {
         return "ALTER DATABASE " + dbName + " SET " + (quotaType == QuotaType.DATA ? "DATA" : "REPLICA") + " QUOTA " +
                 quotaValue;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAlterDbQuotaStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

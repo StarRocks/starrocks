@@ -36,11 +36,7 @@ ScanOperator::~ScanOperator() {
     }
 
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
-        if (_chunk_sources[i] != nullptr) {
-            _chunk_sources[i]->close(state);
-            _chunk_sources[i] = nullptr;
-            detach_chunk_source(i);
-        }
+        _close_chunk_source(state, i);
     }
 }
 
@@ -71,10 +67,8 @@ void ScanOperator::close(RuntimeState* state) {
     }
     // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
-        if (_chunk_sources[i] != nullptr && !_is_io_task_running[i]) {
-            _chunk_sources[i]->close(state);
-            _chunk_sources[i] = nullptr;
-            detach_chunk_source(i);
+        if (!_is_io_task_running[i]) {
+            _close_chunk_source(state, i);
         }
     }
 
@@ -110,6 +104,7 @@ bool ScanOperator::has_output() const {
 
     // Can trigger_next_scan for the picked-up morsel.
     for (int i = 0; i < MAX_IO_TASKS_PER_OP; ++i) {
+        std::shared_lock guard(_task_mutex);
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
             return true;
         }
@@ -210,6 +205,15 @@ inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
     return !ptr.owner_before(wp{}) && !wp{}.owner_before(ptr);
 }
 
+void ScanOperator::_close_chunk_source(RuntimeState* state, int chunk_source_index) {
+    std::unique_lock guard(_task_mutex);
+    if (_chunk_sources[chunk_source_index] != nullptr) {
+        _chunk_sources[chunk_source_index]->close(state);
+        _chunk_sources[chunk_source_index] = nullptr;
+        detach_chunk_source(chunk_source_index);
+    }
+}
+
 void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns,
                                              int64_t scan_rows, int64_t scan_bytes) {
     _last_growth_cpu_time_ns += cpu_time_ns;
@@ -218,10 +222,9 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
     _decrease_committed_scan_tasks();
     _num_running_io_tasks--;
 
+    DCHECK(_chunk_sources[chunk_source_index] != nullptr);
     if (!_chunk_sources[chunk_source_index]->has_next_chunk()) {
-        _chunk_sources[chunk_source_index]->close(state);
-        _chunk_sources[chunk_source_index] = nullptr;
-        detach_chunk_source(chunk_source_index);
+        _close_chunk_source(state, chunk_source_index);
     }
 
     _is_io_task_running[chunk_source_index] = false;
@@ -326,11 +329,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 
 Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index) {
     DCHECK(_morsel_queue != nullptr);
-    if (_chunk_sources[chunk_source_index] != nullptr) {
-        _chunk_sources[chunk_source_index]->close(state);
-        _chunk_sources[chunk_source_index] = nullptr;
-        detach_chunk_source(chunk_source_index);
-    }
+    _close_chunk_source(state, chunk_source_index);
 
     // NOTE: attach an active source before really creating it, to avoid the race condition
     bool need_detach = true;

@@ -25,6 +25,7 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.optimizer.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -190,10 +191,13 @@ public class TaskManager {
                 if (schedule == null) {
                     throw new DdlException("Task [" + task.getName() + "] has no scheduling information");
                 }
-                LocalDateTime startTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(schedule.getStartTime()),
-                        TimeUtils.getTimeZone().toZoneId());
+                LocalDateTime startTime = Utils.getDatetimeFromLong(schedule.getStartTime());
                 Duration duration = Duration.between(LocalDateTime.now(), startTime);
                 long initialDelay = duration.getSeconds();
+                // if startTime < now, start scheduling now
+                if (initialDelay < 0) {
+                    initialDelay = 0;
+                }
                 // this operation should only run in master
                 ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
                                 executeTask(task.getName()), initialDelay, schedule.getPeriod(),
@@ -613,5 +617,9 @@ public class TaskManager {
 
     public boolean containTask(String taskName) {
         return nameToTaskMap.containsKey(taskName);
+    }
+
+    public Task getTask(String taskName) {
+        return nameToTaskMap.get(taskName);
     }
 }

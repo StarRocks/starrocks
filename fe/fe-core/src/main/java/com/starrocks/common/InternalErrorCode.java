@@ -28,6 +28,7 @@ public enum InternalErrorCode {
     DB_ERR(5),
     TABLE_ERR(6),
     META_NOT_FOUND_ERR(7),
+    REPLICA_ENOUGH_ERR(8),
 
     // for load job error
     MANUAL_PAUSE_ERR(100),

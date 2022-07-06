@@ -51,16 +51,13 @@ import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.ColumnRenameClause;
-import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.PartitionRenameClause;
@@ -89,7 +86,6 @@ import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
@@ -2475,6 +2471,10 @@ public class GlobalStateMgr {
         return this.hiveRepository;
     }
 
+    public IcebergRepository getIcebergRepository() {
+        return this.icebergRepository;
+    }
+
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {
         return this.metastoreEventsProcessor;
     }
@@ -2975,42 +2975,6 @@ public class GlobalStateMgr {
 
     public void replayTruncateTable(TruncateTableInfo info) {
         localMetastore.replayTruncateTable(info);
-    }
-
-    public void createFunction(CreateFunctionStmt stmt) throws UserException {
-        FunctionName name = stmt.getFunctionName();
-        Database db = getDb(name.getDb());
-        if (db == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
-        }
-        db.addFunction(stmt.getFunction());
-    }
-
-    public void replayCreateFunction(Function function) {
-        String dbName = function.getFunctionName().getDb();
-        Database db = getDb(dbName);
-        if (db == null) {
-            throw new Error("unknown database when replay log, db=" + dbName);
-        }
-        db.replayAddFunction(function);
-    }
-
-    public void dropFunction(DropFunctionStmt stmt) throws UserException {
-        FunctionName name = stmt.getFunctionName();
-        Database db = getDb(name.getDb());
-        if (db == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
-        }
-        db.dropFunction(stmt.getFunction());
-    }
-
-    public void replayDropFunction(FunctionSearchDesc functionSearchDesc) {
-        String dbName = functionSearchDesc.getName().getDb();
-        Database db = getDb(dbName);
-        if (db == null) {
-            throw new Error("unknown database when replay log, db=" + dbName);
-        }
-        db.replayDropFunction(functionSearchDesc);
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
