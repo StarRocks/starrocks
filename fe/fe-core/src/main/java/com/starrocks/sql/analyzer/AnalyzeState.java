@@ -40,7 +40,6 @@ public class AnalyzeState {
     private List<Expr> groupingFunctionCallExprs;
 
     private List<OrderByElement> orderBy;
-    private List<String> columnOutputNames;
 
     private List<Expr> orderSourceExpressions;
 
@@ -82,7 +81,7 @@ public class AnalyzeState {
 
     public SelectRelation build() {
         SelectRelation selectRelation = new SelectRelation(
-                outputExpressions, columnOutputNames, isDistinct,
+                outputExpressions, isDistinct,
                 orderScope, orderSourceExpressions,
                 relation, predicate, limit,
                 groupBy, aggregate, groupingSetsList, groupingFunctionCallExprs,
@@ -199,14 +198,6 @@ public class AnalyzeState {
 
     public void setOrderBy(List<OrderByElement> orderBy) {
         this.orderBy = orderBy;
-    }
-
-    public List<String> getColumnOutputNames() {
-        return columnOutputNames;
-    }
-
-    public void setColumnOutputNames(List<String> columnOutputNames) {
-        this.columnOutputNames = columnOutputNames;
     }
 
     public List<AnalyticExpr> getOutputAnalytic() {
