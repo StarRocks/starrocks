@@ -97,7 +97,7 @@ public class TaskRunManager {
                     // Note that the old TaskRun and new TaskRun may have the same definition,
                     // but other attributes may be different, such as priority, creation time.
                     // merge priority higher and create time lower and queryId will be change.
-                    taskRuns.remove(taskRun);
+                    boolean isRemove = taskRuns.remove(taskRun);
                     if (oldTaskRun.getStatus().getPriority() > taskRun.getStatus().getPriority()) {
                         taskRun.getStatus().setPriority(oldTaskRun.getStatus().getPriority());
                     }
