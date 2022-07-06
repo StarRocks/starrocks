@@ -1,7 +1,9 @@
 name: Trigger Jobs
 
 on: 
-  pull_request_review
+  pull_request_review:
+    state: 
+      - approved
 
 jobs:
   Trigger-Admit-Test:
