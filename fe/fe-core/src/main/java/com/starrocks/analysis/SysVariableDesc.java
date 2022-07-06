@@ -150,23 +150,6 @@ public class SysVariableDesc extends Expr {
         return toSql();
     }
 
-    public Expr getResultValue() throws AnalysisException {
-        switch (type.getPrimitiveType()) {
-            case BOOLEAN:
-                return new BoolLiteral(this.boolValue);
-            case TINYINT:
-            case SMALLINT:
-            case INT:
-            case BIGINT:
-                return new IntLiteral(this.intValue);
-            case FLOAT:
-            case DOUBLE:
-                return new FloatLiteral(this.floatValue);
-            default:
-                return new StringLiteral(this.strValue);
-        }
-    }
-
     /**
      * Below function is added by new analyzer
      */

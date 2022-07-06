@@ -10,6 +10,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.Constants.AnalyzeType;
@@ -44,7 +45,7 @@ public class StatisticAutoCollector extends MasterDaemon {
 
         GlobalStateMgr.getCurrentAnalyzeMgr().expireAnalyzeJob();
 
-        if (!Config.enable_statistic_collect) {
+        if (!Config.enable_statistic_collect || FeConstants.runningUnitTest) {
             return;
         }
 
@@ -54,8 +55,6 @@ public class StatisticAutoCollector extends MasterDaemon {
         }
 
         initDefaultJob();
-
-        updateHealthy();
 
         List<StatisticsCollectJob> allJobs;
         if (Config.enable_collect_full_statistics) {
@@ -81,43 +80,6 @@ public class StatisticAutoCollector extends MasterDaemon {
         AnalyzeJob analyzeJob = new AnalyzeJob(AnalyzeJob.DEFAULT_ALL_ID, AnalyzeJob.DEFAULT_ALL_ID, Collections.emptyList(),
                 AnalyzeType.SAMPLE, ScheduleType.SCHEDULE, Maps.newHashMap(), ScheduleStatus.PENDING, LocalDateTime.MIN);
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeJob(analyzeJob);
-    }
-
-    private void updateHealthy() {
-        Map<Long, BasicStatsMeta> analyzeMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap();
-        for (Map.Entry<Long, BasicStatsMeta> meta : analyzeMeta.entrySet()) {
-            Database database = GlobalStateMgr.getCurrentState().getDb(meta.getValue().getDbId());
-            OlapTable table = (OlapTable) database.getTable(meta.getValue().getTableId());
-
-            long totalLoadRows = meta.getValue().getUpdateRows();
-
-            long minRowCount = Long.MAX_VALUE;
-            for (Partition partition : table.getPartitions()) {
-                if (partition.getRowCount() < minRowCount) {
-                    minRowCount = partition.getRowCount();
-                }
-            }
-
-            /*
-             * health = totalLoadRows / totalRowCount.
-             * The ratio of the number of modified lines to the total number of lines.
-             * Because we cannot obtain complete table-level information, we use the row count of
-             * the partition with the smallest row count as totalRowCount.
-             * It can be understood that we assume an extreme case where all imported and modified lines
-             * are concentrated in only one partition
-             */
-            double healthy;
-            if (minRowCount == 0) {
-                healthy = 1;
-            } else if (totalLoadRows > minRowCount) {
-                healthy = 0;
-            } else {
-                healthy = 1 - (double) totalLoadRows / (double) minRowCount;
-            }
-
-            meta.getValue().setHealthy(healthy);
-            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(meta.getValue());
-        }
     }
 
     private List<StatisticsCollectJob> generateFullAnalyzeJobs() {
@@ -215,22 +177,29 @@ public class StatisticAutoCollector extends MasterDaemon {
             } else if ((null == analyzeJob.getColumns() || analyzeJob.getColumns().isEmpty())
                     && AnalyzeJob.DEFAULT_ALL_ID != analyzeJob.getTableId()
                     && AnalyzeJob.DEFAULT_ALL_ID != analyzeJob.getDbId()) {
-                // all column
+                //database or table is null mean database/table has been dropped
                 Database db = GlobalStateMgr.getCurrentState().getDb(analyzeJob.getDbId());
-                if (null == db) {
+                if (db == null) {
+                    continue;
+                }
+                OlapTable olapTable = (OlapTable) db.getTable(analyzeJob.getTableId());
+                if (olapTable == null) {
                     continue;
                 }
 
                 createTableJobs(allTableJobMap, analyzeJob, db, db.getTable(analyzeJob.getTableId()));
             } else if (!analyzeJob.getColumns().isEmpty() && AnalyzeJob.DEFAULT_ALL_ID != analyzeJob.getTableId()
                     && AnalyzeJob.DEFAULT_ALL_ID != analyzeJob.getDbId()) {
-                // some column
+                //database or table is null mean database/table has been dropped
                 Database db = GlobalStateMgr.getCurrentState().getDb(analyzeJob.getDbId());
-                if (null == db) {
+                if (db == null) {
+                    continue;
+                }
+                OlapTable olapTable = (OlapTable) db.getTable(analyzeJob.getTableId());
+                if (olapTable == null) {
                     continue;
                 }
 
-                OlapTable olapTable = (OlapTable) db.getTable(analyzeJob.getTableId());
                 createTableJobs(allTableJobMap, analyzeJob, db, olapTable, analyzeJob.getColumns());
             }
         }
@@ -240,10 +209,6 @@ public class StatisticAutoCollector extends MasterDaemon {
 
     private void createTableJobs(Map<Long, TableCollectJob> tableJobs, AnalyzeJob job,
                                  Database db, Table table) {
-        if (null == table || !Table.TableType.OLAP.equals(table.getType())) {
-            return;
-        }
-
         List<String> columns = table.getFullSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                 .collect(Collectors.toList());
         createTableJobs(tableJobs, job, db, (OlapTable) table, columns);

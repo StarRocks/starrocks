@@ -50,6 +50,7 @@ import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.ListPartitionDesc;
 import com.starrocks.analysis.MultiRangePartitionDesc;
@@ -152,12 +153,16 @@ import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -603,12 +608,16 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Same database name");
         }
 
-        Database db = null;
-        Cluster cluster = null;
+        Database db;
+        Cluster cluster;
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
+            cluster = nameToCluster.get(SystemInfoService.DEFAULT_CLUSTER);
+            if (cluster == null) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_EXISTS, SystemInfoService.DEFAULT_CLUSTER);
+            }
             // check if db exists
             db = fullNameToDb.get(fullDbName);
             if (db == null) {
@@ -619,7 +628,6 @@ public class LocalMetastore implements ConnectorMetadata {
             if (fullNameToDb.get(newFullDbName) != null) {
                 throw new DdlException("Database name[" + newFullDbName + "] is already used");
             }
-
             cluster.removeDb(db.getFullName(), db.getId());
             cluster.addDb(newFullDbName, db.getId());
             // 1. rename db
@@ -1643,13 +1651,8 @@ public class LocalMetastore implements ConnectorMetadata {
             if (stmt.isLakeEngine()) {
                 olapTable = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo,
                         distributionInfo, indexes);
-
-                try {
-                    // get service storage uri from StarMgr
-                    ((LakeTable) olapTable).setStorageGroup(stateMgr.getStarOSAgent().getServiceStorageUri());
-                } catch (Exception e) {
-                    throw new DdlException("Failed to get service storage uri from StarMgr", e);
-                }
+                // get service shard storage info from StarMgr
+                ((LakeTable) olapTable).setShardStorageInfo(stateMgr.getStarOSAgent().getServiceShardStorageInfo());
             } else {
                 Preconditions.checkState(stmt.isOlapEngine());
                 olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
@@ -2246,9 +2249,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         int bucketNum = distributionInfo.getBucketNum();
-        Map<String, String> properties = Maps.newHashMap();
-        properties.put(LakeTable.STORAGE_GROUP, table.getStorageGroup());
-        List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum, properties);
+        List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum, table.getShardStorageInfo());
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
             index.addTablet(tablet, tabletMeta);
@@ -2805,11 +2806,19 @@ public class LocalMetastore implements ConnectorMetadata {
         Preconditions.checkNotNull(distributionDesc);
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
         // create refresh scheme
-        MaterializedView.MvRefreshScheme mvRefreshScheme = null;
-        new MaterializedView.MvRefreshScheme();
+        MaterializedView.MvRefreshScheme mvRefreshScheme;
         RefreshSchemeDesc refreshSchemeDesc = stmt.getRefreshSchemeDesc();
         if (refreshSchemeDesc.getType() == RefreshType.ASYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+            MaterializedView.AsyncRefreshContext asyncRefreshContext = mvRefreshScheme.getAsyncRefreshContext();
+            asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
+            if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
+                asyncRefreshContext.setStep(
+                        ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue());
+                asyncRefreshContext.setTimeUnit(
+                        asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
+            }
         } else if (refreshSchemeDesc.getType() == RefreshType.SYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             mvRefreshScheme.setType(MaterializedView.RefreshType.SYNC);
@@ -2923,6 +2932,16 @@ public class LocalMetastore implements ConnectorMetadata {
             if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC) {
                 // create task
                 Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+                MaterializedView.AsyncRefreshContext asyncRefreshContext =
+                        materializedView.getRefreshScheme().getAsyncRefreshContext();
+                if (asyncRefreshContext.getTimeUnit() != null) {
+                    long startTime = asyncRefreshContext.getStartTime();
+                    TaskSchedule taskSchedule = new TaskSchedule(startTime,
+                            asyncRefreshContext.getStep(),
+                            TimeUtils.convertUnitIdentifierToTimeUnit(asyncRefreshContext.getTimeUnit()));
+                    task.setSchedule(taskSchedule);
+                    task.setType(Constants.TaskType.PERIODICAL);
+                }
                 TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
                 taskManager.createTask(task, false);
                 // run task
@@ -2955,6 +2974,11 @@ public class LocalMetastore implements ConnectorMetadata {
                 if (baseTable != null) {
                     baseTable.removeRelatedMaterializedView(table.getId());
                 }
+            }
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(table.getId()));
+            if (refreshTask != null) {
+                taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
             }
         } else {
             stateMgr.getAlterInstance().processDropMaterializedView(stmt);

@@ -43,7 +43,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 25:MERGING-EXCHANGE
-cardinality: 1561188
+cardinality: 40000
 column statistics:
 * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
@@ -59,7 +59,7 @@ OutPut Exchange Id: 25
 24:SORT
 |  order by: [2, VARCHAR, false] ASC
 |  offset: 0
-|  cardinality: 1561188
+|  cardinality: 40000
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
@@ -70,7 +70,7 @@ OutPut Exchange Id: 25
 |  output columns:
 |  2 <-> [2: S_NAME, VARCHAR, false]
 |  3 <-> [3: S_ADDRESS, VARCHAR, false]
-|  cardinality: 1561188
+|  cardinality: 40000
 |  column statistics:
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
@@ -81,7 +81,7 @@ OutPut Exchange Id: 25
 |  build runtime filters:
 |  - filter_id = 4, build_expr = (1: S_SUPPKEY), remote = true
 |  output columns: 2, 3
-|  cardinality: 1561188
+|  cardinality: 40000
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 40000.0] ESTIMATE
@@ -168,7 +168,7 @@ column statistics:
 
 PLAN FRAGMENT 4(F01)
 
-Input Partition: HASH_PARTITIONED: 32: L_PARTKEY, 33: L_SUPPKEY
+Input Partition: HASH_PARTITIONED: 32: L_PARTKEY
 OutPut Partition: HASH_PARTITIONED: 15: PS_SUPPKEY
 OutPut Exchange Id: 14
 
@@ -218,7 +218,7 @@ probe runtime filters:
 PLAN FRAGMENT 5(F02)
 
 Input Partition: RANDOM
-OutPut Partition: HASH_PARTITIONED: 14: PS_PARTKEY, 15: PS_SUPPKEY
+OutPut Partition: HASH_PARTITIONED: 14: PS_PARTKEY
 OutPut Exchange Id: 11
 
 10:Project
@@ -289,7 +289,7 @@ column statistics:
 PLAN FRAGMENT 7(F00)
 
 Input Partition: RANDOM
-OutPut Partition: HASH_PARTITIONED: 32: L_PARTKEY, 33: L_SUPPKEY
+OutPut Partition: HASH_PARTITIONED: 32: L_PARTKEY
 OutPut Exchange Id: 03
 
 2:AGGREGATE (update serialize)

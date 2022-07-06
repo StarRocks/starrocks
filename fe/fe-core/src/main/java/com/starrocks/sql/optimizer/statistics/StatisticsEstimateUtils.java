@@ -32,4 +32,23 @@ public class StatisticsEstimateUtils {
                 .setDistinctValuesCount(newRange.getDistinctValues());
         return builder.build();
     }
+
+    public static Statistics adjustStatisticsByRowCount(Statistics statistics, double rowCount) {
+        // Do not compute predicate statistics if column statistics is unknown or table row count may inaccurate
+        if (statistics.getColumnStatistics().values().stream().anyMatch(ColumnStatistic::isUnknown) ||
+                statistics.isTableRowCountMayInaccurate()) {
+            return statistics;
+        }
+        Statistics.Builder builder = Statistics.buildFrom(statistics);
+        builder.setOutputRowCount(rowCount);
+        // use row count to adjust column statistics distinct values
+        double distinctValues = Math.max(1, rowCount);
+        statistics.getColumnStatistics().forEach((column, columnStatistic) -> {
+            if (columnStatistic.getDistinctValuesCount() > distinctValues) {
+                builder.addColumnStatistic(column,
+                        ColumnStatistic.buildFrom(columnStatistic).setDistinctValuesCount(distinctValues).build());
+            }
+        });
+        return builder.build();
+    }
 }

@@ -32,7 +32,6 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.rewrite.ExprRewriter;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -125,10 +124,6 @@ public class TableRef implements ParseNode, Writable {
 
     // analysis output
     protected TupleDescriptor desc;
-
-    // set after analyzeJoinHints(); true if explicitly set via hints
-    private boolean isBroadcastJoin;
-    private boolean isPartitionJoin;
 
     // END: Members that need to be reset()
     // ///////////////////////////////////////
@@ -268,26 +263,6 @@ public class TableRef implements ParseNode, Writable {
         return desc.getId();
     }
 
-    /**
-     * Return the list of of materialized tuple ids from the TableRef.
-     * This method should only be called after the TableRef has been analyzed.
-     */
-    public List<TupleId> getMaterializedTupleIds() {
-        // This function should only be called after analyze().
-        Preconditions.checkState(isAnalyzed);
-        Preconditions.checkNotNull(desc);
-        return desc.getId().asList();
-    }
-
-
-    /**
-     * Returns true if this table ref has a resolved path that is rooted at a registered
-     * tuple descriptor, false otherwise.
-     */
-    public boolean isRelative() {
-        return false;
-    }
-
     public Table getTable() {
         return desc.getTable();
     }
@@ -321,40 +296,6 @@ public class TableRef implements ParseNode, Writable {
     }
 
     /**
-     * Parse hints.
-     */
-    private void analyzeJoinHints() throws AnalysisException {
-        if (joinHints == null) {
-            return;
-        }
-        for (String hint : joinHints) {
-            if (hint.equalsIgnoreCase("BROADCAST")) {
-                if (joinOp == JoinOperator.RIGHT_OUTER_JOIN
-                        || joinOp == JoinOperator.FULL_OUTER_JOIN
-                        || joinOp == JoinOperator.RIGHT_SEMI_JOIN
-                        || joinOp == JoinOperator.RIGHT_ANTI_JOIN) {
-                    throw new AnalysisException(
-                            joinOp.toString() + " does not support BROADCAST.");
-                }
-                if (isPartitionJoin) {
-                    throw new AnalysisException("Conflicting JOIN hint: " + hint);
-                }
-                isBroadcastJoin = true;
-            } else if (hint.equalsIgnoreCase("SHUFFLE")) {
-                if (joinOp == JoinOperator.CROSS_JOIN) {
-                    throw new AnalysisException("CROSS JOIN does not support SHUFFLE.");
-                }
-                if (isBroadcastJoin) {
-                    throw new AnalysisException("Conflicting JOIN hint: " + hint);
-                }
-                isPartitionJoin = true;
-            } else {
-                throw new AnalysisException("JOIN hint not recognized: " + hint);
-            }
-        }
-    }
-
-    /**
      * Parse PreAgg hints.
      */
     protected void analyzeHints() throws AnalysisException {
@@ -376,14 +317,6 @@ public class TableRef implements ParseNode, Writable {
      * and the TupleDescriptor (desc) of this table has been created.
      */
     public void analyzeJoin(Analyzer analyzer) throws AnalysisException {
-    }
-
-    public void rewriteExprs(ExprRewriter rewriter, Analyzer analyzer)
-            throws AnalysisException {
-        Preconditions.checkState(isAnalyzed);
-        if (onClause != null) {
-            onClause = rewriter.rewrite(onClause, analyzer);
-        }
     }
 
     private String joinOpToSql() {

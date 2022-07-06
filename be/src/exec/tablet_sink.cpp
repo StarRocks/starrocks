@@ -505,7 +505,7 @@ Status NodeChannel::try_close() {
         return _err_st;
     }
 
-    while (_check_prev_request_done()) {
+    if (_check_prev_request_done()) {
         auto st = add_chunk(nullptr, nullptr, nullptr, 0, 0, true);
         if (!st.ok()) {
             _cancelled = true;
@@ -640,6 +640,9 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
 Status OlapTableSink::prepare(RuntimeState* state) {
     _span->AddEvent("prepare");
 
+    // profile must add to state's object pool
+    _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
+
     // add all counter
     _input_rows_counter = ADD_COUNTER(_profile, "RowsRead", TUnit::UNIT);
     _output_rows_counter = ADD_COUNTER(_profile, "RowsReturned", TUnit::UNIT);
@@ -658,9 +661,6 @@ Status OlapTableSink::prepare(RuntimeState* state) {
 
     _sender_id = state->per_fragment_instance_idx();
     _num_senders = state->num_per_fragment_instances();
-
-    // profile must add to state's object pool
-    _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
 
     SCOPED_TIMER(_profile->total_time_counter());
 
@@ -993,7 +993,7 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
     if (close_status.ok()) {
         do {
             RETURN_IF_ERROR(try_close(state));
-            SleepFor(MonoDelta::FromMilliseconds(1));
+            SleepFor(MonoDelta::FromMilliseconds(5));
         } while (!is_close_done());
     }
     return close_wait(state, close_status);

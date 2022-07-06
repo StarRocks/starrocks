@@ -20,6 +20,7 @@ package com.starrocks.common.util;
 import com.google.common.base.Preconditions;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class ListUtil {
@@ -39,6 +40,10 @@ public class ListUtil {
             throws NullPointerException, IllegalArgumentException {
         Preconditions.checkNotNull(list, "list must not be null");
         Preconditions.checkArgument(expectedSize > 0, "expectedSize must larger than 0");
+
+        if (1 == expectedSize) {
+            return Collections.singletonList(list);
+        }
 
         int splitSize = Math.min(expectedSize, list.size());
 

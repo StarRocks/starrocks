@@ -2114,8 +2114,8 @@ public class JoinTest extends PlanTestBase {
             ExecPlan plan = getExecPlan(sql);
             PlanFragment fragment = plan.getFragments().get(1);
             assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "join op: INNER JOIN (BUCKET_SHUFFLE)");
-            Assert.assertEquals(expectedParallelism, fragment.getParallelExecNum());
-            Assert.assertEquals(1, fragment.getPipelineDop());
+            Assert.assertEquals(expectedParallelism, fragment.getPipelineDop());
+            Assert.assertEquals(1, fragment.getParallelExecNum());
 
             // Case 2: colocate join should use fragment instance parallel.
             sql = "select * from colocate1 left join colocate2 " +
@@ -2123,16 +2123,16 @@ public class JoinTest extends PlanTestBase {
             plan = getExecPlan(sql);
             fragment = plan.getFragments().get(1);
             assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "join op: LEFT OUTER JOIN (COLOCATE)");
-            Assert.assertEquals(expectedParallelism, fragment.getParallelExecNum());
-            Assert.assertEquals(1, fragment.getPipelineDop());
+            Assert.assertEquals(expectedParallelism, fragment.getPipelineDop());
+            Assert.assertEquals(1, fragment.getParallelExecNum());
 
             // Case 3: broadcast join should use pipeline parallel.
             sql = "select a.v1 from t0 a join [broadcast] t0 b on a.v1 = b.v2 and a.v2 = b.v1";
             plan = getExecPlan(sql);
             fragment = plan.getFragments().get(1);
             assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "join op: INNER JOIN (BROADCAST)");
-            Assert.assertEquals(1, fragment.getParallelExecNum());
             Assert.assertEquals(expectedParallelism, fragment.getPipelineDop());
+            Assert.assertEquals(1, fragment.getParallelExecNum());
 
             // Case 4: local bucket shuffle join succeeded by broadcast should use fragment instance parallel.
             sql = "select a.v1 from t0 a " +
@@ -2143,8 +2143,8 @@ public class JoinTest extends PlanTestBase {
             String fragmentString = fragment.getExplainString(TExplainLevel.NORMAL);
             assertContains(fragmentString, "join op: INNER JOIN (BROADCAST)");
             assertContains(fragmentString, "join op: INNER JOIN (BUCKET_SHUFFLE)");
-            Assert.assertEquals(expectedParallelism, fragment.getParallelExecNum());
-            Assert.assertEquals(1, fragment.getPipelineDop());
+            Assert.assertEquals(expectedParallelism, fragment.getPipelineDop());
+            Assert.assertEquals(1, fragment.getParallelExecNum());
         } finally {
             sessionVariable.setEnablePipelineEngine(enablePipeline);
             sessionVariable.setPipelineDop(pipelineDop);

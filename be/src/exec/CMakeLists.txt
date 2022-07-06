@@ -29,7 +29,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_FILES
     data_sink.cpp
-    decompressor.cpp
     empty_set_node.cpp
     exec_node.cpp
     exchange_node.cpp
@@ -140,6 +139,7 @@ set(EXEC_FILES
     pipeline/dict_decode_operator.cpp
     pipeline/result_sink_operator.cpp
     pipeline/olap_table_sink_operator.cpp
+    pipeline/scan/balanced_chunk_buffer.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/scan_operator.cpp
     pipeline/scan/olap_chunk_source.cpp

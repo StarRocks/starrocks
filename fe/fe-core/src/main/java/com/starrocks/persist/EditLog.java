@@ -637,12 +637,12 @@ public class EditLog {
                 }
                 case OperationType.OP_ADD_FUNCTION: {
                     final Function function = (Function) journal.getData();
-                    GlobalStateMgr.getCurrentState().replayCreateFunction(function);
+                    Database.replayCreateFunctionLog(function);
                     break;
                 }
                 case OperationType.OP_DROP_FUNCTION: {
                     FunctionSearchDesc function = (FunctionSearchDesc) journal.getData();
-                    GlobalStateMgr.getCurrentState().replayDropFunction(function);
+                    Database.replayDropFunctionLog(function);
                     break;
                 }
                 case OperationType.OP_BACKEND_TABLETS_INFO: {

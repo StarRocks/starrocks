@@ -89,6 +89,7 @@ data = [
         type=pa.struct([("s0", pa.int32()), ("s1", pa.string())]),
     ),
 
+    pa.array(["{\"s1\": 1 }", "{\"s2\": 2}", "{\"s3\": 3}"], type=pa.string()),
 ]
 
 columns = [
@@ -116,6 +117,7 @@ columns = [
     "col_json_struct_struct",
     
     "col_json_struct_string",
+    "col_json_json_string",
 ]
 table = pa.Table.from_arrays(data, columns)
 pq.write_table(table, output)

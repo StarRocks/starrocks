@@ -38,6 +38,7 @@ import com.sleepycat.je.rep.NodeType;
 import com.sleepycat.je.rep.RepInternal;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.ReplicationConfig;
+import com.sleepycat.je.rep.ReplicationNode;
 import com.sleepycat.je.rep.RestartRequiredException;
 import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.DbResetRepGroup;
@@ -163,11 +164,12 @@ public class BDBEnvironment {
     // The setup() method opens the environment and database
     protected void setup() throws JournalException, InterruptedException {
         this.closing = false;
-        initConfigs();
+        ensureHelperInLocal();
+        initConfigs(isElectable);
         setupEnvironment();
     }
 
-    protected void initConfigs() throws JournalException {
+    protected void initConfigs(boolean isElectable) throws JournalException {
         // Almost never used, just in case the master can not restart
         if (Config.metadata_failure_recovery.equals("true")) {
             if (!isElectable) {
@@ -195,6 +197,9 @@ public class BDBEnvironment {
                 .setConfigParam(ReplicationConfig.REPLICA_TIMEOUT, Config.bdbje_heartbeat_timeout_second + " s");
         replicationConfig
                 .setConfigParam(ReplicationConfig.FEEDER_TIMEOUT, Config.bdbje_heartbeat_timeout_second + " s");
+        replicationConfig
+                .setConfigParam(ReplicationConfig.REPLAY_COST_PERCENT,
+                        String.valueOf(Config.bdbje_replay_cost_percent));
 
         if (isElectable) {
             replicationConfig.setReplicaAckTimeout(Config.bdbje_replica_ack_timeout_second, TimeUnit.SECONDS);
@@ -215,6 +220,9 @@ public class BDBEnvironment {
         environmentConfig.setCachePercent(MEMORY_CACHE_PERCENT);
         environmentConfig.setLockTimeout(Config.bdbje_lock_timeout_second, TimeUnit.SECONDS);
         environmentConfig.setConfigParam(EnvironmentConfig.FILE_LOGGING_LEVEL, Config.bdbje_log_level);
+        environmentConfig.setConfigParam(EnvironmentConfig.CLEANER_THREADS,
+                String.valueOf(Config.bdbje_cleaner_threads));
+
         if (isElectable) {
             Durability durability = new Durability(getSyncPolicy(Config.master_sync_policy),
                     getSyncPolicy(Config.replica_sync_policy), getAckPolicy(Config.replica_ack_policy));
@@ -324,6 +332,105 @@ public class BDBEnvironment {
         // failed after retry
         throw exception;
     }
+
+    /**
+     * This method is used to check if the local replicated environment matches that of the helper.
+     * This could happen in a situation like this:
+     * 1. User adds a follower and starts the new follower without helper.
+     *    --> The new follower will run as a master in a standalone environment.
+     * 2. User restarts this follower with a helper.
+     *    --> Sometimes this new follower will join the group successfully, making master crash.
+     *
+     * This method only init the replicated environment through a handshake.
+     * It will not read or write any data.
+     */
+    protected void ensureHelperInLocal() throws JournalException, InterruptedException {
+        if (!isElectable) {
+            LOG.info("skip check local environment for observer");
+            return;
+        }
+
+        if (selfNodeHostPort.equals(helperHostPort)) {
+            LOG.info("skip check local environment because helper node and local node are identical.");
+            return;
+        }
+
+        // Almost never used, just in case the master can not restart
+        if (Config.metadata_failure_recovery.equals("true")) {
+            LOG.info("skip check local environment because metadata_failure_recovery = true");
+            return;
+        }
+
+        LOG.info("start to check if local replica environment from {} contains {}", envHome, helperHostPort);
+
+        // 1. init environment as an observer
+        initConfigs(false);
+
+        HostAndPort hostAndPort = HostAndPort.fromString(helperHostPort);
+
+        JournalException exception = null;
+        for (int i = 0; i < RETRY_TIME; i++) {
+            if (i > 0) {
+                Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+            }
+
+            try {
+                // 2. get local nodes
+                replicatedEnvironment = new ReplicatedEnvironment(envHome, replicationConfig, environmentConfig);
+                Set<ReplicationNode> localNodes = replicatedEnvironment.getGroup().getNodes();
+                if (localNodes.isEmpty()) {
+                    LOG.info("skip check empty environment");
+                    return;
+                }
+
+                // 3. found if match
+                for (ReplicationNode node : localNodes) {
+                    if (node.getHostName().equals(hostAndPort.getHost()) && node.getPort() == hostAndPort.getPort()) {
+                        LOG.info("found {} in local environment!", helperHostPort);
+                        return;
+                    }
+                }
+
+                // 4. helper not found in local, raise exception
+                throw new JournalException(
+                        String.format("bad environment %s! helper host %s not in local %s",
+                                envHome, helperHostPort, localNodes));
+            } catch (RestartRequiredException e) {
+                String errMsg = String.format(
+                        "catch a RestartRequiredException when checking if helper in local after retried %d times, " +
+                        "refresh and check again",
+                        i + 1);
+                LOG.warn(errMsg, e);
+                exception = new JournalException(errMsg);
+                exception.initCause(e);
+                if (e instanceof InsufficientLogException) {
+                    refreshLog((InsufficientLogException) e);
+                }
+            } catch (DatabaseException e) {
+                if (i == 0 && e instanceof UnknownMasterException) {
+                    // The node may be unable to join the group because the Master could not be determined because a
+                    // master was present but lacked a {@link QuorumPolicy#SIMPLE_MAJORITY} needed to update the
+                    // environment with information about this node, if it's a new node and is joining the group for
+                    // the first time.
+                    LOG.warn(
+                            "failed to check if helper in local because of UnknowMasterException for the first time, ignore it.");
+                } else {
+                    String errMsg = String.format("failed to check if helper in local after retried %d times", i + 1);
+                    LOG.error(errMsg, e);
+                    exception = new JournalException(errMsg);
+                    exception.initCause(e);
+                }
+            } finally {
+                if (replicatedEnvironment != null) {
+                    replicatedEnvironment.close();
+                }
+            }
+        }
+
+        // failed after retry
+        throw exception;
+    }
+
 
     public void refreshLog(InsufficientLogException insufficientLogEx) {
         try {

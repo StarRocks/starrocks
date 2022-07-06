@@ -8,6 +8,7 @@
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
 #include "column/json_column.h"
+#include "common/statusor.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "util/json.h"
@@ -134,7 +135,7 @@ static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* outp
         for (int i = 0; i < array->length(); i++) {
             vpack::Builder builder;
             auto view = real_array->GetView(i);
-            JsonValue json = JsonValue::from_string({view.data(), view.length()});
+            ASSIGN_OR_RETURN(auto json, JsonValue::parse_json_or_string({view.data(), view.length()}));
             output->append(std::move(json));
         }
         break;

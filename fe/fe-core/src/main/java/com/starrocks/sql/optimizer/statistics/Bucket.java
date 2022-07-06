@@ -3,23 +3,23 @@
 package com.starrocks.sql.optimizer.statistics;
 
 public class Bucket {
-    private final String lower;
-    private final String upper;
+    private final double lower;
+    private final double upper;
     private final Long count;
     private final Long upperRepeats;
 
-    public Bucket(String lower, String upper, Long count, Long upperRepeats) {
+    public Bucket(double lower, double upper, Long count, Long upperRepeats) {
         this.lower = lower;
         this.upper = upper;
         this.count = count;
         this.upperRepeats = upperRepeats;
     }
 
-    public String getLower() {
+    public double getLower() {
         return lower;
     }
 
-    public String getUpper() {
+    public double getUpper() {
         return upper;
     }
 

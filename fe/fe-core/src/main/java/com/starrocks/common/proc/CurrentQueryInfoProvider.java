@@ -32,7 +32,7 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.qe.QueryStatisticsItem;
-import com.starrocks.rpc.BackendServiceProxy;
+import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PTriggerProfileReportRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
@@ -229,7 +229,7 @@ public class CurrentQueryInfoProvider {
             final PTriggerProfileReportRequest pbRequest =
                     new PTriggerProfileReportRequest(request.getInstanceIds());
             try {
-                futures.add(Pair.create(request, BackendServiceProxy.getInstance().
+                futures.add(Pair.create(request, BackendServiceClient.getInstance().
                         triggerProfileReportAsync(address, pbRequest)));
             } catch (RpcException e) {
                 throw new AnalysisException("Sending request fails for query's execution informations.");

@@ -84,7 +84,7 @@ public:
 
     bool is_canceled() { return _runtime_state->is_cancelled(); }
 
-    MorselQueueMap& morsel_queues() { return _morsel_queues; }
+    MorselQueueFactoryMap& morsel_queue_factories() { return _morsel_queue_factories; }
 
     Status prepare_all_pipelines() {
         for (auto& pipe : _pipelines) {
@@ -134,10 +134,8 @@ private:
     Drivers _drivers;
 
     RuntimeFilterHub _runtime_filter_hub;
-    // _morsel_queues is mapping from an source_id to its corresponding
-    // MorselQueue that is shared among drivers created from the same pipeline,
-    // drivers contend for Morsels from MorselQueue.
-    MorselQueueMap _morsel_queues;
+
+    MorselQueueFactoryMap _morsel_queue_factories;
     // when _num_drivers counts down to zero, means all drivers has finished, then BE
     // can notify FE via reportExecStatus that fragment instance is done after which
     // FragmentContext can be unregistered safely.

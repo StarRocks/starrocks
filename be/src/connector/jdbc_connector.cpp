@@ -96,6 +96,10 @@ int64_t JDBCDataSource::num_rows_read() const {
 int64_t JDBCDataSource::num_bytes_read() const {
     return _bytes_read;
 }
+int64_t JDBCDataSource::cpu_time_spent() const {
+    // TODO: calculte the real cputime
+    return 0;
+}
 
 Status JDBCDataSource::_create_scanner(RuntimeState* state) {
     const TJDBCScanNode& jdbc_scan_node = _provider->_jdbc_scan_node;

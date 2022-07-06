@@ -192,6 +192,8 @@ public:
 
     static Status clear_del_vector(DataDir* store, WriteBatch* batch, TTabletId tablet_id);
 
+    static Status clear_persistent_index(DataDir* store, WriteBatch* batch, TTabletId tablet_id);
+
     static Status remove_tablet_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id, TSchemaHash schema_hash);
 };
 

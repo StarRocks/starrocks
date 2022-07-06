@@ -16,7 +16,9 @@ import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class IcebergHiveCatalogTest {
@@ -51,7 +53,7 @@ public class IcebergHiveCatalogTest {
         Map<String, String> icebergProperties = new HashMap<>();
         IcebergHiveCatalog icebergHiveCatalog = IcebergHiveCatalog.getInstance("thrift://test:9030", icebergProperties);
         Table table = icebergHiveCatalog.loadTable(identifier);
-        Assert.assertTrue(table.name().equals("test"));
+        Assert.assertEquals("test", table.name());
     }
 
     @Test
@@ -62,5 +64,21 @@ public class IcebergHiveCatalogTest {
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
+    }
+
+    @Test
+    public void testListAllDatabases(@Mocked IcebergHiveCatalog hiveCatalog) {
+        new Expectations() {
+            {
+                hiveCatalog.listAllDatabases();
+                result = Arrays.asList("db1", "db2");
+                minTimes = 0;
+            }
+        };
+
+        Map<String, String> icebergProperties = new HashMap<>();
+        IcebergHiveCatalog icebergHiveCatalog = IcebergHiveCatalog.getInstance("thrift://test:9030", icebergProperties);
+        List<String> dbs = icebergHiveCatalog.listAllDatabases();
+        Assert.assertEquals(dbs, Arrays.asList("db1", "db2"));
     }
 }

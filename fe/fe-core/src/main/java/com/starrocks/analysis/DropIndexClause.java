@@ -40,4 +40,9 @@ public class DropIndexClause extends AlterTableClause {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDropIndexClause(this, context);
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

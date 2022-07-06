@@ -24,6 +24,25 @@ void LogicalSplitScanMorsel::init_tablet_reader_params(vectorized::TabletReaderP
     params->short_key_ranges = _short_key_ranges;
 }
 
+/// MorselQueueFactory
+IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq) {
+    if (queue_per_driver_seq.empty()) {
+        _queue_per_driver_seq.emplace_back(pipeline::create_empty_morsel_queue());
+        return;
+    }
+
+    int max_dop = queue_per_driver_seq.rbegin()->first;
+    _queue_per_driver_seq.reserve(max_dop + 1);
+    for (int i = 0; i <= max_dop; ++i) {
+        auto it = queue_per_driver_seq.find(i);
+        if (it == queue_per_driver_seq.end()) {
+            _queue_per_driver_seq.emplace_back(create_empty_morsel_queue());
+        } else {
+            _queue_per_driver_seq.emplace_back(std::move(it->second));
+        }
+    }
+}
+
 /// MorselQueue.
 std::vector<TInternalScanRange*> _convert_morsels_to_olap_scan_ranges(const Morsels& morsels) {
     std::vector<TInternalScanRange*> scan_ranges;
@@ -582,6 +601,10 @@ ShortKeyIndexGroupIterator LogicalSplitMorselQueue::_upper_bound_ordinal(const v
 
     auto end_iter = _segment_group->upper_bound(index_key);
     return end_iter;
+}
+
+MorselQueuePtr create_empty_morsel_queue() {
+    return std::make_unique<FixedMorselQueue>(std::vector<MorselPtr>{});
 }
 
 } // namespace pipeline

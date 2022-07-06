@@ -81,7 +81,7 @@ public class Optimizer {
         context = new OptimizerContext(memo, columnRefFactory, connectContext);
         context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
         TaskContext rootTaskContext =
-                new TaskContext(context, requiredProperty, (ColumnRefSet) requiredColumns.clone(), Double.MAX_VALUE);
+                new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
 
         // Note: root group of memo maybe change after rewrite,
         // so we should always get root group and root group expression
@@ -176,6 +176,7 @@ public class Optimizer {
         // Rewrite Exchange on top of Sort to Final Sort
         result = new ExchangeSortToMergeRule().rewrite(result);
         result = new PruneAggregateNodeRule().rewrite(result, rootTaskContext);
+        result = new PruneShuffleColumnRule().rewrite(result, rootTaskContext);
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
         // This rule should be last
         result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
@@ -243,6 +244,9 @@ public class Optimizer {
             requiredColumns.union(cteContext.getAllRequiredColumns());
             rootTaskContext.setRequiredColumns(requiredColumns);
             ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+            // After prune columns, the output column in the logical property may outdated, because of the following rule
+            // will use the output column, we need to derive the logical property here.
+            memo.deriveAllGroupLogicalProperty();
 
             if (cteContext.needPushLimit() || cteContext.needPushPredicate()) {
                 ruleRewriteOnlyOnce(memo, rootTaskContext, new PushLimitAndFilterToCTEProduceRule());

@@ -8,14 +8,14 @@
 #include "util/raw_container.h"
 
 namespace starrocks {
-class Decompressor;
+class StreamCompression;
 } // namespace starrocks
 
 namespace starrocks::io {
 
 class CompressedInputStream final : public InputStream {
 public:
-    CompressedInputStream(std::shared_ptr<InputStream> source_stream, std::shared_ptr<Decompressor> decompressor,
+    CompressedInputStream(std::shared_ptr<InputStream> source_stream, std::shared_ptr<StreamCompression> decompressor,
                           size_t compressed_data_cache_size = 8 * 1024 * 1024LU)
             : _source_stream(std::move(source_stream)),
               _decompressor(std::move(decompressor)),
@@ -76,7 +76,7 @@ private:
     };
 
     std::shared_ptr<InputStream> _source_stream;
-    std::shared_ptr<Decompressor> _decompressor;
+    std::shared_ptr<StreamCompression> _decompressor;
     CompressedBuffer _compressed_buff;
     bool _stream_end = false;
 };

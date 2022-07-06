@@ -31,6 +31,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class CreateDbStmt extends DdlStmt {
     private boolean ifNotExists;
@@ -43,6 +44,10 @@ public class CreateDbStmt extends DdlStmt {
 
     public String getFullDbName() {
         return dbName;
+    }
+
+    public void setFullDbName(String dbName) {
+        this.dbName = dbName;
     }
 
     public boolean isSetIfNotExists() {
@@ -74,5 +79,15 @@ public class CreateDbStmt extends DdlStmt {
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append("CREATE DATABASE ").append("`").append(dbName).append("`");
         return stringBuilder.toString();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCreateDbStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

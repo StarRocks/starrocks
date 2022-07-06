@@ -21,14 +21,6 @@
 
 package com.starrocks.rpc;
 
-import com.baidu.bjf.remoting.protobuf.utils.JDKCompilerHelper;
-import com.baidu.bjf.remoting.protobuf.utils.compiler.JdkCompiler;
-import com.baidu.jprotobuf.pbrpc.client.ProtobufRpcProxy;
-import com.baidu.jprotobuf.pbrpc.transport.RpcClient;
-import com.baidu.jprotobuf.pbrpc.transport.RpcClientOptions;
-import com.google.common.collect.Maps;
-import com.starrocks.common.Config;
-import com.starrocks.common.util.JdkUtils;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
@@ -45,70 +37,17 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.Future;
 
-public class BackendServiceProxy {
-    private static final Logger LOG = LogManager.getLogger(BackendServiceProxy.class);
+public class BackendServiceClient {
+    private static final Logger LOG = LogManager.getLogger(BackendServiceClient.class);
 
-    private RpcClient rpcClient;
-    // TODO(zc): use TNetworkAddress,
-    private Map<TNetworkAddress, PBackendService> backendServiceMap;
-    private Map<TNetworkAddress, LakeService> lakeServiceMap;
-
-    static {
-        int javaRuntimeVersion = JdkUtils.getJavaVersionAsInteger(System.getProperty("java.version"));
-        JDKCompilerHelper
-                .setCompiler(new JdkCompiler(JdkCompiler.class.getClassLoader(), String.valueOf(javaRuntimeVersion)));
+    private BackendServiceClient() {
     }
 
-    private BackendServiceProxy() {
-        final RpcClientOptions rpcOptions = new RpcClientOptions();
-        // If false, different methods to a service endpoint use different connection pool,
-        // which will create too many connections.
-        // If true, all the methods to a service endpoint use the same connection pool.
-        rpcOptions.setShareThreadPoolUnderEachProxy(true);
-        rpcOptions.setShareChannelPool(true);
-        rpcOptions.setMaxTotoal(Config.brpc_connection_pool_size);
-        // After the RPC request sending, the connection will be closed,
-        // if the number of total connections is greater than MaxIdleSize.
-        // Therefore, MaxIdleSize shouldn't less than MaxTotal for the async requests.
-        rpcOptions.setMaxIdleSize(Config.brpc_connection_pool_size);
-        rpcOptions.setMaxWait(Config.brpc_idle_wait_max_time);
-        rpcClient = new RpcClient(rpcOptions);
-        backendServiceMap = Maps.newHashMap();
-        lakeServiceMap = Maps.newHashMap();
-    }
-
-    public static BackendServiceProxy getInstance() {
-        return SingletonHolder.INSTANCE;
-    }
-
-    protected synchronized PBackendService getBackendService(TNetworkAddress address) {
-        PBackendService service = backendServiceMap.get(address);
-        if (service != null) {
-            return service;
-        }
-        ProtobufRpcProxy<PBackendService> proxy = new ProtobufRpcProxy(rpcClient, PBackendService.class);
-        proxy.setHost(address.getHostname());
-        proxy.setPort(address.getPort());
-        service = proxy.proxy();
-        backendServiceMap.put(address, service);
-        return service;
-    }
-
-    public synchronized LakeService getLakeService(TNetworkAddress address) {
-        LakeService service = lakeServiceMap.get(address);
-        if (service != null) {
-            return service;
-        }
-        ProtobufRpcProxy<LakeService> proxy = new ProtobufRpcProxy(rpcClient, LakeService.class);
-        proxy.setHost(address.getHostname());
-        proxy.setPort(address.getPort());
-        service = proxy.proxy();
-        lakeServiceMap.put(address, service);
-        return service;
+    public static BackendServiceClient getInstance() {
+        return BackendServiceClient.SingletonHolder.INSTANCE;
     }
 
     public Future<PExecPlanFragmentResult> execPlanFragmentAsync(
@@ -117,7 +56,7 @@ public class BackendServiceProxy {
         final PExecPlanFragmentRequest pRequest = new PExecPlanFragmentRequest();
         pRequest.setRequest(tRequest);
         try {
-            final PBackendService service = getBackendService(address);
+            final PBackendService service = BrpcProxy.getInstance().getBackendService(address);
             return service.execPlanFragmentAsync(pRequest);
         } catch (NoSuchElementException e) {
             try {
@@ -127,7 +66,7 @@ public class BackendServiceProxy {
                 } catch (InterruptedException interruptedException) {
                     // do nothing
                 }
-                final PBackendService service = getBackendService(address);
+                final PBackendService service = BrpcProxy.getInstance().getBackendService(address);
                 return service.execPlanFragmentAsync(pRequest);
             } catch (NoSuchElementException noSuchElementException) {
                 LOG.warn("Execute plan fragment retry failed, address={}:{}",
@@ -156,7 +95,7 @@ public class BackendServiceProxy {
         qid.lo = queryId.lo;
         pRequest.queryId = qid;
         try {
-            final PBackendService service = getBackendService(address);
+            final PBackendService service = BrpcProxy.getInstance().getBackendService(address);
             return service.cancelPlanFragmentAsync(pRequest);
         } catch (NoSuchElementException e) {
             // retry
@@ -166,7 +105,7 @@ public class BackendServiceProxy {
                 } catch (InterruptedException interruptedException) {
                     // do nothing
                 }
-                final PBackendService service = getBackendService(address);
+                final PBackendService service = BrpcProxy.getInstance().getBackendService(address);
                 return service.cancelPlanFragmentAsync(pRequest);
             } catch (NoSuchElementException noSuchElementException) {
                 LOG.warn("Cancel plan fragment retry failed, address={}:{}",
@@ -180,10 +119,9 @@ public class BackendServiceProxy {
         }
     }
 
-    public Future<PFetchDataResult> fetchDataAsync(
-            TNetworkAddress address, PFetchDataRequest request) throws RpcException {
+    public Future<PFetchDataResult> fetchDataAsync(TNetworkAddress address, PFetchDataRequest request) throws RpcException {
         try {
-            PBackendService service = getBackendService(address);
+            PBackendService service = BrpcProxy.getInstance().getBackendService(address);
             return service.fetchDataAsync(request);
         } catch (Throwable e) {
             LOG.warn("fetch data catch a exception, address={}:{}",
@@ -195,7 +133,7 @@ public class BackendServiceProxy {
     public Future<PTriggerProfileReportResult> triggerProfileReportAsync(
             TNetworkAddress address, PTriggerProfileReportRequest request) throws RpcException {
         try {
-            final PBackendService service = getBackendService(address);
+            final PBackendService service = BrpcProxy.getInstance().getBackendService(address);
             return service.triggerProfileReport(request);
         } catch (Throwable e) {
             LOG.warn("fetch data catch a exception, address={}:{}",
@@ -204,10 +142,9 @@ public class BackendServiceProxy {
         }
     }
 
-    public Future<PProxyResult> getInfo(
-            TNetworkAddress address, PProxyRequest request) throws RpcException {
+    public Future<PProxyResult> getInfo(TNetworkAddress address, PProxyRequest request) throws RpcException {
         try {
-            final PBackendService service = getBackendService(address);
+            final PBackendService service = BrpcProxy.getInstance().getBackendService(address);
             return service.getInfo(request);
         } catch (Throwable e) {
             LOG.warn("failed to get info, address={}:{}", address.getHostname(), address.getPort(), e);
@@ -216,6 +153,6 @@ public class BackendServiceProxy {
     }
 
     private static class SingletonHolder {
-        private static final BackendServiceProxy INSTANCE = new BackendServiceProxy();
+        private static final BackendServiceClient INSTANCE = new BackendServiceClient();
     }
 }

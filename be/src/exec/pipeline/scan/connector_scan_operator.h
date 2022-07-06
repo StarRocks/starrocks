@@ -4,6 +4,7 @@
 
 #include "connector/connector.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
 
@@ -15,13 +16,25 @@ namespace pipeline {
 
 class ConnectorScanOperatorFactory final : public ScanOperatorFactory {
 public:
-    ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node);
+    using ActiveInputKey = std::pair<int32_t, int32_t>;
+    using ActiveInputSet = phmap::parallel_flat_hash_set<
+            ActiveInputKey, typename phmap::Hash<ActiveInputKey>, typename phmap::EqualTo<ActiveInputKey>,
+            typename std::allocator<ActiveInputKey>, NUM_LOCK_SHARD_LOG, std::mutex, true>;
+
+    ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop);
 
     ~ConnectorScanOperatorFactory() override = default;
 
     Status do_prepare(RuntimeState* state) override;
     void do_close(RuntimeState* state) override;
     OperatorPtr do_create(int32_t dop, int32_t driver_sequence) override;
+    BalancedChunkBuffer& get_chunk_buffer() { return _chunk_buffer; }
+    ActiveInputSet& get_active_inputs() { return _active_inputs; }
+
+private:
+    // TODO: refactor the OlapScanContext, move them into the context
+    BalancedChunkBuffer _chunk_buffer;
+    ActiveInputSet _active_inputs;
 };
 
 class ConnectorScanOperator final : public ScanOperator {
@@ -35,13 +48,19 @@ public:
     void do_close(RuntimeState* state) override;
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
 
-private:
+    // TODO: refactor it into the base class
+    void attach_chunk_source(int32_t source_index) override;
+    void detach_chunk_source(int32_t source_index) override;
+    bool has_shared_chunk_source() const override;
+    bool has_buffer_output() const override;
+    bool has_available_buffer() const override;
+    ChunkPtr get_chunk_from_buffer() override;
 };
 
 class ConnectorChunkSource final : public ChunkSource {
 public:
-    ConnectorChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
-                         vectorized::ConnectorScanNode* scan_node);
+    ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                         ScanOperator* op, vectorized::ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
 
     ~ConnectorChunkSource() override;
 
@@ -52,6 +71,8 @@ public:
     bool has_next_chunk() const override;
 
     bool has_output() const override;
+
+    virtual bool has_shared_output() const override;
 
     virtual size_t get_buffer_size() const override;
 
@@ -87,7 +108,7 @@ private:
     bool _closed = false;
     uint64_t _rows_read = 0;
     uint64_t _bytes_read = 0;
-    UnboundedBlockingQueue<vectorized::ChunkPtr> _chunk_buffer;
+    BalancedChunkBuffer& _chunk_buffer;
 };
 
 } // namespace pipeline

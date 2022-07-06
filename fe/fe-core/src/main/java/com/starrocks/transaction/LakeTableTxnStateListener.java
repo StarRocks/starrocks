@@ -79,8 +79,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         for (long partitionId : dirtyPartitionSet) {
             Partition partition = table.getPartition(partitionId);
             long version = partition.getNextVersion();
-            long visibleTime = System.currentTimeMillis();
-            PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(partitionId, version, visibleTime);
+            PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(partitionId, version, 0);
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
         }
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);

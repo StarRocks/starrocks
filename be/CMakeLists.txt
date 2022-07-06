@@ -322,11 +322,15 @@ if ("${USE_STAROS}" STREQUAL "ON")
      add_library(starlet STATIC IMPORTED)
      set_target_properties(starlet PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet.a)
 
+     add_library(starlet_fslib_all STATIC IMPORTED GLOBAL)
+     set_target_properties(starlet_fslib_all PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet_fslib_all.a)
+
      set(STARROCKS_DEPENDENCIES
         ${STARROCKS_DEPENDENCIES}
         starlet
         gRPC::grpc++_reflection
         gRPC::grpc++
+        starlet_fslib_all
         )
 endif()
 
@@ -722,6 +726,7 @@ endif ()
 install(DIRECTORY DESTINATION ${OUTPUT_DIR})
 install(DIRECTORY DESTINATION ${OUTPUT_DIR}/bin)
 install(DIRECTORY DESTINATION ${OUTPUT_DIR}/conf)
+install(DIRECTORY DESTINATION ${OUTPUT_DIR}/lib)
 
 install(FILES
     ${BASE_DIR}/../bin/common.sh

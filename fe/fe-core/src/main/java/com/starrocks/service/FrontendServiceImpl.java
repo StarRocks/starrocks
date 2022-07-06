@@ -71,11 +71,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.StreamLoadTask;
@@ -452,8 +452,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TTaskInfo info = new TTaskInfo();
             info.setTask_name(task.getName());
             info.setCreate_time(task.getCreateTime() / 1000);
-            // Now there are only MANUAL types of Tasks
-            info.setSchedule("MANUAL");
+            String scheduleStr = task.getType().name();
+            if (task.getType() == Constants.TaskType.PERIODICAL) {
+                scheduleStr += task.getSchedule();
+            }
+            info.setSchedule(scheduleStr);
             info.setDatabase(ClusterNamespace.getNameFromFullName(task.getDbName()));
             info.setDefinition(task.getDefinition());
             info.setExpire_time(task.getExpireTime() / 1000);
@@ -1018,8 +1021,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return ret;
         }
         TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tbl.getId());
-        BasicStatsMeta basicStatsMeta =
-                GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tbl.getId());
         switch (request.txnCommitAttachment.getLoadType()) {
             case ROUTINE_LOAD:
                 if (!(attachment instanceof RLTaskTxnCommitAttachment)) {
@@ -1029,9 +1030,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 entity.counterRoutineLoadFinishedTotal.increase(1L);
                 entity.counterRoutineLoadBytesTotal.increase(routineAttachment.getReceivedBytes());
                 entity.counterRoutineLoadRowsTotal.increase(routineAttachment.getLoadedRows());
-                if (basicStatsMeta != null) {
-                    basicStatsMeta.increase(routineAttachment.getLoadedRows());
-                }
 
                 break;
             case MANUAL_LOAD:
@@ -1042,9 +1040,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 entity.counterStreamLoadFinishedTotal.increase(1L);
                 entity.counterStreamLoadBytesTotal.increase(streamAttachment.getReceivedBytes());
                 entity.counterStreamLoadRowsTotal.increase(streamAttachment.getLoadedRows());
-                if (basicStatsMeta != null) {
-                    basicStatsMeta.increase(streamAttachment.getLoadedRows());
-                }
 
                 break;
             default:

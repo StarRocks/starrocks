@@ -15,6 +15,15 @@ statement
     // Query Statement
     : queryStatement                                                                        #query
 
+    // Database Statement
+    | alterDbQuotaStmt                                                                      #alterDbQuota
+    | createDbStatement                                                                     #createDb
+    | dropDbStatement                                                                       #dropDb
+    | showCreateDbStatement                                                                 #showCreateDb
+    | alterDatabaseRename                                                                   #databaseRename
+    | recoverDbStmt                                                                         #revoverDb
+    | showDataStmt                                                                          #showData
+
     // Table Statement
     | createTableStatement                                                                  #createTable
     | createTableAsSelectStatement                                                          #createTableAsSelect
@@ -27,6 +36,7 @@ statement
     | createIndexStatement                                                                  #createIndex
     | dropIndexStatement                                                                    #dropIndex
     | refreshTableStatement                                                                 #refreshTable
+    | showDeleteStatement                                                                   #showDelete
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -86,6 +96,7 @@ statement
     | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
+    | killStatement                                                                         #kill
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -96,6 +107,38 @@ statement
     ;
 
 
+// ---------------------------------------- DataBase Statement ---------------------------------------------------------
+alterDbQuotaStmt
+    : ALTER DATABASE identifier SET DATA QUOTA identifier
+    | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
+    ;
+
+createDbStatement
+    : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? identifier
+    ;
+
+dropDbStatement
+    : DROP (DATABASE | SCHEMA) (IF EXISTS)? identifier FORCE?
+    ;
+    
+showCreateDbStatement
+    : SHOW CREATE (DATABASE | SCHEMA) identifier
+    ;
+
+
+alterDatabaseRename
+    : ALTER DATABASE identifier RENAME identifier
+    ;
+
+
+recoverDbStmt
+    : RECOVER (DATABASE | SCHEMA) identifier
+    ;
+
+showDataStmt
+    : SHOW DATA
+    | SHOW DATA FROM qualifiedName
+    ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
@@ -220,6 +263,10 @@ showTableStatusStatement
 
 refreshTableStatement
     : REFRESH EXTERNAL TABLE qualifiedName (PARTITION '(' string (',' string)* ')')?
+    ;
+
+showDeleteStatement
+    : SHOW DELETE ((FROM | IN) db=qualifiedName)?
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------
@@ -446,6 +493,10 @@ showDatabasesStatement
 
 showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+killStatement
+    : KILL (CONNECTION? | QUERY) INTEGER_VALUE
     ;
 
 showNodesStatement

@@ -152,6 +152,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
 
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
+    public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
 
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
@@ -203,6 +204,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
+    public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -220,7 +222,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
-    public static final String ENABLE_EXCHANGE_PASS_THROUGH_EXPIRE = "enable_exchange_pass_through_expire";
 
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
 
@@ -270,6 +271,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_TABLET_INTERNAL_PARALLEL)
     private boolean enableTabletInternalParallel = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_SHARED_SCAN)
+    private boolean enableSharedScan = true;
 
     // max memory used on every backend.
     public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;
@@ -519,14 +523,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE)
     private boolean enableColumnExprPredicate = false;
 
-    // Currently, if enable_exchange_pass_through is turned on. The performance has no improve on benchmark test,
-    // and it will cause memory statistics problem of fragment instance,
-    // It also which will introduce the problem of cross-thread memory allocate and release,
-    // So i temporarily disable the enable_exchange_pass_through.
-    // I will turn on int after all the above problems are solved.
-    @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH_EXPIRE, alias = ENABLE_EXCHANGE_PASS_THROUGH,
-            show = ENABLE_EXCHANGE_PASS_THROUGH)
-    private boolean enableExchangePassThrough = false;
+    @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH, flag = VariableMgr.INVISIBLE)
+    private boolean enableExchangePassThrough = true;
 
     @VariableMgr.VarAttr(name = ALLOW_DEFAULT_PARTITION, flag = VariableMgr.INVISIBLE)
     private boolean allowDefaultPartition = false;
@@ -548,6 +546,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SHOW_ALL_VARIABLES, flag = VariableMgr.INVISIBLE)
     private boolean enableShowAllVariables = false;
+
+    @VarAttr(name = CBO_PRUNE_SHUFFLE_COLUMN_RATE, flag = VariableMgr.INVISIBLE)
+    private double cboPruneShuffleColumnRate = 0.1;
+
+    public double getCboPruneShuffleColumnRate() {
+        return cboPruneShuffleColumnRate;
+    }
+
+    public void setCboPruneShuffleColumnRate(double cboPruneShuffleColumnRate) {
+        this.cboPruneShuffleColumnRate = cboPruneShuffleColumnRate;
+    }
 
     public boolean isEnableShowAllVariables() {
         return enableShowAllVariables;
@@ -880,6 +889,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getPipelineDop() {
         return this.pipelineDop;
+    }
+
+    public boolean isEnableSharedScan() {
+        return enableSharedScan;
     }
 
     public int getWorkGroupId() {

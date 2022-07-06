@@ -34,6 +34,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class AlterDatabaseRename extends DdlStmt {
     private String dbName;
@@ -52,6 +53,14 @@ public class AlterDatabaseRename extends DdlStmt {
         return newDbName;
     }
 
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
+    }
+
+    public void setNewDbName(String newName) {
+        this.newDbName = newName;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
         super.analyze(analyzer);
@@ -59,6 +68,7 @@ public class AlterDatabaseRename extends DdlStmt {
             throw new AnalysisException("Database name is not set");
         }
 
+        dbName = ClusterNamespace.getFullName(dbName);
         if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName,
                 PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
                                 Privilege.ALTER_PRIV),
@@ -72,13 +82,22 @@ public class AlterDatabaseRename extends DdlStmt {
 
         FeNameFormat.checkDbName(newDbName);
 
-        dbName = ClusterNamespace.getFullName(dbName);
         newDbName = ClusterNamespace.getFullName(newDbName);
     }
 
     @Override
     public String toSql() {
         return "ALTER DATABASE " + dbName + " RENAME " + newDbName;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAlterDatabaseRename(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
 }

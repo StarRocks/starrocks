@@ -206,7 +206,9 @@ public class StreamLoadPlanner {
         queryOptions.setQuery_type(TQueryType.LOAD);
         queryOptions.setQuery_timeout(streamLoadTask.getTimeout());
         queryOptions.setTransmission_compression_type(streamLoadTask.getTransmisionCompressionType());
-        if (streamLoadTask.getLoadParallelRequestNum() != 0) {
+        // Disable load_dop for LakeTable temporary, because BE's `LakeTabletsChannel` does not support
+        // parallel send from a single sender.
+        if (streamLoadTask.getLoadParallelRequestNum() != 0 && !destTable.isLakeTable()) {
             // only dup_keys can use parallel write since other table's the order of write is important
             if (destTable.getKeysType() == KeysType.DUP_KEYS) {
                 queryOptions.setLoad_dop(streamLoadTask.getLoadParallelRequestNum());

@@ -44,6 +44,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Daemon;
@@ -818,8 +819,15 @@ public class ReportHandler extends Daemon {
                             // update counter
                             ++addToMetaCounter;
                         } catch (MetaNotFoundException e) {
-                            LOG.warn("failed add to meta. tablet[{}], backend[{}]. {}",
-                                    tabletId, backendId, e.getMessage());
+                            // Enough replica causing replica add failed should be treated as a normal
+                            // case to avoid too many useless warning logs. This will happen when a clone task
+                            // finished for decommission or balance, and the redundant replica has been deleted
+                            // from some BE, but the BE's tablet report doesn't see this deletion and still report
+                            // the deleted tablet info to FE.
+                            if (e.getErrorCode() != InternalErrorCode.REPLICA_ENOUGH_ERR) {
+                                LOG.warn("failed add to meta. tablet[{}], backend[{}]. {}",
+                                        tabletId, backendId, e.getMessage());
+                            }
                             needDelete = true;
                         }
                     } else {
@@ -1270,7 +1278,7 @@ public class ReportHandler extends Daemon {
                         return;
                     }
                 }
-                throw new MetaNotFoundException(
+                throw new MetaNotFoundException(InternalErrorCode.REPLICA_ENOUGH_ERR,
                         "replica is enough[" + tablet.getReplicas().size() + "-" + replicationNum + "]");
             }
         } finally {

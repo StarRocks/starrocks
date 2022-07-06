@@ -18,6 +18,7 @@ class Schema;
 namespace lake {
 
 class Rowset;
+class Tablet;
 
 using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
 using RowsetMetadata = RowsetMetadataPB;
@@ -28,8 +29,10 @@ using TabletSchemaPtr = std::shared_ptr<const TabletSchema>;
 
 class Rowset {
 public:
-    explicit Rowset(std::string group, TabletSchemaPtr tablet_schema, RowsetMetadataPtr rowset_metadata);
+    explicit Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata);
     ~Rowset();
+
+    Status init();
 
     StatusOr<std::vector<ChunkIteratorPtr>> get_segment_iterators(const vectorized::Schema& schema,
                                                                   const vectorized::RowsetReadOptions& options);
@@ -42,6 +45,8 @@ private:
     Status load_segments();
 
 private:
+    // _tablet is owned by TabletReader
+    Tablet* _tablet;
     std::string _group;
     TabletSchemaPtr _tablet_schema;
     RowsetMetadataPtr _rowset_metadata;

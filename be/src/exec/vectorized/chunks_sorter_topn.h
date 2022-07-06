@@ -93,7 +93,13 @@ private:
                                               DataSegments& segments);
 
     Status _partial_sort_col_wise(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
-                                  DataSegments& segments, const size_t chunk_size, const size_t rows_to_sort);
+                                  DataSegments& segments, const size_t chunk_size);
+
+    // For rank type topn, it may keep more data than we need during processing,
+    // therefor, pruning should be performed when processing is finished
+    // For example, given the sorted set [1, 2, 3, 3, 3, 4, 5] with limit = 3,
+    // the last two element [4, 5] should be pruned
+    void _rank_pruning();
 
     // buffer
     struct RawChunks {

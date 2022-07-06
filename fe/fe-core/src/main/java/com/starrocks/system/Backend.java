@@ -43,7 +43,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * This class extends the primary identifier of a Backend with ephemeral state,
@@ -71,45 +70,16 @@ public class Backend extends ComputeNode {
     private volatile long tabletMaxCompactionScore = 0;
 
     // additional backendStatus information for BE, display in JSON format
-    private BackendStatus backendStatus = new BackendStatus();
+    private final BackendStatus backendStatus = new BackendStatus();
 
     public Backend() {
-        setHost("");
-        setVersion("");
-        setLastUpdateMs(0);
-        setLastStartTime(0);
-        setIsAlive(new AtomicBoolean());
-        setIsDecommissioned(new AtomicBoolean(false));
-
-        setBePort(0);
-        setHttpPort(0);
-        setBeRpcPort(0);
+        super();
         this.disksRef = ImmutableMap.of();
-
-        setOwnerClusterName("");
-        setBackendState(BackendState.free.ordinal());
-
-        setDecommissionType(DecommissionType.SystemDecommission.ordinal());
     }
 
     public Backend(long id, String host, int heartbeatPort) {
-        setId(id);
-        setHost(host);
-        setVersion("");
-        setHeartbeatPort(heartbeatPort);
-        setBePort(-1);
-        setHttpPort(-1);
-        setBeRpcPort(-1);
-        setLastUpdateMs(-1L);
-        setLastStartTime(-1L);
+        super(id, host, heartbeatPort);
         this.disksRef = ImmutableMap.of();
-
-        setIsAlive(new AtomicBoolean(false));
-        setIsDecommissioned(new AtomicBoolean(false));
-
-        setOwnerClusterName("");
-        setBackendState(BackendState.free.ordinal());
-        setDecommissionType(DecommissionType.SystemDecommission.ordinal());
     }
 
     public void setDisks(ImmutableMap<String, DiskInfo> disks) {
@@ -212,15 +182,6 @@ public class Backend extends ComputeNode {
             }
         }
         return exceedLimit;
-    }
-
-    public String getPathByPathHash(long pathHash) {
-        for (DiskInfo diskInfo : disksRef.values()) {
-            if (diskInfo.getPathHash() == pathHash) {
-                return diskInfo.getRootPath();
-            }
-        }
-        return null;
     }
 
     public void updateDisks(Map<String, TDisk> backendDisks) {

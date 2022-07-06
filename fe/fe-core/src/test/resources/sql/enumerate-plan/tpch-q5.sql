@@ -121,7 +121,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
         AGGREGATE ([GLOBAL] aggregate [{55: sum=sum(54: expr)}] group by [[46: N_NAME]] having [null]
             EXCHANGE SHUFFLE[46]
                 INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY AND 40: S_NATIONKEY = 4: C_NATIONKEY] post-join-predicate [null])
-                    EXCHANGE SHUFFLE[11, 40]
+                    EXCHANGE SHUFFLE[11]
                         INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
                             INNER JOIN (join-predicate [22: L_SUPPKEY = 37: S_SUPPKEY] post-join-predicate [null])
                                 SCAN (columns[20: L_ORDERKEY, 22: L_SUPPKEY, 25: L_EXTENDEDPRICE, 26: L_DISCOUNT] predicate[null])
@@ -135,7 +135,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
                                                     SCAN (columns[50: R_REGIONKEY, 51: R_NAME] predicate[51: R_NAME = AFRICA])
                             EXCHANGE SHUFFLE[10]
                                 SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 14: O_ORDERDATE] predicate[14: O_ORDERDATE >= 1995-01-01 AND 14: O_ORDERDATE < 1996-01-01])
-                    EXCHANGE SHUFFLE[1, 4]
+                    EXCHANGE SHUFFLE[1]
                         SCAN (columns[1: C_CUSTKEY, 4: C_NATIONKEY] predicate[null])
 [end]
 [plan-6]
@@ -144,7 +144,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
         AGGREGATE ([GLOBAL] aggregate [{55: sum=sum(54: expr)}] group by [[46: N_NAME]] having [null]
             EXCHANGE SHUFFLE[46]
                 INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY AND 40: S_NATIONKEY = 4: C_NATIONKEY] post-join-predicate [null])
-                    EXCHANGE SHUFFLE[11, 40]
+                    EXCHANGE SHUFFLE[11]
                         INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
                             INNER JOIN (join-predicate [22: L_SUPPKEY = 37: S_SUPPKEY] post-join-predicate [null])
                                 SCAN (columns[20: L_ORDERKEY, 22: L_SUPPKEY, 25: L_EXTENDEDPRICE, 26: L_DISCOUNT] predicate[null])
@@ -159,7 +159,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
                                                     SCAN (columns[50: R_REGIONKEY, 51: R_NAME] predicate[51: R_NAME = AFRICA])
                             EXCHANGE SHUFFLE[10]
                                 SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 14: O_ORDERDATE] predicate[14: O_ORDERDATE >= 1995-01-01 AND 14: O_ORDERDATE < 1996-01-01])
-                    EXCHANGE SHUFFLE[1, 4]
+                    EXCHANGE SHUFFLE[1]
                         SCAN (columns[1: C_CUSTKEY, 4: C_NATIONKEY] predicate[null])
 [end]
 [plan-7]
@@ -168,7 +168,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
         AGGREGATE ([GLOBAL] aggregate [{55: sum=sum(54: expr)}] group by [[46: N_NAME]] having [null]
             EXCHANGE SHUFFLE[46]
                 INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY AND 40: S_NATIONKEY = 4: C_NATIONKEY] post-join-predicate [null])
-                    EXCHANGE SHUFFLE[11, 40]
+                    EXCHANGE SHUFFLE[11]
                         INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
                             INNER JOIN (join-predicate [22: L_SUPPKEY = 37: S_SUPPKEY] post-join-predicate [null])
                                 SCAN (columns[20: L_ORDERKEY, 22: L_SUPPKEY, 25: L_EXTENDEDPRICE, 26: L_DISCOUNT] predicate[null])
@@ -183,7 +183,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
                                                     SCAN (columns[50: R_REGIONKEY, 51: R_NAME] predicate[51: R_NAME = AFRICA])
                             EXCHANGE SHUFFLE[10]
                                 SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 14: O_ORDERDATE] predicate[14: O_ORDERDATE >= 1995-01-01 AND 14: O_ORDERDATE < 1996-01-01])
-                    EXCHANGE SHUFFLE[1, 4]
+                    EXCHANGE SHUFFLE[1]
                         SCAN (columns[1: C_CUSTKEY, 4: C_NATIONKEY] predicate[null])
 [end]
 [plan-8]
@@ -192,7 +192,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
         AGGREGATE ([GLOBAL] aggregate [{55: sum=sum(54: expr)}] group by [[46: N_NAME]] having [null]
             EXCHANGE SHUFFLE[46]
                 INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY AND 40: S_NATIONKEY = 4: C_NATIONKEY] post-join-predicate [null])
-                    EXCHANGE SHUFFLE[11, 40]
+                    EXCHANGE SHUFFLE[11]
                         INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
                             INNER JOIN (join-predicate [22: L_SUPPKEY = 37: S_SUPPKEY] post-join-predicate [null])
                                 SCAN (columns[20: L_ORDERKEY, 22: L_SUPPKEY, 25: L_EXTENDEDPRICE, 26: L_DISCOUNT] predicate[null])
@@ -208,7 +208,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
                                                     SCAN (columns[50: R_REGIONKEY, 51: R_NAME] predicate[51: R_NAME = AFRICA])
                             EXCHANGE SHUFFLE[10]
                                 SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 14: O_ORDERDATE] predicate[14: O_ORDERDATE >= 1995-01-01 AND 14: O_ORDERDATE < 1996-01-01])
-                    EXCHANGE SHUFFLE[1, 4]
+                    EXCHANGE SHUFFLE[1]
                         SCAN (columns[1: C_CUSTKEY, 4: C_NATIONKEY] predicate[null])
 [end]
 [plan-9]
@@ -401,7 +401,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
         AGGREGATE ([GLOBAL] aggregate [{55: sum=sum(54: expr)}] group by [[46: N_NAME]] having [null]
             EXCHANGE SHUFFLE[46]
                 INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY AND 40: S_NATIONKEY = 4: C_NATIONKEY] post-join-predicate [null])
-                    EXCHANGE SHUFFLE[11, 40]
+                    EXCHANGE SHUFFLE[11]
                         INNER JOIN (join-predicate [22: L_SUPPKEY = 37: S_SUPPKEY] post-join-predicate [null])
                             INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
                                 SCAN (columns[20: L_ORDERKEY, 22: L_SUPPKEY, 25: L_EXTENDEDPRICE, 26: L_DISCOUNT] predicate[null])
@@ -415,7 +415,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
                                             SCAN (columns[45: N_NATIONKEY, 46: N_NAME, 47: N_REGIONKEY] predicate[null])
                                             EXCHANGE BROADCAST
                                                 SCAN (columns[50: R_REGIONKEY, 51: R_NAME] predicate[51: R_NAME = AFRICA])
-                    EXCHANGE SHUFFLE[1, 4]
+                    EXCHANGE SHUFFLE[1]
                         SCAN (columns[1: C_CUSTKEY, 4: C_NATIONKEY] predicate[null])
 [end]
 [plan-18]
@@ -424,7 +424,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
         AGGREGATE ([GLOBAL] aggregate [{55: sum=sum(54: expr)}] group by [[46: N_NAME]] having [null]
             EXCHANGE SHUFFLE[46]
                 INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY AND 40: S_NATIONKEY = 4: C_NATIONKEY] post-join-predicate [null])
-                    EXCHANGE SHUFFLE[11, 40]
+                    EXCHANGE SHUFFLE[11]
                         INNER JOIN (join-predicate [22: L_SUPPKEY = 37: S_SUPPKEY] post-join-predicate [null])
                             INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
                                 SCAN (columns[20: L_ORDERKEY, 22: L_SUPPKEY, 25: L_EXTENDEDPRICE, 26: L_DISCOUNT] predicate[null])
@@ -438,7 +438,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
                                             SCAN (columns[45: N_NATIONKEY, 46: N_NAME, 47: N_REGIONKEY] predicate[null])
                                             EXCHANGE BROADCAST
                                                 SCAN (columns[50: R_REGIONKEY, 51: R_NAME] predicate[51: R_NAME = AFRICA])
-                    EXCHANGE SHUFFLE[1, 4]
+                    EXCHANGE SHUFFLE[1]
                         SCAN (columns[1: C_CUSTKEY, 4: C_NATIONKEY] predicate[null])
 [end]
 [plan-19]
@@ -447,7 +447,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
         AGGREGATE ([GLOBAL] aggregate [{55: sum=sum(54: expr)}] group by [[46: N_NAME]] having [null]
             EXCHANGE SHUFFLE[46]
                 INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY AND 40: S_NATIONKEY = 4: C_NATIONKEY] post-join-predicate [null])
-                    EXCHANGE SHUFFLE[11, 40]
+                    EXCHANGE SHUFFLE[11]
                         INNER JOIN (join-predicate [22: L_SUPPKEY = 37: S_SUPPKEY] post-join-predicate [null])
                             INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
                                 SCAN (columns[20: L_ORDERKEY, 22: L_SUPPKEY, 25: L_EXTENDEDPRICE, 26: L_DISCOUNT] predicate[null])
@@ -462,7 +462,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
                                                 SCAN (columns[45: N_NATIONKEY, 46: N_NAME, 47: N_REGIONKEY] predicate[null])
                                             EXCHANGE SHUFFLE[50]
                                                 SCAN (columns[50: R_REGIONKEY, 51: R_NAME] predicate[51: R_NAME = AFRICA])
-                    EXCHANGE SHUFFLE[1, 4]
+                    EXCHANGE SHUFFLE[1]
                         SCAN (columns[1: C_CUSTKEY, 4: C_NATIONKEY] predicate[null])
 [end]
 [plan-20]
@@ -471,7 +471,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
         AGGREGATE ([GLOBAL] aggregate [{55: sum=sum(54: expr)}] group by [[46: N_NAME]] having [null]
             EXCHANGE SHUFFLE[46]
                 INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY AND 40: S_NATIONKEY = 4: C_NATIONKEY] post-join-predicate [null])
-                    EXCHANGE SHUFFLE[11, 40]
+                    EXCHANGE SHUFFLE[11]
                         INNER JOIN (join-predicate [22: L_SUPPKEY = 37: S_SUPPKEY] post-join-predicate [null])
                             INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
                                 SCAN (columns[20: L_ORDERKEY, 22: L_SUPPKEY, 25: L_EXTENDEDPRICE, 26: L_DISCOUNT] predicate[null])
@@ -486,7 +486,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
                                                 SCAN (columns[45: N_NATIONKEY, 46: N_NAME, 47: N_REGIONKEY] predicate[null])
                                             EXCHANGE SHUFFLE[50]
                                                 SCAN (columns[50: R_REGIONKEY, 51: R_NAME] predicate[51: R_NAME = AFRICA])
-                    EXCHANGE SHUFFLE[1, 4]
+                    EXCHANGE SHUFFLE[1]
                         SCAN (columns[1: C_CUSTKEY, 4: C_NATIONKEY] predicate[null])
 [end]
 [plan-21]
@@ -495,7 +495,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
         AGGREGATE ([GLOBAL] aggregate [{55: sum=sum(54: expr)}] group by [[46: N_NAME]] having [null]
             EXCHANGE SHUFFLE[46]
                 INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY AND 40: S_NATIONKEY = 4: C_NATIONKEY] post-join-predicate [null])
-                    EXCHANGE SHUFFLE[11, 40]
+                    EXCHANGE SHUFFLE[11]
                         INNER JOIN (join-predicate [22: L_SUPPKEY = 37: S_SUPPKEY] post-join-predicate [null])
                             INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
                                 SCAN (columns[20: L_ORDERKEY, 22: L_SUPPKEY, 25: L_EXTENDEDPRICE, 26: L_DISCOUNT] predicate[null])
@@ -510,7 +510,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
                                             SCAN (columns[45: N_NATIONKEY, 46: N_NAME, 47: N_REGIONKEY] predicate[null])
                                             EXCHANGE BROADCAST
                                                 SCAN (columns[50: R_REGIONKEY, 51: R_NAME] predicate[51: R_NAME = AFRICA])
-                    EXCHANGE SHUFFLE[1, 4]
+                    EXCHANGE SHUFFLE[1]
                         SCAN (columns[1: C_CUSTKEY, 4: C_NATIONKEY] predicate[null])
 [end]
 [plan-22]
@@ -519,7 +519,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
         AGGREGATE ([GLOBAL] aggregate [{55: sum=sum(54: expr)}] group by [[46: N_NAME]] having [null]
             EXCHANGE SHUFFLE[46]
                 INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY AND 40: S_NATIONKEY = 4: C_NATIONKEY] post-join-predicate [null])
-                    EXCHANGE SHUFFLE[11, 40]
+                    EXCHANGE SHUFFLE[11]
                         INNER JOIN (join-predicate [22: L_SUPPKEY = 37: S_SUPPKEY] post-join-predicate [null])
                             INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
                                 SCAN (columns[20: L_ORDERKEY, 22: L_SUPPKEY, 25: L_EXTENDEDPRICE, 26: L_DISCOUNT] predicate[null])
@@ -534,7 +534,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
                                             SCAN (columns[45: N_NATIONKEY, 46: N_NAME, 47: N_REGIONKEY] predicate[null])
                                             EXCHANGE BROADCAST
                                                 SCAN (columns[50: R_REGIONKEY, 51: R_NAME] predicate[51: R_NAME = AFRICA])
-                    EXCHANGE SHUFFLE[1, 4]
+                    EXCHANGE SHUFFLE[1]
                         SCAN (columns[1: C_CUSTKEY, 4: C_NATIONKEY] predicate[null])
 [end]
 [plan-23]
@@ -543,7 +543,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
         AGGREGATE ([GLOBAL] aggregate [{55: sum=sum(54: expr)}] group by [[46: N_NAME]] having [null]
             EXCHANGE SHUFFLE[46]
                 INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY AND 40: S_NATIONKEY = 4: C_NATIONKEY] post-join-predicate [null])
-                    EXCHANGE SHUFFLE[11, 40]
+                    EXCHANGE SHUFFLE[11]
                         INNER JOIN (join-predicate [22: L_SUPPKEY = 37: S_SUPPKEY] post-join-predicate [null])
                             INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
                                 SCAN (columns[20: L_ORDERKEY, 22: L_SUPPKEY, 25: L_EXTENDEDPRICE, 26: L_DISCOUNT] predicate[null])
@@ -559,7 +559,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
                                                 SCAN (columns[45: N_NATIONKEY, 46: N_NAME, 47: N_REGIONKEY] predicate[null])
                                             EXCHANGE SHUFFLE[50]
                                                 SCAN (columns[50: R_REGIONKEY, 51: R_NAME] predicate[51: R_NAME = AFRICA])
-                    EXCHANGE SHUFFLE[1, 4]
+                    EXCHANGE SHUFFLE[1]
                         SCAN (columns[1: C_CUSTKEY, 4: C_NATIONKEY] predicate[null])
 [end]
 [plan-24]
@@ -568,7 +568,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
         AGGREGATE ([GLOBAL] aggregate [{55: sum=sum(54: expr)}] group by [[46: N_NAME]] having [null]
             EXCHANGE SHUFFLE[46]
                 INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY AND 40: S_NATIONKEY = 4: C_NATIONKEY] post-join-predicate [null])
-                    EXCHANGE SHUFFLE[11, 40]
+                    EXCHANGE SHUFFLE[11]
                         INNER JOIN (join-predicate [22: L_SUPPKEY = 37: S_SUPPKEY] post-join-predicate [null])
                             INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
                                 SCAN (columns[20: L_ORDERKEY, 22: L_SUPPKEY, 25: L_EXTENDEDPRICE, 26: L_DISCOUNT] predicate[null])
@@ -584,7 +584,7 @@ TOP-N (order by [[55: sum DESC NULLS LAST]])
                                                 SCAN (columns[45: N_NATIONKEY, 46: N_NAME, 47: N_REGIONKEY] predicate[null])
                                             EXCHANGE SHUFFLE[50]
                                                 SCAN (columns[50: R_REGIONKEY, 51: R_NAME] predicate[51: R_NAME = AFRICA])
-                    EXCHANGE SHUFFLE[1, 4]
+                    EXCHANGE SHUFFLE[1]
                         SCAN (columns[1: C_CUSTKEY, 4: C_NATIONKEY] predicate[null])
 [end]
 [plan-25]

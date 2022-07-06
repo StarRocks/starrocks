@@ -13,12 +13,14 @@ public:
 
     ~TestGroupAssigner() override = default;
 
+    std::string get_fs_prefix() override { return "posix://"; }
     StatusOr<std::string> get_group(int64_t tablet_id) override { return _path; }
 
     Status list_group(std::set<std::string>* groups) override {
         groups->emplace(_path);
         return Status::OK();
     }
+    std::string path_assemble(const std::string& path, int64_t tablet_id) override { return path; }
 
 private:
     std::string _path;

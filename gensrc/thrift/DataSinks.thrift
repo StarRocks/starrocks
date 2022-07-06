@@ -67,6 +67,8 @@ struct TPlanFragmentDestination {
   // ... which is being executed on this server
   2: required Types.TNetworkAddress server
   3: optional Types.TNetworkAddress brpc_server
+
+  4: optional i32 pipeline_driver_sequence
 }
 
 // Sink which forwards data to a remote plan fragment,

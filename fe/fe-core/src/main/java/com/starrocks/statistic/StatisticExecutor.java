@@ -219,9 +219,14 @@ public class StatisticExecutor {
 
             GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
         } catch (Exception e) {
-            analyzeJob.setWorkTime(LocalDateTime.now());
-            analyzeJob.setReason(e.getMessage());
-            GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(analyzeJob);
+            // If the job id is equal to -1, it represents the automatic full statistics collection of the new version.
+            // Automatic full statistics collection is an implicit task
+            // that is not recorded in the analyze job list, nor does it update the status of the analyze job.
+            if (analyzeJob.getId() != -1) {
+                analyzeJob.setStatus(Constants.ScheduleStatus.FAILED);
+                analyzeJob.setReason(e.getMessage());
+                GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(analyzeJob);
+            }
 
             analyzeStatus.setStatus(Constants.ScheduleStatus.FAILED);
             analyzeStatus.setEndTime(LocalDateTime.now());
@@ -234,6 +239,21 @@ public class StatisticExecutor {
             analyzeJob.setStatus(Constants.ScheduleStatus.PENDING);
             analyzeJob.setWorkTime(LocalDateTime.now());
             GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(analyzeJob);
+        }
+
+        analyzeStatus.setStatus(Constants.ScheduleStatus.FINISH);
+        analyzeStatus.setEndTime(LocalDateTime.now());
+
+        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        if (analyzeJob.getType().equals(Constants.AnalyzeType.HISTOGRAM)) {
+            for (String columnName : analyzeJob.getColumns()) {
+                GlobalStateMgr.getCurrentAnalyzeMgr().addHistogramStatsMeta(new HistogramStatsMeta(db.getId(),
+                        table.getId(), columnName, analyzeJob.getType(), analyzeStatus.getEndTime(),
+                        analyzeJob.getProperties()));
+            }
+        } else {
+            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), table.getId(),
+                    analyzeJob.getType(), analyzeStatus.getEndTime(), analyzeJob.getProperties()));
         }
     }
 

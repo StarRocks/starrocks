@@ -13,8 +13,15 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.load.loadv2.LoadJobFinalOperation;
+import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
+import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TxnCommitAttachment;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -106,7 +113,7 @@ public class AnalyzeManager implements Writable {
                 continue;
             }
 
-            if (table.getType() != Table.TableType.OLAP) {
+            if (!table.isNativeTable()) {
                 expireList.add(job);
                 continue;
             }
@@ -159,6 +166,44 @@ public class AnalyzeManager implements Writable {
 
     public void replayAddBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
         basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
+    }
+
+    public void updateLoadRows(TransactionState transactionState) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(transactionState.getDbId());
+        if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
+            return;
+        }
+        TxnCommitAttachment attachment = transactionState.getTxnCommitAttachment();
+        if (attachment instanceof RLTaskTxnCommitAttachment) {
+            BasicStatsMeta basicStatsMeta =
+                    GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(transactionState.getTableIdList().get(0));
+            if (basicStatsMeta != null) {
+                basicStatsMeta.increaseUpdateRows(((RLTaskTxnCommitAttachment) attachment).getLoadedRows());
+            }
+        } else if (attachment instanceof ManualLoadTxnCommitAttachment) {
+            BasicStatsMeta basicStatsMeta =
+                    GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(transactionState.getTableIdList().get(0));
+            if (basicStatsMeta != null) {
+                basicStatsMeta.increaseUpdateRows(((ManualLoadTxnCommitAttachment) attachment).getLoadedRows());
+            }
+        } else if (attachment instanceof LoadJobFinalOperation) {
+            LoadJobFinalOperation loadJobFinalOperation = (LoadJobFinalOperation) attachment;
+            loadJobFinalOperation.getLoadingStatus().travelTableCounters(
+                    kv -> {
+                        BasicStatsMeta basicStatsMeta =
+                                GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(kv.getKey());
+                        if (basicStatsMeta != null) {
+                            basicStatsMeta.increaseUpdateRows(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_ROWS));
+                        }
+                    }
+            );
+        } else if (attachment instanceof InsertTxnCommitAttachment) {
+            BasicStatsMeta basicStatsMeta =
+                    GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(transactionState.getTableIdList().get(0));
+            if (basicStatsMeta != null) {
+                basicStatsMeta.increaseUpdateRows(((InsertTxnCommitAttachment) attachment).getLoadedRows());
+            }
+        }
     }
 
     public Map<Long, BasicStatsMeta> getBasicStatsMetaMap() {
@@ -263,7 +308,7 @@ public class AnalyzeManager implements Writable {
         }
 
         public void checkAndExpireCachedStatistics(Table table, AnalyzeJob job) {
-            if (null == table || !Table.TableType.OLAP.equals(table.getType())) {
+            if (null == table || !table.isNativeTable()) {
                 return;
             }
 

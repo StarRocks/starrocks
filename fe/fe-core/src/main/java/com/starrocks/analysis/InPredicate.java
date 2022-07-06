@@ -210,32 +210,6 @@ public class InPredicate extends Predicate {
     }
 
     @Override
-    public Expr getResultValue() throws AnalysisException {
-        recursiveResetChildrenResult();
-        final Expr leftChildValue = getChild(0);
-        if (!(leftChildValue instanceof LiteralExpr) || !isLiteralChildren()) {
-            return this;
-        }
-
-        if (leftChildValue instanceof NullLiteral) {
-            return leftChildValue;
-        }
-
-        List<Expr> inListChildren = children.subList(1, children.size());
-        boolean containsLeftChild = inListChildren.contains(leftChildValue);
-
-        // See QueryPlanTest.java testConstantInPredicate() for examples.
-        // This logic should be same as logic in in_predicate.cpp: get_boolean_val()
-        if (containsLeftChild) {
-            return new BoolLiteral(!isNotIn);
-        }
-        if (inListChildren.contains(NULL_LITERAL)) {
-            return new NullLiteral();
-        }
-        return new BoolLiteral(isNotIn);
-    }
-
-    @Override
     public boolean equals(Object obj) {
         if (super.equals(obj)) {
             InPredicate expr = (InPredicate) obj;

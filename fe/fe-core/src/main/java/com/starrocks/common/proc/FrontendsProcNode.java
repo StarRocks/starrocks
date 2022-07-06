@@ -26,6 +26,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import org.apache.commons.validator.routines.InetAddressValidator;
@@ -99,8 +100,14 @@ public class FrontendsProcNode implements ProcNodeInterface {
                 info.add(Integer.toString(fe.getRpcPort()));
             }
 
-            info.add(globalStateMgr.getFeType().name());
-            info.add(String.valueOf(fe.getHost().equals(masterIp)));
+            // set Role and isMaster field
+            if (fe.getHost().equals(masterIp)) {
+                info.add(FrontendNodeType.MASTER.name());
+                info.add("true");
+            } else {
+                info.add(fe.getRole().name());
+                info.add("false");
+            }
 
             info.add(Integer.toString(globalStateMgr.getClusterId()));
             info.add(String.valueOf(isJoin(allFe, fe)));

@@ -50,6 +50,9 @@ public:
         return std::make_shared<ExchangeSourceOperator>(this, _id, _plan_node_id, driver_sequence);
     }
 
+    bool need_local_shuffle() const override;
+    TPartitionType::type partition_type() const override;
+
     std::shared_ptr<DataStreamRecvr> create_stream_recvr(RuntimeState* state,
                                                          const std::shared_ptr<RuntimeProfile>& profile);
     void close_stream_recvr();
