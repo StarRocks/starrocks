@@ -18,9 +18,10 @@
 |http_port|FE 节点的 HTTP Server 端口。|8030|
 |rpc_port|FE 节点的 Thrift Server 端口。|9020|
 |query_port|FE 节点的 MySQL Server 端口。|9030|
-|edit_log_port|FE 集群（Master，Follower，以及 Observer）间的通信端口。|9010|
+|edit_log_port|FE 集群（Leader，Follower，以及 Observer）间的通信端口。|9010|
 
-> 注意：由于 FE 节点的元数据涉及整个 StarRocks 系统，十分关键，建议您不要将 `meta_dir` 与其他进程混布。
+> 注意
+> 由于 FE 节点的元数据涉及整个 StarRocks 系统，十分关键，建议您将 `meta_dir` 部署于单独路径下。
 
 #### 启动 FE 进程
 
@@ -31,9 +32,10 @@ cd StarRocks-x.x.x/fe
 sh bin/start_fe.sh --daemon
 ```
 
-为了保证 FE 高可用，您需要部署多个 FE 节点。我们建议您部署 3 个 FE 节点，其中包含 1 个 FE Master 节点和 2 个 FE Follower 节点。
+为了保证 FE 高可用，您需要部署多个 FE 节点。我们建议您部署 3 个 FE 节点，其中包含 1 个 FE Leader 节点和 2 个 FE Follower 节点。
 
-> 注意：当拥有多个 FE Follower 节点时，集群内需要有半数以上的 FE Follower 节点存活才能够选举出 FE Master 节点，从而提供查询服务。
+> 注意
+> 当拥有多个 FE Follower 节点时，集群内需要有半数以上的 FE Follower 节点存活才能够选举出 FE Master 节点，从而提供查询服务。
 
 每启动一台 FE 节点后，建议您验证该节点是否启动成功。您可以通过发送查询的方式进行验证。
 
@@ -43,15 +45,13 @@ sh bin/start_fe.sh --daemon
 
 启动 BE 节点前，您需要确认配置文件 **be/conf/be.conf** 中数据存路径 `storage_root_path` 和相关通信端口的配置项是否正确。
 
-BE 配置的通信端口有四个:
-
 |配置项|描述|默认值|
 |---|---|---|
 |storage_root_path|BE 节点存储数据路径，您需要提前创建相应路径。建议您为每个磁盘创建一个路径。|${STARROCKS_HOME}/storage|
 |be_port|BE 上 Thrift Server 的端口，用于接收来自 FE 的请求。|9060|
 |webserver_port|BE 上的 HTTP Server 的端口。|8040|
-|heartbeat_service_port|BE 上心跳服务端口（Thrift），用于接收来自 FE 的心跳。|9050|
-|brpc_port|BE 上的 bRPC 端口，用于 BE 之间的通讯。|8060|
+|heartbeat_service_port|BE 上 Thrift server 端口，用于接收来自 FE 的心跳。|9050|
+|brpc_port|BE 节点间的通讯端口。|8060|
 
 #### 启动 BE 进程
 
@@ -106,7 +106,7 @@ sh bin/stop_be.sh
 
 您可以通过滚动升级的方式平滑升级 StarRocks。StarRocks 的版本号遵循 Major.Minor.Patch 的命名方式，分别代表重大版本，大版本以及小版本。
 
-> 注意：
+> 注意
 >
 > * 由于 StarRocks 保证 BE 后向兼容 FE，因此您需要**先升级 BE 节点，再升级 FE 节点**。错误的升级顺序可能导致新旧 FE、BE 节点不兼容，进而导致 BE 节点停止服务。
 > * StarRocks 2.0 之前的大版本升级时必须逐个大版本升级，2.0 之后的版本可以跨大版本升级。StarRocks 2.0 是当前的长期支持版本（Long Term Support，LTS），维护期为半年以上。
@@ -160,6 +160,9 @@ ps aux | grep starrocks_be
 
 ### 测试 FE 升级的正确性
 
+> 注意
+> 由于 FE 元数据极其重要，而升级出现异常可能导致所有数据丢失，请谨慎升级。
+
 1. 在测试开发环境中单独使用新版本部署一个测试用的 FE 进程。
 2. 修改测试用的 FE 的配置文件 **fe.conf**，将所有端口设置为与生产环境不同。
 3. 在 **fe.conf** 添加配置 `cluster_id = 123456`。
@@ -170,8 +173,8 @@ ps aux | grep starrocks_be
 8. 通过 FE 日志 **fe.log** 验证测试 FE 节点是否成功启动。
 9. 如果启动成功，运行 `sh bin/stop_fe.sh` 停止测试环境的 FE 节点进程。
 
-> 说明：以上第 2 至 第 6 步的目的是防止测试环境的 FE 启动后，错误连接到线上环境中。
-> 注意：由于 FE 元数据极其重要，而升级出现异常可能导致所有数据丢失，请谨慎升级。
+> 说明
+> 以上第 2 至 第 6 步的目的是防止测试环境的 FE 启动后，错误连接到线上环境中。
 
 ### 升级 FE 节点
 
@@ -179,7 +182,8 @@ ps aux | grep starrocks_be
 
 进入 FE 路径，并替换相关文件。以下示例以大版本升级为例。
 
-> 注意：FE 节点小版本升级中（例如从 2.0.x 升级到 2.0.y），您只需升级 **/lib/starrocks-fe.jar**。而大版本升级中（例如从 2.0.x 升级到 2.x.x），您需要替换 FE 节点路径下的 **bin** 和 **lib** 文件夹。
+> 注意
+> FE 节点小版本升级中（例如从 2.0.x 升级到 2.0.y），您只需升级 **/lib/starrocks-fe.jar**。而大版本升级中（例如从 2.0.x 升级到 2.x.x），您需要替换 FE 节点路径下的 **bin** 和 **lib** 文件夹。
 
 ```shell
 cd StarRocks-x.x.x/fe
@@ -272,7 +276,8 @@ mysql> set global batch_size = 4096;
 
 您可以通过命令回滚 StarRocks 版本，回滚范围包括所有安装包名为 **StarRocks-xx** 的版本。当升级后发现出现异常状况，不符合预期，想快速恢复服务的，可以按照下述操作回滚版本。
 
-> 注意：回滚操作与升级操作的顺序相反，应当**先回滚 FE 节点，再回滚 BE 节点** 。错误的回滚顺序可能导致新旧 FE、BE 节点不兼容，进而导致 BE 节点停止服务。
+> 注意
+> 回滚操作与升级操作的顺序相反，应当**先回滚 FE 节点，再回滚 BE 节点** 。错误的回滚顺序可能导致新旧 FE、BE 节点不兼容，进而导致 BE 节点停止服务。
 
 ### 下载安装文件
 
@@ -282,7 +287,8 @@ mysql> set global batch_size = 4096;
 
 进入 FE 路径，并替换相关文件。以下示例以大版本回滚为例。
 
-> 注意：FE 节点小版本回滚中（例如从 2.0.y 回滚到 2.0.x），您只需回滚 **/lib/starrocks-fe.jar**。而大版本回滚中（例如从 2.x.x 升级到 2.0.x），您需要替换 FE 节点路径下的 **bin** 和 **lib** 文件夹。
+> 注意
+> FE 节点小版本回滚中（例如从 2.0.y 回滚到 2.0.x），您只需回滚 **/lib/starrocks-fe.jar**。而大版本回滚中（例如从 2.x.x 升级到 2.0.x），您需要替换 FE 节点路径下的 **bin** 和 **lib** 文件夹。
 
 ```shell
 cd StarRocks-x.x.x/fe
@@ -309,7 +315,8 @@ ps aux | grep StarRocksFE
 
 进入 BE 路径，并替换相关文件。以下示例以大版本回滚为例。
 
-> 注意：BE 节点小版本回滚中（例如从 2.0.y 回滚到 2.0.x），您只需回滚 **/lib/starrocks_be**。而大版本回滚中（例如从 2.x.x 升级到 2.0.x），您需要替换 BE 节点路径下的 **bin** 和 **lib** 文件夹。
+> 注意
+> BE 节点小版本回滚中（例如从 2.0.y 回滚到 2.0.x），您只需回滚 **/lib/starrocks_be**。而大版本回滚中（例如从 2.x.x 升级到 2.0.x），您需要替换 BE 节点路径下的 **bin** 和 **lib** 文件夹。
 
 ```shell
 cd StarRocks-x.x.x/be
