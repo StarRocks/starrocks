@@ -65,7 +65,10 @@ DUPLICATE KEY(recruit_date, region_num)
 DISTRIBUTED BY HASH(recruit_date, region_num) BUCKETS 8;
 ```
 
-> 注意：在 StarRocks 中，字段名不区分大小写，表名区分大小写。
+> 注意
+>
+> * 在 StarRocks 中，字段名不区分大小写，表名区分大小写。
+> * 建表时，`DISTRIBUTED BY` 为必填字段。
 
 ### 建表语句说明
 
