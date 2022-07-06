@@ -2,10 +2,8 @@
 
 package com.starrocks.scheduler;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
-import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.UUIDUtil;
@@ -17,10 +15,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
