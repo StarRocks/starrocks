@@ -20,10 +20,10 @@ jobs:
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         sourceRunId: ${{ github.event.workflow_run.id }}
-    - run: echo "Approved"${{ steps.source-run-info.outputs.sourceEvent.outputs }}
+
     - name: Label when approved by 2 committers
       if: ${{ steps.label-when-reviewed.outputs.approved == 'true' }}
-      uses: TobKed/label-when-approved-action@v1.2
+      uses: dulong41/label-when-approved-action@master
       id: label-when-approved-by-anyone
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
