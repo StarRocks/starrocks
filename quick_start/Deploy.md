@@ -545,4 +545,4 @@ select * from sr_on_mac where c1 >= '2022-02-02';
 成功部署 StarRocks 集群后，您可以：
 
 * [创建表](Create_table.md)
-* [升级集群](../administration/Cluster_administration.md#集群升级)
+* [导入和查询数据](Import_and_query.md)
