@@ -21,11 +21,10 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         sourceRunId: ${{ github.event.workflow_run.id }}
           
-    - uses: luisrjaeger/approved-event-checker@1.0.0
+    - uses: taichi/approved-event-action@v1.2.1
       id: approved
       with:
-        approvals: 2
-        check_changes_requested: false
+        approvals: '2'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
