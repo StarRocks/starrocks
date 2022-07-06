@@ -17,6 +17,7 @@ FE 的高可用集群采用主从复制架构，可避免 FE 单点故障。FE �
 FE 集群从 Follower 中自动选出 Master 节点，所有更改状态操作都由 Master 节点执行。最新状态可以从 FE Master 节点读取。更改操作可以由非 Master 节点发起，继而转发给 Master 节点执行，非 Master 节点在复制日志中的 LSN 记录最近一次更改操作。读操作可以直接在非 Master 节点上执行，但需要等待非 Master 节点的状态已经同步到最近一次更改操作的 LSN，因此非 Master 节点的读写操作满足顺序一致性。Observer 节点能够增加 FE 集群的读负载能力，对时效性要求放宽的非紧要用户可以选择读 Observer 节点。
 
 > 注意
+>
 > * FE 节点之间的时钟相差**不能超过5s**。如果节点之间存在较大时钟差，请使用 NTP 协议校准时间。
 > * 一台机器上只可以部署单个 FE 节点。
 > * 所有 FE 节点的 `http_port` 需保持相同。
@@ -29,32 +30,32 @@ FE 集群从 Follower 中自动选出 Master 节点，所有更改状态操作�
 
 使用 MySQL 客户端连接已有 FE 节点，添加新 FE 节点的信息，包括角色、IP 地址、以及 Port。
 
-- 添加 FE Follower 节点。
+* 添加 FE Follower 节点。
 
 ```sql
 ALTER SYSTEM ADD FOLLOWER "host:port";
 ```
 
-- 添加 FE Observer 节点。
+* 添加 FE Observer 节点。
 
 ```sql
 ALTER SYSTEM ADD OBSERVER "host:port";
 ```
 
-- `host`：机器的IP 地址。如果机器存在多个 IP 地址，则该项为 `priority_networks` 设置项下设定的唯一通信 IP 地址。
-- `port`：`edit_log_port` 设置项下设定的端口，默认为 `9010`。
+* `host`：机器的IP 地址。如果机器存在多个 IP 地址，则该项为 `priority_networks` 设置项下设定的唯一通信 IP 地址。
+* `port`：`edit_log_port` 设置项下设定的端口，默认为 `9010`。
 
 出于安全考虑，StarRocks 的 FE 节点和 BE 节点只会监听一个 IP 地址进行通信。如果一台机器有多块网卡，StarRocks 有可能无法自动找到正确的 IP 地址。例如，通过 `ifconfig` 命令查看到 `eth0` IP 地址为 `192.168.1.1`，`docker0` IP 地址为 `172.17.0.1`，您可以设置 `192.168.1.0/24` 子网以指定使用 `eth0` 作为通信 IP。此处采用 [CIDR](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing) 的表示方法来指定 IP 所在子网范围，以便在所有的 BE 及 FE 节点上使用相同的配置。
 
 如出现错误，您可以通过命令删除相应 FE 节点。
 
-- 删除 FE Follower 节点。
+* 删除 FE Follower 节点。
 
 ```sql
 ALTER SYSTEM DROP FOLLOWER "host:port";
 ```
 
-- 删除 FE Observer 节点。
+* 删除 FE Observer 节点。
 
 ```sql
 ALTER SYSTEM drop OBSERVER "host:port";
@@ -70,8 +71,8 @@ FE 节点需两两之间建立通信连接方可实现复制协议选主，投�
 ./bin/start_fe.sh --helper host:port --daemon
 ```
 
-- `host`：机器的IP 地址。如果机器存在多个 IP 地址，则该项为 `priority_networks` 设置项下设定的唯一通信 IP 地址。
-- `port`：`edit_log_port` 设置项下设定的端口，默认为 `9010`。
+* `host`：机器的IP 地址。如果机器存在多个 IP 地址，则该项为 `priority_networks` 设置项下设定的唯一通信 IP 地址。
+* `port`：`edit_log_port` 设置项下设定的端口，默认为 `9010`。
 
 #### 确认 FE 集群部署成功
 
@@ -148,10 +149,10 @@ bin/install.sh -h \
 -y  /usr/bin/python -p 19321 -s 19320
 ```
 
-- `-d`：StarRocksManager 的安装路径。
-- `-y`：Python 路径。
-- `-p`：`admin_console_port`，默认为 `19321`。
-- `-s`：`supervisor_http_port`，默认为 `19320`。
+* `-d`：StarRocksManager 的安装路径。
+* `-y`：Python 路径。
+* `-p`：`admin_console_port`，默认为 `19321`。
+* `-s`：`supervisor_http_port`，默认为 `19320`。
 
 ### 安装部署 StarRocks
 
@@ -264,5 +265,5 @@ wget https://bootstrap.pypa.io/ez_setup.py -O - | python
 
 成功部署 StarRocks 集群后，您可以：
 
-- [创建表](Create_table.md)
-- [导入和查询数据](Import_and_query.md)
+* [创建表](Create_table.md)
+* [导入和查询数据](Import_and_query.md)
