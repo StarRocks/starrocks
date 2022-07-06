@@ -21,13 +21,13 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           sourceRunId: ${{ github.event.workflow_run.id }}
           
-      - uses: taichi/approved-event-action@master
+      - uses: luisrjaeger/approved-event-checker@v1.0.0
         id: approved
         with:
-          approvals: '2'
+          approvals: 2
+          check_changes_requested: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
           
       - name: Label when approved by 2 committers
         if: ${{ steps.approved.outputs.approved == 'true' }}
