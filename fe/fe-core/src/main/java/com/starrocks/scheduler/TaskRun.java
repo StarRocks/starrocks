@@ -179,10 +179,7 @@ public class TaskRun implements Comparable<TaskRun> {
             return false;
         }
         TaskRun taskRun = (TaskRun) o;
-        if (!status.getDefinition().equals(taskRun.getStatus().getDefinition())) {
-            return false;
-        }
-        return status.getPriority() == taskRun.getStatus().getPriority();
+        return status.getDefinition().equals(taskRun.getStatus().getDefinition());
     }
 
     @Override

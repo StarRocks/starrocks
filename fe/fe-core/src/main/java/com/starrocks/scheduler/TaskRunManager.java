@@ -2,8 +2,10 @@
 
 package com.starrocks.scheduler;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
+import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.UUIDUtil;
@@ -15,8 +17,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -82,10 +86,29 @@ public class TaskRunManager {
             PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.computeIfAbsent(taskId,
                     u -> Queues.newPriorityBlockingQueue());
             if (mergeRedundant) {
-                // The remove here is actually remove the old TaskRun.
-                // Note that the old TaskRun and new TaskRun may have the same priority and definition,
-                // but other attributes may be different, such as creation time.
-                taskRuns.remove(taskRun);
+                // Because java PriorityQueue does not provide an interface for searching by element,
+                // so find it by code O(n), which can be optimized later
+                TaskRun oldTaskRun = null;
+                for (TaskRun run : taskRuns) {
+                    if (run.equals(taskRun)) {
+                        oldTaskRun = run;
+                        break;
+                    }
+                }
+                if (oldTaskRun != null) {
+
+                    // The remove here is actually remove the old TaskRun.
+                    // Note that the old TaskRun and new TaskRun may have the same definition,
+                    // but other attributes may be different, such as priority, creation time.
+                    // merge priority higher and create time lower and queryId will be change.
+                    taskRuns.remove(taskRun);
+                    if (oldTaskRun.getStatus().getPriority() > taskRun.getStatus().getPriority()) {
+                        taskRun.getStatus().setPriority(oldTaskRun.getStatus().getPriority());
+                    }
+                    if (oldTaskRun.getStatus().getCreateTime() > taskRun.getStatus().getCreateTime()) {
+                        taskRun.getStatus().setCreateTime(oldTaskRun.getStatus().getCreateTime());
+                    }
+                }
             }
             taskRuns.offer(taskRun);
         } finally {
