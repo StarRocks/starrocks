@@ -6,6 +6,7 @@ import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
+import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
@@ -127,6 +128,14 @@ public class ShowStmtAnalyzer {
             String dbName = node.getDb();
             dbName = getFullDatabaseName(dbName, context);
             node.setDb(dbName);
+            return null;
+        }
+
+        @Override
+        public Void visitShowDataStmt(ShowDataStmt node, ConnectContext context) {
+            String dbName = node.getDbName();
+            dbName = getFullDatabaseName(dbName, context);
+            node.setDbName(dbName);
             return null;
         }
     }
