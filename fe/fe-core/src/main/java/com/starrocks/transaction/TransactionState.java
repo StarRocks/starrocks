@@ -560,7 +560,9 @@ public class TransactionState implements Writable {
 
     // return true if txn is running but timeout
     public boolean isTimeout(long currentMillis) {
-        return transactionStatus == TransactionStatus.PREPARE && currentMillis - prepareTime > timeoutMs;
+        return (transactionStatus == TransactionStatus.PREPARE && currentMillis - prepareTime > timeoutMs)
+                || (transactionStatus == TransactionStatus.PREPARED && (currentMillis - commitTime)
+                        / 1000 > Config.prepared_transaction_default_timeout_second);
     }
 
     /*
@@ -606,7 +608,15 @@ public class TransactionState implements Writable {
         sb.append(", prepare time: ").append(prepareTime);
         sb.append(", commit time: ").append(commitTime);
         sb.append(", finish time: ").append(finishTime);
-        sb.append(", publish cost: ").append(finishTime - commitTime).append("ms");
+        if (commitTime > prepareTime) {
+            sb.append(", write cost: ").append(commitTime - prepareTime).append("ms");
+        }
+        if (finishTime > commitTime) {
+            sb.append(", publish cost: ").append(finishTime - commitTime).append("ms");
+        }
+        if (finishTime > prepareTime) {
+            sb.append(", total cost: ").append(finishTime - prepareTime).append("ms");
+        }
         sb.append(", reason: ").append(reason);
         if (txnCommitAttachment != null) {
             sb.append(" attachment: ").append(txnCommitAttachment);
