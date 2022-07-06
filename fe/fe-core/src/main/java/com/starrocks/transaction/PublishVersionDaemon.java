@@ -347,9 +347,7 @@ public class PublishVersionDaemon extends MasterDaemon {
     }
 
     /**
-     * Refresh the materialized view if the following conditions are met:
-     * 1. Refresh type of materialized view is ASYNC
-     * 2. startTime and step not set for AsyncRefreshContext
+     * Refresh the materialized view if it should be triggered after base table was loaded.
      * @param transactionState
      * @throws DdlException
      * @throws MetaNotFoundException
@@ -365,14 +363,9 @@ public class PublishVersionDaemon extends MasterDaemon {
             // TODO: try read lock?
             for (long mvId : relatedMvs) {
                 MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
-                MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
-                if (refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
-                    MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
-                    if (asyncRefreshContext.getStartTime() == 0
-                            && asyncRefreshContext.getStep() == 0) {
-                        GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .refreshMaterializedView(db.getFullName(), db.getTable(mvId).getName(), Constants.TaskRunPriority.NORMAL.value());
-                    }
+                if (materializedView.isLoadTriggeredRefresh()) {
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
+                            db.getFullName(), db.getTable(mvId).getName(), Constants.TaskRunPriority.NORMAL.value());
                 }
             }
         }
