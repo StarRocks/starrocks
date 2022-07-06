@@ -46,9 +46,12 @@ private:
     public:
         using Pool = CompressionContextPool<T, Creator, Deleter, Resetter>;
 
-        explicit ReturnToPoolDeleter(Pool* pool) : _pool(pool) { DCHECK(pool); }
+        explicit ReturnToPoolDeleter(Pool* pool) : _pool(pool) {}
 
         void operator()(T* t) {
+            if (_pool == nullptr) {
+                return;
+            }
             InternalRef ptr(t, _pool->_deleter);
             _pool->add(std::move(ptr));
         }
@@ -91,6 +94,10 @@ public:
     size_t created_count() const { return _created_counter.load(); }
 
     ReturnToPoolDeleter get_deleter() { return ReturnToPoolDeleter(this); }
+
+    static Ref get_default() { return Ref(nullptr, get_default_deleter()); }
+
+    static ReturnToPoolDeleter get_default_deleter() { return ReturnToPoolDeleter(nullptr); }
 
     Resetter& get_resetter() { return _resetter; }
 

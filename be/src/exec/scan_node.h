@@ -32,6 +32,8 @@ namespace starrocks {
 namespace pipeline {
 class MorselQueue;
 using MorselQueuePtr = std::unique_ptr<MorselQueue>;
+class MorselQueueFactory;
+using MorselQueueFactoryPtr = std::unique_ptr<MorselQueueFactory>;
 } // namespace pipeline
 
 class TScanRange;
@@ -63,8 +65,13 @@ public:
     // Convert scan_ranges into node-specific scan restrictions.  This should be
     // called after prepare()
     virtual Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) = 0;
+    virtual StatusOr<pipeline::MorselQueueFactoryPtr> convert_scan_range_to_morsel_queue_factory(
+            const std::vector<TScanRangeParams>& scan_ranges,
+            const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
+            const TExecPlanFragmentParams& request, int pipeline_dop);
     virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
-            const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams& request);
+            const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams& request,
+            size_t num_total_scan_ranges);
 
     // If this scan node accept empty scan ranges.
     virtual bool accept_empty_scan_ranges() const { return true; }

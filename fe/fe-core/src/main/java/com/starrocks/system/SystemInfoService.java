@@ -163,19 +163,11 @@ public class SystemInfoService {
         computeNode.setBackendState(BackendState.using);
     }
 
-    // for deploy manager
-    public void addBackends(List<Pair<String, Integer>> hostPortPairs, boolean isFree) throws DdlException {
-        addBackends(hostPortPairs, isFree, "");
-    }
-
     /**
      * @param hostPortPairs : backend's host and port
-     * @param isFree        : if true the backend is not owned by any cluster
-     * @param destCluster   : if not null or empty backend will be added to destCluster
      * @throws DdlException
      */
-    public void addBackends(List<Pair<String, Integer>> hostPortPairs,
-                            boolean isFree, String destCluster) throws DdlException {
+    public void addBackends(List<Pair<String, Integer>> hostPortPairs) throws DdlException {
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
             if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
@@ -184,7 +176,7 @@ public class SystemInfoService {
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            addBackend(pair.first, pair.second, isFree, destCluster);
+            addBackend(pair.first, pair.second);
         }
     }
 
@@ -207,7 +199,7 @@ public class SystemInfoService {
     }
 
     // Final entry of adding backend
-    private void addBackend(String host, int heartbeatPort, boolean isFree, String destCluster) throws DdlException {
+    private void addBackend(String host, int heartbeatPort) {
         Backend newBackend = new Backend(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         // update idToBackend
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
@@ -219,15 +211,8 @@ public class SystemInfoService {
         copiedReportVersions.put(newBackend.getId(), new AtomicLong(0L));
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
 
-        if (!Strings.isNullOrEmpty(destCluster)) {
-            // add backend to destCluster
-            setBackendOwner(newBackend, destCluster);
-        } else if (!isFree) {
-            // add backend to DEFAULT_CLUSTER
-            setBackendOwner(newBackend, DEFAULT_CLUSTER);
-        } else {
-            // backend is free
-        }
+        // add backend to DEFAULT_CLUSTER
+        setBackendOwner(newBackend, DEFAULT_CLUSTER);
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddBackend(newBackend);
@@ -475,6 +460,16 @@ public class SystemInfoService {
             }
         }
         return null;
+    }
+
+    public long getBackendIdWithStarletPort(String host, int starletPort) {
+        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
+        for (Backend backend : idToBackend.values()) {
+            if (backend.getHost().equals(host) && backend.getStarletPort() == starletPort) {
+                return backend.getId();
+            }
+        }
+        return -1L;
     }
 
     public Backend getBackendWithBePort(String host, int bePort) {
@@ -975,6 +970,16 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(backend.getOwnerClusterName());
         if (null != cluster) {
             cluster.removeBackend(backend.getId());
+            // clear map in starosAgent
+            if (Config.integrate_starmgr) {
+                long starletPort = backend.getStarletPort();
+                if (starletPort == 0) {
+                    return;
+                }
+                String workerAddr = backend.getHost() + ":" + starletPort;
+                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerId(workerAddr);
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerId, workerAddr);
+            }
         } else {
             LOG.error("Cluster " + backend.getOwnerClusterName() + " no exist.");
         }

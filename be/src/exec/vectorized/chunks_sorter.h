@@ -13,8 +13,9 @@
 namespace starrocks::vectorized {
 
 struct DataSegment {
-    static const uint8_t BEFORE_LAST_RESULT = 2;
-    static const uint8_t IN_LAST_RESULT = 1;
+    static const uint8_t SMALLER_THAN_MIN_OF_SEGMENT = 2;
+    static const uint8_t INCLUDE_IN_SEGMENT = 1;
+    static const uint8_t LARGER_THAN_MAX_OF_SEGMENT = 0;
 
     ChunkPtr chunk;
     Columns order_by_columns;
@@ -27,15 +28,13 @@ struct DataSegment {
 
     void init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk);
 
-    // there is two compares in the method,
+    // There is two compares in the method,
     // the first is:
-    //     compare every row in every DataSegment of data_segments with rows_to_sort - 1 row of this DataSegment,
-    //     obtain every row compare result in compare_results_array, if < 0, use it to set IN at filter_array.
+    //     compare every row in every DataSegment of data_segments with `rows_to_sort - 1` row of this DataSegment,
+    //     obtain every row compare result in compare_results_array, if <= 0, mark it with `INCLUDE_IN_SEGMENT`.
     // the second is:
-    //     compare every row in compare_results_array that less than 0, use it to compare with first row of this DataSegment,
-    //     as the first step, we set BEFORE_LAST_RESULT at filter_array.
-    //
-    // Actually, we Count the results in the first compare for the second compare.
+    //     compare every row in compare_results_array that <= 0 (i.e. `INCLUDE_IN_SEGMENT` part) with the first row of this DataSegment,
+    //     if < 0, then mark it with `SMALLER_THAN_MIN_OF_SEGMENT`
     Status get_filter_array(std::vector<DataSegment>& data_segments, size_t rows_to_sort,
                             std::vector<std::vector<uint8_t>>& filter_array, const std::vector<int>& sort_order_flags,
                             const std::vector<int>& null_first_flags, uint32_t& least_num, uint32_t& middle_num);

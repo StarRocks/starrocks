@@ -472,24 +472,24 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         connector_scan_node.connector_name = connector::Connector::HIVE;
         new_node.connector_scan_node = connector_scan_node;
         *node = pool->add(new vectorized::ConnectorScanNode(pool, new_node, descs));
-    }
         return Status::OK();
+    }
     case TPlanNodeType::MYSQL_SCAN_NODE: {
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
         connector_scan_node.connector_name = connector::Connector::MYSQL;
         new_node.connector_scan_node = connector_scan_node;
         *node = pool->add(new vectorized::ConnectorScanNode(pool, new_node, descs));
-    }
         return Status::OK();
+    }
     case TPlanNodeType::ES_HTTP_SCAN_NODE: {
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
         connector_scan_node.connector_name = connector::Connector::ES;
         new_node.connector_scan_node = connector_scan_node;
         *node = pool->add(new vectorized::ConnectorScanNode(pool, new_node, descs));
-    }
         return Status::OK();
+    }
     case TPlanNodeType::SCHEMA_SCAN_NODE:
         *node = pool->add(new vectorized::SchemaScanNode(pool, tnode, descs));
         return Status::OK();
@@ -502,8 +502,16 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         connector_scan_node.connector_name = connector::Connector::JDBC;
         new_node.connector_scan_node = connector_scan_node;
         *node = pool->add(new vectorized::ConnectorScanNode(pool, new_node, descs));
-    }
         return Status::OK();
+    }
+    case TPlanNodeType::LAKE_SCAN_NODE: {
+        TPlanNode new_node = tnode;
+        TConnectorScanNode connector_scan_node;
+        connector_scan_node.connector_name = connector::Connector::LAKE;
+        new_node.connector_scan_node = connector_scan_node;
+        *node = pool->add(new vectorized::ConnectorScanNode(pool, new_node, descs));
+        return Status::OK();
+    }
     default:
         return Status::InternalError(strings::Substitute("Vectorized engine not support node: $0", tnode.node_type));
     }
@@ -737,6 +745,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::META_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::JDBC_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::MYSQL_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::LAKE_SCAN_NODE, nodes);
 }
 
 void ExecNode::init_runtime_profile(const std::string& name) {

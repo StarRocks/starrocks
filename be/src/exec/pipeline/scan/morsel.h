@@ -45,6 +45,9 @@ using Morsels = std::vector<MorselPtr>;
 class MorselQueue;
 using MorselQueuePtr = std::unique_ptr<MorselQueue>;
 using MorselQueueMap = std::unordered_map<int32_t, MorselQueuePtr>;
+class MorselQueueFactory;
+using MorselQueueFactoryPtr = std::unique_ptr<MorselQueueFactory>;
+using MorselQueueFactoryMap = std::unordered_map<int32_t, MorselQueueFactoryPtr>;
 
 /// Morsel.
 class Morsel {
@@ -98,6 +101,48 @@ public:
 
 private:
     std::vector<vectorized::ShortKeyRangeOptionPtr> _short_key_ranges;
+};
+
+/// MorselQueue
+class MorselQueueFactory {
+public:
+    virtual ~MorselQueueFactory() = default;
+
+    virtual MorselQueue* create(int driver_sequence) = 0;
+    virtual size_t size() const = 0;
+    virtual bool is_shared() const = 0;
+};
+
+class SharedMorselQueueFactory final : public MorselQueueFactory {
+public:
+    SharedMorselQueueFactory(MorselQueuePtr queue, int size) : _queue(std::move(queue)), _size(size) {}
+    ~SharedMorselQueueFactory() override = default;
+
+    MorselQueue* create(int driver_sequence) override { return _queue.get(); }
+    size_t size() const override { return _size; }
+    bool is_shared() const override { return true; }
+
+private:
+    MorselQueuePtr _queue;
+    const int _size;
+};
+
+class IndividualMorselQueueFactory final : public MorselQueueFactory {
+public:
+    IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq);
+    ~IndividualMorselQueueFactory() override = default;
+
+    MorselQueue* create(int driver_sequence) override {
+        DCHECK_LT(driver_sequence, _queue_per_driver_seq.size());
+        return _queue_per_driver_seq[driver_sequence].get();
+    }
+
+    size_t size() const override { return _queue_per_driver_seq.size(); }
+
+    bool is_shared() const override { return false; }
+
+private:
+    std::vector<MorselQueuePtr> _queue_per_driver_seq;
 };
 
 /// MorselQueue.
@@ -298,6 +343,8 @@ private:
     size_t _range_idx = 0;
     ShortKeyIndexGroupIterator _next_lower_block_iter;
 };
+
+MorselQueuePtr create_empty_morsel_queue();
 
 } // namespace pipeline
 } // namespace starrocks

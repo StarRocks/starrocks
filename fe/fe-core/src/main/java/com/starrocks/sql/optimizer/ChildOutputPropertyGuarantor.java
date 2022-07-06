@@ -304,16 +304,16 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
 
             // 2.1 respect the hint
             if ("SHUFFLE".equalsIgnoreCase(hint)) {
-                if (leftDistributionDesc.isLocalShuffle()) {
+                if (leftDistributionDesc.isLocal()) {
                     enforceChildShuffleDistribution(leftShuffleColumns, leftChild, leftChildOutputProperty, 0);
                 }
-                if (rightDistributionDesc.isLocalShuffle()) {
+                if (rightDistributionDesc.isLocal()) {
                     enforceChildShuffleDistribution(rightShuffleColumns, rightChild, rightChildOutputProperty, 1);
                 }
                 return visitOperator(node, context);
             }
 
-            if (leftDistributionDesc.isLocalShuffle() && rightDistributionDesc.isLocalShuffle()) {
+            if (leftDistributionDesc.isLocal() && rightDistributionDesc.isLocal()) {
                 // colocate join
                 if ("BUCKET".equalsIgnoreCase(hint) ||
                         !canColocateJoin(leftDistributionSpec, rightDistributionSpec, leftShuffleColumns,
@@ -321,11 +321,11 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                     transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);
                 }
                 return visitOperator(node, context);
-            } else if (leftDistributionDesc.isLocalShuffle() && rightDistributionDesc.isShuffle()) {
+            } else if (leftDistributionDesc.isLocal() && rightDistributionDesc.isShuffle()) {
                 // bucket join
                 transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);
                 return visitOperator(node, context);
-            } else if (leftDistributionDesc.isShuffle() && rightDistributionDesc.isLocalShuffle()) {
+            } else if (leftDistributionDesc.isShuffle() && rightDistributionDesc.isLocal()) {
                 // coordinator can not bucket shuffle data from left to right, so we need to adjust to shuffle join
                 enforceChildShuffleDistribution(rightShuffleColumns, rightChild, rightChildOutputProperty, 1);
                 return visitOperator(node, context);

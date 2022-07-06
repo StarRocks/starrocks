@@ -3,14 +3,17 @@
 package com.starrocks.catalog.lake;
 
 import com.google.gson.annotations.SerializedName;
+import com.staros.proto.ObjectStorageInfo;
+import com.staros.proto.ShardStorageInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.TableIndexes;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 
@@ -26,13 +29,14 @@ import java.util.List;
  * <p>
  * TODO: support table api like Iceberg
  */
-public class LakeTable extends OlapTable {
-    public static final String STORAGE_GROUP = "storageGroup";
-
+public class LakeTable extends OlapTable implements GsonPreProcessable {
     // Currently, storage group is table level, which stores all the tablets data and metadata of this table.
     // Format: service storage uri (from StarOS) + table id
-    @SerializedName(value = STORAGE_GROUP)
-    private String storageGroup;
+    //
+    // "shardStorageInfoBytes" is used for serialization of "shardStorageInfo".
+    @SerializedName(value = "shardStorageInfoBytes")
+    private byte[] shardStorageInfoBytes;
+    private ShardStorageInfo shardStorageInfo;
 
     public LakeTable(long id, String tableName, List<Column> baseSchema, KeysType keysType, PartitionInfo partitionInfo,
                      DistributionInfo defaultDistributionInfo, TableIndexes indexes) {
@@ -46,22 +50,45 @@ public class LakeTable extends OlapTable {
     }
 
     public String getStorageGroup() {
-        return storageGroup;
+        return shardStorageInfo.getObjectStorageInfo().getObjectUri();
     }
 
-    public void setStorageGroup(String serviceStorageUri) throws AnalysisException {
+    public ShardStorageInfo getShardStorageInfo() {
+        return shardStorageInfo;
+    }
+
+    public void setShardStorageInfo(ShardStorageInfo shardStorageInfo) throws DdlException {
+        String storageGroup = null;
+
         // s3://bucket/serviceId/tableId/
-        String path = String.format("%s/%d/", serviceStorageUri, id);
+        String path = String.format("%s/%d/", shardStorageInfo.getObjectStorageInfo().getObjectUri(), id);
         try {
             URI uri = new URI(path);
             String scheme = uri.getScheme();
             if (scheme == null) {
-                throw new AnalysisException("Invalid storage path [" + path + "]: no scheme");
+                throw new DdlException("Invalid storage path [" + path + "]: no scheme");
             }
-            this.storageGroup = uri.normalize().toString();
+            storageGroup = uri.normalize().toString();
         } catch (URISyntaxException e) {
-            throw new AnalysisException("Invalid storage path [" + path + "]: " + e.getMessage());
+            throw new DdlException("Invalid storage path [" + path + "]: " + e.getMessage());
         }
+
+        ObjectStorageInfo objectStorageInfo =
+                ObjectStorageInfo.newBuilder(shardStorageInfo.getObjectStorageInfo()).setObjectUri(storageGroup)
+                        .build();
+        this.shardStorageInfo =
+                ShardStorageInfo.newBuilder(shardStorageInfo).setObjectStorageInfo(objectStorageInfo).build();
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        shardStorageInfoBytes = shardStorageInfo.toByteArray();
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
+        shardStorageInfo = ShardStorageInfo.parseFrom(shardStorageInfoBytes);
     }
 
     @Override

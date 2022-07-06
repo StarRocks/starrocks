@@ -493,6 +493,10 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
 }
 
 void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm) {
+    if (chunks.empty() || perm.empty()) {
+        return;
+    }
+
     std::vector<const Chunk*> src;
     src.reserve(chunks.size());
     for (auto& chunk : chunks) {

@@ -119,19 +119,6 @@ public class IsNullPredicate extends Predicate {
     }
 
     @Override
-    public Expr getResultValue() throws AnalysisException {
-        recursiveResetChildrenResult();
-        final Expr ChildValue = getChild(0);
-
-        if (!(ChildValue instanceof LiteralExpr)) {
-            return this;
-        }
-
-        return ChildValue instanceof NullLiteral ?
-                new BoolLiteral(!isNotNull) : new BoolLiteral(isNotNull);
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitIsNullPredicate(this, context);
     }

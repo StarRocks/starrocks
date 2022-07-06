@@ -38,7 +38,7 @@ public class QueryStatement extends StatementBase {
 
     @Override
     public RedirectStatus getRedirectStatus() {
-        return null;
+        return RedirectStatus.NO_FORWARD;
     }
 
     @Override

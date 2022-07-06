@@ -144,28 +144,6 @@ public class SortInfo {
         return nullsFirst;
     }
 
-    /**
-     * Materializes the slots in sortTupleDesc_ referenced in the ordering exprs.
-     * Materializes the slots referenced by the corresponding sortTupleSlotExpr after
-     * applying the 'smap'.
-     */
-    public void materializeRequiredSlots(Analyzer analyzer, ExprSubstitutionMap smap) {
-        Preconditions.checkNotNull(sortTupleDesc_);
-        Preconditions.checkNotNull(sortTupleSlotExprs_);
-        Preconditions.checkState(sortTupleDesc_.isMaterialized());
-        analyzer.materializeSlots(orderingExprs_);
-        List<SlotDescriptor> sortTupleSlotDescs = sortTupleDesc_.getSlots();
-        List<Expr> materializedExprs = Lists.newArrayList();
-        for (int i = 0; i < sortTupleSlotDescs.size(); ++i) {
-            if (sortTupleSlotDescs.get(i).isMaterialized()) {
-                materializedExprs.add(sortTupleSlotExprs_.get(i));
-            }
-        }
-        List<Expr> substMaterializedExprs =
-                Expr.substituteList(materializedExprs, smap, analyzer, false);
-        analyzer.materializeSlots(substMaterializedExprs);
-    }
-
     public void substituteOrderingExprs(ExprSubstitutionMap smap, Analyzer analyzer) {
         orderingExprs_ = Expr.substituteList(orderingExprs_, smap, analyzer, false);
     }

@@ -115,7 +115,7 @@ public class ColocateTableIndexTest {
         // drop db2
         sql = "DROP DATABASE db2;";
         DropDbStmt dropDbStmt = (DropDbStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
-        GlobalStateMgr.getCurrentState().dropDb(dropDbStmt);
+        GlobalStateMgr.getCurrentState().getMetadata().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
         // group1 -> table1_1*, table1_2*
         // group2 -> table2_l*
         infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();

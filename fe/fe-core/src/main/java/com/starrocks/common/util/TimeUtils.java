@@ -43,6 +43,7 @@ import java.time.ZoneId;
 import java.util.Date;
 import java.util.SimpleTimeZone;
 import java.util.TimeZone;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -251,5 +252,21 @@ public class TimeUtils {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_TIME_ZONE, value);
         }
         throw new DdlException("Parse time zone " + value + " error");
+    }
+
+    public static TimeUnit convertUnitIdentifierToTimeUnit(String unitIdentifierDescription) throws DdlException {
+        switch (unitIdentifierDescription) {
+            case "SECOND":
+                return TimeUnit.SECONDS;
+            case "MINUTE":
+                return TimeUnit.MINUTES;
+            case "HOUR":
+                return TimeUnit.HOURS;
+            case "DAY":
+                return TimeUnit.DAYS;
+            default:
+                throw new DdlException(
+                        "Can not get TimeUnit from UnitIdentifier description: " + unitIdentifierDescription);
+        }
     }
 }

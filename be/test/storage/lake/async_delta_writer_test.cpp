@@ -144,8 +144,10 @@ TEST_F(AsyncDeltaWriterTest, test_open) {
     {
         class MockGroupAssigner : public GroupAssigner {
         public:
+            std::string get_fs_prefix() override { return "posix://"; }
             StatusOr<std::string> get_group(int64_t) override { return Status::InternalError("injected error"); }
             Status list_group(std::set<std::string>*) override { return Status::InternalError("injected error"); }
+            std::string path_assemble(const std::string& path, int64_t tablet_id) { return path; }
         };
         MockGroupAssigner mock;
         auto old = _tablet_manager->TEST_set_group_assigner(&mock);

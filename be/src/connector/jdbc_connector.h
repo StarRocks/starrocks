@@ -50,6 +50,7 @@ public:
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
     int64_t num_bytes_read() const override;
+    int64_t cpu_time_spent() const override;
 
 private:
     Status _create_scanner(RuntimeState* state);

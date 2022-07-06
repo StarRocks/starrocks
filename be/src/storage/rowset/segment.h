@@ -87,8 +87,7 @@ public:
 
     ~Segment() = default;
 
-    // Returns `EndOfFile` if |read_options| has predicate and no record in this segment
-    // matched with the predicate.
+    // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
                                             const vectorized::SegmentReadOptions& read_options);
 

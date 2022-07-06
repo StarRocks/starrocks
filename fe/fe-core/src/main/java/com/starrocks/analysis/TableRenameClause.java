@@ -41,4 +41,9 @@ public class TableRenameClause extends AlterTableClause {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitTableRenameClause(this, context);
     }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
 }

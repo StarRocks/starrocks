@@ -1,39 +1,48 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#include "fs/fs_starlet.h"
+
 #include <fmt/format.h>
-#include <fs/fs_starlet.h>
+#include <fslib/configuration.h>
+#include <fslib/fslib_all_initializer.h>
 #include <gtest/gtest.h>
-#include <starlet.h>
 
 #include <fstream>
 
 #include "common/config.h"
 #include "gutil/strings/join.h"
+#include "service/staros_worker.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
-
-extern staros::starlet::Starlet* g_starlet;
 
 class StarletFileSystemTest : public testing::Test {
 public:
     StarletFileSystemTest() = default;
     ~StarletFileSystemTest() override = default;
     void SetUp() override {
-        _starlet = new staros::starlet::Starlet();
-        _starlet->init(8888);
-        g_starlet = _starlet;
+        staros::starlet::fslib::register_builtin_filesystems();
+        staros::starlet::ShardInfo shard_info;
+        shard_info.id = 10086;
+        shard_info.obj_store_info.uri = "";
+        shard_info.properties[staros::starlet::fslib::kS3AccessKeyId] = "5LXNPOQY3KB1LH4X4UQ6";
+        shard_info.properties[staros::starlet::fslib::kS3AccessKeySecret] = "EhniJDQcMAFQwpulH1jLomfu1b+VaJboCJO+Cytb";
+        shard_info.properties[staros::starlet::fslib::kS3OverrideEndpoint] = "172.26.92.205:39000";
+        shard_info.properties[staros::starlet::fslib::kS3Bucket] = "starrocks-test-bucket";
+        shard_info.properties["storageGroup"] = "10010";
+        g_worker = std::make_shared<starrocks::StarOSWorker>();
+        (void)g_worker->add_shard(shard_info);
     }
     void TearDown() override {
-        g_starlet = nullptr;
-        delete _starlet;
+        (void)g_worker->remove_shard(10086);
+        g_worker.reset();
     }
 
     std::string StarletPath(std::string_view path) {
         if (path.front() == '/') {
-            return fmt::format("staros_s3://{}.s3.{}.{}{}", kBucket, kRegion, kDomain, path);
+            return fmt::format("{}?ShardId={}", path.substr(1), 10086);
         } else {
-            return fmt::format("staros_s3://{}.s3.{}.{}/{}", kBucket, kRegion, kDomain, path);
+            return fmt::format("{}?ShardId={}", path, 10086);
         }
     }
 
@@ -45,17 +54,11 @@ public:
             EXPECT_EQ(expected_is_dir, status_or.value());
         }
     }
-
-private:
-    staros::starlet::Starlet* _starlet;
-    constexpr static const char* kBucket = "starlet-test";
-    constexpr static const char* kRegion = "oss-cn-hangzhou";
-    constexpr static const char* kDomain = "aliyuncs.com";
 };
 
 TEST_F(StarletFileSystemTest, test_write_and_read) {
     auto uri = StarletPath("test1");
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(uri));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("staros_s3://"));
     ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(uri));
     EXPECT_OK(wf->append("hello"));
     EXPECT_OK(wf->append(" world!"));
@@ -72,12 +75,11 @@ TEST_F(StarletFileSystemTest, test_write_and_read) {
     EXPECT_EQ("lo world!", std::string_view(buf, nr));
 
     EXPECT_OK(fs->delete_file(uri));
-    ASSIGN_OR_ABORT(rf, fs->new_random_access_file(uri));
-    EXPECT_ERROR(rf->read_at(0, buf, sizeof(buf)));
+    EXPECT_TRUE(fs->new_random_access_file(uri).status().is_not_found());
 }
 
 TEST_F(StarletFileSystemTest, test_directory) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("staros_http://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("staros_s3://"));
     bool created = false;
 
     //
@@ -169,7 +171,7 @@ TEST_F(StarletFileSystemTest, test_directory) {
 
     entries.clear();
     EXPECT_OK(fs->iterate_dir(StarletPath("/"), cb));
-    EXPECT_EQ("dirname0,dirname1,dirname2,file0", JoinStrings(entries, ","));
+    EXPECT_EQ("dirname0/,dirname1/,dirname2/,file0", JoinStrings(entries, ","));
 
     entries.clear();
     EXPECT_OK(fs->iterate_dir(StarletPath("/dirname0"), cb));
@@ -181,7 +183,7 @@ TEST_F(StarletFileSystemTest, test_directory) {
 
     entries.clear();
     EXPECT_OK(fs->iterate_dir(StarletPath("/dirname2"), cb));
-    EXPECT_EQ("subdir0,0.dat,1.dat", JoinStrings(entries, ","));
+    EXPECT_EQ("subdir0/,0.dat,1.dat", JoinStrings(entries, ","));
 
     entries.clear();
     EXPECT_OK(fs->iterate_dir(StarletPath("/dirname2/subdir0"), cb));
@@ -235,7 +237,7 @@ TEST_F(StarletFileSystemTest, test_delete_dir_recursive) {
     ASSERT_OK(fs->delete_dir_recursive(StarletPath("/dirname0")));
     EXPECT_OK(fs->iterate_dir(StarletPath("/"), cb));
     ASSERT_EQ(1, entries.size());
-    ASSERT_EQ("dirname0x", entries[0]);
+    ASSERT_EQ("dirname0x/", entries[0]);
     ASSERT_OK(fs->delete_dir(StarletPath("/dirname0x")));
     ASSERT_ERROR(fs->delete_dir_recursive(StarletPath("/")));
 }

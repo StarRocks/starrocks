@@ -51,17 +51,13 @@ import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.ColumnRenameClause;
-import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.DropDbStmt;
-import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.PartitionRenameClause;
@@ -90,7 +86,6 @@ import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
@@ -812,7 +807,7 @@ public class GlobalStateMgr {
         auditEventProcessor.start();
 
         // 2. get cluster id and role (Observer or Follower)
-        nodeMgr.getClusterIdAndRole();
+        nodeMgr.getClusterIdAndRoleOnStartup();
 
         // 3. Load image first and replay edits
         initJournal();
@@ -966,6 +961,11 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startMasterOnlyDaemonThreads() {
+        if (Config.integrate_starmgr) {
+            // register service to starMgr
+            getStarOSAgent().registerAndBootstrapService();
+        }
+
         // start checkpoint thread
         checkpointer = new Checkpoint(journal);
         checkpointer.setMetaContext(metaContext);
@@ -1020,11 +1020,6 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
-        // register service to starMgr
-        if (Config.integrate_starmgr) {
-            int clusterId = getCurrentState().getClusterId();
-            getStarOSAgent().registerAndBootstrapService(Integer.toString(clusterId));
-        }
     }
 
     // start threads that should running on all FE
@@ -1054,11 +1049,6 @@ public class GlobalStateMgr {
             // not set canRead here, leave canRead as what is was.
             // if meta out of date, canRead will be set to false in replayer thread.
             metaReplayState.setTransferToUnknown();
-            // get serviceId from starMgr
-            if (Config.integrate_starmgr) {
-                int clusterId = getCurrentState().getClusterId();
-                getStarOSAgent().getServiceId(Integer.toString(clusterId));
-            }
             return;
         }
 
@@ -1101,7 +1091,7 @@ public class GlobalStateMgr {
         DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
 
         long checksum = 0;
-        long remoteChecksum = 0;
+        long remoteChecksum = -1;  // in case of empty image file checksum match
         try {
             checksum = loadHeader(dis, checksum);
             checksum = nodeMgr.loadMasterInfo(dis, checksum);
@@ -1680,7 +1670,7 @@ public class GlobalStateMgr {
         listener.setMetaContext(metaContext);
     }
 
-    public synchronized boolean replayJournal(long toJournalId) {
+    public synchronized boolean replayJournal(long toJournalId) throws JournalException {
         long newToJournalId = toJournalId;
         if (newToJournalId == -1) {
             newToJournalId = getMaxJournalId();
@@ -1704,8 +1694,8 @@ public class GlobalStateMgr {
             JournalEntity entity = null;
             try {
                 entity = cursor.next();
-            } catch (InterruptedException | JournalException | JournalInconsistentException e) {
-                LOG.warn("got exception when get next, will exit, ", e);
+            } catch (InterruptedException | JournalInconsistentException e) {
+                LOG.warn("got interrupt exception or inconsistent exception when get next, will exit, ", e);
                 // TODO exit gracefully
                 Util.stdoutWithTime(e.getMessage());
                 System.exit(-1);
@@ -1773,23 +1763,6 @@ public class GlobalStateMgr {
 
     public int getFollowerCnt() {
         return nodeMgr.getFollowerCnt();
-    }
-
-    // For replay edit log, needn't lock metadata
-    public void unprotectCreateDb(Database db) {
-        localMetastore.unprotectCreateDb(db);
-    }
-
-    public void replayCreateDb(Database db) {
-        localMetastore.replayCreateDb(db);
-    }
-
-    public void dropDb(DropDbStmt stmt) throws DdlException {
-        localMetastore.dropDb(stmt);
-    }
-
-    public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {
-        localMetastore.replayDropDb(dbName, isForceDrop);
     }
 
     public void recoverDatabase(RecoverDbStmt recoverStmt) throws DdlException {
@@ -1923,7 +1896,7 @@ public class GlobalStateMgr {
             }
             // There MUST BE 2 space in front of each column description line
             // sqlalchemy requires this to parse SHOW CREATE TAEBL stmt.
-            if (table.getType() == TableType.OLAP || table.getType() == TableType.OLAP_EXTERNAL) {
+            if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
                     sb.append("  ").append(column.toSqlWithoutAggregateTypeName());
@@ -1934,7 +1907,7 @@ public class GlobalStateMgr {
                 sb.append("  ").append(column.toSql());
             }
         }
-        if (table.getType() == TableType.OLAP || table.getType() == TableType.OLAP_EXTERNAL) {
+        if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
             if (CollectionUtils.isNotEmpty(olapTable.getIndexes())) {
                 for (Index index : olapTable.getIndexes()) {
@@ -1944,9 +1917,13 @@ public class GlobalStateMgr {
             }
         }
         sb.append("\n) ENGINE=");
-        sb.append(table.getType().name()).append(" ");
+        if (table.isLakeTable()) {
+            sb.append(CreateTableStmt.LAKE_ENGINE_NAME.toUpperCase()).append(" ");
+        } else {
+            sb.append(table.getType().name()).append(" ");
+        }
 
-        if (table.getType() == TableType.OLAP || table.getType() == TableType.OLAP_EXTERNAL) {
+        if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
 
             // keys
@@ -2494,6 +2471,10 @@ public class GlobalStateMgr {
         return this.hiveRepository;
     }
 
+    public IcebergRepository getIcebergRepository() {
+        return this.icebergRepository;
+    }
+
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {
         return this.metastoreEventsProcessor;
     }
@@ -2994,42 +2975,6 @@ public class GlobalStateMgr {
 
     public void replayTruncateTable(TruncateTableInfo info) {
         localMetastore.replayTruncateTable(info);
-    }
-
-    public void createFunction(CreateFunctionStmt stmt) throws UserException {
-        FunctionName name = stmt.getFunctionName();
-        Database db = getDb(name.getDb());
-        if (db == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
-        }
-        db.addFunction(stmt.getFunction());
-    }
-
-    public void replayCreateFunction(Function function) {
-        String dbName = function.getFunctionName().getDb();
-        Database db = getDb(dbName);
-        if (db == null) {
-            throw new Error("unknown database when replay log, db=" + dbName);
-        }
-        db.replayAddFunction(function);
-    }
-
-    public void dropFunction(DropFunctionStmt stmt) throws UserException {
-        FunctionName name = stmt.getFunctionName();
-        Database db = getDb(name.getDb());
-        if (db == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
-        }
-        db.dropFunction(stmt.getFunction());
-    }
-
-    public void replayDropFunction(FunctionSearchDesc functionSearchDesc) {
-        String dbName = functionSearchDesc.getName().getDb();
-        Database db = getDb(dbName);
-        if (db == null) {
-            throw new Error("unknown database when replay log, db=" + dbName);
-        }
-        db.replayDropFunction(functionSearchDesc);
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {

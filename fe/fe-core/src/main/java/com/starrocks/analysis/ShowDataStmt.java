@@ -41,6 +41,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -78,6 +79,18 @@ public class ShowDataStmt extends ShowStmt {
         this.tableName = tableName;
 
         this.totalRows = new LinkedList<List<String>>();
+    }
+
+    public String getDbName() {
+        return dbName;
+    }
+
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
+    }
+
+    public String getTableName() {
+        return tableName;
     }
 
     @Override
@@ -121,7 +134,7 @@ public class ShowDataStmt extends ShowStmt {
                 }
 
                 for (Table table : sortedTables) {
-                    if (table.getType() != TableType.OLAP) {
+                    if (!table.isNativeTable()) {
                         continue;
                     }
 
@@ -277,6 +290,16 @@ public class ShowDataStmt extends ShowStmt {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowDataStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }
 

@@ -14,6 +14,7 @@ class GroupAssigner {
 public:
     virtual ~GroupAssigner() = default;
 
+    virtual std::string get_fs_prefix() = 0;
     // Given a tablet id return the URI of its associated storage group.
     //
     // A storage group is just a directory on filesystem or a common prefix
@@ -30,6 +31,8 @@ public:
     //
     // All implementations must be thread-safe.
     virtual Status list_group(std::set<std::string>* groups) = 0;
+
+    virtual std::string path_assemble(const std::string& path, int64_t tablet_id) = 0;
 };
 
 } // namespace starrocks::lake

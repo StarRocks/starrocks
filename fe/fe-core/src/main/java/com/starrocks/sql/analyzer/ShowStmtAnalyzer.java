@@ -6,8 +6,11 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
+import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -110,6 +113,14 @@ public class ShowStmtAnalyzer {
             if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
+            return null;
+        }
+
+        @Override
+        public Void visitShowDeleteStmt(ShowDeleteStmt node, ConnectContext context) {
+            String dbName = node.getDbName();
+            dbName = getFullDatabaseName(dbName, context);
+            node.setDbName(dbName);
             return null;
         }
 
@@ -271,6 +282,22 @@ public class ShowStmtAnalyzer {
             } finally {
                 db.readUnlock();
             }
+            return null;
+        }
+        
+        @Override
+        public Void visitShowCreateDbStatement(ShowCreateDbStmt node, ConnectContext context) {
+            String dbName = node.getDb();
+            dbName = getFullDatabaseName(dbName, context);
+            node.setDb(dbName);
+            return null;
+        }
+
+        @Override
+        public Void visitShowDataStmt(ShowDataStmt node, ConnectContext context) {
+            String dbName = node.getDbName();
+            dbName = getFullDatabaseName(dbName, context);
+            node.setDbName(dbName);
             return null;
         }
     }

@@ -27,7 +27,6 @@ DIAGNOSTIC_POP
 
 #include "column/column_helper.h"
 #include "runtime/large_int_value.h"
-#include "storage/schema.h"
 #include "storage/tablet_schema_helper.h"
 
 namespace starrocks::vectorized {

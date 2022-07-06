@@ -29,7 +29,6 @@ import com.starrocks.catalog.InlineView;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
-import com.starrocks.rewrite.ExprRewriter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -202,20 +201,6 @@ public class InlineViewRef extends TableRef {
         result.setIsMaterialized(false);
         result.setTable(inlineView);
         return result;
-    }
-
-    @Override
-    public void rewriteExprs(ExprRewriter rewriter, Analyzer analyzer)
-            throws AnalysisException {
-        super.rewriteExprs(rewriter, analyzer);
-        queryStmt.rewriteExprs(rewriter);
-    }
-
-    @Override
-    public List<TupleId> getMaterializedTupleIds() {
-        Preconditions.checkState(isAnalyzed);
-        Preconditions.checkState(materializedTupleIds.size() > 0);
-        return materializedTupleIds;
     }
 
     public QueryStmt getViewStmt() {

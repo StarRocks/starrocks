@@ -3,7 +3,11 @@
 package com.starrocks.execution;
 
 import com.starrocks.analysis.CreateFunctionStmt;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.catalog.Database;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -11,7 +15,13 @@ import com.starrocks.qe.ShowResultSet;
 public class CreateFunctionExecutor implements DataDefinitionExecutor {
 
     public ShowResultSet execute(StatementBase stmt, ConnectContext context) throws UserException {
-        context.getGlobalStateMgr().createFunction((CreateFunctionStmt) stmt);
+        CreateFunctionStmt createFunctionStmt = (CreateFunctionStmt) stmt;
+        FunctionName name = createFunctionStmt.getFunctionName();
+        Database db = context.getGlobalStateMgr().getDb(name.getDb());
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
+        }
+        db.addFunction(createFunctionStmt.getFunction());
         return null;
     }
 }

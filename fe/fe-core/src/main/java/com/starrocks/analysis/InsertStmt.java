@@ -52,7 +52,6 @@ import com.starrocks.planner.DataSink;
 import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rewrite.ExprRewriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AstVisitor;
@@ -262,12 +261,6 @@ public class InsertStmt extends DmlStmt {
 
     public void setQueryStatement(QueryStatement queryStatement) {
         this.queryStatement = queryStatement;
-    }
-
-    @Override
-    public void rewriteExprs(ExprRewriter rewriter) throws AnalysisException {
-        Preconditions.checkState(isAnalyzed());
-        queryStmt.rewriteExprs(rewriter);
     }
 
     @Override

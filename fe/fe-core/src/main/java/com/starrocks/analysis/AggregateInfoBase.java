@@ -174,28 +174,12 @@ public abstract class AggregateInfoBase {
         return result;
     }
 
-    /**
-     * Marks the slots required for evaluating an Analytic/AggregateInfo by
-     * resolving the materialized aggregate/analytic exprs against smap,
-     * and then marking their slots.
-     */
-    public abstract void materializeRequiredSlots(Analyzer analyzer,
-                                                  ExprSubstitutionMap smap);
-
     public ArrayList<Expr> getGroupingExprs() {
         return groupingExprs_;
     }
 
     public ArrayList<FunctionCallExpr> getAggregateExprs() {
         return aggregateExprs_;
-    }
-
-    public TupleDescriptor getOutputTupleDesc() {
-        return outputTupleDesc_;
-    }
-
-    public TupleDescriptor getIntermediateTupleDesc() {
-        return intermediateTupleDesc_;
     }
 
     public TupleId getIntermediateTupleId() {

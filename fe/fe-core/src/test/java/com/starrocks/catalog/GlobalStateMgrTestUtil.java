@@ -32,16 +32,15 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -103,7 +102,8 @@ public class GlobalStateMgrTestUtil {
         globalStateMgr.initDefaultCluster();
         Database db = createSimpleDb(testDbId1, testTableId1, testPartitionId1, testIndexId1, testTabletId1,
                 testStartVersion);
-        globalStateMgr.unprotectCreateDb(db);
+        LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
+        metastore.unprotectCreateDb(db);
         return globalStateMgr;
     }
 
@@ -265,18 +265,6 @@ public class GlobalStateMgrTestUtil {
     public static Backend createBackend(long id, String host, int heartPort, int bePort, int httpPort) {
         Backend backend = new Backend(id, host, heartPort);
         // backend.updateOnce(bePort, httpPort, 10000);
-        backend.setAlive(true);
-        return backend;
-    }
-
-    public static Backend createBackend(long id, String host, int heartPort, int bePort, int httpPort,
-                                        long totalCapacityB, long availableCapacityB) {
-        Backend backend = createBackend(id, host, heartPort, bePort, httpPort);
-        Map<String, TDisk> backendDisks = new HashMap<String, TDisk>();
-        String rootPath = "root_path";
-        TDisk disk = new TDisk(rootPath, totalCapacityB, availableCapacityB, true);
-        backendDisks.put(rootPath, disk);
-        backend.updateDisks(backendDisks);
         backend.setAlive(true);
         return backend;
     }

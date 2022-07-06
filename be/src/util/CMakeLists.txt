@@ -29,12 +29,12 @@ set(UTIL_FILES
   bthreads/executor.cpp
   arrow/row_batch.cpp
   arrow/starrocks_column_to_arrow.cpp
-  arrow/row_block.cpp
   arrow/utils.cpp
   bfd_parser.cpp
   bitmap.cpp
   compression/block_compression.cpp
   compression/compression_context_pool_singletons.cpp
+  compression/stream_compression.cpp
   coding.cpp
   cpu_info.cpp
   crc32c.cpp

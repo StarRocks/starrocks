@@ -29,6 +29,7 @@
 #include "common/status.h"
 #include "common/tracer.h"
 #include "fmt/core.h"
+#include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
@@ -41,6 +42,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
+#include "storage/tablet_updates.h"
 #include "util/defer_op.h"
 #include "util/json_util.h"
 #include "util/runtime_profile.h"
@@ -95,12 +97,12 @@ Status get_params(HttpRequest* req, uint64_t* tablet_id) {
 }
 
 Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_result) {
-    if (_running) {
+    bool expected = false;
+    if (!_running.compare_exchange_strong(expected, true)) {
         return Status::TooManyTasks("Manual compaction task is running");
     }
-    _running = true;
-    auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_compaction"));
     DeferOp defer([&]() { _running = false; });
+    auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_compaction"));
 
     uint64_t tablet_id;
     RETURN_IF_ERROR(get_params(req, &tablet_id));
@@ -108,16 +110,44 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
     RETURN_IF(tablet == nullptr, Status::InvalidArgument(fmt::format("Not Found tablet:{}", tablet_id)));
 
+    auto* mem_tracker = ExecEnv::GetInstance()->compaction_mem_tracker();
+    if (tablet->updates() != nullptr) {
+        string rowset_ids_string = req->param("rowset_ids");
+        if (rowset_ids_string.empty()) {
+            RETURN_IF_ERROR(tablet->updates()->compaction(mem_tracker));
+        } else {
+            vector<string> id_str_list = strings::Split(rowset_ids_string, ",", strings::SkipEmpty());
+            vector<uint32_t> rowset_ids;
+            for (const auto& id_str : id_str_list) {
+                try {
+                    auto rowset_id = std::stoull(id_str);
+                    if (rowset_id > UINT32_MAX) {
+                        throw std::exception();
+                    }
+                    rowset_ids.push_back((uint32_t)rowset_id);
+                } catch (const std::exception& e) {
+                    std::string msg = fmt::format("invalid argument. rowset_ids:{}", rowset_ids_string);
+                    LOG(WARNING) << msg;
+                    return Status::InvalidArgument(msg);
+                }
+            }
+            if (rowset_ids.empty()) {
+                return Status::InvalidArgument(fmt::format("empty argument. rowset_ids:{}", rowset_ids_string));
+            }
+            RETURN_IF_ERROR(tablet->updates()->compaction(mem_tracker, rowset_ids));
+        }
+        *json_result = R"({"status": "Success", "msg": "compaction task executed successful"})";
+        return Status::OK();
+    }
+
     std::string compaction_type = req->param(PARAM_COMPACTION_TYPE);
     if (compaction_type != to_string(CompactionType::BASE_COMPACTION) &&
         compaction_type != to_string(CompactionType::CUMULATIVE_COMPACTION)) {
         return Status::NotSupported(fmt::format("unsupport compaction type:{}", compaction_type));
     }
 
-    StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
-    auto* mem_tracker = ExecEnv::GetInstance()->compaction_mem_tracker();
-
     if (compaction_type == to_string(CompactionType::CUMULATIVE_COMPACTION)) {
+        StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
         vectorized::CumulativeCompaction cumulative_compaction(mem_tracker, tablet);
 
         Status res = cumulative_compaction.compact();
@@ -134,6 +164,7 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
         }
         tablet->set_last_cumu_compaction_failure_time(0);
     } else if (compaction_type == to_string(CompactionType::BASE_COMPACTION)) {
+        StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
         vectorized::BaseCompaction base_compaction(mem_tracker, tablet);
 
         Status res = base_compaction.compact();
@@ -151,8 +182,93 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
     } else {
         __builtin_unreachable();
     }
-    _running = false;
     *json_result = R"({"status": "Success", "msg": "compaction task executed successful"})";
+    return Status::OK();
+}
+
+Status CompactionAction::_handle_show_repairs(HttpRequest* req, std::string* json_result) {
+    rapidjson::Document root;
+    root.SetObject();
+
+    rapidjson::Document need_to_repair;
+    need_to_repair.SetArray();
+    auto tablets_with_small_segment_files =
+            StorageEngine::instance()->tablet_manager()->get_tablets_need_repair_compaction();
+    for (auto& itr : tablets_with_small_segment_files) {
+        rapidjson::Document item;
+        item.SetObject();
+        item.AddMember("tablet_id", itr.first, root.GetAllocator());
+        rapidjson::Document rowsets;
+        rowsets.SetArray();
+        for (const auto& rowset : itr.second) {
+            rapidjson::Document rs;
+            rs.SetObject();
+            rs.AddMember("rowset_id", rowset.first, root.GetAllocator());
+            rs.AddMember("segments", rowset.second, root.GetAllocator());
+            rowsets.PushBack(rs, root.GetAllocator());
+        }
+        item.AddMember("rowsets", rowsets, root.GetAllocator());
+        need_to_repair.PushBack(item, root.GetAllocator());
+    }
+    root.AddMember("need_to_repair", need_to_repair, root.GetAllocator());
+    root.AddMember("need_to_repair_num", tablets_with_small_segment_files.size(), root.GetAllocator());
+
+    rapidjson::Document executed;
+    executed.SetArray();
+    auto tasks = StorageEngine::instance()->get_executed_repair_compaction_tasks();
+    for (auto& task_info : tasks) {
+        rapidjson::Document item;
+        item.SetObject();
+        item.AddMember("tablet_id", task_info.first, root.GetAllocator());
+        rapidjson::Document rowsets;
+        rowsets.SetArray();
+        for (auto& rowset_st : task_info.second) {
+            rapidjson::Document obj;
+            obj.SetObject();
+            obj.AddMember("rowset_id", rowset_st.first, root.GetAllocator());
+            obj.AddMember("status", rapidjson::StringRef(rowset_st.second.c_str()), root.GetAllocator());
+            rowsets.PushBack(obj, root.GetAllocator());
+        }
+        item.AddMember("rowsets", rowsets, root.GetAllocator());
+        executed.PushBack(item, root.GetAllocator());
+    }
+    root.AddMember("executed_task", executed, root.GetAllocator());
+    root.AddMember("executed_task_num", tasks.size(), root.GetAllocator());
+
+    rapidjson::StringBuffer strbuf;
+    rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(strbuf);
+    root.Accept(writer);
+    *json_result = std::string(strbuf.GetString());
+    return Status::OK();
+}
+
+Status CompactionAction::_handle_submit_repairs(HttpRequest* req, std::string* json_result) {
+    auto tablets_with_small_segment_files =
+            StorageEngine::instance()->tablet_manager()->get_tablets_need_repair_compaction();
+    uint64_t tablet_id;
+    vector<pair<int64_t, vector<uint32_t>>> tasks;
+    if (get_params(req, &tablet_id).ok()) {
+        // do single tablet
+        auto itr = tablets_with_small_segment_files.find(tablet_id);
+        if (itr == tablets_with_small_segment_files.end()) {
+            return Status::NotFound(fmt::format("tablet_id {} not found in repair tablet list", tablet_id));
+        }
+        vector<uint32_t> rowsetids;
+        for (const auto& rowset_segments_pair : itr->second) {
+            rowsetids.emplace_back(rowset_segments_pair.first);
+        }
+        tasks.emplace_back(itr->first, std::move(rowsetids));
+    } else {
+        // do all tablets
+        for (auto& itr : tablets_with_small_segment_files) {
+            vector<uint32_t> rowsetids;
+            for (const auto& rowset_segments_pair : itr.second) {
+                rowsetids.emplace_back(rowset_segments_pair.first);
+            }
+            tasks.emplace_back(itr.first, std::move(rowsetids));
+        }
+    }
+    StorageEngine::instance()->submit_repair_compaction_tasks(tasks);
     return Status::OK();
 }
 
@@ -160,22 +276,22 @@ void CompactionAction::handle(HttpRequest* req) {
     req->add_output_header(HttpHeaders::CONTENT_TYPE, HEADER_JSON.c_str());
     std::string json_result;
 
+    Status st;
     if (_type == CompactionActionType::SHOW_INFO) {
-        Status st = _handle_show_compaction(req, &json_result);
-        if (!st.ok()) {
-            HttpChannel::send_reply(req, HttpStatus::OK, to_json(st));
-        } else {
-            HttpChannel::send_reply(req, HttpStatus::OK, json_result);
-        }
+        st = _handle_show_compaction(req, &json_result);
     } else if (_type == CompactionActionType::RUN_COMPACTION) {
-        Status st = _handle_compaction(req, &json_result);
-        if (!st.ok()) {
-            HttpChannel::send_reply(req, HttpStatus::OK, to_json(st));
-        } else {
-            HttpChannel::send_reply(req, HttpStatus::OK, json_result);
-        }
+        st = _handle_compaction(req, &json_result);
+    } else if (_type == CompactionActionType::SHOW_REPAIR) {
+        st = _handle_show_repairs(req, &json_result);
+    } else if (_type == CompactionActionType::SUBMIT_REPAIR) {
+        st = _handle_submit_repairs(req, &json_result);
     } else {
-        HttpChannel::send_reply(req, HttpStatus::OK, to_json(Status::NotSupported("Action not supported")));
+        st = Status::NotSupported("Action not supported");
+    }
+    if (!st.ok()) {
+        HttpChannel::send_reply(req, HttpStatus::OK, to_json(st));
+    } else {
+        HttpChannel::send_reply(req, HttpStatus::OK, json_result);
     }
 }
 

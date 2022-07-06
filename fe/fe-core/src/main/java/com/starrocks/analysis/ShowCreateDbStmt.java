@@ -36,6 +36,7 @@ import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 // Show create database statement
 //  Syntax:
@@ -55,6 +56,10 @@ public class ShowCreateDbStmt extends ShowStmt {
 
     public String getDb() {
         return db;
+    }
+
+    public void setDb(String db) {
+        this.db = db;
     }
 
     @Override
@@ -89,5 +94,15 @@ public class ShowCreateDbStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowCreateDbStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

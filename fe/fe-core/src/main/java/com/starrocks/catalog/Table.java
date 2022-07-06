@@ -52,6 +52,12 @@ import java.util.Map;
 public class Table extends MetaObject implements Writable {
     private static final Logger LOG = LogManager.getLogger(Table.class);
 
+    // 1. Native table:
+    //   1.1 Local: OLAP, MATERIALIZED_VIEW
+    //   1.2 Lake: LAKE
+    // 2. System table: SCHEMA
+    // 3. View: INLINE_VIEW, VIEW
+    // 4. External table: MYSQL, OLAP_EXTERNAL, BROKER, ELASTICSEARCH, HIVE, ICEBERG, HUDI, ODBC, JDBC
     public enum TableType {
         MYSQL,
         OLAP,
@@ -165,18 +171,24 @@ public class Table extends MetaObject implements Writable {
     public boolean isOlapTable() {
         return type == TableType.OLAP;
     }
+
     public boolean isMaterializedView() {
         return type == TableType.MATERIALIZED_VIEW;
-    }
-
-    public boolean isNativeTable() {
-        return isOlapTable() || isMaterializedView();
     }
 
     public boolean isLakeTable() {
         return type == TableType.LAKE;
     }
 
+    public boolean isLocalTable() {
+        return isOlapTable() || isMaterializedView();
+    }
+
+    public boolean isNativeTable() {
+        return isLocalTable() || isLakeTable();
+    }
+
+    // for create table
     public boolean isOlapOrLakeTable() {
         return isOlapTable() || isLakeTable();
     }

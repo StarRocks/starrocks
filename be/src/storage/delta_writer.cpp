@@ -3,11 +3,11 @@
 #include "storage/delta_writer.h"
 
 #include "runtime/current_thread.h"
+#include "runtime/descriptors.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/rowset/rowset_factory.h"
-#include "storage/schema.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
@@ -85,7 +85,7 @@ Status DeltaWriter::_init() {
         auto tracker = _storage_engine->update_manager()->mem_tracker();
         if (tracker->limit_exceeded()) {
             _set_state(kUninitialized);
-            auto msg = Substitute(
+            auto msg = strings::Substitute(
                     "Primary-key index exceeds the limit. tablet_id: $0, consumption: $1, limit: $2."
                     " Memory stats of top five tablets: $3",
                     _opt.tablet_id, tracker->consumption(), tracker->limit(),
@@ -95,8 +95,8 @@ Status DeltaWriter::_init() {
         }
         if (_tablet->updates()->is_error()) {
             _set_state(kUninitialized);
-            auto msg = fmt::format("Tablet is in error state. This is a primary key table. tablet_id: {}",
-                                   _tablet->tablet_id());
+            auto msg = fmt::format("Tablet is in error state, tablet_id: {} {}", _tablet->tablet_id(),
+                                   _tablet->updates()->get_error_msg());
             return Status::ServiceUnavailable(msg);
         }
     }

@@ -16,6 +16,8 @@ import com.starrocks.analysis.AdminShowConfigStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
+import com.starrocks.analysis.AlterDatabaseQuotaStmt;
+import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
@@ -35,6 +37,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -49,6 +52,7 @@ import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.analysis.DropComputeNodeClause;
+import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -73,6 +77,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.KeysDesc;
+import com.starrocks.analysis.KillStmt;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
@@ -93,14 +98,18 @@ import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RangePartitionDesc;
+import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
+import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
+import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -220,6 +229,73 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSingleStatement(StarRocksParser.SingleStatementContext context) {
         return visit(context.statement());
+    }
+
+
+    // ---------------------------------------- Database Statement -----------------------------------------------------
+    @Override
+    public ParseNode visitAlterDbQuotaStmt(StarRocksParser.AlterDbQuotaStmtContext context) {
+        String dbName = ((Identifier) visit(context.identifier(0))).getValue();
+        if (context.DATA() != null) {
+            String quotaValue = ((Identifier) visit(context.identifier(1))).getValue();
+            return new AlterDatabaseQuotaStmt(dbName,
+                    AlterDatabaseQuotaStmt.QuotaType.DATA,
+                    quotaValue);
+        } else {
+            String quotaValue = context.INTEGER_VALUE().getText();
+            return new AlterDatabaseQuotaStmt(dbName,
+                    AlterDatabaseQuotaStmt.QuotaType.REPLICA,
+                    quotaValue);
+        }
+    }
+
+
+    @Override
+    public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
+        String dbName = ((Identifier) visit(context.identifier())).getValue();
+        return new CreateDbStmt(
+                context.IF() != null,
+                dbName);
+    }
+
+    @Override
+    public ParseNode visitDropDbStatement(StarRocksParser.DropDbStatementContext context) {
+        String dbName = ((Identifier) visit(context.identifier())).getValue();
+        return new DropDbStmt(
+                context.IF() != null,
+                dbName,
+                context.FORCE() != null);
+    }
+    
+    @Override
+    public ParseNode visitShowCreateDbStatement(StarRocksParser.ShowCreateDbStatementContext context) {
+        String dbName = ((Identifier) visit(context.identifier())).getValue();
+        return new ShowCreateDbStmt(dbName);
+    }
+
+
+    @Override
+    public ParseNode visitAlterDatabaseRename(StarRocksParser.AlterDatabaseRenameContext context) {
+        String dbName = ((Identifier) visit(context.identifier(0))).getValue();
+        String newName = ((Identifier) visit(context.identifier(1))).getValue();
+        return new AlterDatabaseRename(dbName, newName);
+    }
+
+    @Override
+    public ParseNode visitRecoverDbStmt(StarRocksParser.RecoverDbStmtContext context) {
+        String dbName = ((Identifier) visit(context.identifier())).getValue();
+        return new RecoverDbStmt(dbName);
+    }
+
+    @Override
+    public ParseNode visitShowDataStmt(StarRocksParser.ShowDataStmtContext context) {
+        if (context.FROM() != null) {
+            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+            TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+            return new ShowDataStmt(targetTableName.getDb(), targetTableName.getTbl());
+        } else {
+            return new ShowDataStmt(null, null);
+        }
     }
 
     // ------------------------------------------- Table Statement -----------------------------------------------------
@@ -478,6 +554,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new ShowCreateTableStmt(targetTableName, ShowCreateTableStmt.CreateTableType.VIEW);
         }
         return new ShowCreateTableStmt(targetTableName, ShowCreateTableStmt.CreateTableType.TABLE);
+    }
+
+    @Override
+    public ParseNode visitShowDeleteStatement(StarRocksParser.ShowDeleteStatementContext context) {
+        QualifiedName dbName = null;
+        if (context.qualifiedName() != null) {
+            dbName = getQualifiedName(context.db);
+        }
+        dbName.toString();
+        return new ShowDeleteStmt(dbName == null ? null : dbName.toString());
     }
 
     @Override
@@ -845,16 +931,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAddBackendClause(StarRocksParser.AddBackendClauseContext context) {
-        List<String> clusters =
+        List<String> backends =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
-        if (context.TO() != null) {
-            Identifier identifier = (Identifier) visit(context.identifier());
-            return new AddBackendClause(clusters, identifier.getValue());
-        }
-        if (context.FREE() != null) {
-            return new AddBackendClause(clusters, true);
-        }
-        return new AddBackendClause(clusters, false);
+        return new AddBackendClause(backends);
     }
 
     @Override
@@ -1716,6 +1795,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new UseStmt(parts.get(0), parts.get(1));
         } else {
             throw new ParsingException("error catalog.database");
+        }
+    }
+
+    @Override
+    public ParseNode visitKillStatement(StarRocksParser.KillStatementContext context) {
+        long id = Long.parseLong(context.INTEGER_VALUE().getText());
+        if (context.QUERY() != null) {
+            return new KillStmt(false, id);
+        } else {
+            return new KillStmt(true, id);
         }
     }
 

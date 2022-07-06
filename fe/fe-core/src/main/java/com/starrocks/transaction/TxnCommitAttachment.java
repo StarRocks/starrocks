@@ -80,6 +80,8 @@ public abstract class TxnCommitAttachment implements Writable {
         } else if (type == LoadJobSourceType.FRONTEND) {
             // spark load
             attachment = new LoadJobFinalOperation();
+        } else if (type == LoadJobSourceType.INSERT_STREAMING) {
+            attachment = new InsertTxnCommitAttachment();
         } else {
             throw new IOException("Unknown load job source type: " + type.name());
         }

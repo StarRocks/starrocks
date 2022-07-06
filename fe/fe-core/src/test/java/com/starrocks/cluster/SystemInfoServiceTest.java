@@ -22,11 +22,11 @@
 package com.starrocks.cluster;
 
 import com.google.common.collect.Lists;
-import com.staros.client.StarClientException;
 import com.starrocks.analysis.AddBackendClause;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.StarOSAgent;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -36,7 +36,6 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
-import com.starrocks.catalog.StarOSAgent;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -211,13 +210,13 @@ public class SystemInfoServiceTest {
         AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
         stmt.analyze(analyzer);
         try {
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs(), true);
+            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs());
         } catch (DdlException e) {
             Assert.fail();
         }
 
         try {
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs(), true);
+            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs());
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("already exists"));
         }
@@ -240,7 +239,7 @@ public class SystemInfoServiceTest {
         AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
         stmt.analyze(analyzer);
         try {
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs(), true);
+            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt.getHostPortPairs());
         } catch (DdlException e) {
             e.printStackTrace();
         }
@@ -285,7 +284,7 @@ public class SystemInfoServiceTest {
         AddBackendClause stmt2 = new AddBackendClause(Lists.newArrayList("192.168.0.1:1235"));
         stmt2.analyze(analyzer);
         try {
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt2.getHostPortPairs(), true);
+            GlobalStateMgr.getCurrentSystemInfo().addBackends(stmt2.getHostPortPairs());
         } catch (DdlException e) {
             e.printStackTrace();
         }

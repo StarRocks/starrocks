@@ -42,4 +42,8 @@ public abstract class AlterClause implements ParseNode {
     public AlterOpType getOpType() {
         return opType;
     }
+
+    public boolean isSupportNewPlanner() {
+        return false;
+    }
 }

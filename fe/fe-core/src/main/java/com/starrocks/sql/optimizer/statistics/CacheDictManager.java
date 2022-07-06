@@ -103,7 +103,7 @@ public class CacheDictManager implements IDictManager {
         }
         int dictSize = tGlobalDict.getIdsSize();
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
-        if (dictSize > 256) {
+        if (dictSize > LOW_CARDINALITY_THRESHOLD) {
             noDictStringColumns.add(columnIdentifier);
             return Optional.empty();
         } else {

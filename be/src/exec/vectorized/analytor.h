@@ -28,6 +28,38 @@ struct FrameRange {
     int64_t end;
 };
 
+class SegmentStatistics {
+private:
+    // We will not perform loop search until processing enough segments
+    // segment canbe partition or peer group
+    static constexpr int64_t MIN_SEGMENT_NUM = 16;
+
+    // Overhead of binary search is O(N/S logN), where S denote the average size of segment
+    // Overhead of loop search is O(N)
+    // The default chunk_size is 4096, then logN turns out to be log(4096) = 12
+    // Considering the error of estimation, we set the threshold to 8
+    static constexpr int64_t AVERAGE_SIZE_THRESHOLD = 8;
+
+public:
+    void update(int64_t segment_size) {
+        _count++;
+        _cumulative_size += segment_size;
+        _average_size = _cumulative_size / _count;
+    }
+
+    void reset() {
+        _count = 0;
+        _cumulative_size = 0;
+        _average_size = 0;
+    }
+
+    bool is_high_cardinality() { return _count > MIN_SEGMENT_NUM && _average_size < AVERAGE_SIZE_THRESHOLD; }
+
+    int64_t _count = 0;
+    int64_t _cumulative_size = 0;
+    int64_t _average_size = 0;
+};
+
 class Analytor;
 using AnalytorPtr = std::shared_ptr<Analytor>;
 using Analytors = std::vector<AnalytorPtr>;
@@ -74,10 +106,10 @@ public:
     void update_current_row_position(int64_t increment) { _current_row_position += increment; }
     int64_t partition_start() const { return _partition_start; }
     int64_t partition_end() const { return _partition_end; }
-    int64_t found_partition_end() const { return _found_partition_end; }
+    const std::pair<bool, int64_t>& found_partition_end() const { return _found_partition_end; }
     int64_t peer_group_start() const { return _peer_group_start; }
     int64_t peer_group_end() const { return _peer_group_end; }
-    int64_t found_peer_group_end() const { return _found_peer_group_end; }
+    const std::pair<bool, int64_t>& found_peer_group_end() const { return _found_peer_group_end; }
 
     const std::vector<starrocks_udf::FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
     const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() { return _agg_expr_ctxs; }
@@ -99,17 +131,13 @@ public:
     void reset_window_state();
     void get_window_function_result(size_t frame_start, size_t frame_end);
 
-    bool is_partition_boundary_reached();
     Status output_result_chunk(vectorized::ChunkPtr* chunk);
     void create_agg_result_columns(int64_t chunk_size);
 
     bool is_new_partition();
     int64_t get_total_position(int64_t local_position);
-    bool find_and_check_partition_end();
+    void find_partition_end();
     void find_peer_group_end();
-    // is_found_partition_end_genuine_boundary = true means _found_partition_end point at
-    // the genuine partition boundary
-    bool find_and_check_peer_group_end(bool is_found_partition_end_genuine_boundary = false);
     void reset_state_for_cur_partition();
     void reset_state_for_next_partition();
 
@@ -145,7 +173,8 @@ private:
     RuntimeProfile::Counter* _rows_returned_counter = nullptr;
     RuntimeProfile::Counter* _column_resize_timer = nullptr;
     RuntimeProfile::Counter* _compute_timer = nullptr;
-    RuntimeProfile::Counter* _binary_search_timer = nullptr;
+    RuntimeProfile::Counter* _partition_search_timer = nullptr;
+    RuntimeProfile::Counter* _peer_group_search_timer = nullptr;
 
     int64_t _num_rows_returned = 0;
     int64_t _limit; // -1: no limit
@@ -169,9 +198,11 @@ private:
     // Record the end pos of current partition.
     // If the end position has not been found during the iteration, _partition_end = _partition_start.
     int64_t _partition_end = 0;
-    // Used to record the first position of the latest Chunk that is not equal to the PartitionKey.
-    // If not found, it points to the last position + 1.
-    int64_t _found_partition_end = 0;
+    // If first = true, then second record the first position of the latest Chunk that is not equal to the PartitionKey.
+    // If first = false, then second points to the last position + 1.
+    std::pair<bool, int64_t> _found_partition_end = {false, 0};
+    SegmentStatistics _partition_statistics;
+    std::queue<int64_t> _candidate_partition_ends;
 
     // A peer group is all of the rows that are peers within the specified ordering.
     // Record the start pos of current peer group.
@@ -179,9 +210,11 @@ private:
     // Record the end pos of current peer group.
     // If the end position has not been found during the iteration, _peer_group_end = _peer_group_start.
     int64_t _peer_group_end = 0;
-    // Used to record the first position of the latest Chunk that is not equal to the peer group.
-    // If not found, it points to the last position + 1.
-    int64_t _found_peer_group_end = 0;
+    // If first = true, then second record the first position of the latest Chunk that is not equal to the peer group.
+    // If first = false, then second points to the last position + 1.
+    std::pair<bool, int64_t> _found_peer_group_end = {false, 0};
+    SegmentStatistics _peer_group_statistics;
+    std::queue<int64_t> _candidate_peer_group_ends;
 
     // Offset from the current row for ROWS windows with start or end bounds specified
     // with offsets. Is positive if the offset is FOLLOWING, negative if PRECEDING, and 0
@@ -229,6 +262,8 @@ private:
                                        int64_t frame_end);
 
     int64_t _find_first_not_equal(vectorized::Column* column, int64_t target, int64_t start, int64_t end);
+    void _find_candidate_partition_ends();
+    void _find_candidate_peer_group_ends();
 };
 
 // Helper class that properly invokes destructor when state goes out of scope.

@@ -105,7 +105,7 @@ private:
         LZ4_stream_t* ctx = context->ctx;
 
         [[maybe_unused]] faststring* compression_buffer = nullptr;
-        [[maybe_unused]] size_t max_len;
+        [[maybe_unused]] size_t max_len = 0;
         if (use_compression_buffer) {
             max_len = max_compressed_len(uncompressed_size);
             if (max_len <= COMPRESSION_BUFFER_THRESHOLD) {
@@ -742,7 +742,7 @@ private:
         ZSTD_CCtx* ctx = context->ctx;
 
         [[maybe_unused]] faststring* compression_buffer = nullptr;
-        [[maybe_unused]] size_t max_len;
+        [[maybe_unused]] size_t max_len = 0;
         if (use_compression_buffer) {
             max_len = max_compressed_len(uncompressed_size);
             if (max_len <= COMPRESSION_BUFFER_THRESHOLD) {

@@ -436,12 +436,6 @@ public class ExpressionStatisticCalculator {
                     minValue = left.getMinValue() - right.getMaxValue();
                     maxValue = left.getMaxValue() - right.getMinValue();
                     break;
-                case FunctionSet.DATEDIFF:
-                    minValue = Utils.getDatetimeFromLong((long) left.getMinValue()).toLocalDate().toEpochDay() -
-                            Utils.getDatetimeFromLong((long) right.getMaxValue()).toLocalDate().toEpochDay();
-                    maxValue = Utils.getDatetimeFromLong((long) left.getMaxValue()).toLocalDate().toEpochDay() -
-                            Utils.getDatetimeFromLong((long) right.getMinValue()).toLocalDate().toEpochDay();
-                    break;
                 case FunctionSet.YEARS_DIFF:
                     interval = 3600 * 24 * 365;
                     minValue = (left.getMinValue() - right.getMaxValue()) / interval;
@@ -458,6 +452,7 @@ public class ExpressionStatisticCalculator {
                     maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
                     break;
                 case FunctionSet.DAYS_DIFF:
+                case FunctionSet.DATEDIFF:
                     interval = 3600 * 24;
                     minValue = (left.getMinValue() - right.getMaxValue()) / interval;
                     maxValue = (left.getMaxValue() - right.getMinValue()) / interval;

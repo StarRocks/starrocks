@@ -44,6 +44,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Daemon;
@@ -771,6 +772,15 @@ public class ReportHandler extends Daemon {
         }
     }
 
+    private static void addDropReplicaTask(AgentBatchTask batchTask, long backendId,
+                                           long tabletId, int schemaHash, String reason) {
+        DropReplicaTask task =
+                new DropReplicaTask(backendId, tabletId, schemaHash, false);
+        batchTask.addTask(task);
+        LOG.warn("delete tablet[{}] from backend[{}] because {}",
+                tabletId, backendId, reason);
+    }
+
     private static void deleteFromBackend(Map<Long, TTablet> backendTablets,
                                           Set<Long> foundTabletsWithValidSchema,
                                           Map<Long, TTabletInfo> foundTabletsWithInvalidSchema,
@@ -782,7 +792,18 @@ public class ReportHandler extends Daemon {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         for (Long tabletId : backendTablets.keySet()) {
             TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
-            if (tabletMeta == null || tabletMeta.isUseStarOS()) {
+            if (tabletMeta == null) {
+                // We need to clean these ghost tablets from current backend, or else it will
+                // continue to report them to FE forever and add some processing overhead(the tablet report
+                // process is protected with DB S lock).
+                addDropReplicaTask(batchTask, backendId, tabletId,
+                        -1 /* Unknown schema hash */, "not found in meta");
+                ++deleteFromBackendCounter;
+                --maxTaskSendPerBe;
+                continue;
+            }
+
+            if (tabletMeta.isUseStarOS()) {
                 continue;
             }
 
@@ -798,8 +819,15 @@ public class ReportHandler extends Daemon {
                             // update counter
                             ++addToMetaCounter;
                         } catch (MetaNotFoundException e) {
-                            LOG.warn("failed add to meta. tablet[{}], backend[{}]. {}",
-                                    tabletId, backendId, e.getMessage());
+                            // Enough replica causing replica add failed should be treated as a normal
+                            // case to avoid too many useless warning logs. This will happen when a clone task
+                            // finished for decommission or balance, and the redundant replica has been deleted
+                            // from some BE, but the BE's tablet report doesn't see this deletion and still report
+                            // the deleted tablet info to FE.
+                            if (e.getErrorCode() != InternalErrorCode.REPLICA_ENOUGH_ERR) {
+                                LOG.warn("failed add to meta. tablet[{}], backend[{}]. {}",
+                                        tabletId, backendId, e.getMessage());
+                            }
                             needDelete = true;
                         }
                     } else {
@@ -809,11 +837,8 @@ public class ReportHandler extends Daemon {
 
                 if (needDelete && maxTaskSendPerBe > 0) {
                     // drop replica
-                    DropReplicaTask task =
-                            new DropReplicaTask(backendId, tabletId, backendTabletInfo.getSchema_hash(), false);
-                    batchTask.addTask(task);
-                    LOG.warn("delete tablet[" + tabletId + "] from backend[" + backendId +
-                            "] because not found in meta");
+                    addDropReplicaTask(batchTask, backendId, tabletId,
+                            backendTabletInfo.getSchema_hash(), "not found in meta");
                     ++deleteFromBackendCounter;
                     --maxTaskSendPerBe;
                 }
@@ -823,10 +848,8 @@ public class ReportHandler extends Daemon {
                 // this tablet is found in meta but with invalid schema hash.
                 // delete it.
                 int schemaHash = foundTabletsWithInvalidSchema.get(tabletId).getSchema_hash();
-                DropReplicaTask task = new DropReplicaTask(backendId, tabletId, schemaHash, false);
-                batchTask.addTask(task);
-                LOG.warn("delete tablet[" + tabletId + " - " + schemaHash + "] from backend[" + backendId
-                        + "] because invalid schema hash");
+                addDropReplicaTask(batchTask, backendId, tabletId, schemaHash,
+                        "invalid schema hash: " + schemaHash);
                 ++deleteFromBackendCounter;
                 --maxTaskSendPerBe;
             }
@@ -1255,7 +1278,7 @@ public class ReportHandler extends Daemon {
                         return;
                     }
                 }
-                throw new MetaNotFoundException(
+                throw new MetaNotFoundException(InternalErrorCode.REPLICA_ENOUGH_ERR,
                         "replica is enough[" + tablet.getReplicas().size() + "-" + replicationNum + "]");
             }
         } finally {

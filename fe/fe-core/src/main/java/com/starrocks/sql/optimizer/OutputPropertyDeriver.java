@@ -189,13 +189,13 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             HashDistributionDesc leftDistributionDesc = leftDistributionSpec.getHashDistributionDesc();
             HashDistributionDesc rightDistributionDesc = rightDistributionSpec.getHashDistributionDesc();
 
-            if (leftDistributionDesc.isLocalShuffle() && rightDistributionDesc.isLocalShuffle()) {
+            if (leftDistributionDesc.isLocal() && rightDistributionDesc.isLocal()) {
                 // colocate join
                 return computeHashJoinDistributionPropertyInfo(node,
                         computeColocateJoinOutputProperty(leftDistributionSpec, rightDistributionSpec),
                         leftOnPredicateColumns,
                         rightOnPredicateColumns, context);
-            } else if (leftDistributionDesc.isLocalShuffle() && rightDistributionDesc.isBucketJoin()) {
+            } else if (leftDistributionDesc.isLocal() && rightDistributionDesc.isBucketJoin()) {
                 // bucket join
                 return computeHashJoinDistributionPropertyInfo(node, leftChildOutputProperty, leftOnPredicateColumns,
                         rightOnPredicateColumns, context);
@@ -206,7 +206,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                         computeShuffleJoinOutputProperty(leftShuffleColumns),
                         leftOnPredicateColumns,
                         rightOnPredicateColumns, context);
-            } else if (leftDistributionDesc.isShuffle() && rightDistributionDesc.isLocalShuffle()) {
+            } else if (leftDistributionDesc.isShuffle() && rightDistributionDesc.isLocal()) {
                 // coordinator can not bucket shuffle data from left to right
                 Preconditions.checkState(false, "Children output property distribution error");
                 return PhysicalPropertySet.EMPTY;

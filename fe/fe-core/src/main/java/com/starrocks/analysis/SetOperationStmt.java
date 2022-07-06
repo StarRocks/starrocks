@@ -27,7 +27,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rewrite.ExprRewriter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -437,37 +436,6 @@ public class SetOperationStmt extends QueryStmt {
             slotDesc.setIsNullable(isNullable);
         }
         baseTblResultExprs = resultExprs;
-    }
-
-    /**
-     * Marks the baseTblResultExprs of its operands as materialized, based on
-     * which of the output slots have been marked.
-     * Calls materializeRequiredSlots() on the operands themselves.
-     */
-    @Override
-    public void materializeRequiredSlots(Analyzer analyzer) {
-    }
-
-    @Override
-    public void rewriteExprs(ExprRewriter rewriter) throws AnalysisException {
-        for (SetOperand op : operands) {
-            op.getQueryStmt().rewriteExprs(rewriter);
-        }
-        if (orderByElements != null) {
-            for (OrderByElement orderByElem : orderByElements) {
-                orderByElem.setExpr(rewriter.rewrite(orderByElem.getExpr(), analyzer));
-            }
-        }
-    }
-
-    @Override
-    public void getMaterializedTupleIds(ArrayList<TupleId> tupleIdList) {
-        // Return the sort tuple if there is an evaluated order by.
-        if (evaluateOrderBy) {
-            tupleIdList.add(sortInfo.getSortTupleDescriptor().getId());
-        } else {
-            tupleIdList.add(tupleId);
-        }
     }
 
     @Override

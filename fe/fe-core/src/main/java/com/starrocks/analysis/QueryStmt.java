@@ -23,7 +23,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -37,7 +36,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Abstract base class for any statement that returns results
@@ -126,59 +124,12 @@ public abstract class QueryStmt extends StatementBase {
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
     }
 
-    /**
-     * Returns a list containing all the materialized tuple ids that this stmt is
-     * correlated with (i.e., those tuple ids from outer query blocks that TableRefs
-     * inside this stmt are rooted at).
-     * <p>
-     * Throws if this stmt contains an illegal mix of un/correlated table refs.
-     * A statement is illegal if it contains a TableRef correlated with a parent query
-     * block as well as a table ref with an absolute path (e.g. a BaseTabeRef). Such a
-     * statement would generate a Subplan containing a base table scan (very expensive),
-     * and should therefore be avoided.
-     * <p>
-     * In other words, the following cases are legal:
-     * (1) only uncorrelated table refs
-     * (2) only correlated table refs
-     * (3) a mix of correlated table refs and table refs rooted at those refs
-     * (the statement is 'self-contained' with respect to correlation)
-     */
-    public List<TupleId> getCorrelatedTupleIds(Analyzer analyzer)
-            throws AnalysisException {
-        // Correlated tuple ids of this stmt.
-        List<TupleId> correlatedTupleIds = Lists.newArrayList();
-        // First correlated and absolute table refs. Used for error detection/reporting.
-        // We pick the first ones for simplicity. Choosing arbitrary ones is equally valid.
-        TableRef correlatedRef = null;
-        TableRef absoluteRef = null;
-        // Materialized tuple ids of the table refs checked so far.
-        Set<TupleId> tblRefIds = Sets.newHashSet();
-
-        List<TableRef> tblRefs = Lists.newArrayList();
-        collectTableRefs(tblRefs);
-        for (TableRef tblRef : tblRefs) {
-            if (absoluteRef == null && !tblRef.isRelative()) {
-                absoluteRef = tblRef;
-            }
-            tblRefIds.add(tblRef.getId());
-        }
-        return correlatedTupleIds;
-    }
-
-    public boolean isEvaluateOrderBy() {
-        return evaluateOrderBy;
-    }
-
     public ArrayList<Expr> getBaseTblResultExprs() {
         return baseTblResultExprs;
     }
 
     public void setNeedToSql(boolean needToSql) {
         this.needToSql = needToSql;
-    }
-
-    protected Expr rewriteQueryExprByMvColumnExpr(Expr expr, Analyzer analyzer) throws AnalysisException {
-        return expr;
     }
 
     /**
@@ -262,13 +213,6 @@ public abstract class QueryStmt extends StatementBase {
     public abstract ArrayList<String> getColLabels();
 
     /**
-     * Returns the materialized tuple ids of the output of this stmt.
-     * Used in case this stmt is part of an @InlineViewRef,
-     * since we need to know the materialized tupls ids of a TableRef.
-     */
-    public abstract void getMaterializedTupleIds(ArrayList<TupleId> tupleIdList);
-
-    /**
      * Returns all physical (non-inline-view) TableRefs of this statement and the nested
      * statements of inline views. The returned TableRefs are in depth-first order.
      */
@@ -342,27 +286,6 @@ public abstract class QueryStmt extends StatementBase {
         return resultExprs;
     }
 
-    /**
-     * Mark all slots that need to be materialized for the execution of this stmt.
-     * This excludes slots referenced in resultExprs (it depends on the consumer of
-     * the output of the stmt whether they'll be accessed) and single-table predicates
-     * (the PlanNode that materializes that tuple can decide whether evaluating those
-     * predicates requires slot materialization).
-     * This is called prior to plan tree generation and allows tuple-materializing
-     * PlanNodes to compute their tuple's mem layout.
-     */
-    public abstract void materializeRequiredSlots(Analyzer analyzer) throws AnalysisException;
-
-    /**
-     * Mark slots referenced in exprs as materialized.
-     */
-    protected void materializeSlots(Analyzer analyzer, List<Expr> exprs) {
-        List<SlotId> slotIds = Lists.newArrayList();
-        for (Expr e : exprs) {
-            e.getIds(null, slotIds);
-        }
-        analyzer.getDescTbl().markSlotsMaterialized(slotIds);
-    }
 
     @Override
     public RedirectStatus getRedirectStatus() {

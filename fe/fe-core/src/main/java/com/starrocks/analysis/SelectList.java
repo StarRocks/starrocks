@@ -21,10 +21,7 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.rewrite.ExprRewriter;
 
 import java.util.List;
 import java.util.Map;
@@ -92,24 +89,6 @@ public class SelectList {
             if (!item.isStar()) {
                 item.getExpr().reset();
             }
-        }
-    }
-
-    public void rewriteExprs(ExprRewriter rewriter, Analyzer analyzer)
-            throws AnalysisException {
-        for (SelectListItem item : items) {
-            if (item.isStar()) {
-                continue;
-            }
-            // equal subquery in select list
-            if (item.getExpr().contains(Predicates.instanceOf(Subquery.class))) {
-                List<Subquery> subqueryExprs = Lists.newArrayList();
-                item.getExpr().collect(Subquery.class, subqueryExprs);
-                for (Subquery s : subqueryExprs) {
-                    s.getStatement().rewriteExprs(rewriter);
-                }
-            }
-            item.setExpr(rewriter.rewrite(item.getExpr(), analyzer));
         }
     }
 

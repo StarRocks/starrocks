@@ -6,23 +6,28 @@
 
 #include <fmt/format.h>
 
+#include "fs/fs_starlet.h"
 #include "service/staros_worker.h"
 
 namespace starrocks::lake {
 
-static const char* const kStarletPrefix = "staros_";
-static const char* const kGroupKey = "storageGroup";
+static std::string normalize_group(const std::string& group) {
+    if (group.back() != '/') {
+        return group;
+    }
+    return group.substr(0, group.length() - 1);
+}
+
+std::string StarletGroupAssigner::get_fs_prefix() {
+    return kStarletPrefix;
+}
 
 StatusOr<std::string> StarletGroupAssigner::get_group(int64_t tablet_id) {
     if (g_worker == nullptr) {
         return Status::InternalError("init_staros_worker() must be called before get_shard_info()");
     }
-    ASSIGN_OR_RETURN(auto shardinfo, g_worker->get_shard_info(tablet_id));
-    auto iter = shardinfo.properties.find(kGroupKey);
-    if (iter == shardinfo.properties.end()) {
-        return Status::InternalError(fmt::format("Fail to find {} group path", tablet_id));
-    }
-    return fmt::format("{}{}", kStarletPrefix, iter->second);
+    ASSIGN_OR_RETURN(auto shard_info, g_worker->get_shard_info(tablet_id));
+    return normalize_group(shard_info.obj_store_info.s3_obj_store.uri);
 }
 
 Status StarletGroupAssigner::list_group(std::set<std::string>* groups) {
@@ -32,14 +37,13 @@ Status StarletGroupAssigner::list_group(std::set<std::string>* groups) {
 
     std::vector<staros::starlet::ShardInfo> shards = g_worker->shards();
     for (const auto& shard : shards) {
-        auto iter = shard.properties.find(kGroupKey);
-        if (iter == shard.properties.end()) {
-            return Status::InternalError(fmt::format("Fail to find {} group path", shard.id));
-        }
-        std::string starlet_group = fmt::format("{}{}", kStarletPrefix, iter->second);
-        groups->emplace(std::move(starlet_group));
+        groups->emplace(std::move(normalize_group(shard.obj_store_info.s3_obj_store.uri)));
     }
     return Status::OK();
+}
+
+std::string StarletGroupAssigner::path_assemble(const std::string& path, int64_t tablet_id) {
+    return fmt::format("{}{}?ShardId={}", kStarletPrefix, path, tablet_id);
 }
 
 } // namespace starrocks::lake

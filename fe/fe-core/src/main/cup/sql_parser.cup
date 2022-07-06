@@ -1008,15 +1008,7 @@ alter_table_clause ::=
 alter_system_clause ::=
     KW_ADD KW_BACKEND string_list:hostPorts
     {:
-        RESULT = new AddBackendClause(hostPorts, false);
-    :}
-    | KW_ADD KW_FREE KW_BACKEND string_list:hostPorts
-    {:
-        RESULT = new AddBackendClause(hostPorts, true);
-    :}
-    | KW_ADD KW_BACKEND KW_TO ident:clusterName string_list:hostPorts
-    {:
-        RESULT = new AddBackendClause(hostPorts, clusterName);
+        RESULT = new AddBackendClause(hostPorts);
     :}
     | KW_DROP KW_BACKEND string_list:hostPorts opt_force:force
     {:
@@ -2430,11 +2422,6 @@ show_param ::=
     | KW_EXPORT opt_db:db opt_wild_where order_by_clause:orderByClause limit_clause:limitClause
     {:
         RESULT = new ShowExportStmt(db, parser.where, orderByClause, limitClause);
-    :}
-    /* Show delete statement */
-    | KW_DELETE opt_db:db
-    {:
-        RESULT = new ShowDeleteStmt(db);
     :}
     /* Show alter table statement: used to show process of alter table statement */
     | KW_ALTER KW_TABLE opt_alter_type:type opt_db:db opt_wild_where order_by_clause:orderByClause limit_clause:limitClause

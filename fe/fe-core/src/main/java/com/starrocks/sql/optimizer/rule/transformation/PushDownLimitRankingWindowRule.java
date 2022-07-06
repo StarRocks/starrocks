@@ -1,24 +1,21 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.TopNType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
@@ -27,21 +24,38 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-/**
- * For rank window functions, such as row_number, rank, dense_rank, if there exists rank related predicate
- * then we can add a TopN to filter data in order to reduce the amount of data to be exchanged and sorted
+/*
+ * For ranking window functions, such as row_number, rank, dense_rank, if there exists rank related order by clause
+ * and limit clause, then we can add a TopN to filter data in order to reduce the amount of data to be exchanged and sorted
  * E.g.
- * select * from (
- * select *, rank() over (order by v2) as rk from t0
- * ) sub_t0
- * where rk < 4;
+ *      select * from (
+ *          select *, rank() over (order by v2) as rk from t0
+ *      ) sub_t0
+ *      order by rk
+ *      limit 5;
+ *
+ * Before:
+ *       TopN
+ *         |
+ *       Project
+ *         |
+ *       Window
+ *
+ * After:
+ *       TopN
+ *         |
+ *       Project
+ *         |
+ *       Window
+ *         |
+ *       TopN
  */
-public class PushDownPredicateWindowRankRule extends TransformationRule {
-
-    public PushDownPredicateWindowRankRule() {
-        super(RuleType.TF_PUSH_DOWN_PREDICATE_WINDOW_RANK,
-                Pattern.create(OperatorType.LOGICAL_FILTER).
-                        addChildren(Pattern.create(OperatorType.LOGICAL_WINDOW, OperatorType.PATTERN_LEAF)));
+public class PushDownLimitRankingWindowRule extends TransformationRule {
+    public PushDownLimitRankingWindowRule() {
+        super(RuleType.TF_PUSH_DOWN_LIMIT_RANKING_WINDOW,
+                Pattern.create(OperatorType.LOGICAL_TOPN)
+                        .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT)
+                                .addChildren(Pattern.create(OperatorType.LOGICAL_WINDOW, OperatorType.PATTERN_LEAF))));
     }
 
     @Override
@@ -52,8 +66,8 @@ public class PushDownPredicateWindowRankRule extends TransformationRule {
             return false;
         }
 
-        OptExpression childExpr = input.inputAt(0);
-        LogicalWindowOperator windowOperator = childExpr.getOp().cast();
+        OptExpression grandChildExpr = input.inputAt(0).inputAt(0);
+        LogicalWindowOperator windowOperator = grandChildExpr.getOp().cast();
 
         if (windowOperator.getWindowCall().size() != 1) {
             return false;
@@ -63,16 +77,19 @@ public class PushDownPredicateWindowRankRule extends TransformationRule {
         CallOperator callOperator = windowOperator.getWindowCall().get(windowCol);
 
         // TODO(hcf) we support dense_rank later
-        if (!FunctionSet.ROW_NUMBER.equalsIgnoreCase(callOperator.getFnName()) &&
-                !FunctionSet.RANK.equalsIgnoreCase(callOperator.getFnName())) {
+        if (!FunctionSet.ROW_NUMBER.equals(callOperator.getFnName()) &&
+                !FunctionSet.RANK.equals(callOperator.getFnName())) {
             return false;
         }
 
-        if (!childExpr.getInputs().isEmpty() && childExpr.inputAt(0).getOp() instanceof LogicalWindowOperator) {
-            OptExpression grandChildExpr = childExpr.inputAt(0);
-            LogicalWindowOperator nextWindowOperator = grandChildExpr.getOp().cast();
-            // We cannot add topN if the current window function and the next window function are in the same sort group
-            return !Objects.equals(windowOperator.getEnforceSortColumns(), nextWindowOperator.getEnforceSortColumns());
+        if (!grandChildExpr.getInputs().isEmpty() &&
+                grandChildExpr.inputAt(0).getOp() instanceof LogicalWindowOperator) {
+            OptExpression grandGrandChildExpr = grandChildExpr.inputAt(0);
+            LogicalWindowOperator nextWindowOperator = grandGrandChildExpr.getOp().cast();
+            // There might be a negative gain if we add a partitionTopN between two window operators that
+            // share the same sort group
+            return !Objects.equals(windowOperator.getEnforceSortColumns(),
+                    nextWindowOperator.getEnforceSortColumns());
         }
 
         return true;
@@ -80,31 +97,19 @@ public class PushDownPredicateWindowRankRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalFilterOperator filterOperator = input.getOp().cast();
-        List<ScalarOperator> filters = Utils.extractConjuncts(filterOperator.getPredicate());
-        OptExpression childExpr = input.inputAt(0);
-        LogicalWindowOperator windowOperator = childExpr.getOp().cast();
-
-        ColumnRefOperator windowCol = Lists.newArrayList(windowOperator.getWindowCall().keySet()).get(0);
-        CallOperator callOperator = windowOperator.getWindowCall().get(windowCol);
-
-        List<BinaryPredicateOperator> lessPredicates =
-                filters.stream().filter(op -> op instanceof BinaryPredicateOperator)
-                        .map(ScalarOperator::<BinaryPredicateOperator>cast)
-                        .filter(op -> Objects.equals(BinaryPredicateOperator.BinaryType.LE, op.getBinaryType()) ||
-                                Objects.equals(BinaryPredicateOperator.BinaryType.LT, op.getBinaryType()))
-                        .filter(op -> Objects.equals(windowCol, op.getChild(0)))
-                        .filter(op -> op.getChild(1) instanceof ConstantOperator)
-                        .collect(Collectors.toList());
-
-        // TODO(hcf) As for rk < 1 and rk <5, we need to add previous rule to simplify such predicates
-        if (lessPredicates.size() != 1) {
+        LogicalTopNOperator topNOperator = input.getOp().cast();
+        if (!topNOperator.hasLimit()) {
             return Collections.emptyList();
         }
 
-        BinaryPredicateOperator lessPredicate = lessPredicates.get(0);
-        ConstantOperator rightChild = lessPredicate.getChild(1).cast();
-        long limitValue = rightChild.getBigint();
+        OptExpression childExpr = input.inputAt(0);
+        LogicalProjectOperator projectOperator = childExpr.getOp().cast();
+
+        OptExpression grandChildExpr = childExpr.inputAt(0);
+        LogicalWindowOperator windowOperator = grandChildExpr.getOp().cast();
+
+        ColumnRefOperator windowCol = Lists.newArrayList(windowOperator.getWindowCall().keySet()).get(0);
+        CallOperator callOperator = windowOperator.getWindowCall().get(windowCol);
 
         List<ColumnRefOperator> partitionByColumns = windowOperator.getPartitionExpressions().stream()
                 .map(ScalarOperator::<ColumnRefOperator>cast)
@@ -115,6 +120,16 @@ public class PushDownPredicateWindowRankRule extends TransformationRule {
             return Collections.emptyList();
         }
 
+        Ordering firstOrdering = topNOperator.getOrderByElements().get(0);
+        if (!firstOrdering.isAscending()) {
+            return Collections.emptyList();
+        }
+        // The output column of the window function must be the first order by columns
+        if (!firstOrdering.getColumnRef().equals(windowCol)) {
+            return Collections.emptyList();
+        }
+
+        long limitValue = topNOperator.getOffset() + topNOperator.getLimit();
         TopNType topNType = TopNType.parse(callOperator.getFnName());
 
         // If partition by columns is not empty, then we cannot derive sort property from the SortNode
@@ -129,14 +144,10 @@ public class PushDownPredicateWindowRankRule extends TransformationRule {
                 .setLimit(limit)
                 .setTopNType(topNType)
                 .setSortPhase(sortPhase)
-                .build(), childExpr.getInputs());
+                .build(), grandChildExpr.getInputs());
 
-        OptExpression newWindowOptExp =
-                OptExpression.create(new LogicalWindowOperator.Builder().withOperator(windowOperator).build(),
-                        newTopNOptExp);
-
-        return Collections.singletonList(
-                OptExpression.create(new LogicalFilterOperator.Builder().withOperator(filterOperator).build(),
-                        newWindowOptExp));
+        OptExpression newWindowOptExp = OptExpression.create(windowOperator, newTopNOptExp);
+        OptExpression newProjectOptExp = OptExpression.create(projectOperator, newWindowOptExp);
+        return Collections.singletonList(OptExpression.create(topNOperator, newProjectOptExp));
     }
 }

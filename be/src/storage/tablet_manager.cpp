@@ -1438,4 +1438,25 @@ Status TabletManager::_move_tablet_directories_to_trash(const TabletSharedPtr& t
     return move_to_trash(tablet->tablet_id_path());
 }
 
+std::unordered_map<TTabletId, vector<pair<uint32_t, uint32_t>>> TabletManager::get_tablets_need_repair_compaction() {
+    std::unordered_map<TTabletId, std::vector<std::pair<uint32_t, uint32_t>>> ret;
+    for (const auto& tablets_shard : _tablets_shards) {
+        std::shared_lock rlock(tablets_shard.lock);
+        for (auto [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+            if (tablet_ptr->updates() == nullptr) {
+                continue;
+            }
+            auto st = tablet_ptr->updates()->list_rowsets_need_repair_compaction();
+            if (!st.ok()) {
+                continue;
+            }
+            if (st.value().empty()) {
+                continue;
+            }
+            ret.emplace(tablet_id, std::move(st.value()));
+        }
+    }
+    return ret;
+}
+
 } // end namespace starrocks

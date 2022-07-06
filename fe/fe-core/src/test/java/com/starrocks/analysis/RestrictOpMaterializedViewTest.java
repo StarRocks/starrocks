@@ -124,7 +124,8 @@ public class RestrictOpMaterializedViewTest {
 
     }
 
-    @Test
+    // This test is temporarily removed because it is unstable,
+    // and it will be added back when the cause of the problem is found and fixed.
     public void testBrokerLoad() {
         String sql1 = "LOAD LABEL db1.label0 (DATA INFILE('/path/file1') INTO TABLE mv1) with broker 'broker0';";
         try {
@@ -163,6 +164,17 @@ public class RestrictOpMaterializedViewTest {
             Assert.fail();
         } catch (Exception e) {
             assertTrue(e.getMessage().contains("is a materialized view,you can use 'ALTER MATERIALIZED VIEW' to alter it."));
+        }
+    }
+
+    @Test
+    public void testDropTable() {
+        String sql1 = "drop table db1.mv1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql1, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            assertTrue(e.getMessage().contains("is a materialized view,use 'drop materialized view mv1' to drop it."));
         }
     }
 

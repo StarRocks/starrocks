@@ -123,6 +123,9 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     protected int pipelineDop = 1;
     protected boolean dopEstimated = false;
 
+    // Enable shared_scan for this fragment: OlapScanOperator could share the output data to avoid data skew
+    protected boolean enableSharedScan = true;
+
     protected final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
     protected final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
 
@@ -232,6 +235,18 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public int getPipelineDop() {
         return pipelineDop;
+    }
+
+    public void setPipelineDop(int dop) {
+        this.pipelineDop = dop;
+    }
+
+    public void setEnableSharedScan(boolean enable) {
+        this.enableSharedScan = enable;
+    }
+
+    public boolean isEnableSharedScan() {
+        return enableSharedScan;
     }
 
     public void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {

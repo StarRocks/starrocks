@@ -197,6 +197,10 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     mkdir -p ${CMAKE_BUILD_DIR}
     cd ${CMAKE_BUILD_DIR}
     if [ "${USE_STAROS}" == "ON"  ]; then
+      if [ -z "$STARLET_INSTALL_DIR" ] ; then
+        # assume starlet_thirdparty is installed to ${STARROCKS_THIRDPARTY}/installed/starlet/
+        STARLET_INSTALL_DIR=${STARROCKS_THIRDPARTY}/installed/starlet
+      fi
       ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
                     -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} \
                     -DSTARROCKS_HOME=${STARROCKS_HOME} \
@@ -206,10 +210,10 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                     -DUSE_STAROS=${USE_STAROS} \
-                    -Dprotobuf_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/third_party/grpc_install/lib64/cmake/protobuf \
-                    -Dabsl_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/third_party/grpc_install/lib64/cmake/absl \
-                    -DgRPC_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/third_party/grpc_install/lib/cmake/grpc \
-                    -Dstarlet_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/starlet_install/lib64/cmake ..
+                    -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
+                    -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
+                    -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
+                    -Dstarlet_DIR=${STARLET_INSTALL_DIR}/starlet_install/lib64/cmake ..
     else
       ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
                     -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} \
@@ -289,6 +293,8 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
 fi
 
 if [ ${BUILD_BE} -eq 1 ]; then
+    rm -rf ${STARROCKS_OUTPUT}/be/lib/*
+
     install -d ${STARROCKS_OUTPUT}/be/bin  \
                ${STARROCKS_OUTPUT}/be/conf \
                ${STARROCKS_OUTPUT}/be/lib/hadoop \

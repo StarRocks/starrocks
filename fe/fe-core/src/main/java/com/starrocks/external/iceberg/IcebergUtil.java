@@ -3,7 +3,14 @@
 package com.starrocks.external.iceberg;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.DdlException;
 import com.starrocks.external.hive.HdfsFileFormat;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
@@ -17,12 +24,19 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.types.Types;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
+
+import static com.starrocks.external.HiveMetaStoreTableUtils.connectorDbIdIdGenerator;
+import static com.starrocks.external.HiveMetaStoreTableUtils.connectorTableIdIdGenerator;
 
 public class IcebergUtil {
+
     /**
      * Get Iceberg table identifier by table property
      */
@@ -161,5 +175,79 @@ public class IcebergUtil {
             }
         }
         return columns.build();
+    }
+
+    public static IcebergTable convertToSRTable(org.apache.iceberg.Table icebergTable, String metastoreURI,
+                                                String dbName, String tblName) throws DdlException {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(IcebergTable.ICEBERG_CATALOG, "HIVE_CATALOG");
+        properties.put(IcebergTable.ICEBERG_DB, dbName);
+        properties.put(IcebergTable.ICEBERG_TABLE, tblName);
+        properties.put(IcebergTable.ICEBERG_METASTORE_URIS, metastoreURI);
+        Map<String, Types.NestedField> icebergColumns = icebergTable.schema().columns().stream()
+                .collect(Collectors.toMap(Types.NestedField::name, field -> field));
+        List<Column> fullSchema = Lists.newArrayList();
+        for (Map.Entry<String, Types.NestedField> entry : icebergColumns.entrySet()) {
+            Types.NestedField icebergColumn = entry.getValue();
+            Type srType = convertColumnType(icebergColumn.type());
+            Column column = new Column(icebergColumn.name(), srType, true);
+            fullSchema.add(column);
+        }
+
+        return new IcebergTable(connectorTableIdIdGenerator.getNextId().asInt(), icebergTable.name(),
+                fullSchema, properties);
+    }
+
+    static Type convertColumnType(org.apache.iceberg.types.Type icebergType) {
+        if (icebergType == null) {
+            return Type.NULL;
+        }
+
+        PrimitiveType primitiveType;
+
+        switch (icebergType.typeId()) {
+            case BOOLEAN:
+                primitiveType = PrimitiveType.BOOLEAN;
+                break;
+            case INTEGER:
+                primitiveType = PrimitiveType.INT;
+                break;
+            case LONG:
+                primitiveType = PrimitiveType.BIGINT;
+                break;
+            case FLOAT:
+                primitiveType = PrimitiveType.FLOAT;
+                break;
+            case DOUBLE:
+                primitiveType = PrimitiveType.DOUBLE;
+                break;
+            case DATE:
+                primitiveType = PrimitiveType.DATE;
+                break;
+            case TIMESTAMP:
+                primitiveType = PrimitiveType.DATETIME;
+                break;
+            case STRING:
+            case UUID:
+                return ScalarType.createDefaultString();
+            case DECIMAL:
+                int precision = ((Types.DecimalType) icebergType).precision();
+                int scale = ((Types.DecimalType) icebergType).scale();
+                return ScalarType.createUnifiedDecimalType(precision, scale);
+            case LIST:
+                return convertColumnType(icebergType.asListType().elementType());
+            case TIME:
+            case FIXED:
+            case BINARY:
+            case STRUCT:
+            case MAP:
+            default:
+                throw new RuntimeException("Unsupported type " + icebergType.typeId().toString());
+        }
+        return ScalarType.createType(primitiveType);
+    }
+
+    public static Database convertToSRDatabase(String dbName) {
+        return new Database(connectorDbIdIdGenerator.getNextId().asInt(), dbName);
     }
 }

@@ -657,7 +657,7 @@ public class HiveMetaClient {
 
     public List<HdfsFileDesc> getHdfsFileDescs(String dirPath, boolean isSplittable,
                                                StorageDescriptor sd) throws Exception {
-        URI uri = new URI(dirPath);
+        URI uri = new URI(dirPath.replace(" ", "%20"));
         FileSystem fileSystem = getFileSystem(uri);
         List<HdfsFileDesc> fileDescs = Lists.newArrayList();
 

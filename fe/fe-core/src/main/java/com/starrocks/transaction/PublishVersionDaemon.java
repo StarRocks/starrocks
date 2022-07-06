@@ -36,8 +36,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.lake.proto.PublishVersionRequest;
 import com.starrocks.lake.proto.PublishVersionResponse;
-import com.starrocks.rpc.BackendServiceProxy;
-import com.starrocks.rpc.LakeService;
+import com.starrocks.rpc.LakeServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -55,12 +54,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 public class PublishVersionDaemon extends MasterDaemon {
 
     private static final Logger LOG = LogManager.getLogger(PublishVersionDaemon.class);
+
+    private static final long RETRY_INTERVAL_MS = 1000;
 
     public PublishVersionDaemon() {
         super("PUBLISH_VERSION", Config.publish_version_interval_ms);
@@ -179,12 +179,16 @@ public class PublishVersionDaemon extends MasterDaemon {
         if (db == null) {
             return false;
         }
-        if (transactionState.getIdToTableCommitInfos().isEmpty()) {
+        if (transactionState.getTableIdList().isEmpty()) {
             return false;
         }
-        long anyTableId = transactionState.getIdToTableCommitInfos().keySet().stream().findFirst().get();
-        Table table = db.getTable(anyTableId);
-        return table.isLakeTable();
+        for (long tableId : transactionState.getTableIdList()) {
+            Table table = db.getTable(tableId);
+            if (table != null) {
+                return table.isLakeTable();
+            }
+        }
+        return false;
     }
 
     // todo: refine performance
@@ -195,6 +199,7 @@ public class PublishVersionDaemon extends MasterDaemon {
             long txnId = txnState.getTransactionId();
             Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
             if (db == null) {
+                LOG.info("the database of transaction {} has been deleted", txnId);
                 globalTransactionMgr.finishTransaction(txnState.getDbId(), txnId, Sets.newHashSet());
                 continue;
             }
@@ -210,7 +215,7 @@ public class PublishVersionDaemon extends MasterDaemon {
         }
     }
 
-    boolean publishTable(Database db, TransactionState txnState, TableCommitInfo tableCommitInfo) throws UserException {
+    boolean publishTable(Database db, TransactionState txnState, TableCommitInfo tableCommitInfo) {
         long txnId = txnState.getTransactionId();
         long tableId = tableCommitInfo.getTableId();
         LakeTable table = (LakeTable) db.getTable(tableId);
@@ -229,7 +234,18 @@ public class PublishVersionDaemon extends MasterDaemon {
                 LOG.info("Removed partition {} from transaction {}", partitionId, txnId);
                 continue;
             }
-            if (!publishPartition(txnState, table, partition, partitionCommitInfo)) {
+            long currentTime = System.currentTimeMillis();
+            long versionTime = partitionCommitInfo.getVersionTime();
+            if (versionTime > 0) {
+                continue;
+            }
+            if (versionTime < 0 && currentTime < Math.abs(versionTime) + RETRY_INTERVAL_MS) {
+                continue;
+            }
+            if (publishPartition(txnState, table, partition, partitionCommitInfo)) {
+                partitionCommitInfo.setVersionTime(System.currentTimeMillis());
+            } else {
+                partitionCommitInfo.setVersionTime(-System.currentTimeMillis());
                 finished = false;
             }
         }
@@ -237,8 +253,10 @@ public class PublishVersionDaemon extends MasterDaemon {
     }
 
     boolean publishPartition(TransactionState txnState, LakeTable table, Partition partition,
-                             PartitionCommitInfo partitionCommitInfo) throws UserException {
+                             PartitionCommitInfo partitionCommitInfo) {
         if (partition.getVisibleVersion() + 1 != partitionCommitInfo.getVersion()) {
+            LOG.warn("partiton version is " + partition.getVisibleVersion() + " commit version is " +
+                    partitionCommitInfo.getVersion());
             return false;
         }
         boolean finished = true;
@@ -247,37 +265,76 @@ public class PublishVersionDaemon extends MasterDaemon {
         List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
         for (MaterializedIndex index : indexes) {
             for (Tablet tablet : index.getTablets()) {
-                long beId = ((LakeTablet) tablet).getPrimaryBackendId();
+                Long beId = choosePublishVersionBackend((LakeTablet) tablet);
+                if (beId == null) {
+                    LOG.warn("No available backend can execute publish version task");
+                    return false;
+                }
                 beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
             }
         }
+        List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
+        List<Backend> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             Backend backend = systemInfoService.getBackend(entry.getKey());
-            // todo: handle backend == null
+            if (backend == null) {
+                LOG.warn("Backend {} has been dropped", entry.getKey());
+                finished = false;
+                continue;
+            }
+            if (!backend.isAlive()) {
+                LOG.warn("Backend {} not alive", backend.getHost());
+                finished = false;
+                continue;
+            }
             TNetworkAddress address = new TNetworkAddress();
             address.setHostname(backend.getHost());
             address.setPort(backend.getBrpcPort());
-            LakeService lakeService = BackendServiceProxy.getInstance().getLakeService(address);
 
-            // todo: send tasks in parallel
+            LakeServiceClient client = new LakeServiceClient(address);
             PublishVersionRequest request = new PublishVersionRequest();
             request.baseVersion = partitionCommitInfo.getVersion() - 1;
             request.newVersion = partitionCommitInfo.getVersion();
             request.tabletIds = entry.getValue();
             request.txnIds = Lists.newArrayList(txnId);
 
-            Future<PublishVersionResponse> responseFuture = lakeService.publishVersion(request);
             try {
-                PublishVersionResponse response = responseFuture.get();
-                if (!response.failedTablets.isEmpty()) {
-                    finished = false;
-                }
-            } catch (ExecutionException | InterruptedException e) {
-                LOG.error(e);
+                Future<PublishVersionResponse> responseFuture = client.publishVersion(request);
+                responseList.add(responseFuture);
+                backendList.add(backend);
+            } catch (Exception e) {
+                LOG.warn(e);
                 finished = false;
             }
         }
+
+        for (int i = 0; i < responseList.size(); i++) {
+            try {
+                PublishVersionResponse response = responseList.get(i).get();
+                if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
+                    LOG.warn("Fail to publish tablet {} on BE {}", response.failedTablets, backendList.get(i).getHost());
+                    finished = false;
+                }
+            } catch (Exception e) {
+                finished = false;
+                LOG.warn(e);
+            }
+        }
         return finished;
+    }
+
+    // Returns null if no backend available.
+    private Long choosePublishVersionBackend(LakeTablet tablet) {
+        try {
+            return tablet.getPrimaryBackendId();
+        } catch (UserException e) {
+            LOG.info("Fail to get primary backend for tablet {}, choose a random alive backend", tablet.getId());
+        }
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
+        if (backendIds.isEmpty()) {
+            return null;
+        }
+        return backendIds.get(0);
     }
 }

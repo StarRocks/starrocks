@@ -27,7 +27,15 @@ struct SIMDGather {
         int i = 0;
 #ifdef __AVX2__
         if (buckets < max_process_size) {
-            __m256i mask = _mm256_set1_epi32(0xFF);
+            // gather will collect data of size sizeof(int32)
+            // we only need the lower 16 bits
+            // eg:
+            // a = [0x12 0x34 0x56 0x78 0x9a 0x...]
+            // gather (a, [0,1,2,3], 2) will be:
+            // [0x12 0x32 0x56 0x78] [0x56 0x78 0x9a..0.] [....]
+            // use will use mask to get lower 16 bits
+            // [0x12 0x32 0x00 0x00] [0x56 0x78 0x00 0x00] [....]
+            __m256i mask = _mm256_set1_epi32(0xFFFF);
             for (; i + 8 <= num_rows; i += 8) {
                 __m256i loaded = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(c));
                 __m256i gathered = _mm256_i32gather_epi32((int32_t*)a, loaded, 2);

@@ -496,6 +496,9 @@ void StorageEngine::stop() {
             thread.join();
         }
     }
+    if (_repair_compaction_thread.joinable()) {
+        _repair_compaction_thread.join();
+    }
     for (auto& thread : _tablet_checkpoint_threads) {
         if (thread.joinable()) {
             thread.join();
