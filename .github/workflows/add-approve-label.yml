@@ -14,31 +14,31 @@ jobs:
   Approve:
     runs-on: ubuntu-latest
     steps:
-      - name: "Get information about the original trigger of the run"
-        uses: potiuk/get-workflow-origin@v1_2
-        id: source-run-info
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          sourceRunId: ${{ github.event.workflow_run.id }}
+    - name: "Get information about the original trigger of the run"
+      uses: potiuk/get-workflow-origin@v1_2
+      id: source-run-info
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        sourceRunId: ${{ github.event.workflow_run.id }}
           
-      - uses: luisrjaeger/approved-event-checker@v1.0.0
-        id: approved
-        with:
-          approvals: 2
-          check_changes_requested: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - uses: luisrjaeger/approved-event-checker@v1.0.0
+      id: approved
+      with:
+        approvals: 2
+        check_changes_requested: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
-      - name: Label when approved by 2 committers
-        if: ${{ steps.approved.outputs.approved == 'true' }}
-        uses: TobKed/label-when-approved-action@v1.2
-        id: label-when-approved-by-anyone
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          require_committers_approval: 'true'
-          label: 'Approved'
-          comment: 'PR approved by at 2 committers and no changes requested.'
-          pullRequestNumber: ${{ steps.source-run-info.outputs.pullRequestNumber }}
+    - name: Label when approved by 2 committers
+      if: ${{ steps.approved.outputs.approved == 'true' }}
+      uses: TobKed/label-when-approved-action@v1.2
+      id: label-when-approved-by-anyone
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        require_committers_approval: 'true'
+        label: 'Approved'
+        comment: 'PR approved by at 2 committers and no changes requested.'
+        pullRequestNumber: ${{ steps.source-run-info.outputs.pullRequestNumber }}
           
 #  - name: Label when approved
 #      uses: pullreminders/label-when-approved-action@v1.0.7
