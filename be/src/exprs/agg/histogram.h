@@ -21,11 +21,11 @@ public:
     T lower;
     T upper;
     // Up to this bucket, the total value
-    size_t count;
+    int32_t count;
     // the number of values that on the upper boundary
-    size_t upper_repeats;
+    int32_t upper_repeats;
     // total value count in this bucket
-    size_t count_in_bucket;
+    int32_t count_in_bucket;
 };
 
 template <typename T>
@@ -43,11 +43,10 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        int64_t total_rows = columns[1]->get(0).get_int64();
-        int64_t sample_rows = columns[2]->get(0).get_int64();
-        int64_t bucket_num = columns[3]->get(0).get_int64();
-
-        int64_t bucket_size = ceil(sample_rows / bucket_num);
+        int32_t total_rows = columns[1]->get(0).get_int32();
+        int32_t sample_rows = columns[2]->get(0).get_int32();
+        int32_t bucket_num = columns[3]->get(0).get_int32();
+        int32_t bucket_size = ceil(sample_rows / bucket_num);
 
         double sample_ratio;
         if (sample_rows == 0) {
@@ -56,6 +55,7 @@ public:
             sample_ratio = total_rows / sample_rows;
         }
         this->data(state).sample_ratio = sample_ratio;
+        this->data(state).buckets.reserve(bucket_num);
 
         T v;
         if (columns[0]->is_nullable()) {
@@ -69,7 +69,7 @@ public:
             v = down_cast<const ColumnType*>(columns[0])->get_data()[row_num];
         }
 
-        if (this->data(state).buckets.is_empty()) {
+        if (this->data(state).buckets.empty()) {
             Bucket<T> bucket(v, v, 1, 1);
             this->data(state).buckets.emplace_back(bucket);
         } else {
@@ -82,7 +82,7 @@ public:
             } else {
                 if (lastBucket->count_in_bucket >= bucket_size) {
                     Bucket<T> bucket(v, v, lastBucket->count + 1, 1);
-                    this->data(state).buckets.push_back(bucket);
+                    this->data(state).buckets.emplace_back(bucket);
                 } else {
                     lastBucket->upper = v;
                     lastBucket->count++;
@@ -119,10 +119,9 @@ public:
 
     std::string toBucketJson(std::string lower, std::string upper, size_t count, size_t upper_repeats,
                              double sample_ratio) const {
-        std::string bucket_json_array = "[\"" + lower + "\",\"" + upper + "\",\"" +
-                                        std::to_string((size_t)(count * sample_ratio)) + "\",\"" +
-                                        std::to_string((size_t)(upper_repeats * sample_ratio)) + "\"]";
-        return bucket_json_array;
+        return fmt::format("[\"{}\",\"{}\",\"{}\",\"{}\"]", lower, upper,
+                           std::to_string((size_t)(count * sample_ratio)),
+                           std::to_string((size_t)(upper_repeats * sample_ratio)));
     }
 
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,

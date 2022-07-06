@@ -894,8 +894,8 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_aggregate_mapping<TYPE_LARGEINT, TYPE_VARCHAR>("histogram");
     add_aggregate_mapping<TYPE_FLOAT, TYPE_VARCHAR>("histogram");
     add_aggregate_mapping<TYPE_DOUBLE, TYPE_VARCHAR>("histogram");
-    add_aggregate_mapping<TYPE_DATE, TYPE_BIGINT>("histogram");
-    add_aggregate_mapping<TYPE_DATETIME, TYPE_BIGINT>("histogram");
+    add_aggregate_mapping<TYPE_DATE, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_DATETIME, TYPE_VARCHAR>("histogram");
     add_aggregate_mapping<TYPE_DECIMAL32, TYPE_VARCHAR>("histogram");
     add_aggregate_mapping<TYPE_DECIMAL64, TYPE_VARCHAR>("histogram");
     add_aggregate_mapping<TYPE_DECIMAL128, TYPE_VARCHAR>("histogram");

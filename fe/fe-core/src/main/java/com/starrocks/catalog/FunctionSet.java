@@ -371,7 +371,7 @@ public class FunctionSet {
 
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
-            new FunctionName(JSON_QUERY), new Type[]{Type.JSON, Type.VARCHAR}, Type.JSON, false);
+            new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
 
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
@@ -1032,7 +1032,7 @@ public class FunctionSet {
 
         for (Type t : HISTOGRAM_TYPE) {
             addBuiltin(AggregateFunction.createBuiltin("histogram",
-                    Lists.newArrayList(t, Type.BIGINT, Type.BIGINT, Type.BIGINT), Type.VARCHAR, Type.VARCHAR,
+                    Lists.newArrayList(t, Type.INT, Type.INT, Type.INT), Type.VARCHAR, Type.VARCHAR,
                     false, false, false));
         }
     }
