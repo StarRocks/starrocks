@@ -16,6 +16,7 @@ jobs:
       env:
         APPROVALS: "2"
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        PERSONAL_TOKEN: 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
         ADD_LABEL: "invalid"
     
 #    - uses: taichi/approved-event-action@master
