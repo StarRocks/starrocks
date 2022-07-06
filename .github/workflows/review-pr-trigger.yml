@@ -7,7 +7,7 @@ jobs:
     name: "Label PRs when reviewed"
     runs-on: ubuntu-latest
     outputs:
-      Get2Approval: ${{ steps.approved.outputs.approved }}
+      approved: ${{ steps.approved.outputs.approved }}
     steps:
     - uses: taichi/approved-event-action@v1.2.1
       id: approved
