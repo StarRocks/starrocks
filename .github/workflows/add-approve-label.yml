@@ -21,15 +21,8 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         sourceRunId: ${{ github.event.workflow_run.id }}
           
-    - uses: taichi/approved-event-action@v1.2.1
-      id: approved
-      with:
-        approvals: '2'
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
     - name: Label when approved by 2 committers
-      if: ${{ steps.approved.outputs.approved == 'true' }}
+      if: ${{ github.event.workflow_run.output == 'true' }}
       uses: TobKed/label-when-approved-action@v1.2
       id: label-when-approved-by-anyone
       with:
