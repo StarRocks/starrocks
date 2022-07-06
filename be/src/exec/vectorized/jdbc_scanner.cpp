@@ -264,7 +264,9 @@ Status JDBCScanner::_init_column_class_name() {
     int len = helper.list_size(column_class_names);
 
     for (int i = 0; i < len; i++) {
-        std::string class_name = helper.to_string((jstring)(helper.list_get(column_class_names, i)));
+        jobject jelement = helper.list_get(column_class_names, i);
+        DeferOp defer([&jelement, this]() { _jni_env->DeleteLocalRef(jelement); });
+        std::string class_name = helper.to_string((jstring)(jelement));
         RETURN_IF_ERROR(_precheck_data_type(class_name, _slot_descs[i]));
         _column_class_name.emplace_back(class_name);
     }
@@ -414,13 +416,14 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, ChunkPtr* chunk) {
         jobject jcolumn = helper.list_get(jchunk, col_idx);
         DeferOp defer([&jcolumn, this]() { _jni_env->DeleteLocalRef(jcolumn); });
 
-#define FILL_COLUMN(get_value_func, cpp_type)                                                                         \
-    {                                                                                                                 \
-        auto func = std::bind(&JVMFunctionHelper::get_value_func, &helper, std::placeholders::_1);                    \
-        for (int i = 0; i < num_rows; i++) {                                                                          \
-            RETURN_IF_ERROR(                                                                                          \
-                    _append_value_from_result<cpp_type>(helper.list_get(jcolumn, i), func, slot_desc, column.get())); \
-        }                                                                                                             \
+#define FILL_COLUMN(get_value_func, cpp_type)                                                              \
+    {                                                                                                      \
+        auto func = std::bind(&JVMFunctionHelper::get_value_func, &helper, std::placeholders::_1);         \
+        for (int i = 0; i < num_rows; i++) {                                                               \
+            jobject jelement = helper.list_get(jcolumn, i);                                                \
+            DeferOp defer([&jelement, this]() { _jni_env->DeleteLocalRef(jelement); });                    \
+            RETURN_IF_ERROR(_append_value_from_result<cpp_type>(jelement, func, slot_desc, column.get())); \
+        }                                                                                                  \
     }
         if (column_class == "java.lang.Short") {
             FILL_COLUMN(valint16_t, int16_t);
@@ -439,21 +442,29 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, ChunkPtr* chunk) {
         } else if (column_class == "java.sql.Timestamp") {
             DCHECK(slot_desc->type().type == TYPE_DATETIME);
             for (int i = 0; i < num_rows; i++) {
-                RETURN_IF_ERROR(_append_datetime_val(helper.list_get(jcolumn, i), slot_desc, column.get()));
+                jobject jelement = helper.list_get(jcolumn, i);
+                DeferOp defer([&jelement, this]() { _jni_env->DeleteLocalRef(jelement); });
+                RETURN_IF_ERROR(_append_datetime_val(jelement, slot_desc, column.get()));
             }
         } else if (column_class == "java.sql.Date") {
             DCHECK(slot_desc->type().type == TYPE_DATE);
             for (int i = 0; i < num_rows; i++) {
-                RETURN_IF_ERROR(_append_date_val(helper.list_get(jcolumn, i), slot_desc, column.get()));
+                jobject jelement = helper.list_get(jcolumn, i);
+                DeferOp defer([&jelement, this]() { _jni_env->DeleteLocalRef(jelement); });
+                RETURN_IF_ERROR(_append_date_val(jelement, slot_desc, column.get()));
             }
         } else if (column_class == "java.time.LocalDateTime") {
             DCHECK(slot_desc->type().type == TYPE_DATETIME);
             for (int i = 0; i < num_rows; i++) {
-                RETURN_IF_ERROR(_append_localdatetime_val(helper.list_get(jcolumn, i), slot_desc, column.get()));
+                jobject jelement = helper.list_get(jcolumn, i);
+                DeferOp defer([&jelement, this]() { _jni_env->DeleteLocalRef(jelement); });
+                RETURN_IF_ERROR(_append_localdatetime_val(jelement, slot_desc, column.get()));
             }
         } else if (column_class == "java.math.BigDecimal") {
             for (int i = 0; i < num_rows; i++) {
-                RETURN_IF_ERROR(_append_decimal_val(helper.list_get(jcolumn, i), slot_desc, column.get()));
+                jobject jelement = helper.list_get(jcolumn, i);
+                DeferOp defer([&jelement, this]() { _jni_env->DeleteLocalRef(jelement); });
+                RETURN_IF_ERROR(_append_decimal_val(jelement, slot_desc, column.get()));
             }
         } else {
             return Status::InternalError(fmt::format("not support type {}", column_class));
