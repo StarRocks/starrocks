@@ -6,6 +6,12 @@ jobs:
   label-when-reviewed:
     name: "Label PRs when reviewed"
     runs-on: ubuntu-latest
+    outputs:
+      Get2Approval: ${{ steps.approved.outputs.approved }}
     steps:
-      - name: "Do nothing. Only trigger corresponding workflow event"
-        run: echo
+    - uses: taichi/approved-event-action@v1.2.1
+      id: approved
+      with:
+        approvals: '2'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
