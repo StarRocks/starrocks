@@ -65,6 +65,7 @@ import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
+import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
@@ -303,6 +304,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitAlterDatabaseRename(AlterDatabaseRename statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    public R visitShowDataStmt(ShowDataStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
     public R visitRecoverDbStmt(RecoverDbStmt statement, C context) {

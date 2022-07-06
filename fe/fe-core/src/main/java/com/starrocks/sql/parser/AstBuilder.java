@@ -106,6 +106,7 @@ import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
+import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
@@ -283,6 +284,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitRecoverDbStmt(StarRocksParser.RecoverDbStmtContext context) {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
         return new RecoverDbStmt(dbName);
+    }
+
+    @Override
+    public ParseNode visitShowDataStmt(StarRocksParser.ShowDataStmtContext context) {
+        if (context.FROM() != null) {
+            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+            TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+            return new ShowDataStmt(targetTableName.getDb(), targetTableName.getTbl());
+        } else {
+            return new ShowDataStmt(null, null);
+        }
     }
 
     // ------------------------------------------- Table Statement -----------------------------------------------------
