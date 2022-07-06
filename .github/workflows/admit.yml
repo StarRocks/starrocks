@@ -2,15 +2,15 @@ name: Trigger Jobs
 
 on: 
   pull_request_review
-  
+permissions: write-all
+
 jobs:
   Trigger-Admit-Test:
     runs-on: ubuntu-latest
-    permissions: write-all
+    
     steps:
     - name: Label when approved
-      uses: pullreminders/label-when-approved-action@master
-
+      uses: pullreminders/label-when-approved-action@master  
       env:
         APPROVALS: "2"
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
