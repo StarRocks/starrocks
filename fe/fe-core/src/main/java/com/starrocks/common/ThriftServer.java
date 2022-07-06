@@ -29,7 +29,6 @@ import org.apache.thrift.TProcessor;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TSimpleServer;
-import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.server.TThreadedSelectorServer;
 import org.apache.thrift.transport.TNonblockingServerSocket;
 import org.apache.thrift.transport.TServerSocket;
@@ -115,13 +114,13 @@ public class ThriftServer {
                 .clientTimeout(Config.thrift_client_timeout_ms)
                 .backlog(Config.thrift_backlog_num);
 
-        TThreadPoolServer.Args serverArgs =
-                new TThreadPoolServer.Args(new TServerSocket(socketTransportArgs)).protocolFactory(
+        SRTThreadPoolServer.Args serverArgs =
+                new SRTThreadPoolServer.Args(new TServerSocket(socketTransportArgs)).protocolFactory(
                         new TBinaryProtocol.Factory()).processor(processor);
         ThreadPoolExecutor threadPoolExecutor = ThreadPoolManager
                 .newDaemonCacheThreadPool(Config.thrift_server_max_worker_threads, "thrift-server-pool", true);
         serverArgs.executorService(threadPoolExecutor);
-        server = new TThreadPoolServer(serverArgs);
+        server = new SRTThreadPoolServer(serverArgs);
     }
 
     public void start() throws IOException {
@@ -150,6 +149,7 @@ public class ThriftServer {
                 server.serve();
             }
         });
+        serverThread.setName("thrift-server-accept");
         serverThread.setDaemon(true);
         serverThread.start();
     }
