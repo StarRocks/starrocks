@@ -187,6 +187,7 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
+import com.starrocks.sql.ast.ShowProcedureStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
@@ -2912,6 +2913,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitUserWithoutHost(StarRocksParser.UserWithoutHostContext context) {
         Identifier user = (Identifier) visit(context.identifierOrString());
         return new UserIdentifier(user.getValue(), "%", false);
+    }
+
+    // ------------------------------------------- Procedure Statement -------------------------------------------
+
+    @Override
+    public ParseNode visitShowProcedureStatment(StarRocksParser.ShowProcedureStatmentContext context) {
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            return new ShowProcedureStmt(stringLiteral.getValue());
+        } else if (context.expression() != null) {
+            return new ShowProcedureStmt((Expr) visit(context.expression()));
+        } else {
+            return new ShowProcedureStmt();
+        }
     }
 
     // ------------------------------------------- Util Functions -------------------------------------------
