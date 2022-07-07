@@ -27,7 +27,7 @@ jobs:
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         require_committers_approval: 'true'
-        label: 'Approved'
+        label: 'approved'
         comment: 'PR approved by at 2 committers and no changes requested.'
         pullRequestNumber: ${{ steps.source-run-info.outputs.pullRequestNumber }}
         
