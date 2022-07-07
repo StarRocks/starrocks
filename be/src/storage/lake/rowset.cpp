@@ -68,9 +68,7 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema,
 
     std::vector<SegmentPtr> segments;
     RETURN_IF_ERROR(load_segments(&segments));
-    LOG(INFO) << "#segments=" << segments.size();
     for (auto& seg_ptr : segments) {
-        LOG(INFO) << "#rows=" << seg_ptr->num_rows();
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
