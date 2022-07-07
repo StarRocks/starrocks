@@ -37,6 +37,7 @@ statement
     | dropIndexStatement                                                                    #dropIndex
     | refreshTableStatement                                                                 #refreshTable
     | showDeleteStatement                                                                   #showDelete
+    | descTableStatement                                                                    #descTable
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -267,6 +268,10 @@ refreshTableStatement
 
 showDeleteStatement
     : SHOW DELETE ((FROM | IN) db=qualifiedName)?
+    ;
+
+descTableStatement
+    : (DESC | DESCRIBE) table=qualifiedName ALL?
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------
@@ -863,7 +868,7 @@ frameBound
 // ------------------------------------------- COMMON AST --------------------------------------------------------------
 
 explainDesc
-    : EXPLAIN (LOGICAL | VERBOSE | COSTS)?
+    : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?
     ;
 
 partitionDesc
