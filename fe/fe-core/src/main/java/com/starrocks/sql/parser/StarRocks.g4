@@ -81,7 +81,7 @@ statement
     | createAnalyzeStatement                                                                #createAnalyze
     | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
     | analyzeHistogramStatement                                                             #analyzeHistogram
-    | dropAnalyzeHistogramStatement                                                         #dropHistogram
+    | dropHistogramStatement                                                                #dropHistogram
     | showAnalyzeStatement                                                                  #showAnalyze
     | showStatsMetaStatement                                                                #showStatsMeta
     | showHistogramMetaStatement                                                            #showHistogramMeta
@@ -431,7 +431,7 @@ analyzeHistogramStatement
         (WITH bucket=INTEGER_VALUE BUCKETS)? properties?
     ;
 
-dropAnalyzeHistogramStatement
+dropHistogramStatement
     : ANALYZE TABLE qualifiedName DROP HISTOGRAM ON identifier (',' identifier)*
     ;
 
