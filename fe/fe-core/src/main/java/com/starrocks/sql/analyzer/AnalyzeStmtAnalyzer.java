@@ -19,6 +19,7 @@ import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AnalyzeTypeDesc;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.Constants;
 import com.starrocks.statistic.StatisticUtils;
@@ -89,6 +90,7 @@ public class AnalyzeStmtAnalyzer {
             return null;
         }
 
+        @Override
         public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
             if (null != statement.getTableName()) {
                 TableName tbl = statement.getTableName();
@@ -189,6 +191,20 @@ public class AnalyzeStmtAnalyzer {
                 }
                 properties.put(Constants.PROP_SAMPLE_COLLECT_ROWS_KEY, String.valueOf(sampleRows));
             }
+        }
+
+        @Override
+        public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext session) {
+            MetaUtils.normalizationTableName(session, statement.getTableName());
+            Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+            List<String> columnNames = statement.getColumnNames();
+            for (String colName : columnNames) {
+                Column col = analyzeTable.getColumn(colName);
+                if (col == null) {
+                    throw new SemanticException("Unknown column '%s' in '%s'", colName, analyzeTable.getName());
+                }
+            }
+            return null;
         }
     }
 }
