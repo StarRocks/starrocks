@@ -1,6 +1,6 @@
 name: Auto Comment
 on:
-  pull_request
+  pull_request_review
 jobs:
   run:
     runs-on: ubuntu-latest
