@@ -10,7 +10,7 @@ on:
 
 jobs:
   Trigger-Admit-Test:
-#    if: contains(github.event.pull_request.labels.*.name, 'Approved')
+    if: contains(github.event.pull_request.labels.*.name, 'Approved')
     runs-on: ubuntu-latest
     steps:  
 #    - name: PR comment with reactions
