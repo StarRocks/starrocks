@@ -286,6 +286,26 @@ public class AlterTest {
     }
 
     @Test
+    public void testRenameTable() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE test.testTable1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        String alterStmt = "alter table test.testTable1 rename testTable2";
+        alterTableWithNewParser(alterStmt, false);
+    }
+
+    @Test
     public void testChangeMaterializedViewRefreshScheme() throws Exception {
         starRocksAssert.useDatabase("test")
                 .withTable("CREATE TABLE test.testTable2\n" +
