@@ -251,6 +251,7 @@ public class StarOSAgent {
         try {
             client.deleteShard(serviceId, shardIds);
         } catch (StarClientException e) {
+            LOG.warn("Failed to delete shards. error: {}", e.getMessage());
             throw new DdlException("Failed to delete shards. error: " + e.getMessage());
         }
     }
@@ -260,7 +261,8 @@ public class StarOSAgent {
         List<ShardInfo> shardInfos = null;
         try {
             shardInfos = client.createShard(serviceId, numShards, 1, shardStorageInfo, null);
-            LOG.debug("Create shards success. shard infos: {}", shardInfos);
+            // LOG.debug("Create shards success. shard infos: {}", shardInfos);
+            LOG.info("Create shards success. shard infos: {}", shardInfos);
         } catch (StarClientException e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
         }

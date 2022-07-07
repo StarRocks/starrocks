@@ -36,7 +36,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
-import com.starrocks.catalog.lake.ShardDelete;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
@@ -90,6 +89,7 @@ import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
+import com.starrocks.persist.ShardInfo;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
@@ -661,8 +661,13 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_ADD_SHARD: {
+                data = ShardInfo.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_DELETE_SHARD: {
-                data = ShardDelete.read(in);
+                data = ShardInfo.read(in);
                 isRead = true;
                 break;
             }
