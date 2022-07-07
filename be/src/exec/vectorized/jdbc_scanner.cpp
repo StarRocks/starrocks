@@ -323,6 +323,7 @@ template <>
 Status JDBCScanner::_append_value_from_result<std::string>(jobject jval,
                                                            std::function<std::string(jobject)> get_value_func,
                                                            SlotDescriptor* slot_desc, Column* column) {
+    DeferOp defer([&jval, this]() { _jni_env->DeleteLocalRef(jval); });
     PROCESS_NULL_VALUE(jval, column)
 
     std::string cpp_val = get_value_func(jval);
@@ -350,6 +351,7 @@ Status JDBCScanner::_append_value_from_result<std::string>(jobject jval,
 template <typename CppType>
 Status JDBCScanner::_append_value_from_result(jobject jval, std::function<CppType(jobject)> get_value_func,
                                               SlotDescriptor* slot_desc, Column* column) {
+    DeferOp defer([&jval, this]() { _jni_env->DeleteLocalRef(jval); });
     PROCESS_NULL_VALUE(jval, column)
 
 #define CHECK_DATA_OVERFLOW(val, min_val, max_val)                                                                  \
@@ -416,14 +418,13 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, ChunkPtr* chunk) {
         jobject jcolumn = helper.list_get(jchunk, col_idx);
         DeferOp defer([&jcolumn, this]() { _jni_env->DeleteLocalRef(jcolumn); });
 
-#define FILL_COLUMN(get_value_func, cpp_type)                                                              \
-    {                                                                                                      \
-        auto func = std::bind(&JVMFunctionHelper::get_value_func, &helper, std::placeholders::_1);         \
-        for (int i = 0; i < num_rows; i++) {                                                               \
-            jobject jelement = helper.list_get(jcolumn, i);                                                \
-            DeferOp defer([&jelement, this]() { _jni_env->DeleteLocalRef(jelement); });                    \
-            RETURN_IF_ERROR(_append_value_from_result<cpp_type>(jelement, func, slot_desc, column.get())); \
-        }                                                                                                  \
+#define FILL_COLUMN(get_value_func, cpp_type)                                                                         \
+    {                                                                                                                 \
+        auto func = std::bind(&JVMFunctionHelper::get_value_func, &helper, std::placeholders::_1);                    \
+        for (int i = 0; i < num_rows; i++) {                                                                          \
+            RETURN_IF_ERROR(                                                                                          \
+                    _append_value_from_result<cpp_type>(helper.list_get(jcolumn, i), func, slot_desc, column.get())); \
+        }                                                                                                             \
     }
         if (column_class == "java.lang.Short") {
             FILL_COLUMN(valint16_t, int16_t);
