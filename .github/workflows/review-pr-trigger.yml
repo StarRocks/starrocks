@@ -15,14 +15,10 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
         
-    - name: create-json
-      id: create-json
-      uses: jsdaniell/create-json@1.1.2
-      with:
-        name: "approval.json"
-        json: '{ ${{ github.event.pull_request.number }}: ${{ steps.approved.outputs.approved }} }'
+    - name: create-file
+      run: echo '${{ steps.approved.outputs.approved }}' >> ${{ github.workspace }}/${{ github.event.pull_request.number }}
         
     - uses: actions/upload-artifact@v3
       with:
         name: review
-        path: ${{ github.workspace }}/approval.json
+        path: ${{ github.workspace }}/${{ github.event.pull_request.number }}
