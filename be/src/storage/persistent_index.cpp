@@ -30,6 +30,7 @@ constexpr size_t page_size = 4096;
 constexpr size_t page_header_size = 64;
 constexpr size_t bucket_per_page = 16;
 constexpr size_t shard_max = 1 << 16;
+constexpr uint64_t page_max = 1ULL << 32;
 constexpr size_t pack_size = 16;
 constexpr size_t page_pack_limit = (page_size - page_header_size) / pack_size;
 constexpr size_t bucket_size_max = 256;
@@ -148,6 +149,9 @@ struct ImmutableIndexShard {
     }
 
     Status write(WritableFile& wb) const;
+
+    static StatusOr<std::unique_ptr<ImmutableIndexShard>> try_create(size_t kv_size, const std::vector<KVRef>& kv_refs,
+                                                                     size_t npage_hint);
 
     static StatusOr<std::unique_ptr<ImmutableIndexShard>> create(size_t kv_size, const std::vector<KVRef>& kv_refs,
                                                                  size_t npage_hint);
@@ -314,7 +318,20 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_
     if (kv_refs.size() == 0) {
         return std::make_unique<ImmutableIndexShard>(0);
     }
-    size_t npage = npage_hint;
+    for (size_t npage = npage_hint; npage < page_max; npage++) {
+        auto rs_create = ImmutableIndexShard::try_create(kv_size, kv_refs, npage);
+        // increase npage and retry
+        if (!rs_create.ok()) {
+            continue;
+        }
+        return std::move(rs_create.value());
+    }
+    return Status::InternalError("failed to create immutable index shard");
+}
+
+StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(size_t kv_size,
+                                                                               const std::vector<KVRef>& kv_refs,
+                                                                               size_t npage) {
     size_t bucket_size_limit = std::min(bucket_size_max, (page_size - page_header_size) / (kv_size + 1));
     size_t nbucket = npage * bucket_per_page;
     std::vector<uint8_t> bucket_sizes(nbucket);
@@ -331,7 +348,6 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_
         auto bid = page * bucket_per_page + bucket;
         auto& sz = bucket_sizes[bid];
         if (sz == bucket_size_limit) {
-            // TODO: increase npage and retry
             return Status::InternalError("bucket size limit exceeded");
         }
         sz++;
@@ -395,7 +411,6 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_
             copy_kv_to_page(kv_size, bucket_info.size, bucket_kv_ptrs_tags[bid].first.data(),
                             bucket_kv_ptrs_tags[bid].second.data(), page.pack(cur_packid));
             cur_packid += bucket_packs[bid];
-            //LOG(INFO) << "cur_packid is " << cur_packid;
             DCHECK(cur_packid <= page_size / pack_size);
         }
         for (auto& move : moves) {
