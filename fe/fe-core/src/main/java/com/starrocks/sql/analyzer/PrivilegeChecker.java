@@ -18,6 +18,7 @@ import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
@@ -723,6 +724,16 @@ public class PrivilegeChecker {
                 throw new SemanticException(e.getMessage());
             } finally {
                 db.readUnlock();
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDescTableStmt(DescribeStmt statement, ConnectContext session) {
+            TableName tableName = statement.getDbTableName();
+            if (!checkTblPriv(session, tableName, PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "DESCRIBE",
+                        session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
             }
             return null;
         }
