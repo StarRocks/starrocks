@@ -28,9 +28,7 @@ ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, con
     _conv_ctx.state = state;
 }
 
-ParquetScanner::~ParquetScanner() {
-    close();
-}
+ParquetScanner::~ParquetScanner() = default;
 
 Status ParquetScanner::open() {
     RETURN_IF_ERROR(FileScanner::open());
@@ -365,6 +363,7 @@ Status ParquetScanner::open_next_reader() {
 }
 
 void ParquetScanner::close() {
+    FileScanner::close();
     _curr_file_reader.reset();
     _pool.clear();
 }

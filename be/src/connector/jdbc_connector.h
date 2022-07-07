@@ -18,6 +18,8 @@ public:
 
     DataSourceProviderPtr create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
+
+    ConnectorType connector_type() const override { return ConnectorType::JDBC; }
 };
 
 class JDBCDataSource;

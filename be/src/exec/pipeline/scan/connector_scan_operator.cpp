@@ -96,6 +96,11 @@ ChunkPtr ConnectorScanOperator::get_chunk_from_buffer() {
     return nullptr;
 }
 
+connector::ConnectorType ConnectorScanOperator::connector_type() {
+    auto* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
+    return scan_node->connector_type();
+}
+
 // ==================== ConnectorChunkSource ====================
 ConnectorChunkSource::ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile,
                                            MorselPtr&& morsel, ScanOperator* op,
@@ -109,7 +114,11 @@ ConnectorChunkSource::ConnectorChunkSource(int32_t scan_operator_id, RuntimeProf
     _conjunct_ctxs = scan_node->conjunct_ctxs();
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
     ScanMorsel* scan_morsel = (ScanMorsel*)_morsel.get();
-    const TScanRange* scan_range = scan_morsel->get_scan_range();
+    TScanRange* scan_range = scan_morsel->get_scan_range();
+
+    if (scan_range->__isset.broker_scan_range) {
+        scan_range->broker_scan_range.params.__set_non_blocking_read(true);
+    }
     _data_source = scan_node->data_source_provider()->create_data_source(*scan_range);
     _data_source->set_predicates(_conjunct_ctxs);
     _data_source->set_runtime_filters(_runtime_bloom_filters);
