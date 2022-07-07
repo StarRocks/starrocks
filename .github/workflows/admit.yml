@@ -1,6 +1,8 @@
 name: Trigger Jobs
 
 on:
+  label:
+    types: [ created ]
   pull_request:
     types: [synchronize, reopened]
 #  pull_request_review:
