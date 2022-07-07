@@ -128,7 +128,9 @@ SHOW ALTER TABLE ROLLUP FROM db_name;
 
 如果 State 为 FINISHED，说明物化视图已经创建完成。
 
-查看物化视图的表结果，需用通过基表名进行：
+### 查看已创建的物化视图
+
+您可以通过基表名查看一个基表的所有物化视图。例如，运行如下命令查看`sales_records`的所有物化视图。
 
 ~~~PlainText
 mysql> desc sales_records all;
