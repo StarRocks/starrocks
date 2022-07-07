@@ -1,0 +1,12 @@
+name: Auto Comment
+on:
+  pull_request
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: wow-actions/auto-comment@v1.0.7
+      with:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        pullRequestUnlocked: |
+          run starrocks_admit_test
