@@ -31,7 +31,7 @@ jobs:
       id: read_property
       uses:  ashley-taylor/read-json-property-action@v1.0
       with:
-        path: approval.json
+        path: review/approval.json
         property: ${{ steps.source-run-info.outputs.pullRequestNumber }}
   
     - name: echo artifact
