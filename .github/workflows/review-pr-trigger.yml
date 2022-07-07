@@ -14,12 +14,17 @@ jobs:
       
       
     steps:
-    - name: Label when approved
-      uses: pullreminders/label-when-approved-action@v1.0.7
-      env:
-        APPROVALS: "2"
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        ADD_LABEL: "approved"
+    - uses: actions-ecosystem/action-add-labels@v1
+      if: ${{ startsWith(github.event.comment.body, '/add-labels') }}
+      with:
+        labels: |
+          approved
+#    - name: Label when approved
+#      uses: pullreminders/label-when-approved-action@v1.0.7
+#      env:
+#        APPROVALS: "2"
+#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        ADD_LABEL: "approved"
         
 #    - uses: taichi/approved-event-action@v1.2.1
 #      id: approved
