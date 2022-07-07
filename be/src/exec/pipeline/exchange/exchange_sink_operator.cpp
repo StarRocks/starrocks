@@ -284,7 +284,6 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
           _buffer(buffer),
           _part_type(part_type),
           _destinations(destinations),
-          _is_pipeline_level_shuffle(is_pipeline_level_shuffle),
           _num_shuffles_per_channel(num_shuffles_per_channel > 0 ? num_shuffles_per_channel : 1),
           _sender_id(sender_id),
           _dest_node_id(dest_node_id),
@@ -332,6 +331,8 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
         }
     }
     _num_shuffles = _channels.size() * _num_shuffles_per_channel;
+
+    _is_pipeline_level_shuffle = is_pipeline_level_shuffle && (_num_shuffles > 1);
 }
 
 Status ExchangeSinkOperator::prepare(RuntimeState* state) {
