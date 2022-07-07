@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.starrocks.common.SparkDppException;
+import com.starrocks.load.loadv2.datasource.DataSource;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -962,19 +963,13 @@ public final class SparkDpp implements java.io.Serializable {
                                                EtlJobConfig.EtlFileGroup fileGroup,
                                                StructType dstTableSchema,
                                                Set<String> dictBitmapColumnSet) throws SparkDppException {
-        // select base index columns from hive table
-        StringBuilder sql = new StringBuilder();
-        sql.append("select ");
-        fileGroup.fileFieldNames.forEach(columnName -> {
-            sql.append(columnName).append(",");
-        });
-        sql.deleteCharAt(sql.length() - 1).append(" from ").append(hiveDbTableName);
-        // where is used here to prevent reading the whole hive table
+        DataSource dataSource = DataSource.fromProperties(spark, fileGroup.hiveTableProperties);
+        Dataset<Row> dataframe = dataSource.getOrLoadTable(hiveDbTableName)
+                .selectExpr(JavaConverters.asScalaBufferConverter(fileGroup.fileFieldNames).asScala().toSeq());
         if (!Strings.isNullOrEmpty(fileGroup.where)) {
-            sql.append(" where ").append(fileGroup.where);
+            dataframe = dataframe.where(fileGroup.where);
         }
 
-        Dataset<Row> dataframe = spark.sql(sql.toString());
         // Note(wb): in current spark load implementation, spark load can't be consistent with starrocks BE; The reason is as follows
         // For stream load in starrocks BE, it runs as follow steps:
         // step 1: type check

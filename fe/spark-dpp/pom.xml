@@ -95,14 +95,20 @@ under the License.
         <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-core_2.12 -->
         <dependency>
             <groupId>org.apache.spark</groupId>
-            <artifactId>spark-core_2.12</artifactId>
+            <artifactId>spark-core_${spark.scala.version}</artifactId>
             <scope>provided</scope>
         </dependency>
 
 		<!-- https://mvnrepository.com/artifact/org.apache.spark/spark-sql_2.12 -->
         <dependency>
             <groupId>org.apache.spark</groupId>
-            <artifactId>spark-sql_2.12</artifactId>
+            <artifactId>spark-sql_${spark.scala.version}</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-catalyst_${spark.scala.version}</artifactId>
             <scope>provided</scope>
         </dependency>
 
@@ -149,20 +155,13 @@ under the License.
         </dependency>
 
         <dependency>
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-catalyst_2.12</artifactId>
-            <version>2.4.5</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
         </dependency>
     </dependencies>
 
     <build>
-        <finalName>spark-dpp-${version}</finalName>
+        <finalName>spark-dpp-${project.version}</finalName>
 
         <plugins>
             <!-- jmockit -->

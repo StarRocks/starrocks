@@ -144,7 +144,8 @@ public class SparkEtlJob {
         sparkDpp.doDpp();
     }
 
-    private String buildGlobalDictAndEncodeSourceTable(EtlTable table, long tableId) {
+    private String buildGlobalDictAndEncodeSourceTable(
+            EtlTable table, Map<String, String> hiveTableProperties, long tableId) {
         // dict column map
         MultiValueMap dictColumnMap = new MultiValueMap();
         for (String dictColumn : tableToBitmapDictColumns.get(tableId)) {
@@ -179,10 +180,20 @@ public class SparkEtlJob {
                 + ", starrocksIntermediateHiveTable: " + starrocksIntermediateHiveTable);
         try {
             GlobalDictBuilder globalDictBuilder = new GlobalDictBuilder(
-                    dictColumnMap, intermediateTableColumnList, mapSideJoinColumns, sourceHiveDBTableName,
-                    sourceHiveFilter, starrocksHiveDB, distinctKeyTableName, globalDictTableName,
+                    dictColumnMap,
+                    intermediateTableColumnList,
+                    mapSideJoinColumns,
+                    sourceHiveDBTableName,
+                    sourceHiveFilter,
+                    starrocksHiveDB,
+                    distinctKeyTableName,
+                    globalDictTableName,
                     starrocksIntermediateHiveTable,
-                    buildConcurrency, veryHighCardinalityColumn, veryHighCardinalityColumnSplitNum, spark);
+                    buildConcurrency,
+                    veryHighCardinalityColumn,
+                    veryHighCardinalityColumnSplitNum,
+                    spark,
+                    hiveTableProperties);
             globalDictBuilder.checkGlobalDictTableName(dorisGlobalDictTableName);
             globalDictBuilder.createHiveIntermediateTable();
             globalDictBuilder.extractDistinctColumn();
@@ -213,7 +224,8 @@ public class SparkEtlJob {
 
             // build global dict and encode source hive table if has bitmap dict columns
             if (!tableToBitmapDictColumns.isEmpty() && tableToBitmapDictColumns.containsKey(tableId)) {
-                String starrocksIntermediateHiveDbTableName = buildGlobalDictAndEncodeSourceTable(table, tableId);
+                String starrocksIntermediateHiveDbTableName = buildGlobalDictAndEncodeSourceTable(
+                        table, fileGroup.hiveTableProperties, tableId);
                 // set with starrocksIntermediateHiveDbTable
                 fileGroup.dppHiveDbTableName = starrocksIntermediateHiveDbTableName;
             }
