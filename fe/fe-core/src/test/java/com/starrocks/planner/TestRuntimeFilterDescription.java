@@ -17,15 +17,15 @@ public class TestRuntimeFilterDescription {
                 {JoinNode.DistributionMode.BROADCAST, 1, true, TRuntimeFilterBuildJoinMode.BORADCAST},
                 {JoinNode.DistributionMode.BROADCAST, 2, true, TRuntimeFilterBuildJoinMode.BORADCAST},
                 {JoinNode.DistributionMode.LOCAL_HASH_BUCKET, 1, true, TRuntimeFilterBuildJoinMode.LOCAL_HASH_BUCKET},
-                {JoinNode.DistributionMode.LOCAL_HASH_BUCKET, 2, false, TRuntimeFilterBuildJoinMode.LOCAL_HASH_BUCKET},
+                {JoinNode.DistributionMode.LOCAL_HASH_BUCKET, 2, true, TRuntimeFilterBuildJoinMode.LOCAL_HASH_BUCKET},
                 {JoinNode.DistributionMode.PARTITIONED, 1, true, TRuntimeFilterBuildJoinMode.PARTITIONED},
-                {JoinNode.DistributionMode.PARTITIONED, 2, false, TRuntimeFilterBuildJoinMode.PARTITIONED},
+                {JoinNode.DistributionMode.PARTITIONED, 2, true, TRuntimeFilterBuildJoinMode.PARTITIONED},
                 {JoinNode.DistributionMode.COLOCATE, 1, true, TRuntimeFilterBuildJoinMode.COLOCATE},
-                {JoinNode.DistributionMode.COLOCATE, 2, false, TRuntimeFilterBuildJoinMode.COLOCATE},
+                {JoinNode.DistributionMode.COLOCATE, 2, true, TRuntimeFilterBuildJoinMode.COLOCATE},
                 {JoinNode.DistributionMode.REPLICATED, 1, false, TRuntimeFilterBuildJoinMode.REPLICATED},
                 {JoinNode.DistributionMode.REPLICATED, 2, false, TRuntimeFilterBuildJoinMode.REPLICATED},
                 {JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET, 1, true, TRuntimeFilterBuildJoinMode.SHUFFLE_HASH_BUCKET},
-                {JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET, 2, false, TRuntimeFilterBuildJoinMode.SHUFFLE_HASH_BUCKET},
+                {JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET, 2, true, TRuntimeFilterBuildJoinMode.SHUFFLE_HASH_BUCKET},
         };
         for (Object[] tc : testCases) {
             JoinNode.DistributionMode joinMode = (JoinNode.DistributionMode) tc[0];

@@ -221,7 +221,7 @@ public class PlanFragmentBuilder {
         }
 
         ExchangeNode exchangeNode =
-                new ExchangeNode(execPlan.getNextNodeId(), inputFragment.getPlanRoot(), false);
+                new ExchangeNode(execPlan.getNextNodeId(), inputFragment.getPlanRoot(), DataPartition.UNPARTITIONED);
         exchangeNode.setNumInstances(1);
         PlanFragment exchangeFragment =
                 new PlanFragment(execPlan.getNextFragmentId(), exchangeNode, DataPartition.UNPARTITIONED);
@@ -1361,7 +1361,7 @@ public class PlanFragmentBuilder {
             PhysicalDistributionOperator distribution = (PhysicalDistributionOperator) optExpr.getOp();
 
             ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
-                    inputFragment.getPlanRoot(), false, distribution.getDistributionSpec().getType());
+                    inputFragment.getPlanRoot(), distribution.getDistributionSpec().getType());
 
             DataPartition dataPartition;
             if (DistributionSpec.DistributionType.GATHER.equals(distribution.getDistributionSpec().getType())) {
@@ -1394,6 +1394,7 @@ public class PlanFragmentBuilder {
                 throw new StarRocksPlannerException("Unsupport exchange type : "
                         + distribution.getDistributionSpec().getType(), INTERNAL_ERROR);
             }
+            exchangeNode.setDataPartition(dataPartition);
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), exchangeNode, dataPartition);
@@ -1424,11 +1425,12 @@ public class PlanFragmentBuilder {
                                                     PlanFragment inputFragment,
                                                     OptExpression optExpr) {
             ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
-                    inputFragment.getPlanRoot(), false,
+                    inputFragment.getPlanRoot(),
                     DistributionSpec.DistributionType.GATHER);
 
             exchangeNode.setNumInstances(1);
             DataPartition dataPartition = DataPartition.UNPARTITIONED;
+            exchangeNode.setDataPartition(dataPartition);
 
             Preconditions.checkState(inputFragment.getPlanRoot() instanceof SortNode);
             SortNode sortNode = (SortNode) inputFragment.getPlanRoot();
@@ -2123,8 +2125,8 @@ public class PlanFragmentBuilder {
                 }
 
                 // nothing distribute can satisfy set-operator, must shuffle data
-                ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
-                        fragment.getPlanRoot(), false);
+                ExchangeNode exchangeNode =
+                        new ExchangeNode(context.getNextNodeId(), fragment.getPlanRoot(), fragment.getDataPartition());
 
                 exchangeNode.setFragment(setOperationFragment);
                 fragment.setDestination(exchangeNode);
@@ -2272,9 +2274,11 @@ public class PlanFragmentBuilder {
 
             MultiCastPlanFragment cteFragment = (MultiCastPlanFragment) context.getCteProduceFragments().get(cteId);
             ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
-                    cteFragment.getPlanRoot(), false, DistributionSpec.DistributionType.SHUFFLE);
+                    cteFragment.getPlanRoot(), DistributionSpec.DistributionType.SHUFFLE);
+
             exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
                     .map(ColumnRefOperator::getId).collect(Collectors.toList()));
+            exchangeNode.setDataPartition(cteFragment.getDataPartition());
 
             exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());
 
