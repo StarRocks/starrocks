@@ -9,4 +9,5 @@ jobs:
       with:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         pullRequestUnlocked: |
+          echo "hello, world"
           run starrocks_admit_test
