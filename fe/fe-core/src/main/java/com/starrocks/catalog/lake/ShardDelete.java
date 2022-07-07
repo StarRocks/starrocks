@@ -3,8 +3,7 @@
 
 package com.starrocks.catalog.lake;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
@@ -13,6 +12,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.lake.proto.DropTabletRequest;
 import com.starrocks.lake.proto.DropTabletResponse;
+import com.starrocks.persist.ShardInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -25,10 +25,8 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.Iterator;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -36,71 +34,69 @@ import java.util.concurrent.Future;
 public class ShardDelete extends MasterDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(ShardDelete.class);
 
-    @SerializedName(value = "shardIdToTablet")
-    private Map<Long, LakeTablet> shardIdToTablet = Maps.newHashMap();
+    @SerializedName(value = "shardIds")
+    private Set<Long> shardIds = Sets.newHashSet();
 
-    public void addShardId(long shardId, LakeTablet tablet) {
+    public void addShardId(Set<Long> tableIds) {
         // for debug
-        LOG.info("add shardId {} in ShardDelete", shardId);
-        shardIdToTablet.put(shardId, tablet);
+        LOG.info("add shardId {} in ShardDelete", tableIds);
+        shardIds.addAll(tableIds);
     }
 
     private void deleteShard() {
         // delete shard and drop lakeTablet
-        Iterator<Map.Entry<Long, LakeTablet>> iterator = shardIdToTablet.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<Long, LakeTablet> entry = iterator.next();
+        if (shardIds.isEmpty()) {
+            return;
+        }
 
-            // 1. drop tablet
-            boolean finished = true;
-            long shardId = entry.getKey();
+        // 1. drop tablet
+        boolean finished = true;
+        try {
+            TNetworkAddress address = new TNetworkAddress();
+
+            long backendId = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getPrimaryBackendIdByShard(shardIds.stream().peek());
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+            address.setHostname(backend.getHost());
+            address.setPort(backend.getBrpcPort());
+            LakeService lakeService = BrpcProxy.getInstance().getLakeService(address);
+
+            DropTabletRequest request = new DropTabletRequest();
+            List<Long> tabletIds = new ArrayList<>(shardIds);
+            request.tabletIds = tabletIds;
+
+            Future<DropTabletResponse> responseFuture = lakeService.dropTablet(request);
+
             try {
-                TNetworkAddress address = new TNetworkAddress();
-                LakeTablet tablet = entry.getValue();
-                long backendId = tablet.getPrimaryBackendId();
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-                address.setHostname(backend.getHost());
-                address.setPort(backend.getBrpcPort());
-                LakeService lakeService = BrpcProxy.getInstance().getLakeService(address);
-
-                DropTabletRequest request = new DropTabletRequest();
-                List<Long> tabletIds = Lists.newArrayList();;
-                tabletIds.add(shardId);
-                request.tabletIds = tabletIds;
-
-                Future<DropTabletResponse> responseFuture = lakeService.dropTablet(request);
-
-                try {
-                    DropTabletResponse response = responseFuture.get();
-                    if (!response.failedTablets.isEmpty()) {
-                        finished = false;
-                    }
-                } catch (ExecutionException | InterruptedException e) {
-                    LOG.error(e);
+                DropTabletResponse response = responseFuture.get();
+                if (!response.failedTablets.isEmpty()) {
                     finished = false;
                 }
-
-            } catch (UserException e) {
-                LOG.warn("failed to get primary backendId");
+            } catch (ExecutionException | InterruptedException e) {
+                LOG.error(e);
                 finished = false;
             }
 
-            // 2. delete shard
-            try {
-                Set<Long> shardIds = new HashSet<>();
-                shardIds.add(shardId);
-                GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(shardIds);
-            } catch (DdlException e) {
-                LOG.warn("failed to delete shard from starMgr");
-                continue;
-            }
+        } catch (UserException e) {
+            LOG.warn("failed to get primary backendId");
+            finished = false;
+        }
 
-            // 3.succ both, remove from the map
-            if (finished == true) {
-                // for debug
-                LOG.info("delete shard {} and drop lake tablet succ.", shardId);
-                iterator.remove();
-            }
+        // 2. delete shard
+        try {
+            GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(shardIds);
+        } catch (DdlException e) {
+            LOG.warn("failed to delete shard from starMgr");
+            return;
+        }
+
+        // 3.succ both, remove from the map
+        if (finished == true) {
+            // for debug
+            LOG.info("delete shard {} and drop lake tablet succ.", shardIds);
+            // TODO: log the batch remove op in Edit log
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveDeleteShard(shardIds);
+            shardIds.clear();
         }
     }
 
@@ -109,13 +105,20 @@ public class ShardDelete extends MasterDaemon implements Writable {
         // for debug
         LOG.info("runAfterCatalogReady of ShardDelete");
         deleteShard();
-        // write edit log
-        GlobalStateMgr.getCurrentState().getEditLog().logShardDelete(this);
     }
 
-    public void replayDeleteShard(ShardDelete info) {
-        shardIdToTablet = info.shardIdToTablet;
+    public void replayDeleteShard(ShardInfo shardInfo) {
+        // for debug
+        LOG.info("enter replayDeleteShard");
+        this.shardIds = shardInfo.getShardIds();
         deleteShard();
+    }
+
+    public void replayAddShard(ShardInfo shardInfo) {
+        // for debug
+        LOG.info("enter replayAddShard");
+        addShardId(shardInfo.getShardIds());
+        LOG.info("shardIdToTablet size in replayDeleteShard is {}.", shardIds.size());
     }
 
     @Override
