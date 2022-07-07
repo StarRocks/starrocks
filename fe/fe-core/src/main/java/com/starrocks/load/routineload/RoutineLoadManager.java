@@ -86,6 +86,14 @@ public class RoutineLoadManager implements Writable {
         lock.writeLock().unlock();
     }
 
+    private void readLock() {
+        lock.readLock().lock();
+    }
+
+    private void readUnlock() {
+        lock.readLock().unlock();
+    }
+
     public RoutineLoadManager() {
     }
 
@@ -321,11 +329,16 @@ public class RoutineLoadManager implements Writable {
     }
 
     public int getSizeOfIdToRoutineLoadTask() {
-        int sizeOfTasks = 0;
-        for (RoutineLoadJob routineLoadJob : idToRoutineLoadJob.values()) {
-            sizeOfTasks += routineLoadJob.getSizeOfRoutineLoadTaskInfoList();
+        readLock();
+        try {
+            int sizeOfTasks = 0;
+            for (RoutineLoadJob routineLoadJob : idToRoutineLoadJob.values()) {
+                sizeOfTasks += routineLoadJob.getSizeOfRoutineLoadTaskInfoList();
+            }
+            return sizeOfTasks;
+        } finally {
+            readUnlock();
         }
-        return sizeOfTasks;
     }
 
     public int getClusterIdleSlotNum() {
@@ -341,7 +354,12 @@ public class RoutineLoadManager implements Writable {
     }
 
     public RoutineLoadJob getJob(long jobId) {
-        return idToRoutineLoadJob.get(jobId);
+        readLock();
+        try {
+            return idToRoutineLoadJob.get(jobId);
+        } finally {
+            readUnlock();
+        }
     }
 
     public RoutineLoadJob getJob(String dbFullName, String jobName) throws MetaNotFoundException {
@@ -362,58 +380,69 @@ public class RoutineLoadManager implements Writable {
      */
     public List<RoutineLoadJob> getJob(String dbFullName, String jobName, boolean includeHistory)
             throws MetaNotFoundException {
-        // return all of routine load job
-        List<RoutineLoadJob> result;
-        RESULT:
-        {
-            if (dbFullName == null) {
-                result = new ArrayList<>(idToRoutineLoadJob.values());
-                sortRoutineLoadJob(result);
-                break RESULT;
-            }
-
-            long dbId = 0L;
-            Database database = Catalog.getCurrentCatalog().getDb(dbFullName);
-            if (database == null) {
-                throw new MetaNotFoundException("failed to find database by dbFullName " + dbFullName);
-            }
-            dbId = database.getId();
-            if (!dbToNameToRoutineLoadJob.containsKey(dbId)) {
-                result = new ArrayList<>();
-                break RESULT;
-            }
-            if (jobName == null) {
-                result = Lists.newArrayList();
-                for (List<RoutineLoadJob> nameToRoutineLoadJob : dbToNameToRoutineLoadJob.get(dbId).values()) {
-                    List<RoutineLoadJob> routineLoadJobList = new ArrayList<>(nameToRoutineLoadJob);
-                    sortRoutineLoadJob(routineLoadJobList);
-                    result.addAll(routineLoadJobList);
+        readLock();
+        try {
+            // return all of routine load job
+            List<RoutineLoadJob> result;
+            RESULT:
+            {
+                if (dbFullName == null) {
+                    result = new ArrayList<>(idToRoutineLoadJob.values());
+                    sortRoutineLoadJob(result);
+                    break RESULT;
                 }
-                break RESULT;
-            }
-            if (dbToNameToRoutineLoadJob.get(dbId).containsKey(jobName)) {
-                result = new ArrayList<>(dbToNameToRoutineLoadJob.get(dbId).get(jobName));
-                sortRoutineLoadJob(result);
-                break RESULT;
-            }
-            return null;
-        }
 
-        if (!includeHistory) {
-            result = result.stream().filter(entity -> !entity.getState().isFinalState()).collect(Collectors.toList());
+                long dbId = 0L;
+                Database database = Catalog.getCurrentCatalog().getDb(dbFullName);
+                if (database == null) {
+                    throw new MetaNotFoundException("failed to find database by dbFullName " + dbFullName);
+                }
+                dbId = database.getId();
+                if (!dbToNameToRoutineLoadJob.containsKey(dbId)) {
+                    result = new ArrayList<>();
+                    break RESULT;
+                }
+                if (jobName == null) {
+                    result = Lists.newArrayList();
+                    for (List<RoutineLoadJob> nameToRoutineLoadJob : dbToNameToRoutineLoadJob.get(dbId).values()) {
+                        List<RoutineLoadJob> routineLoadJobList = new ArrayList<>(nameToRoutineLoadJob);
+                        sortRoutineLoadJob(routineLoadJobList);
+                        result.addAll(routineLoadJobList);
+                    }
+                    break RESULT;
+                }
+                if (dbToNameToRoutineLoadJob.get(dbId).containsKey(jobName)) {
+                    result = new ArrayList<>(dbToNameToRoutineLoadJob.get(dbId).get(jobName));
+                    sortRoutineLoadJob(result);
+                    break RESULT;
+                }
+                return null;
+            }
+
+            if (!includeHistory) {
+                result = result.stream().filter(entity -> !entity.getState().isFinalState())
+                        .collect(Collectors.toList());
+            }
+            return result;
+        } finally {
+            readUnlock();
         }
-        return result;
     }
 
     // return all of routine load job named jobName in all of db
     public List<RoutineLoadJob> getJobByName(String jobName) {
         List<RoutineLoadJob> result = Lists.newArrayList();
-        for (Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob : dbToNameToRoutineLoadJob.values()) {
-            if (nameToRoutineLoadJob.containsKey(jobName)) {
-                List<RoutineLoadJob> routineLoadJobList = new ArrayList<>(nameToRoutineLoadJob.get(jobName));
-                sortRoutineLoadJob(routineLoadJobList);
-                result.addAll(routineLoadJobList);
+        readLock();
+        try {
+            for (Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob : dbToNameToRoutineLoadJob.values()) {
+                if (nameToRoutineLoadJob.containsKey(jobName)) {
+                    List<RoutineLoadJob> routineLoadJobList = new ArrayList<>(nameToRoutineLoadJob.get(jobName));
+                    sortRoutineLoadJob(routineLoadJobList);
+                    result.addAll(routineLoadJobList);
+                }
             }
+        } finally {
+            readUnlock();
         }
         return result;
     }
@@ -441,24 +470,39 @@ public class RoutineLoadManager implements Writable {
     }
 
     public boolean checkTaskInJob(UUID taskId) {
-        for (RoutineLoadJob routineLoadJob : idToRoutineLoadJob.values()) {
-            if (routineLoadJob.containsTask(taskId)) {
-                return true;
+        readLock();
+        try {
+            for (RoutineLoadJob routineLoadJob : idToRoutineLoadJob.values()) {
+                if (routineLoadJob.containsTask(taskId)) {
+                    return true;
+                }
             }
+            return false;
+        } finally {
+            readUnlock();
         }
-        return false;
     }
 
     public List<RoutineLoadJob> getRoutineLoadJobByState(Set<RoutineLoadJob.JobState> desiredStates) {
-        List<RoutineLoadJob> stateJobs = idToRoutineLoadJob.values().stream()
-                .filter(entity -> desiredStates.contains(entity.getState())).collect(Collectors.toList());
-        return stateJobs;
+        readLock();
+        try {
+            List<RoutineLoadJob> stateJobs = idToRoutineLoadJob.values().stream()
+                    .filter(entity -> desiredStates.contains(entity.getState())).collect(Collectors.toList());
+            return stateJobs;
+        } finally {
+            readUnlock();
+        }
     }
 
     // RoutineLoadScheduler will run this method at fixed interval, and renew the timeout tasks
     public void processTimeoutTasks() {
-        for (RoutineLoadJob routineLoadJob : idToRoutineLoadJob.values()) {
-            routineLoadJob.processTimeoutTasks();
+        readLock();
+        try {
+            for (RoutineLoadJob routineLoadJob : idToRoutineLoadJob.values()) {
+                routineLoadJob.processTimeoutTasks();
+            }
+        } finally {
+            readUnlock();
         }
     }
 
@@ -514,10 +558,15 @@ public class RoutineLoadManager implements Writable {
     }
 
     public void updateRoutineLoadJob() throws UserException {
-        for (RoutineLoadJob routineLoadJob : idToRoutineLoadJob.values()) {
-            if (!routineLoadJob.state.isFinalState()) {
-                routineLoadJob.update();
+        readLock();
+        try {
+            for (RoutineLoadJob routineLoadJob : idToRoutineLoadJob.values()) {
+                if (!routineLoadJob.state.isFinalState()) {
+                    routineLoadJob.update();
+                }
             }
+        } finally {
+            readUnlock();
         }
     }
 
