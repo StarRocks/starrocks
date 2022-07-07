@@ -750,7 +750,7 @@ public class Coordinator {
         while (!queue.isEmpty()) {
             int groupSize = queue.size();
             List<PlanFragment> group = new ArrayList<>(groupSize);
-            // The next `size` fragments can be delivered concurrently, because zero in-degree indicates that
+            // The next `groupSize` fragments can be delivered concurrently, because zero in-degree indicates that
             // they don't depend on each other and all the fragments depending on them have been delivered.
             for (int i = 0; i < groupSize; ++i) {
                 PlanFragment fragment = queue.poll();
