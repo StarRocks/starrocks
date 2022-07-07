@@ -235,15 +235,15 @@ public class MaterializedViewAnalyzer {
                 }
                 SlotRef slotRef = getSlotRef(functionCallExpr);
                 slotRef.setType(partitionColumn.getType());
-                // copy function and set it into partitionRefTableExprs
-                Expr partitionRefTableExprs = functionCallExpr.clone();
-                List<Expr> children = partitionRefTableExprs.getChildren();
+                // copy function and set it into partitionRefTableExpr
+                Expr partitionRefTableExpr = functionCallExpr.clone();
+                List<Expr> children = partitionRefTableExpr.getChildren();
                 for (int i = 0; i < children.size(); i++) {
                     if (children.get(i) instanceof SlotRef) {
-                        partitionRefTableExprs.setChild(i, refExpr);
+                        partitionRefTableExpr.setChild(i, refExpr);
                     }
                 }
-                statement.setPartitionRefTableExpr(partitionRefTableExprs);
+                statement.setPartitionRefTableExpr(partitionRefTableExpr);
             } else {
                 // e.g. partition by date_trunc('day',ss) or partition by ss
                 if (refExpr instanceof FunctionCallExpr || refExpr instanceof SlotRef) {
