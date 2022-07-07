@@ -244,8 +244,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             throw new DdlException("Hudi resource [" + resourceName + "] does NOT exists");
         }
         HudiResource hudiResource = (HudiResource) resource;
-        if ((hudiResource == null) || ((resourceName == null || isInternalCatalog(resourceName)) &&
-                hudiResource.getType() != Resource.ResourceType.HUDI)) {
+        if ((resourceName == null || isInternalCatalog(resourceName)) &&
+                hudiResource.getType() != Resource.ResourceType.HUDI) {
             throw new DdlException("Resource [" + resourceName + "] is not hudi resource");
         }
 
