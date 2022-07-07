@@ -564,10 +564,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowAlterStatement(StarRocksParser.ShowAlterStatementContext context) {
-        QualifiedName dbName = null;
-        if (context.qualifiedName() != null) {
-            dbName = getQualifiedName(context.db);
-        }
+        QualifiedName dbName = getQualifiedName(context.db);
         Expr where = null;
         if (context.expression() != null) {
             where = (Expr) visit(context.expression());
@@ -588,7 +585,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.limitElement() != null) {
             limitElement = (LimitElement) visit(context.limitElement());
         }
-        return new ShowAlterStmt(alterType, dbName.toString(), where, orderByElements,
+        return new ShowAlterStmt(alterType, dbName == null ? null : dbName.toString(), where, orderByElements,
                 limitElement);
     }
 
