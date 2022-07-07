@@ -71,8 +71,8 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         Database database = GlobalStateMgr.getCurrentState().getDb(context.ctx.getDatabase());
         MaterializedView materializedView = (MaterializedView) database.getTable(mvId);
         if (!materializedView.isActive()) {
-            LOG.warn("Materialized view: " + mvId + "is not active, " +
-                    "skip sync partition and data with base tables");
+            LOG.warn("Materialized view: {} is not active, " +
+                    "skip sync partition and data with base tables", mvId);
             return;
         }
         Set<Long> baseTableIds = materializedView.getBaseTableIds();
@@ -145,7 +145,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         if (refreshAllPartitions) {
             refreshMv(context, materializedView);
         } else {
-            if (needRefreshPartitionNames.size() > 0) {
+            if (!needRefreshPartitionNames.isEmpty()) {
                 refreshMv(context, materializedView, partitionTable, needRefreshPartitionNames);
             }
         }

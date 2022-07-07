@@ -109,12 +109,12 @@ public class MaterializedViewAnalyzer {
                 if (db.getTable(table.getId()) == null) {
                     throw new SemanticException(
                             "Materialized view do not support table: " + table.getName() +
-                                    " which is in other database");
+                                    " do not exist in database: " + db.getFullName());
                 }
                 if (!(table instanceof OlapTable)) {
                     throw new SemanticException(
-                            "Materialized view only support olap table:" + table.getName() +
-                                    " type:" + table.getType().name());
+                            "Materialized view only supports olap table, but the type of table: " +
+                                    table.getName() + " is: " + table.getType().name());
                 }
                 baseTableIds.add(table.getId());
             });
@@ -226,7 +226,7 @@ public class MaterializedViewAnalyzer {
             Column partitionColumn = statement.getPartitionColumn();
             Expr refExpr = columnExprMap.get(partitionColumn);
             if (expressionPartitionDesc.isFunction()) {
-                // e.g. partition by date_trunc(ss)
+                // e.g. partition by date_trunc('month', ss)
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) expressionPartitionDesc.getExpr();
                 if (!(refExpr instanceof SlotRef)) {
                     throw new SemanticException("Materialized view partition function " +
@@ -243,11 +243,11 @@ public class MaterializedViewAnalyzer {
                         partitionRefTableExprs.setChild(i, refExpr);
                     }
                 }
-                statement.setPartitionRefTableExprs(partitionRefTableExprs);
+                statement.setPartitionRefTableExpr(partitionRefTableExprs);
             } else {
                 // e.g. partition by date_trunc('day',ss) or partition by ss
                 if (refExpr instanceof FunctionCallExpr || refExpr instanceof SlotRef) {
-                    statement.setPartitionRefTableExprs(refExpr);
+                    statement.setPartitionRefTableExpr(refExpr);
                 } else {
                     throw new SemanticException(
                             "Materialized view partition function must related with column");
@@ -256,7 +256,7 @@ public class MaterializedViewAnalyzer {
         }
 
         private void checkPartitionExpParams(CreateMaterializedViewStatement statement) {
-            Expr expr = statement.getPartitionRefTableExprs();
+            Expr expr = statement.getPartitionRefTableExpr();
             if (expr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = ((FunctionCallExpr) expr);
                 String functionName = functionCallExpr.getFnName().getFunction();
@@ -275,7 +275,7 @@ public class MaterializedViewAnalyzer {
 
         private void checkPartitionColumnWithBaseTable(CreateMaterializedViewStatement statement,
                                                        Map<TableName, Table> tableNameTableMap) {
-            SlotRef slotRef = getSlotRef(statement.getPartitionRefTableExprs());
+            SlotRef slotRef = getSlotRef(statement.getPartitionRefTableExpr());
             Table table = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
             PartitionInfo partitionInfo = ((OlapTable) table).getPartitionInfo();
             if (partitionInfo instanceof SinglePartitionInfo) {

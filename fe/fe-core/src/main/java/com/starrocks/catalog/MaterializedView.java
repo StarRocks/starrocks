@@ -375,11 +375,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     @Override
-    public void gsonPostProcess() throws IOException {
-        super.gsonPostProcess();
-    }
-
-    @Override
     public void write(DataOutput out) throws IOException {
         // write type first
         Text.writeString(out, type.name());
@@ -416,7 +411,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         // set privilege
         connectContext.setQualifiedUser(Auth.ROOT_USER);
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
-        PartitionInfo partitionInfo = this.getPartitionInfo();
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
         // currently, mv only supports one expression
         Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
@@ -434,7 +428,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     public void addPartitionRef(Partition mvPartition) {
-        PartitionInfo partitionInfo = this.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             return;
         }
@@ -442,6 +435,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 ((ExpressionRangePartitionInfo) partitionInfo).getRange(mvPartition.getId());
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         OlapTable baseTable = this.getPartitionTable(db);
+        Preconditions.checkState(baseTable != null);
         PartitionInfo baseTablePartitionInfo = baseTable.getPartitionInfo();
         if (baseTablePartitionInfo instanceof SinglePartitionInfo) {
             Preconditions.checkState(baseTable.getPartitions().size() == 1);
@@ -451,11 +445,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         } else {
             RangePartitionInfo baseRangePartitionInfo = (RangePartitionInfo) baseTable.getPartitionInfo();
             Map<Long, Range<PartitionKey>> baseTableIdToRange = baseRangePartitionInfo.getIdToRange(false);
-            for (Long baseTablePartitionId : baseTableIdToRange.keySet()) {
-                Partition baseTablePartition = baseTable.getPartition(baseTablePartitionId);
-                Range<PartitionKey> baseTablePartitionKeyRange = baseTableIdToRange.get(baseTablePartitionId);
+            for (Map.Entry<Long, Range<PartitionKey>> idRangeEntry : baseTableIdToRange.entrySet()) {
+                Partition baseTablePartition = baseTable.getPartition(idRangeEntry.getKey());
                 try {
-                    RangeUtils.checkRangeIntersect(baseTablePartitionKeyRange, mvPartitionKeyRange);
+                    RangeUtils.checkRangeIntersect(idRangeEntry.getValue(), mvPartitionKeyRange);
                 } catch (DdlException e) {
                     this.addPartitionNameRef(baseTablePartition.getName(), mvPartition.getName());
                 }
@@ -466,7 +459,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     public OlapTable getPartitionTable(Database database) {
         Preconditions.checkState(this.getPartitionRefTableExprs().size() == 1);
         Expr partitionExpr = this.getPartitionRefTableExprs().get(0);
-        OlapTable partitionTable = null;
         List<SlotRef> slotRefs = Lists.newArrayList();
         partitionExpr.collect(SlotRef.class, slotRefs);
         // if partitionExpr is FunctionCallExpr, get first SlotRef
@@ -475,11 +467,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         for (Long baseTableId : baseTableIds) {
             OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
             if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(olapTable.getName())) {
-                partitionTable = olapTable;
-                break;
+                return olapTable;
             }
         }
-        return partitionTable;
+        return null;
     }
 
     public static MaterializedView read(DataInput in) throws IOException {

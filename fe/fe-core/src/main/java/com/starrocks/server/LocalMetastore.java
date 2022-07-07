@@ -298,7 +298,7 @@ public class LocalMetastore implements ConnectorMetadata {
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getMaterializedViews().stream().forEach(mv -> mv.onCreate());
+            db.getMaterializedViews().stream().forEach(Table::onCreate);
         }
         LOG.info("finished replay databases from image");
         return newChecksum;
@@ -2845,7 +2845,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // set viewDefineSql
         materializedView.setViewDefineSql(stmt.getInlineViewDef());
         // set partitionRefTableExprs
-        materializedView.setPartitionRefTableExprs(Lists.newArrayList(stmt.getPartitionRefTableExprs()));
+        materializedView.setPartitionRefTableExprs(Lists.newArrayList(stmt.getPartitionRefTableExpr()));
         // set base index id
         long baseIndexId = getNextId();
         materializedView.setBaseIndexId(baseIndexId);

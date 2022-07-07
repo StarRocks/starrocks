@@ -43,7 +43,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private Set<Long> baseTableIds;
     private Column partitionColumn;
     // record expression which related with partition by clause
-    private Expr partitionRefTableExprs;
+    private Expr partitionRefTableExpr;
 
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists, String comment,
                                            RefreshSchemeDesc refreshSchemeDesc, ExpressionPartitionDesc expressionPartitionDesc,
@@ -163,12 +163,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.partitionColumn = partitionColumn;
     }
 
-    public Expr getPartitionRefTableExprs() {
-        return partitionRefTableExprs;
+    public Expr getPartitionRefTableExpr() {
+        return partitionRefTableExpr;
     }
 
-    public void setPartitionRefTableExprs(Expr partitionRefTableExprs) {
-        this.partitionRefTableExprs = partitionRefTableExprs;
+    public void setPartitionRefTableExpr(Expr partitionRefTableExpr) {
+        this.partitionRefTableExpr = partitionRefTableExpr;
     }
 
     @Override

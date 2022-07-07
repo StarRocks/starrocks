@@ -1111,8 +1111,8 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals(e.getMessage(),
-                    "Materialized view do not support table: tbl3 which is in other database");
+            Assert.assertEquals("Materialized view do not support table: tbl3 " +
+                    "do not exist in database: default_cluster:test",e.getMessage());
         }
     }
 
@@ -1129,7 +1129,8 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals(e.getMessage(), "Materialized view only support olap table:mysql_external_table type:MYSQL");
+            Assert.assertEquals("Materialized view only supports olap table, " +
+                    "but the type of table: mysql_external_table is: MYSQL", e.getMessage());
         }
     }
 
