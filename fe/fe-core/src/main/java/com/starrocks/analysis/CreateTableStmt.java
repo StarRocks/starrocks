@@ -419,7 +419,6 @@ public class CreateTableStmt extends DdlStmt {
 
         boolean hasHll = false;
         boolean hasBitmap = false;
-        boolean hasJson = false;
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
             columnDef.analyze(isOlapOrLakeEngine());
@@ -430,10 +429,6 @@ public class CreateTableStmt extends DdlStmt {
 
             if (columnDef.getAggregateType() == BITMAP_UNION) {
                 hasBitmap = columnDef.getType().isBitmapType();
-            }
-
-            if (columnDef.getType().isJsonType()) {
-                hasJson = true;
             }
 
             if (!columnSet.add(columnDef.getName())) {
