@@ -30,10 +30,7 @@ jobs:
     - name: Read Properties
       id: read_property
       run: cat review/${{ steps.source-run-info.outputs.pullRequestNumber }}
-  
-    - name: echo artifact
-      run: echo ${{ steps.read_property.outputs.stdout }}
-    
+
     - name: Label when approved by 2 committers
       if: ${{ steps.read_property.outputs.stdout }} == 'true'
       uses: TobKed/label-when-approved-action@v1.2
