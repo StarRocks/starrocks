@@ -252,6 +252,60 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
     return Status::OK();
 }
 
+size_t TabletUpdates::data_size() const {
+    string err_rowsets;
+    int64_t total_size = 0;
+    {
+        std::lock_guard rl(_lock);
+        if (_edit_version_infos.empty()) {
+            LOG(WARNING) << "tablet deleted when call data_size() tablet:" << _tablet.tablet_id();
+            return 0;
+        }
+        std::lock_guard lg(_rowset_stats_lock);
+        auto& last = _edit_version_infos.back();
+        for (uint32_t rowsetid : last->rowsets) {
+            auto itr = _rowset_stats.find(rowsetid);
+            if (itr != _rowset_stats.end()) {
+                total_size += itr->second->byte_size;
+            } else {
+                StringAppendF(&err_rowsets, "%u,", rowsetid);
+            }
+        }
+    }
+    if (!err_rowsets.empty()) {
+        LOG_EVERY_N(WARNING, 10) << "data_size() some rowset stats not found tablet=" << _tablet.tablet_id()
+                                 << " rowset=" << err_rowsets;
+    }
+    return total_size;
+}
+
+size_t TabletUpdates::num_rows() const {
+    string err_rowsets;
+    int64_t total_row = 0;
+    {
+        std::lock_guard rl(_lock);
+        if (_edit_version_infos.empty()) {
+            LOG(WARNING) << "tablet delete when call num_rows tablet:" << _tablet.tablet_id();
+            return 0;
+        }
+        std::lock_guard lg(_rowset_stats_lock);
+        auto& last = _edit_version_infos.back();
+        for (uint32_t rowsetid : last->rowsets) {
+            auto itr = _rowset_stats.find(rowsetid);
+            if (itr != _rowset_stats.end()) {
+                total_row += itr->second->num_rows;
+            } else {
+                StringAppendF(&err_rowsets, "%u,", rowsetid);
+            }
+        }
+    }
+    if (!err_rowsets.empty()) {
+        LOG_EVERY_N(WARNING, 10) << "data_size() some rowset stats not found tablet=" << _tablet.tablet_id()
+                                 << " rowset=" << err_rowsets;
+    }
+    return total_row;
+}
+
 std::pair<int64_t, int64_t> TabletUpdates::num_rows_and_data_size() const {
     string err_rowsets;
     int64_t total_row = 0;

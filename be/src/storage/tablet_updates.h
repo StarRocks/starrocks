@@ -60,7 +60,13 @@ public:
 
     using IteratorList = std::vector<std::shared_ptr<vectorized::ChunkIterator>>;
 
-    // get number of rows and total size of latest version's rowset files
+    // get latest version's number of rows
+    size_t num_rows() const;
+
+    // get total size of latest version's rowset files
+    size_t data_size() const;
+
+    // get number of rows and total size of latest version's rowset files together
     std::pair<int64_t, int64_t> num_rows_and_data_size() const;
 
     // get latest version's number of rowsets
