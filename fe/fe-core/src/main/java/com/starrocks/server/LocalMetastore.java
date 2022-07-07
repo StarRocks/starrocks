@@ -4133,6 +4133,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 for (MaterializedIndex materializedIndex : allIndices) {
                     long indexId = materializedIndex.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                    Set<Long> tabletIds = new HashSet<>();
                     for (Tablet tablet : materializedIndex.getTablets()) {
                         long tabletId = tablet.getId();
                         if (olapTable.isOlapTable()) {
@@ -4153,11 +4154,14 @@ public class LocalMetastore implements ConnectorMetadata {
                         if (olapTable.isLakeTable()) {
                             // for debug
                             LOG.info("onEraseOlapTable, isLakeTable");
-                            GlobalStateMgr.getCurrentState().getStarosInfo()
-                                    .getShardDelete().addShardId(tabletId, (LakeTablet) tablet);
+                            tabletIds.add(tabletId);
                         }
                         
                     } // end for tablets
+
+                    GlobalStateMgr.getCurrentState().getStarosInfo()
+                            .getShardDelete().addShardId(tabletIds);
+                    GlobalStateMgr.getCurrentState().getEditLog().logAddDeleteShard(tabletIds);
                 } // end for indices
             } // end for partitions
         }

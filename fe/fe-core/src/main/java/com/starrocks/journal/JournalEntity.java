@@ -36,6 +36,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
+import com.starrocks.catalog.lake.ShardDelete;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
@@ -657,6 +658,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE: {
                 data = InsertOverwriteStateChangeInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DELETE_SHARD: {
+                data = ShardDelete.read(in);
                 isRead = true;
                 break;
             }

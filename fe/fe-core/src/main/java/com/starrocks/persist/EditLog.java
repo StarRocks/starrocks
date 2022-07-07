@@ -38,7 +38,6 @@ import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
-import com.starrocks.catalog.lake.ShardDelete;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -84,6 +83,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -881,9 +881,15 @@ public class EditLog {
                     globalStateMgr.getInsertOverwriteJobManager().replayInsertOverwriteStateChange(stateChangeInfo);
                     break;
                 }
+                case OperationType.OP_ADD_SHARD: {
+                    ShardInfo shardInfo = (ShardInfo) journal.getData();
+                    globalStateMgr.getStarosInfo().getShardDelete().replayAddShard(shardInfo);
+                    break;
+                }
                 case OperationType.OP_DELETE_SHARD: {
-                    ShardDelete shardDeleteInfo = (ShardDelete) journal.getData();
-                    globalStateMgr.getStarosInfo().getShardDelete().replayDeleteShard(shardDeleteInfo);
+                    ShardInfo shardInfo = (ShardInfo) journal.getData();
+                    globalStateMgr.getStarosInfo().getShardDelete().replayDeleteShard(shardInfo);
+                    break;
                 }
                 default: {
                     if (Config.ignore_unknown_log_id) {
@@ -1493,7 +1499,12 @@ public class EditLog {
         logEdit(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log);
     }
 
-    public void logShardDelete(ShardDelete info) {
-        logEdit(OperationType.OP_DELETE_SHARD, info);
+    public void logAddDeleteShard(Set<Long> shardIds) {
+        logEdit(OperationType.OP_ADD_SHARD, new ShardInfo(shardIds));
     }
+
+    public void logRemoveDeleteShard(Set<Long> shardIds) {
+        logEdit(OperationType.OP_DELETE_SHARD, new ShardInfo(shardIds));
+    }
+
 }
