@@ -49,6 +49,7 @@ public:
         _load_channel_mgr = std::make_unique<LoadChannelMgr>();
 
         _tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+        _tablet_manager->prune_metacache();
 
         _group_assigner = std::make_unique<lake::TestGroupAssigner>(kTestGroupPath);
         _backup_group_assigner = _tablet_manager->TEST_set_group_assigner(_group_assigner.get());
@@ -198,12 +199,14 @@ protected:
         tablet.delete_txn_log(kTxnId);
         (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_group_assigner(_backup_group_assigner);
         (void)fs::remove_all(kTestGroupPath);
+        _tablet_manager->prune_metacache();
     }
 
     std::shared_ptr<VChunk> read_segment(int64_t tablet_id, const std::string& filename) {
         // Check segment file
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
         auto path = fmt::format("{}/{}", kTestGroupPath, filename);
+        std::cerr << path << '\n';
 
         ASSIGN_OR_ABORT(auto seg, Segment::open(_mem_tracker.get(), fs, path, 0, _tablet_schema.get()));
 
