@@ -19,9 +19,10 @@ jobs:
       uses: actions-ecosystem/action-add-labels@v1
       if: steps.approved.outputs.approved == 'true'
       with:
-        github_token: ${{ secrets.PAT }}
         labels: approved
         number: ${{ github.event.pull_request.number }}
+      env:        
+        GITHUB_TOKEN: ${{ secrets.PAT }}
         
 #    - name: create-file
 #      run: echo '${{ steps.approved.outputs.approved }}' >> ${{ github.workspace }}/${{ github.event.pull_request.number }}
