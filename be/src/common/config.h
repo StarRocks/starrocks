@@ -756,6 +756,8 @@ CONF_String(jaeger_endpoint, "");
 
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
+// Root dir used for cache if cache enabled.
+CONF_String(starlet_cache_dir, "");
 #endif
 
 } // namespace config
