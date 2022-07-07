@@ -715,6 +715,7 @@ public class Coordinator {
         PlanFragment root = fragments.get(0);
 
         // Compute in-degree of each fragment by BFS.
+        // `queue` contains the fragments need to visit its in-edges.
         inDegrees.put(root, 0);
         queue.add(root);
         while (!queue.isEmpty()) {
@@ -741,6 +742,7 @@ public class Coordinator {
                     ErrorType.INTERNAL_ERROR);
         }
 
+        // Compute fragment groups by BFS.
         // `queue` contains the fragments whose in-degree is zero.
         queue.add(root);
         List<List<PlanFragment>> results = Lists.newArrayList();
