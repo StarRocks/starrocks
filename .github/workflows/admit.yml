@@ -2,7 +2,7 @@ name: Trigger Jobs
 
 on:
   pull_request:
-    types: [labeled, unlocked，synchronize, reopened]
+    types: [synchronize, reopened]
 #  pull_request_review:
 
 jobs:
