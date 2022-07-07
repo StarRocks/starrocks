@@ -461,7 +461,7 @@ under the License.
         <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-core_2.12 -->
         <dependency>
             <groupId>org.apache.spark</groupId>
-            <artifactId>spark-core_2.12</artifactId>
+            <artifactId>spark-core_${spark.scala.version}</artifactId>
             <exclusions>
                 <exclusion>
                     <groupId>org.slf4j</groupId>
@@ -481,13 +481,13 @@ under the License.
         <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-launcher_2.12 -->
         <dependency>
             <groupId>org.apache.spark</groupId>
-            <artifactId>spark-launcher_2.12</artifactId>
+            <artifactId>spark-launcher_${spark.scala.version}</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-sql_2.12 -->
         <dependency>
             <groupId>org.apache.spark</groupId>
-            <artifactId>spark-sql_2.12</artifactId>
+            <artifactId>spark-sql_${spark.scala.version}</artifactId>
             <scope>provided</scope>
         </dependency>
 

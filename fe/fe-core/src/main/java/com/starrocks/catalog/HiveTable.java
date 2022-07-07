@@ -102,6 +102,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     private String hiveTableName;
     private String resourceName;
     private String hdfsPath;
+    private boolean isMaxComputeTable = false;
     private final List<String> partColumnNames = Lists.newArrayList();
     // dataColumnNames stores all the non-partition columns of the hive table,
     // consistent with the order defined in the hive table
@@ -174,7 +175,12 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
         if (resource != null) {
             HiveResource hiveResource = (HiveResource) resource;
-            hiveProperties.put(HIVE_METASTORE_URIS, hiveResource.getHiveMetastoreURIs());
+            isMaxComputeTable = hiveResource.isMaxComputeResource();
+            if (!isMaxComputeTable) {
+                hiveProperties.put(HIVE_METASTORE_URIS, hiveResource.getHiveMetastoreURIs());
+            } else {
+                hiveProperties.putAll(hiveResource.getResourceOptions());
+            }
         }
         return hiveProperties;
     }
@@ -361,6 +367,10 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
         this.resourceName = resourceName;
 
+        if (isMaxComputeTable) {
+            return;
+        }
+
         // check column
         // 1. check column exists in hive table
         // 2. check column type mapping
@@ -434,7 +444,12 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             throw new DdlException("resource [" + resourceName + "] is not hive resource");
         }
         HiveResource hiveResource = (HiveResource) resource;
-        hiveProperties.put(HIVE_METASTORE_URIS, hiveResource.getHiveMetastoreURIs());
+        isMaxComputeTable = hiveResource.isMaxComputeResource();
+        if (!isMaxComputeTable) {
+            hiveProperties.put(HIVE_METASTORE_URIS, hiveResource.getHiveMetastoreURIs());
+        } else {
+            hiveProperties.putAll(hiveResource.getResourceOptions());
+        }
     }
 
     @Override
