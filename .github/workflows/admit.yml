@@ -3,11 +3,11 @@ name: Trigger Jobs
 on:
   pull_request:
     types: [synchronize, labeled, reopened]
-  pull_request_review:
+#  pull_request_review:
 
 jobs:
   Trigger-Admit-Test:
-    if: ${{ github.event.label.name == 'Approved' }}
+    if: ${{ github.event.review.state == 'Approved' }}
     runs-on: ubuntu-latest
     steps:
       - name: Trigger admit job
