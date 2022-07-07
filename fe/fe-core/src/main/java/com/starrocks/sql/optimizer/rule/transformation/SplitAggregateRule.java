@@ -275,9 +275,10 @@ public class SplitAggregateRule extends TransformationRule {
                     Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT, new Type[] {fnCall.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF), false);
         } else if (functionName.equalsIgnoreCase(FunctionSet.SUM)) {
-            return new CallOperator(FunctionSet.MULTI_DISTINCT_SUM, fnCall.getType(), fnCall.getChildren(),
-                    Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_SUM, new Type[] {fnCall.getChild(0).getType()},
-                            IS_NONSTRICT_SUPERTYPE_OF), false);
+            Function multiDistinctSumFn = Function.convertSumToMultiDistinctSum(
+                    fnCall.getFunction(), fnCall.getChild(0).getType());
+            return new CallOperator(
+                    FunctionSet.MULTI_DISTINCT_SUM, fnCall.getType(), fnCall.getChildren(), multiDistinctSumFn, false);
         }
         return null;
     }

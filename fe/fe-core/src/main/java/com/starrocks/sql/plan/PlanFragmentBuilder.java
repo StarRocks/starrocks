@@ -18,6 +18,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
@@ -1343,9 +1344,9 @@ public class PlanFragmentBuilder {
                     replaceExpr.getParams().setIsDistinct(false);
                 } else if (functionName.equalsIgnoreCase(FunctionSet.SUM)) {
                     replaceExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_SUM, functionCallExpr.getParams());
-                    replaceExpr.setFn(Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_SUM,
-                            new Type[] {functionCallExpr.getChild(0).getType()},
-                            IS_NONSTRICT_SUPERTYPE_OF));
+                    Function multiDistinctSum = Function.convertSumToMultiDistinctSum(
+                            functionCallExpr.getFn(), functionCallExpr.getChild(0).getType());
+                    replaceExpr.setFn(multiDistinctSum);
                     replaceExpr.getParams().setIsDistinct(false);
                 }
                 Preconditions.checkState(replaceExpr != null);

@@ -5,6 +5,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -16,6 +17,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteRule;
@@ -115,12 +117,19 @@ public class RewriteMultiDistinctRule extends TransformationRule {
                 sumColRef = sumColRef == null ?
                         context.getColumnRefFactory().create(sum, sum.getType(), sum.isNullable()) : sumColRef;
                 newAggMapWithAvg.put(sumColRef, sum);
-
-                CallOperator multiAgv = (CallOperator) scalarRewriter.rewrite(
-                        new CallOperator("divide", oldFunctionCall.getType(),
-                                Lists.newArrayList(sumColRef, countColRef)),
-                        DEFAULT_TYPE_CAST_RULE);
-                projections.put(aggMap.getKey(), multiAgv);
+                CallOperator multiAvg = new CallOperator("divide", oldFunctionCall.getType(),
+                        Lists.newArrayList(sumColRef, countColRef));
+                if (multiAvg.getType().isDecimalV3()) {
+                    // There is not need to apply ImplicitCastRule to divide operator of decimal types.
+                    // but we should cast BIGINT-typed countColRef into DECIMAL(38,0).
+                    ScalarType decimal128p38s0 = ScalarType.createDecimalV3NarrowestType(38, 0);
+                    multiAvg.getChildren().set(
+                            1, new CastOperator(decimal128p38s0, multiAvg.getChild(1), true));
+                } else {
+                    multiAvg = (CallOperator) scalarRewriter.rewrite(multiAvg,
+                            Lists.newArrayList(new ImplicitCastRule()));
+                }
+                projections.put(aggMap.getKey(), multiAvg);
             } else {
                 projections.put(aggMap.getKey(), aggMap.getKey());
                 newAggMapWithAvg.put(aggMap.getKey(), aggMap.getValue());
@@ -161,12 +170,11 @@ public class RewriteMultiDistinctRule extends TransformationRule {
     }
 
     private CallOperator buildMultiSumDistinct(CallOperator oldFunctionCall) {
-        Function searchDesc = new Function(new FunctionName(FunctionSet.MULTI_DISTINCT_SUM),
-                oldFunctionCall.getFunction().getArgs(), Type.INVALID, false);
-        Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
-
+        Function multiDistinctSum = Function.convertSumToMultiDistinctSum(
+                oldFunctionCall.getFunction(), oldFunctionCall.getChild(0).getType());
         return (CallOperator) scalarRewriter.rewrite(
-                new CallOperator(FunctionSet.MULTI_DISTINCT_SUM, fn.getReturnType(), oldFunctionCall.getChildren(), fn),
-                DEFAULT_TYPE_CAST_RULE);
+                new CallOperator(
+                        FunctionSet.MULTI_DISTINCT_SUM, multiDistinctSum.getReturnType(),
+                        oldFunctionCall.getChildren(), multiDistinctSum), DEFAULT_TYPE_CAST_RULE);
     }
 }
