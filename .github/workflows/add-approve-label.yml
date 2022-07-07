@@ -37,7 +37,7 @@ jobs:
       with:
         message: |
           run starrocks_admit_test
-          pr_number: ${{ steps.source-run-info.outputs.pullRequestNumber }}
+        pr_number: ${{ steps.source-run-info.outputs.pullRequestNumber }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
 #  - name: Label when approved
