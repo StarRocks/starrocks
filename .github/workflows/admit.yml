@@ -4,7 +4,6 @@ on:
   pull_request:
     types: [synchronize, labeled, reopened]
   pull_request_review:
-    types: [labeled]
 
 jobs:
   Trigger-Admit-Test:
