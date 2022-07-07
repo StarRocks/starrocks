@@ -877,11 +877,26 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         return result;
     }
 
-    public static class CouldApplyDictOptimizeContext {
-        public Set<Integer> sids;
+    // Check if an expression can be optimized using a dictionary
+    // 1. If the input column is only a dictionary column and there are no unsupported expressions in this expression,
+    // then it must be able to use dictionary optimization
+    // 2. If the input column is multi-column, and if there are expressions in the path of the dictionary column
+    // that can use dictionary optimization, then it is also able to use dictionary optimization
+    // eg:
+    // select if (x = 1, dict, y) from table; couldn't use dictionary optimize. If rewritten as a dictionary
+    // optimization is meaningless
+    //
+    // select if (dict = 1, x, y) from table; could use dictionary optimize.
+    // Because we can save the overhead of string filtering
 
+    public static class CouldApplyDictOptimizeContext {
+        // can use cardinality optimized dictionary columns
+        public Set<Integer> sids;
+        // whether is worth using dictionary optimization
         boolean worthApplied = false;
+        //
         boolean couldAppliedOperator = false;
+        // indicates the existence of expressions that do not support optimization using dictionaries
         boolean hasUnsupportedOperator = false;
 
         void reset() {
@@ -890,8 +905,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         }
     }
 
-    // could apply dict optimize
-    // visit()
     public static class CouldApplyDictOptimizeVisitor
             extends ScalarOperatorVisitor<Void, CouldApplyDictOptimizeContext> {
 
@@ -907,6 +920,15 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         private Void couldApply(ScalarOperator operator, CouldApplyDictOptimizeContext context) {
             boolean hasUnsupportedOperator = false;
             boolean couldAppliedOperator = false;
+            // For any expression, if his child supports low cardinality optimization.
+            // Then it must support low cardinality optimization.
+            // Because we can let child do a low cardinality optimization,
+            // the expression itself does not do any optimization
+            // eg:
+            // Expression(child1, child2)
+            // if only child1 support, but child2 has unsupported expression.
+            // we can rewrite to
+            // Expression(DictExpr(child1), DictExpr(child2))
             for (ScalarOperator child : operator.getChildren()) {
                 context.reset();
                 child.accept(this, context);
@@ -914,7 +936,11 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 couldAppliedOperator = couldAppliedOperator || context.couldAppliedOperator;
             }
 
-            // check
+            // If there exist expressions that cannot be optimized using low bases.
+            // We need to avoid unused optimizations
+            // eg:
+            // if (a=1, dict, c) -> nothing to do
+            // if (a=1, upper(dict), c) -> if (a = 1, DictExpr(dict), c)
             if (hasUnsupportedOperator) {
                 context.couldAppliedOperator = context.worthApplied && couldAppliedOperator;
             } else {
@@ -987,7 +1013,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             couldApply(operator, context);
             context.worthApplied |= context.couldAppliedOperator;
             return null;
-
         }
 
         @Override

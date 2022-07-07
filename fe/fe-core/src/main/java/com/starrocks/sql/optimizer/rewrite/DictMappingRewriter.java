@@ -49,6 +49,7 @@ public class DictMappingRewriter {
     }
 
     private static class RewriterContext {
+        // It is believed that a low cardinality optimization has been applied
         boolean hasAppliedOperator = false;
         boolean hasUnsupportedOperator = false;
 
@@ -110,6 +111,8 @@ public class DictMappingRewriter {
             List<ScalarOperator> children = Lists.newArrayList(scalarOperator.getChildren());
             boolean hasApplied = false;
             boolean disableApplied = context.hasUnsupportedOperator;
+            // For any expression that does not support low-base optimization,
+            // if child already uses optimization, we need to add a DictExpr
             for (int i = 0; i < children.size(); i++) {
                 context.reset();
                 ScalarOperator child = scalarOperator.getChild(i).accept(this, context);
