@@ -79,7 +79,7 @@ FROM sales_records
 GROUP BY store_id;
 ~~~
 
-### View materialized view
+### View creation progress of a materialized view
 
 Since creating a materialized view is an asynchronous operation, after submitting the job, the user needs to check whether the materialized view is created or not with the following command:
 
@@ -107,7 +107,9 @@ The query result is:
 
 If the State is FINISHED, it means the materialized view has been created.
 
-To view the table results of the materialized view, you need to use the base table name:
+### View all created materialized views
+
+You can view all materialized views of a base table by using the name of a base table. For example, run the following code to view all materialized views of `sales_records`.
 
 ~~~PlainText
 mysql> desc sales_records all;
