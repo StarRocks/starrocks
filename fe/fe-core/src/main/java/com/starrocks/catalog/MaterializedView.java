@@ -426,6 +426,11 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                                 .map(col -> new Field(col.getName(), col.getType(),
                                         new TableName(db.getFullName(), this.name), null))
                                 .collect(Collectors.toList()))), connectContext);
+        // if replay , partitions maybe not empty
+        Collection<Partition> partitions = this.getPartitions();
+        for (Partition partition : partitions) {
+            addPartitionRef(partition);
+        }
     }
 
     public void addPartitionRef(Partition mvPartition) {

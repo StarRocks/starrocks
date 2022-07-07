@@ -3141,7 +3141,9 @@ public class LocalMetastore implements ConnectorMetadata {
             OlapTable table = (OlapTable) db.getTable(tableId);
             Partition partition = table.getPartition(partitionId);
             table.renamePartition(partition.getName(), newPartitionName);
-
+            if (table.getType() == Table.TableType.MATERIALIZED_VIEW) {
+                ((MaterializedView) table).addPartitionRef(partition);
+            }
             LOG.info("replay rename partition[{}] to {}", partition.getName(), newPartitionName);
         } finally {
             db.writeUnlock();
