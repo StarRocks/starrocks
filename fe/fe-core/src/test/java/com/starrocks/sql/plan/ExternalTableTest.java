@@ -212,8 +212,9 @@ public class ExternalTableTest extends PlanTestBase {
 
         queryStr = "select * from jointest t1, mysql_table t2, mysql_table t3 where t1.k1 = t3.k1";
         explainString = getFragmentPlan(queryStr);
+        System.out.println(explainString);
         Assert.assertFalse(explainString.contains("INNER JOIN (BUCKET_SHUFFLE))"));
-        Assert.assertTrue(explainString.contains("1:SCAN MYSQL"));
+        Assert.assertTrue(explainString.contains("4:SCAN MYSQL"));
     }
 
 }

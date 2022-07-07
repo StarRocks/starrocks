@@ -177,7 +177,7 @@ public class ReplayFromDumpTest {
         Assert.assertEquals(replaySessionVariable.getParallelExecInstanceNum(), 4);
         System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("  |----24:EXCHANGE\n" +
-                "  |       cardinality: 73049\n" +
+                "  |       cardinality: 65744\n" +
                 "  |    \n" +
                 "  18:UNION\n" +
                 "  |  child exprs:\n" +
@@ -205,7 +205,7 @@ public class ReplayFromDumpTest {
         // Check the size of the left and right tables
         Assert.assertTrue(replayPair.second.contains(" |  \n" +
                 "  |----30:EXCHANGE\n" +
-                "  |       cardinality: 6326\n" +
+                "  |       cardinality: 6304\n" +
                 "  |    \n" +
                 "  14:OlapScanNode\n" +
                 "     table: customer, rollup: customer"));
@@ -367,7 +367,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/decode_limit_with_project"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("  12:Decode\n" +
+        Assert.assertTrue(replayPair.second.contains("  14:Decode\n" +
                 "  |  <dict id 42> : <string id 18>"));
         FeConstants.USE_MOCK_DICT_MANAGER = false;
     }
