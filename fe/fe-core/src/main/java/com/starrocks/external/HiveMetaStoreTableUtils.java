@@ -106,7 +106,10 @@ public class HiveMetaStoreTableUtils {
         List<FieldSchema> unPartHiveColumns = table.getSd().getCols();
         List<FieldSchema> partHiveColumns = table.getPartitionKeys();
         Map<String, FieldSchema> allHiveColumns = unPartHiveColumns.stream()
+                .filter(e -> !unsupportedType.contains(e.getType().toLowerCase()))
                 .collect(Collectors.toMap(FieldSchema::getName, fieldSchema -> fieldSchema));
+        partHiveColumns = partHiveColumns.stream().filter(e -> !unsupportedType.contains(e.getType().toLowerCase()))
+                .collect(Collectors.toList());
         for (FieldSchema hiveColumn : partHiveColumns) {
             allHiveColumns.put(hiveColumn.getName(), hiveColumn);
         }
@@ -117,7 +120,7 @@ public class HiveMetaStoreTableUtils {
         List<FieldSchema> allColumns = table.getSd().getCols();
         List<FieldSchema> partHiveColumns = table.getPartitionKeys();
         allColumns.addAll(partHiveColumns);
-        return allColumns;
+        return allColumns.stream().filter(e -> !unsupportedType.contains(e.getType().toLowerCase())).collect(Collectors.toList());
     }
 
     public static boolean validateColumnType(String hiveType, Type type) {
@@ -241,14 +244,9 @@ public class HiveMetaStoreTableUtils {
         List<FieldSchema> allHiveColumns = getAllColumns(hiveTable);
         List<Column> fullSchema = Lists.newArrayList();
         for (FieldSchema fieldSchema : allHiveColumns) {
-            // skip unsupportable `binary` type
-            if (unsupportedType.contains(fieldSchema.getType())) {
-                continue;
-            } else {
-                Type srType = convertColumnType(fieldSchema.getType());
-                Column column = new Column(fieldSchema.getName(), srType, true);
-                fullSchema.add(column);
-            }
+            Type srType = convertColumnType(fieldSchema.getType());
+            Column column = new Column(fieldSchema.getName(), srType, true);
+            fullSchema.add(column);
         }
 
         // Adding some necessary properties to adapt initialization of HiveTable.
