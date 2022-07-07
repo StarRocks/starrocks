@@ -688,7 +688,8 @@ public class Coordinator {
     /**
      * Compute the topological order of the fragment tree.
      * It will divide fragments to several groups.
-     * - All the upstream fragments of the fragments in the i-th group must belong to any j-th group where j<i.
+     * - There is no data dependency among fragments in a group.
+     * - All the upstream fragments of the fragments in a group must belong to the previous groups.
      * - Each group should be delivered sequentially, and fragments in a group can be delivered concurrently.
      * <p>
      * For example, the following tree will produce four groups: [[1], [2, 3, 4], [5, 6], [7]]
