@@ -242,7 +242,7 @@ public class TaskManager {
             return false;
         }
         if (clearPending) {
-            if (!tryTaskRunLock()) {
+            if (!taskRunManager.tryTaskRunLock()) {
                 return false;
             }
             try {
@@ -250,7 +250,7 @@ public class TaskManager {
             } catch (Exception ex) {
                 LOG.warn("failed to kill task.", ex);
             } finally {
-                taskRunUnlock();
+                taskRunManager.taskRunUnlock();
             }
         }
         return taskRunManager.killTaskRun(task.getId());
