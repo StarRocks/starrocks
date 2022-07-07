@@ -308,6 +308,13 @@ struct TExecPlanFragmentResult {
   1: optional Status.TStatus status
 }
 
+struct TExecBatchPlanFragmentsParams {
+  // required in V1
+  1: optional TExecPlanFragmentParams common_param
+  // required in V1
+  2: optional list<TExecPlanFragmentParams> unique_param_per_instance
+}
+
 // CancelPlanFragment
 struct TCancelPlanFragmentParams {
   1: required InternalServiceVersion protocol_version

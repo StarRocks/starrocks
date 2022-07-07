@@ -143,6 +143,7 @@ public:
     size_t increment_num_scan_operators(size_t n) { return _num_scan_operators.fetch_add(n); }
     size_t decrement_num_scan_operators(size_t n) { return _num_scan_operators.fetch_sub(n); }
     PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
+    PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     starrocks::pipeline::DriverExecutor* driver_executor() { return _driver_executor; }
     starrocks::pipeline::DriverExecutor* wg_driver_executor() { return _wg_driver_executor; }
@@ -242,6 +243,7 @@ private:
     PriorityThreadPool* _pipeline_hdfs_scan_io_thread_pool = nullptr;
     std::atomic<size_t> _num_scan_operators{0};
     PriorityThreadPool* _udf_call_pool = nullptr;
+    PriorityThreadPool* _pipeline_prepare_pool = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
     starrocks::pipeline::QueryContextManager* _query_context_mgr = nullptr;
     starrocks::pipeline::DriverExecutor* _driver_executor = nullptr;
