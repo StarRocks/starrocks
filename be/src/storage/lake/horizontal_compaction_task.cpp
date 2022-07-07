@@ -18,6 +18,7 @@
 #include "storage/merge_iterator.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_reader_params.h"
 
 namespace starrocks::lake {
 
@@ -74,6 +75,7 @@ Status HorizontalCompactionTask::execute() {
         read_iter = new_aggregate_iterator(new_heap_merge_iterator(iterators), 0);
     }
     RETURN_IF_ERROR(read_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS));
+    RETURN_IF_ERROR(read_iter->init_output_schema(vectorized::EMPTY_FILTERED_COLUMN_IDS));
     ASSIGN_OR_RETURN(auto writer, _tablet->new_writer());
     RETURN_IF_ERROR(writer->open());
 

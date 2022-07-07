@@ -201,7 +201,7 @@ public:
         //  |   c0   |  INT | YES |  NO  |
         //  |   c1   |  INT | NO  |  NO  |
         auto schema = _tablet_metadata->mutable_schema();
-        schema->set_id(10);
+        schema->set_id(10101);
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(UNIQUE_KEYS);
         schema->set_num_rows_per_row_block(65535);
