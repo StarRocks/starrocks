@@ -28,7 +28,8 @@ public class EmptyStatisticStorage implements StatisticStorage {
     }
 
     @Override
-    public void expireColumnStatistics(Table table, List<String> columns) {
+    public void expireHistogramStatistics(Long tableId, List<String> columns) {
+
     }
 
     @Override

@@ -99,6 +99,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -476,6 +477,8 @@ public class StmtExecutor {
                 handleUnsupportedStmt();
             } else if (parsedStmt instanceof AnalyzeStmt) {
                 handleAnalyzeStmt();
+            } else if (parsedStmt instanceof DropHistogramStmt) {
+                handleDropHistogramStmt();
             } else if (parsedStmt instanceof AddSqlBlackListStmt) {
                 handleAddSqlBlackListStmt();
             } else if (parsedStmt instanceof DelSqlBlackListStmt) {
@@ -827,6 +830,14 @@ public class StmtExecutor {
 
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         statisticExecutor.collectStatistics(collectJob);
+    }
+
+    private void handleDropHistogramStmt() {
+        DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) parsedStmt;
+        OlapTable table = (OlapTable) MetaUtils.getTable(context, dropHistogramStmt.getTableName());
+
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.dropHistogram(table.getId(), dropHistogramStmt.getColumnNames());
     }
 
     private void handleAddSqlBlackListStmt() {

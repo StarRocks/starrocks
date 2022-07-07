@@ -145,9 +145,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
 
     public R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
         return visitStatement(statement, context);
@@ -163,10 +160,6 @@ public abstract class AstVisitor<R, C> {
 
     public R visitBaseViewStatement(BaseViewStmt statement, C context) {
         return visitStatement(statement, context);
-    }
-
-    public R visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, C context) {
-        return visitDDLStatement(statement, context);
     }
 
     public R visitCreateTableStatement(CreateTableStmt statement, C context) {
@@ -315,6 +308,20 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitKillStatement(KillStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ------------------------------------------- Analyze Statement ---------------------------------------------------
+
+    public R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitDropHistogramStatement(DropHistogramStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
