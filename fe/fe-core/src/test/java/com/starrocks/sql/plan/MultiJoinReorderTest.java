@@ -164,7 +164,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
 
         // Top join tree
-        Assert.assertTrue(planFragment.contains("  21:HASH JOIN\n" +
+        assertContains(planFragment, "  21:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 14: v10 = 11: v4\n" +
@@ -172,15 +172,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |----20:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:OlapScanNode\n" +
-                "     TABLE: t3\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     partitions=1/1\n" +
-                "     rollup: t3\n" +
-                "     tabletRatio=3/3\n" +
-                "     tabletList=10033,10035,10037\n" +
-                "     cardinality=1000000000\n" +
-                "     avgRowSize=1.0\n" +
-                "     numNodes=0\n"));
+                "     TABLE: t3\n");
 
         // Left sub join tree (b)
         Assert.assertTrue(planFragment.contains("  19:HASH JOIN\n" +
@@ -357,7 +349,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
 
         // Top join tree
-        Assert.assertTrue(planFragment.contains("  25:HASH JOIN\n" +
+        assertContains(planFragment, "  25:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 14: v10 = 11: v4\n" +
@@ -365,15 +357,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |----24:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:OlapScanNode\n" +
-                "     TABLE: t3\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     partitions=1/1\n" +
-                "     rollup: t3\n" +
-                "     tabletRatio=3/3\n" +
-                "     tabletList=10033,10035,10037\n" +
-                "     cardinality=1000000000\n" +
-                "     avgRowSize=1.0\n" +
-                "     numNodes=0\n"));
+                "     TABLE: t3\n");
 
         // Left sub join tree (b)
         Assert.assertTrue(planFragment, planFragment.contains("  23:HASH JOIN\n" +

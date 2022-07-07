@@ -149,7 +149,7 @@ LEFT SEMI JOIN (join-predicate [2: v2 = 5: v11] post-join-predicate [null])
 select v2, min(v1) from t0 group by v2 having min(v1) in (select v4 from t1 where v5 = v2);
 [result]
 RIGHT SEMI JOIN (join-predicate [5: v4 = 4: min AND 6: v5 = 2: v2] post-join-predicate [null])
-    SCAN (columns[5: v4, 6: v5] predicate[5: v4 IS NOT NULL])
+    SCAN (columns[5: v4, 6: v5] predicate[5: v4 IS NOT NULL AND 6: v5 IS NOT NULL])
     EXCHANGE SHUFFLE[4]
         AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[2: v2]] having [null]
             EXCHANGE SHUFFLE[2]
@@ -161,7 +161,7 @@ RIGHT SEMI JOIN (join-predicate [5: v4 = 4: min AND 6: v5 = 2: v2] post-join-pre
 select v2, min(v1) from t0 group by v2 having min(v1) in (select v4 from t1 where v5 = v2 and v2 < v6);
 [result]
 RIGHT SEMI JOIN (join-predicate [5: v4 = 4: min AND 6: v5 = 2: v2 AND 2: v2 < 7: v6] post-join-predicate [null])
-    SCAN (columns[5: v4, 6: v5, 7: v6] predicate[5: v4 IS NOT NULL])
+    SCAN (columns[5: v4, 6: v5, 7: v6] predicate[5: v4 IS NOT NULL AND 6: v5 IS NOT NULL])
     EXCHANGE SHUFFLE[4]
         AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[2: v2]] having [null]
             EXCHANGE SHUFFLE[2]
@@ -173,7 +173,7 @@ RIGHT SEMI JOIN (join-predicate [5: v4 = 4: min AND 6: v5 = 2: v2 AND 2: v2 < 7:
 select v2, min(v1) from t0 group by v2 having v2 in (select v4 from t1 where v5 = v2);
 [result]
 RIGHT SEMI JOIN (join-predicate [5: v4 = 2: v2 AND 6: v5 = 2: v2] post-join-predicate [null])
-    SCAN (columns[5: v4, 6: v5] predicate[5: v4 IS NOT NULL])
+    SCAN (columns[5: v4, 6: v5] predicate[5: v4 IS NOT NULL AND 6: v5 IS NOT NULL])
     EXCHANGE SHUFFLE[2]
         AGGREGATE ([GLOBAL] aggregate [{4: min=min(4: min)}] group by [[2: v2]] having [null]
             EXCHANGE SHUFFLE[2]

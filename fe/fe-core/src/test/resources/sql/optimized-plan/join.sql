@@ -190,7 +190,7 @@ select t1f from test_all_type left semi join (select v1,v2 from t0 order by v1) 
 [result]
 RIGHT SEMI JOIN (join-predicate [14: cast = 6: t1f] post-join-predicate [null])
     EXCHANGE SHUFFLE[14]
-        SCAN (columns[12: v2] predicate[null])
+        SCAN (columns[12: v2] predicate[cast(12: v2 as double) IS NOT NULL])
     EXCHANGE SHUFFLE[6]
         SCAN (columns[6: t1f] predicate[null])
 [end]

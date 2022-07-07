@@ -1947,13 +1947,13 @@ public class JoinTest extends PlanTestBase {
                 "WHERE ((t0.v2) BETWEEN (CAST(subt3.v11 AS STRING)) AND (t0.v2)) = (t1.v4);";
         String plan = getFragmentPlan(sql);
         // check no exception
-        assertContains(plan, "  11:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "  10:AGGREGATE (update finalize)\n" +
                 "  |  group by: 1: v4\n" +
                 "  |  \n" +
-                "  10:Project\n" +
+                "  9:Project\n" +
                 "  |  <slot 1> : 1: v4\n" +
                 "  |  \n" +
-                "  9:HASH JOIN\n" +
+                "  8:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v4 = 10: cast");
