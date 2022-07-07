@@ -313,7 +313,7 @@ public class MaterializedViewAnalyzer {
                 List<SlotRef> slotRefs = Lists.newArrayList();
                 expr.collect(SlotRef.class, slotRefs);
                 Preconditions.checkState(slotRefs.size() == 1);
-                return slotRefs.size() > 0 ? slotRefs.get(0) : null;
+                return slotRefs.get(0);
             }
         }
 
