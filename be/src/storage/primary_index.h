@@ -98,6 +98,8 @@ public:
 
     std::string to_string() const;
 
+    bool enable_persistent_index() { return _persistent_index != nullptr; }
+
 private:
     void _set_schema(const vectorized::Schema& pk_schema);
 
