@@ -288,8 +288,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     std::vector<ExecNode*> scan_nodes;
     plan->collect_scan_nodes(&scan_nodes);
 
-    int64_t sum_limit = 0;
-    int64_t underlying_scan_limit = 0;
+    int64_t sum_scan_limit = 0;
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
     for (auto& i : scan_nodes) {
         auto* scan_node = down_cast<ScanNode*>(i);
@@ -305,17 +304,17 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             olap_scan->enable_shared_scan(enable_shared_scan);
         }
         if (scan_node->limit() > 0) {
-            sum_limit += scan_node->limit();
-            int parallelism = dop * ScanOperator::MAX_IO_TASKS_PER_OP;
-            underlying_scan_limit += scan_node->limit() * parallelism;
+            sum_scan_limit += scan_node->limit();
         }
     }
 
     if (_wg && _wg->big_query_scan_rows_limit() > 0) {
         // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
         // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
-        if (sum_limit <= _wg->big_query_scan_rows_limit()) {
-            _query_ctx->set_scan_limit(underlying_scan_limit);
+        if (sum_scan_limit <= _wg->big_query_scan_rows_limit()) {
+            int parallelism = dop * ScanOperator::MAX_IO_TASKS_PER_OP;
+            int64_t parallel_scan_limit = sum_scan_limit * parallelism;
+            _query_ctx->set_scan_limit(parallel_scan_limit);
         } else {
             _query_ctx->set_scan_limit(_wg->big_query_scan_rows_limit());
         }
