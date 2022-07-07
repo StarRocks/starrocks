@@ -25,6 +25,7 @@ jobs:
       with:
         workflow: review-pr-trigger.yml
         pr: ${{ steps.source-run-info.outputs.pullRequestNumber }}
+        path: ${{ github.workspace }}
 
     - name: Read Properties
       id: read_property
