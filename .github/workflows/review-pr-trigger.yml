@@ -10,19 +10,23 @@ jobs:
 #      approved: ${{ steps.approved.outputs.approved }}
       
       
-    steps:
-    - name: Label when approved
-      uses: abinoda/label-when-approved-action@master
+    steps:       
+    - uses: taichi/approved-event-action@v1.2.1
+      id: approved
+      with:
+        approvals: '2'
       env:
-        APPROVALS: "2"
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        ADD_LABEL: "approved"
+        ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
         
-#    - uses: taichi/approved-event-action@v1.2.1
-#      id: approved
-#      with:
-#        approvals: '2'
-#      env:
-#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#        ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
-
+    - name: create-json
+      id: create-json
+      uses: jsdaniell/create-json@1.1.2
+      with:
+        name: "approval.json"
+        json: '{ "${{ github.event.number }}": "${{ steps.approved.outputs.approved }}" }'
+        
+    - uses: actions/upload-artifact@v3
+      with:
+        name: review
+        path: ./"approval.json"
