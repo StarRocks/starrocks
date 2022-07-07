@@ -26,7 +26,10 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -37,6 +40,12 @@ public class ShardDelete extends MasterDaemon implements Writable {
     @SerializedName(value = "shardIds")
     private Set<Long> shardIds = Sets.newHashSet();
 
+    private Map<Long, Set<Long>> shardIdsByBeMap;
+
+    public ShardDelete() {
+        shardIdsByBeMap = new HashMap<>();
+    }
+
     public void addShardId(Set<Long> tableIds) {
         // for debug
         LOG.info("add shardId {} in ShardDelete", tableIds);
@@ -46,57 +55,74 @@ public class ShardDelete extends MasterDaemon implements Writable {
     private void deleteShard() {
         // delete shard and drop lakeTablet
         if (shardIds.isEmpty()) {
+            // for debug
+            LOG.info("shardIds in deleteShard() is empty.");
             return;
         }
 
-        // 1. drop tablet
-        boolean finished = true;
-        try {
-            TNetworkAddress address = new TNetworkAddress();
-
-            long backendId = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getPrimaryBackendIdByShard(shardIds.stream().peek());
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-            address.setHostname(backend.getHost());
-            address.setPort(backend.getBrpcPort());
-            LakeService lakeService = BrpcProxy.getInstance().getLakeService(address);
-
-            DropTabletRequest request = new DropTabletRequest();
-            List<Long> tabletIds = new ArrayList<>(shardIds);
-            request.tabletIds = tabletIds;
-
-            Future<DropTabletResponse> responseFuture = lakeService.dropTablet(request);
-
+        // group shards by be
+        for (long shardId : shardIds) {
             try {
-                DropTabletResponse response = responseFuture.get();
-                if (!response.failedTablets.isEmpty()) {
-                    finished = false;
-                }
-            } catch (ExecutionException | InterruptedException e) {
-                LOG.error(e);
-                finished = false;
+                long backendId = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                        .getPrimaryBackendIdByShard(shardId);
+                shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
+            } catch (UserException e) {
+                continue;
+            }
+        }
+
+        Iterator<Map.Entry<Long, Set<Long>>> it = shardIdsByBeMap.entrySet().iterator();
+        while (it.hasNext()) {
+            boolean finished = true;
+            Map.Entry<Long, Set<Long>> entry = it.next();
+            long backendId = entry.getKey();
+            Set<Long> shards = entry.getValue();
+
+            // 2. delete shard
+            try {
+                GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(shards);
+            } catch (DdlException e) {
+                LOG.warn("failed to delete shard from starMgr");
+                continue;
             }
 
-        } catch (UserException e) {
-            LOG.warn("failed to get primary backendId");
-            finished = false;
-        }
+            // 1. drop tablet
+            {
+                TNetworkAddress address = new TNetworkAddress();
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                address.setHostname(backend.getHost());
+                address.setPort(backend.getBrpcPort());
+                LakeService lakeService = BrpcProxy.getInstance().getLakeService(address);
 
-        // 2. delete shard
-        try {
-            GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(shardIds);
-        } catch (DdlException e) {
-            LOG.warn("failed to delete shard from starMgr");
-            return;
-        }
+                DropTabletRequest request = new DropTabletRequest();
+                List<Long> tabletIds = new ArrayList<>(shards);
+                request.tabletIds = tabletIds;
 
-        // 3.succ both, remove from the map
-        if (finished == true) {
-            // for debug
-            LOG.info("delete shard {} and drop lake tablet succ.", shardIds);
-            // TODO: log the batch remove op in Edit log
-            GlobalStateMgr.getCurrentState().getEditLog().logRemoveDeleteShard(shardIds);
-            shardIds.clear();
+                Future<DropTabletResponse> responseFuture = lakeService.dropTablet(request);
+
+                try {
+                    DropTabletResponse response = responseFuture.get();
+                    if (!response.failedTablets.isEmpty()) {
+                        finished = false;
+                    } else {
+                        // for debug
+                        LOG.info("drop tablet on BE succ.");
+                    }
+                } catch (ExecutionException | InterruptedException e) {
+                    LOG.error(e);
+                    finished = false;
+                }
+            }
+
+
+            // 3. succ both, remove from the map
+            if (finished == true) {
+                // for debug
+                LOG.info("delete shard {} and drop lake tablet succ.", shards);
+                // TODO: log the batch remove op in Edit log
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveDeleteShard(shards);
+                shards.clear();
+            }
         }
     }
 
