@@ -1221,6 +1221,36 @@ TEST_F(AggregateTest, test_bitmap_intersect) {
     ASSERT_EQ("1", result_column->get_pool()[0].to_string());
 }
 
+TEST_F(AggregateTest, test_histogram) {
+    const AggregateFunction* histogram_function = get_aggregate_function("histogram", TYPE_BIGINT, TYPE_VARCHAR, true);
+    auto state = ManagedAggrState::create(ctx, histogram_function);
+
+    auto data_column = gen_input_column1<int64_t>();
+    auto const1 = ColumnHelper::create_const_column<TYPE_INT>(data_column->size(), data_column->size());
+    auto const2 = ColumnHelper::create_const_column<TYPE_INT>(data_column->size(), data_column->size());
+    auto const3 = ColumnHelper::create_const_column<TYPE_INT>(10, data_column->size());
+
+    std::vector<const Column*> raw_columns;
+    raw_columns.resize(4);
+    raw_columns[0] = data_column.get();
+    raw_columns[1] = const1.get();
+    raw_columns[2] = const2.get();
+    raw_columns[3] = const3.get();
+    for (int i = 0; i < data_column->size(); ++i) {
+        histogram_function->update(ctx, raw_columns.data(), state->state(), i);
+    }
+
+    auto result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    histogram_function->finalize_to_column(ctx, state->state(), result_column.get());
+    ASSERT_EQ(
+            "['{ \"buckets\" : "
+            "[[\"0\",\"101\",\"102\",\"1\"],[\"102\",\"203\",\"204\",\"1\"],[\"204\",\"305\",\"306\",\"1\"],[\"306\","
+            "\"407\",\"408\",\"1\"],[\"408\",\"509\",\"510\",\"1\"],[\"510\",\"611\",\"612\",\"1\"],[\"612\",\"713\","
+            "\"714\",\"1\"],[\"714\",\"815\",\"816\",\"1\"],[\"816\",\"917\",\"918\",\"1\"],[\"918\",\"1019\",\"1020\","
+            "\"1\"],[\"1020\",\"200\",\"1026\",\"1\"]] }']",
+            result_column->debug_string());
+}
+
 TEST_F(AggregateTest, test_bitmap_intersect_nullable) {
     const AggregateFunction* group_concat_function =
             get_aggregate_function("bitmap_intersect", TYPE_OBJECT, TYPE_OBJECT, true);
