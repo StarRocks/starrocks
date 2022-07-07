@@ -251,6 +251,8 @@ public:
 
     bool is_global_dict_valid() override { return _scalar_column_writer->is_global_dict_valid(); }
 
+    Status check_string_lengths(const vectorized::Column& column);
+
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
     bool _is_speculated = false;
@@ -878,6 +880,7 @@ StringColumnWriter::StringColumnWriter(const ColumnWriterOptions& opts, std::uni
         : ColumnWriter(std::move(field), opts.meta->is_nullable()), _scalar_column_writer(std::move(column_writer)) {}
 
 Status StringColumnWriter::append(const vectorized::Column& column) {
+    RETURN_IF_ERROR(check_string_lengths(column));
     if (_is_speculated) {
         return _scalar_column_writer->append(column);
     }
@@ -956,6 +959,17 @@ Status StringColumnWriter::finish() {
     }
 
     return _scalar_column_writer->finish();
+}
+
+Status StringColumnWriter::check_string_lengths(const vectorized::Column& column) {
+    size_t limit = get_field()->length();
+    const Slice* slices = (const Slice*)column.raw_data();
+    for (size_t i = 0; i < column.size(); i++) {
+        if (slices[i].get_size() > limit) {
+            return Status::InvalidArgument(fmt::format("string length({}) > limit({})", slices[i].get_size(), limit));
+        }
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::segment_v2

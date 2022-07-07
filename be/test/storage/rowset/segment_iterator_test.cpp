@@ -87,6 +87,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
 
     TabletColumn c1 = create_int_key(1);
     TabletColumn c2 = create_with_default_value<OLAP_FIELD_TYPE_VARCHAR>("");
+    c2.set_length(128);
 
     TabletSchema tablet_schema = create_schema({c1, c2});
 
