@@ -3,18 +3,29 @@ name: Label when reviewed
 on: pull_request_review
 permissions:
   pull-requests: write
+  checks: write
+  contents: read
 jobs:
   label-when-reviewed:
     name: "Label PRs when reviewed"
     runs-on: ubuntu-latest
-    outputs:
-      approved: ${{ steps.approved.outputs.approved }}
+#    outputs:
+#      approved: ${{ steps.approved.outputs.approved }}
+      
+      
     steps:
-    - uses: taichi/approved-event-action@v1.2.1
-      id: approved
-      with:
-        approvals: '2'
+    - name: Label when approved
+      uses: pullreminders/label-when-approved-action@master
       env:
+        APPROVALS: "2"
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
+        ADD_LABEL: "approved"
+        
+#    - uses: taichi/approved-event-action@v1.2.1
+#      id: approved
+#      with:
+#        approvals: '2'
+#      env:
+#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
 
