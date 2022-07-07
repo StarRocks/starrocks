@@ -1,7 +1,8 @@
 name: Label when reviewed
 
 on: pull_request_review
-
+permissions:
+  pull-requests: write
 jobs:
   label-when-reviewed:
     name: "Label PRs when reviewed"
