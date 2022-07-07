@@ -42,7 +42,7 @@
 namespace starrocks {
 
 using PromiseStatus = std::promise<Status>;
-using PromiseStatusPtr = std::unique_ptr<PromiseStatus>;
+using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
 
 template <typename T>
 PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
@@ -214,15 +214,15 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) 
 template <typename T>
 Status PInternalServiceImplBase<T>::_exec_batch_plan_fragments(brpc::Controller* cntl) {
     auto ser_request = cntl->request_attachment().to_string();
-    TExecBatchPlanFragmentsParams t_batch_requests;
+    std::shared_ptr<TExecBatchPlanFragmentsParams> t_batch_requests = std::make_shared<TExecBatchPlanFragmentsParams>();
     {
         const uint8_t* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
-        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_batch_requests));
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_batch_requests.get()));
     }
 
-    auto& common_request = t_batch_requests.common_param;
-    auto& unique_requests = t_batch_requests.unique_param_per_instance;
+    auto& common_request = t_batch_requests->common_param;
+    auto& unique_requests = t_batch_requests->unique_param_per_instance;
 
     if (unique_requests.empty()) {
         return Status::OK();
@@ -232,7 +232,7 @@ Status PInternalServiceImplBase<T>::_exec_batch_plan_fragments(brpc::Controller*
     // and prepare the other fragment instances concurrently using the cached desc_tbl.
     common_request.desc_tbl.__set_is_cached(true);
 
-    std::vector<PromiseStatusPtr> promise_statuses;
+    std::vector<PromiseStatusSharedPtr> promise_statuses;
     for (int i = 1; i < unique_requests.size(); ++i) {
         auto& unique_request = unique_requests[i];
         LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(unique_request.params.fragment_instance_id)
@@ -240,26 +240,25 @@ Status PInternalServiceImplBase<T>::_exec_batch_plan_fragments(brpc::Controller*
                   << ", is_pipeline=1"
                   << ", chunk_size=" << common_request.query_options.batch_size;
 
-        PromiseStatusPtr ms = std::make_unique<PromiseStatus>();
-        _exec_env->pipeline_prepare_pool()->offer([promise = ms.get(), this, &common_request, &unique_request] {
-            promise->set_value(_exec_plan_fragment_by_pipeline(common_request, unique_request));
+        PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
+        _exec_env->pipeline_prepare_pool()->offer([ms, t_batch_requests, i, this] {
+            ms->set_value(_exec_plan_fragment_by_pipeline(t_batch_requests->common_param,
+                                                          t_batch_requests->unique_param_per_instance[i]));
         });
         promise_statuses.emplace_back(std::move(ms));
     }
 
-    Status result_status = Status::OK();
     for (auto& promise : promise_statuses) {
-        Status status = promise->get_future().get();
-        if (result_status.ok() && !status.ok()) {
-            result_status = status;
-        }
+        // When a preparation fails, return error immediately. The other unfinished preparation is safe,
+        // since they can use the shared pointer of promise and t_batch_requests.
+        RETURN_IF_ERROR(promise->get_future().get());
     }
 
-    return result_status;
+    return Status::OK();
 }
 
 template <typename T>
-Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(TExecPlanFragmentParams& t_common_param,
+Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_param,
                                                                     const TExecPlanFragmentParams& t_unique_request) {
     auto fragment_executor = std::make_unique<starrocks::pipeline::FragmentExecutor>();
     auto status = fragment_executor->prepare(_exec_env, t_common_param, t_unique_request);

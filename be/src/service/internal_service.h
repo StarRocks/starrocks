@@ -88,7 +88,7 @@ public:
 private:
     Status _exec_plan_fragment(brpc::Controller* cntl);
     Status _exec_batch_plan_fragments(brpc::Controller* cntl);
-    Status _exec_plan_fragment_by_pipeline(TExecPlanFragmentParams& t_common_request,
+    Status _exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_request,
                                            const TExecPlanFragmentParams& t_unique_request);
     Status _exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request);
 

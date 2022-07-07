@@ -797,11 +797,11 @@ public class Coordinator {
                             continue;
                         }
 
-                        Set<TUniqueId> instanceIds = requests.stream()
+                        Set<TUniqueId> curInstanceIds = requests.stream()
                                 .map(FInstanceExecParam::getInstanceId)
                                 .collect(Collectors.toSet());
                         TExecBatchPlanFragmentsParams tRequest =
-                                params.toThriftInBatch(instanceIds, host, descTable, dbIds);
+                                params.toThriftInBatch(curInstanceIds, host, descTable, dbIds);
                         TExecPlanFragmentParams tCommonParams = tRequest.getCommon_param();
                         List<TExecPlanFragmentParams> tUniqueParamsList = tRequest.getUnique_param_per_instance();
                         Preconditions.checkState(!tUniqueParamsList.isEmpty());
