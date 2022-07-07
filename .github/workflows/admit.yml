@@ -2,12 +2,12 @@ name: Trigger Jobs
 
 on:
   pull_request:
-    types: labeled
+    types: [labeled, synchronize, reopened]
 #  pull_request_review:
 
 jobs:
   Trigger-Admit-Test:
-    if: ${{ github.event.label.name == 'Approved' }}
+    if: contains(github.event.pull_request.labels.*.name, 'Approved')
     runs-on: ubuntu-latest
     steps:
       - name: Trigger admit job
