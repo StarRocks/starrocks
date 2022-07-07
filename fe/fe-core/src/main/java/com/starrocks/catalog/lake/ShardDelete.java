@@ -78,14 +78,6 @@ public class ShardDelete extends MasterDaemon implements Writable {
             long backendId = entry.getKey();
             Set<Long> shards = entry.getValue();
 
-            // 2. delete shard
-            try {
-                GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(shards);
-            } catch (DdlException e) {
-                LOG.warn("failed to delete shard from starMgr");
-                continue;
-            }
-
             // 1. drop tablet
             {
                 TNetworkAddress address = new TNetworkAddress();
@@ -102,7 +94,9 @@ public class ShardDelete extends MasterDaemon implements Writable {
 
                 try {
                     DropTabletResponse response = responseFuture.get();
-                    if (!response.failedTablets.isEmpty()) {
+                    if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
+                        // for debug
+                        LOG.info("failedTablets is {}", response.failedTablets);
                         finished = false;
                     } else {
                         // for debug
@@ -114,6 +108,18 @@ public class ShardDelete extends MasterDaemon implements Writable {
                 }
             }
 
+            // 2. delete shard
+            try {
+                // get shard first
+                List<Long> tabletIds = new ArrayList<>(shards);
+                GlobalStateMgr.getCurrentState().getStarOSAgent().getShards(tabletIds);
+                GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(shards);
+                // for debug
+                LOG.info("delete shards {} succ.", shards);
+            } catch (DdlException e) {
+                LOG.warn("failed to delete shard from starMgr");
+                continue;
+            }
 
             // 3. succ both, remove from the map
             if (finished == true) {
@@ -121,7 +127,8 @@ public class ShardDelete extends MasterDaemon implements Writable {
                 LOG.info("delete shard {} and drop lake tablet succ.", shards);
                 // TODO: log the batch remove op in Edit log
                 GlobalStateMgr.getCurrentState().getEditLog().logRemoveDeleteShard(shards);
-                shards.clear();
+                it.remove();
+                shardIds.removeAll(shards);
             }
         }
     }
