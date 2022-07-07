@@ -16,3 +16,10 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
+        
+    - name: PR comment with reactions
+      uses: thollander/actions-comment-pull-request@v1
+      with:
+        message: |
+          run starrocks_admit_test
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
