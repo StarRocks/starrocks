@@ -21,7 +21,6 @@ namespace starrocks::vectorized {
 class RuntimeFilterProbeCollector;
 
 struct HdfsScanStats {
-    int64_t scan_ns = 0;
     int64_t raw_rows_read = 0;
     int64_t num_rows_read = 0;
     int64_t expr_filter_ns = 0;
