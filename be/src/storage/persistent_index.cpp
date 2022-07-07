@@ -332,8 +332,7 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_
 
 StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(size_t kv_size,
                                                                                const std::vector<KVRef>& kv_refs,
-                                                                               size_t npage_hint) {
-    size_t npage = npage_hint;
+                                                                               size_t npage) {
     size_t bucket_size_limit = std::min(bucket_size_max, (page_size - page_header_size) / (kv_size + 1));
     size_t nbucket = npage * bucket_per_page;
     std::vector<uint8_t> bucket_sizes(nbucket);
