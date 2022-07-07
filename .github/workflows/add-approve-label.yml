@@ -24,7 +24,7 @@ jobs:
     - uses: actions/download-artifact@v3
       with:
         name: review
-        path: ${{ github.workspace }}/approval.json
+        path: ${{ github.workspace }}
 
     - name: Read Properties
       id: read_property
