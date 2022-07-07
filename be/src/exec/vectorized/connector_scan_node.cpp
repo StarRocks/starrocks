@@ -170,8 +170,8 @@ Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
     // init chunk pool
     _pending_scanners.reverse();
     _num_scanners = _pending_scanners.size();
-    _chunks_per_scanner = config::doris_scanner_row_num / state->chunk_size();
-    _chunks_per_scanner += static_cast<int>(config::doris_scanner_row_num % state->chunk_size() != 0);
+    _chunks_per_scanner = config::scanner_row_num / state->chunk_size();
+    _chunks_per_scanner += static_cast<int>(config::scanner_row_num % state->chunk_size() != 0);
     int concurrency = std::min<int>(config::max_hdfs_scanner_num, _num_scanners);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
@@ -371,7 +371,7 @@ void ConnectorScanNode::_scanner_thread(ConnectorScanner* scanner) {
     scanner->set_keep_priority(false);
 
     bool resubmit = false;
-    int64_t raw_rows_threshold = scanner->raw_rows_read() + config::doris_scanner_row_num;
+    int64_t raw_rows_threshold = scanner->raw_rows_read() + config::scanner_row_num;
 
     ChunkPtr chunk = nullptr;
 

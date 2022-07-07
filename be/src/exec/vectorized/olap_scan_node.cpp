@@ -246,7 +246,7 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
     // judge if we need to yield. So we record all raw data read in this round
     // scan, if this exceed threshold, we yield this thread.
     bool resubmit = false;
-    int64_t raw_rows_threshold = scanner->raw_rows_read() + config::doris_scanner_row_num;
+    int64_t raw_rows_threshold = scanner->raw_rows_read() + config::scanner_row_num;
     while (status.ok()) {
         ChunkPtr chunk;
         {
@@ -447,7 +447,7 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
     if (query_options.__isset.max_scan_key_num && query_options.max_scan_key_num > 0) {
         max_scan_key_num = query_options.max_scan_key_num;
     } else {
-        max_scan_key_num = config::doris_max_scan_key_num;
+        max_scan_key_num = config::max_scan_key_num;
     }
     bool scan_keys_unlimited = (limit() == -1);
     bool enable_column_expr_predicate = false;
@@ -614,8 +614,8 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     }
     _pending_scanners.reverse();
     _num_scanners = _pending_scanners.size();
-    _chunks_per_scanner = config::doris_scanner_row_num / runtime_state()->chunk_size();
-    _chunks_per_scanner += (config::doris_scanner_row_num % runtime_state()->chunk_size() != 0);
+    _chunks_per_scanner = config::scanner_row_num / runtime_state()->chunk_size();
+    _chunks_per_scanner += (config::scanner_row_num % runtime_state()->chunk_size() != 0);
     // TODO: dynamic submit stragety
     int concurrency = _scanner_concurrency();
     COUNTER_SET(_task_concurrency, (int64_t)concurrency);
