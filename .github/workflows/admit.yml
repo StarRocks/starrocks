@@ -7,11 +7,10 @@ on:
 
 jobs:
   Trigger-Admit-Test:
-    if: ${{ github.event.review.state == 'Approved' }}
+    if: ${{ github.event.label.name == 'Approved' }}
     runs-on: ubuntu-latest
     steps:
       - name: Trigger admit job
-        if: ${{ steps.approved.outputs.approved == 'true' }}
         uses: jabbukka/jenkins-trigger@main
         with:
           url: http://39.101.206.100:8090/
