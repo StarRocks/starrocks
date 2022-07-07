@@ -687,23 +687,42 @@ public class Coordinator {
 
     /**
      * Compute the topological order of the fragment tree.
+     * It will divide fragments to several groups.
+     * - All the upstream fragments of the fragments in the i-th group must belong to any j-th group where j<i.
+     * - Each group should be delivered sequentially, and fragments in a group can be delivered concurrently.
+     * <p>
+     * For example, the following tree will produce four groups: [[1], [2, 3, 4], [5, 6], [7]]
+     *         1
+     *         │
+     *    ┌────┼────┐
+     *    │    │    │
+     *    2    3    4
+     *    │    │    │
+     * ┌──┴─┐  │    │
+     * │    │  │    │
+     * 5    6  │    │
+     *      │  │    │
+     *      └──┼────┘
+     *         │
+     *         7
      *
-     * @return multiple fragment groups. Each group should be delivered sequentially,
-     * and fragments in a group can be delivered concurrently.
+     * @return multiple fragment groups.
      */
     private List<List<PlanFragment>> computeTopologicalOrderFragments() {
         Queue<PlanFragment> queue = Lists.newLinkedList();
         Map<PlanFragment, Integer> inDegrees = Maps.newHashMap();
 
         PlanFragment root = fragments.get(0);
+
+        // Compute in-degree of each fragment by BFS.
         inDegrees.put(root, 0);
         queue.add(root);
-        // Compute in-degree of each fragment.
         while (!queue.isEmpty()) {
             PlanFragment fragment = queue.poll();
             for (PlanFragment child : fragment.getChildren()) {
                 Integer v = inDegrees.get(child);
                 if (v != null) {
+                    // Has added this child to queue before, don't add again.
                     inDegrees.put(child, v + 1);
                 } else {
                     inDegrees.put(child, 1);
@@ -743,9 +762,14 @@ public class Coordinator {
                     }
                 }
             }
+
             results.add(curResults);
         }
-        Preconditions.checkState(fragments.size() == numOutputFragments);
+
+        if (fragments.size() != numOutputFragments) {
+            throw new StarRocksPlannerException("There are some circles in the fragment tree",
+                    ErrorType.INTERNAL_ERROR);
+        }
 
         return results;
     }
@@ -2659,9 +2683,9 @@ public class Coordinator {
          * - params.per_node_scan_ranges
          * - fragment.output_sink (only for MultiCastDataStreamSink and ExportSink)
          *
-         * @param uniqueParams           The destination unique thrift params.
-         * @param fragmentIndex          The index of this instance in this.instanceExecParams.
-         * @param instanceExecParam      The instance param.
+         * @param uniqueParams         The destination unique thrift params.
+         * @param fragmentIndex        The index of this instance in this.instanceExecParams.
+         * @param instanceExecParam    The instance param.
          * @param enablePipelineEngine Whether enable pipeline engine.
          */
         private void toThriftForUniqueParams(TExecPlanFragmentParams uniqueParams, int fragmentIndex,
@@ -2677,18 +2701,18 @@ public class Coordinator {
                 }
             }
 
-            // add instance number in file name prefix when export job
+            /// Set thrift fragment with the unique fields.
+
+            // Add instance number in file name prefix when export job.
             if (fragment.getSink() instanceof ExportSink) {
                 ExportSink exportSink = (ExportSink) fragment.getSink();
                 if (exportSink.getFileNamePrefix() != null) {
                     exportSink.setFileNamePrefix(exportSink.getFileNamePrefix() + fragmentIndex + "_");
                 }
             }
-
             if (!uniqueParams.isSetFragment()) {
                 uniqueParams.setFragment(fragment.toThriftForUniqueFields());
             }
-
             /*
              * For MultiCastDataFragment, output only send to local, and the instance is keep
              * same with MultiCastDataFragment
@@ -2712,7 +2736,6 @@ public class Coordinator {
             if (!uniqueParams.isSetParams()) {
                 uniqueParams.setParams(new TPlanFragmentExecParams());
             }
-            uniqueParams.params.setQuery_id(queryId);
             uniqueParams.params.setFragment_instance_id(instanceExecParam.instanceId);
 
             Map<Integer, List<TScanRangeParams>> scanRanges = instanceExecParam.perNodeScanRanges;
@@ -2751,6 +2774,10 @@ public class Coordinator {
 
             if (!fragmentExecParams.isSetPer_exch_num_senders()) {
                 fragmentExecParams.setPer_exch_num_senders(Maps.newHashMap());
+            }
+
+            if (!fragmentExecParams.isSetQuery_id()) {
+                fragmentExecParams.setQuery_id(new TUniqueId(0, 0));
             }
         }
 

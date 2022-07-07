@@ -265,6 +265,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PREFER_COMPUTE_NODE)
     private boolean preferComputeNode = false;
 
+    /**
+     * If enable this variable (only take effect for pipeline), it will deliver fragment instances
+     * to BE in batch and concurrently.
+     * - Uses `exec_batch_plan_fragments` instead of `exec_plan_fragment` RPC API, which all the instances
+     *   of a fragment to the same destination host are delivered in the same request.
+     * - Send different fragments concurrently according to topological order of the fragment tree
+     */
     @VariableMgr.VarAttr(name = ENABLE_DELIVER_BATCH_FRAGMENTS)
     private boolean enableDeliverBatchFragments = true;
 
