@@ -21,10 +21,10 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         sourceRunId: ${{ github.event.workflow_run.id }}
 
-    - uses: actions/download-artifact@v3
+    - uses: dawidd6/action-download-artifact@v2
       with:
-        name: review
-        path: ${{ github.workspace }}
+        workflow: review-pr-trigger.yml
+        pr: ${{ steps.source-run-info.outputs.pullRequestNumber }}
 
     - name: Read Properties
       id: read_property
