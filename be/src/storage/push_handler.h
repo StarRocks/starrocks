@@ -30,6 +30,7 @@ public:
     void print_profile();
 
     Status close() {
+        _scanner->close();
         _ready = false;
         return Status::OK();
     }

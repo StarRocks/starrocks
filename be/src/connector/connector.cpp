@@ -3,6 +3,7 @@
 #include "connector/connector.h"
 
 #include "connector/es_connector.h"
+#include "connector/file_connector.h"
 #include "connector/hive_connector.h"
 #include "connector/jdbc_connector.h"
 #include "connector/lake_connector.h"
@@ -31,6 +32,7 @@ const std::string Connector::HIVE = "hive";
 const std::string Connector::ES = "es";
 const std::string Connector::JDBC = "jdbc";
 const std::string Connector::MYSQL = "mysql";
+const std::string Connector::FILE = "file";
 const std::string Connector::LAKE = "lake";
 
 class ConnectorManagerInit {
@@ -41,6 +43,7 @@ public:
         cm->put(Connector::ES, std::make_unique<ESConnector>());
         cm->put(Connector::JDBC, std::make_unique<JDBCConnector>());
         cm->put(Connector::MYSQL, std::make_unique<MySQLConnector>());
+        cm->put(Connector::FILE, std::make_unique<FileConnector>());
         cm->put(Connector::LAKE, std::make_unique<LakeConnector>());
     }
 };
