@@ -37,6 +37,7 @@ import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -553,6 +554,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitGroupByClause(GroupByClause node, C context) {
         return null;
+    }
+
+    public R visitDescTableStmt(DescribeStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
 }

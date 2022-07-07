@@ -22,37 +22,17 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.catalog.MysqlTable;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.common.proc.ProcService;
-import com.starrocks.common.proc.TableProcDir;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.server.GlobalStateMgr;
-import org.apache.commons.lang.StringUtils;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 public class DescribeStmt extends ShowStmt {
 
@@ -89,7 +69,7 @@ public class DescribeStmt extends ShowStmt {
                     .build();
 
     // empty col num equals to DESC_OLAP_TABLE_ALL_META_DATA.size()
-    private static final List<String> EMPTY_ROW = initEmptyRow();
+    public static final List<String> EMPTY_ROW = initEmptyRow();
 
     private TableName dbTableName;
     private ProcNodeInterface node;
@@ -110,158 +90,40 @@ public class DescribeStmt extends ShowStmt {
         return isAllTables;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        dbTableName.analyze(analyzer);
-
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbTableName.getDb(),
-                dbTableName.getTbl(), PrivPredicate.SHOW)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "DESCRIBE",
-                    ConnectContext.get().getQualifiedUser(),
-                    ConnectContext.get().getRemoteIP(),
-                    dbTableName.getTbl());
-        }
-
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbTableName.getDb());
-        if (db == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbTableName.getDb());
-        }
-        db.readLock();
-        try {
-            Table table = db.getTable(dbTableName.getTbl());
-            //if getTable not find table, may be is statement "desc materialized-view-name"
-            if (table == null) {
-                for (Table tb : db.getTables()) {
-                    if (tb.getType() == Table.TableType.OLAP) {
-                        OlapTable olapTable = (OlapTable) tb;
-                        for (MaterializedIndex mvIdx : olapTable.getVisibleIndex()) {
-                            if (olapTable.getIndexNameById(mvIdx.getId()).equalsIgnoreCase(dbTableName.getTbl())) {
-                                List<Column> columns = olapTable.getIndexIdToSchema().get(mvIdx.getId());
-                                for (Column column : columns) {
-                                    // Extra string (aggregation and bloom filter)
-                                    List<String> extras = Lists.newArrayList();
-                                    if (column.getAggregationType() != null &&
-                                            olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
-                                        extras.add(column.getAggregationType().name());
-                                    }
-                                    String defaultStr = column.getMetaDefaultValue(extras);
-                                    String extraStr = StringUtils.join(extras, ",");
-                                    List<String> row = Arrays.asList(
-                                            column.getDisplayName(),
-                                            column.getType().canonicalName(),
-                                            column.isAllowNull() ? "Yes" : "No",
-                                            ((Boolean) column.isKey()).toString(),
-                                            defaultStr,
-                                            extraStr);
-                                    totalRows.add(row);
-                                }
-                                isMaterializedView = true;
-                                return;
-                            }
-                        }
-                    }
-                }
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, dbTableName.getTbl());
-            }
-
-            if (table.getType() == TableType.HIVE || table.getType() == TableType.HUDI || table.getType() == TableType.ICEBERG) {
-                // Reuse the logic of `desc <table_name>` because hive/hudi/iceberg external table doesn't support view.
-                isAllTables = false;
-            }
-
-            if (!isAllTables) {
-                // show base table schema only
-                String procString = "/dbs/" + db.getId() + "/" + table.getId() + "/" + TableProcDir.INDEX_SCHEMA
-                        + "/";
-                if (table.getType() == TableType.OLAP) {
-                    procString += ((OlapTable) table).getBaseIndexId();
-                } else {
-                    procString += table.getId();
-                }
-
-                node = ProcService.getInstance().open(procString);
-            } else {
-                if (table.isNativeTable()) {
-                    isOlapTable = true;
-                    OlapTable olapTable = (OlapTable) table;
-                    Set<String> bfColumns = olapTable.getCopiedBfColumns();
-                    Map<Long, List<Column>> indexIdToSchema = olapTable.getIndexIdToSchema();
-
-                    // indices order
-                    List<Long> indices = Lists.newArrayList();
-                    indices.add(olapTable.getBaseIndexId());
-                    for (Long indexId : indexIdToSchema.keySet()) {
-                        if (indexId != olapTable.getBaseIndexId()) {
-                            indices.add(indexId);
-                        }
-                    }
-
-                    // add all indices
-                    for (int i = 0; i < indices.size(); ++i) {
-                        long indexId = indices.get(i);
-                        List<Column> columns = indexIdToSchema.get(indexId);
-                        String indexName = olapTable.getIndexNameById(indexId);
-                        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
-                        for (int j = 0; j < columns.size(); ++j) {
-                            Column column = columns.get(j);
-
-                            // Extra string (aggregation and bloom filter)
-                            List<String> extras = Lists.newArrayList();
-                            if (column.getAggregationType() != null &&
-                                    olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
-                                extras.add(column.getAggregationType().name());
-                            }
-                            if (bfColumns != null && bfColumns.contains(column.getName())) {
-                                extras.add("BLOOM_FILTER");
-                            }
-                            String defaultStr = column.getMetaDefaultValue(extras);
-                            String extraStr = StringUtils.join(extras, ",");
-                            List<String> row = Arrays.asList("",
-                                    "",
-                                    column.getDisplayName(),
-                                    column.getType().canonicalName(),
-                                    column.isAllowNull() ? "Yes" : "No",
-                                    ((Boolean) column.isKey()).toString(),
-                                    defaultStr,
-                                    extraStr);
-
-                            if (j == 0) {
-                                row.set(0, indexName);
-                                row.set(1, indexMeta.getKeysType().name());
-                            }
-
-                            totalRows.add(row);
-                        } // end for columns
-
-                        if (i != indices.size() - 1) {
-                            totalRows.add(EMPTY_ROW);
-                        }
-                    } // end for indices
-                } else if (table.getType() == TableType.MYSQL) {
-                    isOlapTable = false;
-                    MysqlTable mysqlTable = (MysqlTable) table;
-                    List<String> row = Arrays.asList(mysqlTable.getHost(),
-                            mysqlTable.getPort(),
-                            mysqlTable.getUserName(),
-                            mysqlTable.getPasswd(),
-                            mysqlTable.getMysqlDatabaseName(),
-                            mysqlTable.getMysqlTableName());
-                    totalRows.add(row);
-                } else {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, table.getType());
-                }
-            }
-        } finally {
-            db.readUnlock();
-        }
-    }
-
     public String getTableName() {
         return dbTableName.getTbl();
     }
 
     public String getDb() {
         return dbTableName.getDb();
+    }
+
+    public TableName getDbTableName() {
+        return dbTableName;
+    }
+
+    public List<List<String>> getTotalRows() {
+        return totalRows;
+    }
+
+    public void setMaterializedView(boolean materializedView) {
+        isMaterializedView = materializedView;
+    }
+
+    public void setAllTables(boolean allTables) {
+        isAllTables = allTables;
+    }
+
+    public void setNode(ProcNodeInterface node) {
+        this.node = node;
+    }
+
+    public boolean isOlapTable() {
+        return isOlapTable;
+    }
+
+    public void setOlapTable(boolean olapTable) {
+        isOlapTable = olapTable;
     }
 
     public List<List<String>> getResultRows() throws AnalysisException {
@@ -318,5 +180,15 @@ public class DescribeStmt extends ShowStmt {
             emptyRow.add("");
         }
         return emptyRow;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDescTableStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }
