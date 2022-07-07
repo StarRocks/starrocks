@@ -442,29 +442,21 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, ChunkPtr* chunk) {
         } else if (column_class == "java.sql.Timestamp") {
             DCHECK(slot_desc->type().type == TYPE_DATETIME);
             for (int i = 0; i < num_rows; i++) {
-                jobject jelement = helper.list_get(jcolumn, i);
-                DeferOp defer([&jelement, this]() { _jni_env->DeleteLocalRef(jelement); });
-                RETURN_IF_ERROR(_append_datetime_val(jelement, slot_desc, column.get()));
+                RETURN_IF_ERROR(_append_datetime_val(helper.list_get(jcolumn, i), slot_desc, column.get()));
             }
         } else if (column_class == "java.sql.Date") {
             DCHECK(slot_desc->type().type == TYPE_DATE);
             for (int i = 0; i < num_rows; i++) {
-                jobject jelement = helper.list_get(jcolumn, i);
-                DeferOp defer([&jelement, this]() { _jni_env->DeleteLocalRef(jelement); });
-                RETURN_IF_ERROR(_append_date_val(jelement, slot_desc, column.get()));
+                RETURN_IF_ERROR(_append_date_val(helper.list_get(jcolumn, i), slot_desc, column.get()));
             }
         } else if (column_class == "java.time.LocalDateTime") {
             DCHECK(slot_desc->type().type == TYPE_DATETIME);
             for (int i = 0; i < num_rows; i++) {
-                jobject jelement = helper.list_get(jcolumn, i);
-                DeferOp defer([&jelement, this]() { _jni_env->DeleteLocalRef(jelement); });
-                RETURN_IF_ERROR(_append_localdatetime_val(jelement, slot_desc, column.get()));
+                RETURN_IF_ERROR(_append_localdatetime_val(helper.list_get(jcolumn, i), slot_desc, column.get()));
             }
         } else if (column_class == "java.math.BigDecimal") {
             for (int i = 0; i < num_rows; i++) {
-                jobject jelement = helper.list_get(jcolumn, i);
-                DeferOp defer([&jelement, this]() { _jni_env->DeleteLocalRef(jelement); });
-                RETURN_IF_ERROR(_append_decimal_val(jelement, slot_desc, column.get()));
+                RETURN_IF_ERROR(_append_decimal_val(helper.list_get(jcolumn, i), slot_desc, column.get()));
             }
         } else {
             return Status::InternalError(fmt::format("not support type {}", column_class));
