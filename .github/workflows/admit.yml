@@ -2,7 +2,7 @@ name: Trigger Jobs
 
 on:
   pull_request_target:
-    types: [synchronize, reopened]
+    types: [synchronize, labled, reopened]
 
 jobs:
   Trigger-Admit-Test:
