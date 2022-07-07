@@ -1,6 +1,6 @@
 # StarRocks
 
-  StarRocks 是一款高性能分析型数据仓库，使用向量化、MPP 架构、可实时更新的列式存储引擎等技术实现多维、实时、高并发的数据分析。StarRocks 既支持从各类实时和离线的数据源高效导入数据，也支持直接分析数据湖上各种格式的数据。StarRocks 兼容 MySQL 协议，可使用 MySQL 客户端和常用 BI 工具对接。同时 StarRocks 具备水平扩展，高可用，高可靠，易运维等特性。广泛应用于实时数仓、OLAP 报表、数据湖分析等场景。
+  StarRocks 是一款高性能分析型数据仓库，使用向量化、MPP 架构、可实时更新的列式存储引擎等技术实现多维、实时、高并发的数据分析。StarRocks 既支持从各类实时和离线的数据源高效导入数据，也支持直接分析数据湖上各种格式的数据。StarRocks 兼容 MySQL 协议，可使用 MySQL 客户端和常用 BI 工具对接。同时 StarRocks 具备水平扩展，高可用、高可靠、易运维等特性。广泛应用于实时数仓、OLAP 报表、数据湖分析等场景。
 
 <NavBox>
 <NavBoxPart title="StarRocks 入门">
@@ -26,33 +26,33 @@
 </NavBox>
 
 <NavBox>
-<NavBoxPart title="设计表​">
+<NavBoxPart title="表设计​">
 <NavBoxPartItem>
 
 - [表设计概览](/table_design/StarRocks_table_design)
 - [数据模型](/table_design/Data_model)
 - [数据分布](/table_design/Data_distribution)
-- [排序键和 shortkey index](/table_design/Sort_key)
+- [排序键和前缀索引](/table_design/Sort_key)
 
 </NavBoxPartItem>
 </NavBoxPart>
 
-<NavBoxPart title="导入数据​">
+<NavBoxPart title="数据导入​">
 <NavBoxPartItem>
 
 - [数据导入概览](/loading/Loading_intro)
-- [从本地或网络中导入数据](/loading/StreamLoad)
-- [从 Apache HDFS 或对象存储中导入数据](/loading/BrokerLoad)
-- [从 Apache Kafka® 中导入数据](/loading/RoutineLoad)
-- [利用 Apache Spark™ 资源导入数据](/loading/SparkLoad)
-- [从 MySQL 实时导入数据](/loading/Flink_cdc_load)
+- [从本地或网络导入](/loading/StreamLoad)
+- [从 Apache HDFS 或对象存储导入](/loading/BrokerLoad)
+- [从 Apache Kafka® 导入](/loading/RoutineLoad)
+- [利用 Apache Spark™ 导入](/loading/SparkLoad)
+- [从 MySQL 实时导入](/loading/Flink_cdc_load)
 
 </NavBoxPartItem>
 </NavBoxPart>
 </NavBox>
 
 <NavBox>
-<NavBoxPart title="高效查询数据​">
+<NavBoxPart title="数据查询​">
 <NavBoxPartItem title="提高查询性能">
 
 - [CBO 优化器](/using_starrocks/Cost_based_optimizer)
@@ -76,7 +76,7 @@
 - [Apache Iceberg](/using_starrocks/External_table#apache-iceberg-%E5%A4%96%E8%A1%A8)
 - [MySQL](/using_starrocks/External_table#mysql-%E5%A4%96%E9%83%A8%E8%A1%A8)
 - [Elasticsearch](/using_starrocks/External_table#elasticsearch-%E5%A4%96%E9%83%A8%E8%A1%A8)
-- [更多数据库 (JDBC)](/using_starrocks/External_table#更多数据库jdbc的外部表)
+- [支持 JDBC 的数据库](/using_starrocks/External_table#更多数据库jdbc的外部表)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -108,7 +108,7 @@
 <NavBoxPart title="常见问题​">
 <NavBoxPartItem>
 
-- [导入和提取数据](/faq/loading/Loading_faq)
+- [数据导入和提取](/faq/loading/Loading_faq)
 - [部署运维](/faq/Deploy_faq)
 - [SQL](/faq/Sql_faq)
 
