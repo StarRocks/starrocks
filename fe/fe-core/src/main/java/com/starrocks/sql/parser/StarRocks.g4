@@ -38,8 +38,11 @@ statement
     | refreshTableStatement                                                                 #refreshTable
     | showDeleteStatement                                                                   #showDelete
     | descTableStatement                                                                    #descTable
+<<<<<<< HEAD
     | showIndexStatement                                                                    #showIndex
     | recoverTableStatement                                                                 #recoverTable
+=======
+>>>>>>> Migrate the desc statement from the old to new parser and analyzer (#8385)
 
     // View Statement
     | createViewStatement                                                                   #createView
