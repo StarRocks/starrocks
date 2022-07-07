@@ -210,6 +210,13 @@ message PExecPlanFragmentResult {
     required StatusPB status = 1;
 };
 
+message PExecBatchPlanFragmentsRequest {
+};
+
+message PExecBatchPlanFragmentsResult {
+    optional StatusPB status = 1;
+};
+
 enum PPlanFragmentCancelReason {
     // 0 is reserved
     LIMIT_REACH = 1;
@@ -306,6 +313,7 @@ message PProxyResult {
 service PInternalService {
     rpc transmit_data(PTransmitDataParams) returns (PTransmitDataResult);
     rpc exec_plan_fragment(PExecPlanFragmentRequest) returns (PExecPlanFragmentResult);
+    rpc exec_batch_plan_fragments(PExecBatchPlanFragmentsRequest) returns (PExecBatchPlanFragmentsResult);
     rpc cancel_plan_fragment(PCancelPlanFragmentRequest) returns (PCancelPlanFragmentResult);
     rpc fetch_data(PFetchDataRequest) returns (PFetchDataResult);
     rpc tablet_writer_open(PTabletWriterOpenRequest) returns (PTabletWriterOpenResult);

@@ -21,8 +21,11 @@
 
 package com.starrocks.rpc;
 
+import com.google.common.base.Preconditions;
+import com.starrocks.common.Config;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
@@ -30,6 +33,7 @@ import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
+import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
@@ -78,6 +82,40 @@ public class BackendServiceClient {
                     address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
         }
+    }
+
+    public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(
+            TNetworkAddress address, TExecBatchPlanFragmentsParams tRequest)
+            throws TException, RpcException {
+        final PExecBatchPlanFragmentsRequest pRequest = new PExecBatchPlanFragmentsRequest();
+        pRequest.setRequest(tRequest);
+
+        Future<PExecBatchPlanFragmentsResult> resultFuture = null;
+        for (int i = 1; i <= Config.max_query_retry_time && resultFuture == null; ++i) {
+            try {
+                final PBackendService service = BrpcProxy.getInstance().getBackendService(address);
+                resultFuture = service.execBatchPlanFragmentsAsync(pRequest);
+            } catch (NoSuchElementException e) {
+                // Retry `RETRY_TIMES`, when NoSuchElementException occurs.
+                if (i >= Config.max_query_retry_time) {
+                    LOG.warn("Execute batch plan fragments retry failed, address={}:{}",
+                            address.getHostname(), address.getPort(), e);
+                    throw new RpcException(address.hostname, e.getMessage());
+                }
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                }
+            } catch (Throwable e) {
+                LOG.warn("Execute batch plan fragments catch a exception, address={}:{}",
+                        address.getHostname(), address.getPort(), e);
+                throw new RpcException(address.hostname, e.getMessage());
+            }
+        }
+
+        Preconditions.checkState(resultFuture != null);
+        return resultFuture;
     }
 
     public Future<PCancelPlanFragmentResult> cancelPlanFragmentAsync(
