@@ -41,6 +41,9 @@
 
 namespace starrocks {
 
+using PromiseStatus = std::promise<Status>;
+using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
+
 template <typename T>
 PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
 
@@ -142,10 +145,24 @@ void PInternalServiceImplBase<T>::exec_plan_fragment(google::protobuf::RpcContro
                                                      PExecPlanFragmentResult* response,
                                                      google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
-    brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     auto st = _exec_plan_fragment(cntl);
     if (!st.ok()) {
         LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.get_error_msg();
+    }
+    st.to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::exec_batch_plan_fragments(google::protobuf::RpcController* cntl_base,
+                                                            const PExecBatchPlanFragmentsRequest* request,
+                                                            PExecBatchPlanFragmentsResult* response,
+                                                            google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    auto st = _exec_batch_plan_fragments(cntl);
+    if (!st.ok()) {
+        LOG(WARNING) << "exec multi plan fragments failed, errmsg=" << st.get_error_msg();
     }
     st.to_protobuf(response->mutable_status());
 }
@@ -188,16 +205,73 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) 
               << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num
               << ", is_pipeline=" << is_pipeline << ", chunk_size=" << t_request.query_options.batch_size;
     if (is_pipeline) {
-        auto fragment_executor = std::make_unique<starrocks::pipeline::FragmentExecutor>();
-        auto status = fragment_executor->prepare(_exec_env, t_request);
-        if (status.ok()) {
-            return fragment_executor->execute(_exec_env);
-        } else {
-            return status.is_duplicate_rpc_invocation() ? Status::OK() : status;
-        }
+        return _exec_plan_fragment_by_pipeline(t_request, t_request);
     } else {
-        return _exec_env->fragment_mgr()->exec_plan_fragment(t_request);
+        return _exec_plan_fragment_by_non_pipeline(t_request);
     }
+}
+
+template <typename T>
+Status PInternalServiceImplBase<T>::_exec_batch_plan_fragments(brpc::Controller* cntl) {
+    auto ser_request = cntl->request_attachment().to_string();
+    std::shared_ptr<TExecBatchPlanFragmentsParams> t_batch_requests = std::make_shared<TExecBatchPlanFragmentsParams>();
+    {
+        const uint8_t* buf = (const uint8_t*)ser_request.data();
+        uint32_t len = ser_request.size();
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_batch_requests.get()));
+    }
+
+    auto& common_request = t_batch_requests->common_param;
+    auto& unique_requests = t_batch_requests->unique_param_per_instance;
+
+    if (unique_requests.empty()) {
+        return Status::OK();
+    }
+    RETURN_IF_ERROR(_exec_plan_fragment_by_pipeline(common_request, unique_requests[0]));
+    // Prepare the first fragment instance and set desc_tbl to cache,
+    // and prepare the other fragment instances concurrently using the cached desc_tbl.
+    common_request.desc_tbl.__set_is_cached(true);
+
+    std::vector<PromiseStatusSharedPtr> promise_statuses;
+    for (int i = 1; i < unique_requests.size(); ++i) {
+        auto& unique_request = unique_requests[i];
+        LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(unique_request.params.fragment_instance_id)
+                  << ", coord=" << common_request.coord << ", backend=" << unique_request.backend_num
+                  << ", is_pipeline=1"
+                  << ", chunk_size=" << common_request.query_options.batch_size;
+
+        PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
+        _exec_env->pipeline_prepare_pool()->offer([ms, t_batch_requests, i, this] {
+            ms->set_value(_exec_plan_fragment_by_pipeline(t_batch_requests->common_param,
+                                                          t_batch_requests->unique_param_per_instance[i]));
+        });
+        promise_statuses.emplace_back(std::move(ms));
+    }
+
+    for (auto& promise : promise_statuses) {
+        // When a preparation fails, return error immediately. The other unfinished preparation is safe,
+        // since they can use the shared pointer of promise and t_batch_requests.
+        RETURN_IF_ERROR(promise->get_future().get());
+    }
+
+    return Status::OK();
+}
+
+template <typename T>
+Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_param,
+                                                                    const TExecPlanFragmentParams& t_unique_request) {
+    auto fragment_executor = std::make_unique<starrocks::pipeline::FragmentExecutor>();
+    auto status = fragment_executor->prepare(_exec_env, t_common_param, t_unique_request);
+    if (status.ok()) {
+        return fragment_executor->execute(_exec_env);
+    } else {
+        return status.is_duplicate_rpc_invocation() ? Status::OK() : status;
+    }
+}
+
+template <typename T>
+Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request) {
+    return _exec_env->fragment_mgr()->exec_plan_fragment(t_request);
 }
 
 inline std::string cancel_reason_to_string(::starrocks::PPlanFragmentCancelReason reason) {
