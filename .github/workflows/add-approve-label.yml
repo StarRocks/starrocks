@@ -31,7 +31,8 @@ jobs:
       id: read_property
       run: cat review/${{ steps.source-run-info.outputs.pullRequestNumber }}
 
-    - uses: actions-ecosystem/action-add-labels@v1
+    - name: Label when approved by 2 committers
+      uses: actions-ecosystem/action-add-labels@v1
       if: ${{ steps.read_property.outputs.stdout }} == 'true'
       with:
         labels: approved
