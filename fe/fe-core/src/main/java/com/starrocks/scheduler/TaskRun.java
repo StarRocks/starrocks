@@ -84,8 +84,7 @@ public class TaskRun implements Comparable<TaskRun> {
     public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
         taskRunContext.setDefinition(status.getDefinition());
-        // copy a ConnectContext to avoid concurrency leading to abnormal results.
-        ConnectContext runCtx = new ConnectContext(null);
+        runCtx = new ConnectContext(null);
         runCtx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         runCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         runCtx.setDatabase(task.getDbName());
@@ -110,7 +109,6 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setCtx(runCtx);
         taskRunContext.setRemoteIp(runCtx.getMysqlChannel().getRemoteHostPortString());
         taskRunContext.setProperties(taskRunContextProperties);
-        this.runCtx = runCtx;
         processor.processTaskRun(taskRunContext);
         QueryState queryState = runCtx.getState();
         if (runCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
