@@ -233,7 +233,7 @@ Status ParquetScanner::convert_array_to_column(ConvertFunc conv_func, size_t num
         auto nullable_column = down_cast<NullableColumn*>(column.get());
         auto null_column = nullable_column->mutable_null_column();
         size_t null_count = fill_null_column(array, _batch_start_idx, num_elements, null_column, _chunk_start_idx);
-        nullable_column->set_has_null(null_count != 0);
+        nullable_column->set_has_null(nullable_column->has_null() || null_count != 0);
         null_data = &null_column->get_data().front() + _chunk_start_idx;
         data_column = nullable_column->data_column().get();
     } else {
