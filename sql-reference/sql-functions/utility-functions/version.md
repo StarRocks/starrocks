@@ -2,7 +2,8 @@
 
 ## 功能
 
-主要是为了兼容 mysql 的协议，该函数返回 mysql 数据库的当前版本
+返回 MySQL 数据库的当前版本。
+可以使用`current_version`函数查询 StarRocks 当前的版本。
 
 ## 语法
 
@@ -12,11 +13,11 @@ version();
 
 ## 参数说明
 
-无
+无。该函数不接受任何参数。
 
 ## 返回值说明
 
-返回值的数据类型为 VARCHAR
+返回 VARCHAR 类型的值。
 
 ## 示例
 
@@ -29,3 +30,7 @@ mysql> select version();
 +-----------+
 1 row in set (0.00 sec)
 ```
+
+## 相关文档
+
+[current_version](/sql-reference/sql-functions/utility-functions/current_version.md)

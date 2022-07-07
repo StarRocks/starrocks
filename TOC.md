@@ -338,6 +338,7 @@
       + [regexp](/sql-reference/sql-functions/like_predicate-functions/regexp.md)
     + 工具函数
       + [current_version](/sql-reference/sql-functions/utility-functions/current_version.md)
+      + [version](/sql-reference/sql-functions/utility-functions/version.md)
       + [last_query_id](/sql-reference/sql-functions/utility-functions/last_query_id.md)
       + [sleep](/sql-reference/sql-functions/utility-functions/sleep.md)
       + [uuid](/sql-reference/sql-functions/utility-functions/uuid.md)
