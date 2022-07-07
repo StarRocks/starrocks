@@ -29,16 +29,13 @@ jobs:
 
     - name: Read Properties
       id: read_property
-      uses:  ashley-taylor/read-json-property-action@v1.0
-      with:
-        path: review/approval.json
-        property: ${{ steps.source-run-info.outputs.pullRequestNumber }}
+      run: cat review/${{ steps.source-run-info.outputs.pullRequestNumber }}
   
     - name: echo artifact
-      run: echo ${{ steps.read_property.outputs.value }}
+      run: echo ${{ steps.read_property.outputs.stdout }}
     
     - name: Label when approved by 2 committers
-      if: ${{ steps.read_property.outputs.value }} == 'true'
+      if: ${{ steps.read_property.outputs.stdout }} == 'true'
       uses: TobKed/label-when-approved-action@v1.2
       id: approved
       with:
