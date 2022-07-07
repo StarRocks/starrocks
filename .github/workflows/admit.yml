@@ -1,10 +1,8 @@
 name: Trigger Jobs
 
 on:
-  issues:
-    types: [labeled]
   pull_request_target:
-    types: [synchronize, labled, reopened]
+    types: [synchronize, labeled, reopened]
 
 jobs:
   Trigger-Admit-Test:
