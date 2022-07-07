@@ -1,0 +1,25 @@
+name: Trigger Jobs
+
+on:
+  pull_request:
+    types: [synchronize, labeled, reopened]
+
+jobs:
+  Trigger-Admit-Test:
+    if: ${{ github.event.label.name == 'Approved' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger admit job
+        if: ${{ steps.approved.outputs.approved == 'true' }}
+        uses: jabbukka/jenkins-trigger@main
+        with:
+          url: http://39.101.206.100:8090/
+          job_name: starrocks_admit_test
+          user_name: starrocks
+          api_token: 112bc1b04f326123e6668f931a7d26f7dd
+          parameter: '{ "GITHUB_PR_NUMBER": "${{ env.GITHUB_PR_NUMBER }}", "GITHUB_PR_TARGET_BRANCH": "${{ env.GITHUB_PR_TARGET_BRANCH}}" }'
+          wait: "true"
+          timeout: "3600"
+        env:
+          GITHUB_PR_NUMBER: ${{github.event.pull_request.number}}
+          GITHUB_PR_TARGET_BRANCH: ${{ github.event.pull_request.base.ref }}
