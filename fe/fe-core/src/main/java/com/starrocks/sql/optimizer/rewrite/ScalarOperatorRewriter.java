@@ -14,7 +14,7 @@ import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
-import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedSameColumnRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedScanColumnRule;
 
 import java.util.List;
 
@@ -48,7 +48,7 @@ public class ScalarOperatorRewriter {
             new ReduceCastRule(),
             new NormalizePredicateRule(),
             new FoldConstantsRule(),
-            new SimplifiedSameColumnRule(),
+            new SimplifiedScanColumnRule(),
             new SimplifiedPredicateRule(),
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule()

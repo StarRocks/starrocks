@@ -201,7 +201,7 @@ public class Optimizer {
 
         // Add full cte required columns, and save orig required columns
         // If cte was inline, the columns don't effect normal prune
-        ColumnRefSet requiredColumns = (ColumnRefSet) rootTaskContext.getRequiredColumns().clone();
+        ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
         rootTaskContext.getRequiredColumns().union(cteContext.getAllRequiredColumns());
 
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
