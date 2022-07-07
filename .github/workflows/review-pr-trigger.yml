@@ -20,7 +20,7 @@ jobs:
       uses: jsdaniell/create-json@1.1.2
       with:
         name: "approval.json"
-        json: '{ ${{ github.event.number }}: "${{ steps.approved.outputs.approved }}" }'
+        json: '{ ${{ github.event.pull_request.number }}: "${{ steps.approved.outputs.approved }}" }'
         
     - uses: actions/upload-artifact@v3
       with:
