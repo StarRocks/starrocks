@@ -46,8 +46,8 @@ Status CSVScanner::ScannerCSVReader::_fill_buffer() {
 }
 
 CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-                       ScannerCounter* counter, bool non_blocking_read)
-        : FileScanner(state, profile, scan_range.params, counter, non_blocking_read), _scan_range(scan_range) {
+                       ScannerCounter* counter)
+        : FileScanner(state, profile, scan_range.params, counter), _scan_range(scan_range) {
     if (scan_range.params.__isset.multi_column_separator) {
         _field_delimiter = scan_range.params.multi_column_separator;
     } else {

@@ -136,7 +136,7 @@ public:
     LakeDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node);
     ~LakeDataSourceProvider() override = default;
 
-    DataSourcePtr create_data_source(const TScanRange& scan_range, bool non_blocking_read) override;
+    DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
 protected:
     vectorized::ConnectorScanNode* _scan_node;
@@ -580,7 +580,7 @@ void LakeDataSource::update_counter() {
 LakeDataSourceProvider::LakeDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _t_lake_scan_node(plan_node.lake_scan_node) {}
 
-DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_range, bool non_blocking_read) {
+DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<LakeDataSource>(this, scan_range);
 }
 

@@ -21,7 +21,7 @@ namespace starrocks::vectorized {
 class CSVScanner final : public FileScanner {
 public:
     CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-               ScannerCounter* counter, bool non_blocking_read = false);
+               ScannerCounter* counter);
 
     Status open() override;
 

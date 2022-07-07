@@ -34,7 +34,7 @@ struct ScannerCounter {
 class FileScanner {
 public:
     FileScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRangeParams& params,
-                ScannerCounter* counter, bool non_blocking_read);
+                ScannerCounter* counter);
     virtual ~FileScanner();
 
     virtual Status init_expr_ctx();
@@ -81,7 +81,5 @@ protected:
     // index: destination slot id
     // value: source slot desc
     std::vector<SlotDescriptor*> _dest_slot_desc_mappings;
-
-    bool _non_blocking_read;
 };
 } // namespace starrocks::vectorized

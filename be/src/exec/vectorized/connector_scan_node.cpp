@@ -163,7 +163,7 @@ Status ConnectorScanNode::open(RuntimeState* state) {
 }
 
 Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
-    for (const TScanRangeParams& scan_range : _scan_ranges) {
+    for (TScanRangeParams& scan_range : _scan_ranges) {
         _create_and_init_scanner(state, scan_range.scan_range);
     }
 
@@ -186,8 +186,11 @@ Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, const TScanRange& scan_range) {
-    connector::DataSourcePtr data_source = _data_source_provider->create_data_source(scan_range, false);
+Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, TScanRange& scan_range) {
+    if (scan_range.__isset.broker_scan_range) {
+        scan_range.broker_scan_range.params.__set_non_blocking_read(false);
+    }
+    connector::DataSourcePtr data_source = _data_source_provider->create_data_source(scan_range);
     data_source->set_predicates(_conjunct_ctxs);
     data_source->set_runtime_filters(&_runtime_filter_collector);
     data_source->set_read_limit(_limit);

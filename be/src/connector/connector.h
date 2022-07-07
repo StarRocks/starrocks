@@ -72,7 +72,7 @@ public:
 
     // First version we use TScanRange to define scan range
     // Later version we could use user-defined data.
-    virtual DataSourcePtr create_data_source(const TScanRange& scan_range, bool non_blocking_read) = 0;
+    virtual DataSourcePtr create_data_source(const TScanRange& scan_range) = 0;
     // virtual DataSourcePtr create_data_source(const std::string& scan_range_spec)  = 0;
 
     // non-pipeline APIs

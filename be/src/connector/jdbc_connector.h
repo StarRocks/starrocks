@@ -30,7 +30,7 @@ public:
     ~JDBCDataSourceProvider() override = default;
     friend class JDBCDataSource;
     JDBCDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node);
-    DataSourcePtr create_data_source(const TScanRange& scan_range, bool non_blocking_read) override;
+    DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
     bool insert_local_exchange_operator() const override { return true; }
     bool accept_empty_scan_ranges() const override { return false; }

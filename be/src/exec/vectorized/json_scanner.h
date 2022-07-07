@@ -20,7 +20,7 @@ class JsonParser;
 class JsonScanner : public FileScanner {
 public:
     JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-                ScannerCounter* counter, bool non_blocking_read = false);
+                ScannerCounter* counter);
     ~JsonScanner() override;
 
     // Open this scanner, will initialize information needed

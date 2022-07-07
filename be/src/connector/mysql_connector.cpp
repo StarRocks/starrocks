@@ -36,7 +36,7 @@ DataSourceProviderPtr MySQLConnector::create_data_source_provider(vectorized::Co
 MySQLDataSourceProvider::MySQLDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _mysql_scan_node(plan_node.mysql_scan_node) {}
 
-DataSourcePtr MySQLDataSourceProvider::create_data_source(const TScanRange& scan_range, bool non_blocking_read) {
+DataSourcePtr MySQLDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<MySQLDataSource>(this, scan_range);
 }
 

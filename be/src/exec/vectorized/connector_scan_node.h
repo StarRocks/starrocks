@@ -44,7 +44,7 @@ private:
     // non-pipeline methods.
     void _init_counter();
     Status _start_scan_thread(RuntimeState* state);
-    Status _create_and_init_scanner(RuntimeState* state, const TScanRange& scan_range);
+    Status _create_and_init_scanner(RuntimeState* state, TScanRange& scan_range);
     bool _submit_scanner(ConnectorScanner* scanner, bool blockable);
     void _scanner_thread(ConnectorScanner* scanner);
     void _release_scanner(ConnectorScanner* scanner);

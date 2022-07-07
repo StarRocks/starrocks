@@ -27,7 +27,7 @@ DataSourceProviderPtr ESConnector::create_data_source_provider(vectorized::Conne
 ESDataSourceProvider::ESDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _es_scan_node(plan_node.es_scan_node) {}
 
-DataSourcePtr ESDataSourceProvider::create_data_source(const TScanRange& scan_range, bool non_blocking_read) {
+DataSourcePtr ESDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<ESDataSource>(this, scan_range);
 }
 

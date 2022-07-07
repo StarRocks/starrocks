@@ -25,7 +25,7 @@ DataSourceProviderPtr HiveConnector::create_data_source_provider(vectorized::Con
 HiveDataSourceProvider::HiveDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _hdfs_scan_node(plan_node.hdfs_scan_node) {}
 
-DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_range, bool non_blocking_read) {
+DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<HiveDataSource>(this, scan_range);
 }
 

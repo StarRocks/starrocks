@@ -24,14 +24,13 @@ DataSourceProviderPtr FileConnector::create_data_source_provider(vectorized::Con
 FileDataSourceProvider::FileDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _file_scan_node(plan_node.file_scan_node) {}
 
-DataSourcePtr FileDataSourceProvider::create_data_source(const TScanRange& scan_range, bool non_blocking_read) {
-    return std::make_unique<FileDataSource>(this, scan_range, non_blocking_read);
+DataSourcePtr FileDataSourceProvider::create_data_source(const TScanRange& scan_range) {
+    return std::make_unique<FileDataSource>(this, scan_range);
 }
 
 // ================================
-FileDataSource::FileDataSource(const FileDataSourceProvider* provider, const TScanRange& scan_range,
-                               bool non_blocking_read)
-        : _provider(provider), _scan_range(scan_range.broker_scan_range), _non_blocking_read(non_blocking_read) {
+FileDataSource::FileDataSource(const FileDataSourceProvider* provider, const TScanRange& scan_range)
+        : _provider(provider), _scan_range(scan_range.broker_scan_range) {
     // remove range desc with empty file
     _scan_range.ranges.clear();
     for (const TBrokerRangeDesc& range_desc : scan_range.broker_scan_range.ranges) {
@@ -61,17 +60,13 @@ Status FileDataSource::_create_scanner() {
     }
     // create scanner object and open
     if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_ORC) {
-        _scanner = std::make_unique<ORCScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter,
-                                                _non_blocking_read);
+        _scanner = std::make_unique<ORCScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     } else if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_PARQUET) {
-        _scanner = std::make_unique<ParquetScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter,
-                                                    _non_blocking_read);
+        _scanner = std::make_unique<ParquetScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     } else if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_JSON) {
-        _scanner = std::make_unique<JsonScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter,
-                                                 _non_blocking_read);
+        _scanner = std::make_unique<JsonScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     } else {
-        _scanner = std::make_unique<CSVScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter,
-                                                _non_blocking_read);
+        _scanner = std::make_unique<CSVScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     }
     if (_scanner == nullptr) {
         return Status::InternalError("Failed to create scanner");
@@ -108,7 +103,7 @@ Status FileDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk
             }
             return res.status();
         }
-        *chunk = std::move(res.value());
+        *chunk = std::move(res).value();
 
         // eval conjuncts
         size_t before = (*chunk)->num_rows();

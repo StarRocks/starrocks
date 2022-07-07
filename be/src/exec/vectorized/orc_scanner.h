@@ -16,7 +16,7 @@ public:
                                         const TypeDescriptor& slot_desc);
 
     ORCScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-               starrocks::vectorized::ScannerCounter* counter, bool non_blocking_read = false);
+               starrocks::vectorized::ScannerCounter* counter);
 
     ~ORCScanner() override = default;
 

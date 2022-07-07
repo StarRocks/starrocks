@@ -27,7 +27,7 @@ DataSourceProviderPtr JDBCConnector::create_data_source_provider(vectorized::Con
 JDBCDataSourceProvider::JDBCDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _jdbc_scan_node(plan_node.jdbc_scan_node) {}
 
-DataSourcePtr JDBCDataSourceProvider::create_data_source(const TScanRange& scan_range, bool non_blocking_read) {
+DataSourcePtr JDBCDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<JDBCDataSource>(this, scan_range);
 }
 

@@ -21,15 +21,14 @@ namespace starrocks::vectorized {
 
 FileScanner::FileScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfile* profile,
                          const starrocks::TBrokerScanRangeParams& params,
-                         starrocks::vectorized::ScannerCounter* counter, bool non_blocking_read)
+                         starrocks::vectorized::ScannerCounter* counter)
         : _state(state),
           _profile(profile),
           _params(params),
           _counter(counter),
           _row_desc(nullptr),
           _strict_mode(false),
-          _error_counter(0),
-          _non_blocking_read(non_blocking_read) {}
+          _error_counter(0) {}
 
 FileScanner::~FileScanner() = default;
 
@@ -254,7 +253,11 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
             range_desc.load_id.printTo(ss);
             return Status::InternalError(std::string(ss.str()));
         }
-        auto stream = std::make_shared<StreamLoadPipeInputStream>(std::move(pipe), _non_blocking_read);
+        bool non_blocking_read = false;
+        if (params.__isset.non_blocking_read) {
+            non_blocking_read = params.non_blocking_read;
+        }
+        auto stream = std::make_shared<StreamLoadPipeInputStream>(std::move(pipe), non_blocking_read);
         src_file = std::make_shared<SequentialFile>(std::move(stream), "stream-load-pipe");
         break;
     }
