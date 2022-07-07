@@ -7,7 +7,6 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
@@ -36,13 +35,8 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private Task task;
 
-    // The ConnectCtx brought over when the TaskRun is constructed is usually the task that the user manually
-    // penalizes and executes. For the periodical task, it is triggered by the system,
-    // so typically this value may be NULL.
-    private ConnectContext buildCtx;
-    // The ConnectCtx that actually executes the SQL statement is usually copied or constructed
-    // when TaskRun is executed.
     private ConnectContext runCtx;
+
     private TaskRunProcessor processor;
 
     private TaskRunStatus status;
@@ -92,23 +86,15 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setDefinition(status.getDefinition());
         // copy a ConnectContext to avoid concurrency leading to abnormal results.
         ConnectContext runCtx = new ConnectContext(null);
-        if (buildCtx == null) {
-            buildCtx = new ConnectContext(null);
-            buildCtx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
-            buildCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            buildCtx.setDatabase(task.getDbName());
-            buildCtx.setQualifiedUser(Auth.ROOT_USER);
-            buildCtx.setCurrentUserIdentity(UserIdentity.ROOT);
-        }
-        runCtx.setCluster(buildCtx.getClusterName());
-        runCtx.setGlobalStateMgr(buildCtx.getGlobalStateMgr());
+        runCtx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
+        runCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         runCtx.setDatabase(task.getDbName());
-        runCtx.setQualifiedUser(buildCtx.getQualifiedUser());
-        runCtx.setCurrentUserIdentity(buildCtx.getCurrentUserIdentity());
+        runCtx.setQualifiedUser(status.getUser());
+        runCtx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
-        SessionVariable sessionVariable = (SessionVariable) buildCtx.getSessionVariable().clone();
+        SessionVariable sessionVariable = VariableMgr.newSessionVariable();
         if (properties != null) {
             for (String key : properties.keySet()) {
                 try {
@@ -122,7 +108,7 @@ public class TaskRun implements Comparable<TaskRun> {
         }
         runCtx.setSessionVariable(sessionVariable);
         taskRunContext.setCtx(runCtx);
-        taskRunContext.setRemoteIp(buildCtx.getMysqlChannel().getRemoteHostPortString());
+        taskRunContext.setRemoteIp(runCtx.getMysqlChannel().getRemoteHostPortString());
         taskRunContext.setProperties(taskRunContextProperties);
         this.runCtx = runCtx;
         processor.processTaskRun(taskRunContext);
@@ -137,10 +123,6 @@ public class TaskRun implements Comparable<TaskRun> {
             return false;
         }
         return true;
-    }
-
-    public void setBuildCtx(ConnectContext buildCtx) {
-        this.buildCtx = buildCtx;
     }
 
     public ConnectContext getRunCtx() {
@@ -160,6 +142,7 @@ public class TaskRun implements Comparable<TaskRun> {
         } else {
             status.setCreateTime(createTime);
         }
+        status.setUser(task.getCreateUser());
         status.setDbName(task.getDbName());
         status.setDefinition(task.getDefinition());
         status.setExpireTime(System.currentTimeMillis() + Config.task_runs_ttl_second * 1000L);
