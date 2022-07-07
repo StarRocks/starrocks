@@ -3,11 +3,9 @@ name: Trigger Jobs
 on:
   pull_request_target:
     types: [synchronize, reopened]
-#  pull_request_review:
 
 jobs:
   Trigger-Admit-Test:
-    if: contains(github.event.pull_request.labels.*.name, 'Approved')
     runs-on: ubuntu-latest
     steps:  
 #    - name: PR comment with reactions
@@ -19,6 +17,7 @@ jobs:
 #        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
       - name: Trigger admit job
+        if: contains(github.event.pull_request.labels.*.name, 'Approved')
         uses: jabbukka/jenkins-trigger@main
         with:
           url: http://39.101.206.100:8090/
