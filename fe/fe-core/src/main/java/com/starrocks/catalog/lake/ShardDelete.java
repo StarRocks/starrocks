@@ -125,7 +125,6 @@ public class ShardDelete extends MasterDaemon implements Writable {
             if (finished == true) {
                 // for debug
                 LOG.info("delete shard {} and drop lake tablet succ.", shards);
-                // TODO: log the batch remove op in Edit log
                 GlobalStateMgr.getCurrentState().getEditLog().logRemoveDeleteShard(shards);
                 it.remove();
                 shardIds.removeAll(shards);
@@ -151,7 +150,7 @@ public class ShardDelete extends MasterDaemon implements Writable {
         // for debug
         LOG.info("enter replayAddShard");
         addShardId(shardInfo.getShardIds());
-        LOG.info("shardIdToTablet size in replayDeleteShard is {}.", shardIds.size());
+        LOG.info("shardIds size in replayDeleteShard is {}.", shardIds.size());
     }
 
     @Override
