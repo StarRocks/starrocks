@@ -5,6 +5,7 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
@@ -821,8 +822,13 @@ public class AggregateTest extends PlanTestBase {
 
         sql =
                 "select L_ORDERKEY,window_funnel(-1, L_SHIPDATE, 3, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "window_funnel(-1, 11: L_SHIPDATE, 3, 18: expr)");
+	try {
+            plan = getFragmentPlan(sql);
+        } catch (SemanticException e) {
+            Assert.assertEquals(
+                    "window argument must >= 0",
+                    e.getMessage());
+	}
 
         FeConstants.runningUnitTest = false;
     }
