@@ -25,7 +25,6 @@ jobs:
       with:
         name: "approval.json"
         json: '{ "${{ github.event.number }}": "${{ steps.approved.outputs.approved }}" }'
-        dir: ${{ github.workspace }}
         
     - uses: actions/upload-artifact@v3
       with:
