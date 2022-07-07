@@ -54,7 +54,6 @@ import java.util.Map;
 public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
 
-
     private static final String DELETE_TEMPLATE = "DELETE FROM " + Constants.SampleStatisticsTableName + " WHERE ";
 
     private static final String SELECT_EXPIRE_TABLE_TEMPLATE =
@@ -108,6 +107,20 @@ public class StatisticExecutor {
             LOG.warn("Execute statistic table query fail.", e);
             throw e;
         }
+    }
+
+    public void dropHistogram(Long tableId, List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropHistogramSQL(tableId, columnNames);
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        StatementBase parsedStmt;
+        try {
+            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            executor.execute();
+        } catch (Exception e) {
+            LOG.warn("Execute statistic table expire fail.", e);
+        }
+        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(tableId, columnNames);
     }
 
     // If you call this function, you must ensure that the db lock is added
@@ -219,9 +232,14 @@ public class StatisticExecutor {
 
             GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
         } catch (Exception e) {
-            analyzeJob.setWorkTime(LocalDateTime.now());
-            analyzeJob.setReason(e.getMessage());
-            GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(analyzeJob);
+            // If the job id is equal to -1, it represents the automatic full statistics collection of the new version.
+            // Automatic full statistics collection is an implicit task
+            // that is not recorded in the analyze job list, nor does it update the status of the analyze job.
+            if (analyzeJob.getId() != -1) {
+                analyzeJob.setStatus(Constants.ScheduleStatus.FAILED);
+                analyzeJob.setReason(e.getMessage());
+                GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(analyzeJob);
+            }
 
             analyzeStatus.setStatus(Constants.ScheduleStatus.FAILED);
             analyzeStatus.setEndTime(LocalDateTime.now());

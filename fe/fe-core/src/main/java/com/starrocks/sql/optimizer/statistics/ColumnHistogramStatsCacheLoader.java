@@ -86,8 +86,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
     }
 
     public List<TStatisticData> queryHistogramStatistics(long tableId, List<String> column) throws Exception {
-        //TODO: return statisticExecutor.queryHistogram(tableId, column);
-        return null;
+        return statisticExecutor.queryHistogram(tableId, column);
     }
 
     List<Bucket> convert(String histogramString) {
@@ -97,8 +96,9 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         List<Bucket> buckets = Lists.newArrayList();
         for (int i = 0; i < histogramObj.size(); ++i) {
             JsonArray bucketJsonArray = histogramObj.get(i).getAsJsonArray();
-            Bucket bucket = new Bucket(bucketJsonArray.get(0).getAsString(),
-                    bucketJsonArray.get(1).getAsString(),
+            Bucket bucket = new Bucket(
+                    Double.parseDouble(bucketJsonArray.get(0).getAsString()),
+                    Double.parseDouble(bucketJsonArray.get(1).getAsString()),
                     Long.parseLong(bucketJsonArray.get(2).getAsString()),
                     Long.parseLong(bucketJsonArray.get(3).getAsString()));
             buckets.add(bucket);

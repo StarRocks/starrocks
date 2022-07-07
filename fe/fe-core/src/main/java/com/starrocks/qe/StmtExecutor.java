@@ -99,6 +99,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -200,7 +201,8 @@ public class StmtExecutor {
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Query");
         summaryProfile.addInfoString(ProfileManager.QUERY_STATE, context.getState().toString());
-        summaryProfile.addInfoString("StarRocks Version", Version.STARROCKS_VERSION);
+        summaryProfile.addInfoString("StarRocks Version",
+                String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
@@ -210,6 +212,21 @@ public class StmtExecutor {
         long cpuCostNs = statistics == null || statistics.cpuCostNs == null ? 0 : statistics.cpuCostNs;
         summaryProfile.addInfoString(ProfileManager.QUERY_CPU_COST, DebugUtil.getPrettyStringNs(cpuCostNs));
         summaryProfile.addInfoString(ProfileManager.QUERY_MEM_COST, DebugUtil.getPrettyStringBytes(memCostBytes));
+
+        // Add some import variables in profile
+        SessionVariable variables = context.getSessionVariable();
+        if (variables != null) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
+                    .append(variables.getParallelExecInstanceNum()).append(",");
+            sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
+            if (context.getWorkGroup() != null) {
+                sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getWorkGroup().getName()).append(",");
+            }
+            sb.deleteCharAt(sb.length() - 1);
+            summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
+        }
+
         profile.addChild(summaryProfile);
 
         RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
@@ -460,6 +477,8 @@ public class StmtExecutor {
                 handleUnsupportedStmt();
             } else if (parsedStmt instanceof AnalyzeStmt) {
                 handleAnalyzeStmt();
+            } else if (parsedStmt instanceof DropHistogramStmt) {
+                handleDropHistogramStmt();
             } else if (parsedStmt instanceof AddSqlBlackListStmt) {
                 handleAddSqlBlackListStmt();
             } else if (parsedStmt instanceof DelSqlBlackListStmt) {
@@ -813,6 +832,14 @@ public class StmtExecutor {
         statisticExecutor.collectStatistics(collectJob);
     }
 
+    private void handleDropHistogramStmt() {
+        DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) parsedStmt;
+        OlapTable table = (OlapTable) MetaUtils.getTable(context, dropHistogramStmt.getTableName());
+
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.dropHistogram(table.getId(), dropHistogramStmt.getColumnNames());
+    }
+
     private void handleAddSqlBlackListStmt() {
         AddSqlBlackListStmt addSqlBlackListStmt = (AddSqlBlackListStmt) parsedStmt;
         SqlBlackList.getInstance().put(addSqlBlackListStmt.getSqlPattern());
@@ -986,10 +1013,7 @@ public class StmtExecutor {
         } else {
             sql = originStmt.originStmt;
         }
-        boolean isQuery = false;
-        if (parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) {
-            isQuery = true;
-        }
+        boolean isQuery = parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement;
         QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(context.getQueryId()),
                 isQuery,

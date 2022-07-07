@@ -20,6 +20,7 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Future;
 
@@ -173,5 +174,22 @@ public class TaskRun implements Comparable<TaskRun> {
         } else {
             return this.getStatus().getCreateTime() > taskRun.getStatus().getCreateTime() ? 1 : -1;
         }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        TaskRun taskRun = (TaskRun) o;
+        return status.getDefinition().equals(taskRun.getStatus().getDefinition());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(status);
     }
 }

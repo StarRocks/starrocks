@@ -6,6 +6,7 @@ import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
+import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
@@ -22,6 +23,7 @@ import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
@@ -38,6 +40,7 @@ import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -75,12 +78,6 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
-            AnalyzeStmtAnalyzer.analyze(statement, session);
-            return null;
-        }
-
-        @Override
         public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, ConnectContext session) {
             AdminStmtAnalyzer.analyze(statement, session);
             return null;
@@ -102,12 +99,6 @@ public class Analyzer {
         @Override
         public Void visitBaseViewStatement(BaseViewStmt statement, ConnectContext session) {
             ViewAnalyzer.analyze(statement, session);
-            return null;
-        }
-
-        @Override
-        public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
-            AnalyzeStmtAnalyzer.analyze(statement, session);
             return null;
         }
 
@@ -277,6 +268,12 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitAlterDbQuotaStmt(AlterDatabaseQuotaStmt statement, ConnectContext context) {
+            AlterDbQuotaAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
         public Void visitCreateDbStatement(CreateDbStmt statement, ConnectContext context) {
             CreateDbAnalyzer.analyze(statement, context);
             return null;
@@ -288,12 +285,36 @@ public class Analyzer {
             return null;
         }
 
-
         @Override
         public Void visitAlterDatabaseRename(AlterDatabaseRename statement, ConnectContext context) {
             AlterDatabaseRenameAnalyzer.analyze(statement, context);
             return null;
         }
 
+        @Override
+        public Void visitRecoverDbStmt(RecoverDbStmt statement, ConnectContext context) {
+            RecoverDbAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        // ------------------------------------------- Analyze Statement ---------------------------------------------------
+
+        @Override
+        public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
+            AnalyzeStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
+            AnalyzeStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext session) {
+            AnalyzeStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
     }
 }

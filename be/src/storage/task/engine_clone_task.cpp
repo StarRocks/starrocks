@@ -160,7 +160,7 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
         std::vector<Version> missed_versions;
         tablet->calc_missed_versions(_clone_req.committed_version, &missed_versions);
         if (missed_versions.size() == 0) {
-            LOG(INFO) << "Cloning existing tablet skipped, no missing version. tablet:" << tablet->table_id()
+            LOG(INFO) << "Cloning existing tablet skipped, no missing version. tablet:" << tablet->tablet_id()
                       << " type:" << KeysType_Name(tablet->keys_type()) << " version:" << _clone_req.committed_version;
             return Status::OK();
         }
