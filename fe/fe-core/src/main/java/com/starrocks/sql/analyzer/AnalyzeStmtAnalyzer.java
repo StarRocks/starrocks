@@ -206,5 +206,19 @@ public class AnalyzeStmtAnalyzer {
             }
             return null;
         }
+
+        @Override
+        public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext session) {
+            MetaUtils.normalizationTableName(session, statement.getTableName());
+            Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+            List<String> columnNames = statement.getColumnNames();
+            for (String colName : columnNames) {
+                Column col = analyzeTable.getColumn(colName);
+                if (col == null) {
+                    throw new SemanticException("Unknown column '%s' in '%s'", colName, analyzeTable.getName());
+                }
+            }
+            return null;
+        }
     }
 }

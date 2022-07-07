@@ -823,6 +823,14 @@ public class StmtExecutor {
         statisticExecutor.dropHistogram(table.getId(), dropHistogramStmt.getColumnNames());
     }
 
+    private void handleDropHistogramStmt() {
+        DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) parsedStmt;
+        OlapTable table = (OlapTable) MetaUtils.getTable(context, dropHistogramStmt.getTableName());
+
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.dropHistogram(table.getId(), dropHistogramStmt.getColumnNames());
+    }
+
     private void handleAddSqlBlackListStmt() {
         AddSqlBlackListStmt addSqlBlackListStmt = (AddSqlBlackListStmt) parsedStmt;
         SqlBlackList.getInstance().put(addSqlBlackListStmt.getSqlPattern());
