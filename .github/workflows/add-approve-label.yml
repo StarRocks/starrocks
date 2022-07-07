@@ -31,16 +31,22 @@ jobs:
       id: read_property
       run: cat review/${{ steps.source-run-info.outputs.pullRequestNumber }}
 
-    - name: Label when approved by 2 committers
+    - uses: actions-ecosystem/action-add-labels@v1
       if: ${{ steps.read_property.outputs.stdout }} == 'true'
-      uses: TobKed/label-when-approved-action@v1.2
-      id: approved
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        require_committers_approval: 'true'
-        label: 'approved'
-        comment: 'PR approved by at 2 committers and no changes requested.'
-        pullRequestNumber: ${{ steps.source-run-info.outputs.pullRequestNumber }}
+        labels: approved
+        number: ${{ steps.source-run-info.outputs.pullRequestNumber }}
+
+#    - name: Label when approved by 2 committers
+#      if: ${{ steps.read_property.outputs.stdout }} == 'true'
+#      uses: TobKed/label-when-approved-action@v1.2
+#      id: approved
+#      with:
+#        token: ${{ secrets.GITHUB_TOKEN }}
+#        require_committers_approval: 'true'
+#        label: 'approved'
+#        comment: 'PR approved by at 2 committers and no changes requested.'
+#        pullRequestNumber: ${{ steps.source-run-info.outputs.pullRequestNumber }}
         
 
 #    - name: PR comment with reactions
