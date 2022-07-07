@@ -1,9 +1,9 @@
 name: Add Label
 
 on:
-  workflow_run:
-    workflows: ["Label when reviewed"]
-    types: ['requested']
+#  workflow_run:
+#    workflows: ["Label when reviewed"]
+#    types: ['requested']
 permissions:
   # All other permissions are set to none
   checks: write
