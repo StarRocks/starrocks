@@ -38,6 +38,7 @@ statement
     | refreshTableStatement                                                                 #refreshTable
     | showDeleteStatement                                                                   #showDelete
     | descTableStatement                                                                    #descTable
+    | recoverTableStatement                                                                 #recoverTable
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -275,6 +276,10 @@ showDeleteStatement
 
 descTableStatement
     : (DESC | DESCRIBE) table=qualifiedName ALL?
+    ;
+
+recoverTableStatement
+    : RECOVER TABLE qualifiedName
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------

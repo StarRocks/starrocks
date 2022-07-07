@@ -99,6 +99,7 @@ import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.RecoverDbStmt;
+import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetStmt;
@@ -516,6 +517,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         List<AlterClause> alterClauses = visit(context.alterClause(), AlterClause.class);
         return new AlterTableStmt(targetTableName, alterClauses);
+    }
+
+    @Override
+    public ParseNode visitRecoverTableStatement(StarRocksParser.RecoverTableStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName tableName = qualifiedNameToTableName(qualifiedName);
+        return new RecoverTableStmt(tableName);
     }
 
     @Override
