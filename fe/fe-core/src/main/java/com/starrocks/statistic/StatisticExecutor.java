@@ -54,7 +54,6 @@ import java.util.Map;
 public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
 
-
     private static final String DELETE_TEMPLATE = "DELETE FROM " + Constants.SampleStatisticsTableName + " WHERE ";
 
     private static final String SELECT_EXPIRE_TABLE_TEMPLATE =
@@ -108,6 +107,20 @@ public class StatisticExecutor {
             LOG.warn("Execute statistic table query fail.", e);
             throw e;
         }
+    }
+
+    public void dropHistogram(Long tableId, List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropHistogramSQL(tableId, columnNames);
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        StatementBase parsedStmt;
+        try {
+            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            executor.execute();
+        } catch (Exception e) {
+            LOG.warn("Execute statistic table expire fail.", e);
+        }
+        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(tableId, columnNames);
     }
 
     // If you call this function, you must ensure that the db lock is added

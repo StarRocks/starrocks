@@ -15,12 +15,7 @@ BalancedChunkBuffer::BalancedChunkBuffer(BalanceStrategy strategy, int output_op
     }
 }
 
-BalancedChunkBuffer::~BalancedChunkBuffer() {
-    for (int i = 0; i < _output_operators; i++) {
-        DCHECK(_sub_buffers[i]->empty()) << fmt::format(
-                "BalancedChunkBuffer destory but remained {} chunks in buffer {}", _sub_buffers[i]->get_size(), i);
-    }
-}
+BalancedChunkBuffer::~BalancedChunkBuffer() = default;
 
 const BalancedChunkBuffer::SubBuffer& BalancedChunkBuffer::_get_sub_buffer(int index) const {
     DCHECK_LT(index, _output_operators);

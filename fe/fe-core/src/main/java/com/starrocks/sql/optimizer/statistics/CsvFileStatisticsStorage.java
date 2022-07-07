@@ -140,10 +140,6 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
     }
 
     @Override
-    public void expireColumnStatistics(Table table, List<String> columns) {
-    }
-
-    @Override
     public void addColumnStatistic(Table table, String column, ColumnStatistic columnStatistic) {
     }
 
@@ -151,6 +147,12 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
     public Map<ColumnRefOperator, Histogram> getHistogramStatistics(Table table, List<ColumnRefOperator> columns) {
         return Maps.newHashMap();
     }
+
+    @Override
+    public void expireHistogramStatistics(Long tableId, List<String> columns) {
+
+    }
+
 
     private class StatisticsEntry {
         public String tableId;

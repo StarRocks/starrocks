@@ -22,7 +22,7 @@ statement
     | showCreateDbStatement                                                                 #showCreateDb
     | alterDatabaseRename                                                                   #databaseRename
     | recoverDbStmt                                                                         #revoverDb
-
+    | showDataStmt                                                                          #showData
 
     // Table Statement
     | createTableStatement                                                                  #createTable
@@ -81,7 +81,7 @@ statement
     | createAnalyzeStatement                                                                #createAnalyze
     | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
     | analyzeHistogramStatement                                                             #analyzeHistogram
-    | dropAnalyzeHistogramStatement                                                         #dropHistogram
+    | dropHistogramStatement                                                                #dropHistogram
     | showAnalyzeStatement                                                                  #showAnalyze
     | showStatsMetaStatement                                                                #showStatsMeta
     | showHistogramMetaStatement                                                            #showHistogramMeta
@@ -133,6 +133,11 @@ alterDatabaseRename
 
 recoverDbStmt
     : RECOVER (DATABASE | SCHEMA) identifier
+    ;
+
+showDataStmt
+    : SHOW DATA
+    | SHOW DATA FROM qualifiedName
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
@@ -426,7 +431,7 @@ analyzeHistogramStatement
         (WITH bucket=INTEGER_VALUE BUCKETS)? properties?
     ;
 
-dropAnalyzeHistogramStatement
+dropHistogramStatement
     : ANALYZE TABLE qualifiedName DROP HISTOGRAM ON identifier (',' identifier)*
     ;
 

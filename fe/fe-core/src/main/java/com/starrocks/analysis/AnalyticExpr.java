@@ -190,7 +190,6 @@ public class AnalyticExpr extends Expr {
                 && ((AggregateFunction) fn).isAnalyticFn();
     }
 
-
     public static boolean isOffsetFn(Function fn) {
         if (!isAnalyticFn(fn)) {
             return false;
@@ -214,7 +213,6 @@ public class AnalyticExpr extends Expr {
 
         return fn.functionName().equalsIgnoreCase(ROWNUMBER);
     }
-
 
     /**
      * check the value out of range in lag/lead() function
