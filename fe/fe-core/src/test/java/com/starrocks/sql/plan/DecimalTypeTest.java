@@ -63,7 +63,6 @@ public class DecimalTypeTest extends PlanTestBase {
         String snippet = "  1:OlapScanNode\n" +
                 "     TABLE: tab1\n" +
                 "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join\n" +
-                "     PREDICATES: TRUE\n" +
                 "     partitions=0/1\n" +
                 "     rollup: tab1\n" +
                 "     tabletRatio=0/0\n" +
@@ -71,7 +70,7 @@ public class DecimalTypeTest extends PlanTestBase {
                 "     cardinality=1\n" +
                 "     avgRowSize=3.0\n" +
                 "     numNodes=0";
-        Assert.assertTrue(explain.contains(snippet));
+        assertContains(explain, snippet);
     }
 
     @Test
@@ -91,10 +90,10 @@ public class DecimalTypeTest extends PlanTestBase {
     public void testDecimalConstRewrite() throws Exception {
         String sql = "select * from t0 WHERE CAST( - 8 AS DECIMAL ) * + 52 + 87 < - 86";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+        assertContains(plan, "  0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: TRUE"));
+                "     partitions=0/1");
     }
 
     @Test
@@ -154,11 +153,12 @@ public class DecimalTypeTest extends PlanTestBase {
                 + "     PREAGGREGATION: ON\n"
                 + "     PREDICATES: 2: v11 > 1"));
 
-        Assert.assertTrue(plan.contains("  2:OlapScanNode\n"
-                + "     TABLE: test_all_type\n"
-                + "     PREAGGREGATION: ON\n"
-                + "     partitions=0/1\n"
-                + "     rollup: test_all_type\n"));
+        assertContains(plan, "  2:OlapScanNode\n" +
+                "     TABLE: test_all_type\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: CAST(13: id_decimal AS DECIMAL128(21,2)) IS NOT NULL\n" +
+                "     partitions=0/1\n" +
+                "     rollup: test_all_type");
     }
 
     @Test

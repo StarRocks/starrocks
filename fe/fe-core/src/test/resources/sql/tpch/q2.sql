@@ -60,7 +60,7 @@ TOP-N (order by [[16: S_ACCTBAL DESC NULLS LAST, 26: N_NAME ASC NULLS FIRST, 12:
                                         INNER JOIN (join-predicate [1: P_PARTKEY = 34: PS_PARTKEY] post-join-predicate [null])
                                             SCAN (columns[1: P_PARTKEY, 3: P_MFGR, 5: P_TYPE, 6: P_SIZE] predicate[6: P_SIZE = 12 AND 5: P_TYPE LIKE %COPPER])
                                             EXCHANGE SHUFFLE[34]
-                                                AGGREGATE ([GLOBAL] aggregate [{57: min=min(57: min)}] group by [[34: PS_PARTKEY]] having [null]
+                                                AGGREGATE ([GLOBAL] aggregate [{57: min=min(57: min)}] group by [[34: PS_PARTKEY]] having [57: min IS NOT NULL]
                                                     AGGREGATE ([LOCAL] aggregate [{57: min=min(37: PS_SUPPLYCOST)}] group by [[34: PS_PARTKEY]] having [null]
                                                         INNER JOIN (join-predicate [35: PS_SUPPKEY = 40: S_SUPPKEY] post-join-predicate [null])
                                                             SCAN (columns[34: PS_PARTKEY, 35: PS_SUPPKEY, 37: PS_SUPPLYCOST] predicate[null])

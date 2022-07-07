@@ -127,13 +127,13 @@ public class CTEPlanTest extends PlanTestBase {
 
         String sql = "with xx as (select * from t0) select * from xx as x0 join xx as x1 on x0.v1 = x1.v1;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("MultiCastDataSinks\n" +
+        assertContains(plan, "  MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 01\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 03\n" +
-                "    RANDOM"));
+                "    EXCHANGE ID: 04\n" +
+                "    RANDOM");
 
         connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
     }
@@ -274,13 +274,13 @@ public class CTEPlanTest extends PlanTestBase {
 
         String plan = getFragmentPlan(sql);
         defaultCTEReuse();
-        Assert.assertTrue(plan.contains("  5:SELECT\n" +
+        assertContains(plan, "  6:SELECT\n" +
                 "  |  predicates: 4: v1 = 2\n" +
                 "  |  \n" +
-                "  4:Project\n" +
+                "  5:Project\n" +
                 "  |  <slot 4> : 1: v1\n" +
                 "  |  <slot 5> : 2: v2\n" +
-                "  |  <slot 6> : 3: v3"));
+                "  |  <slot 6> : 3: v3");
     }
 
     @Test
