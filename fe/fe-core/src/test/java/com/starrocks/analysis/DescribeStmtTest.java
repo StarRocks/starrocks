@@ -23,62 +23,53 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
-import mockit.Mock;
-import mockit.MockUp;
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Ignore;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
+
 public class DescribeStmtTest {
-    private Analyzer analyzer;
-    private GlobalStateMgr globalStateMgr;
-    private ConnectContext ctx;
+    private static ConnectContext ctx;
+    private static StarRocksAssert starRocksAssert;
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        ctx = UtFrameUtils.createDefaultCtx();
 
-    @Before
-    public void setUp() {
-        ctx = new ConnectContext(null);
-        ctx.setQualifiedUser("root");
-        ctx.setRemoteIP("192.168.1.1");
-
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
-        globalStateMgr = AccessTestUtil.fetchAdminCatalog();
-
-        new MockUp<ConnectContext>() {
-            @Mock
-            public ConnectContext get() {
-                return ctx;
-            }
-        };
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            GlobalStateMgr getCurrentState() {
-                return globalStateMgr;
-            }
-        };
+        starRocksAssert = new StarRocksAssert();
+        starRocksAssert.withDatabase("testDb").useDatabase("testTbl");
+        starRocksAssert.withTable("create table testDb.testTbl(" +
+                "id int, name string) DISTRIBUTED BY HASH(id) BUCKETS 10 " +
+                "PROPERTIES(\"replication_num\" = \"1\")");
     }
 
-    @Ignore
     @Test
-    public void testNormal() throws UserException {
-        DescribeStmt stmt = new DescribeStmt(new TableName("", "testTbl"), false);
-        stmt.analyze(analyzer);
-        Assert.assertEquals("DESCRIBE `testCluster:testDb.testTbl`", stmt.toString());
+    public void testDescribeTable() {
+        DescribeStmt stmt = new DescribeStmt(new TableName("testDb", "testTbl"), false);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.assertEquals("DESCRIBE `default_cluster:testDb.testTbl`", stmt.toString());
         Assert.assertEquals(6, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("testCluster:testDb", stmt.getDb());
+        Assert.assertEquals("default_cluster:testDb", stmt.getDb());
+        Assert.assertEquals("testTbl", stmt.getTableName());
+
+        DescribeStmt stmtAll = new DescribeStmt(new TableName("testDb", "testTbl"), true);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmtAll, ctx);
+        Assert.assertEquals("DESCRIBE `default_cluster:testDb.testTbl` ALL", stmtAll.toString());
+        Assert.assertEquals(6, stmt.getMetaData().getColumnCount());
+        Assert.assertEquals("default_cluster:testDb", stmt.getDb());
         Assert.assertEquals("testTbl", stmt.getTableName());
     }
 
     @Test
-    public void testAllNormal() throws UserException {
-        DescribeStmt stmt = new DescribeStmt(new TableName("", "testTbl"), true);
-        stmt.analyze(analyzer);
-        Assert.assertEquals("DESCRIBE `testCluster:testDb.testTbl` ALL", stmt.toString());
-        Assert.assertEquals(8, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("IndexKeysType", stmt.getMetaData().getColumn(1).getName());
-        Assert.assertEquals("testCluster:testDb", stmt.getDb());
-        Assert.assertEquals("testTbl", stmt.getTableName());
+    public void testDescExplain() throws UserException {
+        String sql = "desc insert into testDb.testTbl select * from testDb.testTbl";
+        StatementBase statementBase =
+                com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
+        ExecPlan execPlan = new StatementPlanner().plan(statementBase, ctx);
+        Assert.assertTrue(((InsertStmt) statementBase).getQueryStatement().isExplain());
     }
 }
