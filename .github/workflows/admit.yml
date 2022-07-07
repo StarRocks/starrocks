@@ -4,8 +4,8 @@ on:
   workflow_run:
     workflows: ["Add Label"]
     types: ['requested']
-#  pull_request:
-#    types: [synchronize, reopened]
+  pull_request:
+    types: [labeled, synchronize, reopened]
 #  pull_request_review:
 
 jobs:
