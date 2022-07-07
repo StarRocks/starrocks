@@ -35,6 +35,7 @@ jobs:
       uses: actions-ecosystem/action-add-labels@v1
       if: ${{ steps.read_property.outputs.stdout }} == 'true'
       with:
+        github_token: ${{ secrets.PAT }}
         labels: approved
         number: ${{ steps.source-run-info.outputs.pullRequestNumber }}
 
