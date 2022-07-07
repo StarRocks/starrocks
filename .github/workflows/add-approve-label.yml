@@ -21,7 +21,23 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         sourceRunId: ${{ github.event.workflow_run.id }}
 
+    - uses: actions/download-artifact@v3
+      with:
+        name: review
+        path: ${{ github.workspace }}/approval.json
+
+    - name: Read Properties
+      id: read_property
+      uses:  ashley-taylor/read-json-property-action@v1.0
+      with:
+        path: approval.json
+        property: ${{ steps.source-run-info.outputs.pullRequestNumber }}
+  
+    - name: echo artifact
+      run: echo ${{ steps.read_property.outputs.value }}
+    
     - name: Label when approved by 2 committers
+      if: ${{ steps.read_property.outputs.value }} == 'true'
       uses: TobKed/label-when-approved-action@v1.2
       id: approved
       with:
