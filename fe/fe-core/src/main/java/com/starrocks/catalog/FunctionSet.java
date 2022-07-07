@@ -251,6 +251,23 @@ public class FunctionSet {
                     .add(Type.FLOAT)
                     .add(Type.DOUBLE)
                     .build();
+
+    private static final Set<Type> HISTOGRAM_TYPE =
+            ImmutableSet.<Type>builder()
+                    .add(Type.BOOLEAN)
+                    .add(Type.TINYINT)
+                    .add(Type.SMALLINT)
+                    .add(Type.INT)
+                    .add(Type.BIGINT)
+                    .add(Type.LARGEINT)
+                    .add(Type.FLOAT)
+                    .add(Type.DOUBLE)
+                    .add(Type.DATE)
+                    .add(Type.DATETIME)
+                    .add(Type.DECIMAL32)
+                    .add(Type.DECIMAL64)
+                    .add(Type.DECIMAL128)
+                    .build();
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
      * need to check whether the expression tree can use vectorized function from bottom to
@@ -850,6 +867,11 @@ public class FunctionSet {
                     LEAD, Lists.newArrayList(t, Type.BIGINT), t, t));
         }
 
+        for (Type t : HISTOGRAM_TYPE) {
+            addBuiltin(AggregateFunction.createBuiltin("histogram",
+                    Lists.newArrayList(t, Type.INT, Type.INT, Type.INT), Type.VARCHAR, Type.VARCHAR,
+                    false, false, false));
+        }
     }
 
     public List<Function> getBuiltinFunctions() {

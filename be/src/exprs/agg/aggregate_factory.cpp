@@ -17,6 +17,7 @@
 #include "exprs/agg/count.h"
 #include "exprs/agg/distinct.h"
 #include "exprs/agg/group_concat.h"
+#include "exprs/agg/histogram.h"
 #include "exprs/agg/hll_ndv.h"
 #include "exprs/agg/hll_union.h"
 #include "exprs/agg/hll_union_count.h"
@@ -224,6 +225,11 @@ AggregateFunctionPtr AggregateFactory::MakeLastValueWindowFunction() {
 template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeLeadLagWindowFunction() {
     return std::make_shared<LeadLagWindowFunction<PT>>();
+}
+
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakeHistogramAggregationFunction() {
+    return std::make_shared<HistogramAggregationFunction<PT>>();
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -524,6 +530,8 @@ public:
             return AggregateFactory::MakeRowNumberWindowFunction();
         } else if (name == "ntile") {
             return AggregateFactory::MakeNtileWindowFunction();
+        } else if (name == "histogram") {
+            return AggregateFactory::MakeHistogramAggregationFunction<ArgPT>();
         }
         return nullptr;
     }
@@ -605,6 +613,8 @@ public:
             return AggregateFactory::MakeFirstValueWindowFunction<ArgPT>();
         } else if (name == "last_value") {
             return AggregateFactory::MakeLastValueWindowFunction<ArgPT>();
+        } else if (name == "histogram") {
+            return AggregateFactory::MakeHistogramAggregationFunction<ArgPT>();
         }
         return nullptr;
     }
@@ -857,6 +867,20 @@ AggregateFuncResolver::AggregateFuncResolver() {
 
     add_aggregate_mapping<TYPE_CHAR, TYPE_VARCHAR>("group_concat");
     add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARCHAR>("group_concat");
+
+    add_aggregate_mapping<TYPE_BOOLEAN, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_TINYINT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_SMALLINT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_INT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_LARGEINT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_FLOAT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_DOUBLE, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_DATE, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_DATETIME, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_DECIMAL32, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_DECIMAL64, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_DECIMAL128, TYPE_VARCHAR>("histogram");
 
     ADD_ALL_TYPE("first_value");
     ADD_ALL_TYPE("last_value");
