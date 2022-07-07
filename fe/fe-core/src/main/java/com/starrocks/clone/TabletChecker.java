@@ -181,12 +181,29 @@ public class TabletChecker extends MasterDaemon {
             return;
         }
 
-        checkTablets();
+        checkAllTablets();
 
         removePriosIfNecessary();
 
         stat.counterTabletCheckRound.incrementAndGet();
         LOG.info(stat.incrementalBrief());
+    }
+
+    /**
+     * Check the manually repaired table/partition first,
+     * so that they can be scheduled for repair at first place.
+     */
+    private void checkAllTablets() {
+        checkTabletsOnlyInPrios();
+        checkTabletsNotInPrios();
+    }
+
+    private void checkTabletsOnlyInPrios() {
+        doCheck(true);
+    }
+
+    private void checkTabletsNotInPrios() {
+        doCheck(false);
     }
 
     /**
@@ -202,7 +219,7 @@ public class TabletChecker extends MasterDaemon {
         return !(tabletCtx.needCloneFromSource() && tabletCtx.getHealthyReplicas().size() == 0);
     }
 
-    private void checkTablets() {
+    private void doCheck(boolean checkInPrios) {
         long start = System.currentTimeMillis();
         long totalTabletNum = 0;
         long unhealthyTabletNum = 0;
@@ -230,6 +247,11 @@ public class TabletChecker extends MasterDaemon {
                         continue;
                     }
 
+                    if ((checkInPrios && !isTableInPrios(dbId, table.getId())) ||
+                            (!checkInPrios && isTableInPrios(dbId, table.getId()))) {
+                        continue;
+                    }
+
                     OlapTable olapTbl = (OlapTable) table;
                     for (Partition partition : globalStateMgr.getAllPartitionsIncludeRecycleBin(olapTbl)) {
                         if (partition.isUseStarOS()) {
@@ -242,13 +264,19 @@ public class TabletChecker extends MasterDaemon {
                             // and we can schedule the tablets in it.
                             continue;
                         }
+
                         short replicaNum = globalStateMgr.getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(),
                                 partition.getId());
                         if (replicaNum == (short) -1) {
                             continue;
                         }
-                        boolean isInPrios = isInPrios(dbId, table.getId(), partition.getId());
+
+                        boolean isPartitionInPrios = isPartitionInPrios(dbId, table.getId(), partition.getId());
                         boolean prioPartIsHealthy = true;
+                        if ((checkInPrios && !isPartitionInPrios) || (!checkInPrios && isPartitionInPrios)) {
+                            continue;
+                        }
+
                         /*
                          * Tablet in SHADOW index can not be repaired of balanced
                          */
@@ -274,7 +302,7 @@ public class TabletChecker extends MasterDaemon {
                                     // Only set last status check time when status is healthy.
                                     localTablet.setLastStatusCheckTime(start);
                                     continue;
-                                } else if (isInPrios) {
+                                } else if (isPartitionInPrios) {
                                     statusWithPrio.second = TabletSchedCtx.Priority.VERY_HIGH;
                                     prioPartIsHealthy = false;
                                 }
@@ -311,7 +339,7 @@ public class TabletChecker extends MasterDaemon {
                             }
                         } // indices
 
-                        if (prioPartIsHealthy && isInPrios) {
+                        if (prioPartIsHealthy && isPartitionInPrios) {
                             // if all replicas in this partition are healthy, remove this partition from
                             // priorities.
                             LOG.debug("partition is healthy, remove from prios: {}-{}-{}",
@@ -333,13 +361,21 @@ public class TabletChecker extends MasterDaemon {
         stat.counterUnhealthyTabletNum.addAndGet(unhealthyTabletNum);
         stat.counterTabletAddToBeScheduled.addAndGet(addToSchedulerTabletNum);
 
-        LOG.info("finished to check tablets. unhealth/total/added/in_sched/not_ready: {}/{}/{}/{}/{}, cost: {} ms",
-                unhealthyTabletNum, totalTabletNum, addToSchedulerTabletNum, tabletInScheduler, tabletNotReady, cost);
+        LOG.info("finished to check tablets. checkInPrios: {}, " +
+                        "unhealthy/total/added/in_sched/not_ready: {}/{}/{}/{}/{}, cost: {} ms",
+                checkInPrios, unhealthyTabletNum, totalTabletNum, addToSchedulerTabletNum,
+                tabletInScheduler, tabletNotReady, cost);
     }
 
-    private boolean isInPrios(long dbId, long tblId, long partId) {
+    private boolean isTableInPrios(long dbId, long tblId) {
         synchronized (prios) {
-            if (prios.contains(dbId, tblId)) {
+            return prios.contains(dbId, tblId);
+        }
+    }
+
+    private boolean isPartitionInPrios(long dbId, long tblId, long partId) {
+        synchronized (prios) {
+            if (isTableInPrios(dbId, tblId)) {
                 return prios.get(dbId, tblId).contains(new PrioPart(partId, -1, -1));
             }
             return false;
