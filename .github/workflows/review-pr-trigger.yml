@@ -29,4 +29,4 @@ jobs:
     - uses: actions/upload-artifact@v3
       with:
         name: review
-        path: ${{ github.workspace }}/"approval.json"
+        path: ${{ github.workspace }}/approval.json
