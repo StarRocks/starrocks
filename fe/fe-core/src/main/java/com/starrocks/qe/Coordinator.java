@@ -745,17 +745,16 @@ public class Coordinator {
         // Compute fragment groups by BFS.
         // `queue` contains the fragments whose in-degree is zero.
         queue.add(root);
-        List<List<PlanFragment>> results = Lists.newArrayList();
+        List<List<PlanFragment>> groups = Lists.newArrayList();
         int numOutputFragments = 0;
         while (!queue.isEmpty()) {
-            int size = queue.size();
-            numOutputFragments += size;
-            List<PlanFragment> curResults = new ArrayList<>(size);
+            int groupSize = queue.size();
+            List<PlanFragment> group = new ArrayList<>(groupSize);
             // The next `size` fragments can be delivered concurrently, because zero in-degree indicates that
             // they don't depend on each other and all the fragments depending on them have been delivered.
-            for (int i = 0; i < size; ++i) {
+            for (int i = 0; i < groupSize; ++i) {
                 PlanFragment fragment = queue.poll();
-                curResults.add(fragment);
+                group.add(fragment);
 
                 for (PlanFragment child : fragment.getChildren()) {
                     int degree = inDegrees.compute(child, (k, v) -> v - 1);
@@ -765,7 +764,8 @@ public class Coordinator {
                 }
             }
 
-            results.add(curResults);
+            groups.add(group);
+            numOutputFragments += groupSize;
         }
 
         if (fragments.size() != numOutputFragments) {
@@ -773,7 +773,7 @@ public class Coordinator {
                     ErrorType.INTERNAL_ERROR);
         }
 
-        return results;
+        return groups;
     }
 
     /**
