@@ -126,6 +126,7 @@ public class MaterializedViewAnalyzer {
             genColumnAndSetIntoStmt(statement, selectRelation, columnExprMap);
             // some check if partition exp exists
             if (statement.getPartitionExpDesc() != null) {
+                statement.setOriginPartitionColumnName(statement.getPartitionExpDesc().getSlotRef().getColumnName());
                 // check partition expression all in column list and
                 // write the expr into partitionExpDesc if partition expression exists
                 checkExpInColumn(statement, columnExprMap);

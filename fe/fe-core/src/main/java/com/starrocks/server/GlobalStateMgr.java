@@ -107,6 +107,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.ResourceMgr;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.StarOSAgent;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
@@ -133,11 +134,13 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.Daemon;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.SmallFileMgr;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
@@ -210,6 +213,7 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
@@ -1849,7 +1853,64 @@ public class GlobalStateMgr {
         // 1.1 materialized view
         if (table.getType() == TableType.MATERIALIZED_VIEW) {
             MaterializedView mv = (MaterializedView) table;
-            sb.append(mv.getViewDefineSql());
+            sb.append("CREATE MATERIALIZED VIEW `").append(table.getName()).append("`");
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+            // partition
+            PartitionInfo partitionInfo = mv.getPartitionInfo();
+            List<Long> partitionId = null;
+            if (separatePartition) {
+                partitionId = Lists.newArrayList();
+            }
+            if (!(partitionInfo instanceof SinglePartitionInfo)) {
+                sb.append("\n").append(partitionInfo.toSql(mv, partitionId));
+            }
+            // distribution
+            DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
+            sb.append("\n").append(distributionInfo.toSql());
+
+            // refresh schema
+            MaterializedView.MvRefreshScheme refreshScheme = mv.getRefreshScheme();
+            sb.append("\nREFRESH ").append(refreshScheme.getType());
+            if (refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
+                //START('2122-12-31') EVERY(INTERVAL 1 HOUR)
+                MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
+                sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
+                                .format(DateUtils.DATE_TIME_FORMATTER))
+                        .append("\")");
+                if (asyncRefreshContext.getTimeUnit() != null) {
+                    sb.append(" EVERY(INTERVAL ").append(asyncRefreshContext.getStep()).append(" ")
+                            .append(asyncRefreshContext.getTimeUnit()).append(")");
+                }
+            }
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+
+            // replicationNum
+            Short replicationNum = mv.getDefaultReplicationNum();
+            sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
+            sb.append(replicationNum).append("\"");
+
+            //storageMedium
+            String storageMedium = mv.getStorageMedium();
+            sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM).append("\" = \"");
+            sb.append(storageMedium).append("\"");
+
+            //storageCooldownTime
+            Map<String, String> properties = mv.getTableProperty().getProperties();
+            if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
+                sb.append("\n");
+            } else {
+                sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME).append("\" = \"");
+                sb.append(TimeUtils.longToTimeString(
+                        Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)))).append("\"");
+                sb.append("\n");
+            }
+            sb.append(")");
+            sb.append("\nAS ").append(mv.getViewDefineSql());
+            sb.append(";");
             createTableStmt.add(sb.toString());
             return;
         }

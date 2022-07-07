@@ -313,6 +313,17 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 .collect(Collectors.toSet());
     }
 
+    public QueryStatement getQueryStmt() {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setCluster(SystemInfoService.DEFAULT_CLUSTER);
+        connectContext.setDatabase(db.getFullName());
+        connectContext.setQualifiedUser(Auth.ROOT_USER);
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        return ((QueryStatement) SqlParser.parse(
+                this.viewDefineSql, connectContext.getSessionVariable().getSqlMode()).get(0));
+    }
+
     public boolean needRefreshPartition(long baseTableId, Partition baseTablePartition) {
         BasePartitionInfo basePartitionInfo = this.getRefreshScheme().getAsyncRefreshContext()
                 .getBaseTableVisibleVersionMap()
