@@ -14,20 +14,11 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
-
-    - name: Label when approved by 2 committers
-      uses: actions-ecosystem/action-add-labels@v1
-      if: steps.approved.outputs.approved == 'true'
+        
+    - name: create-file
+      run: echo '${{ steps.approved.outputs.approved }}' >> ${{ github.workspace }}/${{ github.event.pull_request.number }}
+        
+    - uses: actions/upload-artifact@v3
       with:
-        labels: approved
-        number: ${{ github.event.pull_request.number }}
-      env:        
-        GITHUB_TOKEN: ${{ secrets.PAT }}
-        
-#    - name: create-file
-#      run: echo '${{ steps.approved.outputs.approved }}' >> ${{ github.workspace }}/${{ github.event.pull_request.number }}
-        
-#    - uses: actions/upload-artifact@v3
-#      with:
-#        name: review
-#        path: ${{ github.workspace }}/${{ github.event.pull_request.number }}
+        name: review
+        path: ${{ github.workspace }}/${{ github.event.pull_request.number }}
