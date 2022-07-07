@@ -18,6 +18,7 @@ jobs:
 #      with:
 #        message: |
 #          run starrocks_admit_test
+#         pr_number:
 #        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
       - name: Trigger admit job
