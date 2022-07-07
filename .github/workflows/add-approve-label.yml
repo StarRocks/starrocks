@@ -31,6 +31,14 @@ jobs:
         label: 'Approved'
         comment: 'PR approved by at 2 committers and no changes requested.'
         pullRequestNumber: ${{ steps.source-run-info.outputs.pullRequestNumber }}
+        
+    - name: PR comment with reactions
+      uses: thollander/actions-comment-pull-request@v1
+      with:
+        message: |
+          run starrocks_admit_test
+          pr_number: ${{ steps.source-run-info.outputs.pullRequestNumber }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
 #  - name: Label when approved
 #      uses: pullreminders/label-when-approved-action@v1.0.7
