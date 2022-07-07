@@ -119,7 +119,7 @@ public class ViewDefBuilder {
             sqlBuilder.append(node.getName().toSql());
             if (node.getPartitionNames() != null) {
                 List<String> partitionNames = node.getPartitionNames().getPartitionNames();
-                if (partitionNames != null && partitionNames.size() > 0) {
+                if (partitionNames != null && !partitionNames.isEmpty()) {
                     sqlBuilder.append(" PARTITION(");
                 }
                 for (String partitionName : partitionNames) {

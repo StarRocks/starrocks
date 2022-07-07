@@ -443,11 +443,7 @@ public class MaterializedViewAnalyzer {
                 SlotRef slotRef = (SlotRef) fnExpr.getChild(1);
                 PrimitiveType primitiveType = slotRef.getType().getPrimitiveType();
                 // must check slotRef type, because function analyze don't check it.
-                if ((primitiveType == PrimitiveType.DATETIME || primitiveType == PrimitiveType.DATE)) {
-                    return true;
-                } else {
-                    return false;
-                }
+                return primitiveType == PrimitiveType.DATETIME || primitiveType == PrimitiveType.DATE;
             } else {
                 return false;
             }

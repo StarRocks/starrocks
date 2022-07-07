@@ -49,12 +49,7 @@ public class RangeUtils {
     }
 
     public static boolean isRangeIntersect(Range<PartitionKey> range1, Range<PartitionKey> range2) {
-        if (range2.isConnected(range1)) {
-            if (!range2.intersection(range1).isEmpty()) {
-                return true;
-            }
-        }
-        return false;
+        return range2.isConnected(range1) && !range2.intersection(range1).isEmpty();
     }
 
     /*

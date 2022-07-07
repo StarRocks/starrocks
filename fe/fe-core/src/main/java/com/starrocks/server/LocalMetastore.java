@@ -1138,9 +1138,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 partitionInfo.addPartition(
                         partition.getId(), info.getDataProperty(), info.getReplicationNum(), info.isInMemory());
             }
-            if (olapTable.getType() == Table.TableType.MATERIALIZED_VIEW && !info.isTempPartition()) {
-                ((MaterializedView) olapTable).addPartitionRef(partition);
-            }
+            replayMvAddPartition(info, olapTable, partition);
             if (!isCheckpointThread()) {
                 // add to inverted index
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
@@ -1160,6 +1158,12 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         } finally {
             db.writeUnlock();
+        }
+    }
+
+    private void replayMvAddPartition(PartitionPersistInfo info, OlapTable olapTable, Partition partition) {
+        if (olapTable.getType() == Table.TableType.MATERIALIZED_VIEW && !info.isTempPartition()) {
+            ((MaterializedView) olapTable).addPartitionRef(partition);
         }
     }
 
