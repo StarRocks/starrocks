@@ -182,23 +182,26 @@ public class TaskManager {
                 Preconditions.checkArgument(task.getId() == 0);
                 task.setId(GlobalStateMgr.getCurrentState().getNextId());
             }
-            if (task.getType() == Constants.TaskType.PERIODICAL && !isReplay) {
-                TaskSchedule schedule = task.getSchedule();
-                if (schedule == null) {
-                    throw new DdlException("Task [" + task.getName() + "] has no scheduling information");
+            if (task.getType() == Constants.TaskType.PERIODICAL) {
+                task.setState(Constants.TaskState.ACTIVE);
+                if (!isReplay) {
+                    TaskSchedule schedule = task.getSchedule();
+                    if (schedule == null) {
+                        throw new DdlException("Task [" + task.getName() + "] has no scheduling information");
+                    }
+                    LocalDateTime startTime = Utils.getDatetimeFromLong(schedule.getStartTime());
+                    Duration duration = Duration.between(LocalDateTime.now(), startTime);
+                    long initialDelay = duration.getSeconds();
+                    // if startTime < now, start scheduling now
+                    if (initialDelay < 0) {
+                        initialDelay = 0;
+                    }
+                    // this operation should only run in master
+                    ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
+                                    executeTask(task.getName()), initialDelay, schedule.getPeriod(),
+                            schedule.getTimeUnit());
+                    periodFutureMap.put(task.getId(), future);
                 }
-                LocalDateTime startTime = Utils.getDatetimeFromLong(schedule.getStartTime());
-                Duration duration = Duration.between(LocalDateTime.now(), startTime);
-                long initialDelay = duration.getSeconds();
-                // if startTime < now, start scheduling now
-                if (initialDelay < 0) {
-                    initialDelay = 0;
-                }
-                // this operation should only run in master
-                ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                                executeTask(task.getName()), initialDelay, schedule.getPeriod(),
-                        schedule.getTimeUnit());
-                periodFutureMap.put(task.getId(), future);
             }
             nameToTaskMap.put(task.getName(), task);
             idToTaskMap.put(task.getId(), task);

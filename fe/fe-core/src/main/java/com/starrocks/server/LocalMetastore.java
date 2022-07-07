@@ -2949,7 +2949,6 @@ public class LocalMetastore implements ConnectorMetadata {
                             TimeUtils.convertUnitIdentifierToTimeUnit(asyncRefreshContext.getTimeUnit()));
                     task.setSchedule(taskSchedule);
                     task.setType(Constants.TaskType.PERIODICAL);
-                    task.setState(Constants.TaskState.ACTIVE);
                 }
                 TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
                 taskManager.createTask(task, false);
