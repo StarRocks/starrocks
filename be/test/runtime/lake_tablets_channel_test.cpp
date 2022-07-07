@@ -216,7 +216,15 @@ protected:
 
         ASSIGN_OR_ABORT(auto seg_iter, seg->new_iterator(*_schema, opts));
         auto read_chunk_ptr = vectorized::ChunkHelper::new_chunk(*_schema, 1024);
-        CHECK_OK(seg_iter->get_next(read_chunk_ptr.get()));
+        while (true) {
+            auto tmp_chunk = vectorized::ChunkHelper::new_chunk(*_schema, 1024);
+            auto st = seg_iter->get_next(tmp_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            read_chunk_ptr->append(*tmp_chunk);
+        }
         seg_iter->close();
         return read_chunk_ptr;
     }

@@ -26,6 +26,7 @@
 #include "storage/lake/test_group_assigner.h"
 #include "storage/lake/txn_log.h"
 #include "testutil/assert.h"
+#include "testutil/id_generator.h"
 
 namespace starrocks::lake {
 
@@ -45,7 +46,7 @@ public:
         _backup_group_assigner = _tablet_manager->TEST_set_group_assigner(_group_assigner.get());
 
         _tablet_metadata = std::make_shared<TabletMetadata>();
-        _tablet_metadata->set_id(10086);
+        _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         //
         //  | column | type | KEY | NULL |
@@ -53,14 +54,14 @@ public:
         //  |   c0   |  INT | YES |  NO  |
         //  |   c1   |  INT | NO  |  NO  |
         auto schema = _tablet_metadata->mutable_schema();
-        schema->set_id(10);
+        schema->set_id(next_id());
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(DUP_KEYS);
         schema->set_num_rows_per_row_block(65535);
         schema->set_compress_kind(COMPRESS_LZ4);
         auto c0 = schema->add_column();
         {
-            c0->set_unique_id(0);
+            c0->set_unique_id(next_id());
             c0->set_name("c0");
             c0->set_type("INT");
             c0->set_is_key(true);
@@ -68,7 +69,7 @@ public:
         }
         auto c1 = schema->add_column();
         {
-            c1->set_unique_id(1);
+            c1->set_unique_id(next_id());
             c1->set_name("c1");
             c1->set_type("INT");
             c1->set_is_key(false);
