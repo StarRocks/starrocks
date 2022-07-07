@@ -12,7 +12,7 @@ jobs:
       
     steps:
     - name: Label when approved
-      uses: abinoda/label-when-approved-action@1.0.7
+      uses: abinoda/label-when-approved-action@master
       env:
         APPROVALS: "2"
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
