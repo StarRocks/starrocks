@@ -569,7 +569,7 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testWithCaseWhen() throws Exception {
         String sql;
         String plan;
-        // test if
+        // test if with only one dictionary column
         sql = "select case when S_ADDRESS = 'key' then 1 else 0 end from supplier";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("9 <-> DictExpr(10: S_ADDRESS,[if(<place-holder> = 'key', 1, 0)])"));
@@ -583,6 +583,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "select case when S_ADDRESS = 'key' then 1 when S_ADDRESS = '2' then 2 else S_NATIONKEY end from supplier";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("     dict_col=S_ADDRESS"));
+        Assert.assertTrue(plan.contains("  |  9 <-> CASE WHEN DictExpr(10: S_ADDRESS,[<place-holder> = 'key']) THEN 1 WHEN DictExpr(10: S_ADDRESS,[<place-holder> = '2']) THEN 2 ELSE 4: S_NATIONKEY END"));
         // test case when with common expression 1
         sql =
                 "select S_ADDRESS = 'key' , case when S_ADDRESS = 'key' then 1 when S_ADDRESS = '2' then 2 else 3 end from supplier";
@@ -605,6 +606,10 @@ public class LowCardinalityTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains(" |  9 <-> CASE WHEN DictExpr(10: S_ADDRESS,[<place-holder> = 'key']) THEN CAST(rand() AS VARCHAR) WHEN DictExpr(10: S_ADDRESS,[<place-holder> = '2']) THEN 'key2' ELSE 'key3' END"));
         Assert.assertFalse(plan.contains("Decode"));
+        // test multi low cardinality column input
+        sql = "select if(S_ADDRESS = 'key', S_COMMENT, 'y') from supplier";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  |  9 <-> if[(DictExpr(10: S_ADDRESS,[<place-holder> = 'key']), DictExpr(11: S_COMMENT,[<place-holder>]), 'y'); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]"));
     }
 
     @Test
