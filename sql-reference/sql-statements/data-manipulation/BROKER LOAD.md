@@ -2,13 +2,13 @@
 
 ## 功能
 
-Broker Load 通过随 StarRocks 集群一同部署的 broker 进行，访问对应数据源的数据，进行数据导入。该导入方式使用的场景详见 [broker laod](/loading/BrokerLoad.md) 章节。
+Broker Load 通过随 StarRocks 集群一同部署的 broker 进行，访问对应数据源的数据，进行数据导入。该导入方式使用的场景详见 [Broker load](/loading/BrokerLoad.md) 章节。
 
 可以通过 `show broker` 命令查看已经部署的 broker。
 
 目前支持以下 5 种数据源：
 
-1. Apache HDFS：社区版本 hdfs。
+1. HDFS：社区版本 hdfs。
 2. Amazon S3：Amazon 对象存储。
 3. 阿里云 OSS：阿里云对象存储。
 4. 腾讯 COS：腾讯云对象存储。
@@ -117,7 +117,7 @@ WITH BROKER broker_name
 
     用于提供通过 broker 访问数据源的信息。不同的 broker，以及不同的访问方式，需要提供的信息不同。
 
-    1. Apache HDFS
+    1. HDFS
 
         社区版本的 hdfs，支持简单认证、kerberos 认证。以及支持 HA 配置。
 
