@@ -148,6 +148,8 @@ public:
 
     bool is_duplicate_rpc_invocation() const { return code() == TStatusCode::DUPLICATE_RPC_INVOCATION; }
 
+    bool is_time_out() const { return code() == TStatusCode::TIMEOUT; }
+
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.
     template <typename T>

@@ -60,6 +60,10 @@ CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrok
     }
 }
 
+void CSVScanner::close() {
+    FileScanner::close();
+};
+
 Status CSVScanner::open() {
     RETURN_IF_ERROR(FileScanner::open());
 
@@ -143,7 +147,13 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
             }
             if (_scan_range.ranges[_curr_file_index].start_offset > 0) {
                 // Skip the first record started from |start_offset|.
-                file->skip(_scan_range.ranges[_curr_file_index].start_offset);
+                auto status = file->skip(_scan_range.ranges[_curr_file_index].start_offset);
+                if (status.is_time_out()) {
+                    // open this file next time
+                    --_curr_file_index;
+                    _curr_reader.reset();
+                    return status;
+                }
                 CSVReader::Record dummy;
                 RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
             }
@@ -153,11 +163,20 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
 
         src_chunk->set_num_rows(0);
         Status status = _parse_csv(src_chunk.get());
-        if (status.is_end_of_file()) {
-            _curr_reader = nullptr;
-            DCHECK_EQ(0, src_chunk->num_rows());
-        } else if (!status.ok()) {
-            return status;
+
+        if (!status.ok()) {
+            if (status.is_end_of_file()) {
+                _curr_reader = nullptr;
+                DCHECK_EQ(0, src_chunk->num_rows());
+            } else if (status.is_time_out()) {
+                // if timeout happens at the beginning of reading src_chunk, we return the error state
+                // else we will _materialize the lines read before timeout
+                if (src_chunk->num_rows() == 0) {
+                    return status;
+                }
+            } else {
+                return status;
+            }
         }
 
         fill_columns_from_path(src_chunk, _num_fields_in_csv, _scan_range.ranges[_curr_file_index].columns_from_path,

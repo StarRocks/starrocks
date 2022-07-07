@@ -180,6 +180,8 @@ struct TBrokerScanRangeParams {
     11: optional string multi_column_separator;
     // If multi_row_delimiter is set, row_delimiter will ignore.
     12: optional string multi_row_delimiter;
+    // If non_blocking_read is set, stream_load_pipe will not block while performing read io
+    13: optional bool non_blocking_read;
 }
 
 // Broker scan range
@@ -254,6 +256,7 @@ struct TFileScanNode {
     // Partition info used to process partition select in broker load
     2: optional list<Exprs.TExpr> partition_exprs
     3: optional list<Partitions.TRangePartition> partition_infos
+    4: optional bool enable_pipeline_load
 }
 
 struct TEsScanNode {
