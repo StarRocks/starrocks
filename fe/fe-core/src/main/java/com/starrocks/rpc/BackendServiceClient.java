@@ -22,6 +22,7 @@
 package com.starrocks.rpc;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.common.Config;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
@@ -45,8 +46,6 @@ import java.util.concurrent.Future;
 
 public class BackendServiceClient {
     private static final Logger LOG = LogManager.getLogger(BackendServiceClient.class);
-
-    private static final int RETRY_TIMES = 2;
 
     private BackendServiceClient() {
     }
@@ -92,13 +91,13 @@ public class BackendServiceClient {
         pRequest.setRequest(tRequest);
 
         Future<PExecBatchPlanFragmentsResult> resultFuture = null;
-        for (int i = 1; i <= RETRY_TIMES && resultFuture == null; ++i) {
+        for (int i = 1; i <= Config.max_query_retry_time && resultFuture == null; ++i) {
             try {
                 final PBackendService service = BrpcProxy.getInstance().getBackendService(address);
                 resultFuture = service.execBatchPlanFragmentsAsync(pRequest);
             } catch (NoSuchElementException e) {
                 // Retry `RETRY_TIMES`, when NoSuchElementException occurs.
-                if (i >= RETRY_TIMES) {
+                if (i >= Config.max_query_retry_time) {
                     LOG.warn("Execute batch plan fragments retry failed, address={}:{}",
                             address.getHostname(), address.getPort(), e);
                     throw new RpcException(address.hostname, e.getMessage());

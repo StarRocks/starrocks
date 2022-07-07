@@ -532,11 +532,12 @@ public class Coordinator {
         boolean enablePipelineEngine = connectContext != null &&
                 connectContext.getSessionVariable().isEnablePipelineEngine() &&
                 fragments.stream().allMatch(PlanFragment::canUsePipeline);
+        // Only pipeline uses deliver_batch_fragments.
         boolean enableDeliverBatchFragments = enablePipelineEngine
                 && connectContext.getSessionVariable().isEnableDeliverBatchFragments();
 
         if (enableDeliverBatchFragments) {
-            deliverExecBatchFragmentsRequests();
+            deliverExecBatchFragmentsRequests(enablePipelineEngine);
         } else {
             deliverExecFragmentRequests(enablePipelineEngine);
         }
@@ -753,7 +754,7 @@ public class Coordinator {
      * Deliver multiple fragments concurrently according to the topological order,
      * and all the instances of a fragment to the same destination host are delivered in the same request.
      */
-    private void deliverExecBatchFragmentsRequests() throws Exception {
+    private void deliverExecBatchFragmentsRequests(boolean enablePipelineEngine) throws Exception {
         long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
         List<List<PlanFragment>> topologicalFragments = computeTopologicalOrderFragments();
 
@@ -801,7 +802,7 @@ public class Coordinator {
                                 .map(FInstanceExecParam::getInstanceId)
                                 .collect(Collectors.toSet());
                         TExecBatchPlanFragmentsParams tRequest =
-                                params.toThriftInBatch(curInstanceIds, host, descTable, dbIds);
+                                params.toThriftInBatch(curInstanceIds, host, descTable, dbIds, enablePipelineEngine);
                         TExecPlanFragmentParams tCommonParams = tRequest.getCommon_param();
                         List<TExecPlanFragmentParams> tUniqueParamsList = tRequest.getUnique_param_per_instance();
                         Preconditions.checkState(!tUniqueParamsList.isEmpty());
@@ -2661,14 +2662,14 @@ public class Coordinator {
          * @param uniqueParams           The destination unique thrift params.
          * @param fragmentIndex          The index of this instance in this.instanceExecParams.
          * @param instanceExecParam      The instance param.
-         * @param isEnablePipelineEngine Whether enable pipeline engine.
+         * @param enablePipelineEngine Whether enable pipeline engine.
          */
         private void toThriftForUniqueParams(TExecPlanFragmentParams uniqueParams, int fragmentIndex,
-                                             FInstanceExecParam instanceExecParam, boolean isEnablePipelineEngine)
+                                             FInstanceExecParam instanceExecParam, boolean enablePipelineEngine)
                 throws Exception {
             uniqueParams.setProtocol_version(InternalServiceVersion.V1);
             uniqueParams.setBackend_num(instanceExecParam.backendNum);
-            if (isEnablePipelineEngine) {
+            if (enablePipelineEngine) {
                 if (instanceExecParam.isSetPipelineDop()) {
                     uniqueParams.setPipeline_dop(instanceExecParam.pipelineDop);
                 } else {
@@ -2756,7 +2757,7 @@ public class Coordinator {
         List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
                                                TDescriptorTable descTable,
                                                Set<Long> dbIds,
-                                               boolean isEnablePipelineEngine) throws Exception {
+                                               boolean enablePipelineEngine) throws Exception {
             WorkGroup workgroup = chooseWorkGroup(dbIds);
             setBucketSeqToInstanceForRuntimeFilters();
 
@@ -2769,8 +2770,8 @@ public class Coordinator {
                 TExecPlanFragmentParams params = new TExecPlanFragmentParams();
 
                 toThriftForCommonParams(params, instanceExecParam.getHost(), descTable, workgroup,
-                        isEnablePipelineEngine);
-                toThriftForUniqueParams(params, i, instanceExecParam, isEnablePipelineEngine);
+                        enablePipelineEngine);
+                toThriftForUniqueParams(params, i, instanceExecParam, enablePipelineEngine);
 
                 paramsList.add(params);
             }
@@ -2779,13 +2780,14 @@ public class Coordinator {
 
         TExecBatchPlanFragmentsParams toThriftInBatch(
                 Set<TUniqueId> inFlightInstanceIds, TNetworkAddress destHost, TDescriptorTable descTable,
-                Set<Long> dbIds) throws Exception {
+                Set<Long> dbIds,
+                boolean enablePipelineEngine) throws Exception {
 
             WorkGroup workgroup = chooseWorkGroup(dbIds);
             setBucketSeqToInstanceForRuntimeFilters();
 
             TExecPlanFragmentParams commonParams = new TExecPlanFragmentParams();
-            toThriftForCommonParams(commonParams, destHost, descTable, workgroup, true);
+            toThriftForCommonParams(commonParams, destHost, descTable, workgroup, enablePipelineEngine);
             fillRequiredFieldsToThrift(commonParams);
 
             List<TExecPlanFragmentParams> uniqueParamsList = Lists.newArrayList();
@@ -2796,7 +2798,7 @@ public class Coordinator {
                 }
 
                 TExecPlanFragmentParams uniqueParams = new TExecPlanFragmentParams();
-                toThriftForUniqueParams(uniqueParams, i, instanceExecParam, true);
+                toThriftForUniqueParams(uniqueParams, i, instanceExecParam, enablePipelineEngine);
                 fillRequiredFieldsToThrift(uniqueParams);
 
                 uniqueParamsList.add(uniqueParams);
