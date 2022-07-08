@@ -177,6 +177,7 @@ public class LowCardinalityTest extends PlanTestBase {
         Assert.assertFalse(plan.contains("Decode"));
     }
 
+    // test simple group by one lowcardinality column
     @Test
     public void testDecodeNodeRewrite3() throws Exception {
         String sql = "select L_COMMENT from lineitem group by L_COMMENT";
@@ -307,6 +308,7 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testDecodeNodeRewriteDistinct() throws Exception {
         String sql;
         String plan;
+
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
         sql = "select count(distinct S_ADDRESS) from supplier";
         plan = getVerboseExplain(sql);
@@ -325,6 +327,16 @@ public class LowCardinalityTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  6:AGGREGATE (merge finalize)\n" +
                 "  |  aggregate: count[([9: count, BIGINT, false]); args: VARCHAR; result: BIGINT; args nullable: true; result nullable: false]"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
+
+        // TODO Fix unused Decode Node
+        sql = "select count(distinct S_ADDRESS, S_COMMENT) from supplier";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains(
+                "aggregate: count[(if[(3 IS NULL, NULL, [7, VARCHAR, false]); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]); args: VARCHAR; result: BIGINT; args nullable: true; result nullable: false]\n"));
+        Assert.assertTrue(plan.contains("  4:Decode\n" +
+                "  |  <dict id 10> : <string id 3>\n" +
+                "  |  <dict id 11> : <string id 7>\n" +
+                "  |  cardinality: 1"));
     }
 
     @Test
@@ -543,29 +555,6 @@ public class LowCardinalityTest extends PlanTestBase {
     }
 
     @Test
-    public void testDecodeNodeRewrite15() throws Exception {
-        // Test Predicate dict columns both has support predicate and no-support predicate
-        String sql;
-        String plan;
-        {
-            sql = "select count(*) from " +
-                    "supplier where S_ADDRESS like '%A%' and S_ADDRESS not like '%B%'";
-            plan = getCostExplain(sql);
-            Assert.assertFalse(plan.contains(" dict_col=S_ADDRESS "));
-        }
-        {
-            sql = "select * from supplier l join supplier r on " +
-                    "l.S_NAME = r.S_NAME where upper(l.S_ADDRESS) like '%A%' and upper(l.S_ADDRESS) not like '%B%'";
-            plan = getCostExplain(sql);
-            Assert.assertTrue(plan.contains("  1:OlapScanNode\n" +
-                    "     table: supplier, rollup: supplier\n" +
-                    "     preAggregation: on\n" +
-                    "     Predicates: upper(3: S_ADDRESS) LIKE '%A%', NOT (upper(3: S_ADDRESS) LIKE '%B%')\n" +
-                    "     dict_col=S_COMMENT"));
-        }
-    }
-
-    @Test
     public void testWithCaseWhen() throws Exception {
         String sql;
         String plan;
@@ -583,7 +572,8 @@ public class LowCardinalityTest extends PlanTestBase {
                 "select case when S_ADDRESS = 'key' then 1 when S_ADDRESS = '2' then 2 else S_NATIONKEY end from supplier";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("     dict_col=S_ADDRESS"));
-        Assert.assertTrue(plan.contains("  |  9 <-> CASE WHEN DictExpr(10: S_ADDRESS,[<place-holder> = 'key']) THEN 1 WHEN DictExpr(10: S_ADDRESS,[<place-holder> = '2']) THEN 2 ELSE 4: S_NATIONKEY END"));
+        Assert.assertTrue(plan.contains(
+                "  |  9 <-> CASE WHEN DictExpr(10: S_ADDRESS,[<place-holder> = 'key']) THEN 1 WHEN DictExpr(10: S_ADDRESS,[<place-holder> = '2']) THEN 2 ELSE 4: S_NATIONKEY END"));
         // test case when with common expression 1
         sql =
                 "select S_ADDRESS = 'key' , case when S_ADDRESS = 'key' then 1 when S_ADDRESS = '2' then 2 else 3 end from supplier";
@@ -604,22 +594,14 @@ public class LowCardinalityTest extends PlanTestBase {
         sql =
                 "select case when S_ADDRESS = 'key' then rand() when S_ADDRESS = '2' then 'key2' else 'key3' end from supplier";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains(" |  9 <-> CASE WHEN DictExpr(10: S_ADDRESS,[<place-holder> = 'key']) THEN CAST(rand() AS VARCHAR) WHEN DictExpr(10: S_ADDRESS,[<place-holder> = '2']) THEN 'key2' ELSE 'key3' END"));
+        Assert.assertTrue(plan.contains(
+                " |  9 <-> CASE WHEN DictExpr(10: S_ADDRESS,[<place-holder> = 'key']) THEN CAST(rand() AS VARCHAR) WHEN DictExpr(10: S_ADDRESS,[<place-holder> = '2']) THEN 'key2' ELSE 'key3' END"));
         Assert.assertFalse(plan.contains("Decode"));
         // test multi low cardinality column input
         sql = "select if(S_ADDRESS = 'key', S_COMMENT, 'y') from supplier";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("  |  9 <-> if[(DictExpr(10: S_ADDRESS,[<place-holder> = 'key']), DictExpr(11: S_COMMENT,[<place-holder>]), 'y'); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]"));
-    }
-
-    @Test
-    public void testCastRewrite() throws Exception {
-        String sql;
-        String plan;
-        // test cast low cardinality column as other type column
-        sql = "select cast (S_ADDRESS as datetime)  from supplier";
-        plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("     dict_col=S_ADDRESS"));
+        Assert.assertTrue(plan.contains(
+                "  |  9 <-> if[(DictExpr(10: S_ADDRESS,[<place-holder> = 'key']), DictExpr(11: S_COMMENT,[<place-holder>]), 'y'); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]"));
     }
 
     @Test
@@ -657,15 +639,117 @@ public class LowCardinalityTest extends PlanTestBase {
     }
 
     @Test
-    public void testScanFilter() throws Exception {
-        String sql = "select count(*) from supplier where S_ADDRESS = 'kks' group by S_ADDRESS ";
-        String plan = getFragmentPlan(sql);
+    public void testProject() throws Exception {
+        String sql;
+        String plan;
+
+        // test cast low cardinality column as other type column
+        sql = "select cast (S_ADDRESS as datetime)  from supplier";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("     dict_col=S_ADDRESS"));
+
+        // test simple string function
+        sql = "select substring(S_ADDRESS,1,2)  from supplier";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains(" 11 <-> DictExpr(10: S_ADDRESS,[substring(<place-holder>, 1, 2)])"));
+
+        // test simple string function with two column
+        // test worth for rewrite
+        sql = "select substring(S_ADDRESS, S_SUPPKEY, 2)  from supplier";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains(
+                "9 <-> substring[([3: S_ADDRESS, VARCHAR, false], [1: S_SUPPKEY, INT, false], 2); args: VARCHAR,INT,INT; result: VARCHAR; args nullable: false; result nullable: true]"));
+        Assert.assertFalse(plan.contains("Decode"));
+
+        // test string function with one column
+        sql = "select substring(S_ADDRESS, S_ADDRESS, 1) from supplier";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("11 <-> DictExpr(10: S_ADDRESS,[substring(<place-holder>, CAST(<place-holder> AS INT), 1)])"));
+
+        // test simple string function with two column
+        // test worth for rewrite
+        sql = "select substring(upper(S_ADDRESS), S_SUPPKEY, 2) from supplier";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("9 <-> substring[(DictExpr(10: S_ADDRESS,[upper(<place-holder>)]), [1: S_SUPPKEY, INT, false], 2); args: VARCHAR,INT,INT; result: VARCHAR; args nullable: true; result nullable: true]"));
+
+        // TODO: return dict column for this case
+        // test input two string column
+        sql = "select if(S_ADDRESS='kks', S_COMMENT, S_COMMENT) from supplier";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains(" |  9 <-> if[(DictExpr(10: S_ADDRESS,[<place-holder> = 'kks']), DictExpr(11: S_COMMENT,[<place-holder>]), DictExpr(11: S_COMMENT,[<place-holder>])); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]"));
+    }
+
+    @Test
+    public void testScanPredicate() throws Exception {
+        String sql;
+        String plan;
+
+        // Test Predicate dict columns both has support predicate and no-support predicate
+        sql = "select count(*) from " +
+                "supplier where S_ADDRESS like '%A%' and S_ADDRESS not like '%B%'";
+        plan = getCostExplain(sql);
+        Assert.assertFalse(plan.contains(" dict_col=S_ADDRESS "));
+
+        sql = "select * from supplier l join supplier r on " +
+                "l.S_NAME = r.S_NAME where upper(l.S_ADDRESS) like '%A%' and upper(l.S_ADDRESS) not like '%B%'";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("  1:OlapScanNode\n" +
+                "     table: supplier, rollup: supplier\n" +
+                "     preAggregation: on\n" +
+                "     Predicates: upper(3: S_ADDRESS) LIKE '%A%', NOT (upper(3: S_ADDRESS) LIKE '%B%')\n" +
+                "     dict_col=S_COMMENT"));
+
+        // Test Simple Filter
+        sql = "select count(*) from supplier where S_ADDRESS = 'kks' group by S_ADDRESS ";
+        plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("DictExpr(10: S_ADDRESS,[<place-holder> = 'kks'])"));
         Assert.assertTrue(plan.contains("group by: 10: S_ADDRESS"));
 
+        // Test unsupported predicate
+        // binary columns only support slotRef op const
         sql = "select count(*) from supplier where S_ADDRESS + 2 > 'kks' group by S_ADDRESS";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("group by: 3: S_ADDRESS"));
+
+        // Test Predicate with if predicate
+        sql = "select count(*) from supplier where if(S_ADDRESS = 'kks', true, false)";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(
+                plan.contains("PREDICATES: DictExpr(10: S_ADDRESS,[if(<place-holder> = 'kks', TRUE, FALSE)])"));
+
+        // Test single input Expression
+        sql = "select count(*) from supplier where if(S_ADDRESS = 'kks', cast(S_ADDRESS as boolean), false)";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "PREDICATES: DictExpr(10: S_ADDRESS,[if(<place-holder> = 'kks', CAST(<place-holder> AS BOOLEAN), FALSE)])"));
+
+        // Test multi input Expression with DictColumn
+        sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_COMMENT as boolean), false)";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "PREDICATES: if(DictExpr(10: S_ADDRESS,[<place-holder> = 'kks']), DictExpr(11: S_COMMENT,[CAST(<place-holder> AS BOOLEAN)]), FALSE)"));
+
+        // Test multi input Expression with No-String Column
+        sql = "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_NAME as boolean), false)";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "PREDICATES: if(DictExpr(10: S_ADDRESS,[<place-holder> = 'kks']), CAST(2: S_NAME AS BOOLEAN), FALSE)"));
+
+        // Test Two input column. one could apply the other couldn't apply
+        // The first expression that can accept a full rewrite. the second couldn't apply
+        sql = "select count(*) from supplier where S_ADDRESS = 'kks' and S_COMMENT not like '%kks%'";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "PREDICATES: DictExpr(10: S_ADDRESS,[<place-holder> = 'kks']), NOT (7: S_COMMENT LIKE '%kks%')"));
+
+        // Test Two input column. one could apply the other couldn't apply
+        // Two Predicate, The first expression that can accept a partial rewrite.
+        sql =
+                "select count(*) from supplier where if(S_ADDRESS = 'kks',cast(S_COMMENT as boolean), false) and S_COMMENT not like '%kks%'";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(
+                "PREDICATES: if(DictExpr(10: S_ADDRESS,[<place-holder> = 'kks']), CAST(7: S_COMMENT AS BOOLEAN), FALSE), NOT (7: S_COMMENT LIKE '%kks%')"));
+
     }
 
     @Test

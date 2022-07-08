@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
+import com.aliyun.datalake.metastore.common.functional.ThrowingRunnable;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
@@ -65,6 +66,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType.EQ_FOR_NULL;
@@ -324,58 +327,37 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 ScalarOperator newPredicate;
                 List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperator.getPredicate());
 
+                // check column could apply dict optimize
                 for (Integer columnId : context.tableIdToStringColumnIds.get(tableId)) {
-                    if (context.disableDictOptimizeColumns.contains(columnId)) {
-                        continue;
-                    }
-
                     ColumnRefOperator stringColumn = context.columnRefFactory.getColumnRef(columnId);
                     if (!scanOperator.getColRefToColumnMetaMap().containsKey(stringColumn)) {
                         continue;
                     }
 
-                    ColumnRefOperator newDictColumn = null;
-                    boolean couldEncoded = true;
-                    if (scanOperator.getPredicate() != null &&
-                            scanOperator.getPredicate().getUsedColumns().contains(columnId)) {
-                        // If there is an unsupported expression in any of the low cardinality columns,
-                        // we disable low cardinality optimization.
-                        // TODO(stdpain):
-                        // If one of the two low-cardinality columns is supported and the other is not,
-                        // we could make the first column apply low cardinality optimization
-                        boolean couldApply = predicates.stream()
-                                .allMatch(predicate -> !predicate.getUsedColumns().contains(columnId) ||
-                                        couldApplyDictOptimize(predicate, context.allStringColumnIds));
-                        if (!couldApply) {
-                            couldEncoded = false;
-                        } else {
-                            for (int i = 0; i < predicates.size(); i++) {
-                                ScalarOperator predicate = predicates.get(i);
-                                if (predicate.getUsedColumns().contains(columnId)) {
-                                    Preconditions.checkState(
-                                            couldApplyDictOptimize(predicate, context.allStringColumnIds));
-                                    if (newDictColumn == null) {
-                                        newDictColumn = context.columnRefFactory.create(
-                                                stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
-                                        context.stringColumnIdToDictColumnIds.put(columnId, newDictColumn.getId());
-                                    }
-
-                                    final DictMappingRewriter rewriter = new DictMappingRewriter(context);
-                                    final ScalarOperator newCallOperator = rewriter.rewrite(predicate.clone());
-                                    predicates.set(i, newCallOperator);
-                                }
-                            }
+                    BooleanSupplier checkColumnCouldApply = () -> {
+                        if (context.disableDictOptimizeColumns.contains(columnId)) {
+                            return false;
                         }
-                    }
 
-                    if (!couldEncoded) {
+                        if (scanOperator.getPredicate() != null &&
+                                scanOperator.getPredicate().getUsedColumns().contains(columnId)) {
+                            // If there is an unsupported expression in any of the low cardinality columns,
+                            // we disable low cardinality optimization.
+                            return predicates.stream()
+                                    .allMatch(predicate -> !predicate.getUsedColumns().contains(columnId) ||
+                                            couldApplyDictOptimize(predicate, context.allStringColumnIds));
+                        }
+                        return true;
+                    };
+
+                    if (!checkColumnCouldApply.getAsBoolean()) {
+                        context.allStringColumnIds.remove(columnId);
                         continue;
                     }
 
-                    if (newDictColumn == null) {
-                        newDictColumn = context.columnRefFactory.create(
-                                stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
-                    }
+                    ColumnRefOperator newDictColumn = context.columnRefFactory.create(
+                            stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
+
                     if (newOutputColumns.contains(stringColumn)) {
                         newOutputColumns.remove(stringColumn);
                         newOutputColumns.add(newDictColumn);
@@ -395,6 +377,24 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
                     context.stringColumnIdToDictColumnIds.put(columnId, newDictColumn.getId());
                     context.hasEncoded = true;
+                }
+
+                // rewrite predicate
+                for (Integer columnId : context.tableIdToStringColumnIds.get(tableId)) {
+                    if (context.stringColumnIdToDictColumnIds.containsKey(columnId) &&
+                            scanOperator.getPredicate() != null &&
+                            scanOperator.getPredicate().getUsedColumns().contains(columnId)) {
+                        for (int i = 0; i < predicates.size(); i++) {
+                            ScalarOperator predicate = predicates.get(i);
+                            if (predicate.getUsedColumns().contains(columnId)) {
+                                Preconditions.checkState(
+                                        couldApplyDictOptimize(predicate, context.allStringColumnIds));
+                                final DictMappingRewriter rewriter = new DictMappingRewriter(context);
+                                final ScalarOperator newCallOperator = rewriter.rewrite(predicate.clone());
+                                predicates.set(i, newCallOperator);
+                            }
+                        }
+                    }
                 }
 
                 newPredicate = Utils.compoundAnd(predicates);
@@ -958,7 +958,9 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 return null;
             }
 
-            return couldApply(call, context);
+            couldApply(call, context);
+            context.worthApplied |= context.couldAppliedOperator;
+            return null;
         }
 
         @Override
