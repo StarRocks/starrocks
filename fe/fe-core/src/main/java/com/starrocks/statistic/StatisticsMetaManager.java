@@ -106,7 +106,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
         int total = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false).size();
         // maybe cluster just shutdown, ignore
-        if (aliveSize < total / 2) {
+        if (aliveSize <= total / 2) {
             lossTableCount = 0;
             return true;
         }

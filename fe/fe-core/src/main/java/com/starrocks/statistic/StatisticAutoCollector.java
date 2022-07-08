@@ -205,7 +205,10 @@ public class StatisticAutoCollector extends MasterDaemon {
                 if (null == db) {
                     continue;
                 }
-
+                Table table = db.getTable(analyzeJob.getTableId());
+                if (null == table || !Table.TableType.OLAP.equals(table.getType())) {
+                    continue;
+                }
                 createTableJobs(allTableJobMap, analyzeJob, db, db.getTable(analyzeJob.getTableId()),
                         analyzeJob.getColumns());
             }
