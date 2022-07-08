@@ -59,9 +59,9 @@ public:
         return Status::OK();
     }
     Status open(RuntimeState* state) {
-        if (_is_open) return Status::OK();
+        if (_opened) return Status::OK();
         RETURN_IF_ERROR(_data_source->open(state));
-        _is_open = true;
+        _opened = true;
         return Status::OK();
     }
     void close(RuntimeState* state) { _data_source->close(state); }
@@ -74,7 +74,7 @@ public:
     int64_t num_rows_read() const { return _data_source->num_rows_read(); }
     void set_keep_priority(bool v) { _keep_priority = v; }
     bool keep_priority() const { return _keep_priority; }
-    bool is_open() { return _is_open; }
+    bool is_open() { return _opened; }
 
     RuntimeState* runtime_state() { return _runtime_state; }
 
@@ -102,7 +102,7 @@ public:
 private:
     connector::DataSourcePtr _data_source = nullptr;
     RuntimeState* _runtime_state = nullptr;
-    bool _is_open = false;
+    bool _opened = false;
     bool _keep_priority = false;
     std::atomic_bool _pending_token = false;
     MonotonicStopWatch _pending_queue_sw;
