@@ -67,6 +67,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
+import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -299,6 +300,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.watershedTxnId =
                 GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         this.jobState = JobState.WAITING_TXN;
+        span.setAttribute("watershedTxnId", this.watershedTxnId);
+        span.addEvent("setWaitingTxn");
 
         // write edit log
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
@@ -391,6 +394,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         AgentTaskQueue.addBatchTask(rollupBatchTask);
         AgentTaskExecutor.submit(rollupBatchTask);
         this.jobState = JobState.RUNNING;
+        span.addEvent("setRunning");
 
         // DO NOT write edit log here, tasks will be send again if FE restart or master changed.
         LOG.info("transfer rollup job {} state to {}", jobId, this.jobState);
@@ -487,6 +491,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         LOG.info("rollup job finished: {}", jobId);
+        this.span.end();
     }
 
     private void onFinished(OlapTable tbl) {
@@ -520,6 +525,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.finishedTimeMs = System.currentTimeMillis();
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        span.setStatus(StatusCode.ERROR, errMsg);
+        span.end();
         return true;
     }
 

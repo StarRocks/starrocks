@@ -1252,7 +1252,12 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void runAlterJobV2() {
-        alterJobsV2.values().forEach(AlterJobV2::run);
+        for (AlterJobV2 alterJob : alterJobsV2.values()) {
+            if (alterJob.jobState.isFinalState()) {
+                continue;
+            }
+            alterJob.run();
+        }
     }
 
     @Deprecated
