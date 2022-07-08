@@ -406,7 +406,7 @@ public class GlobalStateMgr {
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
 
-    private StarosInfo starosInfo;
+    private ShardManager shardManager;
 
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
@@ -568,7 +568,7 @@ public class GlobalStateMgr {
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
-        this.starosInfo = new StarosInfo();
+        this.shardManager = new ShardManager();
     }
 
     public static void destroyCheckpoint() {
@@ -726,8 +726,8 @@ public class GlobalStateMgr {
         return localMetastore;
     }
 
-    public StarosInfo getStarosInfo() {
-        return starosInfo;
+    public ShardManager getShardManager() {
+        return shardManager;
     }
 
     @VisibleForTesting
@@ -1028,7 +1028,7 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
-        starosInfo.getShardDelete().start();
+        shardManager.getShardDeleter().start();
     }
 
     // start threads that should running on all FE
@@ -1144,7 +1144,7 @@ public class GlobalStateMgr {
             checksum = loadInsertOverwriteJobs(dis, checksum);
             checksum = nodeMgr.loadComputeNodes(dis, checksum);
             remoteChecksum = dis.readLong();
-            checksum = starosInfo.loadShardDeleteInfo(dis, checksum);
+            checksum = shardManager.loadShardDeleteInfo(dis, checksum);
             remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
@@ -1396,7 +1396,7 @@ public class GlobalStateMgr {
             checksum = saveInsertOverwriteJobs(dos, checksum);
             checksum = nodeMgr.saveComputeNodes(dos, checksum);
             dos.writeLong(checksum);
-            checksum = starosInfo.saveShardDeleteInfo(dos, checksum);
+            checksum = shardManager.saveShardDeleteInfo(dos, checksum);
             dos.writeLong(checksum);
         }
 

@@ -4161,8 +4161,8 @@ public class LocalMetastore implements ConnectorMetadata {
                         
                     } // end for tablets
 
-                    GlobalStateMgr.getCurrentState().getStarosInfo()
-                            .getShardDelete().addShardId(tabletIds);
+                    GlobalStateMgr.getCurrentState().getShardManager()
+                            .getShardDeleter().addUnusedShardId(tabletIds);
                     GlobalStateMgr.getCurrentState().getEditLog().logAddDeleteShard(tabletIds);
                 } // end for indices
             } // end for partitions
