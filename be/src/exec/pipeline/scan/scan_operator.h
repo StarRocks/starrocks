@@ -15,6 +15,8 @@ namespace pipeline {
 
 class ScanOperator : public SourceOperator {
 public:
+    static constexpr int MAX_IO_TASKS_PER_OP = 4;
+
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
                  std::atomic<int>& num_committed_scan_tasks);
 
@@ -55,6 +57,20 @@ public:
     // It takes effect, only when it is positive.
     virtual size_t max_scan_concurrency() const { return 0; }
 
+<<<<<<< HEAD
+=======
+protected:
+    const size_t _buffer_size = config::pipeline_io_buffer_size;
+
+    // Shared scan
+    virtual void attach_chunk_source(int32_t source_index) = 0;
+    virtual void detach_chunk_source(int32_t source_index) {}
+    virtual bool has_shared_chunk_source() const = 0;
+    virtual bool has_buffer_output() const = 0;
+    virtual bool has_available_buffer() const = 0;
+    virtual ChunkPtr get_chunk_from_buffer() = 0;
+
+>>>>>>> 439164a91 ([Enhance] allow simple limit sql exceed bigquery_scan_rows_limit (#8380))
 private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out

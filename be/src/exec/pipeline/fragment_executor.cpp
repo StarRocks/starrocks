@@ -256,6 +256,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
     std::vector<TScanRangeParams> no_scan_ranges;
     plan->collect_scan_nodes(&scan_nodes);
 
+<<<<<<< HEAD
     MorselQueueMap& morsel_queues = _fragment_ctx->morsel_queues();
     for (auto& i : scan_nodes) {
         ScanNode* scan_node = down_cast<ScanNode*>(i);
@@ -264,6 +265,38 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
         ASSIGN_OR_RETURN(MorselQueuePtr morsel_queue,
                          scan_node->convert_scan_range_to_morsel_queue(scan_ranges, scan_node->id(), request));
         morsel_queues.emplace(scan_node->id(), std::move(morsel_queue));
+=======
+    int64_t sum_scan_limit = 0;
+    MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
+    for (auto& i : scan_nodes) {
+        auto* scan_node = down_cast<ScanNode*>(i);
+        const std::vector<TScanRangeParams>& scan_ranges = request.scan_ranges_of_node(scan_node->id());
+        const auto& scan_ranges_per_driver_seq = request.per_driver_seq_scan_ranges_of_node(scan_node->id());
+
+        ASSIGN_OR_RETURN(auto morsel_queue_factory, scan_node->convert_scan_range_to_morsel_queue_factory(
+                                                            scan_ranges, scan_ranges_per_driver_seq, scan_node->id(),
+                                                            dop, enable_tablet_internal_parallel));
+        morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
+
+        if (auto* olap_scan = dynamic_cast<vectorized::OlapScanNode*>(scan_node)) {
+            olap_scan->enable_shared_scan(enable_shared_scan);
+        }
+        if (scan_node->limit() > 0) {
+            sum_scan_limit += scan_node->limit();
+        }
+    }
+
+    if (_wg && _wg->big_query_scan_rows_limit() > 0) {
+        // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
+        // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
+        if (sum_scan_limit <= _wg->big_query_scan_rows_limit()) {
+            int parallelism = dop * ScanOperator::MAX_IO_TASKS_PER_OP;
+            int64_t parallel_scan_limit = sum_scan_limit * parallelism;
+            _query_ctx->set_scan_limit(parallel_scan_limit);
+        } else {
+            _query_ctx->set_scan_limit(_wg->big_query_scan_rows_limit());
+        }
+>>>>>>> 439164a91 ([Enhance] allow simple limit sql exceed bigquery_scan_rows_limit (#8380))
     }
 
     return Status::OK();
