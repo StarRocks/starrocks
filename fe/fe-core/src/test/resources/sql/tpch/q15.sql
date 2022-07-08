@@ -40,7 +40,7 @@ order by
 TOP-N (order by [[1: S_SUPPKEY ASC NULLS FIRST]])
     TOP-N (order by [[1: S_SUPPKEY ASC NULLS FIRST]])
         INNER JOIN (join-predicate [47: max = 27: sum] post-join-predicate [null])
-            AGGREGATE ([GLOBAL] aggregate [{47: max=max(47: max)}] group by [[]] having [null]
+            AGGREGATE ([GLOBAL] aggregate [{47: max=max(47: max)}] group by [[]] having [47: max IS NOT NULL]
                 EXCHANGE GATHER
                     AGGREGATE ([LOCAL] aggregate [{47: max=max(46: sum)}] group by [[]] having [null]
                         AGGREGATE ([GLOBAL] aggregate [{46: sum=sum(46: sum)}] group by [[30: L_SUPPKEY]] having [null]

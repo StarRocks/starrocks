@@ -18,6 +18,7 @@ import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
@@ -58,6 +59,7 @@ import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
@@ -499,6 +501,17 @@ public class PrivilegeChecker {
         }
 
         @Override
+        public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext session) {
+            TableName tableName = statement.getTableName();
+
+            if (!checkTblPriv(session, tableName, PrivPredicate.LOAD)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
+                        session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
+            }
+            return null;
+        }
+
+        @Override
         public Void visitShowCreateDbStatement(ShowCreateDbStmt statement, ConnectContext session) {
             String db = statement.getDb();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), db,
@@ -711,6 +724,16 @@ public class PrivilegeChecker {
                 throw new SemanticException(e.getMessage());
             } finally {
                 db.readUnlock();
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDescTableStmt(DescribeStmt statement, ConnectContext session) {
+            TableName tableName = statement.getDbTableName();
+            if (!checkTblPriv(session, tableName, PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "DESCRIBE",
+                        session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
             }
             return null;
         }

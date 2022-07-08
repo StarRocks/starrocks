@@ -6,6 +6,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import org.apache.velocity.VelocityContext;
 
 import java.io.StringWriter;
@@ -26,9 +27,13 @@ public class TableCollectJob extends StatisticsCollectJob {
 
     @Override
     public void collect() throws Exception {
-        for (String column : columns) {
-            String sql = buildFullInsertSQL(db, table, Lists.newArrayList(column));
-            collectStatisticSync(sql);
+        List<List<String>> splitColumns = Lists.partition(columns,
+                (int) (table.getRowCount() * columns.size() / Config.statistics_collect_max_row_count + 1));
+        for (List<String> splitColItem : splitColumns) {
+            for (String columnName : splitColItem) {
+                String sql = buildFullInsertSQL(db, table, Lists.newArrayList(columnName));
+                collectStatisticSync(sql);
+            }
         }
     }
 

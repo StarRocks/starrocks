@@ -11,6 +11,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -149,5 +150,10 @@ public class AnalyzeStmtTest {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
         Assert.assertTrue(analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc);
         Assert.assertEquals(((AnalyzeHistogramDesc) (analyzeStmt.getAnalyzeTypeDesc())).getBuckets(), 256);
+
+        sql = "analyze table t0 drop histogram on v1";
+        DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) analyzeSuccess(sql);
+        Assert.assertEquals(dropHistogramStmt.getTableName().toSql(), "`test`.`t0`");
+        Assert.assertEquals(dropHistogramStmt.getColumnNames().toString(), "[v1]");
     }
 }

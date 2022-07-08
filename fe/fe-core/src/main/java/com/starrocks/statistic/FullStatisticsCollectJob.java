@@ -7,6 +7,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import org.apache.velocity.VelocityContext;
 
 import java.util.List;
@@ -37,9 +38,14 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     public void collect() throws Exception {
         for (Long partitionId : partitionIdList) {
             Partition partition = table.getPartition(partitionId);
-            for (String columnName : columns) {
-                String sql = buildCollectFullStatisticSQL(db, table, partition, Lists.newArrayList(columnName));
-                collectStatisticSync(sql);
+
+            List<List<String>> splitColumns = Lists.partition(columns,
+                    (int) (partition.getRowCount() * columns.size() / Config.statistics_collect_max_row_count + 1));
+            for (List<String> splitColItem : splitColumns) {
+                for (String columnName : splitColItem) {
+                    String sql = buildCollectFullStatisticSQL(db, table, partition, Lists.newArrayList(columnName));
+                    collectStatisticSync(sql);
+                }
             }
         }
     }

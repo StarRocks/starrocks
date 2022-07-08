@@ -190,6 +190,13 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _udf_call_pool = new PriorityThreadPool("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
     _fragment_mgr = new FragmentMgr(this);
 
+    int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
+    if (num_prepare_threads <= 0) {
+        num_prepare_threads = std::thread::hardware_concurrency();
+    }
+    _pipeline_prepare_pool =
+            new PriorityThreadPool("pip_prepare", num_prepare_threads, config::pipeline_prepare_thread_pool_queue_size);
+
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
     _max_executor_threads = std::thread::hardware_concurrency();
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
@@ -450,6 +457,10 @@ void ExecEnv::_destroy() {
     if (_udf_call_pool) {
         delete _udf_call_pool;
         _udf_call_pool = nullptr;
+    }
+    if (_pipeline_prepare_pool) {
+        delete _pipeline_prepare_pool;
+        _pipeline_prepare_pool = nullptr;
     }
     if (_pipeline_scan_io_thread_pool) {
         delete _pipeline_scan_io_thread_pool;

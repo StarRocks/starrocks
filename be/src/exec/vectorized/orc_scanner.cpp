@@ -232,6 +232,7 @@ Status ORCScanner::_open_next_orc_reader() {
 }
 
 void ORCScanner::close() {
+    FileScanner::close();
     _orc_reader.reset(nullptr);
 }
 

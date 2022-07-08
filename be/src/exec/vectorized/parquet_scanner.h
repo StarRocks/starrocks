@@ -25,10 +25,6 @@ namespace starrocks::vectorized {
 // Broker scanner convert the data read from broker to starrocks's tuple.
 class ParquetScanner : public FileScanner {
 public:
-    ParquetScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRangeParams& params,
-                   ScannerCounter* counter, const std::vector<TBrokerRangeDesc>& ranges,
-                   std::vector<std::shared_ptr<RandomAccessFile>>&& files);
-
     ParquetScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                    ScannerCounter* counter);
 

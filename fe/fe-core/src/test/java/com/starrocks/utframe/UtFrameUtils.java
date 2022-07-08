@@ -386,8 +386,8 @@ public class UtFrameUtils {
         // mock statistics table
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         if (!starRocksAssert.databaseExist("_statistics_")) {
-            starRocksAssert.withDatabaseWithoutAnalyze(StatsConstants.StatisticsDBName)
-                    .useDatabase(StatsConstants.StatisticsDBName);
+            starRocksAssert.withDatabaseWithoutAnalyze(StatsConstants.STATISTICS_DB_NAME)
+                    .useDatabase(StatsConstants.STATISTICS_DB_NAME);
             starRocksAssert.withTable(createStatisticsTableStmt);
         }
         // prepare dump mock environment

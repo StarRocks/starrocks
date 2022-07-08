@@ -363,6 +363,23 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return result;
     }
 
+    /**
+     * Create thrift fragment with the unique fields, including
+     * - output_sink (only for MultiCastDataStreamSink and ExportSink).
+     * @return The thrift fragment with the unique fields.
+     */
+    public TPlanFragment toThriftForUniqueFields() {
+        TPlanFragment result = new TPlanFragment();
+        // Fill the required field.
+        result.setPartition(dataPartition.toThrift());
+
+        if (sink != null && (this instanceof MultiCastPlanFragment || sink instanceof ExportSink)) {
+            result.setOutput_sink(sink.toThrift());
+        }
+
+        return result;
+    }
+
     private List<TGlobalDict> dictToThrift(List<Pair<Integer, ColumnDict>> dicts) {
         List<TGlobalDict> result = Lists.newArrayList();
         for (Pair<Integer, ColumnDict> dictPair : dicts) {

@@ -37,6 +37,7 @@ statement
     | dropIndexStatement                                                                    #dropIndex
     | refreshTableStatement                                                                 #refreshTable
     | showDeleteStatement                                                                   #showDelete
+    | descTableStatement                                                                    #descTable
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -81,7 +82,7 @@ statement
     | createAnalyzeStatement                                                                #createAnalyze
     | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
     | analyzeHistogramStatement                                                             #analyzeHistogram
-    | dropAnalyzeHistogramStatement                                                         #dropHistogram
+    | dropHistogramStatement                                                                #dropHistogram
     | showAnalyzeStatement                                                                  #showAnalyze
     | showStatsMetaStatement                                                                #showStatsMeta
     | showHistogramMetaStatement                                                            #showHistogramMeta
@@ -104,6 +105,9 @@ statement
     | REVOKE identifierOrString FROM user                                                   #revokeRole
     | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
+
+    // procedure
+    | showProcedureStatment                                                                 #showProcedure
     ;
 
 
@@ -269,6 +273,10 @@ showDeleteStatement
     : SHOW DELETE ((FROM | IN) db=qualifiedName)?
     ;
 
+descTableStatement
+    : (DESC | DESCRIBE) table=qualifiedName ALL?
+    ;
+
 // ------------------------------------------- View Statement ----------------------------------------------------------
 
 createViewStatement
@@ -431,7 +439,7 @@ analyzeHistogramStatement
         (WITH bucket=INTEGER_VALUE BUCKETS)? properties?
     ;
 
-dropAnalyzeHistogramStatement
+dropHistogramStatement
     : ANALYZE TABLE qualifiedName DROP HISTOGRAM ON identifier (',' identifier)*
     ;
 
@@ -646,7 +654,7 @@ columnAliases
     ;
 
 relationPrimary
-    : qualifiedName partitionNames? tabletList? bracketHint?                                     #tableName
+    : qualifiedName partitionNames? tabletList? bracketHint?                              #tableName
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'                                 #inlineTable
     | subquery                                                                            #subqueryRelation
     | qualifiedName '(' expression (',' expression)* ')'                                  #tableFunction
@@ -661,6 +669,10 @@ tabletList
     : TABLET '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     ;
 
+// ------------------------------------------- Procedure Statement ---------------------------------------------------------
+showProcedureStatment
+    : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
+    ;
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -863,7 +875,7 @@ frameBound
 // ------------------------------------------- COMMON AST --------------------------------------------------------------
 
 explainDesc
-    : EXPLAIN (LOGICAL | VERBOSE | COSTS)?
+    : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?
     ;
 
 partitionDesc

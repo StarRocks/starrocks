@@ -1052,8 +1052,10 @@ public class PlanTestBase {
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
     }
 
-    public static void assertContains(String text, String pattern) {
-        Assert.assertTrue(text, text.contains(pattern));
+    public static void assertContains(String text, String... pattern) {
+        for (String s : pattern) {
+            Assert.assertTrue(text, text.contains(s));
+        }
     }
 
     public static void assertNotContains(String text, String pattern) {

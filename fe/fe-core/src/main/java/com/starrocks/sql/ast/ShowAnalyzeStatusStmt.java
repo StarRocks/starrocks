@@ -53,8 +53,11 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         }
         row.set(2, table.getName());
 
+        long totalCollectColumnsSize = table.getBaseSchema().stream()
+                .filter(column -> column.isKey() && column.getType().canStatistic()).count();
+
         if (null != columns && !columns.isEmpty()
-                && (columns.size() != table.getBaseSchema().size())) {
+                && (columns.size() != totalCollectColumnsSize)) {
             String str = String.join(",", columns);
             row.set(3, str);
         }

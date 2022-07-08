@@ -54,11 +54,10 @@ import java.util.Map;
 public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
 
-
-    private static final String DELETE_TEMPLATE = "DELETE FROM " + StatsConstants.SampleStatisticsTableName + " WHERE ";
+    private static final String DELETE_TEMPLATE = "DELETE FROM " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME + " WHERE ";
 
     private static final String SELECT_EXPIRE_TABLE_TEMPLATE =
-            "SELECT DISTINCT table_id" + " FROM " + StatsConstants.SampleStatisticsTableName + " WHERE 1 = 1 ";
+            "SELECT DISTINCT table_id" + " FROM " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME + " WHERE 1 = 1 ";
 
     public List<TStatisticData> queryStatisticSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
         String sql;
@@ -108,6 +107,20 @@ public class StatisticExecutor {
             LOG.warn("Execute statistic table query fail.", e);
             throw e;
         }
+    }
+
+    public void dropHistogram(Long tableId, List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropHistogramSQL(tableId, columnNames);
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        StatementBase parsedStmt;
+        try {
+            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            executor.execute();
+        } catch (Exception e) {
+            LOG.warn("Execute statistic table expire fail.", e);
+        }
+        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(tableId, columnNames);
     }
 
     // If you call this function, you must ensure that the db lock is added
@@ -344,22 +357,6 @@ public class StatisticExecutor {
         }
         return Pair.create(sqlResult, coord.getExecStatus());
     }
-
-    private int splitColumnsByRows(Long dbId, Long tableId, long rows, boolean isSample) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        OlapTable table = (OlapTable) db.getTable(tableId);
-
-        long count =
-                table.getPartitions().stream().map(p -> p.getBaseIndex().getRowCount()).reduce(Long::sum).orElse(1L);
-        if (isSample) {
-            count = Math.min(count, rows);
-        }
-        count = Math.max(count, 1L);
-
-        // 500w data per query
-        return (int) (5000000L / count + 1);
-    }
-
 
     // Lock all database before analyze
     private static void lock(Map<String, Database> dbs) {

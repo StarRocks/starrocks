@@ -18,20 +18,20 @@ public class StatisticSQLBuilder {
     private static final String QUERY_SAMPLE_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_DATA_VERSION + " as INT), update_time, db_id, table_id, column_name,"
                     + " row_count, data_size, distinct_count, null_count, max, min"
-                    + " FROM " + StatsConstants.SampleStatisticsTableName
+                    + " FROM " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME
                     + " WHERE $predicate";
 
     private static final String QUERY_FULL_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_DATA_VERSION + " as INT), $updateTime, db_id, table_id, column_name,"
                     + " sum(row_count), cast(avg(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
                     + " max(max), min(min)"
-                    + " FROM " + StatsConstants.FullStatisticsTableName
+                    + " FROM " + StatsConstants.FULL_STATISTICS_TABLE_NAME
                     + " WHERE $predicate"
                     + " GROUP BY db_id, table_id, column_name";
 
     private static final String QUERY_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_HISTOGRAM_VERSION + " as INT), table_id, column_name, histogram"
-                    + " FROM " + StatsConstants.HistogramStatisticsTableName
+                    + " FROM " + StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME
                     + " WHERE $predicate";
 
     private static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
@@ -101,6 +101,12 @@ public class StatisticSQLBuilder {
 
         context.put("predicate", Joiner.on(" and ").join(predicateList));
         return build(context, QUERY_HISTOGRAM_STATISTIC_TEMPLATE);
+    }
+
+    public static String buildDropHistogramSQL(Long tableId, List<String> columnNames) {
+        return "delete from " + StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME + " where table_id = "
+                + tableId + " and column_name in (" + Joiner.on(", ")
+                .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")";
     }
 
     private static String build(VelocityContext context, String template) {

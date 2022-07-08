@@ -114,6 +114,7 @@ ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, c
         : ScanNode(pool, tnode, descs) {
     _name = "connector_scan";
     auto c = connector::ConnectorManager::default_instance()->get(tnode.connector_scan_node.connector_name);
+    _connector_type = c->connector_type();
     _data_source_provider = c->create_data_source_provider(this, tnode);
 }
 
@@ -162,7 +163,7 @@ Status ConnectorScanNode::open(RuntimeState* state) {
 }
 
 Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
-    for (const TScanRangeParams& scan_range : _scan_ranges) {
+    for (TScanRangeParams& scan_range : _scan_ranges) {
         _create_and_init_scanner(state, scan_range.scan_range);
     }
 
@@ -185,7 +186,10 @@ Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, const TScanRange& scan_range) {
+Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, TScanRange& scan_range) {
+    if (scan_range.__isset.broker_scan_range) {
+        scan_range.broker_scan_range.params.__set_non_blocking_read(false);
+    }
     connector::DataSourcePtr data_source = _data_source_provider->create_data_source(scan_range);
     data_source->set_predicates(_conjunct_ctxs);
     data_source->set_runtime_filters(&_runtime_filter_collector);
@@ -517,7 +521,6 @@ Status ConnectorScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& s
         // to create at least one data source
         _scan_ranges.emplace_back(TScanRangeParams());
     }
-    COUNTER_UPDATE(_profile.scan_ranges_counter, scan_ranges.size());
     return Status::OK();
 }
 
@@ -528,7 +531,6 @@ bool ConnectorScanNode::accept_empty_scan_ranges() const {
 void ConnectorScanNode::_init_counter() {
     _profile.scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
     _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
-    _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
 }
 
 } // namespace starrocks::vectorized

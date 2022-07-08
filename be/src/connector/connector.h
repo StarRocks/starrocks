@@ -92,6 +92,15 @@ public:
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 
+enum ConnectorType {
+    HIVE = 0,
+    ES = 1,
+    JDBC = 2,
+    MYSQL = 3,
+    FILE = 4,
+    LAKE = 5,
+};
+
 class Connector {
 public:
     // supported connectors.
@@ -99,6 +108,7 @@ public:
     static const std::string ES;
     static const std::string JDBC;
     static const std::string MYSQL;
+    static const std::string FILE;
     static const std::string LAKE;
 
     virtual ~Connector() = default;
@@ -110,6 +120,8 @@ public:
 
     // virtual DataSourceProviderPtr create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
     //                                                         const std::string& table_handle) const;
+
+    virtual ConnectorType connector_type() const = 0;
 };
 
 class ConnectorManager {

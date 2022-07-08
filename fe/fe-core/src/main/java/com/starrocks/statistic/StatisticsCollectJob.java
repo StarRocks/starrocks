@@ -34,7 +34,7 @@ public abstract class StatisticsCollectJob {
     protected final StatsConstants.ScheduleType scheduleType;
     protected final Map<String, String> properties;
 
-    public StatisticsCollectJob(Database db, OlapTable table, List<String> columns,
+    protected StatisticsCollectJob(Database db, OlapTable table, List<String> columns,
                                 StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
                                 Map<String, String> properties) {
         this.db = db;
@@ -57,7 +57,7 @@ public abstract class StatisticsCollectJob {
         DEFAULT_VELOCITY_ENGINE.setProperty("runtime.log.logsystem.log4j.logger", "velocity");
     }
 
-    protected static final String INSERT_STATISTIC_TEMPLATE = "INSERT INTO " + StatsConstants.SampleStatisticsTableName;
+    protected static final String INSERT_STATISTIC_TEMPLATE = "INSERT INTO " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 
     public abstract void collect() throws Exception;
 

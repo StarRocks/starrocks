@@ -52,6 +52,7 @@ public class PushDownPredicateScanRule extends TransformationRule {
         Preconditions.checkState(predicates != null);
         predicates = scalarOperatorRewriter.rewrite(predicates,
                 ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
+        predicates = Utils.transTrue2Null(predicates);
 
         if (logicalScanOperator instanceof LogicalOlapScanOperator) {
             LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) logicalScanOperator;

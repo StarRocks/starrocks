@@ -45,11 +45,16 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
 
     @Override
     public void collect() throws Exception {
-        for (String columnName : columns) {
-            String sql = buildSampleInsertSQL(db.getId(), table.getId(), Lists.newArrayList(columnName),
-                    Long.parseLong(properties.getOrDefault(StatsConstants.PROP_SAMPLE_COLLECT_ROWS_KEY,
-                            String.valueOf(Config.statistic_sample_collect_rows))));
-            collectStatisticSync(sql);
+        long sampleRowCount = Long.parseLong(properties.getOrDefault(StatsConstants.PROP_SAMPLE_COLLECT_ROWS_KEY,
+                String.valueOf(Config.statistic_sample_collect_rows)));
+        List<List<String>> splitColumns = Lists.partition(columns,
+                (int) (sampleRowCount * columns.size() / Config.statistics_collect_max_row_count + 1));
+
+        for (List<String> splitColItem : splitColumns) {
+            for (String columnName : splitColItem) {
+                String sql = buildSampleInsertSQL(db.getId(), table.getId(), Lists.newArrayList(columnName), sampleRowCount);
+                collectStatisticSync(sql);
+            }
         }
     }
 

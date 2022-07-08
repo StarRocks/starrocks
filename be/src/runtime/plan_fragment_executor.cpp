@@ -146,7 +146,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     // set up sink, if required
     if (request.fragment.__isset.output_sink) {
         RETURN_IF_ERROR(DataSink::create_data_sink(_runtime_state, request.fragment.output_sink,
-                                                   request.fragment.output_exprs, params, row_desc(), &_sink));
+                                                   request.fragment.output_exprs, params, params.sender_id, row_desc(),
+                                                   &_sink));
         DCHECK(_sink != nullptr);
         RETURN_IF_ERROR(_sink->prepare(runtime_state()));
         _sink->set_query_statistics(_query_statistics);

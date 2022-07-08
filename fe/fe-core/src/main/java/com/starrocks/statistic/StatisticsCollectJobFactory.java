@@ -19,6 +19,9 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class StatisticsCollectJobFactory {
+    private StatisticsCollectJobFactory() {
+    }
+
     public static List<StatisticsCollectJob> buildStatisticsCollectJob(AnalyzeJob analyzeJob) {
         // The jobs need to be sorted in order of execution to avoid duplicate collections
 

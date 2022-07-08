@@ -227,7 +227,7 @@ public abstract class JoinOrder {
             cost += exprInfo.rightChildExpr.bestExprInfo.cost;
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) exprInfo.expr.getOp();
             if (penaltyCross && joinOperator.getJoinType().isCrossJoin()) {
-                cost *= StatsConstants.CrossJoinCostPenalty;
+                cost *= StatsConstants.CROSS_JOIN_COST_PENALTY;
             }
         }
         exprInfo.cost = cost;

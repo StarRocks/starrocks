@@ -83,7 +83,7 @@ private:
     const std::vector<TPlanFragmentDestination> _destinations;
     // If the pipeline of dest be is ExchangeSourceOperator -> AggregateBlockingSinkOperator(with group by)
     // then we shuffle for different parallelism at sender side(ExchangeSinkOperator) if _is_pipeline_level_shuffle is true
-    const bool _is_pipeline_level_shuffle;
+    bool _is_pipeline_level_shuffle;
     // Degree of pipeline level shuffle
     // - If _is_pipeline_level_shuffle is false, it is set to 1.
     // - If _is_pipeline_level_shuffle is true,

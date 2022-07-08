@@ -55,13 +55,13 @@ public class CachedStatisticStorageTest {
             + ");";
 
     public static void createStatisticsTable() throws Exception {
-        CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.StatisticsDBName);
+        CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {
             GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
         } catch (DdlException e) {
             return;
         }
-        starRocksAssert.useDatabase(StatsConstants.StatisticsDBName);
+        starRocksAssert.useDatabase(StatsConstants.STATISTICS_DB_NAME);
         starRocksAssert.withTable(DEFAULT_CREATE_TABLE_TEMPLATE);
     }
 

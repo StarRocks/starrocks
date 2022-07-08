@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.sql.parser.SqlParser.parseFirstStatement;
-import static com.starrocks.statistic.StatsConstants.HistogramStatisticsTableName;
+import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME;
 
 public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private static final String COLLECT_HISTOGRAM_STATISTIC_TEMPLATE =
@@ -52,7 +52,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
     public String buildCollectHistogram(Database database, OlapTable table, Long totalRows, Long sampleRows,
                                         Long bucketNum, String columnName) {
-        StringBuilder builder = new StringBuilder("INSERT INTO ").append(HistogramStatisticsTableName).append(" ");
+        StringBuilder builder = new StringBuilder("INSERT INTO ").append(HISTOGRAM_STATISTICS_TABLE_NAME).append(" ");
 
         VelocityContext context = new VelocityContext();
         context.put("tableId", table.getId());
