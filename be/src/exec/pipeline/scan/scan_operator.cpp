@@ -181,7 +181,14 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
         return Status::OK();
     }
 
-    for (int i = 0; i < MAX_IO_TASKS_PER_OP; ++i) {
+    // Avoid uneven distribution when io tasks execute very fast, so we start
+    // traverse the chunk_source array from last visit idx
+    int cnt = MAX_IO_TASKS_PER_OP;
+    while (--cnt >= 0) {
+        if (++_chunk_source_idx >= MAX_IO_TASKS_PER_OP) {
+            _chunk_source_idx = 0;
+        }
+        int i = _chunk_source_idx;
         if (_is_io_task_running[i]) {
             continue;
         }

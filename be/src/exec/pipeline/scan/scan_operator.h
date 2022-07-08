@@ -116,6 +116,7 @@ private:
     mutable std::shared_mutex _task_mutex; // Protects the chunk-source from concurrent close and read
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
+    int32_t _chunk_source_idx = -1;
 
     mutable SpinLock _scan_status_mutex;
     Status _scan_status;
