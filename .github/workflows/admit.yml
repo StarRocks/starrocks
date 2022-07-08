@@ -1,14 +1,18 @@
 name: Trigger Jobs
 
 on:
-  pull_request_target:
+  pull_request:
     types: [synchronize, labeled, reopened]
 
 jobs:
   Trigger-Admit-Test:
     runs-on: ubuntu-latest
     steps:
-      - run: echo '${{ toJson(github.event.pull_request.requested_reviewers) }}'
+      - id: reviews
+        uses: jrylan/github-action-reviews-counter@main
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: echo "approved"${{ steps.reviews.outputs.approved }}
       
 #       - uses: wow-actions/auto-comment@v1.0.7
 #         if: contains(github.event.pull_request.labels.*.name, 'Approved')
