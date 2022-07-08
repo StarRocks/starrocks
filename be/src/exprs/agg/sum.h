@@ -71,16 +71,20 @@ public:
 
     void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                              int64_t current_row_position, int64_t partition_start,
-                                             int64_t partition_end, int64_t preceding,
-                                             int64_t following) const override {
+                                             int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
+                                             bool ignore_subtraction, bool ignore_addition) const override {
         const auto* column = down_cast<const InputColumnType*>(columns[0]);
         const auto* data = column->get_data().data();
 
-        if (preceding >= 0 && current_row_position - 1 - preceding >= partition_start) {
-            this->data(state).sum -= data[current_row_position - 1 - preceding];
+        const int64_t previous_frame_first_position = current_row_position - 1 + rows_start_offset;
+        const int64_t current_frame_last_position = current_row_position + rows_end_offset;
+        if (!ignore_subtraction && previous_frame_first_position >= partition_start &&
+            previous_frame_first_position < partition_end) {
+            this->data(state).sum -= data[previous_frame_first_position];
         }
-        if (following >= 0 && current_row_position + following < partition_end) {
-            this->data(state).sum += data[current_row_position + following];
+        if (!ignore_addition && current_frame_last_position >= partition_start &&
+            current_frame_last_position < partition_end) {
+            this->data(state).sum += data[current_frame_last_position];
         }
     }
 

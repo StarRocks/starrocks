@@ -48,13 +48,15 @@ public:
 
     void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                              int64_t current_row_position, int64_t partition_start,
-                                             int64_t partition_end, int64_t preceding,
-                                             int64_t following) const override {
-        DCHECK_GE(preceding, 0);
-        DCHECK_GE(following, 0);
+                                             int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
+                                             bool ignore_subtraction, bool ignore_addition) const override {
+        DCHECK(!ignore_subtraction);
+        DCHECK(!ignore_addition);
         // We don't actually update in removable cumulative way, since the ordinary way is effecient enough
-        const auto frame_start = std::max(current_row_position - preceding, partition_start);
-        const auto frame_end = std::min(current_row_position + following + 1, partition_end);
+        const auto frame_start =
+                std::min(std::max(current_row_position + rows_start_offset, partition_start), partition_end);
+        const auto frame_end =
+                std::max(std::min(current_row_position + rows_end_offset + 1, partition_end), partition_start);
         this->data(state).count = (frame_end - frame_start);
     }
 
@@ -158,24 +160,37 @@ public:
 
     void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                              int64_t current_row_position, int64_t partition_start,
-                                             int64_t partition_end, int64_t preceding,
-                                             int64_t following) const override {
-        DCHECK_GE(preceding, 0);
-        DCHECK_GE(following, 0);
-        const auto frame_start = std::max(current_row_position - preceding, partition_start);
-        const auto frame_end = std::min(current_row_position + following + 1, partition_end);
+                                             int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
+                                             bool ignore_subtraction, bool ignore_addition) const override {
+        DCHECK(!ignore_subtraction);
+        DCHECK(!ignore_addition);
+        const auto frame_start =
+                std::min(std::max(current_row_position + rows_start_offset, partition_start), partition_end);
+        const auto frame_end =
+                std::max(std::min(current_row_position + rows_end_offset + 1, partition_end), partition_start);
+        const auto frame_size = frame_end - frame_start;
+        // For cases like: rows between 2 preceding and 1 preceding
+        // If frame_start ge frame_end, means the frame is empty,
+        // we could directly return.
+        if (frame_size <= 0) {
+            this->data(state).count = 0;
+            return;
+        }
         if (columns[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(columns[0]);
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
                 if (this->data(state).is_frame_init) {
                     // Since frame has been evaluated, we only need to update the boundary
-                    if (current_row_position - 1 - preceding >= partition_start &&
-                        null_data[current_row_position - 1 - preceding] == 0) {
+                    const int64_t previous_frame_first_position = current_row_position - 1 + rows_start_offset;
+                    const int64_t current_frame_last_position = current_row_position + rows_end_offset;
+                    if (previous_frame_first_position >= partition_start &&
+                        previous_frame_first_position < partition_end &&
+                        null_data[previous_frame_first_position] == 0) {
                         this->data(state).count--;
                     }
-                    if (current_row_position + following < partition_end &&
-                        null_data[current_row_position + following] == 0) {
+                    if (current_frame_last_position >= partition_start && current_frame_last_position < partition_end &&
+                        null_data[current_frame_last_position] == 0) {
                         this->data(state).count++;
                     }
                 } else {
@@ -191,7 +206,7 @@ public:
 
         // Has no null value
         // We don't actually update in removable cumulative way, since the ordinary way is effecient enough
-        this->data(state).count = (frame_end - frame_start);
+        this->data(state).count = frame_size;
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {

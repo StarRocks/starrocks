@@ -469,7 +469,6 @@ public:
                                    int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                    int64_t frame_end) const override {
         // For cases like: rows between 2 preceding and 1 preceding
-        // Please refer to AnalyticNode::_update_window_batch_normal
         // If frame_start ge frame_end, means the frame is empty,
         // we could directly return.
         if (frame_start >= frame_end) {
@@ -511,17 +510,25 @@ public:
 
     void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                              int64_t current_row_position, int64_t partition_start,
-                                             int64_t partition_end, int64_t preceding,
-                                             int64_t following) const override {
-        DCHECK_GE(preceding, 0);
-        DCHECK_GE(following, 0);
+                                             int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
+                                             bool ignore_subtraction, bool ignore_addition) const override {
+        DCHECK(!ignore_subtraction);
+        DCHECK(!ignore_addition);
         this->data(state).is_null = true;
+        const auto frame_start =
+                std::min(std::max(current_row_position + rows_start_offset, partition_start), partition_end);
+        const auto frame_end =
+                std::max(std::min(current_row_position + rows_end_offset + 1, partition_end), partition_start);
+        const auto frame_size = frame_end - frame_start;
+        // For cases like: rows between 2 preceding and 1 preceding
+        // If frame_start ge frame_end, means the frame is empty,
+        // we could directly return.
+        if (frame_size <= 0) {
+            return;
+        }
         if (columns[0]->is_nullable()) {
             const auto* column = down_cast<const NullableColumn*>(columns[0]);
             const Column* data_column = &column->data_column_ref();
-            const auto frame_start = std::max(current_row_position - preceding, partition_start);
-            const auto frame_end = std::min(current_row_position + following + 1, partition_end);
-            const auto frame_size = frame_end - frame_start;
 
             // The fast pass
             if (!column->has_null()) {
@@ -530,7 +537,8 @@ public:
                     // Since frame has been evaluated, we only need to update the boundary
                     this->nested_function->update_state_removable_cumulatively(
                             ctx, this->data(state).mutable_nest_state(), &data_column, current_row_position,
-                            partition_start, partition_end, preceding, following);
+                            partition_start, partition_end, rows_start_offset, rows_end_offset, ignore_subtraction,
+                            ignore_addition);
                 } else {
                     // Build the frame for the first time
                     this->nested_function->update_batch_single_state(ctx, this->data(state).mutable_nest_state(),
@@ -543,21 +551,24 @@ public:
             const uint8_t* f_data = column->null_column()->raw_data();
             if (this->data(state).is_frame_init) {
                 // Since frame has been evaluated, we only need to update the boundary
-                bool is_previous_preceding_null = false;
-                if (current_row_position - 1 - preceding >= partition_start &&
-                    f_data[current_row_position - 1 - preceding] == 1) {
-                    is_previous_preceding_null = true;
+                const int64_t previous_frame_first_position = current_row_position - 1 + rows_start_offset;
+                const int64_t current_frame_last_position = current_row_position + rows_end_offset;
+                bool is_previous_frame_start_null = false;
+                if (previous_frame_first_position >= partition_start && previous_frame_first_position < partition_end &&
+                    f_data[previous_frame_first_position] == 1) {
+                    is_previous_frame_start_null = true;
                     this->data(state).null_count--;
                 }
-                bool is_current_following_null = false;
-                if (current_row_position + following < partition_end && f_data[current_row_position + following] == 1) {
-                    is_current_following_null = true;
+                bool is_current_frame_end_null = false;
+                if (current_frame_last_position >= partition_start && current_frame_last_position < partition_end &&
+                    f_data[current_frame_last_position] == 1) {
+                    is_current_frame_end_null = true;
                     this->data(state).null_count++;
                 }
                 this->nested_function->update_state_removable_cumulatively(
                         ctx, this->data(state).mutable_nest_state(), &data_column, current_row_position,
-                        partition_start, partition_end, is_previous_preceding_null ? -1 : preceding,
-                        is_current_following_null ? -1 : following);
+                        partition_start, partition_end, rows_start_offset, rows_end_offset,
+                        is_previous_frame_start_null, is_current_frame_end_null);
                 if (frame_size != this->data(state).null_count) {
                     this->data(state).is_null = false;
                 }
@@ -576,9 +587,9 @@ public:
             }
         } else {
             this->data(state).is_null = false;
-            this->nested_function->update_state_removable_cumulatively(ctx, this->data(state).mutable_nest_state(),
-                                                                       columns, current_row_position, partition_start,
-                                                                       partition_end, preceding, following);
+            this->nested_function->update_state_removable_cumulatively(
+                    ctx, this->data(state).mutable_nest_state(), columns, current_row_position, partition_start,
+                    partition_end, rows_start_offset, rows_end_offset, ignore_subtraction, ignore_addition);
         }
     }
 };

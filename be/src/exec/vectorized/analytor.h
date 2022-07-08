@@ -220,13 +220,14 @@ private:
     SegmentStatistics _peer_group_statistics;
     std::queue<int64_t> _candidate_peer_group_ends;
 
-    // -1 means unbounded preceding
-    // 0 means current row
-    int64_t _preceding = -1;
+    // Offset from the current row for ROWS windows with start or end bounds specified
+    // with offsets. Is positive if the offset is FOLLOWING, negative if PRECEDING, and 0
+    // if type is CURRENT ROW or UNBOUNDED PRECEDING/FOLLOWING.
+    int64_t _rows_start_offset = 0;
+    int64_t _rows_end_offset = 0;
 
-    // -1 means unbounded following
-    // 0 means current row
-    int64_t _following = -1;
+    bool _is_unbounded_preceding = false;
+    bool _is_unbounded_following = false;
 
     // The offset of the n-th window function in a row of window functions.
     std::vector<size_t> _agg_states_offsets;

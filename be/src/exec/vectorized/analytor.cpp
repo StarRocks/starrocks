@@ -44,24 +44,30 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
         if (window.__isset.window_start) {
             TAnalyticWindowBoundary b = window.window_start;
             if (b.__isset.rows_offset_value) {
-                DCHECK_EQ(b.type, TAnalyticWindowBoundaryType::PRECEDING);
-                _preceding = b.rows_offset_value;
+                _rows_start_offset = b.rows_offset_value;
+                if (b.type == TAnalyticWindowBoundaryType::PRECEDING) {
+                    _rows_start_offset *= -1;
+                }
             } else {
                 DCHECK_EQ(b.type, TAnalyticWindowBoundaryType::CURRENT_ROW);
-                _preceding = 0;
+                _rows_start_offset = 0;
             }
         }
 
         if (window.__isset.window_end) {
             TAnalyticWindowBoundary b = window.window_end;
             if (b.__isset.rows_offset_value) {
-                DCHECK_EQ(b.type, TAnalyticWindowBoundaryType::FOLLOWING);
-                _following = b.rows_offset_value;
+                _rows_end_offset = b.rows_offset_value;
+                if (b.type == TAnalyticWindowBoundaryType::PRECEDING) {
+                    _rows_end_offset *= -1;
+                }
             } else {
                 DCHECK_EQ(b.type, TAnalyticWindowBoundaryType::CURRENT_ROW);
-                _following = 0;
+                _rows_end_offset = 0;
             }
         }
+        _is_unbounded_preceding = !window.__isset.window_start;
+        _is_unbounded_following = !window.__isset.window_end;
     }
 }
 
@@ -359,10 +365,10 @@ void Analytor::offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk) {
 }
 
 FrameRange Analytor::get_sliding_frame_range() {
-    if (_preceding >= 0) {
-        return {_current_row_position - _preceding, _current_row_position + _following + 1};
+    if (!_is_unbounded_preceding) {
+        return {_current_row_position + _rows_start_offset, _current_row_position + _rows_end_offset + 1};
     } else {
-        return {_partition_start, _current_row_position + _following + 1};
+        return {_partition_start, _current_row_position + _rows_end_offset + 1};
     }
 }
 
@@ -677,7 +683,7 @@ std::string Analytor::debug_string() const {
     ss << "current_row_position=" << _current_row_position << ", partition=(" << _partition_start << ", "
        << _partition_end << ", " << _found_partition_end.second << "/" << _found_partition_end.first
        << "), peer_group=(" << _peer_group_start << ", " << _peer_group_end << ")"
-       << ", frame=(" << _preceding << ", " << _following << ")";
+       << ", frame=(" << _rows_start_offset << ", " << _rows_end_offset << ")";
 
     return ss.str();
 }
@@ -712,8 +718,9 @@ void Analytor::update_window_batch_removable_cumulatively() {
         _agg_functions[i]->update_state_removable_cumulatively(
                 _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], &agg_column,
                 _current_row_position, _partition_start, _partition_end,
-                _preceding >= 0 ? _preceding : (_current_row_position - _partition_start),
-                _following >= 0 ? _following : (_partition_end - 1 - _current_row_position));
+                _is_unbounded_preceding ? (_partition_start - _current_row_position) : _rows_start_offset,
+                _is_unbounded_following ? (_partition_end - 1 - _current_row_position) : _rows_end_offset, false,
+                false);
     }
 }
 
