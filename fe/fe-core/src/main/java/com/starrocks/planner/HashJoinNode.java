@@ -170,7 +170,8 @@ public class HashJoinNode extends PlanNode {
             // then it's hard to estimate right bloom filter size, or it's too big.
             // so we'd better to skip this global runtime filter.
             long card = inner.getCardinality();
-            if (card <= 0 || card > sessionVariable.getGlobalRuntimeFilterBuildMaxSize()) {
+            long buildMax = sessionVariable.getGlobalRuntimeFilterBuildMaxSize();
+            if (buildMax > 0 && card <= 0 || card > buildMax) {
                 return;
             }
         }
