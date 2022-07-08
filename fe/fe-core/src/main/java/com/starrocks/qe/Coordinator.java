@@ -808,7 +808,7 @@ public class Coordinator {
                 // If a request need send descTable, the other requests to the same host will be in the second stage.
                 // Otherwise, the request will be in the first stage, including
                 // - the request need send descTable.
-                // - the request to the host, where some request in the previous has already sent descTable.
+                // - the request to the host, where some request in the previous group has already sent descTable.
                 List<List<Pair<BackendExecState, TExecBatchPlanFragmentsParams>>> inflightRequestsList =
                         ImmutableList.of(new ArrayList<>(), new ArrayList<>());
                 for (PlanFragment fragment : fragmentGroup) {
