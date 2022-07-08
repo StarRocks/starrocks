@@ -773,3 +773,137 @@ After an external table is created, you can query the data in Apache Iceberg by 
 ~~~SQL
 select count(*) from iceberg_tbl;
 ~~~
+
+## Hudi external table
+
+StarRocks allows you to query data from Hudi data lakes by using Hudi external tables, thus facilitating blazing-fast data lake analytics. This topic describes how to create a Hudi external table in your StarRocks cluster and use the Hudi external table to query data from a Hudi data lake.
+
+### Before you begin
+
+Make sure that your StarRocks cluster is granted access to the Hive metastore, HDFS cluster, or bucket with which you can register Hudi tables.
+
+### Precautions
+
+* Hudi external tables for Hudi are read-only and can be used only for queries.
+
+* StarRocks supports Hudi Copy on Write (CoW) tables but not Hudi Merge on Read (MoR) tables. For information about the differences between CoW and MoR, see [Table & Query Types](https://hudi.apache.org/docs/table_types/).
+
+* StarRocks supports the following compression formats for Hudi files: gzip, zstd, LZ4, and Snappy. The default compression format for Hudi files is gzip.
+
+* StarRocks cannot synchronize schema changes from Hudi managed tables. For more information, see [Schema Evolution](https://hudi.apache.org/docs/schema_evolution/). If the schema of a Hudi managed table is changed, you must delete the associated Hudi external table from your StarRocks cluster and then re-create that external table.
+
+### Procedure
+
+#### Step 1: Create and manage Hudi resources
+
+You must create Hudi resources in your StarRocks cluster. The Hudi resources are used to manage the Hudi databases and external tables that you create in your StarRocks cluster.
+
+##### Create a Hudi resource
+
+Execute the following statement to create a Hudi resource named `hudi0`:
+
+~~~SQL
+CREATE EXTERNAL RESOURCE "hudi0" 
+PROPERTIES ( 
+    "type" = "hudi", 
+    "hive.metastore.uris" = "thrift://192.168.7.251:9083"
+);
+~~~
+
+The following table describes the parameters.
+
+| Parameter           | Description                                                  |
+| ------------------- | ------------------------------------------------------------ |
+| type                | The type of the Hudi resource. Set the vaue to hudi.         |
+| hive.metastore.uris | The Thrift URI of the Hive metastore to which the Hudi resource connects. After connecting the Hudi resource to a Hive metastore, you can create and manage Hudi tables by using Hive. The Thrift URI in the thrift://<IP address of the Hive metastore>:<Port number> format. The default port number is 9083. |
+
+From v2.3 onwards, StarRocks allows changing the `hive.metastore.uris` value of a Hudi resource. For more information, see [ALTER RESOURCE](<https://docs.starrocks.com/en-us/2.3/sql-reference/sql-statements/data-definition/ALTER> RESOURCE).
+
+##### View Hudi resources
+
+Execute the following statement to view all Hudi resources that are created in your StarRocks cluster:
+
+~~~SQL
+SHOW RESOURCES;
+~~~
+
+##### Delete a Hudi resource
+
+Execute the following statement to delete the Hudi resource named `hudi0`:
+
+~~~SQL
+DROP RESOURCE "hudi0";
+~~~
+
+> Note:
+>
+> Deleting a Hudi resource causes unavailability of all Hudi external tables that are created by using that Hudi resource. However, the deletion does not affect your data stored in Hudi. If you still want to query your data from Hudi by using StarRocks, you must re-create Hudi resources, Hudi databases, and Hudi external tables in your StarRocks cluster.
+
+#### Step 2: Create Hudi databases
+
+Execute the following statement to create and open a Hudi database named `hudi_test` in your StarRocks cluster:
+
+~~~SQL
+CREATE DATABASE hudi_test; 
+USE hudi_test; 
+~~~
+
+> Note:
+>
+> The name that you specify for the Hudi database in your StarRocks cluster does not need to be the same as the associated database in Hudi.
+
+#### Step 3: Create Hudi external tables
+
+Execute the following statement to create a Hudi external table named `hudi_tbl` in the `hudi_test` Hudi database:
+
+~~~SQL
+CREATE EXTERNAL TABLE `hudi_tbl` ( 
+    `id` bigint NULL, 
+    `data` varchar(200) NULL 
+) ENGINE=HUDI 
+PROPERTIES ( 
+    "resource" = "hudi0", 
+    "database" = "hudi", 
+    "table" = "hudi_table" 
+); 
+~~~
+
+The following table describes the parameters.
+
+| Parameter | Description                                                  |
+| --------- | ------------------------------------------------------------ |
+| ENGINE    | The query engine of the Hudi external table. Set the value to `HUDI`. |
+| resource  | The name of the Hudi resource in your StarRocks cluster.     |
+| database  | The name of the Hudi database to which the Hudi external table belongs in your StarRocks cluster. |
+| table     | The Hudi managed table with which the Hudi external table is associated. |
+
+> Note:
+>
+> * The name that you specify for the Hudi external table does not need to be the same as the associated Hudi managed table.
+>
+> * The columns in the Hudi external table must have the same names but can be in a different sequence compared to their counterpart columns in the associated Hudi managed table.
+>
+> * You can select some or all columns from the associated Hudi managed table and create only the selected columns in the Hudi external table. The following table lists the mapping between the data types supported by Hudi and the data types supported by StarRocks.
+
+| Data types supported by Hudi | Data types supported by StarRocks |
+| ---------------------------- | --------------------------------- |
+| BOOLEAN                      | BOOLEAN                           |
+| INT                          | TINYINT/SMALLINT/INT              |
+| DATE                         | DATE                              |
+| TimeMillis/TimeMicros        | TIME                              |
+| LONG                         | BIGINT                            |
+| FLOAT                        | FLOAT                             |
+| DOUBLE                       | DOUBLE                            |
+| STRING                       | CHAR/VARCHAR                      |
+| ARRAY                        | ARRAY                             |
+| DECIMAL                      | DECIMAL                           |
+
+> If some columns of a Hudi managed table are any of the FIXED, ENUM, UNION, MAP, and BYTES data types, you cannot access these columns by creating a Hudi external table associated with that Hudi managed table.
+
+#### Step 4: Query data from a Hudi external table
+
+After you create a Hudi external table associated with a specific Hudi managed table, you do not need to load data into the Hudi external table. To query data from Hudi, execute the following statement:
+
+~~~SQL
+SELECT COUNT(*) FROM hudi_tbl;
+~~~
