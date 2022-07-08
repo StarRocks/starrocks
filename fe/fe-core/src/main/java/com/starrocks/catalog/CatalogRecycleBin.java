@@ -377,10 +377,8 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 Table table = tableInfo.getTable();
                 TableType tableType = table.getType();
                 nameToTableInfo.remove(dbId, table.getName());
-                if (tableType == TableType.OLAP && !isCheckpointThread()) {
+                if (table.isOlapOrLakeTable() && !isCheckpointThread()) {
                     GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) table, true);
-                } else if (tableType == TableType.LAKE && !isCheckpointThread()) {
-                    GlobalStateMgr.getCurrentState().onEraseOlapTable((LakeTable) table, true);
                 }
             }
         }
