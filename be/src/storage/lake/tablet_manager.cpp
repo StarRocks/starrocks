@@ -398,44 +398,82 @@ Status TabletManager::publish_version(int64_t tablet_id, int64_t base_version, i
     return publish(&tablet, base_version, new_version, txns, txns_size);
 }
 
+static Status apply_write_log(const TxnLogPB_OpWrite& op_write, TabletMetadata* metadata) {
+    if (op_write.has_rowset() && op_write.rowset().num_rows() > 0) {
+        auto rowset = metadata->add_rowsets();
+        rowset->CopyFrom(op_write.rowset());
+        rowset->set_id(metadata->next_rowset_id());
+        metadata->set_next_rowset_id(metadata->next_rowset_id() + rowset->segments_size());
+    }
+    return Status::OK();
+}
+
+static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, TabletMetadata* metadata) {
+    // It's ok to have a compaction log without input rowset and output rowset.
+    if (op_compaction.input_rowsets().empty()) {
+        DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
+        return Status::OK();
+    }
+    if (UNLIKELY(!op_compaction.has_output_rowset())) {
+        return Status::InternalError("compaction log contains input rowset but no output rowset");
+    }
+    if (UNLIKELY(op_compaction.output_rowset().num_rows() == 0)) {
+        return Status::InternalError("compaction output rowset is empty");
+    }
+
+    struct Finder {
+        int64_t id;
+        bool operator()(const RowsetMetadata& r) const { return r.id() == id; }
+    };
+
+    auto input_id = op_compaction.input_rowsets(0);
+    auto first_input_pos = std::find_if(metadata->rowsets().begin(), metadata->rowsets().end(), Finder{input_id});
+    if (UNLIKELY(first_input_pos == metadata->rowsets().end())) {
+        return Status::InternalError(fmt::format("input rowset {} not found", input_id));
+    }
+
+    // Safety check:
+    // 1. All input rowsets must exist in |metadata->rowsets()|
+    // 2. Position of the input rowsets must be adjacent.
+    auto pre_input_pos = first_input_pos;
+    for (int i = 1, sz = metadata->rowsets_size(); i < sz; i++) {
+        input_id = op_compaction.input_rowsets(i);
+        auto it = std::find_if(pre_input_pos + 1, metadata->rowsets().end(), Finder{input_id});
+        if (it == metadata->rowsets().end()) {
+            return Status::InternalError(fmt::format("input rowset {} not exist", input_id));
+        } else if (it != pre_input_pos + 1) {
+            return Status::InternalError(fmt::format("input rowset position not adjacent"));
+        } else {
+            pre_input_pos = it;
+        }
+    }
+
+    // Replace the first input rowset with output rowset
+    auto first_idx = static_cast<int>(first_input_pos - metadata->rowsets().begin());
+    auto output_rowset = metadata->mutable_rowsets(first_idx);
+    output_rowset->CopyFrom(op_compaction.output_rowset());
+    output_rowset->set_id(metadata->next_rowset_id());
+    metadata->set_next_rowset_id(metadata->next_rowset_id() + output_rowset->segments_size());
+
+    // Erase other input rowsets from metadata
+    auto end_input_pos = pre_input_pos + 1;
+    DCHECK_EQ(op_compaction.input_rowsets_size(), end_input_pos - first_input_pos);
+    metadata->mutable_rowsets()->erase(first_input_pos + 1, end_input_pos);
+    return Status::OK();
+}
+
 Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata) {
-    // Apply write log
     if (log.has_op_write()) {
-        if (log.op_write().has_rowset() && log.op_write().rowset().num_rows() > 0) {
-            auto rowset = metadata->add_rowsets();
-            rowset->CopyFrom(log.op_write().rowset());
-            rowset->set_id(metadata->next_rowset_id());
-            metadata->set_next_rowset_id(metadata->next_rowset_id() + rowset->segments_size());
-        }
+        RETURN_IF_ERROR(apply_write_log(log.op_write(), metadata));
     }
 
-    // Apply compaction log
     if (log.has_op_compaction()) {
-        const auto& op_compaction = log.op_compaction();
-        // Remove input rowset(s)
-        auto find_pos = metadata->rowsets().begin();
-        for (auto input_id : op_compaction.input_rowsets()) {
-            auto f = [&](const RowsetMetadataPB& r) { return r.id() == input_id; };
-            auto it = std::find_if(find_pos, metadata->rowsets().end(), f);
-            if (it == metadata->rowsets().end()) {
-                return Status::InternalError(fmt::format("input rowset {} not found", input_id));
-            }
-            find_pos = metadata->mutable_rowsets()->erase(it);
-        }
-        // Add output rowset
-        if (op_compaction.has_output_rowset() && op_compaction.output_rowset().num_rows() > 0) {
-            auto rowset = metadata->add_rowsets();
-            rowset->CopyFrom(op_compaction.output_rowset());
-            rowset->set_id(metadata->next_rowset_id());
-            metadata->set_next_rowset_id(metadata->next_rowset_id() + rowset->segments_size());
-        }
+        RETURN_IF_ERROR(apply_compaction_log(log.op_compaction(), metadata));
     }
 
-    // Apply schema change log
     if (log.has_op_schema_change()) {
         return Status::NotSupported("does not support apply schema change log yet");
     }
-
     return Status::OK();
 }
 

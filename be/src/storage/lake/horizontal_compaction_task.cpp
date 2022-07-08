@@ -42,7 +42,7 @@ Status HorizontalCompactionTask::execute() {
         max_input_segs = 1;
     } else {
         for (auto& rowset : _input_rowsets) {
-            max_input_segs = rowset->is_overlapped() ? rowset->num_segments() : 1;
+            max_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
         }
     }
     const int32_t chunk_size = CompactionUtils::get_read_chunk_size(

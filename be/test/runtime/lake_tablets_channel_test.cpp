@@ -31,6 +31,7 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
+#include "testutil/id_generator.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -45,6 +46,7 @@ using Int32Column = starrocks::vectorized::Int32Column;
 class LakeTabletsChannelTest : public testing::Test {
 public:
     LakeTabletsChannelTest() {
+        _schema_id = next_id();
         _mem_tracker = std::make_unique<MemTracker>(-1);
         _load_channel_mgr = std::make_unique<LoadChannelMgr>();
 
@@ -118,7 +120,7 @@ public:
         //  |   c0   |  INT | YES |  NO  |
         //  |   c1   |  INT | NO  |  NO  |
         auto schema = metadata->mutable_schema();
-        schema->set_id(10);
+        schema->set_id(_schema_id);
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(DUP_KEYS);
         schema->set_num_rows_per_row_block(65535);
@@ -236,6 +238,7 @@ protected:
     static constexpr int64_t kTxnId = 12345;
     static constexpr const char* const kTestGroupPath = "test_lake_tablets_channel";
 
+    int64_t _schema_id;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
     lake::TabletManager* _tablet_manager;
