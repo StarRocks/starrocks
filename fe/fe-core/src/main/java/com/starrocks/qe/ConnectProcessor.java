@@ -111,11 +111,11 @@ public class ConnectProcessor {
             LOG.warn("Failed to execute command `Change user`.");
             return;
         }
-        handleResetConnnection();
+        handleResetConnection();
     }
 
     // COM_RESET_CONNECTION: reset current connection session variables
-    private void handleResetConnnection() throws IOException {
+    private void handleResetConnection() throws IOException {
         resetConnectionSession();
         ctx.getState().setOk();
     }
@@ -402,7 +402,7 @@ public class ConnectProcessor {
                 handleChangeUser();
                 break;
             case COM_RESET_CONNECTION:
-                handleResetConnnection();
+                handleResetConnection();
                 break;
             case COM_PING:
                 handlePing();
