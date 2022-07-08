@@ -1,52 +1,39 @@
 # SET PROPERTY
 
-## 描述
+## 功能
 
-设置用户的属性，包括分配给用户的资源等。
+设置用户属性。当前仅支持设置单个用户的最大连接数。
+
+> 说明：这里的属性是指用户 (user) 的属性，而非用户标识 (user_identity) 的属性。如果通过 CREATE USER 语句创建了 `'jack'@'%'` 和 `'jack'@'192.%'`，那么使用 SET PROPERTY 语句设置的是 `jack` 这个用户的属性，而不是 `'jack'@'%'` 或 `'jack'@'192.%'` 的属性。
 
 ## 语法
 
-注：方括号 [] 中内容可省略不写。
-
 ```SQL
-SET PROPERTY [FOR 'user'] 'key' = 'value' [, 'key' = 'value'];
+SET PROPERTY [FOR 'user'] 'max_user_connections' = 'value';
 ```
 
-这里设置的用户属性，是针对 user 的，而不是 user_identity。即假设通过 CREATE USER 语句创建了两个用户 `'jack'@'%'` 和 `'jack'@'192.%'`，则使用 `SET PROPERTY` 语句，只能针对 jack 这个用户，而不是 `'jack'@'%'` 或 `'jack'@'192.%'`。
+## 参数说明
 
-**key:**
+- `For 'user'`：指定用户，可选参数。如不设置该参数，默认设置当前用户的属性。
 
-超级用户权限:
-
-```plain text
-max_user_connections: 最大连接数。
-resource.cpu_share: cpu资源分配。
-```
-
-普通用户权限：
-
-```plain text
-quota.normal: normal级别的资源分配。
-quota.high: high级别的资源分配。
-quota.low: low级别的资源分配。
-```
+- `'max_user_connections' = 'value'`：单个用户的最大连接数，必选参数。只有管理员和 root 用户有权限设置该属性。
 
 ## 示例
 
-1. 修改用户 jack 最大连接数为 1000。
+示例一：设置当前用户的最大连接数为 1000。
 
-    ```SQL
-    SET PROPERTY FOR 'jack' 'max_user_connections' = '1000';
-    ```
+```SQL
+SET PROPERTY 'max_user_connections' = '1000';
+```
 
-2. 修改用户 jack 的 cpu_share 为 1000。
+示例二：设置用户 `jack` 的最大连接数为 1000。
 
-    ```SQL
-    SET PROPERTY FOR 'jack' 'resource.cpu_share' = '1000';
-    ```
+```SQL
+SET PROPERTY FOR 'jack' 'max_user_connections' = '1000';
+```
 
-3. 修改 jack 用户的 normal 组的权重。
+## 相关操作
 
-    ```SQL
-    SET PROPERTY FOR 'jack' 'quota.normal' = '400';
-    ```
+- 如要创建一个用户，参见 [CREATE USER](../account-management/CREATE%20USER.md)。
+
+- 如要查看一个用户属性，参见 [SHOW PROPERTY](../data-manipulation/SHOW%20PROPERTY.md)。
