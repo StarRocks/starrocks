@@ -357,7 +357,6 @@ alterClause
     : createIndexClause
     | dropIndexClause
     | tableRenameClause
-
     | addBackendClause
     | dropBackendClause
     | modifyBackendHostClause
@@ -366,6 +365,7 @@ alterClause
     | modifyFrontendHostClause
     | addComputeNodeClause
     | dropComputeNodeClause
+    | swapTableClause
     ;
 
 createIndexClause
@@ -378,6 +378,10 @@ dropIndexClause
 
 tableRenameClause
     : RENAME identifier
+    ;
+
+swapTableClause
+    : SWAP WITH identifier
     ;
 
 addBackendClause

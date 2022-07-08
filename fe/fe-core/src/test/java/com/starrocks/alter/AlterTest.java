@@ -719,7 +719,7 @@ public class AlterTest {
 
         // name conflict
         String replaceStmt = "ALTER TABLE test.replace1 SWAP WITH r1";
-        alterTable(replaceStmt, true);
+        alterTableWithNewParser(replaceStmt, true);
 
         // replace1 with replace2
         replaceStmt = "ALTER TABLE test.replace1 SWAP WITH replace2";
@@ -732,7 +732,7 @@ public class AlterTest {
                 replace2.getPartition("replace2").getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
                         .size());
 
-        alterTable(replaceStmt, false);
+        alterTableWithNewParser(replaceStmt, false);
 
         replace1 = (OlapTable) db.getTable("replace1");
         replace2 = (OlapTable) db.getTable("replace2");

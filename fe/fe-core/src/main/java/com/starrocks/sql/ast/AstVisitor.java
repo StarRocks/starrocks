@@ -78,6 +78,7 @@ import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
@@ -371,6 +372,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitModifyBackendHostClause(ModifyBackendAddressClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitSwapTableClause(SwapTableClause clause, C context) {
         return visitNode(clause, context);
     }
 
