@@ -453,7 +453,6 @@ static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, T
     }
     // Erase input rowsets from metadata
     auto end_input_pos = pre_input_pos + 1;
-    DCHECK_EQ(op_compaction.input_rowsets_size(), end_input_pos - first_input_pos);
     metadata->mutable_rowsets()->erase(first_input_pos, end_input_pos);
     return Status::OK();
 }
