@@ -1,0 +1,24 @@
+name: Label when reviewed
+
+on: pull_request_review
+
+jobs:
+  label-when-reviewed:
+    name: "Label PRs when reviewed"
+    runs-on: ubuntu-latest
+    steps:              
+      - uses: taichi/approved-event-action@v1.2.1
+        id: approved
+        with:
+          approvals: '2'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
+                                                                                        
+      - name: create-file
+        run: echo '${{ steps.approved.outputs.approved }}' >> ${{ github.workspace }}/${{ github.event.pull_request.number }}
+                                                                                                                              
+      - uses: actions/upload-artifact@v3
+        with:
+          name: review
+          path: ${{ github.workspace }}/${{ github.event.pull_request.number }}
