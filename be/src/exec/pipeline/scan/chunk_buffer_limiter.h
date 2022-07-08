@@ -71,7 +71,7 @@ class DynamicChunkBufferLimiter final : public ChunkBufferLimiter {
 public:
     class Token final : public ChunkBufferToken {
     public:
-        Token(std::atomic<size_t>& acquired_tokens_counter, int num_tokens)
+        Token(std::atomic<int>& acquired_tokens_counter, int num_tokens)
                 : _acquired_tokens_counter(acquired_tokens_counter), _num_tokens(num_tokens) {}
 
         ~Token() override { _acquired_tokens_counter.fetch_sub(_num_tokens); }
@@ -83,7 +83,7 @@ public:
         Token& operator=(Token&&) = delete;
 
     private:
-        std::atomic<size_t>& _acquired_tokens_counter;
+        std::atomic<int>& _acquired_tokens_counter;
         const int _num_tokens;
     };
 
@@ -100,13 +100,16 @@ public:
 
     ChunkBufferTokenPtr pin(int num_chunks) override;
 
-    bool is_full() const override { return _acquired_chunks_counter >= _capacity; }
-    size_t size() const override { return _acquired_chunks_counter; }
+    bool is_full() const override { return _pinned_chunks_counter >= _capacity; }
+    size_t size() const override { return _pinned_chunks_counter; }
     size_t capacity() const override { return _capacity; }
     size_t default_capacity() const override { return _default_capacity; }
 
 private:
-    void _unpin(int num_chunks) { _acquired_chunks_counter.fetch_sub(num_chunks); }
+    void _unpin(int num_chunks) {
+        int prev_value = _pinned_chunks_counter.fetch_sub(num_chunks);
+        DCHECK_GE(prev_value, 1);
+    }
 
     std::mutex _mutex;
     size_t _sum_row_bytes = 0;
@@ -119,7 +122,7 @@ private:
     const int64_t _mem_limit;
     const int _chunk_size;
 
-    std::atomic<size_t> _acquired_chunks_counter = 0;
+    std::atomic<int> _pinned_chunks_counter = 0;
 };
 
 } // namespace starrocks::pipeline
