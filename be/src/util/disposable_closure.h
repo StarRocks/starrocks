@@ -7,6 +7,7 @@
 #include <atomic>
 #include <utility>
 
+#include "runtime/current_thread.h"
 #include "service/brpc.h"
 
 namespace starrocks {
