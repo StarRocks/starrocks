@@ -301,7 +301,7 @@ public class AlterTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');");
-        String alterStmt = "alter table test.testTable1 rename testRenameTable2";
+        String alterStmt = "alter table test.testRenameTable1 rename testRenameTable2";
         alterTableWithNewParser(alterStmt, false);
     }
 
