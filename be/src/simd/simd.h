@@ -78,6 +78,19 @@ inline size_t count_nonzero(const std::vector<int8_t>& list) {
 
 // NOTE: memchr is much faster than a plain SIMD implementation
 template <class T>
+inline static size_t find_byte(const std::vector<T>& list, size_t start, size_t count, T byte) {
+    if (start >= list.size()) {
+        return start;
+    }
+    count = std::min(count, list.size() - start);
+    const void* p = std::memchr((const void*)(list.data() + start), byte, count);
+    if (p == nullptr) {
+        return start + count;
+    }
+    return (T*)p - list.data();
+}
+
+template <class T>
 inline static size_t find_byte(const std::vector<T>& list, size_t start, T byte) {
     if (start >= list.size()) {
         return start;
@@ -98,7 +111,21 @@ inline size_t find_nonzero(const std::vector<uint8_t>& list, size_t start) {
     return find_byte<uint8_t>(list, start, 1);
 }
 
+inline size_t find_nonzero(const std::vector<uint8_t>& list, size_t start, size_t count) {
+    return find_byte<uint8_t>(list, start, count, 1);
+}
+
 inline size_t find_zero(const std::vector<int8_t>& list, size_t start) {
     return find_byte<int8_t>(list, start, 0);
 }
+
+inline bool contain_nonzero(const std::vector<uint8_t>& list, size_t start) {
+    return find_nonzero(list, start) < list.size();
+}
+
+inline bool contain_nonzero(const std::vector<uint8_t>& list, size_t start, size_t count) {
+    size_t pos = find_nonzero(list, start, count);
+    return pos < list.size() && pos < start + count;
+}
+
 } // namespace SIMD
