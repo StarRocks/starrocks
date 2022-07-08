@@ -11,6 +11,7 @@
 
 namespace starrocks::vectorized {
 
+// TODO: move constructor and move assignment
 class Schema {
 public:
     Schema() = default;

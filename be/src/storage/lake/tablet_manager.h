@@ -16,6 +16,7 @@ class TCreateTabletReq;
 
 namespace starrocks::lake {
 
+class CompactionTask;
 class GroupAssigner;
 class Tablet;
 template <typename T>
@@ -23,6 +24,7 @@ class MetadataIterator;
 using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 using TxnLogIter = MetadataIterator<TxnLogPtr>;
 using TabletSchemaPtr = std::shared_ptr<const starrocks::TabletSchema>;
+using CompactionTaskPtr = std::shared_ptr<CompactionTask>;
 
 class TabletManager {
     friend class Tablet;
@@ -42,6 +44,8 @@ public:
 
     Status publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version, const int64_t* txns,
                            int txns_size);
+
+    StatusOr<CompactionTaskPtr> compact(int64_t tablet_id, int64_t version, int64_t txn_id);
 
     Status put_tablet_metadata(const std::string& group, const TabletMetadata& metadata);
     Status put_tablet_metadata(const std::string& group, TabletMetadataPtr metadata);

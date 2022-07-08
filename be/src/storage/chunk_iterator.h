@@ -21,7 +21,7 @@ class Chunk;
 class ChunkIterator {
 public:
     // |schema| is the output fields.
-    ChunkIterator(vectorized::Schema schema) : _schema(std::move(schema)) {}
+    explicit ChunkIterator(vectorized::Schema schema) : _schema(std::move(schema)) {}
 
     ChunkIterator(vectorized::Schema schema, int chunk_size) : _schema(std::move(schema)), _chunk_size(chunk_size) {}
 

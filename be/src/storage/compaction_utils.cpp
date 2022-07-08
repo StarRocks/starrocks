@@ -36,7 +36,7 @@ int32_t CompactionUtils::get_read_chunk_size(int64_t mem_limit, int32_t config_c
     if (chunk_size > config_chunk_size) {
         chunk_size = config_chunk_size;
     }
-    return chunk_size;
+    return (uint32_t)chunk_size;
 }
 
 Status CompactionUtils::construct_output_rowset_writer(Tablet* tablet, uint32_t max_rows_per_segment,
