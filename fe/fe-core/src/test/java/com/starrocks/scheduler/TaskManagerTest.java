@@ -245,8 +245,7 @@ public class TaskManagerTest {
 
         LocalDateTime now = LocalDateTime.now();
 
-        Task task = new Task();
-        task.setName("test_periodical");
+        Task task = new Task("test_periodical");
         task.setCreateTime(System.currentTimeMillis());
         task.setDbName("test");
         task.setDefinition("select 1");
@@ -295,8 +294,7 @@ public class TaskManagerTest {
     public void testTaskRunPriority() {
         PriorityBlockingQueue<TaskRun> queue = Queues.newPriorityBlockingQueue();
         long now = System.currentTimeMillis();
-        Task task = new Task();
-        task.setName("test");
+        Task task = new Task("test");
 
         TaskRun taskRun1 = TaskRunBuilder.newBuilder(task).build();
         taskRun1.initStatus("1", now);
@@ -336,8 +334,7 @@ public class TaskManagerTest {
     public void testTaskRunMergePriorityFirst() {
 
         TaskRunManager taskRunManager = new TaskRunManager();
-        Task task = new Task();
-        task.setName("test");
+        Task task = new Task("test");
 
         long taskId = 1;
 
@@ -369,8 +366,7 @@ public class TaskManagerTest {
     public void testTaskRunMergePriorityFirst2() {
 
         TaskRunManager taskRunManager = new TaskRunManager();
-        Task task = new Task();
-        task.setName("test");
+        Task task = new Task("test");
 
         long taskId = 1;
 
@@ -402,8 +398,7 @@ public class TaskManagerTest {
     public void testTaskRunMergeTimeFirst() {
 
         TaskRunManager taskRunManager = new TaskRunManager();
-        Task task = new Task();
-        task.setName("test");
+        Task task = new Task("test");
 
         long taskId = 1;
 
@@ -435,8 +430,7 @@ public class TaskManagerTest {
     public void testTaskRunMergeTimeFirst2() {
 
         TaskRunManager taskRunManager = new TaskRunManager();
-        Task task = new Task();
-        task.setName("test");
+        Task task = new Task("test");
 
         long taskId = 1;
 
@@ -468,8 +462,7 @@ public class TaskManagerTest {
     public void testTaskRunNotMerge() {
 
         TaskRunManager taskRunManager = new TaskRunManager();
-        Task task = new Task();
-        task.setName("test");
+        Task task = new Task("test");
 
         long taskId = 1;
 
