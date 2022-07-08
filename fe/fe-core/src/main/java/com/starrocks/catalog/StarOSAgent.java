@@ -245,6 +245,7 @@ public class StarOSAgent {
     }
 
     public List<ShardInfo> getShards(List<Long> shardIds) {
+        prepare();
         List<ShardInfo> shardInfos = null;
         try {
             shardInfos = client.getShardInfo(serviceId, shardIds);
@@ -260,7 +261,7 @@ public class StarOSAgent {
     public void deleteShards(Set<Long> shardIds) throws DdlException {
         // for debug
         LOG.info("deleteShards");
-        // prepare();
+        prepare();
         try {
             client.deleteShard(serviceId, shardIds);
         } catch (StarClientException e) {
