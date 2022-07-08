@@ -1,7 +1,7 @@
 name: Trigger Jobs
 
 on:
-  pull_request:
+  pull_request_target:
     types: [synchronize, labeled, reopened]
 
 jobs:
