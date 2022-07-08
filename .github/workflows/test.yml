@@ -14,7 +14,7 @@ jobs:
         with:
           issue-number: ${{github.event.pull_request.number}}
           comment-author: 'github-actions[bot]'
-          body-includes: 'Change for master is approved!!'
+          body-includes: 'run'
 
       - name: Comment
         if: steps.find-last-comment.outputs.comment-id == ''
