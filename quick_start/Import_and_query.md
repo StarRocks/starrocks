@@ -67,9 +67,10 @@ StarRocks 兼容 MySQL 协议，其查询语句基本符合 SQL92 标准。
 
 ### 简单查询
 
-查询表中全部数据。
+通过 MySQL 客户端登录 StarRocks，查询表中全部数据。
 
 ```sql
+use example_db;
 select * from detailDemo;
 ```
 
