@@ -194,7 +194,6 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             } else {
                 hiveRepository.refreshConnectorTable(resourceName, dbName, tableName);
             }
-            GlobalStateMgr.getCurrentState().getHiveRepository().refreshTableCache(hmsTableInfo);
         } catch (Exception e) {
             hiveRepository.clearCache(hmsTableInfo);
             LOG.warn("Failed to refresh [{}.{}.{}]. Invalidate all cache on it", resourceName, dbName, tableName);
