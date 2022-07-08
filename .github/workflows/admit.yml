@@ -8,11 +8,11 @@ jobs:
   Trigger-Admit-Test:
     runs-on: ubuntu-latest
     steps:
-      - id: reviews
-        uses: jrylan/github-action-reviews-counter@main
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - run: echo "approved"${{ steps.reviews.outputs.approved }}
+#       - id: reviews
+#         uses: jrylan/github-action-reviews-counter@main
+#         with:
+#           repo-token: ${{ secrets.GITHUB_TOKEN }}
+#       - run: echo "approved"${{ steps.reviews.outputs.approved }}
       
 #       - uses: wow-actions/auto-comment@v1.0.7
 #         if: contains(github.event.pull_request.labels.*.name, 'Approved')
