@@ -1,25 +1,24 @@
-name: file changes
+name: Respond to approved
+
 on:
-  push:
-    branches:
-      - main
-  pull_request_target:
-    paths:
-      conf/test_hy
+  pull_request_review:
 
 jobs:
-  build:
+  check-state:
+    if: github.event.review.state == 'approved' && github.event.pull_request.base.ref == 'master'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Find last comment
+        id: find-last-comment
+        uses: peter-evans/find-comment@v1
         with:
-          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
-      - run: |
-          echo "hi, im here"
+          issue-number: ${{github.event.pull_request.number}}
+          comment-author: 'github-actions[bot]'
+          body-includes: 'Change for master is approved!!'
 
-      - id: files
-        uses: jitterbit/get-changed-files@v1
-      - run: |
-         for changed_file in ${{ steps.files.outputs.all }}; do
-            echo "Do something with this ${changed_file}."
-         done
+      - name: Comment
+        if: steps.find-last-comment.outputs.comment-id == ''
+        uses: peter-evans/create-or-update-comment@v1
+        with:
+          issue-number: ${{github.event.pull_request.number}}
+          body: "Change for master is approved!! Merge it carefully."
