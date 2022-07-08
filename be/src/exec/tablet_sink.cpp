@@ -133,7 +133,7 @@ Status NodeChannel::init(RuntimeState* state) {
     return Status::OK();
 }
 
-void NodeChannel::open() {
+void NodeChannel::try_open() {
     PTabletWriterOpenRequest request;
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(_index_id);
@@ -179,6 +179,15 @@ void NodeChannel::open() {
     request.release_schema();
 }
 
+bool NodeChannel::is_open_done() {
+    if (_open_closure != nullptr) {
+        // open request already finished
+        return (_open_closure->count() != 2);
+    }
+
+    return true;
+}
+
 Status NodeChannel::open_wait() {
     _open_closure->join();
     if (_open_closure->cntl.Failed()) {
@@ -207,7 +216,11 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
     {
         SCOPED_RAW_TIMER(&_serialize_batch_ns);
         StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
-        if (!res.ok()) return res.status();
+        if (!res.ok()) {
+            _cancelled = true;
+            _err_st = res.status();
+            return _err_st;
+        }
         res->Swap(dst);
     }
     DCHECK(dst->has_uncompressed_size());
@@ -216,8 +229,10 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
     size_t uncompressed_size = dst->uncompressed_size();
 
     if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(uncompressed_size)) {
-        return Status::InternalError(fmt::format("The input size for compression should be less than {}",
-                                                 _compress_codec->max_input_size()));
+        _cancelled = true;
+        _err_st = Status::InternalError(fmt::format("The input size for compression should be less than {}",
+                                                    _compress_codec->max_input_size()));
+        return _err_st;
     }
 
     // try compress the ChunkPB data
@@ -246,6 +261,15 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
     return Status::OK();
 }
 
+bool NodeChannel::is_full() {
+    if (_chunk_queue.size() >= _max_chunk_queue_size || _mem_tracker->limit()) {
+        if (!_check_prev_request_done()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 Status NodeChannel::add_chunk(vectorized::Chunk* input, const int64_t* tablet_ids, const uint32_t* indexes,
                               uint32_t from, uint32_t size, bool eos) {
     if (_cancelled || _send_finished) {
@@ -256,6 +280,12 @@ Status NodeChannel::add_chunk(vectorized::Chunk* input, const int64_t* tablet_id
         SCOPED_TIMER(_parent->_pack_chunk_timer);
         if (UNLIKELY(_cur_chunk == nullptr)) {
             _cur_chunk = input->clone_empty_with_slot();
+        }
+
+        if (is_full()) {
+            // wait previous request done then we can pop data from queue to send request
+            // and make new space to push data.
+            RETURN_IF_ERROR(_wait_one_prev_request());
         }
 
         // 1. append data
@@ -280,13 +310,8 @@ Status NodeChannel::add_chunk(vectorized::Chunk* input, const int64_t* tablet_id
 
         // 4. check last request
         if (!_check_prev_request_done()) {
-            if (_chunk_queue.size() > _max_chunk_queue_size || _mem_tracker->limit()) {
-                // 4.1 wait if queue full
-                RETURN_IF_ERROR(_wait_one_prev_request());
-            } else {
-                // 4.2 noblock here so that channel cant send data
-                return Status::OK();
-            }
+            // 4.1 noblock here so that other node channel can send data
+            return Status::OK();
         }
 
     } else {
@@ -418,6 +443,20 @@ bool NodeChannel::_check_prev_request_done() {
     return false;
 }
 
+bool NodeChannel::_check_all_prev_request_done() {
+    if (UNLIKELY(_next_packet_seq == 0)) {
+        return true;
+    }
+
+    for (size_t i = 0; i < _max_parallel_request_size; i++) {
+        if (_add_batch_closures[i]->count() != 1) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 Status NodeChannel::_wait_one_prev_request() {
     SCOPED_TIMER(_parent->_wait_response_timer);
     if (_next_packet_seq == 0) {
@@ -446,6 +485,27 @@ Status NodeChannel::_wait_one_prev_request() {
     RETURN_IF_ERROR(_wait_request(_add_batch_closures[_current_request_index]));
 
     return Status::OK();
+}
+
+Status NodeChannel::try_close() {
+    if (_cancelled || _send_finished) {
+        return _err_st;
+    }
+
+    if (_check_prev_request_done()) {
+        auto st = add_chunk(nullptr, nullptr, nullptr, 0, 0, true);
+        if (!st.ok()) {
+            _cancelled = true;
+            _err_st = st;
+            return _err_st;
+        }
+    }
+
+    return Status::OK();
+}
+
+bool NodeChannel::is_close_done() {
+    return (_send_finished && _check_all_prev_request_done()) || _cancelled;
 }
 
 Status NodeChannel::close_wait(RuntimeState* state) {
@@ -687,13 +747,33 @@ Status OlapTableSink::prepare(RuntimeState* state) {
 Status OlapTableSink::open(RuntimeState* state) {
     SCOPED_TIMER(_profile->total_time_counter());
     SCOPED_TIMER(_open_timer);
+    RETURN_IF_ERROR(try_open(state));
+    RETURN_IF_ERROR(open_wait());
+
+    return Status::OK();
+}
+
+Status OlapTableSink::try_open(RuntimeState* state) {
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
 
     for (auto& index_channel : _channels) {
-        index_channel->for_each_node_channel([](NodeChannel* ch) { ch->open(); });
+        index_channel->for_each_node_channel([](NodeChannel* ch) { ch->try_open(); });
     }
 
+    return Status::OK();
+}
+
+bool OlapTableSink::is_open_done() {
+    bool open_done = true;
+    for (auto& index_channel : _channels) {
+        index_channel->for_each_node_channel([&open_done](NodeChannel* ch) { open_done &= ch->is_open_done(); });
+    }
+
+    return open_done;
+}
+
+Status OlapTableSink::open_wait() {
     Status err_st = Status::OK();
     for (auto& index_channel : _channels) {
         index_channel->for_each_node_channel([&index_channel, &err_st](NodeChannel* ch) {
@@ -832,6 +912,15 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
     return Status::OK();
 }
 
+bool OlapTableSink::is_full() {
+    bool full = false;
+    for (auto& index_channel : _channels) {
+        index_channel->for_each_node_channel([&full](NodeChannel* ch) { full |= ch->is_full(); });
+    }
+
+    return full;
+}
+
 Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel* channel,
                                           std::vector<uint16_t>& selection_idx) {
     Status err_st = Status::OK();
@@ -863,7 +952,51 @@ Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel
     return Status::OK();
 }
 
+Status OlapTableSink::try_close(RuntimeState* state) {
+    Status err_st = Status::OK();
+    bool intolerable_failure = false;
+    for (auto& index_channel : _channels) {
+        index_channel->for_each_node_channel([&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
+            auto st = ch->try_close();
+            if (!st.ok()) {
+                LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
+                             << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
+                err_st = st;
+                index_channel->mark_as_failed(ch);
+            }
+            if (index_channel->has_intolerable_failure()) {
+                intolerable_failure = true;
+            }
+        });
+    }
+
+    if (intolerable_failure) {
+        return err_st;
+    } else {
+        return Status::OK();
+    }
+}
+
+bool OlapTableSink::is_close_done() {
+    bool close_done = true;
+    for (auto& index_channel : _channels) {
+        index_channel->for_each_node_channel([&close_done](NodeChannel* ch) { close_done &= ch->is_close_done(); });
+    }
+
+    return close_done;
+}
+
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
+    if (close_status.ok()) {
+        do {
+            RETURN_IF_ERROR(try_close(state));
+            SleepFor(MonoDelta::FromMilliseconds(5));
+        } while (!is_close_done());
+    }
+    return close_wait(state, close_status);
+}
+
+Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     Status status = close_status;
     if (status.ok()) {
         // only if status is ok can we call this _profile->total_time_counter().

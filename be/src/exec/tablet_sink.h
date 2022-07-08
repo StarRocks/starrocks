@@ -135,13 +135,24 @@ public:
 
     Status init(RuntimeState* state);
 
-    // we use open/open_wait to parallel
-    void open();
+    // async open interface: try_open() -> [is_open_done()] -> open_wait()
+    // if is_open_done() return true, open_wait() will not block
+    // otherwise open_wait() will block
+    void try_open();
+    bool is_open_done();
     Status open_wait();
 
+    // async add chunk interface
+    // if is_full() return false, add_chunk() will not block
     Status add_chunk(vectorized::Chunk* chunk, const int64_t* tablet_ids, const uint32_t* indexes, uint32_t from,
                      uint32_t size, bool eos);
+    bool is_full();
 
+    // async close interface: try_close() -> [is_close_done()] -> close_wait()
+    // if is_close_done() return true, close_wait() will not block
+    // otherwise close_wait() will block
+    Status try_close();
+    bool is_close_done();
     Status close_wait(RuntimeState* state);
 
     void cancel(const Status& err_st);
@@ -169,6 +180,7 @@ private:
     Status _wait_all_prev_request();
     Status _wait_one_prev_request();
     bool _check_prev_request_done();
+    bool _check_all_prev_request_done();
     Status _serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst);
 
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
@@ -272,11 +284,34 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
+    // sync open interface
     Status open(RuntimeState* state) override;
 
+    // async open interface: try_open() -> [is_open_done()] -> open_wait()
+    // if is_open_done() return true, open_wait() will not block
+    // otherwise open_wait() will block
+    Status try_open(RuntimeState* state);
+
+    bool is_open_done();
+
+    Status open_wait();
+
+    // async add chunk interface
+    // if is_full() return false, add_chunk() will not block
     Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
 
-    // close() will send RPCs too. If RPCs failed, return error.
+    bool is_full();
+
+    // async close interface: try_close() -> [is_close_done()] -> close_wait()
+    // if is_close_done() return true, close_wait() will not block
+    // otherwise close_wait() will block
+    Status try_close(RuntimeState* state);
+
+    bool is_close_done();
+
+    Status close_wait(RuntimeState* state, Status close_status);
+
+    // sync close() interface
     Status close(RuntimeState* state, Status close_status) override;
 
     // Returns the runtime profile for the sink.
