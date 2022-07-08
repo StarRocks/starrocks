@@ -414,12 +414,6 @@ static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, T
         DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
         return Status::OK();
     }
-    if (UNLIKELY(!op_compaction.has_output_rowset())) {
-        return Status::InternalError("compaction log contains input rowset but no output rowset");
-    }
-    if (UNLIKELY(op_compaction.output_rowset().num_rows() == 0)) {
-        return Status::InternalError("compaction output rowset is empty");
-    }
 
     struct Finder {
         int64_t id;
@@ -448,17 +442,19 @@ static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, T
         }
     }
 
-    // Replace the first input rowset with output rowset
-    auto first_idx = static_cast<int>(first_input_pos - metadata->rowsets().begin());
-    auto output_rowset = metadata->mutable_rowsets(first_idx);
-    output_rowset->CopyFrom(op_compaction.output_rowset());
-    output_rowset->set_id(metadata->next_rowset_id());
-    metadata->set_next_rowset_id(metadata->next_rowset_id() + output_rowset->segments_size());
-
-    // Erase other input rowsets from metadata
+    if (op_compaction.has_output_rowset() && op_compaction.output_rowset().num_rows() > 0) {
+        // Replace the first input rowset with output rowset
+        auto first_idx = static_cast<int>(first_input_pos - metadata->rowsets().begin());
+        auto output_rowset = metadata->mutable_rowsets(first_idx);
+        output_rowset->CopyFrom(op_compaction.output_rowset());
+        output_rowset->set_id(metadata->next_rowset_id());
+        metadata->set_next_rowset_id(metadata->next_rowset_id() + output_rowset->segments_size());
+        ++first_input_pos;
+    }
+    // Erase input rowsets from metadata
     auto end_input_pos = pre_input_pos + 1;
     DCHECK_EQ(op_compaction.input_rowsets_size(), end_input_pos - first_input_pos);
-    metadata->mutable_rowsets()->erase(first_input_pos + 1, end_input_pos);
+    metadata->mutable_rowsets()->erase(first_input_pos, end_input_pos);
     return Status::OK();
 }
 

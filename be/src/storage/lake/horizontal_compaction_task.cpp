@@ -19,6 +19,7 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
+#include "util/defer_op.h"
 
 namespace starrocks::lake {
 
@@ -78,6 +79,7 @@ Status HorizontalCompactionTask::execute() {
     RETURN_IF_ERROR(read_iter->init_output_schema(vectorized::EMPTY_FILTERED_COLUMN_IDS));
     ASSIGN_OR_RETURN(auto writer, _tablet->new_writer());
     RETURN_IF_ERROR(writer->open());
+    DeferOp defer([&]() { writer->close(); });
 
     auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
     auto char_field_indexes = vectorized::ChunkHelper::get_char_field_indexes(schema);
