@@ -10,4 +10,5 @@ add_library(Connector STATIC
     jdbc_connector.cpp
     lake_connector.cpp
     mysql_connector.cpp
+    file_connector.cpp
 )

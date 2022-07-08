@@ -33,6 +33,7 @@ option cc_generic_services = true;
 service PBackendService {
     rpc transmit_data(starrocks.PTransmitDataParams) returns (starrocks.PTransmitDataResult);
     rpc exec_plan_fragment(starrocks.PExecPlanFragmentRequest) returns (starrocks.PExecPlanFragmentResult);
+    rpc exec_batch_plan_fragments(starrocks.PExecBatchPlanFragmentsRequest) returns (starrocks.PExecBatchPlanFragmentsResult);
     rpc cancel_plan_fragment(starrocks.PCancelPlanFragmentRequest) returns (starrocks.PCancelPlanFragmentResult);
     rpc fetch_data(starrocks.PFetchDataRequest) returns (starrocks.PFetchDataResult);
     rpc tablet_writer_open(starrocks.PTabletWriterOpenRequest) returns (starrocks.PTabletWriterOpenResult);

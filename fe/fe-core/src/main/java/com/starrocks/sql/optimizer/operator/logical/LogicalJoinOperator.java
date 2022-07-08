@@ -23,15 +23,15 @@ public class LogicalJoinOperator extends LogicalOperator {
     private final String joinHint;
     // For mark the node has been push  down join on clause, avoid dead-loop
     private boolean hasPushDownJoinOnClause = false;
+    private boolean hasDeriveIsNotNullPredicate = false;
 
     public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate) {
         this(joinType, onPredicate, "", Operator.DEFAULT_LIMIT, null, false);
     }
 
-    public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate, String joinHint,
-                               long limit,
-                               ScalarOperator predicate,
-                               boolean hasPushDownJoinOnClause) {
+    private LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate, String joinHint,
+                                long limit, ScalarOperator predicate,
+                                boolean hasPushDownJoinOnClause) {
         super(OperatorType.LOGICAL_JOIN, limit, predicate, null);
         this.joinType = joinType;
         this.onPredicate = onPredicate;
@@ -39,6 +39,7 @@ public class LogicalJoinOperator extends LogicalOperator {
         this.joinHint = joinHint;
 
         this.hasPushDownJoinOnClause = hasPushDownJoinOnClause;
+        this.hasDeriveIsNotNullPredicate = false;
     }
 
     private LogicalJoinOperator(Builder builder) {
@@ -48,6 +49,7 @@ public class LogicalJoinOperator extends LogicalOperator {
         this.joinHint = builder.joinHint;
 
         this.hasPushDownJoinOnClause = builder.hasPushDownJoinOnClause;
+        this.hasDeriveIsNotNullPredicate = builder.hasDeriveIsNotNullPredicate;
     }
 
     // Constructor for UT, don't use this ctor except ut
@@ -58,12 +60,20 @@ public class LogicalJoinOperator extends LogicalOperator {
         this.joinHint = "";
     }
 
-    public boolean isHasPushDownJoinOnClause() {
+    public boolean hasPushDownJoinOnClause() {
         return hasPushDownJoinOnClause;
     }
 
     public void setHasPushDownJoinOnClause(boolean hasPushDownJoinOnClause) {
         this.hasPushDownJoinOnClause = hasPushDownJoinOnClause;
+    }
+
+    public boolean hasDeriveIsNotNullPredicate() {
+        return hasDeriveIsNotNullPredicate;
+    }
+
+    public void setHasDeriveIsNotNullPredicate(boolean hasDeriveIsNotNullPredicate) {
+        this.hasDeriveIsNotNullPredicate = hasDeriveIsNotNullPredicate;
     }
 
     public JoinOperator getJoinType() {
@@ -159,6 +169,7 @@ public class LogicalJoinOperator extends LogicalOperator {
         private ScalarOperator onPredicate;
         private String joinHint = "";
         private boolean hasPushDownJoinOnClause = false;
+        private boolean hasDeriveIsNotNullPredicate = false;
 
         @Override
         public LogicalJoinOperator build() {
@@ -172,6 +183,7 @@ public class LogicalJoinOperator extends LogicalOperator {
             this.onPredicate = joinOperator.onPredicate;
             this.joinHint = joinOperator.joinHint;
             this.hasPushDownJoinOnClause = joinOperator.hasPushDownJoinOnClause;
+            this.hasDeriveIsNotNullPredicate = joinOperator.hasDeriveIsNotNullPredicate;
             return this;
         }
 

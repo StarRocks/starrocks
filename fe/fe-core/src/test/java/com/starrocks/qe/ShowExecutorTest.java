@@ -402,29 +402,12 @@ public class ShowExecutorTest {
     @Ignore
     @Test
     public void testDescribe() throws DdlException {
-        SystemInfoService clusterInfo = AccessTestUtil.fetchSystemInfoService();
-        Analyzer analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
-        GlobalStateMgr globalStateMgr = AccessTestUtil.fetchAdminCatalog();
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setQualifiedUser("default_cluster:testUser");
 
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            GlobalStateMgr getCurrentState() {
-                return globalStateMgr;
-            }
-
-            @Mock
-            SystemInfoService getCurrentSystemInfo() {
-                return clusterInfo;
-            }
-        };
-
-        DescribeStmt stmt = new DescribeStmt(new TableName("default_cluster:testDb", "testTbl"), false);
-        try {
-            stmt.analyze(analyzer);
-        } catch (Exception e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
+        DescribeStmt stmt = (DescribeStmt) com.starrocks.sql.parser.SqlParser.parse("desc testTbl",
+                ctx.getSessionVariable().getSqlMode()).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet;

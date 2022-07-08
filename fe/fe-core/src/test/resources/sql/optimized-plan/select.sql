@@ -156,26 +156,26 @@ SCAN (columns[1: v1, 2: v2, 3: v3] predicate[abs(1: v1) = abs(1: v1)])
 [sql]
 select * from t0_not_null where v1=v1
 [result]
-SCAN (columns[1: v1, 2: v2, 3: v3] predicate[true])
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
 
 [sql]
 select * from t0_not_null where v1>=v1
 [result]
-SCAN (columns[1: v1, 2: v2, 3: v3] predicate[true])
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
 
 [sql]
 select * from t0_not_null where v1<=v1
 [result]
-SCAN (columns[1: v1, 2: v2, 3: v3] predicate[true])
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 
 [end]
 
 [sql]
 select * from t0_not_null where v1<=>v1
 [result]
-SCAN (columns[1: v1, 2: v2, 3: v3] predicate[true])
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
 
 [sql]
@@ -199,5 +199,5 @@ VALUES
 [sql]
 select * from t0 where v1<=>v1
 [result]
-SCAN (columns[1: v1, 2: v2, 3: v3] predicate[true])
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]

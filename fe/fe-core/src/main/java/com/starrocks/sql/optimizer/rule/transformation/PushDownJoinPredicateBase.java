@@ -16,12 +16,12 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarEquivalenceExtractor;
 import com.starrocks.sql.optimizer.rewrite.ScalarRangePredicateExtractor;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -31,16 +31,18 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
         super(type, pattern);
     }
 
-    public static OptExpression pushDownPredicate(OptExpression root, ScalarOperator leftPushDown,
-                                                  ScalarOperator rightPushDown) {
-        if (leftPushDown != null) {
-            OptExpression newLeft = new OptExpression(new LogicalFilterOperator(leftPushDown));
+    public static OptExpression pushDownPredicate(OptExpression root, List<ScalarOperator> leftPushDown,
+                                                  List<ScalarOperator> rightPushDown) {
+        if (leftPushDown != null && !leftPushDown.isEmpty()) {
+            Set<ScalarOperator> set = Sets.newLinkedHashSet(leftPushDown);
+            OptExpression newLeft = new OptExpression(new LogicalFilterOperator(Utils.compoundAnd(set)));
             newLeft.getInputs().add(root.getInputs().get(0));
             root.getInputs().set(0, newLeft);
         }
 
-        if (rightPushDown != null) {
-            OptExpression newRight = new OptExpression(new LogicalFilterOperator(rightPushDown));
+        if (rightPushDown != null && !rightPushDown.isEmpty()) {
+            Set<ScalarOperator> set = Sets.newLinkedHashSet(rightPushDown);
+            OptExpression newRight = new OptExpression(new LogicalFilterOperator(Utils.compoundAnd(set)));
             newRight.getInputs().add(root.getInputs().get(1));
             root.getInputs().set(1, newRight);
         }
@@ -102,7 +104,7 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
         conjunctList.removeAll(leftPushDown);
         conjunctList.removeAll(rightPushDown);
 
-        ScalarOperator joinPredicate = Utils.compoundAnd(new ArrayList<>(eqConjuncts));
+        ScalarOperator joinPredicate = Utils.compoundAnd(Lists.newArrayList(eqConjuncts));
         ScalarOperator postJoinPredicate = Utils.compoundAnd(conjunctList);
 
         OptExpression root;
@@ -132,7 +134,11 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
             }
             root = OptExpression.create(newJoin, input.getInputs());
         }
-        return pushDownPredicate(root, Utils.compoundAnd(leftPushDown), Utils.compoundAnd(rightPushDown));
+
+        if (!join.hasDeriveIsNotNullPredicate()) {
+            deriveIsNotNullPredicate(eqConjuncts, root, leftPushDown, rightPushDown);
+        }
+        return pushDownPredicate(root, leftPushDown, rightPushDown);
     }
 
     public static ScalarOperator equivalenceDerive(ScalarOperator predicate, boolean returnInputPredicate) {
@@ -169,18 +175,46 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
         }
 
         if (!returnInputPredicate) {
-            allPredicate.removeAll(inputPredicates);
+            inputPredicates.forEach(allPredicate::remove);
         }
         return Utils.compoundAnd(Lists.newArrayList(allPredicate));
     }
 
     public static ScalarOperator rangePredicateDerive(ScalarOperator predicate) {
         ScalarRangePredicateExtractor scalarRangePredicateExtractor = new ScalarRangePredicateExtractor();
-
-        return scalarRangePredicateExtractor.rewriteAll(
-                Utils.compoundAnd(
-                        Utils.extractConjuncts(predicate).stream().map(scalarRangePredicateExtractor::rewriteAll)
-                                .collect(Collectors.toList())));
+        return scalarRangePredicateExtractor.rewriteAll(Utils.compoundAnd(
+                Utils.extractConjuncts(predicate).stream().map(scalarRangePredicateExtractor::rewriteAll)
+                        .collect(Collectors.toList())));
     }
 
+    private static void deriveIsNotNullPredicate(List<BinaryPredicateOperator> onEQPredicates, OptExpression join,
+                                                 List<ScalarOperator> leftPushDown,
+                                                 List<ScalarOperator> rightPushDown) {
+        List<ScalarOperator> leftEQ = Lists.newArrayList();
+        List<ScalarOperator> rightEQ = Lists.newArrayList();
+
+        for (BinaryPredicateOperator bpo : onEQPredicates) {
+            if (!bpo.getBinaryType().isEqual()) {
+                continue;
+            }
+
+            if (join.getChildOutputColumns(0).containsAll(bpo.getChild(0).getUsedColumns())) {
+                leftEQ.add(bpo.getChild(0));
+                rightEQ.add(bpo.getChild(1));
+            } else if (join.getChildOutputColumns(0).containsAll(bpo.getChild(1).getUsedColumns())) {
+                leftEQ.add(bpo.getChild(1));
+                rightEQ.add(bpo.getChild(0));
+            }
+        }
+
+        LogicalJoinOperator joinOp = ((LogicalJoinOperator) join.getOp());
+        JoinOperator joinType = joinOp.getJoinType();
+        if ((joinType.isInnerJoin() || joinType.isRightSemiJoin()) && leftPushDown.isEmpty()) {
+            leftEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone())).forEach(leftPushDown::add);
+        }
+        if ((joinType.isInnerJoin() || joinType.isLeftSemiJoin()) && rightPushDown.isEmpty()) {
+            rightEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone())).forEach(rightPushDown::add);
+        }
+        joinOp.setHasDeriveIsNotNullPredicate(true);
+    }
 }

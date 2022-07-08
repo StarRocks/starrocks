@@ -126,7 +126,6 @@ Status HdfsScanner::_build_scanner_context() {
 
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     RETURN_IF_CANCELLED(_runtime_state);
-    SCOPED_RAW_TIMER(&_stats.scan_ns);
     Status status = do_get_next(runtime_state, chunk);
     if (status.ok()) {
         if (!_conjunct_ctxs.empty()) {
@@ -221,9 +220,7 @@ void HdfsScanner::update_counter() {
 
     update_hdfs_counter(profile);
 
-    COUNTER_UPDATE(profile->scan_timer, _stats.scan_ns);
     COUNTER_UPDATE(profile->reader_init_timer, _stats.reader_init_ns);
-
     COUNTER_UPDATE(profile->rows_read_counter, _stats.raw_rows_read);
     COUNTER_UPDATE(profile->bytes_read_counter, _stats.bytes_read);
     COUNTER_UPDATE(profile->expr_filter_timer, _stats.expr_filter_ns);

@@ -40,6 +40,7 @@ import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -77,12 +78,6 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
-            AnalyzeStmtAnalyzer.analyze(statement, session);
-            return null;
-        }
-
-        @Override
         public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, ConnectContext session) {
             AdminStmtAnalyzer.analyze(statement, session);
             return null;
@@ -104,12 +99,6 @@ public class Analyzer {
         @Override
         public Void visitBaseViewStatement(BaseViewStmt statement, ConnectContext session) {
             ViewAnalyzer.analyze(statement, session);
-            return null;
-        }
-
-        @Override
-        public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
-            AnalyzeStmtAnalyzer.analyze(statement, session);
             return null;
         }
 
@@ -308,5 +297,24 @@ public class Analyzer {
             return null;
         }
 
+        // ------------------------------------------- Analyze Statement ---------------------------------------------------
+
+        @Override
+        public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
+            AnalyzeStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
+            AnalyzeStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext session) {
+            AnalyzeStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
     }
 }

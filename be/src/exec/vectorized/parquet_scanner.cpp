@@ -28,9 +28,7 @@ ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, con
     _conv_ctx.state = state;
 }
 
-ParquetScanner::~ParquetScanner() {
-    close();
-}
+ParquetScanner::~ParquetScanner() = default;
 
 Status ParquetScanner::open() {
     RETURN_IF_ERROR(FileScanner::open());
@@ -252,8 +250,15 @@ Status ParquetScanner::convert_array_to_column(ConvertFunc conv_func, size_t num
         return illegal_converting_error(array->type()->name(), type_desc->debug_string());
     } else {
         auto* filter_data = (&_chunk_filter.front()) + _chunk_start_idx;
-        return conv_func(array, _batch_start_idx, num_elements, data_column, _chunk_start_idx, null_data, filter_data,
-                         &_conv_ctx);
+        auto st = conv_func(array, _batch_start_idx, num_elements, data_column, _chunk_start_idx, null_data,
+                            filter_data, &_conv_ctx);
+        if (st.ok()) {
+            // in some scene such as string length exceeds limit, the column will be set NULL, so we need reset has_null
+            if (column->is_nullable()) {
+                down_cast<NullableColumn*>(column.get())->update_has_null();
+            }
+        }
+        return st;
     }
 }
 
@@ -365,6 +370,7 @@ Status ParquetScanner::open_next_reader() {
 }
 
 void ParquetScanner::close() {
+    FileScanner::close();
     _curr_file_reader.reset();
     _pool.clear();
 }

@@ -264,7 +264,9 @@ Status JDBCScanner::_init_column_class_name() {
     int len = helper.list_size(column_class_names);
 
     for (int i = 0; i < len; i++) {
-        std::string class_name = helper.to_string((jstring)(helper.list_get(column_class_names, i)));
+        jobject jelement = helper.list_get(column_class_names, i);
+        DeferOp defer([&jelement, this]() { _jni_env->DeleteLocalRef(jelement); });
+        std::string class_name = helper.to_string((jstring)(jelement));
         RETURN_IF_ERROR(_precheck_data_type(class_name, _slot_descs[i]));
         _column_class_name.emplace_back(class_name);
     }
@@ -321,6 +323,7 @@ template <>
 Status JDBCScanner::_append_value_from_result<std::string>(jobject jval,
                                                            std::function<std::string(jobject)> get_value_func,
                                                            SlotDescriptor* slot_desc, Column* column) {
+    DeferOp defer([&jval, this]() { _jni_env->DeleteLocalRef(jval); });
     PROCESS_NULL_VALUE(jval, column)
 
     std::string cpp_val = get_value_func(jval);
@@ -348,6 +351,7 @@ Status JDBCScanner::_append_value_from_result<std::string>(jobject jval,
 template <typename CppType>
 Status JDBCScanner::_append_value_from_result(jobject jval, std::function<CppType(jobject)> get_value_func,
                                               SlotDescriptor* slot_desc, Column* column) {
+    DeferOp defer([&jval, this]() { _jni_env->DeleteLocalRef(jval); });
     PROCESS_NULL_VALUE(jval, column)
 
 #define CHECK_DATA_OVERFLOW(val, min_val, max_val)                                                                  \
