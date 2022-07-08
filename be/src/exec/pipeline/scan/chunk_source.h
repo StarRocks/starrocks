@@ -16,10 +16,16 @@ class RuntimeProfile;
 
 namespace pipeline {
 
+class BalancedChunkBuffer;
+
 class ChunkSource {
 public:
-    ChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel)
-            : _scan_operator_seq(scan_operator_id), _runtime_profile(runtime_profile), _morsel(std::move(morsel)) {}
+    ChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                BalancedChunkBuffer& chunk_buffer)
+            : _scan_operator_seq(scan_operator_id),
+              _runtime_profile(runtime_profile),
+              _morsel(std::move(morsel)),
+              _chunk_buffer(chunk_buffer) {}
 
     virtual ~ChunkSource() = default;
 
@@ -29,28 +35,31 @@ public:
 
     // Return true if eos is not reached
     // Return false if eos is reached or error occurred
-    virtual bool has_next_chunk() const = 0;
+    bool has_next_chunk() const { return _status.ok(); }
+    bool has_output() const;
+    bool has_shared_output() const;
 
-    // Whether cache is empty or not
-    virtual bool has_output() const = 0;
-
-    virtual bool has_shared_output() const = 0;
-
-    virtual size_t get_buffer_size() const = 0;
-
-    virtual StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer() = 0;
-
-    virtual Status buffer_next_batch_chunks_blocking(size_t chunk_size, RuntimeState* state) = 0;
-    virtual Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, RuntimeState* state,
-                                                                   size_t* num_read_chunks, int worker_id,
-                                                                   workgroup::WorkGroupPtr running_wg) = 0;
+    StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer();
+    Status buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state);
+    Status buffer_next_batch_chunks_blocking_for_workgroup(size_t batch_size, RuntimeState* state,
+                                                           size_t* num_read_chunks, int worker_id,
+                                                           workgroup::WorkGroupPtr running_wg);
 
     // Counters of scan
-    int64_t get_cpu_time_spent() { return _cpu_time_spent_ns; }
+    int64_t get_cpu_time_spent() const { return _cpu_time_spent_ns; }
     int64_t get_scan_rows() const { return _scan_rows_num; }
     int64_t get_scan_bytes() const { return _scan_bytes; }
 
 protected:
+    // MUST be implemented by different ChunkSource
+    virtual Status _read_chunk(RuntimeState* state, vectorized::ChunkPtr* chunk) = 0;
+
+    // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
+    static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
+    // Yield scan io task when maximum time in nano-seconds has spent in current execution round,
+    // if it runs in the worker thread owned by other workgroup, which has running drivers.
+    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 20'000'000L;
+
     const int32_t _scan_operator_seq;
     RuntimeProfile* _runtime_profile;
     // The morsel will own by pipeline driver
@@ -60,6 +69,9 @@ protected:
     int64_t _cpu_time_spent_ns = 0;
     int64_t _scan_rows_num = 0;
     int64_t _scan_bytes = 0;
+
+    BalancedChunkBuffer& _chunk_buffer;
+    Status _status = Status::OK();
 };
 
 using ChunkSourcePtr = std::shared_ptr<ChunkSource>;
