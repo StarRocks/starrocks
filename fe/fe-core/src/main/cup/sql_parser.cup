@@ -979,10 +979,6 @@ alter_table_clause ::=
     {:
         RESULT = new TableRenameClause(newTableName);
     :}
-    | KW_SWAP KW_WITH ident:tblName
-    {:
-        RESULT = new SwapTableClause(tblName);
-    :}
     | KW_RENAME KW_ROLLUP ident:rollupName ident:newRollupName
     {:
         RESULT = new RollupRenameClause(rollupName, newRollupName);
