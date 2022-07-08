@@ -121,6 +121,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
@@ -503,6 +504,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<String> hostPorts =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         return new DropComputeNodeClause(hostPorts);
+    }
+
+    @Override
+    public ParseNode visitSwapTableClause(StarRocksParser.SwapTableClauseContext context) {
+        Identifier identifier = (Identifier) visit(context.identifier());
+        return new SwapTableClause(identifier.getValue());
     }
 
     @Override
