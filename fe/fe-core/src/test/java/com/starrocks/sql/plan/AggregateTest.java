@@ -824,9 +824,11 @@ public class AggregateTest extends PlanTestBase {
         expectedException.expectMessage("window argument must >= 0");
         sql =
                 "select L_ORDERKEY,window_funnel(-1, L_SHIPDATE, 3, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
-        plan = getFragmentPlan(sql);
-
-        FeConstants.runningUnitTest = false;
+	try {
+            plan = getFragmentPlan(sql);
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }
     }
 
     @Test
