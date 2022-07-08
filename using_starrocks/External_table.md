@@ -659,10 +659,10 @@ StarRocks支持通过外表的方式查询Apache Hudi数据湖中的数据，帮
 
 ### 注意事项
 
-* Hudi外表是只读的，只能用于查询操作。
-* 当前支持Hudi的表类型为Copy on write(下文简称COW)，暂不支持Merge on read(下文简称MOR)表类型。COW和MOR之间的更多区别，请参见[Apache Hudi官网](https://hudi.apache.org/docs/table_types)。
-* 支持Hudi文件的压缩格式为GZIP（默认值），ZSTD，LZ4和SNAPPY。
-* StarRocks暂不⽀持同步Hudi中的[schema evolution](https://hudi.apache.org/docs/schema_evolution)，如果Hudi表schema evolution发生变更，您需要在StarRocks中删除对应Hudi外表并重新建立。
+* Hudi 外表是只读的，只能用于查询操作。
+* 当前支持 Hudi 的表类型为 Copy on write(下文简称 COW)，暂不支持 Merge on read(下文简称 MOR)表类型。COW 和 MOR 之间的更多区别，请参见 [Apache Hudi 官网](https://hudi.apache.org/docs/table_types)。
+* 支持 Hudi 文件的压缩格式为 GZIP（默认值），ZSTD，LZ4 和 SNAPPY。
+* StarRocks 暂不⽀持同步 Hudi 表结构。如果 Hudi 表结构发生变化，您需要在 StarRocks 中删除相应的外部表并重新创建。
 
 ### 操作步骤
 
@@ -682,8 +682,8 @@ PROPERTIES (
 
 |  参数   | 说明  |
 |  ----  | ----  |
-| type  | 资源类型，固定取值为**hudi**。 |
-| hive.metastore.uris | Hive Metastore的thrift URI。<br>Hudi通过连接Hive Metastore，以创建并管理表。您需要传入该Hive Metastore的thrift URI。格式为**thrift://<Hive Metadata的IP地址>:<端口号>**，端口号默认为9083。 |
+| type  | 资源类型，固定取值为 **hudi**。 |
+| hive.metastore.uris | Hive Metastore 的 thrift URI。<br> Hudi 通过连接 Hive Metastore，以创建并管理表。您需要传入该 Hive Metastore 的 thrift URI。格式为 **thrift://<Hudi元数据的IP地址>:<端口号>**，端口号默认为 9083。 |
 
 执行如下命令，查看StarRocks中的所有Hudi资源。
 
