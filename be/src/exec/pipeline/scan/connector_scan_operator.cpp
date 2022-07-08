@@ -76,9 +76,7 @@ ConnectorChunkSource::~ConnectorChunkSource() {
 }
 
 Status ConnectorChunkSource::prepare(RuntimeState* state) {
-    // semantics of `prepare` in ChunkSource is identical to `open`
     _runtime_state = state;
-    RETURN_IF_ERROR(_data_source->open(state));
     return Status::OK();
 }
 
@@ -172,6 +170,11 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(siz
 
 Status ConnectorChunkSource::_read_chunk(vectorized::ChunkPtr* chunk) {
     RuntimeState* state = _runtime_state;
+    if (!_opened) {
+        RETURN_IF_ERROR(_data_source->open(state));
+        _opened = true;
+    }
+
     if (state->is_cancelled()) {
         return Status::Cancelled("canceled state");
     }
