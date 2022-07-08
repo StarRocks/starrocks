@@ -97,7 +97,6 @@ private:
     struct Profile {
         RuntimeProfile::Counter* scanner_queue_counter = nullptr;
         RuntimeProfile::Counter* scanner_queue_timer = nullptr;
-        RuntimeProfile::Counter* scan_ranges_counter = nullptr;
     };
     std::mutex _mtx;
     Stack<ChunkPtr> _chunk_pool;
