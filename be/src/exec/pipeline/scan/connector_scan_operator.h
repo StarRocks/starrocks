@@ -84,6 +84,7 @@ private:
     // =========================
     RuntimeState* _runtime_state = nullptr;
     Status _status = Status::OK();
+    bool _opened = false;
     bool _closed = false;
     uint64_t _rows_read = 0;
     uint64_t _bytes_read = 0;
