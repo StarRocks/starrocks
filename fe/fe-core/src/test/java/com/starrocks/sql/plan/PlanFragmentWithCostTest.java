@@ -1077,18 +1077,18 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         System.out.println(plan);
 
         assertContains(plan, "  Input Partition: RANDOM\n" +
-                "  OutPut Partition: HASH_PARTITIONED: 3: v3\n" +
+                "  OutPut Partition: HASH_PARTITIONED: 2: v2\n" +
                 "  OutPut Exchange Id: 01");
 
         assertContains(plan, "Input Partition: RANDOM\n" +
-                "  OutPut Partition: HASH_PARTITIONED: 6: v6\n" +
+                "  OutPut Partition: HASH_PARTITIONED: 5: v5\n" +
                 "  OutPut Exchange Id: 03");
 
         assertContains(plan, "  |  build runtime filters:\n" +
-                "  |  - filter_id = 1, build_expr = (6: v6), remote = true\n");
+                "  |  - filter_id = 0, build_expr = (5: v5), remote = true\n");
 
         assertContains(plan, "probe runtime filters:\n" +
-                "     - filter_id = 1, probe_expr = (3: v3)");
+                "     - filter_id = 0, probe_expr = (2: v2)");
     }
 
 }
