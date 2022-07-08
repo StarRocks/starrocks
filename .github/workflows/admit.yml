@@ -1,10 +1,11 @@
-name: Auto Comment
+name: Trigger Jobs
+
 on:
   pull_request_target:
     types: [synchronize, labeled, reopened]
 
 jobs:
-  run:
+  Trigger-Admit-Test:
     runs-on: ubuntu-latest
     steps:  
       - name: PR comment
