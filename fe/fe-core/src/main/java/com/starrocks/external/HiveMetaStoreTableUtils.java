@@ -162,6 +162,8 @@ public class HiveMetaStoreTableUtils {
                         primitiveType == PrimitiveType.VARCHAR;
             case "BOOLEAN":
                 return primitiveType == PrimitiveType.BOOLEAN;
+            case "BINARY":
+                return primitiveType == PrimitiveType.INVALID_TYPE;
             case "ARRAY":
                 if (!type.isArrayType()) {
                     return false;
@@ -222,7 +224,7 @@ public class HiveMetaStoreTableUtils {
                     return type;
                 }
             default:
-                throw new DdlException("hive table column type [" + typeUpperCase + "] transform failed.");
+                primitiveType = PrimitiveType.INVALID_TYPE;
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {
@@ -244,9 +246,14 @@ public class HiveMetaStoreTableUtils {
         List<FieldSchema> allHiveColumns = getAllColumns(hiveTable);
         List<Column> fullSchema = Lists.newArrayList();
         for (FieldSchema fieldSchema : allHiveColumns) {
-            Type srType = convertColumnType(fieldSchema.getType());
-            Column column = new Column(fieldSchema.getName(), srType, true);
-            fullSchema.add(column);
+            // skip unsupportable `binary` type
+            if (unsupportedType.contains(fieldSchema.getType())) {
+                continue;
+            } else {
+                Type srType = convertColumnType(fieldSchema.getType());
+                Column column = new Column(fieldSchema.getName(), srType, true);
+                fullSchema.add(column);
+            }
         }
 
         // Adding some necessary properties to adapt initialization of HiveTable.

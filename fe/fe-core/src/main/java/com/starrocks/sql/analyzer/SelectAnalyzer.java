@@ -18,6 +18,7 @@ import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
@@ -252,6 +253,15 @@ public class SelectAnalyzer {
         List<Expr> outputExpressions = outputExpressionBuilder.build();
         analyzeState.setOutputExpression(outputExpressions);
         analyzeState.setOutputScope(new Scope(RelationId.anonymous(), new RelationFields(outputFields.build())));
+        List<Type> invalidCols = outputExpressions.stream()
+                .filter(expr -> !(expr.getType().getPrimitiveType() != PrimitiveType.INVALID_TYPE)).map(Expr::getType)
+                .collect(Collectors.toList());
+        for (Field field : outputFields.build()) {
+            if (invalidCols.contains(field.getType())) {
+                throw new SemanticException("field " + field.getName()
+                        + "'s type " + field.getType() + " is unsupported!");
+            }
+        }
         return outputExpressions;
     }
 

@@ -104,12 +104,12 @@ public class Column implements Writable {
 
     public Column(String name, Type dataType) {
         this(name, dataType, false, null, false, null, "");
-        Preconditions.checkArgument(dataType.isValid());
+        // Preconditions.checkArgument(dataType.isValid());
     }
 
     public Column(String name, Type dataType, boolean isAllowNull) {
         this(name, dataType, false, null, isAllowNull, null, "");
-        Preconditions.checkArgument(dataType.isValid());
+        // Preconditions.checkArgument(dataType.isValid());
     }
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, String defaultValue,
@@ -135,8 +135,8 @@ public class Column implements Writable {
         if (this.type == null) {
             this.type = Type.NULL;
         }
-        Preconditions.checkArgument(this.type.isComplexType() ||
-                this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
+        //Preconditions.checkArgument(this.type.isComplexType() ||
+        //        this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
 
         this.aggregationType = aggregateType;
         this.isAggregationTypeImplicit = false;
