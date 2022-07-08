@@ -3,6 +3,7 @@
 #include "exec/pipeline/scan/connector_scan_operator.h"
 
 #include "column/chunk.h"
+#include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/vectorized/connector_scan_node.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
@@ -12,8 +13,9 @@ namespace starrocks::pipeline {
 
 // ==================== ConnectorScanOperatorFactory ====================
 
-ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node)
-        : ScanOperatorFactory(id, scan_node) {}
+ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node,
+                                                           ChunkBufferLimiterPtr buffer_limiter)
+        : ScanOperatorFactory(id, scan_node, std::move(buffer_limiter)) {}
 
 Status ConnectorScanOperatorFactory::do_prepare(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
@@ -29,14 +31,14 @@ void ConnectorScanOperatorFactory::do_close(RuntimeState* state) {
 }
 
 OperatorPtr ConnectorScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
-    return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, _scan_node, _num_committed_scan_tasks);
+    return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, _scan_node, _buffer_limiter.get());
 }
 
 // ==================== ConnectorScanOperator ====================
 
 ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence,
-                                             ScanNode* scan_node, std::atomic<int>& num_committed_scan_tasks)
-        : ScanOperator(factory, id, driver_sequence, scan_node, num_committed_scan_tasks) {}
+                                             ScanNode* scan_node, ChunkBufferLimiter* buffer_limiter)
+        : ScanOperator(factory, id, driver_sequence, scan_node, buffer_limiter) {}
 
 Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     return Status::OK();
@@ -47,17 +49,19 @@ void ConnectorScanOperator::do_close(RuntimeState* state) {}
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
     return std::make_shared<ConnectorChunkSource>(_chunk_source_profiles[chunk_source_index].get(), std::move(morsel),
-                                                  this, scan_node);
+                                                  this, scan_node, _buffer_limiter);
 }
 
 // ==================== ConnectorChunkSource ====================
 ConnectorChunkSource::ConnectorChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
-                                           vectorized::ConnectorScanNode* scan_node)
+                                           vectorized::ConnectorScanNode* scan_node,
+                                           ChunkBufferLimiter* const buffer_limiter)
         : ChunkSource(runtime_profile, std::move(morsel)),
           _scan_node(scan_node),
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),
-          _runtime_bloom_filters(op->runtime_bloom_filters()) {
+          _runtime_bloom_filters(op->runtime_bloom_filters()),
+          _buffer_limiter(buffer_limiter) {
     _conjunct_ctxs = scan_node->conjunct_ctxs();
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
     ScanMorsel* scan_morsel = (ScanMorsel*)_morsel.get();
@@ -105,9 +109,10 @@ size_t ConnectorChunkSource::get_buffer_size() const {
 }
 
 StatusOr<vectorized::ChunkPtr> ConnectorChunkSource::get_next_chunk_from_buffer() {
-    vectorized::ChunkPtr chunk = nullptr;
+    // Will release the token after exiting this scope.
+    ChunkWithToken chunk = std::make_pair(nullptr, nullptr);
     _chunk_buffer.try_get(&chunk);
-    return chunk;
+    return std::move(chunk.first);
 }
 
 Status ConnectorChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state) {
@@ -116,16 +121,20 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size
     }
 
     for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
+        if (_chunk_token == nullptr && (_chunk_token = _buffer_limiter->pin(1)) == nullptr) {
+            return Status::OK();
+        }
+
         vectorized::ChunkPtr chunk;
         _status = _read_chunk(&chunk);
         if (!_status.ok()) {
             // end of file is normal case, need process chunk
             if (_status.is_end_of_file()) {
-                _chunk_buffer.put(std::move(chunk));
+                _chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)));
             }
             break;
         }
-        _chunk_buffer.put(std::move(chunk));
+        _chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)));
     }
     return _status;
 }
@@ -139,6 +148,10 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(siz
     int64_t time_spent = 0;
     for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         {
+            if (_chunk_token == nullptr && (_chunk_token = _buffer_limiter->pin(1)) == nullptr) {
+                return Status::OK();
+            }
+
             SCOPED_RAW_TIMER(&time_spent);
 
             vectorized::ChunkPtr chunk;
@@ -147,13 +160,13 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(siz
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
                     ++(*num_read_chunks);
-                    _chunk_buffer.put(std::move(chunk));
+                    _chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)));
                 }
                 break;
             }
 
             ++(*num_read_chunks);
-            _chunk_buffer.put(std::move(chunk));
+            _chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)));
         }
 
         if (time_spent >= YIELD_MAX_TIME_SPENT) {

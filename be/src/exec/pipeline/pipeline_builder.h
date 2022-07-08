@@ -59,6 +59,8 @@ public:
     FragmentContext* fragment_context() { return _fragment_context; }
 
     MorselQueue* morsel_queue_of_source_operator(const SourceOperatorFactory* source_op);
+    size_t degree_of_parallelism_of_source_operator(int32_t source_node_id) const;
+    size_t degree_of_parallelism_of_source_operator(const SourceOperatorFactory* source_op) const;
 
 private:
     static constexpr int kLocalExchangeBufferChunks = 8;

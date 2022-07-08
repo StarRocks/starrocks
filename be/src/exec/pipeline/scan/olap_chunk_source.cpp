@@ -4,6 +4,7 @@
 
 #include "column/column_helper.h"
 #include "common/constexpr.h"
+#include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/vectorized/olap_scan_node.h"
@@ -25,12 +26,14 @@ namespace starrocks::pipeline {
 using namespace vectorized;
 
 OlapChunkSource::OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                                 vectorized::OlapScanNode* scan_node, OlapScanContext* scan_ctx)
+                                 vectorized::OlapScanNode* scan_node, OlapScanContext* scan_ctx,
+                                 ChunkBufferLimiter* const buffer_limiter)
         : ChunkSource(runtime_profile, std::move(morsel)),
           _scan_node(scan_node),
           _scan_ctx(scan_ctx),
           _limit(scan_node->limit()),
-          _scan_range(down_cast<ScanMorsel*>(_morsel.get())->get_olap_scan_range()) {}
+          _scan_range(down_cast<ScanMorsel*>(_morsel.get())->get_olap_scan_range()),
+          _buffer_limiter(buffer_limiter) {}
 
 OlapChunkSource::~OlapChunkSource() {
     _reader.reset();
@@ -292,9 +295,10 @@ size_t OlapChunkSource::get_buffer_size() const {
 }
 
 StatusOr<vectorized::ChunkPtr> OlapChunkSource::get_next_chunk_from_buffer() {
-    vectorized::ChunkPtr chunk = nullptr;
+    // Will release the token after exiting this scope.
+    ChunkWithToken chunk = std::make_pair(nullptr, nullptr);
     _chunk_buffer.try_get(&chunk);
-    return chunk;
+    return std::move(chunk.first);
 }
 
 Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state) {
@@ -304,18 +308,22 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, Run
     using namespace vectorized;
 
     for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
+        if (_chunk_token == nullptr && (_chunk_token = _buffer_limiter->pin(1)) == nullptr) {
+            return Status::OK();
+        }
+
         ChunkUniquePtr chunk(
                 ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(), true));
         _status = _read_chunk_from_storage(_runtime_state, chunk.get());
         if (!_status.ok()) {
             // end of file is normal case, need process chunk
             if (_status.is_end_of_file()) {
-                _chunk_buffer.put(std::move(chunk));
+                _chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)));
             }
             break;
         }
 
-        _chunk_buffer.put(std::move(chunk));
+        _chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)));
     }
 
     return _status;
@@ -327,11 +335,15 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
     if (!_status.ok()) {
         return _status;
     }
-
     using namespace vectorized;
+
     int64_t time_spent = 0;
     for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         {
+            if (_chunk_token == nullptr && (_chunk_token = _buffer_limiter->pin(1)) == nullptr) {
+                return Status::OK();
+            }
+
             SCOPED_RAW_TIMER(&time_spent);
 
             ChunkUniquePtr chunk(
@@ -341,13 +353,13 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
                     ++(*num_read_chunks);
-                    _chunk_buffer.put(std::move(chunk));
+                    _chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)));
                 }
                 break;
             }
 
             ++(*num_read_chunks);
-            _chunk_buffer.put(std::move(chunk));
+            _chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)));
         }
 
         if (time_spent >= YIELD_MAX_TIME_SPENT) {
@@ -421,6 +433,7 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
         TRY_CATCH_ALLOC_SCOPE_END()
 
     } while (chunk->num_rows() == 0);
+
     _update_realtime_counter(chunk);
     // Improve for select * from table limit x, x is small
     if (_limit != -1 && _num_rows_read >= _limit) {
@@ -436,11 +449,11 @@ void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
     _scan_bytes = stats.bytes_read;
     _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
 
-    // Update local countesr
+    // Update local counters.
     _local_sum_row_bytes += chunk->memory_usage();
     _local_num_rows += chunk->num_rows();
     if (_local_sum_chunks++ % UPDATE_AVG_ROW_BYTES_FREQUENCY == 0) {
-        _scan_ctx->update_avg_row_bytes(_local_sum_row_bytes, _local_num_rows);
+        _buffer_limiter->update_avg_row_bytes(_local_sum_row_bytes, _local_num_rows);
         _local_sum_row_bytes = 0;
         _local_num_rows = 0;
     }

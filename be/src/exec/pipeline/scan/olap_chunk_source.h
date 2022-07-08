@@ -29,11 +29,14 @@ namespace pipeline {
 
 class ScanOperator;
 class OlapScanContext;
+class ChunkBufferToken;
+using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
+class ChunkBufferLimiter;
 
 class OlapChunkSource final : public ChunkSource {
 public:
     OlapChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, vectorized::OlapScanNode* scan_node,
-                    OlapScanContext* scan_ctx);
+                    OlapScanContext* scan_ctx, ChunkBufferLimiter* const buffer_limiter);
 
     ~OlapChunkSource() override;
 
@@ -77,6 +80,8 @@ private:
     void _decide_chunk_size();
 
 private:
+    using ChunkWithToken = std::pair<vectorized::ChunkPtr, ChunkBufferTokenPtr>;
+
     vectorized::TabletReaderParams _params{};
     vectorized::OlapScanNode* _scan_node;
     OlapScanContext* _scan_ctx;
@@ -85,7 +90,8 @@ private:
     TInternalScanRange* _scan_range;
 
     Status _status = Status::OK();
-    UnboundedBlockingQueue<vectorized::ChunkPtr> _chunk_buffer;
+    UnboundedBlockingQueue<ChunkWithToken> _chunk_buffer;
+    ChunkBufferLimiter* const _buffer_limiter;
     vectorized::ConjunctivePredicates _not_push_down_predicates;
     std::vector<uint8_t> _selection;
 
