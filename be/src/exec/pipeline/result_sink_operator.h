@@ -48,6 +48,8 @@ public:
         return Status::OK();
     }
 
+    Status set_cancelled(RuntimeState* state) override;
+
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
