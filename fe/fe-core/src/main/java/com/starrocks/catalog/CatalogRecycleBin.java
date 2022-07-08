@@ -61,6 +61,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
+import static java.lang.Math.max;
 
 public class CatalogRecycleBin extends MasterDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(CatalogRecycleBin.class);
@@ -78,11 +79,14 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
     private com.google.common.collect.Table<Long, String, RecycleTableInfo> nameToTableInfo;
     private Map<Long, RecyclePartitionInfo> idToPartition;
 
-    // if enable erase later, the real recycle time is RecycleTime + LATE_RECYCLE_INTERVAL_SECONDS
-    // This is only useful on master, when tablet scheduler repair a tablet that is about to expire
-    // We can make the db/table/partition infomation stay longer until the asynchronized agent task finish.
-    protected static int LATE_RECYCLE_INTERVAL_SECONDS = 60;
     protected Map<Long, Long> idToRecycleTime;
+
+    // The real recycle time will extend by LATE_RECYCLE_INTERVAL_SECONDS when enable `eraseLater`.
+    // It is only take effect on master when the tablet scheduler repairs a tablet that is about to expire.
+    // Assume that the repair task will be done within LATE_RECYCLE_INTERVAL_SECONDS.
+    // We should check DB/table/partition that was about to expire in LATE_RECYCLE_INTERVAL_SECONDS, and make sure
+    // they stay longer until the asynchronous agent task finish.
+    protected static int LATE_RECYCLE_INTERVAL_SECONDS = 60;
     protected Set<Long> enableEraseLater;
 
     public CatalogRecycleBin() {
@@ -234,11 +238,13 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
      * Only used by main loop.
      */
     private synchronized boolean canErase(long id, long currentTimeMs) {
-        long latency = currentTimeMs - idToRecycleTime.get(id);
+        long latencyMs = currentTimeMs - idToRecycleTime.get(id);
+        long expireMs = max(Config.catalog_trash_expire_second * 1000L, MIN_ERASE_LATENCY);
         if (enableEraseLater.contains(id)) {
-            latency -= LATE_RECYCLE_INTERVAL_SECONDS * 1000L;
+            // if enableEraseLater is set, extend the timeout by LATE_RECYCLE_INTERVAL_SECONDS
+            expireMs += LATE_RECYCLE_INTERVAL_SECONDS * 1000L;
         }
-        return latency > MIN_ERASE_LATENCY && latency > Config.catalog_trash_expire_second * 1000L;
+        return latencyMs > expireMs;
     }
 
     /**
