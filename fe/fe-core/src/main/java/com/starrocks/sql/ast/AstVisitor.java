@@ -376,6 +376,10 @@ public abstract class AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    public R visitAddPartitionClause(AddPartitionClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     public R visitSwapTableClause(SwapTableClause clause, C context) {
         return visitNode(clause, context);
     }
