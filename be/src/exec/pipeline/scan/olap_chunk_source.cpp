@@ -40,13 +40,19 @@ OlapChunkSource::~OlapChunkSource() {
     _predicate_free_pool.clear();
 }
 
+Status OlapChunkSource::set_finished(RuntimeState* state) {
+    _chunk_buffer.shutdown();
+    _chunk_buffer.clear();
+
+    return Status::OK();
+}
+
 void OlapChunkSource::close(RuntimeState* state) {
     _update_counter();
     _prj_iter->close();
     _reader.reset();
     _predicate_free_pool.clear();
-    _chunk_buffer.shutdown();
-    _chunk_buffer.clear();
+    set_finished(state);
 }
 
 Status OlapChunkSource::prepare(RuntimeState* state) {
@@ -323,7 +329,9 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, Run
             break;
         }
 
-        _chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)));
+        if (!_chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)))) {
+            break;
+        }
     }
 
     return _status;
@@ -359,7 +367,9 @@ Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t b
             }
 
             ++(*num_read_chunks);
-            _chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)));
+            if (!_chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)))) {
+                break;
+            }
         }
 
         if (time_spent >= YIELD_MAX_TIME_SPENT) {

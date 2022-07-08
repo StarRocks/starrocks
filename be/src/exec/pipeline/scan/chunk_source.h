@@ -27,6 +27,8 @@ public:
 
     virtual Status prepare(RuntimeState* state) = 0;
 
+    // Mark that it needn't produce any chunk anymore.
+    virtual Status set_finished(RuntimeState* state) = 0;
     virtual void close(RuntimeState* state) = 0;
 
     // Return true if eos is not reached

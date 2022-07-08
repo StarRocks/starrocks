@@ -86,12 +86,18 @@ Status ConnectorChunkSource::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+Status ConnectorChunkSource::set_finished(RuntimeState* state) {
+    _chunk_buffer.shutdown();
+    _chunk_buffer.clear();
+
+    return Status::OK();
+}
+
 void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
     _closed = true;
     _data_source->close(state);
-    _chunk_buffer.shutdown();
-    _chunk_buffer.clear();
+    set_finished(state);
 }
 
 bool ConnectorChunkSource::has_next_chunk() const {
@@ -134,7 +140,9 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size
             }
             break;
         }
-        _chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)));
+        if (!_chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)))) {
+            break;
+        }
     }
     return _status;
 }
@@ -166,7 +174,9 @@ Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(siz
             }
 
             ++(*num_read_chunks);
-            _chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)));
+            if (!_chunk_buffer.put(std::make_pair(std::move(chunk), std::move(_chunk_token)))) {
+                break;
+            }
         }
 
         if (time_spent >= YIELD_MAX_TIME_SPENT) {

@@ -72,9 +72,12 @@ void ScanOperator::close(RuntimeState* state) {
     }
     // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
-        if (_chunk_sources[i] != nullptr && !_is_io_task_running[i]) {
-            _chunk_sources[i]->close(state);
-            _chunk_sources[i] = nullptr;
+        if (_chunk_sources[i] != nullptr) {
+            _chunk_sources[i]->set_finished(state);
+            if (!_is_io_task_running[i]) {
+                _chunk_sources[i]->close(state);
+                _chunk_sources[i] = nullptr;
+            }
         }
     }
 
