@@ -51,30 +51,32 @@
   + [临时分区](/using_starrocks/Temporary_partition.md)
   + [文件管理器](/using_starrocks/filemanager.md)
 + 管理手册
-  + 部署使用
-    + [容器编译](/administration/Build_in_docker.md)
-    + [集群部署](/administration/Deployment.md)
-    + [在 AWS 上使用 AWS CloudFormation 部署 StarRocks 集群](/administration/AWS_cloudformation.md)
-    + [集群管理](/administration/Cluster_administration.md)
-    + [DorisDB升级到StarRocks](/administration/update_from_dorisdb.md)
-    + [Apache Doris升级到StarRocks](/administration/update_from_doris.md)
-    + [通过StarGo部署StarRocks集群](/administration/stargo.md)
-  + 运维操作
+  + 部署集群
+    + [通过 StarGo 部署](/administration/stargo.md)
+    + [通过 StarRocks Manager 部署](/administration/deploy_with_manager.md)
+    + [通过 Docker 镜像部署](/administration/deploy_with_manager.md)
+    + [通过源码编译](/administration/Build_in_docker.md)
+    + [部署 FE 高可用集群](/administration/Deployment.md)
+    + [部署 Broker](/administration/deploy_broker.md)
+  + 运维集群
     + [扩容缩容](/administration/Scale_up_down.md)
     + [备份恢复](/administration/Backup_and_restore.md)
     + [参数配置](/administration/Configuration.md)
     + [监控报警](/administration/Monitor_and_Alert.md)
-    + 资源管理
+    + [集群管理](/administration/Cluster_administration.md)
+    + [升级 DorisDB 到 StarRocks](/administration/update_from_dorisdb.md)
+    + [升级 Apache Doris 到 StarRocks](/administration/update_from_doris.md)
+    + 管理资源
       + [资源隔离](/administration/Resource_Group.md)
       + [查询管理](/administration/Query_management.md)
       + [内存管理](/administration/Memory_management.md)
       + [负载均衡](/administration/Load_balance.md)
       + [副本管理](/administration/Replica.md)
       + [黑名单管理](/administration/Blacklist.md)
-  + 数据恢复
+  + 恢复数据
     + [数据恢复](/administration/Data_recovery.md)
     + [元数据恢复](/administration/Metadata_recovery.md)
-  + 用户权限及认证
+  + 管理用户权限及认证
     + [用户权限](/administration/User_privilege.md)
     + [认证方式](/administration/Authentication.md)
   + 性能调优
