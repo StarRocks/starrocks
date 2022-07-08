@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
-import com.aliyun.datalake.metastore.common.functional.ThrowingRunnable;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
@@ -67,7 +66,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType.EQ_FOR_NULL;
