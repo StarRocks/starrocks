@@ -11,12 +11,14 @@
 
 namespace starrocks {
 
+class MemTracker;
+
 // Disposable call back, it must be created on the heap.
 // It will destroy itself after call back
 template <typename T, typename C = void>
 class DisposableClosure : public google::protobuf::Closure {
 public:
-    DisposableClosure(const C& ctx) : _ctx(ctx) {}
+    DisposableClosure(const C& ctx, MemTracker* const mem_tracker) : _ctx(ctx), _mem_tracker(mem_tracker) {}
     ~DisposableClosure() override = default;
 
     // Disallow copy and assignment.
@@ -35,7 +37,12 @@ public:
             } else {
                 _success_handler(_ctx, result);
             }
-            delete this;
+            {
+                // The request memory is acquired by ExchangeSinkOperator,
+                // so use the instance_mem_tracker passed from ExchangeSinkOperator to release memory.
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
+                delete this;
+            }
         } catch (const std::exception& exp) {
             LOG(FATAL) << "[ExchangeSinkOperator] Callback error: " << exp.what();
         } catch (...) {
@@ -50,5 +57,6 @@ private:
     const C _ctx;
     std::function<void(const C&)> _failed_handler;
     std::function<void(const C&, const T&)> _success_handler;
+    MemTracker* const _mem_tracker = nullptr;
 };
 } // namespace starrocks

@@ -72,13 +72,23 @@ StatusOr<vectorized::ChunkPtr> ResultSinkOperator::pull_chunk(RuntimeState* stat
     CHECK(false) << "Shouldn't pull chunk from result sink operator";
 }
 
+Status ResultSinkOperator::set_cancelled(RuntimeState* state) {
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+
+    _fetch_data_result.clear();
+    return Status::OK();
+}
+
 bool ResultSinkOperator::need_input() const {
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+
     if (is_finished()) {
         return false;
     }
     if (_fetch_data_result.empty()) {
         return true;
     }
+
     auto* mysql_writer = down_cast<MysqlResultWriter*>(_writer.get());
     auto status = mysql_writer->try_add_batch(_fetch_data_result);
     if (status.ok()) {
@@ -90,10 +100,20 @@ bool ResultSinkOperator::need_input() const {
 }
 
 Status ResultSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+    // The ResultWriter memory that sends the results is no longer recorded to the query memory.
+    // There are two reason:
+    // 1. the query result has come out, and then the memory limit is triggered, cancel, it is not necessary
+    // 2. if this memory is counted, The memory of the receiving thread needs to be recorded,
+    // and the life cycle of MemTracker needs to be considered
+    //
+    // All the places where acquire and release memory of _fetch_data_result must use process_mem_tracker.
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+
     if (!_last_error.ok()) {
         return _last_error;
     }
     DCHECK(_fetch_data_result.empty());
+
     auto* mysql_writer = down_cast<MysqlResultWriter*>(_writer.get());
     auto status = mysql_writer->process_chunk_for_pipeline(chunk.get());
     if (status.ok()) {
@@ -120,4 +140,5 @@ void ResultSinkOperatorFactory::close(RuntimeState* state) {
     Expr::close(_output_expr_ctxs, state);
     OperatorFactory::close(state);
 }
+
 } // namespace starrocks::pipeline
