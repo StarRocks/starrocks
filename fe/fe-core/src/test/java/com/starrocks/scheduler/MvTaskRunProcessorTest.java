@@ -62,7 +62,7 @@ public class MvTaskRunProcessorTest {
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
                 .withNewMaterializedView("create materialized view test.mv1\n" +
-                        "partition by date_trunc('week',tbl1.k1) \n" +
+                        "partition by date_trunc('week',k1) \n" +
                         "distributed by hash(k2)\n" +
                         "refresh manual\n" +
                         "properties('replication_num' = '1')\n" +

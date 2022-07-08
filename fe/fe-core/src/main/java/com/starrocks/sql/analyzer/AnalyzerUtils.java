@@ -318,7 +318,7 @@ public class AnalyzerUtils {
         }
     }
 
-    private static class TableAndViewCollectorWithAlias extends TableCollector {
+    private static class TableAndViewCollectorWithAlias extends TableCollectorWithAlias {
         public TableAndViewCollectorWithAlias(Map<TableName, Table> dbs) {
             super(dbs);
         }

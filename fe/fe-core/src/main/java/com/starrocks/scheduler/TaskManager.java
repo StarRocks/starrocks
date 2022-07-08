@@ -2,7 +2,6 @@
 
 package com.starrocks.scheduler;
 
-
 import com.clearspring.analytics.util.Lists;
 import com.clearspring.analytics.util.Preconditions;
 import com.google.common.collect.ImmutableList;
@@ -13,7 +12,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.QueryableReentrantLock;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -33,7 +31,6 @@ import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -120,10 +117,13 @@ public class TaskManager {
                 continue;
             }
 
-            LocalDateTime startTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(taskSchedule.getStartTime()),
-                    TimeUtils.getTimeZone().toZoneId());
+            LocalDateTime startTime = Utils.getDatetimeFromLong(taskSchedule.getStartTime());
             Duration duration = Duration.between(LocalDateTime.now(), startTime);
             long initialDelay = duration.getSeconds();
+            // if startTime < now, start scheduling now
+            if (initialDelay < 0) {
+                initialDelay = 0;
+            }
             ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
                             executeTask(task.getName()), initialDelay, taskSchedule.getPeriod(),
                     taskSchedule.getTimeUnit());
@@ -182,23 +182,26 @@ public class TaskManager {
                 Preconditions.checkArgument(task.getId() == 0);
                 task.setId(GlobalStateMgr.getCurrentState().getNextId());
             }
-            if (task.getType() == Constants.TaskType.PERIODICAL && !isReplay) {
-                TaskSchedule schedule = task.getSchedule();
-                if (schedule == null) {
-                    throw new DdlException("Task [" + task.getName() + "] has no scheduling information");
+            if (task.getType() == Constants.TaskType.PERIODICAL) {
+                task.setState(Constants.TaskState.ACTIVE);
+                if (!isReplay) {
+                    TaskSchedule schedule = task.getSchedule();
+                    if (schedule == null) {
+                        throw new DdlException("Task [" + task.getName() + "] has no scheduling information");
+                    }
+                    LocalDateTime startTime = Utils.getDatetimeFromLong(schedule.getStartTime());
+                    Duration duration = Duration.between(LocalDateTime.now(), startTime);
+                    long initialDelay = duration.getSeconds();
+                    // if startTime < now, start scheduling now
+                    if (initialDelay < 0) {
+                        initialDelay = 0;
+                    }
+                    // this operation should only run in master
+                    ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
+                                    executeTask(task.getName()), initialDelay, schedule.getPeriod(),
+                            schedule.getTimeUnit());
+                    periodFutureMap.put(task.getId(), future);
                 }
-                LocalDateTime startTime = Utils.getDatetimeFromLong(schedule.getStartTime());
-                Duration duration = Duration.between(LocalDateTime.now(), startTime);
-                long initialDelay = duration.getSeconds();
-                // if startTime < now, start scheduling now
-                if (initialDelay < 0) {
-                    initialDelay = 0;
-                }
-                // this operation should only run in master
-                ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                                executeTask(task.getName()), initialDelay, schedule.getPeriod(),
-                        schedule.getTimeUnit());
-                periodFutureMap.put(task.getId(), future);
             }
             nameToTaskMap.put(task.getName(), task);
             idToTaskMap.put(task.getId(), task);
