@@ -521,7 +521,6 @@ Status ConnectorScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& s
         // to create at least one data source
         _scan_ranges.emplace_back(TScanRangeParams());
     }
-    COUNTER_UPDATE(_profile.scan_ranges_counter, scan_ranges.size());
     return Status::OK();
 }
 
@@ -532,7 +531,6 @@ bool ConnectorScanNode::accept_empty_scan_ranges() const {
 void ConnectorScanNode::_init_counter() {
     _profile.scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
     _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
-    _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
 }
 
 } // namespace starrocks::vectorized

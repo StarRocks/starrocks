@@ -58,7 +58,7 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* rows_read_counter = nullptr;
     RuntimeProfile::Counter* bytes_read_counter = nullptr;
     RuntimeProfile::Counter* scan_timer = nullptr;
-    RuntimeProfile::Counter* scan_files_counter = nullptr;
+    RuntimeProfile::Counter* scan_ranges_counter = nullptr;
     RuntimeProfile::Counter* reader_init_timer = nullptr;
     RuntimeProfile::Counter* open_file_timer = nullptr;
     RuntimeProfile::Counter* expr_filter_timer = nullptr;
