@@ -7,14 +7,20 @@ on:
 jobs:
   Trigger-Admit-Test:
     runs-on: ubuntu-latest
-    steps:  
-      - name: PR comment with reactions
-        uses: thollander/actions-comment-pull-request@v1
+    steps:
+      - uses: wow-actions/auto-comment@v1.0.7
         with:
-          message: |
-            run starrocks_admit_test
-#         pr_number:
           GITHUB_TOKEN: ${{ secrets.PAT }}
+          pullRequestUnlocked: |
+            run starrocks_admit_test
+            
+#      - name: PR comment with reactions
+#        uses: thollander/actions-comment-pull-request@v1
+#        with:
+#          message: |
+#            run starrocks_admit_test
+#         pr_number:
+#          GITHUB_TOKEN: ${{ secrets.PAT }}
         
       - name: Trigger admit job
         if: contains(github.event.pull_request.labels.*.name, 'Approved')
