@@ -5,7 +5,7 @@ on:
 
 jobs:
   check-state:
-    if: github.event.review.state == 'approved' && github.event.pull_request.base.ref == 'master'
+    if: github.event.review.state == 'approved' && github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     steps:
       - name: Find last comment
