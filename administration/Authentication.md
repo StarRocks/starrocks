@@ -17,7 +17,7 @@ authentication_ldap_simple_server_host =
 authentication_ldap_simple_server_port =
 ```
 
-如果您希望通过 StarRocks 直接在 LDAP 系统中检索用户的方式认证登录的用户，您还需要额外添加以下配置项。
+如果您希望通过 StarRocks 直接在 LDAP 系统中检索用户的方式认证登录的用户，您还需要**额外添加以下配置项**。
 
 ```conf
 # 添加用户的 Base DN，指定用户的检索范围。
@@ -32,7 +32,7 @@ authentication_ldap_simple_bind_root_pwd =
 
 ### 创建用户
 
-创建 LDAP 认证用户。
+完成以上配置后，您还需要在 StarRocks 中创建相应用户，并指定其认证方式及认证信息。
 
 ```sql
 CREATE USER user_identity IDENTIFIED WITH authentication_ldap_simple [AS 'ldap_distinguished_name'];
@@ -44,7 +44,7 @@ CREATE USER user_identity IDENTIFIED WITH authentication_ldap_simple [AS 'ldap_d
 CREATE USER zhangsan IDENTIFIED WITH authentication_ldap_simple AS 'uid=zhansan,ou=company,dc=example,dc=com'
 ```
 
-如果您希望通过 StarRocks 直接在 LDAP 系统中检索用户的方式认证登录的用户，则在完成以上额外配置后，您无需创建用户时指定用户在 LDAP 中的 DN。该用户在登录时， StarRocks 将在 LDAP 系统中检索该用户，如果有且仅有一个匹配结果，则认证成功果。
+如果您希望通过 StarRocks 直接在 LDAP 系统中检索用户的方式认证登录的用户，则在完成以上**额外配置后**，您无需在创建用户时指定用户在 LDAP 中的 DN。该用户在登录时，StarRocks 将在 LDAP 系统中检索该用户，如果有且仅有一个匹配结果，则认证成功果。
 
 ### 认证用户
 
