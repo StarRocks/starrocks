@@ -820,15 +820,11 @@ public class AggregateTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 3, 18: expr)");
 
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("window argument must >= 0");
         sql =
                 "select L_ORDERKEY,window_funnel(-1, L_SHIPDATE, 3, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
-	try {
-            plan = getFragmentPlan(sql);
-        } catch (SemanticException e) {
-            Assert.assertEquals(
-                    "window argument must >= 0",
-                    e.getMessage());
-	}
+        plan = getFragmentPlan(sql);
 
         FeConstants.runningUnitTest = false;
     }
