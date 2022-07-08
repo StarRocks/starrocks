@@ -10,20 +10,19 @@ jobs:
     steps:
       - run: echo '${{ toJson(github.event.pull_request.requested_reviewers) }}'
       
-      - uses: wow-actions/auto-comment@v1.0.7
-        if: contains(github.event.pull_request.labels.*.name, 'Approved')
-        with:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
-          pullRequestUnlocked: |
-            run starrocks_admit_test
+#       - uses: wow-actions/auto-comment@v1.0.7
+#         if: contains(github.event.pull_request.labels.*.name, 'Approved')
+#         with:
+#           GITHUB_TOKEN: ${{ secrets.PAT }}
+#           pullRequestUnlocked: |
+#             run starrocks_admit_test
             
-#      - name: PR comment with reactions
-#        uses: thollander/actions-comment-pull-request@v1
-#        with:
-#          message: |
-#            run starrocks_admit_test
-#         pr_number:
-#          GITHUB_TOKEN: ${{ secrets.PAT }}
+      - name: PR comment with reactions
+        uses: thollander/actions-comment-pull-request@v1
+        with:
+          message: |
+            run starrocks_admit_test
+          GITHUB_TOKEN: ${{ secrets.PAT }}
         
 #       - name: Trigger admit job
 #         if: contains(github.event.pull_request.labels.*.name, 'Approved')
