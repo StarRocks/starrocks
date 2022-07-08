@@ -881,12 +881,12 @@ public class EditLog {
                     globalStateMgr.getInsertOverwriteJobManager().replayInsertOverwriteStateChange(stateChangeInfo);
                     break;
                 }
-                case OperationType.OP_ADD_SHARD: {
+                case OperationType.OP_ADD_UNUSED_SHARD: {
                     ShardInfo shardInfo = (ShardInfo) journal.getData();
                     globalStateMgr.getStarosInfo().getShardDelete().replayAddShard(shardInfo);
                     break;
                 }
-                case OperationType.OP_DELETE_SHARD: {
+                case OperationType.OP_DELETE_UNUSED_SHARD: {
                     ShardInfo shardInfo = (ShardInfo) journal.getData();
                     globalStateMgr.getStarosInfo().getShardDelete().replayDeleteShard(shardInfo);
                     break;
@@ -1500,11 +1500,11 @@ public class EditLog {
     }
 
     public void logAddDeleteShard(Set<Long> shardIds) {
-        logEdit(OperationType.OP_ADD_SHARD, new ShardInfo(shardIds));
+        logEdit(OperationType.OP_ADD_UNUSED_SHARD, new ShardInfo(shardIds));
     }
 
     public void logRemoveDeleteShard(Set<Long> shardIds) {
-        logEdit(OperationType.OP_DELETE_SHARD, new ShardInfo(shardIds));
+        logEdit(OperationType.OP_DELETE_UNUSED_SHARD, new ShardInfo(shardIds));
     }
 
 }

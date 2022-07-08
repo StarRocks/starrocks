@@ -19,7 +19,7 @@ public class ShardInfo implements Writable {
     private Set<Long> shardIds;
 
     public ShardInfo() {
-        this.shardIds =  Sets.newHashSet();
+        this.shardIds = Sets.newHashSet();
     }
 
     public ShardInfo(Set<Long> ids) {

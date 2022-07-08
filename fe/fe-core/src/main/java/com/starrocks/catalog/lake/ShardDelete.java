@@ -110,9 +110,6 @@ public class ShardDelete extends MasterDaemon implements Writable {
 
             // 2. delete shard
             try {
-                // get shard first
-                List<Long> tabletIds = new ArrayList<>(shards);
-                GlobalStateMgr.getCurrentState().getStarOSAgent().getShards(tabletIds);
                 GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(shards);
                 // for debug
                 LOG.info("delete shards {} succ.", shards);
