@@ -2,7 +2,7 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.server.StarosInfo;
+import com.starrocks.catalog.lake.ShardManager;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -12,17 +12,17 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 
-public class StarosInfoTest {
+public class ShardManagerTest {
     @Test
     public void test() {
-        StarosInfo info = new StarosInfo();
-        Assert.assertEquals(null, info.getShardDelete());
+        ShardManager info = new ShardManager();
+        Assert.assertEquals(null, info.getShardDeleter());
     }
 
     @Test
     public void testLoadAndSaveShardDeleteInfo() throws Exception {
-        StarosInfo info = new StarosInfo();
-        File tempFile = File.createTempFile("StarosInfoTest", ".image");
+        ShardManager info = new ShardManager();
+        File tempFile = File.createTempFile("ShardManagerTest", ".image");
         System.err.println("write image " + tempFile.getAbsolutePath());
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(tempFile));
         long checksum = 0;

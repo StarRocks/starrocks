@@ -883,12 +883,12 @@ public class EditLog {
                 }
                 case OperationType.OP_ADD_UNUSED_SHARD: {
                     ShardInfo shardInfo = (ShardInfo) journal.getData();
-                    globalStateMgr.getStarosInfo().getShardDelete().replayAddShard(shardInfo);
+                    globalStateMgr.getShardManager().getShardDeleter().replayAddUnusedShard(shardInfo);
                     break;
                 }
                 case OperationType.OP_DELETE_UNUSED_SHARD: {
                     ShardInfo shardInfo = (ShardInfo) journal.getData();
-                    globalStateMgr.getStarosInfo().getShardDelete().replayDeleteShard(shardInfo);
+                    globalStateMgr.getShardManager().getShardDeleter().replayDeleteUnusedShard(shardInfo);
                     break;
                 }
                 default: {
