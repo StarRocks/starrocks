@@ -48,9 +48,9 @@ void UpdateConfigAction::handle(HttpRequest* req) {
     LOG(INFO) << req->debug_string();
 
     std::call_once(_once_flag, [&]() {
-        _config_callback.emplace("doris_scanner_thread_pool_thread_num", [&]() {
-            LOG(INFO) << "set doris_scanner_thread_pool_thread_num:" << config::doris_scanner_thread_pool_thread_num;
-            _exec_env->thread_pool()->set_num_thread(config::doris_scanner_thread_pool_thread_num);
+        _config_callback.emplace("scanner_thread_pool_thread_num", [&]() {
+            LOG(INFO) << "set scanner_thread_pool_thread_num:" << config::scanner_thread_pool_thread_num;
+            _exec_env->thread_pool()->set_num_thread(config::scanner_thread_pool_thread_num);
         });
     });
 
