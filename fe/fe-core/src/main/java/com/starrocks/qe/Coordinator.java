@@ -804,7 +804,11 @@ public class Coordinator {
             for (int groupIndex = 0; groupIndex < fragmentGroups.size(); ++groupIndex) {
                 List<PlanFragment> fragmentGroup = fragmentGroups.get(groupIndex);
 
-                // Divide
+                // Divide requests of fragments in the current group to two stages.
+                // If a request need send descTable, the other requests to the same host will be in the second stage.
+                // Otherwise, the request will be in the first stage, including
+                // - the request need send descTable.
+                // - the request to the host, where some request in the previous has already sent descTable.
                 List<List<Pair<BackendExecState, TExecBatchPlanFragmentsParams>>> inflightRequestsList =
                         ImmutableList.of(new ArrayList<>(), new ArrayList<>());
                 for (PlanFragment fragment : fragmentGroup) {
