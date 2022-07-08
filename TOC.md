@@ -350,7 +350,6 @@
   + [Scale in and uut](/administration/Scale_up_down.md)
   + [Backup and restore](/administration/Backup_and_restore.md)
   + [Deploy StarRocks with StarGo](/administration/stargo.md)
-  + [Deploy a StarRocks cluster on AWS by using AWS CloudFormation](/administration/AWS_Cloudformation.md)
   + Data Recovery
     + [Data recovery](/administration/Data_recovery.md)
     + [Restore FEs](/administration/Metadata_recovery.md)

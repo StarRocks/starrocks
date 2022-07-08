@@ -72,6 +72,4 @@ Fix the following bugs:
 
 ### Others
 
-- StarGo, a cluster management tool, can deploy, start, upgrade, and roll back clusters and manage multiple clusters. For more information, see [Deploy StarRocks with StarGo](../administration/stargo.md).
-
-- StarRocks clusters can be quickly deployed on AWS by using CloudFormation. For more information, see [Deploy a StarRocks Cluster on AWS by Using AWS CloudFormation](../administration/AWS_Cloudformation.md).
+StarGo, a cluster management tool, can deploy, start, upgrade, and roll back clusters and manage multiple clusters. For more information, see [Deploy StarRocks with StarGo](../administration/stargo.md).
