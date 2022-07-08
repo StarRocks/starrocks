@@ -35,14 +35,17 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.ViewDefBuilder;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.ExpressionPartitionUtil;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.parser.SqlParser;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -55,6 +58,8 @@ import java.util.Set;
 
 public class MvTaskRunProcessor extends BaseTaskRunProcessor {
 
+    private static final Logger LOG = LogManager.getLogger(MvTaskRunProcessor.class);
+
     public static final String MV_ID = "mvId";
 
     @Override
@@ -65,6 +70,11 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         // 0. prepare
         Database database = GlobalStateMgr.getCurrentState().getDb(context.ctx.getDatabase());
         MaterializedView materializedView = (MaterializedView) database.getTable(mvId);
+        if (!materializedView.isActive()) {
+            LOG.warn("Materialized view: {} is not active, " +
+                    "skip sync partition and data with base tables", mvId);
+            return;
+        }
         Set<Long> baseTableIds = materializedView.getBaseTableIds();
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
@@ -77,7 +87,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                 for (Partition partition : partitions) {
                     if (materializedView.needRefreshPartition(baseTableId, partition)) {
                         needRefresh = true;
-                        materializedView.addOrUpdateBasePartition(baseTableId, partition);
+                        materializedView.updateBasePartition(baseTableId, partition);
                     }
                 }
             }
@@ -92,11 +102,11 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                 ((ExpressionRangePartitionInfo) partitionInfo);
         // currently, mv only supports one expression
         Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
-        Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
-        Column partitionColumn = expressionRangePartitionInfo.getPartitionColumns().get(0);
         // 1. scan base table, get table id which used in partition
+        Expr partitionExpr = materializedView.getPartitionRefTableExprs().get(0);
         Map<Long, OlapTable> olapTables = Maps.newHashMap();
         OlapTable partitionTable = null;
+        Column partitionColumn = null;
         List<SlotRef> slotRefs = Lists.newArrayList();
         partitionExpr.collect(SlotRef.class, slotRefs);
         // if partitionExpr is FunctionCallExpr, get first SlotRef
@@ -106,6 +116,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
             if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(olapTable.getName())) {
                 partitionTable = olapTable;
+                partitionColumn = partitionTable.getColumn(slotRef.getColumnName());
             }
             olapTables.put(baseTableId, olapTable);
         }
@@ -134,7 +145,9 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         if (refreshAllPartitions) {
             refreshMv(context, materializedView);
         } else {
-            refreshMv(context, materializedView, partitionTable, needRefreshPartitionNames);
+            if (!needRefreshPartitionNames.isEmpty()) {
+                refreshMv(context, materializedView, partitionTable, needRefreshPartitionNames);
+            }
         }
     }
 
@@ -159,7 +172,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             if (!materializedView.needAddBasePartition(baseTableId, basePartition)) {
                 continue;
             }
-            materializedView.addOrUpdateBasePartition(baseTableId, basePartition);
+            materializedView.addBasePartition(baseTableId, basePartition);
             Range<PartitionKey> basePartitionRange = baseRangePartitionInfo.getRange(basePartitionId);
             List<Column> basePartitionColumns = baseRangePartitionInfo.getPartitionColumns();
             int basePartitionIndex = -1;
@@ -209,7 +222,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             if (materializedView.needRefreshPartition(baseTableId, partition)) {
                 needRefreshPartitionNames.addAll(
                         materializedView.getMvPartitionNameByTable(basePartitionName));
-                materializedView.addOrUpdateBasePartition(baseTableId, partition);
+                materializedView.updateBasePartition(baseTableId, partition);
             }
         }
     }
@@ -221,7 +234,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         for (Partition basePartition : basePartitions) {
             if (materializedView.needRefreshPartition(baseTableId, basePartition)) {
                 refreshAllPartitions = true;
-                materializedView.addOrUpdateBasePartition(baseTableId, basePartition);
+                materializedView.updateBasePartition(baseTableId, basePartition);
             }
         }
         return refreshAllPartitions;
@@ -267,7 +280,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                     database, materializedView.getName(),
                     new AddPartitionClause(singleRangePartitionDesc, distributionDesc,
                             partitionProperties, false));
-            materializedView.addPartitionIdRef(basePartitionName, partitionName);
+            materializedView.addPartitionNameRef(basePartitionName, partitionName);
         } catch (Exception e) {
             throw new SemanticException("Expression add partition failed: %s, db: %s, table: %s", e.getMessage(),
                     database.getFullName(), materializedView.getName());
@@ -281,7 +294,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             GlobalStateMgr.getCurrentState().dropPartition(
                     database, materializedView,
                     new DropPartitionClause(false, dropPartitionName, false, true));
-            materializedView.dropPartitionIdRef(mvPartitionName);
+            materializedView.dropPartitionNameRef(mvPartitionName);
         } catch (Exception e) {
             throw new SemanticException("Expression drop partition failed: {}, db: {}, table: {}", e.getMessage(),
                     database.getFullName(), materializedView.getName());
@@ -322,11 +335,12 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             TableRelation tableRelation = tableRelations.get(olapTable.getName());
             tableRelation.setPartitionNames(
                     new PartitionNames(false, new ArrayList<>(tablePartitionNames)));
+            Analyzer.analyze(queryStatement, ctx);
             // e.g. insert into mv partition(p1,p2) select * from table partition(p3)
             String insertIntoSql = "insert overwrite " +
                     materializedView.getName() +
                     " partition(" + mvPartitionName + ") " +
-                    AST2SQL.toString(queryStatement);
+                    ViewDefBuilder.build(queryStatement);
             execInsertStmt(insertIntoSql, context, materializedView);
             ctx.setQueryId(UUIDUtil.genUUID());
         }
