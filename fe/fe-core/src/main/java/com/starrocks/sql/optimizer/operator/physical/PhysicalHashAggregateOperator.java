@@ -196,6 +196,10 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         dictColIds.forEach(dictSet::union);
         final ScalarOperator predicate = getPredicate();
         getAggregations().forEach((k, v) -> {
+            if (resultSet.contains(k.getId())) {
+                resultSet.union(v.getUsedColumns());
+            }
+
             if (!couldApplyStringDict(v, dictSet)) {
                 resultSet.union(v.getUsedColumns());
             }

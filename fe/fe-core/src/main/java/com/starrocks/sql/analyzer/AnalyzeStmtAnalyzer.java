@@ -19,6 +19,7 @@ import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AnalyzeTypeDesc;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.Constants;
 import com.starrocks.statistic.StatisticUtils;
@@ -38,7 +39,11 @@ public class AnalyzeStmtAnalyzer {
             Constants.PRO_SAMPLE_RATIO,
             Constants.PRO_AUTO_COLLECT_STATISTICS_RATIO,
             Constants.PROP_UPDATE_INTERVAL_SEC_KEY,
-            Constants.PROP_SAMPLE_COLLECT_ROWS_KEY);
+            Constants.PROP_SAMPLE_COLLECT_ROWS_KEY,
+
+            //Deprecated , just not throw exception
+            Constants.PROP_COLLECT_INTERVAL_SEC_KEY
+    );
 
     public static final List<String> NUMBER_PROP_KEY_LIST = ImmutableList.<String>builder()
             .add(Constants.PROP_UPDATE_INTERVAL_SEC_KEY)
@@ -57,8 +62,8 @@ public class AnalyzeStmtAnalyzer {
             if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
                 throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());
             }
-            if (analyzeTable.getType() != Table.TableType.OLAP) {
-                throw new SemanticException("Table '%s' is not a OLAP table", analyzeTable.getName());
+            if (!analyzeTable.isNativeTable()) {
+                throw new SemanticException("Table '%s' is not a OLAP/LAKE table", analyzeTable.getName());
             }
 
             // Analyze columns mentioned in the statement.
@@ -85,6 +90,7 @@ public class AnalyzeStmtAnalyzer {
             return null;
         }
 
+        @Override
         public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
             if (null != statement.getTableName()) {
                 TableName tbl = statement.getTableName();
@@ -101,10 +107,10 @@ public class AnalyzeStmtAnalyzer {
                 } else if (null != statement.getTableName().getTbl()) {
                     MetaUtils.normalizationTableName(session, statement.getTableName());
                     Database db = MetaUtils.getDatabase(session, statement.getTableName());
-                    Table table = MetaUtils.getTable(session, statement.getTableName());
+                    Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
 
-                    if (!(table instanceof OlapTable)) {
-                        throw new SemanticException("Table '%s' is not a OLAP table", table.getName());
+                    if (!analyzeTable.isNativeTable()) {
+                        throw new SemanticException("Table '%s' is not a OLAP/LAKE table", analyzeTable.getName());
                     }
 
                     // Analyze columns mentioned in the statement.
@@ -113,9 +119,9 @@ public class AnalyzeStmtAnalyzer {
                     List<String> columnNames = statement.getColumnNames();
                     if (columnNames != null && !columnNames.isEmpty()) {
                         for (String colName : columnNames) {
-                            Column col = table.getColumn(colName);
+                            Column col = analyzeTable.getColumn(colName);
                             if (col == null) {
-                                throw new SemanticException("Unknown column '%s' in '%s'", colName, table.getName());
+                                throw new SemanticException("Unknown column '%s' in '%s'", colName, analyzeTable.getName());
                             }
                             if (!mentionedColumns.add(colName)) {
                                 throw new SemanticException("Column '%s' specified twice", colName);
@@ -124,7 +130,7 @@ public class AnalyzeStmtAnalyzer {
                     }
 
                     statement.setDbId(db.getId());
-                    statement.setTableId(table.getId());
+                    statement.setTableId(analyzeTable.getId());
                 }
             }
             analyzeProperties(statement.getProperties());
@@ -185,6 +191,20 @@ public class AnalyzeStmtAnalyzer {
                 }
                 properties.put(Constants.PROP_SAMPLE_COLLECT_ROWS_KEY, String.valueOf(sampleRows));
             }
+        }
+
+        @Override
+        public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext session) {
+            MetaUtils.normalizationTableName(session, statement.getTableName());
+            Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+            List<String> columnNames = statement.getColumnNames();
+            for (String colName : columnNames) {
+                Column col = analyzeTable.getColumn(colName);
+                if (col == null) {
+                    throw new SemanticException("Unknown column '%s' in '%s'", colName, analyzeTable.getName());
+                }
+            }
+            return null;
         }
     }
 }

@@ -113,7 +113,7 @@ public class AnalyzeManager implements Writable {
                 continue;
             }
 
-            if (table.getType() != Table.TableType.OLAP) {
+            if (!table.isNativeTable()) {
                 expireList.add(job);
                 continue;
             }
@@ -308,7 +308,7 @@ public class AnalyzeManager implements Writable {
         }
 
         public void checkAndExpireCachedStatistics(Table table, AnalyzeJob job) {
-            if (null == table || !Table.TableType.OLAP.equals(table.getType())) {
+            if (null == table || !table.isNativeTable()) {
                 return;
             }
 

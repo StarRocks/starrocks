@@ -31,7 +31,7 @@ import com.starrocks.common.AnalysisException;
  * Represents an anonymous type definition, e.g., used in DDL and CASTs.
  */
 public class TypeDef implements ParseNode {
-    private final Type parsedType;
+    private Type parsedType;
     private boolean isAnalyzed;
 
     public TypeDef(Type parsedType) {
@@ -148,6 +148,10 @@ public class TypeDef implements ParseNode {
 
     public Type getType() {
         return parsedType;
+    }
+
+    public void setType(Type type) {
+        this.parsedType = type;
     }
 
     @Override

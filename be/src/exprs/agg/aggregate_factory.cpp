@@ -17,6 +17,7 @@
 #include "exprs/agg/count.h"
 #include "exprs/agg/distinct.h"
 #include "exprs/agg/group_concat.h"
+#include "exprs/agg/histogram.h"
 #include "exprs/agg/hll_ndv.h"
 #include "exprs/agg/hll_union.h"
 #include "exprs/agg/hll_union_count.h"
@@ -24,6 +25,7 @@
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/percentile_approx.h"
+#include "exprs/agg/percentile_cont.h"
 #include "exprs/agg/retention.h"
 #include "exprs/agg/sum.h"
 #include "exprs/agg/variance.h"
@@ -189,6 +191,11 @@ AggregateFunctionPtr AggregateFactory::MakePercentileUnionAggregateFunction() {
 }
 
 template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakePercentileContAggregateFunction() {
+    return std::make_shared<PercentileContAggregateFunction<PT>>();
+}
+
+template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeArrayAggAggregateFunction() {
     return std::make_shared<ArrayAggAggregateFunction<PT>>();
 }
@@ -224,6 +231,11 @@ AggregateFunctionPtr AggregateFactory::MakeLastValueWindowFunction() {
 template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeLeadLagWindowFunction() {
     return std::make_shared<LeadLagWindowFunction<PT>>();
+}
+
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakeHistogramAggregationFunction() {
+    return std::make_shared<HistogramAggregationFunction<PT>>();
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -471,6 +483,10 @@ public:
                 auto array_agg = AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<ArrayAggAggregateState<ArgPT>, false>(
                         array_agg);
+            } else if (name == "percentile_cont") {
+                auto percentile_cont = AggregateFactory::MakePercentileContAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionVariadic<PercentileContState<ArgPT>>(
+                        percentile_cont);
             }
         } else {
             if (name == "count") {
@@ -507,6 +523,8 @@ public:
                 return AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
             } else if (name == "array_agg") {
                 return AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
+            } else if (name == "percentile_cont") {
+                return AggregateFactory::MakePercentileContAggregateFunction<ArgPT>();
             }
         }
 
@@ -524,6 +542,8 @@ public:
             return AggregateFactory::MakeRowNumberWindowFunction();
         } else if (name == "ntile") {
             return AggregateFactory::MakeNtileWindowFunction();
+        } else if (name == "histogram") {
+            return AggregateFactory::MakeHistogramAggregationFunction<ArgPT>();
         }
         return nullptr;
     }
@@ -578,6 +598,10 @@ public:
                 auto array_agg_value = AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<ArrayAggAggregateState<ArgPT>, false>(
                         array_agg_value);
+            } else if (name == "percentile_cont") {
+                auto percentile_cont = AggregateFactory::MakePercentileContAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionVariadic<PercentileContState<ArgPT>>(
+                        percentile_cont);
             }
         } else {
             if (name == "avg") {
@@ -596,6 +620,8 @@ public:
                 return AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
             } else if (name == "array_agg") {
                 return AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
+            } else if (name == "percentile_cont") {
+                return AggregateFactory::MakePercentileContAggregateFunction<ArgPT>();
             }
         }
 
@@ -605,6 +631,8 @@ public:
             return AggregateFactory::MakeFirstValueWindowFunction<ArgPT>();
         } else if (name == "last_value") {
             return AggregateFactory::MakeLastValueWindowFunction<ArgPT>();
+        } else if (name == "histogram") {
+            return AggregateFactory::MakeHistogramAggregationFunction<ArgPT>();
         }
         return nullptr;
     }
@@ -858,6 +886,20 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_aggregate_mapping<TYPE_CHAR, TYPE_VARCHAR>("group_concat");
     add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARCHAR>("group_concat");
 
+    add_aggregate_mapping<TYPE_BOOLEAN, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_TINYINT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_SMALLINT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_INT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_LARGEINT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_FLOAT, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_DOUBLE, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_DATE, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_DATETIME, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_DECIMAL32, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_DECIMAL64, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_DECIMAL128, TYPE_VARCHAR>("histogram");
+
     ADD_ALL_TYPE("first_value");
     ADD_ALL_TYPE("last_value");
     ADD_ALL_TYPE("lead");
@@ -925,6 +967,10 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_object_mapping<TYPE_DOUBLE, TYPE_DOUBLE>("percentile_approx");
 
     add_object_mapping<TYPE_PERCENTILE, TYPE_PERCENTILE>("percentile_union");
+
+    add_aggregate_mapping<TYPE_DOUBLE, TYPE_DOUBLE>("percentile_cont");
+    add_aggregate_mapping<TYPE_DATE, TYPE_DATE>("percentile_cont");
+    add_aggregate_mapping<TYPE_DATETIME, TYPE_DATETIME>("percentile_cont");
 
     add_array_mapping<TYPE_ARRAY, TYPE_VARCHAR>("dict_merge");
     add_array_mapping<TYPE_ARRAY, TYPE_ARRAY>("retention");

@@ -201,7 +201,7 @@ public class Optimizer {
 
         // Add full cte required columns, and save orig required columns
         // If cte was inline, the columns don't effect normal prune
-        ColumnRefSet requiredColumns = (ColumnRefSet) rootTaskContext.getRequiredColumns().clone();
+        ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
         rootTaskContext.getRequiredColumns().union(cteContext.getAllRequiredColumns());
 
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
@@ -244,6 +244,9 @@ public class Optimizer {
             requiredColumns.union(cteContext.getAllRequiredColumns());
             rootTaskContext.setRequiredColumns(requiredColumns);
             ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+            // After prune columns, the output column in the logical property may outdated, because of the following rule
+            // will use the output column, we need to derive the logical property here.
+            memo.deriveAllGroupLogicalProperty();
 
             if (cteContext.needPushLimit() || cteContext.needPushPredicate()) {
                 ruleRewriteOnlyOnce(memo, rootTaskContext, new PushLimitAndFilterToCTEProduceRule());

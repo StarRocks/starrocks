@@ -69,20 +69,19 @@ public class ScanTest extends PlanTestBase {
     public void testPreAggregation() throws Exception {
         String sql = "select k1 from t0 inner join baseall on v1 = cast(k8 as int) group by k1";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("1:Project\n" +
+        assertContains(plan, "1:Project\n" +
                 "  |  <slot 4> : 4: k1\n" +
                 "  |  <slot 15> : CAST(CAST(13: k8 AS INT) AS BIGINT)\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: baseall\n" +
-                "     PREAGGREGATION: OFF. Reason: Predicates include the value column\n" +
-                "     partitions=0/1"));
+                "     PREAGGREGATION: OFF. Reason: Predicates include the value column\n");
 
         sql = "select 0 from baseall inner join t0 on v1 = k1 group by (v2 + k2),k1";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+        assertContains(plan, "0:OlapScanNode\n" +
                 "     TABLE: baseall\n" +
-                "     PREAGGREGATION: OFF. Reason: Group columns isn't bound table baseall"));
+                "     PREAGGREGATION: OFF. Reason: Group columns isn't bound table baseall");
     }
 
     @Test
@@ -92,7 +91,8 @@ public class ScanTest extends PlanTestBase {
         assertContains(plan, "  RESULT SINK\n" +
                 "\n" +
                 "  0:SCAN SCHEMA\n" +
-                "     limit: 1\n");;
+                "     limit: 1\n");
+        ;
     }
 
     @Test

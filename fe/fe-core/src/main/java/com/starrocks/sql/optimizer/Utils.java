@@ -227,7 +227,7 @@ public class Utils {
         return false;
     }
 
-    public static ScalarOperator compoundOr(List<ScalarOperator> nodes) {
+    public static ScalarOperator compoundOr(Collection<ScalarOperator> nodes) {
         return createCompound(CompoundPredicateOperator.CompoundType.OR, nodes);
     }
 
@@ -235,7 +235,7 @@ public class Utils {
         return createCompound(CompoundPredicateOperator.CompoundType.OR, Arrays.asList(nodes));
     }
 
-    public static ScalarOperator compoundAnd(List<ScalarOperator> nodes) {
+    public static ScalarOperator compoundAnd(Collection<ScalarOperator> nodes) {
         return createCompound(CompoundPredicateOperator.CompoundType.AND, nodes);
     }
 
@@ -270,7 +270,7 @@ public class Utils {
     //  /\   /\
     // a  b c  d
     public static ScalarOperator createCompound(CompoundPredicateOperator.CompoundType type,
-                                                List<ScalarOperator> nodes) {
+                                                Collection<ScalarOperator> nodes) {
         LinkedList<ScalarOperator> link =
                 nodes.stream().filter(Objects::nonNull).collect(Collectors.toCollection(Lists::newLinkedList));
 
@@ -313,14 +313,14 @@ public class Utils {
         int count = 0;
         Operator operator = root.getOp();
         for (OptExpression child : root.getInputs()) {
-            if (isInnerOrCrossJoin(operator)) {
+            if (isInnerOrCrossJoin(operator) && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
                 count += countInnerJoinNodeSize(child);
             } else {
                 count = Math.max(count, countInnerJoinNodeSize(child));
             }
         }
 
-        if (isInnerOrCrossJoin(operator)) {
+        if (isInnerOrCrossJoin(operator) && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
             count += 1;
         }
         return count;
@@ -451,7 +451,7 @@ public class Utils {
         int schemaHash = table.getSchemaHashByIndexId(selectedIndexId);
         for (Long partitionId : selectedPartitionId) {
             Partition partition = table.getPartition(partitionId);
-            if (partition.isUseStarOS()) {
+            if (table.isLakeTable()) {
                 // TODO(wyb): necessary to support?
                 return false;
             }
@@ -550,5 +550,12 @@ public class Utils {
         } catch (Exception ignored) {
         }
         return Optional.empty();
+    }
+
+    public static ScalarOperator transTrue2Null(ScalarOperator predicates) {
+        if (ConstantOperator.TRUE.equals(predicates)) {
+            return null;
+        }
+        return predicates;
     }
 }

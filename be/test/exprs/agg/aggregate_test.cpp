@@ -1086,6 +1086,54 @@ TEST_F(AggregateTest, test_group_concat_const_seperator) {
     ASSERT_EQ("abcbcdcdedefefgfghghihijijk", result_column->get_data()[0]);
 }
 
+TEST_F(AggregateTest, test_percentile_cont) {
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DOUBLE)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DOUBLE))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DOUBLE));
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DOUBLE, TYPE_DOUBLE, false);
+
+    // update input column 1
+    auto state1 = ManagedAggrState::create(ctx, func);
+
+    auto data_column1 = DoubleColumn::create();
+    auto const_colunm1 = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.1, 1);
+    data_column1->append(3.0);
+    data_column1->append(3.0);
+
+    std::vector<const Column*> raw_columns1;
+    raw_columns1.resize(2);
+    raw_columns1[0] = data_column1.get();
+    raw_columns1[1] = const_colunm1.get();
+
+    func->update_batch_single_state(local_ctx.get(), data_column1->size(), raw_columns1.data(), state1->state());
+
+    // update input column 2
+    auto state2 = ManagedAggrState::create(ctx, func);
+
+    auto data_column2 = DoubleColumn::create();
+    auto const_colunm2 = ColumnHelper::create_const_column<TYPE_DOUBLE>(0.1, 1);
+    data_column2->append(6.0);
+
+    std::vector<const Column*> raw_columns2;
+    raw_columns2.resize(2);
+    raw_columns2[0] = data_column2.get();
+    raw_columns2[1] = const_colunm2.get();
+
+    func->update_batch_single_state(local_ctx.get(), data_column2->size(), raw_columns2.data(), state2->state());
+
+    // merge column 1 and column 2
+    ColumnPtr serde_column = BinaryColumn::create();
+    auto result_column = DoubleColumn::create();
+    func->serialize_to_column(local_ctx.get(), state1->state(), serde_column.get());
+    func->merge(local_ctx.get(), serde_column.get(), state2->state(), 0);
+    func->finalize_to_column(local_ctx.get(), state2->state(), result_column.get());
+
+    ASSERT_EQ(3, result_column->get_data()[0]);
+}
+
 TEST_F(AggregateTest, test_intersect_count) {
     const AggregateFunction* group_concat_function =
             get_aggregate_function("intersect_count", TYPE_INT, TYPE_BIGINT, false);
@@ -1171,6 +1219,36 @@ TEST_F(AggregateTest, test_bitmap_intersect) {
     group_concat_function->finalize_to_column(ctx, state->state(), result_column.get());
 
     ASSERT_EQ("1", result_column->get_pool()[0].to_string());
+}
+
+TEST_F(AggregateTest, test_histogram) {
+    const AggregateFunction* histogram_function = get_aggregate_function("histogram", TYPE_BIGINT, TYPE_VARCHAR, true);
+    auto state = ManagedAggrState::create(ctx, histogram_function);
+
+    auto data_column = gen_input_column1<int64_t>();
+    auto const1 = ColumnHelper::create_const_column<TYPE_INT>(data_column->size(), data_column->size());
+    auto const2 = ColumnHelper::create_const_column<TYPE_INT>(data_column->size(), data_column->size());
+    auto const3 = ColumnHelper::create_const_column<TYPE_INT>(10, data_column->size());
+
+    std::vector<const Column*> raw_columns;
+    raw_columns.resize(4);
+    raw_columns[0] = data_column.get();
+    raw_columns[1] = const1.get();
+    raw_columns[2] = const2.get();
+    raw_columns[3] = const3.get();
+    for (int i = 0; i < data_column->size(); ++i) {
+        histogram_function->update(ctx, raw_columns.data(), state->state(), i);
+    }
+
+    auto result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    histogram_function->finalize_to_column(ctx, state->state(), result_column.get());
+    ASSERT_EQ(
+            "['{ \"buckets\" : "
+            "[[\"0\",\"101\",\"102\",\"1\"],[\"102\",\"203\",\"204\",\"1\"],[\"204\",\"305\",\"306\",\"1\"],[\"306\","
+            "\"407\",\"408\",\"1\"],[\"408\",\"509\",\"510\",\"1\"],[\"510\",\"611\",\"612\",\"1\"],[\"612\",\"713\","
+            "\"714\",\"1\"],[\"714\",\"815\",\"816\",\"1\"],[\"816\",\"917\",\"918\",\"1\"],[\"918\",\"1019\",\"1020\","
+            "\"1\"],[\"1020\",\"200\",\"1026\",\"1\"]] }']",
+            result_column->debug_string());
 }
 
 TEST_F(AggregateTest, test_bitmap_intersect_nullable) {

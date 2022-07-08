@@ -207,6 +207,7 @@ public class FunctionSet {
     public static final String MAX = "max";
     public static final String MIN = "min";
     public static final String PERCENTILE_APPROX = "percentile_approx";
+    public static final String PERCENTILE_CONT = "percentile_cont";
     public static final String RETENTION = "retention";
     public static final String STDDEV = "stddev";
     public static final String STDDEV_POP = "stddev_pop";
@@ -401,6 +402,23 @@ public class FunctionSet {
                     .add(Type.BIGINT)
                     .add(Type.FLOAT)
                     .add(Type.DOUBLE)
+                    .build();
+
+    private static final Set<Type> HISTOGRAM_TYPE =
+            ImmutableSet.<Type>builder()
+                    .add(Type.BOOLEAN)
+                    .add(Type.TINYINT)
+                    .add(Type.SMALLINT)
+                    .add(Type.INT)
+                    .add(Type.BIGINT)
+                    .add(Type.LARGEINT)
+                    .add(Type.FLOAT)
+                    .add(Type.DOUBLE)
+                    .add(Type.DATE)
+                    .add(Type.DATETIME)
+                    .add(Type.DECIMAL32)
+                    .add(Type.DECIMAL64)
+                    .add(Type.DECIMAL128)
                     .build();
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
@@ -847,6 +865,17 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(RETENTION, Lists.newArrayList(Type.ARRAY_BOOLEAN),
                 Type.ARRAY_BOOLEAN, Type.BIGINT, false, false, false));
 
+        // PercentileCont
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_CONT,
+                Lists.newArrayList(Type.DATE, Type.DOUBLE), Type.DATE, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_CONT,
+                Lists.newArrayList(Type.DATETIME, Type.DOUBLE), Type.DATETIME, Type.VARCHAR,
+                false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_CONT,
+                Lists.newArrayList(Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARCHAR,
+                false, false, false));
+
         // Avg
         // TODO: switch to CHAR(sizeof(AvgIntermediateType) when that becomes available
         addBuiltin(AggregateFunction.createBuiltin(AVG,
@@ -1001,6 +1030,11 @@ public class FunctionSet {
                     LEAD, Lists.newArrayList(t, Type.BIGINT), t, t));
         }
 
+        for (Type t : HISTOGRAM_TYPE) {
+            addBuiltin(AggregateFunction.createBuiltin("histogram",
+                    Lists.newArrayList(t, Type.INT, Type.INT, Type.INT), Type.VARCHAR, Type.VARCHAR,
+                    false, false, false));
+        }
     }
 
     public List<Function> getBuiltinFunctions() {

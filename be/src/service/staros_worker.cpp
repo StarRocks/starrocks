@@ -17,7 +17,7 @@
 namespace starrocks {
 
 std::ostream& operator<<(std::ostream& os, const staros::starlet::ShardInfo& shard) {
-    return os << "Shard{.id=" << shard.id << " .uri=" << shard.obj_store_info.uri << "}";
+    return os << "Shard{.id=" << shard.id << " .uri=" << shard.obj_store_info.s3_obj_store.uri << "}";
 }
 
 absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
@@ -81,7 +81,6 @@ void init_staros_worker() {
     g_worker = std::make_shared<StarOSWorker>();
     g_starlet = new staros::starlet::Starlet(g_worker);
     g_starlet->init(starlet_config);
-    g_starlet->set_star_mgr_addr(config::starmgr_addr);
     g_starlet->start();
 }
 

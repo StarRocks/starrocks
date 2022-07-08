@@ -50,6 +50,7 @@ import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.ListPartitionDesc;
 import com.starrocks.analysis.MultiRangePartitionDesc;
@@ -152,12 +153,17 @@ import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -2801,11 +2807,19 @@ public class LocalMetastore implements ConnectorMetadata {
         Preconditions.checkNotNull(distributionDesc);
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
         // create refresh scheme
-        MaterializedView.MvRefreshScheme mvRefreshScheme = null;
-        new MaterializedView.MvRefreshScheme();
+        MaterializedView.MvRefreshScheme mvRefreshScheme;
         RefreshSchemeDesc refreshSchemeDesc = stmt.getRefreshSchemeDesc();
         if (refreshSchemeDesc.getType() == RefreshType.ASYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+            MaterializedView.AsyncRefreshContext asyncRefreshContext = mvRefreshScheme.getAsyncRefreshContext();
+            asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
+            if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
+                asyncRefreshContext.setStep(
+                        ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue());
+                asyncRefreshContext.setTimeUnit(
+                        asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
+            }
         } else if (refreshSchemeDesc.getType() == RefreshType.SYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             mvRefreshScheme.setType(MaterializedView.RefreshType.SYNC);
@@ -2919,6 +2933,16 @@ public class LocalMetastore implements ConnectorMetadata {
             if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC) {
                 // create task
                 Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+                MaterializedView.AsyncRefreshContext asyncRefreshContext =
+                        materializedView.getRefreshScheme().getAsyncRefreshContext();
+                if (asyncRefreshContext.getTimeUnit() != null) {
+                    long startTime = asyncRefreshContext.getStartTime();
+                    TaskSchedule taskSchedule = new TaskSchedule(startTime,
+                            asyncRefreshContext.getStep(),
+                            TimeUtils.convertUnitIdentifierToTimeUnit(asyncRefreshContext.getTimeUnit()));
+                    task.setSchedule(taskSchedule);
+                    task.setType(Constants.TaskType.PERIODICAL);
+                }
                 TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
                 taskManager.createTask(task, false);
                 // run task
@@ -2951,6 +2975,11 @@ public class LocalMetastore implements ConnectorMetadata {
                 if (baseTable != null) {
                     baseTable.removeRelatedMaterializedView(table.getId());
                 }
+            }
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(table.getId()));
+            if (refreshTask != null) {
+                taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
             }
         } else {
             stateMgr.getAlterInstance().processDropMaterializedView(stmt);
@@ -2987,7 +3016,7 @@ public class LocalMetastore implements ConnectorMetadata {
             Task task = TaskBuilder.buildMvTask(materializedView, dbName);
             taskManager.createTask(task, false);
         }
-        taskManager.executeTask(mvTaskName, priority);
+        taskManager.executeTask(mvTaskName, new ExecuteOption(priority));
     }
 
     /*

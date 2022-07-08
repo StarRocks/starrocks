@@ -331,6 +331,42 @@ public class Config extends ConfigBase {
     public static String bdbje_log_level = "INFO";
 
     /**
+     * bdb je cleaner thread number
+     */
+    @ConfField
+    public static int bdbje_cleaner_threads = 1;
+
+    /**
+     * The cost of replaying the replication stream as compared to the cost of
+     * performing a network restore, represented as a percentage.  Specifies
+     * the relative cost of using a log file as the source of transactions to
+     * replay on a replica as compared to using the file as part of a network
+     * restore.  This parameter is used to determine whether a cleaned log file
+     * that could be used to support replay should be removed because a network
+     * restore would be more efficient.  The value is typically larger than
+     * 100, to represent that replay is usually more expensive than network
+     * restore for a given amount of log data due to the cost of replaying
+     * transactions.  If the value is 0, then the parameter is disabled, and no
+     * log files will be retained based on the relative costs of replay and
+     * network restore.
+     *
+     * <p>Note that log files are always retained if they are known to be
+     * needed to support replication for electable replicas that have been in
+     * contact with the master within the REP_STREAM_TIMEOUT(default is 30min) period,
+     * or by any replica currently performing replication. This parameter only
+     * applies to the retention of additional files that might be useful to
+     * secondary nodes that are out of contact, or to electable nodes that have
+     * been out of contact for longer than REP_STREAM_TIMEOUT.</p>
+     *
+     * <p>To disable the retention of these additional files, set this
+     * parameter to zero.</p>
+     *
+     * If the bdb dir expands, set this param to 0.
+     */
+    @ConfField
+    public static int bdbje_replay_cost_percent = 150;
+
+    /**
      * the max txn number which bdbje can rollback when trying to rejoin the group
      */
     @ConfField

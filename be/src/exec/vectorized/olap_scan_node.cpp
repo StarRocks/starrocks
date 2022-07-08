@@ -311,9 +311,13 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
             _close_pending_scanners();
         }
     } else {
-        scanner->close(runtime_state());
-        _closed_scanners.fetch_add(1, std::memory_order_release);
-        _close_pending_scanners();
+        if (scanner != nullptr) {
+            scanner->close(runtime_state());
+            _closed_scanners.fetch_add(1, std::memory_order_release);
+            _close_pending_scanners();
+        } else {
+            _close_pending_scanners();
+        }
     }
 
     if (_closed_scanners.load(std::memory_order_acquire) == _num_scanners) {
@@ -340,8 +344,8 @@ void OlapScanNode::enable_shared_scan(bool enable) {
 }
 
 StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_queue(
-        const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams& request,
-        size_t num_total_scan_ranges) {
+        const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
+        bool enable_tablet_internal_parallel, size_t num_total_scan_ranges) {
     pipeline::Morsels morsels;
     for (const auto& scan_range : scan_ranges) {
         morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
@@ -353,17 +357,14 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
     }
 
     // Disable by the session variable shouldn't use tablet internal parallel.
-    const auto& query_options = request.query_options;
-    bool enable =
-            query_options.__isset.enable_tablet_internal_parallel && query_options.enable_tablet_internal_parallel;
-    if (!enable) {
+    if (!enable_tablet_internal_parallel) {
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
     }
 
     int64_t scan_dop;
     int64_t splitted_scan_rows;
-    ASSIGN_OR_RETURN(auto could, _could_tablet_internal_parallel(scan_ranges, request, num_total_scan_ranges, &scan_dop,
-                                                                 &splitted_scan_rows));
+    ASSIGN_OR_RETURN(auto could, _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
+                                                                 &scan_dop, &splitted_scan_rows));
     if (!could) {
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
     }
@@ -378,13 +379,10 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
 }
 
 StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
-                                                             const TExecPlanFragmentParams& request,
-                                                             size_t num_total_scan_ranges, int64_t* scan_dop,
-                                                             int64_t* splitted_scan_rows) const {
+                                                             int32_t pipeline_dop, size_t num_total_scan_ranges,
+                                                             int64_t* scan_dop, int64_t* splitted_scan_rows) const {
     // The enough number of tablets shouldn't use tablet internal parallel.
-    int32_t dop = request.__isset.pipeline_dop ? request.pipeline_dop : 0;
-    dop = ExecEnv::GetInstance()->calc_pipeline_dop(dop);
-    if (num_total_scan_ranges >= dop) {
+    if (num_total_scan_ranges >= pipeline_dop) {
         return false;
     }
 
@@ -401,9 +399,9 @@ StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<T
                      std::min(*splitted_scan_rows, config::tablet_internal_parallel_max_splitted_scan_rows));
     // scan_dop is restricted in the range [1, dop].
     *scan_dop = num_table_rows / *splitted_scan_rows;
-    *scan_dop = std::max<int64_t>(1, std::min<int64_t>(*scan_dop, dop));
+    *scan_dop = std::max<int64_t>(1, std::min<int64_t>(*scan_dop, pipeline_dop));
 
-    bool could = *scan_dop >= dop || *scan_dop >= config::tablet_internal_parallel_min_scan_dop;
+    bool could = *scan_dop >= pipeline_dop || *scan_dop >= config::tablet_internal_parallel_min_scan_dop;
     return could;
 }
 

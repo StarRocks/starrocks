@@ -6,6 +6,7 @@ import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
+import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
@@ -17,22 +18,34 @@ import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
+import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UpdateStmt;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
@@ -46,14 +59,22 @@ import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.statistic.AnalyzeJob;
 
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
+import java.util.SortedSet;
+import java.util.TreeMap;
+import java.util.TreeSet;
 
 public class PrivilegeChecker {
     public static void check(StatementBase statement, ConnectContext session) {
@@ -416,11 +437,72 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
-            TableName tableName = statement.getTableName();
-            if (!checkTblPriv(session, tableName, PrivPredicate.SELECT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
-                        session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
+            if (statement.getDbId() == AnalyzeJob.DEFAULT_ALL_ID) {
+                List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+                for (Long dbId : dbIds) {
+                    Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                    if (!checkDbPriv(session, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            ClusterNamespace.getNameFromFullName(db.getFullName()),
+                            PrivPredicate.SELECT)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "SELECT",
+                                session.getQualifiedUser(), session.getRemoteIP(),
+                                ClusterNamespace.getNameFromFullName(db.getFullName()));
+                    }
+
+                    if (!checkDbPriv(session, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            ClusterNamespace.getNameFromFullName(db.getFullName()),
+                            PrivPredicate.LOAD)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "LOAD",
+                                session.getQualifiedUser(), session.getRemoteIP(),
+                                ClusterNamespace.getNameFromFullName(db.getFullName()));
+                    }
+                }
+            } else if (AnalyzeJob.DEFAULT_ALL_ID == statement.getTableId()
+                    && AnalyzeJob.DEFAULT_ALL_ID != statement.getDbId()) {
+                Database db = GlobalStateMgr.getCurrentState().getDb(statement.getDbId());
+                for (Table table : db.getTables()) {
+                    TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            db.getFullName(), table.getName());
+                    if (!checkTblPriv(session, tableName, PrivPredicate.SELECT)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
+                                session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
+                    }
+
+                    if (!checkTblPriv(session, tableName, PrivPredicate.LOAD)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
+                                session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
+                    }
+                }
+            } else if (AnalyzeJob.DEFAULT_ALL_ID != statement.getTableId()
+                    && AnalyzeJob.DEFAULT_ALL_ID != statement.getDbId()) {
+                TableName tableName = statement.getTableName();
+
+                if (!checkTblPriv(session, tableName, PrivPredicate.SELECT)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
+                            session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
+                }
+
+                if (!checkTblPriv(session, tableName, PrivPredicate.LOAD)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
+                            session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
+                }
             }
+
+            return null;
+        }
+
+        @Override
+        public Void visitAlterDbQuotaStmt(AlterDatabaseQuotaStmt statement, ConnectContext session) {
+            String dbName = statement.getDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), dbName);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext session) {
+            TableName tableName = statement.getTableName();
 
             if (!checkTblPriv(session, tableName, PrivPredicate.LOAD)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
@@ -464,6 +546,7 @@ public class PrivilegeChecker {
         }
 
 
+        @Override
         public Void visitAlterDatabaseRename(AlterDatabaseRename statement, ConnectContext session) {
             String dbName = statement.getDbName();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName,
@@ -471,6 +554,186 @@ public class PrivilegeChecker {
                                     Privilege.ALTER_PRIV),
                             CompoundPredicate.Operator.OR))) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), dbName);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitRecoverDbStmt(RecoverDbStmt statement, ConnectContext session) {
+            String dbName = statement.getDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName,
+                    PrivPredicate.of(PrivBitSet.of(Privilege.ALTER_PRIV,
+                                    Privilege.CREATE_PRIV,
+                                    Privilege.ADMIN_PRIV),
+                            CompoundPredicate.Operator.OR))) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), dbName);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowDataStmt(ShowDataStmt statement, ConnectContext session) {
+            String dbName = statement.getDbName();
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            if (db == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
+            db.readLock();
+            try {
+                String tableName = statement.getTableName();
+                List<List<String>> totalRows = statement.getResultRows();
+                if (tableName == null) {
+                    long totalSize = 0;
+                    long totalReplicaCount = 0;
+
+                    // sort by table name
+                    List<Table> tables = db.getTables();
+                    SortedSet<Table> sortedTables = new TreeSet<>(new Comparator<Table>() {
+                        @Override
+                        public int compare(Table t1, Table t2) {
+                            return t1.getName().compareTo(t2.getName());
+                        }
+                    });
+
+                    for (Table table : tables) {
+                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbName,
+                                table.getName(),
+                                PrivPredicate.SHOW)) {
+                            continue;
+                        }
+                        sortedTables.add(table);
+                    }
+
+                    for (Table table : sortedTables) {
+                        if (!table.isNativeTable()) {
+                            continue;
+                        }
+
+                        OlapTable olapTable = (OlapTable) table;
+                        long tableSize = olapTable.getDataSize();
+                        long replicaCount = olapTable.getReplicaCount();
+
+                        Pair<Double, String> tableSizePair = DebugUtil.getByteUint(tableSize);
+                        String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(tableSizePair.first) + " "
+                                + tableSizePair.second;
+
+                        List<String> row = Arrays.asList(table.getName(), readableSize, String.valueOf(replicaCount));
+                        totalRows.add(row);
+
+                        totalSize += tableSize;
+                        totalReplicaCount += replicaCount;
+                    } // end for tables
+
+                    Pair<Double, String> totalSizePair = DebugUtil.getByteUint(totalSize);
+                    String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(totalSizePair.first) + " "
+                            + totalSizePair.second;
+                    List<String> total = Arrays.asList("Total", readableSize, String.valueOf(totalReplicaCount));
+                    totalRows.add(total);
+
+                    // quota
+                    long quota = db.getDataQuota();
+                    long replicaQuota = db.getReplicaQuota();
+                    Pair<Double, String> quotaPair = DebugUtil.getByteUint(quota);
+                    String readableQuota = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(quotaPair.first) + " "
+                            + quotaPair.second;
+
+                    List<String> quotaRow = Arrays.asList("Quota", readableQuota, String.valueOf(replicaQuota));
+                    totalRows.add(quotaRow);
+
+                    // left
+                    long left = Math.max(0, quota - totalSize);
+                    long replicaCountLeft = Math.max(0, replicaQuota - totalReplicaCount);
+                    Pair<Double, String> leftPair = DebugUtil.getByteUint(left);
+                    String readableLeft = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(leftPair.first) + " "
+                            + leftPair.second;
+                    List<String> leftRow = Arrays.asList("Left", readableLeft, String.valueOf(replicaCountLeft));
+                    totalRows.add(leftRow);
+                } else {
+                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbName,
+                            tableName,
+                            PrivPredicate.SHOW)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW DATA",
+                                session.getQualifiedUser(),
+                                session.getRemoteIP(),
+                                tableName);
+                    }
+
+                    Table table = db.getTable(tableName);
+                    if (table == null) {
+                        ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+                    }
+
+                    if (table.getType() != Table.TableType.OLAP) {
+                        ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
+                    }
+
+                    OlapTable olapTable = (OlapTable) table;
+                    int i = 0;
+                    long totalSize = 0;
+                    long totalReplicaCount = 0;
+
+                    // sort by index name
+                    Map<String, Long> indexNames = olapTable.getIndexNameToId();
+                    Map<String, Long> sortedIndexNames = new TreeMap<String, Long>();
+                    for (Map.Entry<String, Long> entry : indexNames.entrySet()) {
+                        sortedIndexNames.put(entry.getKey(), entry.getValue());
+                    }
+
+                    for (Long indexId : sortedIndexNames.values()) {
+                        long indexSize = 0;
+                        long indexReplicaCount = 0;
+                        long indexRowCount = 0;
+                        for (Partition partition : olapTable.getAllPartitions()) {
+                            MaterializedIndex mIndex = partition.getIndex(indexId);
+                            indexSize += mIndex.getDataSize();
+                            indexReplicaCount += mIndex.getReplicaCount();
+                            indexRowCount += mIndex.getRowCount();
+                        }
+
+                        Pair<Double, String> indexSizePair = DebugUtil.getByteUint(indexSize);
+                        String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(indexSizePair.first) + " "
+                                + indexSizePair.second;
+
+                        List<String> row = null;
+                        if (i == 0) {
+                            row = Arrays.asList(tableName,
+                                    olapTable.getIndexNameById(indexId),
+                                    readableSize, String.valueOf(indexReplicaCount),
+                                    String.valueOf(indexRowCount));
+                        } else {
+                            row = Arrays.asList("",
+                                    olapTable.getIndexNameById(indexId),
+                                    readableSize, String.valueOf(indexReplicaCount),
+                                    String.valueOf(indexRowCount));
+                        }
+
+                        totalSize += indexSize;
+                        totalReplicaCount += indexReplicaCount;
+                        totalRows.add(row);
+
+                        i++;
+                    } // end for indices
+
+                    Pair<Double, String> totalSizePair = DebugUtil.getByteUint(totalSize);
+                    String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(totalSizePair.first) + " "
+                            + totalSizePair.second;
+                    List<String> row = Arrays.asList("", "Total", readableSize, String.valueOf(totalReplicaCount), "");
+                    totalRows.add(row);
+                }
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            } finally {
+                db.readUnlock();
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDescTableStmt(DescribeStmt statement, ConnectContext session) {
+            TableName tableName = statement.getDbTableName();
+            if (!checkTblPriv(session, tableName, PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "DESCRIBE",
+                        session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
             }
             return null;
         }

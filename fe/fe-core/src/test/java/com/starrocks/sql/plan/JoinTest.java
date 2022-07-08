@@ -42,7 +42,7 @@ public class JoinTest extends PlanTestBase {
     public void testInnerJoinWithPredicate() throws Exception {
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 = 1"));
+        assertContains(planFragment, "PREDICATES: 1: v1 = 1");
     }
 
     @Test
@@ -101,7 +101,6 @@ public class JoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n"));
-
 
         sql = "select * from t0 join test_all_type on NOT 69 IS NOT NULL where true";
         planFragment = getFragmentPlan(sql);
@@ -667,7 +666,7 @@ public class JoinTest extends PlanTestBase {
                 "             AND (v3 IN (SELECT v1 FROM t0)));";
         // check no exception
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "12:HASH JOIN\n" +
+        assertContains(plan, "11:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 5: v2 = 24: v1");
@@ -1223,10 +1222,10 @@ public class JoinTest extends PlanTestBase {
 
         sql = "select * from test.join1 inner join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+        assertContains(explainString, "  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2, 0) > 3"));
+                "     PREDICATES: round(2, 0) > 3");
 
         sql = "select * from test.join1 where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
@@ -1269,9 +1268,9 @@ public class JoinTest extends PlanTestBase {
                 "and (join2.id > 1 or join2.id < 10);";
         String explainString = getFragmentPlan(sql);
 
-        Assert.assertTrue(explainString.contains("join op: LEFT OUTER JOIN (BROADCAST)"));
-        Assert.assertTrue(explainString.contains("PREDICATES: (5: id > 1) OR (5: id < 10)"));
-        Assert.assertTrue(explainString.contains("equal join conjunct: 2: id = 5: id"));
+        assertContains(explainString, "join op: LEFT OUTER JOIN (BROADCAST)");
+        assertContains(explainString, "PREDICATES: (5: id > 1) OR (5: id < 10)");
+        assertContains(explainString, "equal join conjunct: 2: id = 5: id");
     }
 
     @Test
@@ -1536,19 +1535,19 @@ public class JoinTest extends PlanTestBase {
         sql = "select * from join1 left join join2 as b on join1.id = b.id\n" +
                 "left join join2 as c on join1.id = c.id \n" +
                 "where b.dt > 1 and c.dt > 1;";
-        starRocksAssert.query(sql).explainContains("6:HASH JOIN\n" +
-                        "  |  join op: INNER JOIN (BROADCAST)\n" +
+        assertContains(starRocksAssert.query(sql).explainQuery(), "  7:HASH JOIN\n" +
+                        "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                         "  |  colocate: false, reason: \n" +
                         "  |  equal join conjunct: 2: id = 8: id",
-                "  3:HASH JOIN\n" +
-                        "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  4:HASH JOIN\n" +
+                        "  |  join op: INNER JOIN (PARTITIONED)\n" +
                         "  |  colocate: false, reason: \n" +
                         "  |  equal join conjunct: 2: id = 5: id",
-                "  4:OlapScanNode\n" +
+                "  5:OlapScanNode\n" +
                         "     TABLE: join2\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 7: dt > 1",
-                "  1:OlapScanNode\n" +
+                "  2:OlapScanNode\n" +
                         "     TABLE: join2\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 4: dt > 1");
@@ -1709,10 +1708,10 @@ public class JoinTest extends PlanTestBase {
                 "left join join2 on join1.id = join2.id\n" +
                 "where join2.id > 1;";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
+        assertContains(explainString, "  1:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 5: id > 1"));
+                "     PREDICATES: 5: id > 1");
 
         // test left join: right table join predicate, only push down right table
         sql = "select *\n from join1\n" +
@@ -1948,13 +1947,13 @@ public class JoinTest extends PlanTestBase {
                 "WHERE ((t0.v2) BETWEEN (CAST(subt3.v11 AS STRING)) AND (t0.v2)) = (t1.v4);";
         String plan = getFragmentPlan(sql);
         // check no exception
-        assertContains(plan, "  11:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "  10:AGGREGATE (update finalize)\n" +
                 "  |  group by: 1: v4\n" +
                 "  |  \n" +
-                "  10:Project\n" +
+                "  9:Project\n" +
                 "  |  <slot 1> : 1: v4\n" +
                 "  |  \n" +
-                "  9:HASH JOIN\n" +
+                "  8:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v4 = 10: cast");
@@ -2424,7 +2423,7 @@ public class JoinTest extends PlanTestBase {
             String sql =
                     "select * from ( select * from t0 left join[bucket] t1 on t0.v1 = t1.v4 ) s1 join[bucket] t2 on s1.v4 = t2.v7";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  |  join op: INNER JOIN (PARTITIONED)\n" +
+            assertContains(plan, "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 4: v4 = 7: v7");
         }
@@ -2560,7 +2559,6 @@ public class JoinTest extends PlanTestBase {
                 "  |  other predicates: [1: v1, BIGINT, true] < [4: v7, BIGINT, true]\n" +
                 "  |  cardinality: 1\n");
 
-
         sql = "select * from t0 join t2 on t0.v1 + t2.v7 < 2";
         plan = getVerboseExplain(sql);
         assertNotContains(plan, "build runtime filters");
@@ -2585,6 +2583,29 @@ public class JoinTest extends PlanTestBase {
                 "     probe runtime filters:\n" +
                 "     - filter_id = 1, probe_expr = (1: v4)");
          */
+    }
+
+    @Test
+    public void testIsNotNullOnPredicate() throws Exception {
+        String sql = "select * from " +
+                "t0 left outer join t1 on t0.v3 = t1.v6 " +
+                "              join t2 on t1.v5 = t2.v8";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 5: v5 IS NOT NULL");
+        assertContains(plan, "PREDICATES: 8: v8 IS NOT NULL");
+        assertContains(plan, "PREDICATES: 3: v3 IS NOT NULL");
+    }
+
+    @Test
+    public void testIsNotNullWherePredicate() throws Exception {
+        String sql = "select * from " +
+                "t0 left outer join t1 on t0.v3 = t1.v6 " +
+                "              ,t2 " +
+                "where t1.v5 = t2.v8";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 5: v5 IS NOT NULL");
+        assertContains(plan, "PREDICATES: 8: v8 IS NOT NULL");
+        assertContains(plan, "PREDICATES: 3: v3 IS NOT NULL");
     }
 
 }

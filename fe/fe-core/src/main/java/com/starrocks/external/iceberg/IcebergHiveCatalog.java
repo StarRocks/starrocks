@@ -4,6 +4,7 @@ package com.starrocks.external.iceberg;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.external.iceberg.hive.CachedClientPool;
 import com.starrocks.external.iceberg.hive.HiveTableOperations;
@@ -26,9 +27,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+
+import static com.starrocks.external.iceberg.IcebergUtil.convertToSRDatabase;
 
 public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(IcebergHiveCatalog.class);
@@ -133,9 +138,31 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
         throw new UnsupportedOperationException("Not implemented");
     }
 
+    public List<String> listAllDatabases() {
+        try {
+            return new ArrayList<>(clients.run(IMetaStoreClient::getAllDatabases));
+        } catch (TException | InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public Database getDB(String dbName) throws InterruptedException, TException {
+        org.apache.hadoop.hive.metastore.api.Database db = clients.run(client -> client.getDatabase(dbName));
+        if (db == null || db.getName() == null) {
+            throw new TException("Hive db " + dbName + " doesn't exist");
+        }
+        return convertToSRDatabase(dbName);
+    }
+
     @Override
     public List<TableIdentifier> listTables(Namespace namespace) {
-        throw new UnsupportedOperationException("Not implemented");
+        String database = namespace.level(0);
+        try {
+            List<String> tableNames = clients.run(client -> client.getAllTables(database));
+            return tableNames.stream().map(tblName -> TableIdentifier.of(namespace, tblName)).collect(Collectors.toList());
+        } catch (TException | InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override

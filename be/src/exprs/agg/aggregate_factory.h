@@ -94,6 +94,9 @@ public:
     static AggregateFunctionPtr MakePercentileUnionAggregateFunction();
 
     template <PrimitiveType PT>
+    static AggregateFunctionPtr MakePercentileContAggregateFunction();
+
+    template <PrimitiveType PT>
     static AggregateFunctionPtr MakeArrayAggAggregateFunction();
 
     // Windows functions:
@@ -113,6 +116,9 @@ public:
 
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeLeadLagWindowFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeHistogramAggregationFunction();
 };
 
 const AggregateFunction* get_aggregate_function(const std::string& name, PrimitiveType arg_type,

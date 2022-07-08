@@ -4,18 +4,23 @@ package com.starrocks.scheduler;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.Future;
 
@@ -81,7 +86,15 @@ public class TaskRun implements Comparable<TaskRun> {
         TaskRunContext taskRunContext = new TaskRunContext();
         taskRunContext.setDefinition(status.getDefinition());
         // copy a ConnectContext to avoid concurrency leading to abnormal results.
-        ConnectContext newCtx = new ConnectContext();
+        ConnectContext newCtx = new ConnectContext(null);
+        if (ctx == null) {
+            ctx = new ConnectContext(null);
+            ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
+            ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+            ctx.setDatabase(task.getDbName());
+            ctx.setQualifiedUser(Auth.ROOT_USER);
+            ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        }
         newCtx.setCluster(ctx.getClusterName());
         newCtx.setGlobalStateMgr(ctx.getGlobalStateMgr());
         newCtx.setDatabase(task.getDbName());
@@ -155,5 +168,22 @@ public class TaskRun implements Comparable<TaskRun> {
         } else {
             return this.getStatus().getCreateTime() > taskRun.getStatus().getCreateTime() ? 1 : -1;
         }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        TaskRun taskRun = (TaskRun) o;
+        return status.getDefinition().equals(taskRun.getStatus().getDefinition());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(status);
     }
 }
