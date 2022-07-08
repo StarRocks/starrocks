@@ -270,7 +270,6 @@ void PipeLineFileScanNodeTest::execute_pipeline() {
 
 void PipeLineFileScanNodeTest::generate_morse_queue(std::vector<starrocks::vectorized::ConnectorScanNode*> scan_nodes,
                                                     std::vector<TScanRangeParams> scan_ranges) {
-    TExecPlanFragmentParams request;
     std::vector<TScanRangeParams> no_scan_ranges;
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
 
