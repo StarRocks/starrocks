@@ -407,7 +407,7 @@ public class Database extends MetaObject implements Writable {
         } else {
             // for debug
             LOG.info("force drop"); 
-            if (table.getType() == Table.TableType.OLAP || table.getType() == Table.TableType.LAKE) {
+            if (table.isOlapOrLakeTable()) {
                 // for debug
                 LOG.info("force drop && tableType is OLAP or LAKE");
                 batchTaskMap = GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) table, isReplay);
