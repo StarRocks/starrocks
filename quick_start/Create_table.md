@@ -122,10 +122,22 @@ SHOW TABLES;
 DESC table_name;
 ```
 
+示例：
+
+```sql
+DESC detailDemo;
+```
+
 * 查看建表语句
 
 ```sql
 SHOW CREATE TABLE table_name;
+```
+
+示例：
+
+```sql
+SHOW CREATE TABLE detailDemo;
 ```
 
 <br/>
@@ -142,6 +154,17 @@ StarRocks 支持多种 DDL 操作。
 
 ```sql
 ALTER TABLE detailDemo ADD COLUMN uv BIGINT DEFAULT '0' after ispass;
+```
+
+### 删除列
+
+删除以上步骤新增的列。
+
+> 注意
+> 如果您通过上述步骤添加了 `uv`，请务必删除此列以保证后续 Quick Start 内容可以执行。
+
+```sql
+ALTER TABLE detailDemo DROP COLUMN uv;
 ```
 
 ### 查看修改表结构作业状态
