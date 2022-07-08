@@ -6,7 +6,7 @@
 
 StarRocks 支持两种导入模式：同步导入和异步导入。
 
-> 注意：如果是外部程序接入 StarRocks 的导入，需要先判断使用哪种导入模式，然后再确定接入逻辑。
+> 说明：如果是外部程序接入 StarRocks 的导入，需要先判断使用哪种导入模式，然后再确定接入逻辑。
 
 ### 同步导入
 
@@ -32,11 +32,12 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 1. 创建导入作业。
 
-2. 查看 StarRocks 返回的作业创建结果。
+2. 根据 StarRocks 返回的作业创建结果，判断作业是否创建成功。
 
-3. 判断作业创建结果。如果作业创建成功，进入步骤 4；如果作业创建失败，可以回到步骤 1，尝试重试导入作业。
+   - 如果作业创建成功，进入步骤 3。
+   - 如果作业创建失败，可以回到步骤 1，尝试重试导入作业。
 
-4. 轮询查看导入作业的状态，直到状态变为 **FINISHED** 或 **CANCELLED**。
+3. 轮询查看导入作业的状态，直到状态变为 **FINISHED** 或 **CANCELLED**。
 
 在异步的导入方式 Broker Load 和 Spark Load 中，一个导入作业的执行流程主要分为 5 个阶段，如下图所示。
 
@@ -44,21 +45,21 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 每个阶段的描述如下：
 
-1. **PENDING**
+1. **PENDING**<br>
    该阶段是指提交导入作业后，等待 FE 调度执行。
 
-2. **ETL**
+2. **ETL**<br>
    该阶段执行数据的预处理，包括清洗、分区、排序、聚合等。
 
    > 说明：如果是 Broker Load 作业，该阶段会直接完成。
 
-3. **LOADING**
+3. **LOADING**<br>
    该阶段先对数据进行清洗和转换，然后将数据发送给 BE 处理。当数据全部导入后，进入等待生效过程，此时，导入作业的状态依旧是 **LOADING**。
 
-4. **FINISHED**
+4. **FINISHED**<br>
    在导入作业涉及的所有数据均生效后，作业的状态变成 **FINISHED**，此时，导入的数据均可查询。**FINISHED** 是导入作业的最终状态。
 
-5. **CANCELLED**
+5. **CANCELLED**<br>
    在导入作业的状态变为 **FINISHED** 之前，您可以随时取消作业。另外，如果导入出现错误，StarRocks 系统也会自动取消导入作业。作业取消后，进入 **CANCELLED** 状态。**CANCELLED** 也是导入作业的一种最终状态。
 
 ## 导入方式
@@ -67,12 +68,12 @@ StarRocks 提供 [Stream Load](/loading/StreamLoad.md)、[Broker Load](/loading/
 
 | 导入方式           | 业务场景                                                     | 数据量（单作业）                 | 数据源                                       | 数据格式              | 同步模式 |
 | ------------------ | ------------------------------------------------------------ | -------------------------------- | -------------------------------------------- | --------------------- | -------- |
-| Stream Load        | 通过 HTTP 协议导入本地文件、或通过程序导入数据流。           | 10 GB 以内（CSV 格式不受此限制） | - 本地文件 - 程序                            | - CSV - JSON          | 同步     |
-| Broker Load        | 通过独立的 Broker 程序从外部云存储系统导入。                 | 数十到数百 GB                    | - HDFS - Amazon S3 - 阿里云 OSS - 腾讯云 COS | - CSV - ORC - Parquet | 异步     |
-| Routine Load       | 从 Apache Kafka® 等流式数据源实时地导入数据。                | 微批导入 MB 到 GB 级             | Kafka                                        | - CSV - JSON          | 异步     |
-| Spark Load         | - 通过 Apache Spark™ 集群初次从云存储系统迁移导入大量数据。 - 需要做全局数据字典来精确去重。 | 数十 GB 到 TB级别                | - HDFS - Hive                                | - CSV - Apache Hive™  | 异步     |
-| INSERT INTO SELECT | - 外表导入。 - StarRocks 数据表之间的数据导入。              | 跟内存相关                       | - StarRocks 表 - 外部表                      | StarRocks 数据表      | 同步     |
-| INSERT INTO VALUES | - 单条批量小数据量插入。 - 通过 JDBC 等接口导入。            | 简单测试用                       | - 程序 - ETL 工具                            | SQL                   | 同步     |
+| Stream Load        | 通过 HTTP 协议导入本地文件、或通过程序导入数据流。           | 10 GB 以内（CSV 格式不受此限制） | - 本地文件<br> - 程序                            | - CSV<br> - JSON          | 同步     |
+| Broker Load        | 通过独立的 Broker 程序从外部云存储系统导入。                 | 数十到数百 GB                    | - HDFS<br> - Amazon S3<br> - 阿里云 OSS<br> - 腾讯云 COS<br> | - CSV<br> - ORC<br> - Parquet | 异步     |
+| Routine Load       | 从 Apache Kafka® 等流式数据源实时地导入数据。                | 微批导入 MB 到 GB 级             | Kafka                                        | - CSV<br> - JSON          | 异步     |
+| Spark Load         | - 通过 Apache Spark™ 集群初次从云存储系统迁移导入大量数据。<br> - 需要做全局数据字典来精确去重。 | 数十 GB 到 TB级别                | - HDFS<br> - Hive                                | - CSV<br> - Apache Hive™  | 异步     |
+| INSERT INTO SELECT | - 外表导入。<br> - StarRocks 数据表之间的数据导入。              | 跟内存相关                       | - StarRocks 表<br> - 外部表                      | StarRocks 数据表      | 同步     |
+| INSERT INTO VALUES | - 单条批量小数据量插入。<br> - 通过 JDBC 等接口导入。            | 简单测试用                       | - 程序<br> - ETL 工具                            | SQL                   | 同步     |
 
 您可以根据业务场景、数据量、数据源、数据格式和导入频次等来选择合适的导入方式。另外，在选择导入方式时，可以注意以下几点：
 
