@@ -31,6 +31,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.staros.proto.ShardStorageInfo;
 import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AddRollupClause;
 import com.starrocks.analysis.AdminCheckTabletsStmt;
@@ -110,6 +111,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.lake.LakeTable;
 import com.starrocks.catalog.lake.LakeTablet;
+import com.starrocks.catalog.lake.StorageInfo;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
@@ -1290,7 +1292,8 @@ public class LocalMetastore implements ConnectorMetadata {
                     new TabletMeta(db.getId(), table.getId(), partitionId, indexId, indexMeta.getSchemaHash(),
                             storageMedium);
             if (table.isLakeTable()) {
-                createLakeTablets((LakeTable) table, index, distributionInfo, replicationNum, tabletMeta, tabletIdSet);
+                createLakeTablets((LakeTable) table, partitionId, index, distributionInfo, replicationNum, tabletMeta,
+                        tabletIdSet);
             } else {
                 createOlapTablets(db.getClusterName(), index, Replica.ReplicaState.NORMAL, distributionInfo,
                         partition.getVisibleVersion(), replicationNum, tabletMeta, tabletIdSet);
@@ -1652,18 +1655,39 @@ public class LocalMetastore implements ConnectorMetadata {
         // indexes
         TableIndexes indexes = new TableIndexes(stmt.getIndexes());
 
+        // set base index info to table
+        // this should be done before create partition.
+        Map<String, String> properties = stmt.getProperties();
+
         // create table
         long tableId = GlobalStateMgr.getCurrentState().getNextId();
         OlapTable olapTable = null;
         if (stmt.isExternal()) {
             olapTable = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
-                    distributionInfo, indexes, stmt.getProperties());
+                    distributionInfo, indexes, properties);
         } else {
             if (stmt.isLakeEngine()) {
                 olapTable = new LakeTable(tableId, tableName, baseSchema, keysType, partitionInfo,
                         distributionInfo, indexes);
+
+                // storage cache property
+                boolean enableStorageCache = PropertyAnalyzer.analyzeBooleanProp(
+                        properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, false);
+                long storageCacheTtlS = 0;
+                try {
+                    storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(
+                            properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
+                if (enableStorageCache && storageCacheTtlS == 0) {
+                    throw new DdlException("Storage cache ttl should not be 0 when cache is enabled");
+                }
+
                 // get service shard storage info from StarMgr
-                ((LakeTable) olapTable).setShardStorageInfo(stateMgr.getStarOSAgent().getServiceShardStorageInfo());
+                ShardStorageInfo shardStorageInfo = stateMgr.getStarOSAgent().getServiceShardStorageInfo();
+
+                ((LakeTable) olapTable).setStorageInfo(shardStorageInfo, enableStorageCache, storageCacheTtlS);
             } else {
                 Preconditions.checkState(stmt.isOlapEngine());
                 olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
@@ -1675,10 +1699,6 @@ public class LocalMetastore implements ConnectorMetadata {
         // set base index id
         long baseIndexId = getNextId();
         olapTable.setBaseIndexId(baseIndexId);
-
-        // set base index info to table
-        // this should be done before create partition.
-        Map<String, String> properties = stmt.getProperties();
 
         // analyze bloom filter columns
         Set<String> bfColumns = null;
@@ -1756,6 +1776,7 @@ public class LocalMetastore implements ConnectorMetadata {
             partitionInfo.setReplicationNum(partitionId, replicationNum);
             partitionInfo.setIsInMemory(partitionId, isInMemory);
             partitionInfo.setTabletType(partitionId, tabletType);
+            partitionInfo.setStorageInfo(partitionId, olapTable.getTableProperty().getStorageInfo());
         }
 
         // check colocation properties
@@ -2249,8 +2270,9 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     // TODO: clear tablet and shard when failed
-    private void createLakeTablets(LakeTable table, MaterializedIndex index, DistributionInfo distributionInfo,
-                                   short replicationNum, TabletMeta tabletMeta, Set<Long> tabletIdSet)
+    private void createLakeTablets(LakeTable table, long partitionId, MaterializedIndex index,
+                                   DistributionInfo distributionInfo, short replicationNum, TabletMeta tabletMeta,
+                                   Set<Long> tabletIdSet)
             throws DdlException {
         Preconditions.checkArgument(replicationNum > 0);
 
@@ -2259,8 +2281,12 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Unknown distribution type: " + distributionInfoType);
         }
 
+        PartitionInfo partitionInfo = table.getPartitionInfo();
+        StorageInfo storageInfo = partitionInfo.getStorageInfo(partitionId);
+        // TODO: set partition storage cache property
+        ShardStorageInfo shardStorageInfo = ShardStorageInfo.newBuilder(table.getShardStorageInfo()).build();
         int bucketNum = distributionInfo.getBucketNum();
-        List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum, table.getShardStorageInfo());
+        List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum, shardStorageInfo);
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
             index.addTablet(tablet, tabletMeta);

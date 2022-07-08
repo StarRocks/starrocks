@@ -27,7 +27,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.PartitionKeyDesc.PartitionRangeType;
 import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.lake.StorageInfo;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PrintableMap;
@@ -50,6 +52,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
     private boolean isInMemory = false;
     private TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
     private Long versionInfo;
+    private StorageInfo storageInfo;
 
     public SingleRangePartitionDesc(boolean ifNotExists, String partName, PartitionKeyDesc partitionKeyDesc,
                                     Map<String, String> properties) {
@@ -95,6 +98,10 @@ public class SingleRangePartitionDesc extends PartitionDesc {
 
     public Long getVersionInfo() {
         return versionInfo;
+    }
+
+    public StorageInfo getStorageInfo() {
+        return storageInfo;
     }
 
     public Map<String, String> getProperties() {
@@ -144,6 +151,16 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         isInMemory = PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
 
         tabletType = PropertyAnalyzer.analyzeTabletType(properties);
+
+        // analyze enable storage cache and cache ttl
+        boolean enableStorageCache = PropertyAnalyzer.analyzeBooleanProp(
+                properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, false);
+        long storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(
+                properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
+        if (enableStorageCache && storageCacheTtlS == 0) {
+            throw new AnalysisException("Storage cache ttl should not be 0 when cache is enabled");
+        }
+        storageInfo = new StorageInfo(null, enableStorageCache, storageCacheTtlS);
 
         if (otherProperties == null) {
             // check unknown properties
