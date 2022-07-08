@@ -661,12 +661,12 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_ADD_SHARD: {
+            case OperationType.OP_ADD_UNUSED_SHARD: {
                 data = ShardInfo.read(in);
                 isRead = true;
                 break;
             }
-            case OperationType.OP_DELETE_SHARD: {
+            case OperationType.OP_DELETE_UNUSED_SHARD: {
                 data = ShardInfo.read(in);
                 isRead = true;
                 break;

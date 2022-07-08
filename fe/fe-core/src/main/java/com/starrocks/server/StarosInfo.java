@@ -12,7 +12,7 @@ import java.io.IOException;
 
 public class StarosInfo {
 
-    private static final Logger LOG = LogManager.getLogger(NodeMgr.class);
+    private static final Logger LOG = LogManager.getLogger(StarosInfo.class);
 
     private final ShardDelete shardDelete;
 
