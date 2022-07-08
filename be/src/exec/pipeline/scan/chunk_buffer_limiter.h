@@ -106,11 +106,9 @@ public:
     size_t default_capacity() const override { return _default_capacity; }
 
 private:
-    void _unpin(int num_chunks) {
-        int prev_value = _pinned_chunks_counter.fetch_sub(num_chunks);
-        DCHECK_GE(prev_value, 1);
-    }
+    void _unpin(int num_chunks);
 
+private:
     std::mutex _mutex;
     size_t _sum_row_bytes = 0;
     size_t _num_rows = 0;

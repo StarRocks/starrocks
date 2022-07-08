@@ -2,6 +2,8 @@
 
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 
+#include "glog/logging.h"
+
 namespace starrocks::pipeline {
 
 void DynamicChunkBufferLimiter::update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows) {
@@ -29,6 +31,11 @@ ChunkBufferTokenPtr DynamicChunkBufferLimiter::pin(int num_chunks) {
         return nullptr;
     }
     return std::make_unique<DynamicChunkBufferLimiter::Token>(_pinned_chunks_counter, num_chunks);
+}
+
+void DynamicChunkBufferLimiter::_unpin(int num_chunks) {
+    int prev_value = _pinned_chunks_counter.fetch_sub(num_chunks);
+    DCHECK_GE(prev_value, 1);
 }
 
 } // namespace starrocks::pipeline
