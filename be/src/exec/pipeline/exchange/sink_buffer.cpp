@@ -283,7 +283,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<vo
         }
 
         auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(
-                {instance_id, request.params->sequence(), GetCurrentTimeNanos()});
+                {instance_id, request.params->sequence(), GetCurrentTimeNanos()}, _mem_tracker);
 
         closure->addFailedHandler([this](const ClosureContext& ctx) noexcept {
             _is_finishing = true;
