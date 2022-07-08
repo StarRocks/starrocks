@@ -156,7 +156,7 @@ public class TaskManagerTest {
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {}
         };
         String sql = "create materialized view test.mv1\n" +
-                "partition by date_trunc('month',tbl1.k1)\n" +
+                "partition by date_trunc('month',k1)\n" +
                 "distributed by hash(k2)\n" +
                 "refresh manual\n" +
                 "properties('replication_num' = '1')\n" +
@@ -204,7 +204,7 @@ public class TaskManagerTest {
             }
         };
         String sql = "create materialized view test.mv1\n" +
-                "partition by date_trunc('month',tbl1.k1)\n" +
+                "partition by date_trunc('month',k1)\n" +
                 "distributed by hash(k2)\n" +
                 "refresh async every(interval 5 second)\n" +
                 "properties('replication_num' = '1')\n" +

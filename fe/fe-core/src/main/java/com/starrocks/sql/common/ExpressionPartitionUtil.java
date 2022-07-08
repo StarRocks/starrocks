@@ -15,7 +15,6 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -85,9 +84,7 @@ public class ExpressionPartitionUtil {
                             Collections.singletonList(new PartitionValue(upperLiteralExpr.getStringValue())),
                             Collections.singletonList(partitionColumn));
                     Range<PartitionKey> partitionKeyRange = Range.closedOpen(lowerPartitionKey, upperPartitionKey);
-                    try {
-                        RangeUtils.checkRangeIntersect(partitionKeyRange, existPartitionKeyRange);
-                    } catch (DdlException e) {
+                    if (RangeUtils.isRangeIntersect(partitionKeyRange, existPartitionKeyRange)) {
                         PartitionKey existLowerPartitionKey = existPartitionKeyRange.lowerEndpoint();
                         PartitionKey existUpperPartitionKey = existPartitionKeyRange.upperEndpoint();
                         if (existLowerPartitionKey.compareTo(lowerPartitionKey) <= 0 &&

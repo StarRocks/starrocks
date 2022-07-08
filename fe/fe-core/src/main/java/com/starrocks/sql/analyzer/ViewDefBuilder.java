@@ -117,7 +117,17 @@ public class ViewDefBuilder {
         public String visitTable(TableRelation node, Void outerScope) {
             StringBuilder sqlBuilder = new StringBuilder();
             sqlBuilder.append(node.getName().toSql());
-
+            if (node.getPartitionNames() != null) {
+                List<String> partitionNames = node.getPartitionNames().getPartitionNames();
+                if (partitionNames != null && !partitionNames.isEmpty()) {
+                    sqlBuilder.append(" PARTITION(");
+                }
+                for (String partitionName : partitionNames) {
+                    sqlBuilder.append("`").append(partitionName).append("`").append(",");
+                }
+                sqlBuilder.deleteCharAt(sqlBuilder.length() - 1);
+                sqlBuilder.append(")");
+            }
             if (node.getAlias() != null) {
                 sqlBuilder.append(" AS ");
                 sqlBuilder.append("`").append(node.getAlias()).append("`");
