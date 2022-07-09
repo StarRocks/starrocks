@@ -1183,56 +1183,56 @@ public class JoinTest extends PlanTestBase {
         Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2, 0) > 3"));
+                "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
 
         sql = "select * from test.join1 right semi join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2, 0) > 3"));
+                "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
 
         sql = "select * from test.join1 right anti join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2, 0) > 3"));
+                "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
 
         sql = "select * from test.join1 left join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2, 0) > 3"));
+                "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
 
         sql = "select * from test.join1 left semi join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2, 0) > 3"));
+                "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
 
         sql = "select * from test.join1 left anti join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2, 0) > 3"));
+                "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
 
         sql = "select * from test.join1 inner join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         assertContains(explainString, "  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2, 0) > 3");
+                "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0");
 
         sql = "select * from test.join1 where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2, 0) > 3"));
+                "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
     }
 
     @Test
