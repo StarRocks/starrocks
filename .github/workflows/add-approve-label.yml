@@ -12,7 +12,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  Approve:
+  Add-Approve-Label:
     runs-on: ubuntu-latest
     steps:        
       - name: "Get information about the original trigger of the run"
