@@ -54,7 +54,7 @@ public class Scope {
         if (matchFields.size() > 1) {
             throw new SemanticException("Column '%s' is ambiguous", expression.getColumnName());
         } else if (matchFields.size() == 1) {
-            if (matchFields.get(0).getType().equals(PrimitiveType.INVALID_TYPE)) {
+            if (matchFields.get(0).getType().getPrimitiveType().equals(PrimitiveType.INVALID_TYPE)) {
                 throw new SemanticException("table column type [" + matchFields.get(0).getName() + "] transform failed.");
             } else {
                 return Optional.of(asResolvedField(matchFields.get(0), fieldIndexOffset));

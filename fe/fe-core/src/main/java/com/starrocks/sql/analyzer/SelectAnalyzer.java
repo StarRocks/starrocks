@@ -204,6 +204,10 @@ public class SelectAnalyzer {
                 }
 
                 for (Field field : fields) {
+                    if (field.getType().getPrimitiveType().equals(PrimitiveType.INVALID_TYPE)) {
+                        throw new SemanticException("table column type ["
+                                + field.getType() + "] transform failed.");
+                    }
                     int fieldIndex = scope.getRelationFields().indexOf(field);
                     /*
                      * Generate a special "SlotRef" as FieldReference,
@@ -253,15 +257,6 @@ public class SelectAnalyzer {
         List<Expr> outputExpressions = outputExpressionBuilder.build();
         analyzeState.setOutputExpression(outputExpressions);
         analyzeState.setOutputScope(new Scope(RelationId.anonymous(), new RelationFields(outputFields.build())));
-        List<Type> invalidCols = outputExpressions.stream()
-                .filter(expr -> !(expr.getType().getPrimitiveType() != PrimitiveType.INVALID_TYPE)).map(Expr::getType)
-                .collect(Collectors.toList());
-        for (Field field : outputFields.build()) {
-            if (invalidCols.contains(field.getType())) {
-                throw new SemanticException("field " + field.getName()
-                        + "'s type " + field.getType() + " is unsupported!");
-            }
-        }
         return outputExpressions;
     }
 
