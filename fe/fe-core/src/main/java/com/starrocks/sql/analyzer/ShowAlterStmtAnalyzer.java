@@ -57,7 +57,6 @@ public class ShowAlterStmtAnalyzer {
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, statement.getDbName());
             }
-
             // build proc path
             ShowAlterStmt.AlterType type = statement.getType();
             StringBuilder sb = new StringBuilder();
@@ -88,11 +87,6 @@ public class ShowAlterStmtAnalyzer {
             }
             statement.setDbName(dbName);
             ShowAlterStmt.AlterType type = statement.getType();
-
-            Database db = context.getGlobalStateMgr().getDb(dbName);
-            if (db == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-            }
             Preconditions.checkNotNull(type);
 
             Expr whereClause = statement.getWhereClause();
