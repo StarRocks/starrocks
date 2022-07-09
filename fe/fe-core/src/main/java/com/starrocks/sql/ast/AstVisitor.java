@@ -59,6 +59,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
+import com.starrocks.analysis.ModifyPartitionClause;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RecoverDbStmt;
@@ -376,6 +377,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitSwapTableClause(SwapTableClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitModifyPartitionClause(ModifyPartitionClause clause, C context) {
         return visitNode(clause, context);
     }
 

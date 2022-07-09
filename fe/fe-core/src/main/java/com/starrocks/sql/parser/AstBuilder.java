@@ -85,6 +85,7 @@ import com.starrocks.analysis.ListPartitionDesc;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
+import com.starrocks.analysis.ModifyPartitionClause;
 import com.starrocks.analysis.MultiItemListPartitionDesc;
 import com.starrocks.analysis.MultiRangePartitionDesc;
 import com.starrocks.analysis.NullLiteral;
@@ -214,6 +215,7 @@ import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -664,6 +666,29 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     .map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         }
         return new RefreshTableStmt(targetTableName, partitionNames);
+    }
+
+    @Override
+    public ParseNode visitModifyPartitionClause(StarRocksParser.ModifyPartitionClauseContext context) {
+        Map<String, String> properties = null;
+        if (context.propertyList() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        if (context.identifier() != null) {
+            final String partitionName = ((Identifier) visit(context.identifier())).getValue();
+            return new ModifyPartitionClause(Collections.singletonList(partitionName), properties);
+        } else if (context.identifierList() != null) {
+            final List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+            return new ModifyPartitionClause(identifierList.stream().map(Identifier::getValue).collect(toList()),
+                    properties);
+        } else if (context.ASTERISK_SYMBOL() != null) {
+            return ModifyPartitionClause.createStarClause(properties);
+        }
+        return null;
     }
 
     // ------------------------------------------- View Statement ------------------------------------------------------

@@ -463,7 +463,7 @@ public class AlterTest {
                 Short.valueOf(tbl2.getPartitionInfo().getReplicationNum(partition.getId())));
         Assert.assertEquals(Short.valueOf("2"), tbl2.getDefaultReplicationNum());
         stmt = "alter table test.tbl2 modify partition tbl2 set ('replication_num' = '1');";
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
         Assert.assertEquals(Short.valueOf("1"),
                 Short.valueOf(tbl2.getPartitionInfo().getReplicationNum(partition.getId())));
         Assert.assertEquals(Short.valueOf("1"), tbl2.getDefaultReplicationNum());
@@ -498,7 +498,7 @@ public class AlterTest {
             Assert.assertEquals(Short.valueOf("1"),
                     Short.valueOf(tbl4.getPartitionInfo().getReplicationNum(partition.getId())));
         }
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
         for (Partition partition : partitionList) {
             Assert.assertEquals(Short.valueOf("3"),
                     Short.valueOf(tbl4.getPartitionInfo().getReplicationNum(partition.getId())));
@@ -511,7 +511,7 @@ public class AlterTest {
         for (Partition partition : partitionList) {
             Assert.assertEquals(false, tbl4.getPartitionInfo().getIsInMemory(partition.getId()));
         }
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
         for (Partition partition : partitionList) {
             Assert.assertEquals(true, tbl4.getPartitionInfo().getIsInMemory(partition.getId()));
         }
@@ -526,7 +526,7 @@ public class AlterTest {
         for (Partition partition : partitionList) {
             Assert.assertEquals(oldDataProperty, tbl4.getPartitionInfo().getDataProperty(partition.getId()));
         }
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
         DataProperty newDataProperty = new DataProperty(TStorageMedium.HDD, DataProperty.MAX_COOLDOWN_TIME_MS);
         for (Partition partition : partitionList) {
             Assert.assertEquals(newDataProperty, tbl4.getPartitionInfo().getDataProperty(partition.getId()));
@@ -536,7 +536,7 @@ public class AlterTest {
         // batch update range partitions' properties with *
         stmt = "alter table test.tbl4 modify partition (*) set ('replication_num' = '1')";
         partitionList = Lists.newArrayList(p1, p2, p3, p4);
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
         for (Partition partition : partitionList) {
             Assert.assertEquals(Short.valueOf("1"),
                     Short.valueOf(tbl4.getPartitionInfo().getReplicationNum(partition.getId())));
