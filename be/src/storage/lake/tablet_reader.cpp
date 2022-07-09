@@ -22,7 +22,6 @@
 
 namespace starrocks::lake {
 
-using ChunkHelper = starrocks::vectorized::ChunkHelper;
 using ConjunctivePredicates = starrocks::vectorized::ConjunctivePredicates;
 using Datum = starrocks::vectorized::Datum;
 using Field = starrocks::vectorized::Field;

@@ -105,7 +105,7 @@ public:
             }
         }
 
-        auto column = vectorized::ChunkHelper::column_from_field_type(Type, false);
+        auto column = ChunkHelper::column_from_field_type(Type, false);
         page_decoder.seek_to_position_in_page(0);
         ASSERT_EQ(0, page_decoder.current_index());
 

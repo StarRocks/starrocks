@@ -2346,7 +2346,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     uint32_t next_rowset_id = 0;
     std::vector<RowsetLoadInfo> new_rowset_load_infos(src_rowsets.size());
 
-    vectorized::Schema base_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
 
     OlapReaderStatistics stats;
 
@@ -2483,11 +2483,11 @@ Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& b
                                                 const std::vector<vectorized::ChunkIteratorPtr>& seg_iterators,
                                                 vectorized::ChunkChanger* chunk_changer,
                                                 const std::unique_ptr<RowsetWriter>& rowset_writer) {
-    vectorized::Schema base_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
-    vectorized::ChunkPtr base_chunk = vectorized::ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
+    vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    vectorized::ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
 
-    vectorized::Schema new_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(_tablet.tablet_schema());
-    vectorized::ChunkPtr new_chunk = vectorized::ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
+    vectorized::Schema new_schema = ChunkHelper::convert_schema_to_format_v2(_tablet.tablet_schema());
+    vectorized::ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
 

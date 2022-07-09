@@ -59,9 +59,7 @@ protected:
     RuntimeProfile* _runtime_profile;
     const TupleDescriptor* _tuple_desc = nullptr;
 
-    void _init_chunk(vectorized::ChunkPtr* chunk, size_t n) {
-        *chunk = vectorized::ChunkHelper::new_chunk(*_tuple_desc, n);
-    }
+    void _init_chunk(vectorized::ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
 };
 
 using DataSourcePtr = std::unique_ptr<DataSource>;

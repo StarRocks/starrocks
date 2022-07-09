@@ -56,7 +56,7 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema,
             segment_schema = new vectorized::Schema(schema);
             segment_schema_guard.reset(segment_schema);
         }
-        auto f = vectorized::ChunkHelper::convert_field_to_format_v2(cid, col);
+        auto f = ChunkHelper::convert_field_to_format_v2(cid, col);
         segment_schema->append(std::make_shared<vectorized::Field>(std::move(f)));
     }
 
