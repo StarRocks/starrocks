@@ -99,6 +99,7 @@ statement
     // Other statement
     | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
+    | showProcesslistStatement                                                              #showProcesslist
     | showVariablesStatement                                                                #showVariables
     | killStatement                                                                         #kill
 
@@ -365,7 +366,6 @@ showCatalogsStatement
     : SHOW CATALOGS
     ;
 
-
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
 
 alterClause
@@ -525,6 +525,10 @@ showDatabasesStatement
 
 showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showProcesslistStatement
+    : SHOW FULL? PROCESSLIST
     ;
 
 killStatement
