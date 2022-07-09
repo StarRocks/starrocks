@@ -799,7 +799,6 @@ public class AggregateTest extends PlanTestBase {
 
     @Test
     public void testWindowFunnel() throws Exception {
-        FeConstants.runningUnitTest = true;
         String sql =
                 "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 0, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
         String plan = getFragmentPlan(sql);
@@ -819,13 +818,10 @@ public class AggregateTest extends PlanTestBase {
                 "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 3, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 3, 18: expr)");
-
-        FeConstants.runningUnitTest = false;
     }
 
     @Test
     public void testWindowFunnelWithInvalidDecimalWindow() throws Exception {
-        FeConstants.runningUnitTest = true;
         expectedException.expect(SemanticException.class);
         expectedException.expectMessage("window argument must >= 0");
         String sql =
@@ -833,13 +829,11 @@ public class AggregateTest extends PlanTestBase {
         try {
             getFragmentPlan(sql);
         } finally {
-            FeConstants.runningUnitTest = false;
         }        
     }
 
     @Test
     public void testWindowFunnelWithNonDecimalWindow() throws Exception {
-        FeConstants.runningUnitTest = true;
         expectedException.expect(SemanticException.class);
         expectedException.expectMessage("window argument must be numerical type");
         String sql =
@@ -847,7 +841,6 @@ public class AggregateTest extends PlanTestBase {
         try {
             getFragmentPlan(sql);
         } finally {
-            FeConstants.runningUnitTest = false;
         } 
     }
 
