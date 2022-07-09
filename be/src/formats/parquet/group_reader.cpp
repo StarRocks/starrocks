@@ -300,7 +300,7 @@ void GroupReader::_init_read_chunk() {
     }
 
     size_t chunk_size = _chunk_size;
-    _read_chunk = vectorized::ChunkHelper::new_chunk(read_slots, chunk_size);
+    _read_chunk = ChunkHelper::new_chunk(read_slots, chunk_size);
     raw::stl_vector_resize_uninitialized(&_selection, chunk_size);
 
     // replace dict filter column

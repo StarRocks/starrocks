@@ -113,8 +113,8 @@ int64_t FileReader::_get_row_group_start_offset(const tparquet::RowGroup& row_gr
 
 StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
     if (!_scanner_ctx->min_max_conjunct_ctxs.empty()) {
-        auto min_chunk = vectorized::ChunkHelper::new_chunk(*_scanner_ctx->min_max_tuple_desc, 0);
-        auto max_chunk = vectorized::ChunkHelper::new_chunk(*_scanner_ctx->min_max_tuple_desc, 0);
+        auto min_chunk = ChunkHelper::new_chunk(*_scanner_ctx->min_max_tuple_desc, 0);
+        auto max_chunk = ChunkHelper::new_chunk(*_scanner_ctx->min_max_tuple_desc, 0);
 
         bool exist = false;
         RETURN_IF_ERROR(_read_min_max_chunk(row_group, &min_chunk, &max_chunk, &exist));

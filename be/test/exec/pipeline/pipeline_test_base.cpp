@@ -134,7 +134,7 @@ vectorized::ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<
     static std::uniform_real_distribution<float> uf;
     static std::uniform_real_distribution<double> ud;
 
-    auto chunk = vectorized::ChunkHelper::new_chunk(slots, row_num);
+    auto chunk = ChunkHelper::new_chunk(slots, row_num);
 
     // add data
     for (size_t i = 0; i < slots.size(); ++i) {

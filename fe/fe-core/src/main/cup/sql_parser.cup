@@ -1735,10 +1735,6 @@ recover_stmt ::=
     {:
         RESULT = new RecoverDbStmt(dbName);
     :}
-    | KW_RECOVER KW_TABLE table_name:dbTblName
-    {:
-        RESULT = new RecoverTableStmt(dbTblName);
-    :}
     | KW_RECOVER KW_PARTITION ident:partitionName KW_FROM table_name:dbTblName
     {:
         RESULT = new RecoverPartitionStmt(dbTblName, partitionName);

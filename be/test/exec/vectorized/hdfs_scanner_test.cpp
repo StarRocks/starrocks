@@ -171,7 +171,7 @@ TEST_F(HdfsScannerTest, TestParquetGetNext) {
     status = scanner->open(_runtime_state);
     ASSERT_TRUE(status.ok());
 
-    auto chunk = vectorized::ChunkHelper::new_chunk(*tuple_desc, 0);
+    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
     status = scanner->get_next(_runtime_state, &chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(chunk->num_rows(), 4);
@@ -284,7 +284,7 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
 
 #define READ_ORC_ROWS(scanner, exp)                                                    \
     do {                                                                               \
-        auto chunk = vectorized::ChunkHelper::new_chunk(*tuple_desc, 0);               \
+        auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);                           \
         uint64_t records = 0;                                                          \
         for (;;) {                                                                     \
             chunk->reset();                                                            \
