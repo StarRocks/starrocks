@@ -93,6 +93,10 @@ statement
     | alterWorkGroupStatement                                                               #alterWorkGroup
     | showWorkGroupStatement                                                                #showWorkGroup
 
+    //UDF
+    | showFunctionsStatement                                                                #showFunctions
+
+
     // Other statement
     | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
@@ -495,6 +499,13 @@ showWorkGroupStatement
 classifier
     : '(' expression (',' expression)* ')'
     ;
+
+// ------------------------------------------- Function ----------------------------------------------------
+
+showFunctionsStatement
+    : SHOW FULL? BUILTIN? FUNCTIONS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 

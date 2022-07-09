@@ -33,6 +33,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class ShowFunctionsStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
@@ -110,9 +111,18 @@ public class ShowFunctionsStmt extends ShowStmt {
         }
     }
 
+    public void setDbName(String db) {
+        this.dbName = db;
+    }
+
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowFunctions(this, context);
     }
 
     @Override
@@ -133,6 +143,11 @@ public class ShowFunctionsStmt extends ShowStmt {
             sb.append("LIKE ").append("`").append(wild).append("`");
         }
         return sb.toString();
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
     @Override

@@ -110,6 +110,7 @@ import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
+import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -1786,6 +1787,29 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 .getSymbol());
         Subquery subquery = new Subquery(new QueryStatement((QueryRelation) visit(context.queryBody())));
         return new BinaryPredicate(op, (Expr) visit(context.booleanExpression()), subquery);
+    }
+
+    @Override
+    public ParseNode visitShowFunctionsStatement(StarRocksParser.ShowFunctionsStatementContext context) {
+        boolean isBuiltIn = context.BUILTIN() != null;
+        boolean isVerbose = context.FULL() != null;
+
+        String dbName = null;
+        if (context.db != null) {
+            dbName = getQualifiedName(context.db).toString();
+        }
+
+        String pattern = null;
+        if (context.pattern != null) {
+            pattern = context.pattern.toString();
+        }
+
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        return new ShowFunctionsStmt(dbName, isBuiltIn, isVerbose, pattern, where);
     }
 
     // ------------------------------------------- Other Statement -----------------------------------------------------

@@ -11,6 +11,7 @@ import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
+import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -40,6 +41,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static com.starrocks.common.ErrorCode.ERR_UNSUPPORTED_SQL_PATTERN;
 
 public class ShowStmtAnalyzer {
 
@@ -82,6 +85,25 @@ public class ShowStmtAnalyzer {
             String db = node.getDb();
             db = getFullDatabaseName(db, context);
             node.setDb(db);
+            return null;
+        }
+
+        @Override
+        public Void visitShowFunctions(ShowFunctionsStmt node, ConnectContext context) {
+            String dbName = node.getDbName();
+            if (Strings.isNullOrEmpty(dbName)) {
+                dbName = context.getDatabase();
+                if (Strings.isNullOrEmpty(dbName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+                }
+            } else {
+                dbName = ClusterNamespace.getFullName(dbName);
+            }
+            node.setDbName(dbName);
+
+            if (node.getExpr() != null) {
+                ErrorReport.reportSemanticException(ERR_UNSUPPORTED_SQL_PATTERN);
+            }
             return null;
         }
 
