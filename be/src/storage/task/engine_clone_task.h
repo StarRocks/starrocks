@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "agent/task_worker_pool.h"
 #include "agent/utils.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/HeartbeatService.h"
@@ -29,6 +30,9 @@
 #include "storage/task/engine_task.h"
 
 namespace starrocks {
+
+void run_clone_task(std::shared_ptr<TAgentTaskRequest> agent_task_req,
+                    TaskWorkerPool* clone_task_worker_pool);
 
 // base class for storage engine
 // add "Engine" as task prefix to prevent duplicate name with agent task
