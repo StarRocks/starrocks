@@ -761,9 +761,7 @@ public class PrivilegeChecker {
                     .checkTblPriv(ConnectContext.get(), statement.getDbName(), statement.getTableName(),
                             PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW PARTITIONS",
-                        ConnectContext.get().getQualifiedUser(),
-                        ConnectContext.get().getRemoteIP(),
-                        statement.getTableName());
+                        context.getQualifiedUser(), context.getRemoteIP(), statement.getTableName());
             }
             return null;
         }

@@ -30,15 +30,12 @@ import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class ShowPartitionsStmt extends ShowStmt {
-    private static final Logger LOG = LogManager.getLogger(ShowPartitionsStmt.class);
 
     public static final String FILTER_PARTITION_ID = "PartitionId";
     public static final String FILTER_PARTITION_NAME = "PartitionName";

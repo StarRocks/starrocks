@@ -357,11 +357,13 @@ public class ShowStmtAnalyzer {
                 try {
                     statement.setNode(ProcService.getInstance().open(stringBuilder.toString()));
                 } catch (AnalysisException e) {
-                    logger.error("get the PROC Node by the path {} error", stringBuilder, e);
-                    throw new SemanticException(e.getMessage());
+                    throw new SemanticException("get the PROC Node by the path %s error: %s", stringBuilder,
+                            e.getMessage());
                 }
 
-                analyzeOrderBy(statement.getOrderByElements(), statement.getNode(), statement.getOrderByPairs());
+                final List<OrderByPair> orderByPairs =
+                        analyzeOrderBy(statement.getOrderByElements(), statement.getNode());
+                statement.setOrderByPairs(orderByPairs);
             } finally {
                 db.readUnlock();
             }
@@ -391,12 +393,10 @@ public class ShowStmtAnalyzer {
                     leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_STATE);
             if (subExpr instanceof BinaryPredicate) {
                 BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
-                if (filter) {
-                    if (binaryPredicate.getOp() != BinaryPredicate.Operator.EQ) {
-                        throw new SemanticException(
-                                String.format("Only operator =|like are supported for %s", leftKey));
-                    }
-                } else if (leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_LAST_CONSISTENCY_CHECK_TIME)) {
+                if (filter && binaryPredicate.getOp() != BinaryPredicate.Operator.EQ) {
+                    throw new SemanticException(String.format("Only operator =|like are supported for %s", leftKey));
+                }
+                if (leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_LAST_CONSISTENCY_CHECK_TIME)) {
                     if (!(subExpr.getChild(1) instanceof StringLiteral)) {
                         throw new SemanticException("Where clause : LastConsistencyCheckTime =|>=|<=|>|<|!= "
                                 + "\"2019-12-22|2019-12-22 22:22:00\"");
@@ -404,8 +404,8 @@ public class ShowStmtAnalyzer {
                     try {
                         subExpr.setChild(1, (subExpr.getChild(1)).castTo(Type.DATETIME));
                     } catch (AnalysisException e) {
-                        logger.error("expression cast to datetime error", e);
-                        throw new SemanticException(e.getMessage());
+                        throw new SemanticException("expression %s cast to datetime error: %s",
+                                subExpr.getChild(1).toString(), e.getMessage());
                     }
                 } else if (!leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_PARTITION_ID) &&
                         !leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_BUCKETS) &&
@@ -415,12 +415,10 @@ public class ShowStmtAnalyzer {
                 }
             } else if (subExpr instanceof LikePredicate) {
                 LikePredicate likePredicate = (LikePredicate) subExpr;
-                if (filter) {
-                    if (likePredicate.getOp() != LikePredicate.Operator.LIKE) {
-                        throw new SemanticException("Where clause : PartitionName|State like "
-                                + "\"p20191012|NORMAL\"");
-                    }
-                } else {
+                if (filter & likePredicate.getOp() != LikePredicate.Operator.LIKE) {
+                    throw new SemanticException("Where clause : PartitionName|State like \"p20191012|NORMAL\"");
+                }
+                if (!filter) {
                     throw new SemanticException("Where clause : PartitionName|State like \"p20191012|NORMAL\"");
                 }
             } else {
@@ -432,10 +430,9 @@ public class ShowStmtAnalyzer {
         /**
          * analyze order by clause if not null and init the orderByPairs
          */
-        private void analyzeOrderBy(List<OrderByElement> orderByElements, ProcNodeInterface node,
-                                    List<OrderByPair> orderByPairs) {
+        private List<OrderByPair> analyzeOrderBy(List<OrderByElement> orderByElements, ProcNodeInterface node) {
+            List<OrderByPair> orderByPairs = new ArrayList<>();
             if (orderByElements != null && !orderByElements.isEmpty()) {
-                orderByPairs = new ArrayList<>();
                 for (OrderByElement orderByElement : orderByElements) {
                     if (!(orderByElement.getExpr() instanceof SlotRef)) {
                         throw new SemanticException("Should order by column");
@@ -446,6 +443,7 @@ public class ShowStmtAnalyzer {
                     orderByPairs.add(orderByPair);
                 }
             }
+            return orderByPairs;
         }
 
     }
