@@ -95,8 +95,24 @@ public class ShowAlterStmt extends ShowStmt {
         return this.node;
     }
 
+    public Expr getWhereClause() {
+        return whereClause;
+    }
+
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
+    }
+
     public void setNode(ProcNodeInterface node) {
         this.node = node;
+    }
+
+    public void setFilter(HashMap<String, Expr> filterMap) {
+        this.filterMap = filterMap;
+    }
+
+    public void setOrderByPairs(ArrayList<OrderByPair> orderByPairs) {
+        this.orderByPairs = orderByPairs;
     }
 
     public ShowAlterStmt(AlterType type, String dbName, Expr whereClause, List<OrderByElement> orderByElements,
