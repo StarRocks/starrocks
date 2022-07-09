@@ -49,7 +49,7 @@ Status HorizontalCompactionTask::execute() {
     const int32_t chunk_size = CompactionUtils::get_read_chunk_size(
             config::compaction_memory_limit_per_worker, config::vector_chunk_size, num_rows, num_size, max_input_segs);
 
-    vectorized::RowsetReadOptions rs_opts;
+    RowsetReadOptions rs_opts;
     rs_opts.sorted = true;
     rs_opts.reader_type = READER_CUMULATIVE_COMPACTION;
     rs_opts.chunk_size = chunk_size;

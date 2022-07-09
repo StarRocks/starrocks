@@ -504,7 +504,7 @@ TEST_F(RowsetTest, VerticalWriteTest) {
     ASSERT_EQ(num_rows, rowset->rowset_meta()->num_rows());
     ASSERT_EQ(3, rowset->rowset_meta()->num_segments());
 
-    vectorized::RowsetReadOptions rs_opts;
+    RowsetReadOptions rs_opts;
     rs_opts.is_primary_keys = false;
     rs_opts.sorted = true;
     rs_opts.version = 0;
