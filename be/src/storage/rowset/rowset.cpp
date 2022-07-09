@@ -332,7 +332,7 @@ private:
 };
 
 StatusOr<vectorized::ChunkIteratorPtr> Rowset::new_iterator(const vectorized::Schema& schema,
-                                                            const vectorized::RowsetReadOptions& options) {
+                                                            const RowsetReadOptions& options) {
     std::vector<vectorized::ChunkIteratorPtr> seg_iters;
     RETURN_IF_ERROR(get_segment_iterators(schema, options, &seg_iters));
     if (seg_iters.empty()) {
@@ -344,7 +344,7 @@ StatusOr<vectorized::ChunkIteratorPtr> Rowset::new_iterator(const vectorized::Sc
     }
 }
 
-Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const vectorized::RowsetReadOptions& options,
+Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const RowsetReadOptions& options,
                                      std::vector<vectorized::ChunkIteratorPtr>* segment_iterators) {
     RowsetReleaseGuard guard(shared_from_this());
 

@@ -242,7 +242,7 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
     RowsetSharedPtr rowset = *_writer->build();
     unique_ptr<Schema> read_schema = create_schema("pk int", 1);
     OlapReaderStatistics stats;
-    vectorized::RowsetReadOptions rs_opts;
+    RowsetReadOptions rs_opts;
     rs_opts.sorted = false;
     rs_opts.use_page_cache = false;
     rs_opts.stats = &stats;
@@ -289,7 +289,7 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
     RowsetSharedPtr rowset = *_writer->build();
     unique_ptr<Schema> read_schema = create_schema("pk int", 1);
     OlapReaderStatistics stats;
-    vectorized::RowsetReadOptions rs_opts;
+    RowsetReadOptions rs_opts;
     rs_opts.sorted = false;
     rs_opts.use_page_cache = false;
     rs_opts.stats = &stats;

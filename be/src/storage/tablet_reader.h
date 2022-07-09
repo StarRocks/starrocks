@@ -17,7 +17,6 @@
 namespace starrocks::vectorized {
 
 class ColumnPredicate;
-class RowsetReadOptions;
 
 class TabletReader final : public ChunkIterator {
 public:
