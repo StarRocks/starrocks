@@ -116,7 +116,7 @@ public class ShowPartitionsStmt extends ShowStmt {
             sb.append(" WHERE ").append(whereClause.toSql());
         }
         // Order By clause
-        if (orderByElements != null && orderByElements.size() > 0) {
+        if (orderByElements != null && !orderByElements.isEmpty()) {
             sb.append(" ORDER BY ");
             for (int i = 0; i < orderByElements.size(); ++i) {
                 sb.append(orderByElements.get(i).toSql());

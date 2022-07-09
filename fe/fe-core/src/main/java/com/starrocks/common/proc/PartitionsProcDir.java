@@ -187,7 +187,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         }
 
         // order by
-        if (orderByPairs != null && orderByPairs.size() > 0) {
+        if (orderByPairs != null && !orderByPairs.isEmpty()) {
             ListComparator<List<Comparable>> comparator;
             OrderByPair[] orderByPairArr = new OrderByPair[orderByPairs.size()];
             comparator = new ListComparator<>(orderByPairs.toArray(orderByPairArr));

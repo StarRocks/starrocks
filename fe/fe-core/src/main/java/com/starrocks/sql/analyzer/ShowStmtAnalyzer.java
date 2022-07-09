@@ -392,39 +392,46 @@ public class ShowStmtAnalyzer {
             boolean filter = leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_PARTITION_NAME) ||
                     leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_STATE);
             if (subExpr instanceof BinaryPredicate) {
-                BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
-                if (filter && binaryPredicate.getOp() != BinaryPredicate.Operator.EQ) {
-                    throw new SemanticException(String.format("Only operator =|like are supported for %s", leftKey));
-                }
-                if (leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_LAST_CONSISTENCY_CHECK_TIME)) {
-                    if (!(subExpr.getChild(1) instanceof StringLiteral)) {
-                        throw new SemanticException("Where clause : LastConsistencyCheckTime =|>=|<=|>|<|!= "
-                                + "\"2019-12-22|2019-12-22 22:22:00\"");
-                    }
-                    try {
-                        subExpr.setChild(1, (subExpr.getChild(1)).castTo(Type.DATETIME));
-                    } catch (AnalysisException e) {
-                        throw new SemanticException("expression %s cast to datetime error: %s",
-                                subExpr.getChild(1).toString(), e.getMessage());
-                    }
-                } else if (!leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_PARTITION_ID) &&
-                        !leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_BUCKETS) &&
-                        !leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_REPLICATION_NUM)) {
-                    throw new SemanticException("Only the columns of PartitionId/PartitionName/" +
-                            "State/Buckets/ReplicationNum/LastConsistencyCheckTime are supported.");
-                }
+                binaryPredicateHandler(subExpr, leftKey, filter);
             } else if (subExpr instanceof LikePredicate) {
-                LikePredicate likePredicate = (LikePredicate) subExpr;
-                if (filter & likePredicate.getOp() != LikePredicate.Operator.LIKE) {
-                    throw new SemanticException("Where clause : PartitionName|State like \"p20191012|NORMAL\"");
-                }
-                if (!filter) {
-                    throw new SemanticException("Where clause : PartitionName|State like \"p20191012|NORMAL\"");
-                }
+                likePredicateHandler((LikePredicate) subExpr, filter);
             } else {
                 throw new SemanticException("Only operator =|>=|<=|>|<|!=|like are supported.");
             }
             filterMap.put(leftKey.toLowerCase(), subExpr);
+        }
+
+        private void likePredicateHandler(LikePredicate subExpr, boolean filter) {
+            if (filter && subExpr.getOp() != LikePredicate.Operator.LIKE) {
+                throw new SemanticException("Where clause : PartitionName|State like \"p20191012|NORMAL\"");
+            }
+            if (!filter) {
+                throw new SemanticException("Where clause : PartitionName|State like \"p20191012|NORMAL\"");
+            }
+        }
+
+        private void binaryPredicateHandler(Expr subExpr, String leftKey, boolean filter) {
+            BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
+            if (filter && binaryPredicate.getOp() != BinaryPredicate.Operator.EQ) {
+                throw new SemanticException(String.format("Only operator =|like are supported for %s", leftKey));
+            }
+            if (leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_LAST_CONSISTENCY_CHECK_TIME)) {
+                if (!(subExpr.getChild(1) instanceof StringLiteral)) {
+                    throw new SemanticException("Where clause : LastConsistencyCheckTime =|>=|<=|>|<|!= "
+                            + "\"2019-12-22|2019-12-22 22:22:00\"");
+                }
+                try {
+                    subExpr.setChild(1, (subExpr.getChild(1)).castTo(Type.DATETIME));
+                } catch (AnalysisException e) {
+                    throw new SemanticException("expression %s cast to datetime error: %s",
+                            subExpr.getChild(1).toString(), e.getMessage());
+                }
+            } else if (!leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_PARTITION_ID) &&
+                    !leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_BUCKETS) &&
+                    !leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_REPLICATION_NUM)) {
+                throw new SemanticException("Only the columns of PartitionId/PartitionName/" +
+                        "State/Buckets/ReplicationNum/LastConsistencyCheckTime are supported.");
+            }
         }
 
         /**
