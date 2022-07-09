@@ -111,6 +111,7 @@ import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
@@ -664,6 +665,29 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     .map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         }
         return new RefreshTableStmt(targetTableName, partitionNames);
+    }
+
+    @Override
+    public ParseNode visitShowPartitionsStatement(StarRocksParser.ShowPartitionsStatementContext context) {
+        boolean temp = context.TEMPORARY() != null;
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName tableName = qualifiedNameToTableName(qualifiedName);
+
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        List<OrderByElement> orderByElements = new ArrayList<>();
+        if (context.ORDER() != null) {
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowPartitionsStmt(tableName, where, orderByElements, limitElement, temp);
     }
 
     // ------------------------------------------- View Statement ------------------------------------------------------

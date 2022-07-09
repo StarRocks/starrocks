@@ -38,6 +38,7 @@ statement
     | refreshTableStatement                                                                 #refreshTable
     | showDeleteStatement                                                                   #showDelete
     | descTableStatement                                                                    #descTable
+    | showPartitionsStatement                                                               #showPartitions
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -275,6 +276,12 @@ showDeleteStatement
 
 descTableStatement
     : (DESC | DESCRIBE) table=qualifiedName ALL?
+    ;
+
+showPartitionsStatement
+    : SHOW TEMPORARY? PARTITIONS FROM table=qualifiedName
+    (WHERE expression)?
+    (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------

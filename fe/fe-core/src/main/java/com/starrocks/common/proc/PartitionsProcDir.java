@@ -363,13 +363,13 @@ public class PartitionsProcDir implements ProcDirInterface {
         }
     }
 
-    public int analyzeColumn(String columnName) throws AnalysisException {
+    public int analyzeColumn(String columnName) {
         for (int i = 0; i < this.titleNames.size(); ++i) {
             if (this.titleNames.get(i).equalsIgnoreCase(columnName)) {
                 return i;
             }
         }
-        ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
+        ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         return -1;
     }
 }

@@ -23,29 +23,16 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.util.OrderByPair;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,12 +40,12 @@ import java.util.Map;
 public class ShowPartitionsStmt extends ShowStmt {
     private static final Logger LOG = LogManager.getLogger(ShowPartitionsStmt.class);
 
-    private static final String FILTER_PARTITION_ID = "PartitionId";
-    private static final String FILTER_PARTITION_NAME = "PartitionName";
-    private static final String FILTER_STATE = "State";
-    private static final String FILTER_BUCKETS = "Buckets";
-    private static final String FILTER_REPLICATION_NUM = "ReplicationNum";
-    private static final String FILTER_LAST_CONSISTENCY_CHECK_TIME = "LastConsistencyCheckTime";
+    public static final String FILTER_PARTITION_ID = "PartitionId";
+    public static final String FILTER_PARTITION_NAME = "PartitionName";
+    public static final String FILTER_STATE = "State";
+    public static final String FILTER_BUCKETS = "Buckets";
+    public static final String FILTER_REPLICATION_NUM = "ReplicationNum";
+    public static final String FILTER_LAST_CONSISTENCY_CHECK_TIME = "LastConsistencyCheckTime";
 
     private String dbName;
     private String tableName;
@@ -99,144 +86,6 @@ public class ShowPartitionsStmt extends ShowStmt {
 
     public ProcNodeInterface getNode() {
         return node;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        analyzeImpl(analyzer);
-        // check access
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbName, tableName,
-                PrivPredicate.SHOW)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW PARTITIONS",
-                    ConnectContext.get().getQualifiedUser(),
-                    ConnectContext.get().getRemoteIP(),
-                    tableName);
-        }
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        if (db == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
-
-        db.readLock();
-        try {
-            Table table = db.getTable(tableName);
-            if (!(table instanceof OlapTable)) {
-                throw new AnalysisException("Table[" + tableName + "] does not exists or is not OLAP table");
-            }
-
-            // build proc path
-            StringBuilder stringBuilder = new StringBuilder();
-            stringBuilder.append("/dbs/");
-            stringBuilder.append(db.getId());
-            stringBuilder.append("/").append(table.getId());
-            if (isTempPartition) {
-                stringBuilder.append("/temp_partitions");
-            } else {
-                stringBuilder.append("/partitions");
-            }
-
-            LOG.debug("process SHOW PROC '{}';", stringBuilder.toString());
-
-            node = ProcService.getInstance().open(stringBuilder.toString());
-
-            this.analyzeOrderBy();
-        } finally {
-            db.readUnlock();
-        }
-    }
-
-    /**
-     * analyze order by clause if not null and init the orderByPairs
-     *
-     * @throws AnalysisException
-     */
-    private void analyzeOrderBy() throws AnalysisException {
-        if (orderByElements != null && !orderByElements.isEmpty()) {
-            orderByPairs = new ArrayList<>();
-            for (OrderByElement orderByElement : orderByElements) {
-                if (!(orderByElement.getExpr() instanceof SlotRef)) {
-                    throw new AnalysisException("Should order by column");
-                }
-                SlotRef slotRef = (SlotRef) orderByElement.getExpr();
-                int index = ((PartitionsProcDir) node).analyzeColumn(slotRef.getColumnName());
-                OrderByPair orderByPair = new OrderByPair(index, !orderByElement.getIsAsc());
-                orderByPairs.add(orderByPair);
-            }
-        }
-    }
-
-    public void analyzeImpl(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-        if (Strings.isNullOrEmpty(dbName)) {
-            dbName = analyzer.getDefaultDb();
-            if (Strings.isNullOrEmpty(dbName)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-            }
-        } else {
-            dbName = ClusterNamespace.getFullName(dbName);
-        }
-
-        // analyze where clause if not null
-        if (whereClause != null) {
-            analyzeSubPredicate(whereClause);
-        }
-
-        // analyze limit clause if not null
-        if (limitElement != null) {
-            limitElement.analyze(analyzer);
-        }
-    }
-
-    private void analyzeSubPredicate(Expr subExpr) throws AnalysisException {
-        if (subExpr == null) {
-            return;
-        }
-        if (subExpr instanceof CompoundPredicate) {
-            CompoundPredicate cp = (CompoundPredicate) subExpr;
-            if (cp.getOp() != CompoundPredicate.Operator.AND) {
-                throw new AnalysisException("Only allow compound predicate with operator AND");
-            }
-            analyzeSubPredicate(cp.getChild(0));
-            analyzeSubPredicate(cp.getChild(1));
-            return;
-        }
-
-        if (!(subExpr.getChild(0) instanceof SlotRef)) {
-            throw new AnalysisException("Show filter by column");
-        }
-
-        String leftKey = ((SlotRef) subExpr.getChild(0)).getColumnName();
-        if (subExpr instanceof BinaryPredicate) {
-            BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
-            if (leftKey.equalsIgnoreCase(FILTER_PARTITION_NAME) || leftKey.equalsIgnoreCase(FILTER_STATE)) {
-                if (binaryPredicate.getOp() != BinaryPredicate.Operator.EQ) {
-                    throw new AnalysisException(String.format("Only operator =|like are supported for %s", leftKey));
-                }
-            } else if (leftKey.equalsIgnoreCase(FILTER_LAST_CONSISTENCY_CHECK_TIME)) {
-                if (!(subExpr.getChild(1) instanceof StringLiteral)) {
-                    throw new AnalysisException("Where clause : LastConsistencyCheckTime =|>=|<=|>|<|!= "
-                            + "\"2019-12-22|2019-12-22 22:22:00\"");
-                }
-                subExpr.setChild(1, (subExpr.getChild(1)).castTo(Type.DATETIME));
-            } else if (!leftKey.equalsIgnoreCase(FILTER_PARTITION_ID) && !leftKey.equalsIgnoreCase(FILTER_BUCKETS) &&
-                    !leftKey.equalsIgnoreCase(FILTER_REPLICATION_NUM)) {
-                throw new AnalysisException("Only the columns of PartitionId/PartitionName/" +
-                        "State/Buckets/ReplicationNum/LastConsistencyCheckTime are supported.");
-            }
-        } else if (subExpr instanceof LikePredicate) {
-            LikePredicate likePredicate = (LikePredicate) subExpr;
-            if (leftKey.equalsIgnoreCase(FILTER_PARTITION_NAME) || leftKey.equalsIgnoreCase(FILTER_STATE)) {
-                if (likePredicate.getOp() != LikePredicate.Operator.LIKE) {
-                    throw new AnalysisException("Where clause : PartitionName|State like "
-                            + "\"p20191012|NORMAL\"");
-                }
-            } else {
-                throw new AnalysisException("Where clause : PartitionName|State like \"p20191012|NORMAL\"");
-            }
-        } else {
-            throw new AnalysisException("Only operator =|>=|<=|>|<|!=|like are supported.");
-        }
-        filterMap.put(leftKey.toLowerCase(), subExpr);
     }
 
     @Override
@@ -289,4 +138,45 @@ public class ShowPartitionsStmt extends ShowStmt {
         return toSql();
     }
 
+    public String getDbName() {
+        return dbName;
+    }
+
+    public String getTableName() {
+        return tableName;
+    }
+
+    public Expr getWhereClause() {
+        return whereClause;
+    }
+
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
+    }
+
+    public boolean isTempPartition() {
+        return isTempPartition;
+    }
+
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
+    }
+
+    public void setOrderByPairs(List<OrderByPair> orderByPairs) {
+        this.orderByPairs = orderByPairs;
+    }
+
+    public void setNode(ProcNodeInterface node) {
+        this.node = node;
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowPartitionsStmt(this, context);
+    }
 }

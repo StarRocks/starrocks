@@ -30,6 +30,7 @@ import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
@@ -734,6 +735,19 @@ public class PrivilegeChecker {
             if (!checkTblPriv(session, tableName, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "DESCRIBE",
                         session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowPartitionsStmt(ShowPartitionsStmt statement, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkTblPriv(ConnectContext.get(), statement.getDbName(), statement.getTableName(),
+                            PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW PARTITIONS",
+                        ConnectContext.get().getQualifiedUser(),
+                        ConnectContext.get().getRemoteIP(),
+                        statement.getTableName());
             }
             return null;
         }
