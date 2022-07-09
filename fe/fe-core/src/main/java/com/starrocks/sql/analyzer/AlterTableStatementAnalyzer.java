@@ -59,7 +59,7 @@ public class AlterTableStatementAnalyzer {
 
     static class AlterTableClauseAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
-        private final static Logger logger = LoggerFactory.getLogger(AlterTableClauseAnalyzerVisitor.class);
+        private static final Logger logger = LoggerFactory.getLogger(AlterTableClauseAnalyzerVisitor.class);
 
         public void analyze(AlterClause statement, ConnectContext session) {
             visit(statement, session);
