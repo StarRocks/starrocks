@@ -18,7 +18,7 @@ NullableColumn::NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&
             << "nullable column's data must be single column";
     ColumnPtr ptr = std::move(null_column);
     _null_column = std::static_pointer_cast<NullColumn>(ptr);
-    _has_null = SIMD::count_nonzero(_null_column->get_data());
+    _has_null = SIMD::contain_nonzero(_null_column->get_data(), 0);
 }
 
 NullableColumn::NullableColumn(ColumnPtr data_column, NullColumnPtr null_column)
@@ -58,7 +58,7 @@ void NullableColumn::append(const Column& src, size_t offset, size_t count) {
 
         _null_column->append(*c._null_column, offset, count);
         _data_column->append(*c._data_column, offset, count);
-        _has_null = _has_null || SIMD::count_nonzero(&(c._null_column->get_data()[offset]), count);
+        _has_null = _has_null || SIMD::contain_nonzero(c._null_column->get_data(), offset, count);
     } else {
         _null_column->resize(_null_column->size() + count);
         _data_column->append(src, offset, count);
@@ -78,7 +78,7 @@ void NullableColumn::append_selective(const Column& src, const uint32_t* indexes
 
         _null_column->append_selective(*src_column._null_column, indexes, from, size);
         _data_column->append_selective(*src_column._data_column, indexes, from, size);
-        _has_null = _has_null || SIMD::count_nonzero(&_null_column->get_data()[orig_size], size);
+        _has_null = _has_null || SIMD::contain_nonzero(_null_column->get_data(), orig_size, size);
     } else {
         _null_column->resize(orig_size + size);
         _data_column->append_selective(src, indexes, from, size);
@@ -98,7 +98,7 @@ void NullableColumn::append_value_multiple_times(const Column& src, uint32_t ind
 
         _null_column->append_value_multiple_times(*src_column._null_column, index, size);
         _data_column->append_value_multiple_times(*src_column._data_column, index, size);
-        _has_null = _has_null || SIMD::count_nonzero(&_null_column->get_data()[orig_size], size);
+        _has_null = _has_null || SIMD::contain_nonzero(_null_column->get_data(), orig_size, size);
     } else {
         _null_column->resize(orig_size + size);
         _data_column->append_value_multiple_times(src, index, size);
@@ -164,6 +164,13 @@ void NullableColumn::fill_null_with_default() {
     _data_column->fill_default(_null_column->get_data());
 }
 
+<<<<<<< HEAD
+=======
+void NullableColumn::update_has_null() {
+    _has_null = SIMD::contain_nonzero(_null_column->get_data(), 0);
+}
+
+>>>>>>> bad670058 ([Enhancement] use memchr instead of SIMD::count_nonzero to calculate has_null (#8450))
 Status NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
     size_t replace_num = src.size();
@@ -172,7 +179,7 @@ Status NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
         RETURN_IF_ERROR(_null_column->update_rows(*c._null_column, indexes));
         RETURN_IF_ERROR(_data_column->update_rows(*c._data_column, indexes));
         // update rows may convert between null and not null, so we need count every times
-        _has_null = SIMD::count_nonzero(_null_column->get_data());
+        update_has_null();
     } else {
         auto new_null_column = NullColumn::create();
         new_null_column->get_data().insert(new_null_column->get_data().end(), replace_num, 0);
@@ -354,7 +361,7 @@ void NullableColumn::check_or_die() const {
     CHECK_EQ(_null_column->size(), _data_column->size());
     // when _has_null=true, the column may have no null value, so don't check.
     if (!_has_null) {
-        CHECK_EQ(SIMD::count_nonzero(_null_column->get_data()), 0);
+        CHECK(!SIMD::contain_nonzero(_null_column->get_data(), 0));
     }
     _data_column->check_or_die();
     _null_column->check_or_die();
