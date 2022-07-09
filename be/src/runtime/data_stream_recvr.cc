@@ -836,29 +836,30 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
                                                    const std::vector<bool>* is_asc,
                                                    const std::vector<bool>* is_null_first) {
     DCHECK(_is_merging);
-    _chunks_merger = std::make_unique<vectorized::SortedChunksMerger>(state, _keep_order);
-    vectorized::ChunkSuppliers chunk_suppliers;
+    _cascade_merger = std::make_unique<vectorized::CascadeChunkMerger>(state, _profile.get());
+
+    std::vector<vectorized::ChunkProvider> chunk_providers;
     for (SenderQueue* q : _sender_queues) {
-        // we willn't use chunk_supplier in pipeline.
-        auto f = [q](vectorized::Chunk** chunk) -> Status { return Status::OK(); };
-        chunk_suppliers.emplace_back(std::move(f));
-    }
-    vectorized::ChunkProbeSuppliers chunk_probe_suppliers;
-    for (SenderQueue* q : _sender_queues) {
-        // we use chunk_probe_supplier in pipeline.
-        auto f = [q](vectorized::Chunk** chunk) -> bool { return q->try_get_chunk(chunk); };
-        chunk_probe_suppliers.emplace_back(std::move(f));
-    }
-    vectorized::ChunkHasSuppliers chunk_has_suppliers;
-    for (SenderQueue* q : _sender_queues) {
-        // we use chunk_has_supplier in pipeline.
-        auto f = [q]() -> bool { return q->has_chunk(); };
-        chunk_has_suppliers.emplace_back(std::move(f));
+        auto f = [q](vectorized::ChunkUniquePtr* chunk, bool* eos) -> bool {
+            if (!q->has_chunk()) {
+                return false;
+            }
+            if (chunk != nullptr && eos != nullptr) {
+                vectorized::Chunk* out = nullptr;
+                *eos = !q->try_get_chunk(&out);
+                if (out) {
+                    *chunk = ChunkUniquePtr(out);
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            return true;
+        };
+        chunk_providers.push_back(std::move(f));
     }
 
-    RETURN_IF_ERROR(_chunks_merger->init_for_pipeline(chunk_suppliers, chunk_probe_suppliers, chunk_has_suppliers,
-                                                      &(exprs->lhs_ordering_expr_ctxs()), is_asc, is_null_first));
-    _chunks_merger->set_profile(_profile.get());
+    RETURN_IF_ERROR(_cascade_merger->init(chunk_providers, &exprs->lhs_ordering_expr_ctxs(), is_asc, is_null_first));
     return Status::OK();
 }
 
@@ -914,12 +915,16 @@ Status DataStreamRecvr::get_next(vectorized::ChunkPtr* chunk, bool* eos) {
 }
 
 Status DataStreamRecvr::get_next_for_pipeline(vectorized::ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit) {
-    DCHECK(_chunks_merger.get() != nullptr);
-    return _chunks_merger->get_next_for_pipeline(chunk, eos, should_exit);
+    DCHECK(!!_cascade_merger);
+    return _cascade_merger->get_next(chunk, eos, should_exit);
 }
 
 bool DataStreamRecvr::is_data_ready() {
-    return _chunks_merger->is_data_ready();
+    if (!!_cascade_merger) {
+        return _cascade_merger->is_data_ready();
+    } else {
+        return _chunks_merger->is_data_ready();
+    }
 }
 
 Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
@@ -960,6 +965,7 @@ void DataStreamRecvr::close() {
     _mgr->deregister_recvr(fragment_instance_id(), dest_node_id());
     _mgr = nullptr;
     _chunks_merger.reset();
+    _cascade_merger.reset();
 }
 
 DataStreamRecvr::~DataStreamRecvr() {

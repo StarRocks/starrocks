@@ -258,7 +258,98 @@ TEST(SortingTest, merge_sorted_chunks) {
     ASSERT_TRUE(output.is_sorted(sort_desc));
 }
 
-TEST(SortingTest, merge_sorted_stream) {
+TEST(MergeTest, merge_sorted_cursor_two_way) {
+    constexpr int num_columns = 3;
+    constexpr int num_chunks = 3;
+    constexpr int chunk_size = 10;
+
+    std::vector<std::unique_ptr<ColumnRef>> exprs;
+    std::vector<ExprContext*> sort_exprs;
+    std::vector<bool> asc_arr;
+    std::vector<bool> null_first;
+    Chunk::SlotHashMap map;
+    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+
+    for (int i = 0; i < num_columns; i++) {
+        auto expr = std::make_unique<ColumnRef>(type_desc, i);
+        exprs.emplace_back(std::move(expr));
+        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        asc_arr.push_back(true);
+        null_first.push_back(true);
+        map[i] = i;
+    }
+    DeferOp defer([&]() { clear_exprs(sort_exprs); });
+
+    std::vector<std::unique_ptr<Chunk>> left_chunks;
+    std::vector<std::unique_ptr<Chunk>> right_chunks;
+    int left_index = 0;
+    int right_index = 0;
+    for (int i = 0; i < num_chunks; i++) {
+        Columns left_columns, right_columns;
+        for (int k = 0; k < num_columns; k++) {
+            left_columns.push_back(build_sorted_column(type_desc, k, i * chunk_size * (k + 1), chunk_size, k + 1));
+            right_columns.push_back(
+                    build_sorted_column(type_desc, k, (i + 1) * chunk_size * (k + 1), chunk_size, k + 1));
+        }
+
+        left_chunks.push_back(std::make_unique<Chunk>(left_columns, map));
+        right_chunks.push_back(std::make_unique<Chunk>(right_columns, map));
+    }
+    for (auto& chunk : left_chunks) {
+        for (int i = 0; i < chunk->num_rows(); i++) {
+            fmt::print("left_chunk row: {}\n", chunk->debug_row(i));
+        }
+    }
+    for (auto& chunk : right_chunks) {
+        for (int i = 0; i < chunk->num_rows(); i++) {
+            fmt::print("right_chunk row: {}\n", chunk->debug_row(i));
+        }
+    }
+
+    ChunkProvider left_chunk_provider = [&](ChunkUniquePtr* chunk, bool* eos) {
+        if (left_index >= left_chunks.size()) {
+            *eos = true;
+            return false;
+        }
+        if (chunk && eos) {
+            *chunk = std::move(left_chunks[left_index++]);
+        }
+        return true;
+    };
+
+    ChunkProvider right_chunk_provider = [&](ChunkUniquePtr* chunk, bool* eos) {
+        if (right_index >= right_chunks.size()) {
+            *eos = true;
+            return false;
+        }
+        if (chunk && eos) {
+            *chunk = std::move(right_chunks[right_index++]);
+        }
+        return true;
+    };
+
+    auto left_cursor = std::make_unique<SimpleChunkSortCursor>(left_chunk_provider, &sort_exprs);
+    auto right_cursor = std::make_unique<SimpleChunkSortCursor>(right_chunk_provider, &sort_exprs);
+    std::vector<ChunkUniquePtr> output_chunks;
+    ChunkConsumer consumer = [&](ChunkUniquePtr chunk) {
+        output_chunks.push_back(std::move(chunk));
+        return Status::OK();
+    };
+    SortDescs sort_desc(std::vector<int>{1, 1, 1}, std::vector<int>{-1, -1, -1});
+    merge_sorted_cursor_two_way(sort_desc, std::move(left_cursor), std::move(right_cursor), consumer);
+
+    for (auto& chunk : output_chunks) {
+        for (int i = 0; i < chunk->num_rows(); i++) {
+            fmt::print("row: {}\n", chunk->debug_row(i));
+            if (i > 0) {
+                int x = compare_chunk_row(sort_desc, chunk->columns(), chunk->columns(), i - 1, i);
+                ASSERT_LE(x, 0);
+            }
+        }
+    }
+}
+
+TEST(MergeTest, merge_sorted_stream) {
     constexpr int num_columns = 3;
     constexpr int num_runs = 4;
     constexpr int num_chunks_per_run = 4;

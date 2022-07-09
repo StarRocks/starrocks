@@ -18,6 +18,8 @@ namespace vectorized {
 typedef std::function<Status(Chunk**)> ChunkSupplier;
 typedef std::vector<ChunkSupplier> ChunkSuppliers;
 
+typedef std::function<Status(ChunkUniquePtr)> ChunkConsumer;
+
 // A chunk supplier signal EOS by outputting a NULL Chunk.
 typedef std::function<bool(Chunk**)> ChunkProbeSupplier;
 typedef std::vector<ChunkProbeSupplier> ChunkProbeSuppliers;
@@ -32,6 +34,8 @@ using ChunkProvider = std::function<bool(ChunkUniquePtr*, bool*)>;
 // A cursor refers to a record in a Chunk, and can compare to a cursor referring a record in another Chunk.
 class ChunkCursor {
 public:
+    ChunkCursor() = default;
+    ChunkCursor(const ChunkCursor&) = delete;
     ChunkCursor(ChunkSupplier chunk_supplier, ChunkProbeSupplier chunk_probe_supplier,
                 ChunkHasSupplier chunk_has_supplier, const std::vector<ExprContext*>* sort_exprs,
                 const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first, bool is_pipeline);
@@ -46,13 +50,13 @@ public:
     bool has_next();
     // Move to next row for pipeline.
     void next_for_pipeline();
-    void reset_with_next_chunk_for_pipeline();
+    void next_chunk_for_pipeline();
     // Is current row valid? A new Cursor without any next() has an invalid row.
     bool is_valid() const;
     // Copy current row to the dest Chunk whose structure is as same as the source Chunk.
     bool copy_current_row_to(Chunk* dest) const;
 
-    const ChunkPtr& get_current_chunk() const { return _current_chunk; };
+    ChunkPtr get_current_chunk() { return _current_chunk; };
     int32_t get_current_position_in_chunk() const { return _current_pos; };
 
     [[nodiscard]] ChunkPtr clone_empty_chunk(size_t reserved_row_number) const;
