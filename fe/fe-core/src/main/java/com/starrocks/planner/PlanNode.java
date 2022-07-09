@@ -25,7 +25,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.google.common.math.LongMath;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
@@ -154,19 +153,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.cardinality = -1;
         this.planNodeName = planNodeName;
         this.numInstances = 1;
-    }
-
-    /**
-     * Computes and returns the sum of two cardinalities. If an overflow occurs,
-     * the maximum Long value is returned (Long.MAX_VALUE).
-     */
-    public static long addCardinalities(long a, long b) {
-        try {
-            return LongMath.checkedAdd(a, b);
-        } catch (ArithmeticException e) {
-            LOG.warn("overflow when adding cardinalities: " + a + ", " + b);
-            return Long.MAX_VALUE;
-        }
     }
 
     public List<RuntimeFilterDescription> getProbeRuntimeFilters() {
@@ -566,23 +552,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         columnStatistics = statistics.getColumnStatistics();
     }
 
-    /**
-     * Compute the product of the selectivies of all conjuncts.
-     */
-    protected double computeSelectivity() {
-        double prod = 1.0;
-        for (Expr e : conjuncts) {
-            prod *= e.getSelectivity();
-        }
-        return prod;
-    }
-
     public ExprSubstitutionMap getOutputSmap() {
         return outputSmap;
-    }
-
-    public ExprSubstitutionMap getWithoutTupleIsNullOutputSmap() {
-        return withoutTupleIsNullOutputSmap == null ? outputSmap : withoutTupleIsNullOutputSmap;
     }
 
     public void init(Analyzer analyzer) throws UserException {

@@ -21,7 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
@@ -105,31 +104,11 @@ public class Analyzer {
     // Flag indicating whether this analyzer belongs to a WITH clause view.
     private boolean isWithClause_ = false;
 
-    // By default, all registered semi-joined tuples are invisible, i.e., their slots
-    // cannot be referenced. If set, this semi-joined tuple is made visible. Such a tuple
-    // should only be made visible for analyzing the On-clause of its semi-join.
-    // In particular, if there are multiple semi-joins in the same query block, then the
-    // On-clause of any such semi-join is not allowed to reference other semi-joined tuples
-    // except its own. Therefore, only a single semi-joined tuple can be visible at a time.
-    private TupleId visibleSemiJoinedTupleId_ = null;
-    // for some situation that udf is not allowed.
-    private boolean isUDFAllowed = true;
     // timezone specified for some operation, such as broker load
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
 
-    // Whether to ignore cast expressions
-    // Compatibility with older versions, maybe delete in near future
-    private boolean ignoreCast = false;
-    private String schemaDb;
-    private String schemaTable;
-    private String schemaWild;
-
     public boolean isWithClause() {
         return isWithClause_;
-    }
-
-    public void setUDFAllowed(boolean val) {
-        this.isUDFAllowed = val;
     }
 
     public void setTimezone(String timezone) {
@@ -239,15 +218,6 @@ public class Analyzer {
     // Set of lowercase ambiguous implicit table aliases.
     private final Set<String> ambiguousAliases_ = Sets.newHashSet();
 
-    // Indicates whether this analyzer/block is guaranteed to have an empty result set
-    // due to a limit 0 or constant conjunct evaluating to false.
-    private boolean hasEmptyResultSet_ = false;
-
-    // Indicates whether the select-project-join (spj) portion of this query block
-    // is guaranteed to return an empty result set. Set due to a constant non-Having
-    // conjunct evaluating to false.
-    private boolean hasEmptySpjResultSet_ = false;
-
     public Analyzer(GlobalStateMgr globalStateMgr, ConnectContext context) {
         ancestors = Lists.newArrayList();
         globalState = new GlobalState(globalStateMgr, context);
@@ -293,20 +263,6 @@ public class Analyzer {
 
     public int getCallDepth() {
         return callDepth;
-    }
-
-    /**
-     * Substitute analyzer's internal expressions (conjuncts) with the given
-     * substitution map
-     */
-    public void substitute(ExprSubstitutionMap sMap) {
-        for (ExprId id : globalState.conjuncts.keySet()) {
-            // TODO(dhc): next three lines for subquery
-            if (globalState.conjuncts.get(id).substitute(sMap) instanceof BoolLiteral) {
-                continue;
-            }
-            globalState.conjuncts.put(id, (Predicate) globalState.conjuncts.get(id).substitute(sMap));
-        }
     }
 
     /**
@@ -551,27 +507,6 @@ public class Analyzer {
         return globalState.semiJoinedTupleIds.containsKey(tid);
     }
 
-    public boolean isAntiJoinedConjunct(Expr e) {
-        return getAntiJoinRef(e) != null;
-    }
-
-    public TableRef getAntiJoinRef(Expr e) {
-        TableRef tblRef = globalState.sjClauseByConjunct.get(e.getId());
-        if (tblRef == null) {
-            return null;
-        }
-        return (tblRef.getJoinOp().isAntiJoin()) ? tblRef : null;
-    }
-
-    public boolean containsOuterJoinedTid(Set<TupleId> tids) {
-        for (TupleId tid : tids) {
-            if (isOuterJoined(tid)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     public DescriptorTable getDescTbl() {
         return globalState.descTbl;
     }
@@ -582,59 +517,6 @@ public class Analyzer {
 
     public Set<String> getAliases() {
         return uniqueTableAliasSet_;
-    }
-
-    public void setHasEmptyResultSet() {
-        hasEmptyResultSet_ = true;
-    }
-
-    public boolean isOjConjunct(Expr e) {
-        return globalState.ojClauseByConjunct.containsKey(e.getId());
-    }
-
-    public boolean isIjConjunct(Expr e) {
-        return globalState.ijClauseByConjunct.containsKey(e.getId());
-    }
-
-    public boolean isSjConjunct(Expr e) {
-        return globalState.sjClauseByConjunct.containsKey(e.getId());
-    }
-
-    public TableRef getFullOuterJoinRef(Expr e) {
-        return globalState.fullOuterJoinedConjuncts.get(e.getId());
-    }
-
-    public boolean isFullOuterJoined(Expr e) {
-        return globalState.fullOuterJoinedConjuncts.containsKey(e.getId());
-    }
-
-    /**
-     * return equal conjuncts, used by OlapScanNode.normalizePredicate and SelectStmt.reorderTable
-     */
-    public List<Expr> getEqJoinConjuncts(TupleId id) {
-        final List<ExprId> conjunctIds = globalState.eqJoinConjuncts.get(id);
-        if (conjunctIds == null) {
-            return Lists.newArrayList();
-        }
-        final List<Expr> result = Lists.newArrayList();
-        for (ExprId conjunctId : conjunctIds) {
-            final Expr e = globalState.conjuncts.get(conjunctId);
-            Preconditions.checkState(e != null);
-            result.add(e);
-        }
-        return result;
-    }
-
-    public int getCurrentOutputColumn(TupleId id) {
-        Integer result = currentOutputColumn.get(id);
-        if (null == result) {
-            return this.getTupleDesc(id).getSlots().size();
-        }
-        return result;
-    }
-
-    public void setCurrentOutputColumn(TupleId id, int v) {
-        currentOutputColumn.put(id, v);
     }
 
     /**
@@ -763,44 +645,6 @@ public class Analyzer {
             return true;
         }
 
-        if (e.isOnClauseConjunct()) {
-
-            if (isAntiJoinedConjunct(e)) {
-                return canEvalAntiJoinedConjunct(e, tupleIds);
-            }
-            if (isIjConjunct(e) || isSjConjunct(e)) {
-                if (!containsOuterJoinedTid(tids)) {
-                    return true;
-                }
-                // If the predicate references an outer-joined tuple, then evaluate it at
-                // the join that the On-clause belongs to.
-                TableRef onClauseTableRef = null;
-                if (isIjConjunct(e)) {
-                    onClauseTableRef = globalState.ijClauseByConjunct.get(e.getId());
-                } else {
-                    onClauseTableRef = globalState.sjClauseByConjunct.get(e.getId());
-                }
-                Preconditions.checkNotNull(onClauseTableRef);
-                return tupleIds.containsAll(onClauseTableRef.getAllTableRefIds());
-            }
-
-            if (isFullOuterJoined(e)) {
-                return canEvalFullOuterJoinedConjunct(e, tupleIds);
-            }
-            if (isOjConjunct(e)) {
-                // Force this predicate to be evaluated by the corresponding outer join node.
-                // The join node will pick up the predicate later via getUnassignedOjConjuncts().
-                if (tids.size() > 1) {
-                    return false;
-                }
-                // Optimization for single-tid predicates: Legal to assign below the outer join
-                // if the predicate is from the same On-clause that makes tid nullable
-                // (otherwise e needn't be true when that tuple is set).
-                TupleId tid = tids.iterator().next();
-                return globalState.ojClauseByConjunct.get(e.getId()) == getLastOjClause(tid);
-            }
-        }
-
         for (TupleId tid : tids) {
             TableRef rhsRef = getLastOjClause(tid);
             // this is not outer-joined; ignore
@@ -814,41 +658,5 @@ public class Analyzer {
         }
 
         return true;
-    }
-
-    /**
-     * Checks if a conjunct from the On-clause of an anti join can be evaluated in a node
-     * that materializes a given list of tuple ids.
-     */
-    public boolean canEvalAntiJoinedConjunct(Expr e, List<TupleId> nodeTupleIds) {
-        TableRef antiJoinRef = getAntiJoinRef(e);
-        if (antiJoinRef == null) {
-            return true;
-        }
-        List<TupleId> tids = Lists.newArrayList();
-        e.getIds(tids, null);
-        if (tids.size() > 1) {
-            return nodeTupleIds.containsAll(antiJoinRef.getAllTableRefIds())
-                    && antiJoinRef.getAllTableRefIds().containsAll(nodeTupleIds);
-        }
-        // A single tid conjunct that is anti-joined can be safely assigned to a
-        // node below the anti join that specified it.
-        return globalState.semiJoinedTupleIds.containsKey(tids.get(0));
-    }
-
-    /**
-     * Returns false if 'e' references a full outer joined tuple and it is incorrect to
-     * evaluate 'e' at a node materializing 'tids'. Returns true otherwise.
-     */
-    public boolean canEvalFullOuterJoinedConjunct(Expr e, List<TupleId> tids) {
-        TableRef fullOuterJoin = getFullOuterJoinRef(e);
-        if (fullOuterJoin == null) {
-            return true;
-        }
-        return tids.containsAll(fullOuterJoin.getAllTableRefIds());
-    }
-
-    public boolean isOuterJoined(TupleId tid) {
-        return globalState.outerJoinedTupleIds.containsKey(tid);
     }
 }
