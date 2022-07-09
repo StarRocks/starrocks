@@ -169,7 +169,11 @@ Status TabletManager::drop_tablet(int64_t tablet_id) {
     RETURN_IF_ERROR(fs->iterate_dir(path_assemble(group_path, tablet_id), scan_cb));
     for (const auto& obj : objects) {
         erase_metacache(obj);
-        (void)fs->delete_file(path_assemble(fmt::format("{}/{}", group_path, obj), tablet_id));
+        Status res = fs->delete_file(path_assemble(fmt::format("{}/{}", group_path, obj), tablet_id));
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to delete obj " << obj;
+            return Status::Corruption(fmt::format("delete_file of {} is failed", tablet_id));
+        }
     }
 
     return Status::OK();

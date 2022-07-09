@@ -88,14 +88,10 @@ public class ShardDeleter extends MasterDaemon {
 
                 try {
                     DropTabletResponse response = responseFuture.get();
-                    if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
+                    if (response != null && response.succTablets != null && !response.succTablets.isEmpty()) {
                         // for debug
-                        LOG.info("failedTablets is {}", response.failedTablets);
-                        finished = false;
-                    } else {
-                        // for debug
-                        LOG.info("drop tablet on BE succ.");
-                    }
+                        LOG.info("succTablets is {}", response.succTablets);
+                    }   
                 } catch (ExecutionException | InterruptedException e) {
                     LOG.error(e);
                     finished = false;
