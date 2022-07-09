@@ -226,7 +226,6 @@ public class ConnectProcessor {
         }
         queryDetail.setEndTime(endTime);
         queryDetail.setLatency(elapseMs);
-        queryDetail.setWorkGroupName(ctx.getWorkGroup() != null ? ctx.getWorkGroup().getName() : "");
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
     }
 

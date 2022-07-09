@@ -31,6 +31,8 @@ public class WorkGroup implements Writable {
     public static final String BIG_QUERY_CPU_SECOND_LIMIT = "big_query_cpu_second_limit";
     public static final String CONCURRENCY_LIMIT = "concurrency_limit";
     public static final String WORKGROUP_TYPE = "type";
+    public static final String DEFAULT_WORKGROUP_NAME = "default";
+
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("name", ScalarType.createVarchar(100)))
@@ -44,6 +46,7 @@ public class WorkGroup implements Writable {
                     .addColumn(new Column("type", ScalarType.createVarchar(200)))
                     .addColumn(new Column("classifiers", ScalarType.createVarchar(1024)))
                    .build();
+
     @SerializedName(value = "classifiers")
     List<WorkGroupClassifier> classifiers;
     @SerializedName(value = "name")
