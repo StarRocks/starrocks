@@ -32,6 +32,7 @@ struct TransmitChunkInfo {
     doris::PBackendService_Stub* brpc_stub;
     PTransmitChunkParamsPtr params;
     butil::IOBuf attachment;
+    int64_t attachment_physical_bytes;
 };
 
 struct ClosureContext {
