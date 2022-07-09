@@ -1,5 +1,18 @@
 # StarRocks version 2.1
 
+## 2.1.11
+
+发布日期：2022年7月9日
+
+### Bug 修复
+
+修复了如下 Bug：
+
+- 主键模型 (Primary Key) 表在高频导入时，会卡住无法继续进行。[#7763](https://github.com/StarRocks/starrocks/issues/7763)
+- 在低基数优化中，对聚合表达式的顺序处理有误，导致 `count distinct` 函数返回的一些结果错误。[#7659](https://github.com/StarRocks/starrocks/issues/7659)
+- LIMIT 子句中的裁剪规则处理错误，导致 LIMIT 子句执行以后没有结果。[#7894](https://github.com/StarRocks/starrocks/pull/7894)
+- 如果一个查询的 Join 条件列中有进行全局低基数字典优化，会导致查询结果错误。[8302](https://github.com/StarRocks/starrocks/issues/8302)
+
 ## 2.1.10
 
 发布日期：2022年6月24日
