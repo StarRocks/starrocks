@@ -1,7 +1,0 @@
-#Tue Apr 19 16:42:58 CST 2022
-module-resource*?\:file\:/home/disk2/liuxuefen/starrocks/jdbc_bridge/checkstyle-header.txt=4BB15A22DB63112AE43283C185CE549B157329
-/home/disk2/liuxuefen/starrocks/jdbc_bridge/src/main/java/com/starrocks/jdbcbridge/JDBCBridge.java=1650099882000
-/home/disk2/liuxuefen/starrocks/jdbc_bridge/src/main/java/com/starrocks/jdbcbridge/JDBCScanner.java=1650099882000
-/home/disk2/liuxuefen/starrocks/jdbc_bridge/src/main/java/com/starrocks/jdbcbridge/JDBCScanContext.java=1650099882000
-/home/disk2/liuxuefen/starrocks/jdbc_bridge/src/main/java/com/starrocks/jdbcbridge/JDBCUtil.java=1650099882000
-configuration*?=FCE3D253305D834B416B6145CA49EB3C2D1FF0B5
