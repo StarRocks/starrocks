@@ -63,6 +63,17 @@ under the License.
             </properties>
         </profile>
         <profile>
+            <id>thirdparty</id>
+            <activation>
+                <property>
+                    <name>env.STARROCKS_THIRDPARTY</name>
+                </property>
+            </activation>
+            <properties>
+                <starrocks.thrift>${env.STARROCKS_THIRDPARTY}/installed/bin/thrift</starrocks.thrift>
+            </properties>
+        </profile>
+        <profile>
             <id>windows</id>
             <properties>
                 <starrocks.thrift>thrift.exe</starrocks.thrift>
