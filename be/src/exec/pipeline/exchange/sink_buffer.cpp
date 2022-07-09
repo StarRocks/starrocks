@@ -321,6 +321,8 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<vo
         ++_total_in_flight_rpc;
         ++_num_in_flight_rpcs[instance_id.lo];
 
+        // Attachment will be released by process_mem_tracker in closure->Run() in bthread, when receiving the response,
+        // so decrease the memory usage of attachment from instance_mem_tracker immediately before sending the request.
         _mem_tracker->release(request.attachment_physical_bytes);
         ExecEnv::GetInstance()->process_mem_tracker()->consume(request.attachment_physical_bytes);
 
@@ -331,6 +333,8 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<vo
         if (bthread_self()) {
             request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
         } else {
+            // When the driver worker thread sends request and creates the protobuf request,
+            // also use process_mem_tracker to record the memory of the protobuf request.
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
             request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
         }
