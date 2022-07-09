@@ -26,11 +26,11 @@ public class ShardManagerTest {
         System.err.println("write image " + tempFile.getAbsolutePath());
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(tempFile));
         long checksum = 0;
-        long saveChecksum = info.saveShardDeleteInfo(dos, checksum);
+        long saveChecksum = info.saveShardManager(dos, checksum);
         dos.close();
 
         DataInputStream dis = new DataInputStream(new FileInputStream(tempFile));
-        long loadChecksum = info.loadShardDeleteInfo(dis, checksum);
+        long loadChecksum = info.loadShardManager(dis, checksum);
         Assert.assertEquals(saveChecksum, loadChecksum);
     }
 

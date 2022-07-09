@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<checkstyle version="8.40">
+<file name="/home/disk2/liuxuefen/starrocks/jdbc_bridge/src/main/java/com/starrocks/jdbcbridge/JDBCScanContext.java">
+</file>
+<file name="/home/disk2/liuxuefen/starrocks/jdbc_bridge/src/main/java/com/starrocks/jdbcbridge/JDBCScanner.java">
+</file>
+<file name="/home/disk2/liuxuefen/starrocks/jdbc_bridge/src/main/java/com/starrocks/jdbcbridge/JDBCUtil.java">
+</file>
+<file name="/home/disk2/liuxuefen/starrocks/jdbc_bridge/src/main/java/com/starrocks/jdbcbridge/JDBCBridge.java">
+</file>
+</checkstyle>

@@ -114,6 +114,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.WorkGroupMgr;
+import com.starrocks.catalog.lake.ShardManager;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
@@ -1144,7 +1145,7 @@ public class GlobalStateMgr {
             checksum = loadInsertOverwriteJobs(dis, checksum);
             checksum = nodeMgr.loadComputeNodes(dis, checksum);
             remoteChecksum = dis.readLong();
-            checksum = shardManager.loadShardDeleteInfo(dis, checksum);
+            checksum = shardManager.loadShardManager(dis, checksum);
             remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
@@ -1396,7 +1397,7 @@ public class GlobalStateMgr {
             checksum = saveInsertOverwriteJobs(dos, checksum);
             checksum = nodeMgr.saveComputeNodes(dos, checksum);
             dos.writeLong(checksum);
-            checksum = shardManager.saveShardDeleteInfo(dos, checksum);
+            checksum = shardManager.saveShardManager(dos, checksum);
             dos.writeLong(checksum);
         }
 
