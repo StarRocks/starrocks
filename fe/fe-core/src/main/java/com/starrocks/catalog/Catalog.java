@@ -838,7 +838,7 @@ public class Catalog {
         auditEventProcessor.start();
 
         // 2. get cluster id and role (Observer or Follower)
-        getClusterIdAndRole();
+        getClusterIdAndRoleOnStartup();
 
         // 3. Load image first and replay edits
         this.editLog = new EditLog(nodeName);
@@ -876,7 +876,7 @@ public class Catalog {
         return isReady.get();
     }
 
-    private void getClusterIdAndRole() throws IOException {
+    private void getClusterIdAndRoleOnStartup() throws IOException {
         File roleFile = new File(this.imageDir, Storage.ROLE_FILE);
         File versionFile = new File(this.imageDir, Storage.VERSION_FILE);
 
@@ -1049,7 +1049,7 @@ public class Catalog {
                     System.exit(-1);
                 }
             }
-            getNewImage(rightHelperNode);
+            getNewImageOnStartup(rightHelperNode);
         }
 
         if (Config.cluster_id != -1 && clusterId != Config.cluster_id) {
@@ -1421,25 +1421,26 @@ public class Catalog {
         return false;
     }
 
-    private void getNewImage(Pair<String, Integer> helperNode) throws IOException {
+
+    /**
+      * When a new node joins in the cluster for the first time, it will download image from the helper at the very beginning
+      * Exception are free to raise on initialized phase
+      */
+    private void getNewImageOnStartup(Pair<String, Integer> helperNode) throws IOException {
         long localImageVersion = 0;
         Storage storage = new Storage(this.imageDir);
         localImageVersion = storage.getImageJournalId();
 
-        try {
-            URL infoUrl = new URL("http://" + helperNode.first + ":" + Config.http_port + "/info");
-            StorageInfo info = getStorageInfo(infoUrl);
-            long version = info.getImageJournalId();
-            if (version > localImageVersion) {
-                String url = "http://" + helperNode.first + ":" + Config.http_port
-                        + "/image?version=" + version;
-                String filename = Storage.IMAGE + "." + version;
-                File dir = new File(this.imageDir);
-                MetaHelper.getRemoteFile(url, HTTP_TIMEOUT_SECOND * 1000, MetaHelper.getOutputStream(filename, dir));
-                MetaHelper.complete(filename, dir);
-            }
-        } catch (Exception e) {
-            return;
+        URL infoUrl = new URL("http://" + helperNode.first + ":" + Config.http_port + "/info");
+        StorageInfo info = getStorageInfo(infoUrl);
+        long version = info.getImageJournalId();
+        if (version > localImageVersion) {
+            String url = "http://" + helperNode.first + ":" + Config.http_port
+                    + "/image?version=" + version;
+            String filename = Storage.IMAGE + "." + version;
+            File dir = new File(this.imageDir);
+            MetaHelper.getRemoteFile(url, HTTP_TIMEOUT_SECOND * 1000, MetaHelper.getOutputStream(filename, dir));
+            MetaHelper.complete(filename, dir);
         }
     }
 
@@ -1497,7 +1498,7 @@ public class Catalog {
         DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
 
         long checksum = 0;
-        long remoteChecksum = 0;
+        long remoteChecksum = -1;
         try {
             checksum = loadHeader(dis, checksum);
             checksum = loadMasterInfo(dis, checksum);
