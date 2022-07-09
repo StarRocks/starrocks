@@ -189,11 +189,20 @@ public class ScalarType extends Type implements Cloneable {
         return scalarType;
     }
 
-    // 0's type is decimal32(0,0)
-    public static ScalarType createDecimalV3TypeForZero() {
-        ScalarType scalarType = new ScalarType(PrimitiveType.DECIMAL32);
-        scalarType.precision = 0;
-        scalarType.scale = 0;
+    public static ScalarType createDecimalV3TypeForZero(int scale) {
+        final ScalarType scalarType;
+        if (scale <= PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL32)) {
+            scalarType = new ScalarType(PrimitiveType.DECIMAL32);
+        } else if (scale <= PrimitiveType.getDefaultScaleOfDecimal(PrimitiveType.DECIMAL64)) {
+            scalarType = new ScalarType(PrimitiveType.DECIMAL64);
+        } else if (scale <= PrimitiveType.getDefaultScaleOfDecimal(PrimitiveType.DECIMAL128)) {
+            scalarType = new ScalarType(PrimitiveType.DECIMAL128);
+        } else {
+            scalarType = new ScalarType(PrimitiveType.DECIMAL128);
+            scale = PrimitiveType.getDefaultScaleOfDecimal(PrimitiveType.DECIMAL128);
+        }
+        scalarType.precision = scale;
+        scalarType.scale = scale;
         return scalarType;
     }
 
@@ -221,7 +230,7 @@ public class ScalarType extends Type implements Cloneable {
 
     public static ScalarType createDecimalV3NarrowestType(int precision, int scale) {
         if (precision == 0 && scale == 0) {
-            return createDecimalV3TypeForZero();
+            return createDecimalV3TypeForZero(0);
         }
         final int decimal32MaxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL32);
         final int decimal64MaxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL64);
