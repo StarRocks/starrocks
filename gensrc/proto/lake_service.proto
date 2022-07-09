@@ -44,7 +44,7 @@ message DropTabletRequest {
 }
 
 message DropTabletResponse {
-    repeated int64 failed_tablets = 2;
+    repeated int64 succ_tablets = 2;
 }
 
 service LakeService {
