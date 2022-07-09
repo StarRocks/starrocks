@@ -249,14 +249,14 @@ public class HiveRepository {
         // Each hive table corresponds to the number counter of the StarRocks hive external table
         private final ConcurrentHashMap<HiveExternalTableIdentifier, Integer> hiveTblCounter = new ConcurrentHashMap<>();
 
-        public void add(String resource, String database, String table) {
+        public int add(String resource, String database, String table) {
             HiveExternalTableIdentifier identifier = HiveExternalTableIdentifier.of(resource, database, table);
-            hiveTblCounter.compute(identifier, (k, v) -> v == null ? 1 : v + 1);
+            return hiveTblCounter.compute(identifier, (k, v) -> v == null ? 1 : v + 1);
         }
 
-        public void reduce(String resource, String database, String table) {
+        public int reduce(String resource, String database, String table) {
             HiveExternalTableIdentifier identifier = HiveExternalTableIdentifier.of(resource, database, table);
-            hiveTblCounter.compute(identifier, (k, v) -> v == null || v == 0 ? 0 : v - 1);
+            return hiveTblCounter.compute(identifier, (k, v) -> v == null || v == 0 ? 0 : v - 1);
         }
 
         public int get(String resource, String database, String table) {
