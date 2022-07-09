@@ -93,17 +93,7 @@ StarRocks 提供 [Stream Load](/loading/StreamLoad.md)、[Broker Load](/loading/
 
 ## 数据类型
 
-StarRocks 支持导入如下数据类型：
-
-- 整型类，包括 TINYINT、SMALLINT、INT、BIGINT 和 LARGEINT。举例： `1` | `1000` | `1234`。
-
-- 浮点类，包括 FLOAT、DOUBLE 和 DECIMAL。举例：`1.1`、`0.23`、`.356`。
-
-- 日期类，包括 DATE 和 DATETIME。举例：`2017-10-03`、`2017-06-13 12:34:03`。
-
-- 字符串类，包括 CHAR 和 VARCHAR。举例：`I am a student`、`a`。
-
-- `NULL` 值。举例：`\N`。
+StarRocks 支持导入所有数据类型。个别数据类型的导入可能会存在一些限制，具体请参见[数据类型](/sql-reference/sql-statements/data-types/BIGINT.md)。
 
 ## 使用说明
 
