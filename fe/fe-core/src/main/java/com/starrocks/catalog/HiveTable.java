@@ -590,14 +590,14 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public void onCreate() {
-        if (this.resourceName != null) {
-            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().registerTable(this);
-        }
+        hiveRepository.getCounter().add(resourceName, hiveDbName, hiveTableName);
+        GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().registerTable(this);
     }
 
     @Override
     public void onDrop() {
-        if (this.resourceName != null) {
+        hiveRepository.getCounter().reduce(resourceName, hiveDbName, hiveTableName);
+        if (hiveRepository.getCounter().get(resourceName, hiveDbName, hiveTableName) == 0) {
             hiveRepository.clearCache(hmsTableInfo);
             GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unregisterTable(this);
         }
