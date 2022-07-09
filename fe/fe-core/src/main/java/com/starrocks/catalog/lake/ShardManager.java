@@ -2,7 +2,6 @@
 
 package com.starrocks.catalog.lake;
 
-import com.starrocks.catalog.lake.ShardDeleter;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -29,12 +28,12 @@ public class ShardManager implements Writable {
         return shardDeleter;
     }
 
-    public long loadShardDeleteInfo(DataInputStream in, long checksum) throws IOException {
+    public long loadShardManager(DataInputStream in, long checksum) throws IOException {
         read(in);
         return checksum;
     }
 
-    public long saveShardDeleteInfo(DataOutputStream out, long checksum) throws IOException {
+    public long saveShardManager(DataOutputStream out, long checksum) throws IOException {
         write(out);
         return checksum;
     }
