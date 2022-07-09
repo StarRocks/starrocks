@@ -15,6 +15,8 @@ namespace pipeline {
 
 class ScanOperator : public SourceOperator {
 public:
+    static constexpr int MAX_IO_TASKS_PER_OP = 4;
+
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
                  std::atomic<int>& num_committed_scan_tasks);
 
@@ -96,8 +98,6 @@ protected:
     std::atomic<int>& _num_committed_scan_tasks;
 
 private:
-    static constexpr int MAX_IO_TASKS_PER_OP = 4;
-
     const size_t _buffer_size = config::pipeline_io_buffer_size;
 
     int32_t _io_task_retry_cnt = 0;
