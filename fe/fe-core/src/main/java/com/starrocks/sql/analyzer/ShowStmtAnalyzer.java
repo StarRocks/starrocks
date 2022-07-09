@@ -126,14 +126,7 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowAlterStmt(ShowAlterStmt statement, ConnectContext context) {
-            try {
-                //first analyze
-                ShowAlterStmtAnalyzer.analyze(statement, context);
-                // check auth when get job info
-                ShowAlterStmtAnalyzer.handleShowAlterTable(statement, context);
-            } catch (AnalysisException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
-            }
+            ShowAlterStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
