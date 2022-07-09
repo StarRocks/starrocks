@@ -32,9 +32,11 @@
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "common/config.h"
 #include "gutil/endian.h"
 #include "storage/tablet_schema.h"
 #include "types/date_value.hpp"
+#include "util/xxh3.h"
 
 namespace starrocks {
 
@@ -254,9 +256,30 @@ bool PrimaryKeyEncoder::is_supported(const vectorized::Schema& schema) {
     return true;
 }
 
+// We don't check whether the schema supports encoding or not.
+// It is caller's duty to ensure that the schema supports encoding
+bool PrimaryKeyEncoder::enable_mapping_pk_into_hash(const vectorized::Schema& schema) {
+    if (!config::enable_mapping_pk_into_hash) {
+        return false;
+    }
+    size_t ret = 0;
+    size_t n = schema.num_key_fields();
+    for (size_t i = 0; i < n; i++) {
+        auto t = schema.field(i)->type()->type();
+        if (t == OLAP_FIELD_TYPE_VARCHAR || t == OLAP_FIELD_TYPE_CHAR) {
+            return true;
+        }
+        ret += TabletColumn::get_field_length_by_type(t, 0);
+    }
+    return ret > 16 ? true : false;
+}
+
 FieldType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::Schema& schema) {
     if (!is_supported(schema)) {
         return OLAP_FIELD_TYPE_NONE;
+    }
+    if (enable_mapping_pk_into_hash(schema)) {
+        return OLAP_FIELD_TYPE_LARGEINT;
     }
     if (schema.num_key_fields() == 1) {
         return schema.field(0)->type()->type();
@@ -265,6 +288,10 @@ FieldType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::Schema& 
 }
 
 size_t PrimaryKeyEncoder::get_encoded_fixed_size(const vectorized::Schema& schema) {
+    // if `enable_mapping_pk_into_hash()` is true, we will use a hash value(int128) to replace the encoded key
+    if (enable_mapping_pk_into_hash(schema)) {
+        return 16;
+    }
     size_t ret = 0;
     size_t n = schema.num_key_fields();
     for (size_t i = 0; i < n; i++) {
@@ -281,6 +308,10 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
                                         std::unique_ptr<vectorized::Column>* pcolumn) {
     if (!is_supported(schema)) {
         return Status::NotSupported("type not supported for primary key encoding");
+    }
+    if (enable_mapping_pk_into_hash(schema)) {
+        *pcolumn = vectorized::Int128Column::create_mutable();
+        return Status::OK();
     }
     // TODO: let `Chunk::column_from_field_type` and `Chunk::column_from_field` return a
     // `std::unique_ptr<Column>` instead of `std::shared_ptr<Column>`, in order to reuse
@@ -402,22 +433,50 @@ void PrimaryKeyEncoder::encode(const vectorized::Schema& schema, const vectorize
     if (schema.num_key_fields() == 1) {
         // simple encoding, src & dest should have same type
         auto& src = chunk.get_column_by_index(0);
-        dest->append(*src, offset, len);
+        if (!enable_mapping_pk_into_hash(schema)) {
+            dest->append(*src, offset, len);
+        } else {
+            DCHECK(src->is_binary()) << "src column should be binary";
+            DCHECK(dest->is_numeric()) << "dest column should be int128";
+            auto& bsrc = down_cast<vectorized::BinaryColumn&>(*src);
+            auto& idest = down_cast<vectorized::Int128Column&>(*dest);
+            idest.reserve(len);
+            for (int i = 0; i < len; i++) {
+                Slice s = bsrc.get_slice(offset + i);
+                XXH128_hash_t val = XXH3_128bits(s.get_data(), s.get_size());
+                idest.append(((static_cast<int128_t>(val.high64)) << 64) + static_cast<int128_t>(val.low64));
+            }
+        }
     } else {
-        CHECK(dest->is_binary()) << "dest column should be binary";
         int ncol = schema.num_key_fields();
         vector<EncodeOp> ops;
         vector<const void*> datas;
         prepare_ops_datas(schema, chunk, &ops, &datas);
-        vectorized::BinaryColumn& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
-        bdest.reserve(bdest.size() + len);
-        string buff;
-        for (size_t i = 0; i < len; i++) {
-            buff.clear();
-            for (int j = 0; j < ncol; j++) {
-                ops[j](datas[j], offset + i, &buff);
+        if (enable_mapping_pk_into_hash(schema)) {
+            DCHECK(dest->is_numeric()) << "dest column should be int128";
+            vectorized::Int128Column& idest = down_cast<vectorized::Int128Column&>(*dest);
+            idest.reserve(len);
+            string buff;
+            for (size_t i = 0; i < len; i++) {
+                buff.clear();
+                for (int j = 0; j < ncol; j++) {
+                    ops[j](datas[j], offset + i, &buff);
+                }
+                XXH128_hash_t val = XXH3_128bits(buff.data(), buff.size());
+                idest.append(((static_cast<int128_t>(val.high64)) << 64) + static_cast<int128_t>(val.low64));
             }
-            bdest.append(buff);
+        } else {
+            CHECK(dest->is_binary()) << "dest column should be binary";
+            vectorized::BinaryColumn& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
+            bdest.reserve(bdest.size() + len);
+            string buff;
+            for (size_t i = 0; i < len; i++) {
+                buff.clear();
+                for (int j = 0; j < ncol; j++) {
+                    ops[j](datas[j], offset + i, &buff);
+                }
+                bdest.append(buff);
+            }
         }
     }
 }
@@ -427,29 +486,61 @@ void PrimaryKeyEncoder::encode_selective(const vectorized::Schema& schema, const
     if (schema.num_key_fields() == 1) {
         // simple encoding, src & dest should have same type
         auto& src = chunk.get_column_by_index(0);
-        dest->append_selective(*src, indexes, 0, len);
+        if (!enable_mapping_pk_into_hash(schema)) {
+            dest->append_selective(*src, indexes, 0, len);
+        } else {
+            DCHECK(src->is_binary()) << "src column should be binary";
+            DCHECK(dest->is_numeric()) << "dest column should be int128";
+            auto& bsrc = down_cast<vectorized::BinaryColumn&>(*src);
+            auto& idest = down_cast<vectorized::Int128Column&>(*dest);
+            idest.reserve(len);
+            for (int i = 0; i < len; ++i) {
+                Slice s = bsrc.get_slice(indexes[i]);
+                XXH128_hash_t val = XXH3_128bits(s.get_data(), s.get_size());
+                idest.append(((static_cast<int128_t>(val.high64)) << 64) + static_cast<int128_t>(val.low64));
+            }
+        }
     } else {
-        CHECK(dest->is_binary()) << "dest column should be binary";
         int ncol = schema.num_key_fields();
         vector<EncodeOp> ops;
         vector<const void*> datas;
         prepare_ops_datas(schema, chunk, &ops, &datas);
-        vectorized::BinaryColumn& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
-        bdest.reserve(bdest.size() + len);
-        string buff;
-        for (int i = 0; i < len; i++) {
-            uint32_t idx = indexes[i];
-            buff.clear();
-            for (int j = 0; j < ncol; j++) {
-                ops[j](datas[j], idx, &buff);
+        if (enable_mapping_pk_into_hash(schema)) {
+            DCHECK(dest->is_numeric()) << "dest column should be int128";
+            vectorized::Int128Column& idest = down_cast<vectorized::Int128Column&>(*dest);
+            idest.reserve(len);
+            string buff;
+            for (int i = 0; i < len; i++) {
+                uint32_t idx = indexes[i];
+                buff.clear();
+                for (int j = 0; j < ncol; j++) {
+                    ops[j](datas[j], idx, &buff);
+                }
+                XXH128_hash_t val = XXH3_128bits(buff.data(), buff.size());
+                idest.append(((static_cast<int128_t>(val.high64)) << 64) + static_cast<int128_t>(val.low64));
             }
-            bdest.append(buff);
+        } else {
+            CHECK(dest->is_binary()) << "dest column should be binary";
+            vectorized::BinaryColumn& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
+            bdest.reserve(bdest.size() + len);
+            string buff;
+            for (int i = 0; i < len; i++) {
+                uint32_t idx = indexes[i];
+                buff.clear();
+                for (int j = 0; j < ncol; j++) {
+                    ops[j](datas[j], idx, &buff);
+                }
+                bdest.append(buff);
+            }
         }
     }
 }
 
 bool PrimaryKeyEncoder::encode_exceed_limit(const vectorized::Schema& schema, const vectorized::Chunk& chunk,
                                             size_t offset, size_t len, const size_t limit_size) {
+    if (enable_mapping_pk_into_hash(schema)) {
+        return false;
+    }
     int ncol = schema.num_key_fields();
     vector<const void*> datas(ncol, nullptr);
     if (ncol == 1) {
@@ -500,6 +591,10 @@ bool PrimaryKeyEncoder::encode_exceed_limit(const vectorized::Schema& schema, co
 
 Status PrimaryKeyEncoder::decode(const vectorized::Schema& schema, const vectorized::Column& keys, size_t offset,
                                  size_t len, vectorized::Chunk* dest) {
+    if (enable_mapping_pk_into_hash(schema)) {
+        LOG(WARNING) << "decode is not support when enable hash key";
+        return Status::InternalError("decode is not support");
+    }
     if (schema.num_key_fields() == 1) {
         // simple decoding, src & dest should have same type
         dest->get_column_by_index(0)->append(keys, offset, len);

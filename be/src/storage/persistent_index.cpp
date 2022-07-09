@@ -1233,7 +1233,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         return Status::InternalError("get tablet persistent index meta failed");
     }
 
-    // There are three conditions
+    // There are four conditions
     // First is we do not find PersistentIndexMetaPB in TabletMeta, it maybe the first time to
     // enable persistent index
     // Second is we find PersistentIndexMetaPB in TabletMeta, but it's version is behind applied_version
@@ -1242,15 +1242,26 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     //    2. Restart be and disable persistent index, applied_version is update to 2-0
     //    3. Restart be and enable persistent index
     // In this case, we don't have all rowset data in persistent index files, so we also need to rebuild it
-    // The last is we find PersistentIndexMetaPB and it's version is equal to latest applied version. In this case,
+    // Third is we find PersistentIndexMetaPB and it's version is equal to latest applied version. In this case,
     // we can load from index file directly
+    // The last is we change `config::enable_mapping_pk_into_hash` before be restarted, it will change the key value of the
+    // same record, so we need to rebuild the PersistentIndex
+    const TabletSchema& tablet_schema = tablet->tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
+    for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
+        pk_columns[i] = (ColumnId)i;
+    }
+    auto pkey_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, pk_columns);
+
     EditVersion lastest_applied_version;
     RETURN_IF_ERROR(tablet->updates()->get_latest_applied_version(&lastest_applied_version));
     if (status.ok()) {
         // all applied rowsets has save in existing persistent index meta
         // so we can load persistent index according to PersistentIndexMetaPB
         EditVersion version = index_meta.version();
-        if (version == lastest_applied_version) {
+        bool enable_mapping_pk_into_hash = index_meta.enable_mapping_pk_into_hash();
+        if (version == lastest_applied_version &&
+            enable_mapping_pk_into_hash == PrimaryKeyEncoder::enable_mapping_pk_into_hash(pkey_schema)) {
             status = load(index_meta);
             LOG(INFO) << "load persistent index tablet:" << tablet->tablet_id() << " version:" << version.to_string()
                       << " size: " << _size << " l0_size: " << (_l0 ? _l0->size() : 0)
@@ -1262,12 +1273,6 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         }
     }
 
-    const TabletSchema& tablet_schema = tablet->tablet_schema();
-    vector<ColumnId> pk_columns(tablet_schema.num_key_columns());
-    for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
-        pk_columns[i] = (ColumnId)i;
-    }
-    auto pkey_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, pk_columns);
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
     if (fix_size == 0) {
         LOG(WARNING) << "Build persistent index failed because get key cloumn size failed";
@@ -1294,6 +1299,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     //   2. delete WALs because maybe PersistentIndexMetaPB has expired wals
     //   3. reset SnapshotMeta
     //   4. write all data into new tmp _l0 index file (tmp file will be delete in _build_commit())
+    index_meta.set_enable_mapping_pk_into_hash(PrimaryKeyEncoder::enable_mapping_pk_into_hash(pkey_schema));
     index_meta.set_key_size(_key_size);
     lastest_applied_version.to_pb(index_meta.mutable_version());
     MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
