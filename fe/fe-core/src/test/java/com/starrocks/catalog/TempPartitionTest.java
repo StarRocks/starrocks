@@ -90,7 +90,7 @@ public class TempPartitionTest {
 
     private List<List<String>> checkShowPartitionsResultNum(String tbl, boolean isTemp, int expected) throws Exception {
         String showStr = "show " + (isTemp ? "temporary" : "") + " partitions from " + tbl;
-        ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseAndAnalyzeStmt(showStr, ctx);
+        ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseStmtWithNewParser(showStr, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, (ShowStmt) showStmt);
         ShowResultSet showResultSet = executor.execute();
         List<List<String>> rows = showResultSet.getResultRows();
@@ -140,7 +140,7 @@ public class TempPartitionTest {
             throws Exception {
         partNameToTabletId.clear();
         String showStr = "show " + (isTemp ? "temporary" : "") + " partitions from " + tbl;
-        ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseAndAnalyzeStmt(showStr, ctx);
+        ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseStmtWithNewParser(showStr, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, (ShowStmt) showStmt);
         ShowResultSet showResultSet = executor.execute();
         List<List<String>> rows = showResultSet.getResultRows();

@@ -360,7 +360,7 @@ public class ShowExecutorTest {
         // Ok to test
         ShowPartitionsStmt stmt = new ShowPartitionsStmt(new TableName("testDb", "testTbl"),
                 null, null, null, false);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
