@@ -98,13 +98,14 @@ public:
 
     const std::string& getName() const override { return _file->filename(); }
 
-    void emptyIORanges() override {
+    bool isIORangesEnabled() const override { return config::orc_coalesce_read_enable; }
+
+    void clearIORanges() override {
         _buffer_stream_enabled = false;
         _buffer_stream.release();
     }
 
     void setIORanges(std::vector<orc::InputStream::IORange>& io_ranges) override {
-        if (!config::orc_coalesce_read_enable) return;
         _buffer_stream_enabled = true;
         std::vector<SharedBufferedInputStream::IORange> bs_io_ranges;
         for (const auto& r : io_ranges) {

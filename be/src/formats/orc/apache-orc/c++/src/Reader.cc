@@ -944,14 +944,13 @@ void RowReaderImpl::buildIORanges(std::vector<InputStream::IORange>* io_ranges) 
         }
         offset += length;
     }
-    // stripe footer
-    io_ranges->emplace_back(InputStream::IORange{.offset = offset, .size = currentStripeInfo.footerlength()});
 }
 
 void RowReaderImpl::startNextStripe() {
     reader.reset(); // ColumnReaders use lots of memory; free old memory first
     rowIndexes.clear();
     bloomFilterIndex.clear();
+    bool streamIORangesEnabled = contents->stream->isIORangesEnabled();
 
     while (currentStripe < lastStripe) {
         currentStripeInfo = footer->stripes(static_cast<int>(currentStripe));
@@ -978,10 +977,12 @@ void RowReaderImpl::startNextStripe() {
 
         contents->stream->prepareCache(InputStream::PrepareCacheScope::READ_FULL_STRIPE, currentStripeInfo.offset(),
                                        stripeSize);
-        contents->stream->emptyIORanges();
+        if (streamIORangesEnabled) {
+            contents->stream->clearIORanges();
+        }
         currentStripeFooter = getStripeFooter(currentStripeInfo, *contents);
         rowsInCurrentStripe = currentStripeInfo.numberofrows();
-        {
+        if (streamIORangesEnabled) {
             std::vector<InputStream::IORange> io_ranges;
             buildIORanges(&io_ranges);
             contents->stream->setIORanges(io_ranges);
@@ -1433,7 +1434,11 @@ uint64_t InputStream::getNaturalReadSizeAfterSeek() const {
 
 void InputStream::prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length) {}
 
-void InputStream::emptyIORanges() {}
+bool InputStream::isIORangesEnabled() const {
+    return false;
+}
+
+void InputStream::clearIORanges() {}
 
 void InputStream::setIORanges(std::vector<InputStream::IORange>& io_ranges) {}
 

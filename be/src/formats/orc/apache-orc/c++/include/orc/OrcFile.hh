@@ -83,7 +83,8 @@ public:
 
     virtual void prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length);
 
-    virtual void emptyIORanges();
+    virtual bool isIORangesEnabled() const;
+    virtual void clearIORanges();
     virtual void setIORanges(std::vector<InputStream::IORange>& io_ranges);
 };
 
