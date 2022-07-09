@@ -38,6 +38,7 @@ statement
     | refreshTableStatement                                                                 #refreshTable
     | showDeleteStatement                                                                   #showDelete
     | descTableStatement                                                                    #descTable
+    | showIndexStatement                                                                    #showIndex
     | recoverTableStatement                                                                 #recoverTable
 
     // View Statement
@@ -276,6 +277,10 @@ showDeleteStatement
 
 descTableStatement
     : (DESC | DESCRIBE) table=qualifiedName ALL?
+    ;
+
+showIndexStatement
+    : SHOW (INDEX | INDEXES | KEY | KEYS) ((FROM | IN) table=qualifiedName) ((FROM | IN) db=qualifiedName)?
     ;
 
 recoverTableStatement
