@@ -260,8 +260,8 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         if (latency < (Config.catalog_trash_expire_second - LATE_RECYCLE_INTERVAL_SECONDS) * 1000L) {
             return true;
         }
-        // 3. still expire after adding recycle time, sorry.
-        if (latency - LATE_RECYCLE_INTERVAL_SECONDS * 1000L > Config.catalog_trash_expire_second * 1000L) {
+        // 3. already expired, sorry.
+        if (latency > Config.catalog_trash_expire_second * 1000L) {
             return false;
         }
         enableEraseLater.add(id);

@@ -213,6 +213,33 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
+    public void testEnsureEraseLater() {
+        Config.catalog_trash_expire_second = 600; // set expire in 10 minutes
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+        Database db = new Database(111, "uno");
+        recycleBin.recycleDatabase(db, new HashSet<>());
+
+        // no need to set enable erase later if there are a lot of time left
+        long now = System.currentTimeMillis();
+        Assert.assertTrue(recycleBin.ensureEraseLater(db.getId(), now));
+        Assert.assertFalse(recycleBin.enableEraseLater.contains(db.getId()));
+
+        // no need to set enable erase later if already exipre
+        long moreThanTenMinutesLater = now + 620 * 1000L;
+        Assert.assertFalse(recycleBin.ensureEraseLater(db.getId(), moreThanTenMinutesLater));
+        Assert.assertFalse(recycleBin.enableEraseLater.contains(db.getId()));
+
+        // now we should set enable erase later because we are about to expire
+        long moreThanNineMinutesLater = now + 550 * 1000L;
+        Assert.assertTrue(recycleBin.ensureEraseLater(db.getId(), moreThanNineMinutesLater));
+        Assert.assertTrue(recycleBin.enableEraseLater.contains(db.getId()));
+
+        // if already expired, we should return false but won't erase the flag
+        Assert.assertFalse(recycleBin.ensureEraseLater(db.getId(), moreThanTenMinutesLater));
+        Assert.assertTrue(recycleBin.enableEraseLater.contains(db.getId()));
+     }
+
+    @Test
     public void testRecycleDb(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
         Database db1 = new Database(111, "uno");
         Database db2SameName = new Database(22, "dos"); // samename
