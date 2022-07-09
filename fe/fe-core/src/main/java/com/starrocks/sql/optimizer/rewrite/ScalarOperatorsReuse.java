@@ -11,6 +11,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -190,6 +191,10 @@ public class ScalarOperatorsReuse {
             return tryRewrite(operator);
         }
 
+        public ScalarOperator visitDictMappingOperator(DictMappingOperator operator, Void context) {
+            return tryRewrite(operator.clone());
+        }
+
         @Override
         public ScalarOperator visitCloneOperator(CloneOperator operator, Void context) {
             ScalarOperator clone = new CloneOperator(operator.getChild(0).accept(this, null));
@@ -231,6 +236,11 @@ public class ScalarOperatorsReuse {
 
             return collectCommonOperatorsByDepth(scalarOperator.getChildren().stream().map(
                     argument -> argument.accept(this, context)).reduce(Math::max).get() + 1, scalarOperator);
+        }
+
+        @Override
+        public Integer visitDictMappingOperator(DictMappingOperator scalarOperator, Void context) {
+            return collectCommonOperatorsByDepth(1, scalarOperator);
         }
 
     }

@@ -160,6 +160,7 @@ public class DictMappingRewriter {
             return rewriteForScalarOperator(predicate, context);
         }
 
+        @Override
         public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator predicate, RewriterContext context) {
             if (!predicate.getChild(0).isColumnRef()) {
                 context.hasAppliedOperator = false;

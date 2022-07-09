@@ -664,19 +664,45 @@ public class LowCardinalityTest extends PlanTestBase {
         // test string function with one column
         sql = "select substring(S_ADDRESS, S_ADDRESS, 1) from supplier";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("11 <-> DictExpr(10: S_ADDRESS,[substring(<place-holder>, CAST(<place-holder> AS INT), 1)])"));
+        Assert.assertTrue(plan.contains(
+                "11 <-> DictExpr(10: S_ADDRESS,[substring(<place-holder>, CAST(<place-holder> AS INT), 1)])"));
 
         // test simple string function with two column
         // test worth for rewrite
         sql = "select substring(upper(S_ADDRESS), S_SUPPKEY, 2) from supplier";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("9 <-> substring[(DictExpr(10: S_ADDRESS,[upper(<place-holder>)]), [1: S_SUPPKEY, INT, false], 2); args: VARCHAR,INT,INT; result: VARCHAR; args nullable: true; result nullable: true]"));
+        Assert.assertTrue(plan.contains(
+                "9 <-> substring[(DictExpr(10: S_ADDRESS,[upper(<place-holder>)]), [1: S_SUPPKEY, INT, false], 2); args: VARCHAR,INT,INT; result: VARCHAR; args nullable: true; result nullable: true]"));
+
+        // Test common expression reuse 1
+        // couldn't reuse case
+        // DictExpr return varchar and int
+        sql = "select if(S_SUPPKEY='kks', upper(S_ADDRESS), S_COMMENT), upper(S_ADDRESS) from supplier";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains(
+                "  |  9 <-> if[(cast([1: S_SUPPKEY, INT, false] as VARCHAR(1048576)) = 'kks', DictExpr(11: S_ADDRESS,[upper(<place-holder>)]), DictExpr(12: S_COMMENT,[<place-holder>])); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]\n" +
+                        "  |  13 <-> DictExpr(11: S_ADDRESS,[upper(<place-holder>)])"));
+        Assert.assertTrue(plan.contains("Decode"));
 
         // TODO: return dict column for this case
+        // common expression reuse 2
         // test input two string column
         sql = "select if(S_ADDRESS='kks', S_COMMENT, S_COMMENT) from supplier";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains(" |  9 <-> if[(DictExpr(10: S_ADDRESS,[<place-holder> = 'kks']), DictExpr(11: S_COMMENT,[<place-holder>]), DictExpr(11: S_COMMENT,[<place-holder>])); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]"));
+        Assert.assertTrue(plan.contains(
+                "  |  9 <-> if[(DictExpr(10: S_ADDRESS,[<place-holder> = 'kks']), [12: expr, VARCHAR(101), true], [12: expr, VARCHAR(101), true]); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]\n" +
+                        "  |  common expressions:\n" +
+                        "  |  12 <-> DictExpr(11: S_COMMENT,[<place-holder>])"));
+        Assert.assertFalse(plan.contains("Decode"));
+
+        // common expression reuse 3
+        sql = "select if(S_ADDRESS='kks', upper(S_COMMENT), S_COMMENT), concat(upper(S_COMMENT), S_ADDRESS) from supplier";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  |  output columns:\n" +
+                "  |  9 <-> if[(DictExpr(11: S_ADDRESS,[<place-holder> = 'kks']), [13: expr, VARCHAR, true], DictExpr(12: S_COMMENT,[<place-holder>])); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]\n" +
+                "  |  10 <-> concat[([13: expr, VARCHAR, true], DictExpr(11: S_ADDRESS,[<place-holder>])); args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]"));
+        Assert.assertTrue(plan.contains("  |  common expressions:\n" +
+                "  |  13 <-> DictExpr(12: S_COMMENT,[upper(<place-holder>)])"));
     }
 
     @Test

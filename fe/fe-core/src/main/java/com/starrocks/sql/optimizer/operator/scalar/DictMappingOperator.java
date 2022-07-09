@@ -60,6 +60,14 @@ public class DictMappingOperator extends ScalarOperator {
 
     @Override
     public boolean equals(Object other) {
+        if (other == null) {
+            return false;
+        }
+        if (other instanceof DictMappingOperator) {
+            final DictMappingOperator mapping = (DictMappingOperator) other;
+            return mapping.getType().equals(getType()) && mapping.originScalaOperator.equals(originScalaOperator) &&
+                    mapping.dictColumn.equals(dictColumn);
+        }
         return false;
     }
 
@@ -73,6 +81,7 @@ public class DictMappingOperator extends ScalarOperator {
         return dictColumn.getUsedColumns();
     }
 
+    @Override
     public ScalarOperator clone() {
         DictMappingOperator clone = (DictMappingOperator) super.clone();
         clone.dictColumn = (ColumnRefOperator) this.dictColumn.clone();
