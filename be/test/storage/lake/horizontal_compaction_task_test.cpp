@@ -77,7 +77,7 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
-        _schema = std::make_shared<VSchema>(vectorized::ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
 protected:
@@ -226,7 +226,7 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
-        _schema = std::make_shared<VSchema>(vectorized::ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
 protected:

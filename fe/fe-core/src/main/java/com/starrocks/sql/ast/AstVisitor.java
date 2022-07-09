@@ -62,6 +62,7 @@ import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RecoverDbStmt;
+import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
@@ -247,6 +248,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowMaterializedViewStmt(ShowMaterializedViewStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    public R visitRecoverTableStatement(RecoverTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
     }
 
     public R visitShowDatabasesStmt(ShowDbStmt statement, C context) {

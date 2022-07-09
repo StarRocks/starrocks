@@ -58,7 +58,7 @@ public:
 
         auto metadata = new_tablet_metadata(10086);
         _tablet_schema = TabletSchema::create(_mem_tracker.get(), metadata->schema());
-        _schema = std::make_shared<VSchema>(vectorized::ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
 
         // init _open_request
         _open_request.mutable_id()->set_hi(456789);
@@ -220,9 +220,9 @@ protected:
         opts.chunk_size = 1024;
 
         ASSIGN_OR_ABORT(auto seg_iter, seg->new_iterator(*_schema, opts));
-        auto read_chunk_ptr = vectorized::ChunkHelper::new_chunk(*_schema, 1024);
+        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
         while (true) {
-            auto tmp_chunk = vectorized::ChunkHelper::new_chunk(*_schema, 1024);
+            auto tmp_chunk = ChunkHelper::new_chunk(*_schema, 1024);
             auto st = seg_iter->get_next(tmp_chunk.get());
             if (st.is_end_of_file()) {
                 break;

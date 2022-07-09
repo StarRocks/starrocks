@@ -38,6 +38,7 @@ statement
     | refreshTableStatement                                                                 #refreshTable
     | showDeleteStatement                                                                   #showDelete
     | descTableStatement                                                                    #descTable
+    | recoverTableStatement                                                                 #recoverTable
     | showPartitionsStatement                                                               #showPartitions
 
     // View Statement
@@ -276,6 +277,10 @@ showDeleteStatement
 
 descTableStatement
     : (DESC | DESCRIBE) table=qualifiedName ALL?
+    ;
+
+recoverTableStatement
+    : RECOVER TABLE qualifiedName
     ;
 
 showPartitionsStatement
