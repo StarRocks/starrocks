@@ -60,7 +60,7 @@ RuntimeProfile::PeriodicCounterUpdateState RuntimeProfile::_s_periodic_counter_u
 
 const std::unordered_set<std::string> RuntimeProfile::NON_MERGE_COUNTER_NAMES = {
         "DegreeOfParallelism", "RuntimeBloomFilterNum", "RuntimeInFilterNum",         "PushdownPredicates",
-        "MemoryLimit",         "ChunkBufferCapacity",   "DefaultChunkBufferCapacity", "PeakBufferSize"};
+        "MemoryLimit",         "ChunkBufferCapacity",   "DefaultChunkBufferCapacity", "PeakChunkBufferSize"};
 
 RuntimeProfile::RuntimeProfile(std::string name, bool is_averaged_profile)
         : _parent(nullptr),
