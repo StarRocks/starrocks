@@ -1,0 +1,27 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
+package com.starrocks.sql.analyzer;
+
+import com.starrocks.analysis.CreateTableLikeStmt;
+import com.starrocks.analysis.TableName;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeNameFormat;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.common.MetaUtils;
+
+public class CreateTableLikeAnalyzer {
+
+    public static void analyze(CreateTableLikeStmt statement, ConnectContext context) {
+        final TableName tableNameObject = statement.getDbTbl();
+        MetaUtils.normalizationTableName(context, tableNameObject);
+
+        final String tableName = tableNameObject.getTbl();
+        try {
+            FeNameFormat.checkTableName(tableName);
+        } catch (AnalysisException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
+        }
+    }
+}

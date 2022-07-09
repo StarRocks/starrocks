@@ -41,6 +41,7 @@ import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
@@ -341,6 +342,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 extProperties,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue(),
                 context.rollupDesc() == null ? null : getRollupDesc(context.rollupDesc()));
+    }
+
+    @Override
+    public ParseNode visitCreateTableLikeStatement(StarRocksParser.CreateTableLikeStatementContext context) {
+        return new CreateTableLikeStmt(context.IF() != null,
+                qualifiedNameToTableName(getQualifiedName(context.qualifiedName(0))),
+                qualifiedNameToTableName(getQualifiedName(context.qualifiedName(1))));
     }
 
     private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context) {

@@ -15,6 +15,7 @@ import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
@@ -63,6 +64,12 @@ public class Analyzer {
         @Override
         public Void visitCreateTableStatement(CreateTableStmt statement, ConnectContext context) {
             CreateTableAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateTableLikeStatement(CreateTableLikeStmt statement, ConnectContext context) {
+            CreateTableLikeAnalyzer.analyze(statement, context);
             return null;
         }
 
