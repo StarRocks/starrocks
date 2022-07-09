@@ -25,8 +25,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.MetaUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -58,8 +56,6 @@ public class AlterTableStatementAnalyzer {
     }
 
     static class AlterTableClauseAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
-
-        private static final Logger logger = LoggerFactory.getLogger(AlterTableClauseAnalyzerVisitor.class);
 
         public void analyze(AlterClause statement, ConnectContext session) {
             visit(statement, session);
@@ -97,7 +93,7 @@ public class AlterTableStatementAnalyzer {
                 throw new SemanticException("Partition names is not set or empty");
             }
 
-            if (partitionNames.stream().anyMatch(entity -> Strings.isNullOrEmpty(entity))) {
+            if (partitionNames.stream().anyMatch(Strings::isNullOrEmpty)) {
                 throw new SemanticException("there are empty partition name");
             }
 
@@ -109,8 +105,7 @@ public class AlterTableStatementAnalyzer {
             try {
                 checkProperties(Maps.newHashMap(properties));
             } catch (AnalysisException e) {
-                logger.error("check properties error", e);
-                throw new SemanticException(e.getMessage());
+                throw new SemanticException("check properties error: %s", e.getMessage());
             }
             return null;
         }
@@ -127,7 +122,7 @@ public class AlterTableStatementAnalyzer {
             Preconditions.checkNotNull(newDataProperty);
 
             // 2. replication num
-            short newReplicationNum = (short) -1;
+            short newReplicationNum;
             newReplicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, FeConstants.default_replication_num);
             Preconditions.checkState(newReplicationNum != (short) -1);
 
