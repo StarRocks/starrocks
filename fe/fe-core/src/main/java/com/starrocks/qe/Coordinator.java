@@ -564,7 +564,7 @@ public class Coordinator {
 
                 // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
                 // shuffle partitions' ordinals in DataStreamSink. backendIds of Fragment instances that
-                // contains shuffle join determine the ordinals of GRF components in the GRF. For a
+                // contain shuffle join determine the ordinals of GRF components in the GRF. For a
                 // shuffle join, its shuffle partitions and corresponding one-map-one GRF components
                 // should have the same ordinals. so here assign monotonic unique backendIds to
                 // Fragment instances to keep consistent order with Fragment instances in
@@ -783,7 +783,7 @@ public class Coordinator {
      */
     private void deliverExecBatchFragmentsRequests(boolean enablePipelineEngine) throws Exception {
         long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
-        List<List<PlanFragment>> topologicalFragments = computeTopologicalOrderFragments();
+        List<List<PlanFragment>> fragmentGroups = computeTopologicalOrderFragments();
 
         lock();
         try {
@@ -792,21 +792,32 @@ public class Coordinator {
             int profileFragmentId = 0;
 
             Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
-            // The cached desc table is only used for the non-first instance request to the same host.
-            // Since all the instances of a fragment will be sent in a request,
-            // there is no chance to use the cached desc table.
-            descTable.setIs_cached(false);
 
-            for (List<PlanFragment> concurrencyFragments : topologicalFragments) {
-                List<Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>>> futures = Lists.newArrayList();
+            this.descTable.setIs_cached(false);
+            TDescriptorTable emptyDescTable = new TDescriptorTable();
+            emptyDescTable.setIs_cached(true);
+            emptyDescTable.setTupleDescriptors(Collections.emptyList());
 
-                for (PlanFragment fragment : concurrencyFragments) {
+            // Record the first groupIndex of each host.
+            // Each host only sends descTable once in the first batch request.
+            Map<TNetworkAddress, Integer> host2firstGroupIndex = Maps.newHashMap();
+            for (int groupIndex = 0; groupIndex < fragmentGroups.size(); ++groupIndex) {
+                List<PlanFragment> fragmentGroup = fragmentGroups.get(groupIndex);
+
+                // Divide requests of fragments in the current group to two stages.
+                // If a request need send descTable, the other requests to the same host will be in the second stage.
+                // Otherwise, the request will be in the first stage, including
+                // - the request need send descTable.
+                // - the request to the host, where some request in the previous group has already sent descTable.
+                List<List<Pair<BackendExecState, TExecBatchPlanFragmentsParams>>> inflightRequestsList =
+                        ImmutableList.of(new ArrayList<>(), new ArrayList<>());
+                for (PlanFragment fragment : fragmentGroup) {
                     FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
                     Preconditions.checkState(!params.instanceExecParams.isEmpty());
 
                     // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
                     // shuffle partitions' ordinals in DataStreamSink. backendIds of Fragment instances that
-                    // contains shuffle join determine the ordinals of GRF components in the GRF. For a
+                    // contain shuffle join determine the ordinals of GRF components in the GRF. For a
                     // shuffle join, its shuffle partitions and corresponding one-map-one GRF components
                     // should have the same ordinals. so here assign monotonic unique backendIds to
                     // Fragment instances to keep consistent order with Fragment instances in
@@ -825,11 +836,31 @@ public class Coordinator {
                             continue;
                         }
 
+                        int inflightIndex = 0;
+                        TDescriptorTable curDescTable = this.descTable;
+                        if (enablePipelineEngine) {
+                            Integer firstGroupIndex = host2firstGroupIndex.get(host);
+                            if (firstGroupIndex == null) {
+                                // Hasn't sent descTable for this host,
+                                // so send descTable this time.
+                                host2firstGroupIndex.put(host, groupIndex);
+                            } else if (firstGroupIndex < groupIndex) {
+                                // Has sent descTable for this host in the previous fragment group,
+                                // so needn't wait and use cached descTable.
+                                curDescTable = emptyDescTable;
+                            } else {
+                                // The previous fragment for this host int the current fragment group will send descTable,
+                                // so this fragment need wait until the previous one finishes delivering.
+                                inflightIndex = 1;
+                                curDescTable = emptyDescTable;
+                            }
+                        }
+
                         Set<TUniqueId> curInstanceIds = requests.stream()
                                 .map(FInstanceExecParam::getInstanceId)
                                 .collect(Collectors.toSet());
                         TExecBatchPlanFragmentsParams tRequest =
-                                params.toThriftInBatch(curInstanceIds, host, descTable, dbIds, enablePipelineEngine);
+                                params.toThriftInBatch(curInstanceIds, host, curDescTable, dbIds, enablePipelineEngine);
                         TExecPlanFragmentParams tCommonParams = tRequest.getCommon_param();
                         List<TExecPlanFragmentParams> tUniqueParamsList = tRequest.getUnique_param_per_instance();
                         Preconditions.checkState(!tUniqueParamsList.isEmpty());
@@ -860,51 +891,59 @@ public class Coordinator {
 
                         if (lastExecState != null) {
                             // Just choose any instance ExecState to send the RPC request.
-                            futures.add(Pair.create(lastExecState, lastExecState.execRemoteBatchFragmentsAsync(tRequest)));
+                            inflightRequestsList.get(inflightIndex).add(Pair.create(lastExecState, tRequest));
                         }
                     }
 
                     profileFragmentId += 1;
                 }
 
-                for (Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>> pair : futures) {
-                    TStatusCode code;
-                    String errMsg = null;
-                    try {
-                        PExecBatchPlanFragmentsResult result =
-                                pair.second.get(queryDeliveryTimeoutMs, TimeUnit.MILLISECONDS);
-                        code = TStatusCode.findByValue(result.status.statusCode);
-                        if (result.status.errorMsgs != null && !result.status.errorMsgs.isEmpty()) {
-                            errMsg = result.status.errorMsgs.get(0);
-                        }
-                    } catch (ExecutionException e) {
-                        LOG.warn("catch a execute exception", e);
-                        code = TStatusCode.THRIFT_RPC_ERROR;
-                    } catch (InterruptedException e) {
-                        LOG.warn("catch a interrupt exception", e);
-                        code = TStatusCode.INTERNAL_ERROR;
-                    } catch (TimeoutException e) {
-                        LOG.warn("catch a timeout exception", e);
-                        code = TStatusCode.TIMEOUT;
+                for (List<Pair<BackendExecState, TExecBatchPlanFragmentsParams>> inflightRequests : inflightRequestsList) {
+                    List<Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>>> futures = Lists.newArrayList();
+                    for (Pair<BackendExecState, TExecBatchPlanFragmentsParams> inflightRequest : inflightRequests) {
+                        futures.add(Pair.create(inflightRequest.first,
+                                inflightRequest.first.execRemoteBatchFragmentsAsync(inflightRequest.second)));
                     }
 
-                    if (code != TStatusCode.OK) {
-                        if (errMsg == null) {
-                            errMsg = "exec rpc error. backend id: " + pair.first.backend.getId();
+                    for (Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>> pair : futures) {
+                        TStatusCode code;
+                        String errMsg = null;
+                        try {
+                            PExecBatchPlanFragmentsResult result =
+                                    pair.second.get(queryDeliveryTimeoutMs, TimeUnit.MILLISECONDS);
+                            code = TStatusCode.findByValue(result.status.statusCode);
+                            if (result.status.errorMsgs != null && !result.status.errorMsgs.isEmpty()) {
+                                errMsg = result.status.errorMsgs.get(0);
+                            }
+                        } catch (ExecutionException e) {
+                            LOG.warn("catch a execute exception", e);
+                            code = TStatusCode.THRIFT_RPC_ERROR;
+                        } catch (InterruptedException e) {
+                            LOG.warn("catch a interrupt exception", e);
+                            code = TStatusCode.INTERNAL_ERROR;
+                        } catch (TimeoutException e) {
+                            LOG.warn("catch a timeout exception", e);
+                            code = TStatusCode.TIMEOUT;
                         }
-                        queryStatus.setStatus(errMsg);
-                        LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
-                                errMsg, code, pair.first.fragmentId,
-                                pair.first.address.hostname, pair.first.address.port);
-                        cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
-                        switch (Objects.requireNonNull(code)) {
-                            case TIMEOUT:
-                                throw new UserException("query timeout. backend id: " + pair.first.backend.getId());
-                            case THRIFT_RPC_ERROR:
-                                SimpleScheduler.addToBlacklist(pair.first.backend.getId());
-                                throw new RpcException(pair.first.backend.getHost(), "rpc failed");
-                            default:
-                                throw new UserException(errMsg);
+
+                        if (code != TStatusCode.OK) {
+                            if (errMsg == null) {
+                                errMsg = "exec rpc error. backend id: " + pair.first.backend.getId();
+                            }
+                            queryStatus.setStatus(errMsg);
+                            LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
+                                    errMsg, code, pair.first.fragmentId,
+                                    pair.first.address.hostname, pair.first.address.port);
+                            cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
+                            switch (Objects.requireNonNull(code)) {
+                                case TIMEOUT:
+                                    throw new UserException("query timeout. backend id: " + pair.first.backend.getId());
+                                case THRIFT_RPC_ERROR:
+                                    SimpleScheduler.addToBlacklist(pair.first.backend.getId());
+                                    throw new RpcException(pair.first.backend.getHost(), "rpc failed");
+                                default:
+                                    throw new UserException(errMsg);
+                            }
                         }
                     }
                 }

@@ -8,6 +8,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/util.h"
 #include "storage/lake/group_assigner.h"
+#include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
@@ -180,9 +181,10 @@ Status TabletManager::drop_tablet(int64_t tablet_id) {
 }
 
 Status TabletManager::put_tablet_metadata(const std::string& group, TabletMetadataPtr metadata) {
+    auto options = WritableFileOptions{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     auto metadata_path = tablet_metadata_path(group, metadata->id(), metadata->version());
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_group_assigner->get_fs_prefix()));
-    ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(path_assemble(metadata_path, metadata->id())));
+    ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(options, path_assemble(metadata_path, metadata->id())));
     RETURN_IF_ERROR(wf->append(metadata->SerializeAsString()));
     RETURN_IF_ERROR(wf->close());
 
@@ -338,9 +340,10 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& group, int64_t
 }
 
 Status TabletManager::put_txn_log(const std::string& group, TxnLogPtr log) {
+    auto options = WritableFileOptions{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     auto txnlog_path = txn_log_path(group, log->tablet_id(), log->txn_id());
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_group_assigner->get_fs_prefix()));
-    ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(path_assemble(txnlog_path, log->tablet_id())));
+    ASSIGN_OR_RETURN(auto wf, fs->new_writable_file(options, path_assemble(txnlog_path, log->tablet_id())));
     RETURN_IF_ERROR(wf->append(log->SerializeAsString()));
     RETURN_IF_ERROR(wf->close());
 
@@ -399,24 +402,77 @@ Status TabletManager::publish_version(int64_t tablet_id, int64_t base_version, i
     return publish(&tablet, base_version, new_version, txns, txns_size);
 }
 
-Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata) {
-    if (log.has_op_write()) {
-        if (log.op_write().has_rowset() && log.op_write().rowset().segments_size() > 0) {
-            auto rowset = metadata->add_rowsets();
-            rowset->CopyFrom(log.op_write().rowset());
-            rowset->set_id(metadata->next_rowset_id());
-            metadata->set_next_rowset_id(metadata->next_rowset_id() + rowset->segments_size());
+static Status apply_write_log(const TxnLogPB_OpWrite& op_write, TabletMetadata* metadata) {
+    if (op_write.has_rowset() && op_write.rowset().num_rows() > 0) {
+        auto rowset = metadata->add_rowsets();
+        rowset->CopyFrom(op_write.rowset());
+        rowset->set_id(metadata->next_rowset_id());
+        metadata->set_next_rowset_id(metadata->next_rowset_id() + rowset->segments_size());
+    }
+    return Status::OK();
+}
+
+static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, TabletMetadata* metadata) {
+    // It's ok to have a compaction log without input rowset and output rowset.
+    if (op_compaction.input_rowsets().empty()) {
+        DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
+        return Status::OK();
+    }
+
+    struct Finder {
+        int64_t id;
+        bool operator()(const RowsetMetadata& r) const { return r.id() == id; }
+    };
+
+    auto input_id = op_compaction.input_rowsets(0);
+    auto first_input_pos = std::find_if(metadata->rowsets().begin(), metadata->rowsets().end(), Finder{input_id});
+    if (UNLIKELY(first_input_pos == metadata->rowsets().end())) {
+        return Status::InternalError(fmt::format("input rowset {} not found", input_id));
+    }
+
+    // Safety check:
+    // 1. All input rowsets must exist in |metadata->rowsets()|
+    // 2. Position of the input rowsets must be adjacent.
+    auto pre_input_pos = first_input_pos;
+    for (int i = 1, sz = metadata->rowsets_size(); i < sz; i++) {
+        input_id = op_compaction.input_rowsets(i);
+        auto it = std::find_if(pre_input_pos + 1, metadata->rowsets().end(), Finder{input_id});
+        if (it == metadata->rowsets().end()) {
+            return Status::InternalError(fmt::format("input rowset {} not exist", input_id));
+        } else if (it != pre_input_pos + 1) {
+            return Status::InternalError(fmt::format("input rowset position not adjacent"));
+        } else {
+            pre_input_pos = it;
         }
     }
 
+    if (op_compaction.has_output_rowset() && op_compaction.output_rowset().num_rows() > 0) {
+        // Replace the first input rowset with output rowset
+        auto first_idx = static_cast<int>(first_input_pos - metadata->rowsets().begin());
+        auto output_rowset = metadata->mutable_rowsets(first_idx);
+        output_rowset->CopyFrom(op_compaction.output_rowset());
+        output_rowset->set_id(metadata->next_rowset_id());
+        metadata->set_next_rowset_id(metadata->next_rowset_id() + output_rowset->segments_size());
+        ++first_input_pos;
+    }
+    // Erase input rowsets from metadata
+    auto end_input_pos = pre_input_pos + 1;
+    metadata->mutable_rowsets()->erase(first_input_pos, end_input_pos);
+    return Status::OK();
+}
+
+Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata) {
+    if (log.has_op_write()) {
+        RETURN_IF_ERROR(apply_write_log(log.op_write(), metadata));
+    }
+
     if (log.has_op_compaction()) {
-        return Status::NotSupported("does not support apply compaction log yet");
+        RETURN_IF_ERROR(apply_compaction_log(log.op_compaction(), metadata));
     }
 
     if (log.has_op_schema_change()) {
         return Status::NotSupported("does not support apply schema change log yet");
     }
-
     return Status::OK();
 }
 
@@ -472,6 +528,20 @@ Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const 
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_log_path(txn_id) << ": " << st;
     }
     return Status::OK();
+}
+
+// TODO: better input rowsets select policy.
+StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t version, int64_t txn_id) {
+    ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
+    ASSIGN_OR_RETURN(auto metadata, tablet.get_metadata(version));
+    auto tablet_ptr = std::make_shared<Tablet>(tablet);
+    std::vector<RowsetPtr> input_rowsets;
+    input_rowsets.reserve(metadata->rowsets_size());
+    for (const auto& rowset : metadata->rowsets()) {
+        auto metadata_ptr = std::make_shared<RowsetMetadata>(rowset);
+        input_rowsets.emplace_back(std::make_shared<Rowset>(tablet_ptr.get(), std::move(metadata_ptr)));
+    }
+    return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet_ptr), std::move(input_rowsets));
 }
 
 } // namespace starrocks::lake

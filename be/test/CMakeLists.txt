@@ -156,6 +156,7 @@ set(EXEC_FILES
         ./storage/lake/async_delta_writer_test.cpp
         ./storage/lake/delta_writer_test.cpp
         ./storage/lake/group_assigner_test.cpp
+        ./storage/lake/horizontal_compaction_task_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/tablet_reader_test.cpp
         ./storage/lake/tablet_writer_test.cpp

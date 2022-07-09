@@ -318,8 +318,8 @@ RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_
     writer_context.segments_overlap = NONOVERLAPPING;
     std::unique_ptr<RowsetWriter> writer;
     EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-    auto schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
-    auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
+    auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    auto chunk = ChunkHelper::new_chunk(schema, keys.size());
     auto& cols = chunk->columns();
     size_t size = keys.size();
     for (size_t i = 0; i < size; i++) {

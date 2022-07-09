@@ -99,6 +99,7 @@ import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.RecoverDbStmt;
+import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetStmt;
@@ -121,6 +122,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
@@ -506,6 +508,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitSwapTableClause(StarRocksParser.SwapTableClauseContext context) {
+        Identifier identifier = (Identifier) visit(context.identifier());
+        return new SwapTableClause(identifier.getValue());
+    }
+
+    @Override
     public ParseNode visitShowComputeNodes(StarRocksParser.ShowComputeNodesContext context) {
         return new ShowComputeNodesStmt();
     }
@@ -516,6 +524,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         List<AlterClause> alterClauses = visit(context.alterClause(), AlterClause.class);
         return new AlterTableStmt(targetTableName, alterClauses);
+    }
+
+    @Override
+    public ParseNode visitRecoverTableStatement(StarRocksParser.RecoverTableStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName tableName = qualifiedNameToTableName(qualifiedName);
+        return new RecoverTableStmt(tableName);
     }
 
     @Override

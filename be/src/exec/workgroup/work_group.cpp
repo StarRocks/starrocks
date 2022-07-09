@@ -354,7 +354,9 @@ Status WorkGroup::check_big_query(const QueryContext& query_context) {
     }
 
     // Check scan rows number
-    if (_big_query_scan_rows_limit && query_context.cur_scan_rows_num() > _big_query_scan_rows_limit) {
+    int64_t bigquery_scan_limit =
+            query_context.get_scan_limit() > 0 ? query_context.get_scan_limit() : _big_query_scan_rows_limit;
+    if (_big_query_scan_rows_limit && query_context.cur_scan_rows_num() > bigquery_scan_limit) {
         _bigquery_count++;
         return Status::Cancelled(fmt::format("exceed big query scan_rows limit: current is {} but limit is {}",
                                              query_context.cur_scan_rows_num(), _big_query_scan_rows_limit));

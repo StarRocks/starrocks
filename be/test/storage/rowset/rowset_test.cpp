@@ -264,10 +264,10 @@ TEST_F(RowsetTest, FinalMergeTest) {
         std::unique_ptr<RowsetWriter> rowset_writer;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
+        auto schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema);
 
         {
-            auto chunk = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+            auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
             auto& cols = chunk->columns();
             for (auto i = 0; i < rows_per_segment; i++) {
                 cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
@@ -279,7 +279,7 @@ TEST_F(RowsetTest, FinalMergeTest) {
         }
 
         {
-            auto chunk = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+            auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
             auto& cols = chunk->columns();
             for (auto i = rows_per_segment / 2; i < rows_per_segment + rows_per_segment / 2; i++) {
                 cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
@@ -291,7 +291,7 @@ TEST_F(RowsetTest, FinalMergeTest) {
         }
 
         {
-            auto chunk = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+            auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
             auto& cols = chunk->columns();
             for (auto i = rows_per_segment; i < rows_per_segment * 2; i++) {
                 cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
@@ -322,7 +322,7 @@ TEST_F(RowsetTest, FinalMergeTest) {
 
         seg_iterator->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
 
-        auto chunk = vectorized::ChunkHelper::new_chunk(seg_iterator->schema(), 100);
+        auto chunk = ChunkHelper::new_chunk(seg_iterator->schema(), 100);
 
         size_t count = 0;
 
@@ -361,10 +361,10 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
-    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
 
     {
-        auto chunk = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto& cols = chunk->columns();
         for (auto i = 0; i < rows_per_segment; i++) {
             cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
@@ -378,7 +378,7 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
     }
 
     {
-        auto chunk = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto& cols = chunk->columns();
         for (auto i = rows_per_segment / 2; i < rows_per_segment + rows_per_segment / 2; i++) {
             cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
@@ -392,7 +392,7 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
     }
 
     {
-        auto chunk = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto& cols = chunk->columns();
         for (auto i = rows_per_segment; i < rows_per_segment * 2; i++) {
             cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
@@ -425,7 +425,7 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
 
     seg_iterator->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
 
-    auto chunk = vectorized::ChunkHelper::new_chunk(seg_iterator->schema(), 100);
+    auto chunk = ChunkHelper::new_chunk(seg_iterator->schema(), 100);
     size_t count = 0;
 
     while (true) {
@@ -468,8 +468,8 @@ TEST_F(RowsetTest, VerticalWriteTest) {
     {
         // k1 k2
         std::vector<uint32_t> column_indexes{0, 1};
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, column_indexes);
-        auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
+        auto schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, column_indexes);
+        auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
@@ -485,8 +485,8 @@ TEST_F(RowsetTest, VerticalWriteTest) {
     {
         // v1
         std::vector<uint32_t> column_indexes{2};
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, column_indexes);
-        auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
+        auto schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, column_indexes);
+        auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
         for (auto i = 0; i < num_rows % chunk_size; ++i) {
             chunk->reset();
             auto& cols = chunk->columns();
@@ -509,13 +509,13 @@ TEST_F(RowsetTest, VerticalWriteTest) {
     rs_opts.sorted = true;
     rs_opts.version = 0;
     rs_opts.stats = &_stats;
-    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
+    auto schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema);
     auto res = rowset->new_iterator(schema, rs_opts);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
 
     auto iterator = res.value();
     int count = 0;
-    auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
+    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
     while (true) {
         chunk->reset();
         auto st = iterator->get_next(chunk.get());
