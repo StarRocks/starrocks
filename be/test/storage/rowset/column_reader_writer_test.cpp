@@ -181,7 +181,7 @@ protected:
                 {
                     st = iter->seek_to_first();
                     ASSERT_TRUE(st.ok()) << st.to_string();
-                    vectorized::ColumnPtr dst = vectorized::ChunkHelper::column_from_field_type(type, true);
+                    vectorized::ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
                     // will do direct copy to column
                     size_t rows_read = src.size();
                     dst->reserve(rows_read);
@@ -203,7 +203,7 @@ protected:
                         ASSERT_TRUE(st.ok());
 
                         size_t rows_read = 1024;
-                        vectorized::ColumnPtr dst = vectorized::ChunkHelper::column_from_field_type(type, true);
+                        vectorized::ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
 
                         st = iter->next_batch(&rows_read, dst.get());
                         ASSERT_TRUE(st.ok());
@@ -220,7 +220,7 @@ protected:
                     st = iter->seek_to_first();
                     ASSERT_TRUE(st.ok());
 
-                    vectorized::ColumnPtr dst = vectorized::ChunkHelper::column_from_field_type(type, true);
+                    vectorized::ColumnPtr dst = ChunkHelper::column_from_field_type(type, true);
                     vectorized::SparseRange read_range;
                     size_t write_num = src.size();
                     read_range.add(vectorized::Range(0, write_num / 3));
@@ -438,7 +438,7 @@ protected:
     template <FieldType type>
     vectorized::ColumnPtr numeric_data(int null_ratio) {
         using CppType = typename CppTypeTraits<type>::CppType;
-        auto col = vectorized::ChunkHelper::column_from_field_type(type, true);
+        auto col = ChunkHelper::column_from_field_type(type, true);
         CppType value = 0;
         size_t count = 2 * 1024 * 1024 / sizeof(CppType);
         col->reserve(count);
@@ -457,7 +457,7 @@ protected:
         static std::string s1(4, 'a');
         static std::string s2(4, 'b');
         size_t count = 128 * 1024 / 4;
-        auto col = vectorized::ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, true);
+        auto col = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, true);
         auto nc = down_cast<vectorized::NullableColumn*>(col.get());
         nc->reserve(count);
         down_cast<vectorized::BinaryColumn*>(nc->data_column().get())->get_data().reserve(s1.size() * count);
@@ -483,7 +483,7 @@ protected:
         std::string s7("gbcdefghijklmnopqrstuvwxyz");
         std::string s8("hbcdefghijklmnopqrstuvwxyz");
 
-        auto col = vectorized::ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, true);
+        auto col = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, true);
         size_t count = (128 * 1024 / s1.size()) / 8 * 8;
         auto nc = down_cast<vectorized::NullableColumn*>(col.get());
         nc->reserve(count);
@@ -510,7 +510,7 @@ protected:
 
     vectorized::ColumnPtr date_values(int null_ratio) {
         size_t count = 4 * 1024 * 1024 / sizeof(vectorized::DateValue);
-        auto col = vectorized::ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATE_V2, true);
+        auto col = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATE_V2, true);
         vectorized::DateValue value = vectorized::DateValue::create(2020, 10, 1);
         for (size_t i = 0; i < count; i++) {
             CHECK_EQ(1, col->append_numbers(&value, sizeof(value)));
@@ -525,7 +525,7 @@ protected:
 
     vectorized::ColumnPtr datetime_values(int null_ratio) {
         size_t count = 4 * 1024 * 1024 / sizeof(vectorized::TimestampValue);
-        auto col = vectorized::ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_TIMESTAMP, true);
+        auto col = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_TIMESTAMP, true);
         vectorized::TimestampValue value = vectorized::TimestampValue::create(2020, 10, 1, 10, 20, 1);
         for (size_t i = 0; i < count; i++) {
             CHECK_EQ(1, col->append_numbers(&value, sizeof(value)));
@@ -673,7 +673,7 @@ TEST_F(ColumnReaderWriterTest, test_array_int) {
 }
 
 TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
-    auto col = vectorized::ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_INT, true);
+    auto col = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_INT, true);
     size_t count = 1024;
     col->reserve(count);
     for (int32_t i = 0; i < count; ++i) {
