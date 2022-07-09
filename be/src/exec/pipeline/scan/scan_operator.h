@@ -18,6 +18,8 @@ using ChunkBufferLimiterPtr = std::unique_ptr<ChunkBufferLimiter>;
 
 class ScanOperator : public SourceOperator {
 public:
+    static constexpr int MAX_IO_TASKS_PER_OP = 4;
+
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
                  ChunkBufferLimiter* buffer_limiter);
 
@@ -93,8 +95,6 @@ protected:
     ChunkBufferLimiter* _buffer_limiter;
 
 private:
-    static constexpr int MAX_IO_TASKS_PER_OP = 4;
-
     const size_t _buffer_size = config::pipeline_io_buffer_size;
 
     int32_t _io_task_retry_cnt = 0;
