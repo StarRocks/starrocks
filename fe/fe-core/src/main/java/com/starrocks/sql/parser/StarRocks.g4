@@ -366,6 +366,7 @@ alterClause
     | addComputeNodeClause
     | dropComputeNodeClause
     | swapTableClause
+    | dropPartitionClause
     ;
 
 createIndexClause
@@ -374,6 +375,10 @@ createIndexClause
 
 dropIndexClause
     : DROP INDEX indexName=identifier
+    ;
+
+dropPartitionClause
+    : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
     ;
 
 tableRenameClause

@@ -380,7 +380,7 @@ public class AlterTest {
         alterTable(stmt, true);
 
         stmt = "alter table test.tbl1 drop partition p3, drop partition p4";
-        alterTable(stmt, true);
+        alterTableWithNewParser(stmt, true);
 
         stmt = "alter table test.tbl1 drop partition p3, add column k3 int";
         alterTable(stmt, true);

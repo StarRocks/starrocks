@@ -41,6 +41,7 @@ import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
@@ -376,6 +377,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitSwapTableClause(SwapTableClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitDropPartitionClause(DropPartitionClause clause, C context) {
         return visitNode(clause, context);
     }
 
