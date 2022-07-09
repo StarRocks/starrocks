@@ -127,6 +127,7 @@ statement
     | REVOKE identifierOrString FROM user                                                   #revokeRole
     | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
+    | ALTER USER user authOption                                                            #alterUser
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
@@ -1215,6 +1216,11 @@ number
     : DECIMAL_VALUE  #decimalValue
     | DOUBLE_VALUE   #doubleValue
     | INTEGER_VALUE  #integerValue
+    ;
+
+authOption
+    : IDENTIFIED BY PASSWORD? string                            # authWithoutPlugin
+    | IDENTIFIED WITH identifierOrString ((BY | AS) string)?    # authWithPlugin
     ;
 
 nonReserved

@@ -10,6 +10,7 @@ import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CompoundPredicate;
@@ -457,6 +458,16 @@ public class PrivilegeChecker {
             }
             return null;
 
+        }
+
+        @Override
+        public Void visitAlterUserStatement(AlterUserStmt statement, ConnectContext context) {
+            // check if current user has GRANT priv on GLOBAL level.
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(
+                    ConnectContext.get(), PrivPredicate.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
         }
 
         @Override
