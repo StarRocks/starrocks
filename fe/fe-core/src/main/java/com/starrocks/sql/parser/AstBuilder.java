@@ -20,6 +20,7 @@ import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyticExpr;
@@ -130,6 +131,7 @@ import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UpdateStmt;
+import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.analysis.ValueList;
 import com.starrocks.catalog.AggregateType;
@@ -198,6 +200,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.UseStmt;
+import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentifier;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
@@ -1794,6 +1797,37 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 .getSymbol());
         Subquery subquery = new Subquery(new QueryStatement((QueryRelation) visit(context.queryBody())));
         return new BinaryPredicate(op, (Expr) visit(context.booleanExpression()), subquery);
+    }
+
+    // ------------------------------------------- Privilege Statement -------------------------------------------------
+
+    @Override
+    public ParseNode visitAlterUser(StarRocksParser.AlterUserContext context) {
+        UserDesc userDesc;
+        UserIdentifier user = (UserIdentifier) visit(context.user());
+        UserAuthOption authOption = (UserAuthOption) visit(context.authOption());
+        if (authOption.getAuthPlugin() == null) {
+            userDesc = new UserDesc(user.getUserIdentity(), authOption.getPassword(), authOption.isPasswordPlain());
+        } else {
+            userDesc = new UserDesc(user.getUserIdentity(), authOption.getAuthPlugin(), authOption.getAuthString(),
+                    authOption.isPasswordPlain());
+        }
+        return new AlterUserStmt(userDesc);
+    }
+
+    @Override
+    public ParseNode visitAuthWithoutPlugin(StarRocksParser.AuthWithoutPluginContext context) {
+        String password = ((StringLiteral) visit(context.string())).getStringValue();
+        boolean isPasswordPlain = context.PASSWORD() == null;
+        return new UserAuthOption(password, null, null, isPasswordPlain);
+    }
+
+    @Override
+    public ParseNode visitAuthWithPlugin(StarRocksParser.AuthWithPluginContext context) {
+        Identifier authPlugin = (Identifier) visit(context.identifierOrString());
+        String authString = context.string() == null ? null : ((StringLiteral) visit(context.string())).getStringValue();
+        boolean isPasswordPlain = context.AS() == null;
+        return new UserAuthOption(null, authPlugin.getValue(), authString, isPasswordPlain);
     }
 
     // ------------------------------------------- Other Statement -----------------------------------------------------
