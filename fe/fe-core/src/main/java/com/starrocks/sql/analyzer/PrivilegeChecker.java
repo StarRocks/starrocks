@@ -145,7 +145,7 @@ public class PrivilegeChecker {
         public Void visitIndexStmt(ShowIndexStmt statement, ConnectContext session) {
             if (!checkTblPriv(session, statement.getTableName(), PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, session.getQualifiedUser(),
-                       statement.getTableName().toString());
+                        statement.getTableName().toString());
             }
             return null;
         }
