@@ -234,7 +234,7 @@ public class ScalarType extends Type implements Cloneable {
             return createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
         } else {
             Preconditions.checkState(false,
-                    "Illegal decimal precision(1 to 38): pecision=" + precision);
+                    "Illegal decimal precision(1 to 38): precision=" + precision);
             return ScalarType.INVALID;
         }
     }
