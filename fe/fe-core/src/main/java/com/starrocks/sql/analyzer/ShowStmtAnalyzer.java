@@ -126,7 +126,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitIndexStmt(ShowIndexStmt node, ConnectContext context) {
+        public Void visitShowIndexStmt(ShowIndexStmt node, ConnectContext context) {
             node.init();
             String db = node.getTableName().getDb();
             db = getFullDatabaseName(db, context);
