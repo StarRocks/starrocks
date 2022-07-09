@@ -190,7 +190,7 @@ private:
 
     // Average time of closure stayed in the buffer
     // Formula is: cumulative_time / _degree_of_parallelism, so the estimation may
-    // not be that accurate, but enough to reflect the issue.
+    // not be that accurate, but enough to expose problems in profile analysis
     RuntimeProfile::Counter* _closure_block_timer;
     RuntimeProfile::Counter* _process_total_timer = nullptr;
 
