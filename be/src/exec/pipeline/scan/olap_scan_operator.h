@@ -18,7 +18,8 @@ using OlapScanContextPtr = std::shared_ptr<OlapScanContext>;
 
 class OlapScanOperatorFactory final : public ScanOperatorFactory {
 public:
-    OlapScanOperatorFactory(int32_t id, ScanNode* scan_node, OlapScanContextPtr ctx);
+    OlapScanOperatorFactory(int32_t id, ScanNode* scan_node, ChunkBufferLimiterPtr buffer_limiter,
+                            OlapScanContextPtr ctx);
 
     ~OlapScanOperatorFactory() override = default;
 
@@ -33,7 +34,7 @@ private:
 class OlapScanOperator final : public ScanOperator {
 public:
     OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
-                     std::atomic<int>& num_committed_scan_tasks, OlapScanContextPtr ctx);
+                     ChunkBufferLimiter* buffer_limiter, OlapScanContextPtr ctx);
 
     ~OlapScanOperator() override;
 
@@ -44,19 +45,8 @@ public:
     void do_close(RuntimeState* state) override;
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
 
-    size_t max_scan_concurrency() const override;
-
-private:
-    size_t _avg_max_scan_concurrency() const;
-
 private:
     OlapScanContextPtr _ctx;
-
-    const size_t _default_max_scan_concurrency;
-    // These three fields are used to calculate the average of different `max_scan_concurrency`s for profile.
-    mutable size_t _prev_max_scan_concurrency = 0;
-    mutable size_t _sum_max_scan_concurrency = 0;
-    mutable size_t _num_max_scan_concurrency = 0;
 };
 
 } // namespace pipeline
