@@ -26,8 +26,7 @@ Rowset::~Rowset() = default;
 //  1. delete predicates
 //  2. primary key table
 //  3. rowid range and short key range
-StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema,
-                                        const vectorized::RowsetReadOptions& options) {
+StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema, const RowsetReadOptions& options) {
     vectorized::SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet->group_assemble()));
     seg_options.stats = options.stats;

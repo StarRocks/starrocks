@@ -24,6 +24,7 @@ using RowsetSharedPtr = std::shared_ptr<Rowset>;
 class DelVector;
 using DelVectorPtr = std::shared_ptr<DelVector>;
 class MemTracker;
+class RowsetReadOptions;
 class SnapshotMeta;
 class Tablet;
 class TTabletInfo;
@@ -31,7 +32,6 @@ class TTabletInfo;
 namespace vectorized {
 class ChunkIterator;
 class CompactionState;
-class RowsetReadOptions;
 class Schema;
 class TabletReader;
 class ChunkChanger;

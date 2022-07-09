@@ -47,6 +47,7 @@
 namespace starrocks {
 
 class DataDir;
+class RowsetReadOptions;
 class Tablet;
 class TabletMeta;
 class TabletUpdates;
@@ -58,7 +59,6 @@ using TabletSharedPtr = std::shared_ptr<Tablet>;
 
 namespace vectorized {
 class ChunkIterator;
-class RowsetReadOptions;
 } // namespace vectorized
 
 using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
