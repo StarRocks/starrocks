@@ -278,7 +278,7 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    public R visitIndexStmt(ShowIndexStmt statement, C context) {
+    public R visitShowIndexStmt(ShowIndexStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
