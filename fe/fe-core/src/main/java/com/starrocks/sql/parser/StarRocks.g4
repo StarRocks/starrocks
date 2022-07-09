@@ -278,13 +278,10 @@ descTableStatement
     : (DESC | DESCRIBE) table=qualifiedName ALL?
     ;
 
-<<<<<<< HEAD
-=======
 recoverTableStatement
     : RECOVER TABLE qualifiedName
     ;
 
->>>>>>> upstream/main
 // ------------------------------------------- View Statement ----------------------------------------------------------
 
 createViewStatement
