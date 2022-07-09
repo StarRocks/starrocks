@@ -4,6 +4,11 @@
 
 #include <chrono>
 
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <bthread/bthread.h>
+DIAGNOSTIC_POP
+
 #include "fmt/core.h"
 #include "util/time.h"
 #include "util/uid_util.h"
@@ -220,10 +225,15 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<vo
 
         TransmitChunkInfo& request = buffer.front();
         bool need_wait = false;
-        DeferOp pop_defer([&need_wait, &buffer]() {
+        DeferOp pop_defer([&need_wait, &buffer, mem_tracker = _mem_tracker]() {
             if (need_wait) {
                 return;
             }
+
+            // The request memory is acquired by ExchangeSinkOperator,
+            // so use the instance_mem_tracker passed from ExchangeSinkOperator to release memory.
+            // This must be invoked before decrease_defer desctructed to avoid sink_buffer and fragment_ctx released.
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
             buffer.pop();
         });
 
@@ -273,7 +283,7 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<vo
         }
 
         auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(
-                {instance_id, request.params->sequence(), GetCurrentTimeNanos()}, _mem_tracker);
+                {instance_id, request.params->sequence(), GetCurrentTimeNanos()});
 
         closure->addFailedHandler([this](const ClosureContext& ctx) noexcept {
             _is_finishing = true;
@@ -311,10 +321,19 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<vo
         ++_total_in_flight_rpc;
         ++_num_in_flight_rpcs[instance_id.lo];
 
+        _mem_tracker->release(request.attachment_physical_bytes);
+        ExecEnv::GetInstance()->process_mem_tracker()->consume(request.attachment_physical_bytes);
+
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
         closure->cntl.request_attachment().append(request.attachment);
-        request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
+
+        if (bthread_self()) {
+            request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
+        } else {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+            request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
+        }
 
         return;
     }
