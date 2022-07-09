@@ -65,8 +65,8 @@ public:
         if (empty) {
             return *writer->build();
         }
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
-        auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
+        auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
@@ -116,10 +116,10 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*partial_schema.get());
+        auto schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema.get());
 
         if (keys.size() > 0) {
-            auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
+            auto chunk = ChunkHelper::new_chunk(schema, keys.size());
             EXPECT_TRUE(2 == chunk->num_columns());
             auto& cols = chunk->columns();
             for (size_t i = 0; i < keys.size(); i++) {
@@ -149,9 +149,9 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+        auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
         for (std::size_t written_rows = 0; written_rows < keys.size(); written_rows += max_rows_per_segment) {
-            auto chunk = vectorized::ChunkHelper::new_chunk(schema, max_rows_per_segment);
+            auto chunk = ChunkHelper::new_chunk(schema, max_rows_per_segment);
             auto& cols = chunk->columns();
             for (size_t i = 0; i < max_rows_per_segment; i++) {
                 cols[0]->append_datum(vectorized::Datum(keys[written_rows + i]));
@@ -493,8 +493,8 @@ static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletRea
 }
 
 static ssize_t read_and_compare(const vectorized::ChunkIteratorPtr& iter, const vector<int64_t>& keys) {
-    auto chunk = vectorized::ChunkHelper::new_chunk(iter->schema(), 100);
-    auto full_chunk = vectorized::ChunkHelper::new_chunk(iter->schema(), keys.size());
+    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+    auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto& cols = full_chunk->columns();
     for (size_t i = 0; i < keys.size(); i++) {
         cols[0]->append_datum(vectorized::Datum(keys[i]));
@@ -520,7 +520,7 @@ static ssize_t read_and_compare(const vectorized::ChunkIteratorPtr& iter, const 
 }
 
 static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
-    auto chunk = vectorized::ChunkHelper::new_chunk(iter->schema(), 100);
+    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
     while (true) {
         auto st = iter->get_next(chunk.get());
@@ -538,7 +538,7 @@ static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
 }
 
 static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
-    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -548,7 +548,7 @@ static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
 }
 
 static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, int64_t version, const vector<int64_t>& keys) {
-    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -559,13 +559,13 @@ static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, int64_t ve
 
 static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tablet, int64_t version,
                                                       const vector<int64_t>& keys) {
-    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
         return -1;
     }
-    auto full_chunk = vectorized::ChunkHelper::new_chunk(iter->schema(), keys.size());
+    auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto& cols = full_chunk->columns();
     for (size_t i = 0; i < keys.size(); i++) {
         cols[0]->append_datum(vectorized::Datum((int64_t)keys[i]));
@@ -573,7 +573,7 @@ static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tab
         auto v = std::to_string((int64_t)(keys[i] % 1000 + 2));
         cols[2]->append_datum(vectorized::Datum(Slice{v}));
     }
-    auto chunk = vectorized::ChunkHelper::new_chunk(iter->schema(), 100);
+    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
     while (true) {
         auto st = iter->get_next(chunk.get());
@@ -850,7 +850,7 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     ASSERT_EQ(0, read_tablet(_tablet, 1));
 
     // Create iterators before remove expired version, but read them after removal.
-    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     vectorized::TabletReader reader1(_tablet, Version(0, 1), schema);
     vectorized::TabletReader reader2(_tablet, Version(0, 2), schema);
     vectorized::TabletReader reader3(_tablet, Version(0, 3), schema);
@@ -2369,8 +2369,7 @@ void TabletUpdatesTest::test_get_column_values(bool enable_persistent_index) {
     for (auto i = 0; i < read_column_ids.size(); i++) {
         const auto read_column_id = read_column_ids[i];
         auto tablet_column = tablet_schema.column(read_column_id);
-        auto column =
-                vectorized::ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        auto column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         read_columns[i] = column->clone_empty();
     }
     std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
