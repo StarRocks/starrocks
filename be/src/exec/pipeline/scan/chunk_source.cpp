@@ -11,6 +11,14 @@
 
 namespace starrocks::pipeline {
 
+ChunkSource::ChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                         BalancedChunkBuffer& chunk_buffer)
+        : _scan_operator_seq(scan_operator_id),
+          _runtime_profile(runtime_profile),
+          _morsel(std::move(morsel)),
+          _chunk_buffer(chunk_buffer),
+          _chunk_token(nullptr) {}
+
 StatusOr<vectorized::ChunkPtr> ChunkSource::get_next_chunk_from_buffer() {
     vectorized::ChunkPtr chunk = nullptr;
     _chunk_buffer.try_get(_scan_operator_seq, &chunk);
@@ -25,6 +33,14 @@ bool ChunkSource::has_shared_output() const {
     return !_chunk_buffer.all_empty();
 }
 
+void ChunkSource::pin_chunk_token(ChunkBufferTokenPtr chunk_token) {
+    _chunk_token = std::move(chunk_token);
+}
+
+void ChunkSource::unpin_chunk_token() {
+    _chunk_token.reset(nullptr);
+}
+
 Status ChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state) {
     if (!_status.ok()) {
         return _status;
@@ -32,17 +48,21 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, Runtime
     using namespace vectorized;
 
     for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
+        if (_chunk_token == nullptr && (_chunk_token = _chunk_buffer.limiter()->pin(1)) == nullptr) {
+            return Status::OK();
+        }
+
         ChunkPtr chunk;
         _status = _read_chunk(state, &chunk);
         if (!_status.ok()) {
             // end of file is normal case, need process chunk
             if (_status.is_end_of_file()) {
-                _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
+                _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
             }
             break;
         }
 
-        _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
+        _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
     }
 
     return _status;
@@ -61,19 +81,23 @@ Status ChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch
         {
             SCOPED_RAW_TIMER(&time_spent);
 
+            if (_chunk_token == nullptr && (_chunk_token = _chunk_buffer.limiter()->pin(1)) == nullptr) {
+                return Status::OK();
+            }
+
             ChunkPtr chunk;
             _status = _read_chunk(state, &chunk);
             if (!_status.ok()) {
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
                     ++(*num_read_chunks);
-                    _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
+                    _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
                 }
                 break;
             }
 
             ++(*num_read_chunks);
-            _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
+            _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
         }
 
         if (time_spent >= YIELD_MAX_TIME_SPENT) {
