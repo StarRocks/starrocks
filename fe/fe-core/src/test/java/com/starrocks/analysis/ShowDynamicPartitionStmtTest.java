@@ -25,7 +25,6 @@ public class ShowDynamicPartitionStmtTest {
     @Test
     public void testNormal() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
-        ctx.setCluster("default_cluster");
         ctx.setDatabase("testDb");
         String showSQL = "SHOW DYNAMIC PARTITION TABLES FROM testDb";
         ShowDynamicPartitionStmt stmtFromSql =

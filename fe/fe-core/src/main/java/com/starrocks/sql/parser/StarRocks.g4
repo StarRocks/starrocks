@@ -104,6 +104,10 @@ statement
     | alterResourceGroupStatement                                                               #alterResourceGroup
     | showResourceGroupStatement                                                                #showResourceGroup
 
+    //UDF
+    | showFunctionsStatement                                                                #showFunctions
+
+
     // Other statement
     | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
@@ -584,6 +588,13 @@ showResourceGroupStatement
 classifier
     : '(' expression (',' expression)* ')'
     ;
+
+// ------------------------------------------- Function ----------------------------------------------------
+
+showFunctionsStatement
+    : SHOW FULL? BUILTIN? FUNCTIONS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
