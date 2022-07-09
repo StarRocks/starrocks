@@ -711,7 +711,10 @@ CONF_Bool(object_storage_endpoint_use_https, "false");
 
 CONF_Bool(enable_orc_late_materialization, "true");
 // orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
-CONF_Int32(orc_file_cache_max_size, "2097152");
+CONF_Int32(orc_file_cache_max_size, "8388608");
+CONF_Int32(orc_natural_read_size, "8388608");
+CONF_mBool(orc_coalesce_read_enable, "true");
+
 // parquet reader, each column will reserve X bytes for read
 // but with coalesce read enabled, this value is not used.
 CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
