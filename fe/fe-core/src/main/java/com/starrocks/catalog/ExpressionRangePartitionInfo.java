@@ -6,16 +6,11 @@ import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.SelectRelation;
 
 import java.util.List;
-import java.util.Map;
 
 import static java.util.stream.Collectors.toList;
-import static java.util.stream.Collectors.toMap;
 
 /**
  * ExpressionRangePartitionInfo replace columns with expressions

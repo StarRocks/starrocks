@@ -1874,7 +1874,6 @@ public class GlobalStateMgr {
             MaterializedView.MvRefreshScheme refreshScheme = mv.getRefreshScheme();
             sb.append("\nREFRESH ").append(refreshScheme.getType());
             if (refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
-                //START('2122-12-31') EVERY(INTERVAL 1 HOUR)
                 MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
                 sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
                                 .format(DateUtils.DATE_TIME_FORMATTER))
