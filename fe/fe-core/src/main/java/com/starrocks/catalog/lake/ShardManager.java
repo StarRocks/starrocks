@@ -2,6 +2,7 @@
 
 package com.starrocks.catalog.lake;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -18,6 +19,7 @@ public class ShardManager implements Writable {
 
     private static final Logger LOG = LogManager.getLogger(ShardManager.class);
 
+    @SerializedName(value = "ShardDeleter")
     private final ShardDeleter shardDeleter;
 
     public ShardManager() {
