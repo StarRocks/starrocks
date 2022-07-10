@@ -32,6 +32,7 @@ import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BoolLiteral;
+import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
@@ -576,6 +577,27 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         List<AlterClause> alterClauses = visit(context.alterClause(), AlterClause.class);
         return new AlterTableStmt(targetTableName, alterClauses);
+    }
+
+    @Override
+    public ParseNode visitCancelAlterTableStatement(StarRocksParser.CancelAlterTableStatementContext context) {
+        ShowAlterStmt.AlterType alterType;
+        if (context.ROLLUP() != null) {
+            alterType = ShowAlterStmt.AlterType.ROLLUP;
+        } else if (context.MATERIALIZED() != null && context.VIEW() != null) {
+            alterType = ShowAlterStmt.AlterType.MATERIALIZED_VIEW;
+        } else {
+            alterType = ShowAlterStmt.AlterType.COLUMN;
+        }
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName dbTableName = qualifiedNameToTableName(qualifiedName);
+
+        List<Long> alterJobIdList = null;
+        if (context.INTEGER_VALUE() != null) {
+            alterJobIdList = context.INTEGER_VALUE()
+                    .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList());
+        }
+        return new CancelAlterTableStmt(alterType, dbTableName, alterJobIdList == null ? null : alterJobIdList);
     }
 
     @Override

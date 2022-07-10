@@ -42,6 +42,7 @@ statement
     | createTableLikeStatement                                                              #createTableLike
     | showIndexStatement                                                                    #showIndex
     | recoverTableStatement                                                                 #recoverTable
+    | cancelAlterTableStatement                                                             #cancelAlterTable
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -304,6 +305,10 @@ showIndexStatement
 
 recoverTableStatement
     : RECOVER TABLE qualifiedName
+    ;
+
+cancelAlterTableStatement
+    : CANCEL ALTER TABLE (COLUMN | ROLLUP | MATERIALIZED VIEW)? FROM qualifiedName ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------
