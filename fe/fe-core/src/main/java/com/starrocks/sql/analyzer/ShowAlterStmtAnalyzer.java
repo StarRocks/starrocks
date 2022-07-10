@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import javax.annotation.Nonnull;
 
 public class ShowAlterStmtAnalyzer {
 
@@ -53,11 +54,8 @@ public class ShowAlterStmtAnalyzer {
         }
 
         private void handleShowAlterTable(ShowAlterStmt statement, ConnectContext context) throws SemanticException {
-            Database db = context.getGlobalStateMgr().getDb(statement.getDbName());
-            if (db == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, statement.getDbName());
-            }
             // build proc path
+            @Nonnull Database db = context.getGlobalStateMgr().getDb(statement.getDbName());
             ShowAlterStmt.AlterType type = statement.getType();
             StringBuilder sb = new StringBuilder();
             sb.append("/jobs/");
@@ -86,6 +84,11 @@ public class ShowAlterStmtAnalyzer {
                 dbName = ClusterNamespace.getFullName(dbName);
             }
             statement.setDbName(dbName);
+            // Check db.
+            if (context.getGlobalStateMgr().getDb(dbName) == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
+
             ShowAlterStmt.AlterType type = statement.getType();
             Preconditions.checkNotNull(type);
 
