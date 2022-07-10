@@ -41,6 +41,7 @@ import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
+import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UpdateStmt;
@@ -357,6 +358,15 @@ public class PrivilegeChecker {
             String db = statement.getDb();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowTabletStmt(ShowTabletStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "SHOW TABLET");
             }
             return null;
         }

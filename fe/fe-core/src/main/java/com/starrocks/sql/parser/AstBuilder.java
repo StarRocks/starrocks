@@ -125,6 +125,7 @@ import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowStatusStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
@@ -631,6 +632,34 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new ShowTableStmt(database, isVerbose, null, (Expr) visit(context.expression()));
         } else {
             return new ShowTableStmt(database, isVerbose, null);
+        }
+    }
+
+    @Override
+    public ParseNode visitShowTabletStatement(StarRocksParser.ShowTabletStatementContext context) {
+        if (context.INTEGER_VALUE() != null) {
+            return new ShowTabletStmt(null, Long.parseLong(context.INTEGER_VALUE().getText()));
+        } else {
+            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+            TableName dbTblName = qualifiedNameToTableName(qualifiedName);
+            PartitionNames partitionNames = null;
+            if (context.partitionNames() != null) {
+                partitionNames = (PartitionNames) visit(context.partitionNames());
+            }
+            Expr where = null;
+            if (context.expression() != null) {
+                where = (Expr) visit(context.expression());
+            }
+            List<OrderByElement> orderByElements = null;
+            if (context.ORDER() != null) {
+                orderByElements = new ArrayList<>();
+                orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+            }
+            LimitElement limitElement = null;
+            if (context.limitElement() != null) {
+                limitElement = (LimitElement) visit(context.limitElement());
+            }
+            return new ShowTabletStmt(dbTblName, -1L, partitionNames, where, orderByElements, limitElement);
         }
     }
 

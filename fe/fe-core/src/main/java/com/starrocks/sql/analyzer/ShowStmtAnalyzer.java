@@ -21,6 +21,7 @@ import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
@@ -65,6 +66,12 @@ public class ShowStmtAnalyzer {
             String db = node.getDb();
             db = getFullDatabaseName(db, context);
             node.setDb(db);
+            return null;
+        }
+
+        @Override
+        public Void visitShowTabletStmt(ShowTabletStmt node, ConnectContext context) {
+            ShowTabletStmtAnalyzer.analyze(node, context);
             return null;
         }
 
