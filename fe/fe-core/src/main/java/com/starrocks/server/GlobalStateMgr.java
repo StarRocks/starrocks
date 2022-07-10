@@ -1857,15 +1857,13 @@ public class GlobalStateMgr {
             if (!Strings.isNullOrEmpty(table.getComment())) {
                 sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
             }
+
             // partition
             PartitionInfo partitionInfo = mv.getPartitionInfo();
-            List<Long> partitionId = null;
-            if (separatePartition) {
-                partitionId = Lists.newArrayList();
-            }
             if (!(partitionInfo instanceof SinglePartitionInfo)) {
-                sb.append("\n").append(partitionInfo.toSql(mv, partitionId));
+                sb.append("\n").append(partitionInfo.toSql(mv, null));
             }
+
             // distribution
             DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
             sb.append("\n").append(distributionInfo.toSql());
