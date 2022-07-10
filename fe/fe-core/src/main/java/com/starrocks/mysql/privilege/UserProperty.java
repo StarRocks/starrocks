@@ -58,7 +58,6 @@ public class UserProperty implements Writable {
     private static final String PROP_MAX_USER_CONNECTIONS = "max_user_connections";
     private static final String PROP_RESOURCE = "resource";
     private static final String PROP_QUOTA = "quota";
-    private static final String PROP_DEFAULT_LOAD_CLUSTER = "default_load_cluster";
 
     // for system user
     public static final Set<Pattern> ADVANCED_PROPERTIES = Sets.newHashSet();
@@ -184,9 +183,6 @@ public class UserProperty implements Writable {
 
         // max user connections
         result.add(Lists.newArrayList(PROP_MAX_USER_CONNECTIONS, String.valueOf(maxConn)));
-
-        // load cluster
-        result.add(Lists.newArrayList(PROP_DEFAULT_LOAD_CLUSTER, ""));
 
         // get resolved ips if user has domain
         Map<String, Set<String>> resolvedIPs = whiteList.getResolvedIPs();
