@@ -37,6 +37,14 @@ public class ModifyTablePropertiesClause extends AlterTableClause {
         this.properties = properties;
     }
 
+    public void setOpType(AlterOpType opType) {
+        this.opType = opType;
+    }
+
+    public void setNeedTableStable(boolean needTableStable) {
+        this.needTableStable = needTableStable;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) {}
 

@@ -132,7 +132,7 @@ public class AlterJobV2Test {
     public void testModifyTableProperties() throws Exception {
         // 1. process a modify table properties job(enable_persistent_index)
         String alterStmtStr = "alter table test.properties_change_test set ('enable_persistent_index' = 'true');";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterStmtStr, connectContext);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
         // 2. check alter job
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
@@ -157,7 +157,7 @@ public class AlterJobV2Test {
 
         // 4. process a modify table properties job(in_memory)
         String alterStmtStr2 = "alter table test.properties_change_test set ('in_memory' = 'true');";
-        alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterStmtStr2, connectContext);
+        alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr2, connectContext);
         GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
 
         // 4. check alter job

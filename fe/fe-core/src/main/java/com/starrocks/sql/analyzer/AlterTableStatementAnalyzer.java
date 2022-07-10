@@ -24,6 +24,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.MetaUtils;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 
 import java.util.List;
 import java.util.Map;
@@ -84,20 +85,19 @@ public class AlterTableStatementAnalyzer {
 
         @Override
         public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, ConnectContext context) {
+            @CheckForNull
             Map<String, String> properties = clause.getProperties();
-            if (properties == null || properties.isEmpty()) {
+            if (properties.isEmpty()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Properties is not set");
             }
 
-            boolean needTableStable = true;
-            AlterOpType opType = clause.getOpType();
             if (properties.size() != 1
                     && !TableProperty.isSamePrefixProperties(properties, TableProperty.DYNAMIC_PARTITION_PROPERTY_PREFIX)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can only set one table property at a time");
             }
 
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
-                needTableStable = false;
+                clause.setNeedTableStable(false);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)) {
                 if (!properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE).equalsIgnoreCase("column")) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can only change storage type to COLUMN");
@@ -106,13 +106,13 @@ public class AlterTableStatementAnalyzer {
                 if (!properties.get(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE).equalsIgnoreCase("hash")) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can only change distribution type to HASH");
                 }
-                needTableStable = false;
+                clause.setNeedTableStable(false);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_SEND_CLEAR_ALTER_TASK)) {
                 if (!properties.get(PropertyAnalyzer.PROPERTIES_SEND_CLEAR_ALTER_TASK).equalsIgnoreCase("true")) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Property " + PropertyAnalyzer.PROPERTIES_SEND_CLEAR_ALTER_TASK + " should be set to true");
                 }
-                needTableStable = false;
+                clause.setNeedTableStable(false);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_FPP)) {
                 // do nothing, these 2 properties will be analyzed when creating alter job
@@ -138,8 +138,8 @@ public class AlterTableStatementAnalyzer {
                 }
                 properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Short.toString(defaultReplicationNum));
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
-                needTableStable = false;
-                opType = AlterOpType.MODIFY_TABLE_PROPERTY_SYNC;
+                clause.setNeedTableStable(false);
+                clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                 if (!properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX).equalsIgnoreCase("true") &&
                         !properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX).equalsIgnoreCase("false")) {
@@ -147,15 +147,13 @@ public class AlterTableStatementAnalyzer {
                             "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX +
                                     " must be bool type(false/true)");
                 }
-                needTableStable = false;
-                opType = AlterOpType.MODIFY_TABLE_PROPERTY_SYNC;
+                clause.setNeedTableStable(false);
+                clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLET_TYPE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Alter tablet type not supported");
             } else {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown table property: " + properties.keySet());
             }
-            clause.setOpType(opType);
-            clause.setNeedTableStable(needTableStable);
             return null;
         }
     }
