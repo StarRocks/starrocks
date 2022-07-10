@@ -48,38 +48,21 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
         sb.append("PARTITION BY ");
         if (table instanceof MaterializedView) {
             sb.append("(");
-            MaterializedView mv = (MaterializedView) table;
-            Map<Expr, String> exprPartitionAliasMap = mv.getExprPartitionAliasMap();
             for (Expr expr : partitionExprs) {
-                String alias = exprPartitionAliasMap.get(expr);
                 if (expr instanceof SlotRef) {
-                    sb.append("`").append(alias).append("`").append(",");
+                    SlotRef slotRef = (SlotRef) expr.clone();
+                    sb.append("`").append(slotRef.getColumnName()).append("`").append(",");
                 }
                 if (expr instanceof FunctionCallExpr) {
-                    QueryStatement queryStmt = mv.getQueryStmt();
-                    SelectRelation selectRelation = (SelectRelation) queryStmt.getQueryRelation();
-                    Map<String, Expr> selectExprMap =
-                            selectRelation.getSelectList().getItems().stream().filter(item -> item.getAlias() != null)
-                                    .collect(toMap(SelectListItem::getAlias, SelectListItem::getExpr));
-                    // find base table expression
-                    if (selectExprMap.containsKey(alias)) {
-                        Expr baseTableExpr = selectExprMap.get(alias);
-                        if (baseTableExpr instanceof SlotRef) {
-                            Expr cloneExpr = expr.clone();
-                            SlotRef slotRefAlias = new SlotRef(null, alias);
-                            for (int i = 0; i < cloneExpr.getChildren().size(); i++) {
-                                Expr child = cloneExpr.getChildren().get(i);
-                                if (child instanceof SlotRef) {
-                                    cloneExpr.setChild(i, slotRefAlias);
-                                    break;
-                                }
-                            }
-                            sb.append(cloneExpr.toSql()).append(",");
-                        }
-                        if (baseTableExpr instanceof FunctionCallExpr) {
-                            sb.append("`").append(alias).append("`").append(",");
+                    Expr cloneExpr = expr.clone();
+                    for (int i = 0; i < cloneExpr.getChildren().size(); i++) {
+                        Expr child = cloneExpr.getChildren().get(i);
+                        if (child instanceof SlotRef) {
+                            cloneExpr.setChild(i, new SlotRef(null, ((SlotRef) child).getColumnName()));
+                            break;
                         }
                     }
+                    sb.append(cloneExpr.toSql()).append(",");
                 }
             }
             sb.deleteCharAt(sb.length() - 1);
