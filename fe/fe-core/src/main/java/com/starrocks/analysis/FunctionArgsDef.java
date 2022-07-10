@@ -76,4 +76,12 @@ public class FunctionArgsDef {
     public String toString() {
         return toSql();
     }
+
+    public List<TypeDef> getArgTypeDefs() {
+        return argTypeDefs;
+    }
+
+    public void setArgTypes(Type[] argTypes) {
+        this.argTypes = argTypes;
+    }
 }

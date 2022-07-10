@@ -39,6 +39,7 @@ import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.DropDbStmt;
+import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
@@ -316,6 +317,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowFunctions(ShowFunctionsStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    public R visitDropFunction(DropFunctionStmt statement, C context) {
+        return visitDDLStatement(statement, context);
     }
 
     // ------------------------------------------- Analyze Statement ---------------------------------------------------

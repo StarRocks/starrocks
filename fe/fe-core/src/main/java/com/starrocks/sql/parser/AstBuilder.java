@@ -54,6 +54,7 @@ import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.analysis.DropComputeNodeClause;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFollowerClause;
+import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropObserverClause;
@@ -62,6 +63,7 @@ import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
+import com.starrocks.analysis.FunctionArgsDef;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
@@ -1810,6 +1812,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new ShowFunctionsStmt(dbName, isBuiltIn, isVerbose, pattern, where);
+    }
+
+    @Override
+    public ParseNode visitDropFunctionStatement(StarRocksParser.DropFunctionStatementContext context) {
+        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+
+        List<TypeDef> typeDefList = new ArrayList<>();
+        for (StarRocksParser.TypeContext typeContext : context.type()) {
+            typeDefList.add(new TypeDef(getType(typeContext)));
+        }
+        boolean isVariadic = context.DOTDOTDOT() != null;
+
+        return new DropFunctionStmt(FunctionName.createFnName(functionName),
+                new FunctionArgsDef(typeDefList, isVariadic));
     }
 
     // ------------------------------------------- Other Statement -----------------------------------------------------

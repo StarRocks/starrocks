@@ -3,13 +3,20 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DropDbStmt;
+import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.FunctionArgsDef;
+import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
@@ -19,6 +26,8 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.List;
 
 public class DropStmtAnalyzer {
     private static final Logger LOG = LogManager.getLogger(DropStmtAnalyzer.class);
@@ -88,6 +97,33 @@ public class DropStmtAnalyzer {
             if (dbName.equalsIgnoreCase(ClusterNamespace.getFullName(InfoSchemaDb.DATABASE_NAME))) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, context.getQualifiedUser(), dbName);
             }
+            return null;
+        }
+
+        @Override
+        public Void visitDropFunction(DropFunctionStmt statement, ConnectContext context) {
+
+            // analyze function name
+            FunctionName functionName = statement.getFunctionName();
+            FunctionAnalyzer.analyzeFunctionName(functionName, context);
+            // analyze arguments
+            FunctionArgsDef argsDef = statement.getArgsDef();
+
+            try {
+                List<TypeDef> argDefs = argsDef.getArgTypeDefs();
+                Type[] argTypes = new Type[argDefs.size()];
+                int i = 0;
+                for (TypeDef typeDef : argDefs) {
+                    typeDef.analyze(null);
+                    argTypes[i++] = typeDef.getType();
+                }
+                argsDef.setArgTypes(argTypes);
+
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+
+            statement.setFunction(new FunctionSearchDesc(functionName, argsDef.getArgTypes(), argsDef.isVariadic()));
             return null;
         }
     }

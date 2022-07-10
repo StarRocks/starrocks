@@ -95,6 +95,8 @@ statement
 
     //UDF
     | showFunctionsStatement                                                                #showFunctions
+    | dropFunctionStatement                                                                 #dropFunctionst
+
 
 
     // Other statement
@@ -505,6 +507,13 @@ classifier
 showFunctionsStatement
     : SHOW FULL? BUILTIN? FUNCTIONS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
+
+dropFunctionStatement
+    : DROP FUNCTION qualifiedName '(' DOTDOTDOT')'
+    | DROP FUNCTION qualifiedName '(' (type (',' type)*)? ')'
+    | DROP FUNCTION qualifiedName '(' (type (',' type)*)? DOTDOTDOT ')'
+    ;
+
 
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
@@ -1116,4 +1125,5 @@ nonReserved
     | VALUE | VARIABLES | VIEW | VERBOSE
     | WARNINGS | WEEK | WORK | WRITE
     | YEAR
+    | DOTDOTDOT
     ;

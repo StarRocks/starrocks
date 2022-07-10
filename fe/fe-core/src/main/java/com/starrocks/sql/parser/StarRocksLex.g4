@@ -417,6 +417,8 @@ BRACKETED_COMMENT
 
 SEMICOLON: ';';
 
+DOTDOTDOT: '...';
+
 WS
     : [ \r\n\t]+ -> channel(HIDDEN)
     ;
