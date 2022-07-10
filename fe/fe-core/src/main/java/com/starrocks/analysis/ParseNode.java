@@ -40,7 +40,7 @@ public interface ParseNode {
     /**
      * @return SQL syntax corresponding to this node.
      */
-    default String toSql() {
+    default String toSql() throws UserException {
         throw new RuntimeException("New AST not implement toSql function");
     }
 

@@ -1042,21 +1042,29 @@ public class LocalMetastore implements ConnectorMetadata {
     private void checkColocation(Database db, OlapTable olapTable, DistributionInfo distributionInfo,
                                  List<PartitionDesc> partitionDescs)
             throws DdlException {
-        if (colocateTableIndex.isColocateTable(olapTable.getId())) {
-            String fullGroupName = db.getId() + "_" + olapTable.getColocateGroup();
-            ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
-            Preconditions.checkNotNull(groupSchema);
-            groupSchema.checkDistribution(distributionInfo);
-            for (PartitionDesc partitionDesc : partitionDescs) {
-                groupSchema.checkReplicationNum(partitionDesc.getReplicationNum());
+        try {
+            if (colocateTableIndex.isColocateTable(olapTable.getId())) {
+                String fullGroupName = db.getId() + "_" + olapTable.getColocateGroup();
+                ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
+                Preconditions.checkNotNull(groupSchema);
+                groupSchema.checkDistribution(distributionInfo);
+                for (PartitionDesc partitionDesc : partitionDescs) {
+                    groupSchema.checkReplicationNum(partitionDesc.getReplicationNum());
+                }
             }
+        } catch (NotImplementedException e) {
+            throw new DdlException(e.getMessage());
         }
     }
 
-    private void checkDataProperty(List<PartitionDesc> partitionDescs) {
-        for (PartitionDesc partitionDesc : partitionDescs) {
-            DataProperty dataProperty = partitionDesc.getPartitionDataProperty();
-            Preconditions.checkNotNull(dataProperty);
+    private void checkDataProperty(List<PartitionDesc> partitionDescs) throws DdlException {
+        try {
+            for (PartitionDesc partitionDesc : partitionDescs) {
+                DataProperty dataProperty = partitionDesc.getPartitionDataProperty();
+                Preconditions.checkNotNull(dataProperty);
+            }
+        } catch (NotImplementedException e) {
+            throw new DdlException(e.getMessage());
         }
     }
 
@@ -1064,28 +1072,33 @@ public class LocalMetastore implements ConnectorMetadata {
                                                 HashMap<String, Set<Long>> partitionNameToTabletSet,
                                                 Set<Long> tabletIdSetForAll)
             throws DdlException {
-        List<Partition> partitionList = Lists.newArrayListWithCapacity(partitionDescs.size());
-        for (PartitionDesc partitionDesc : partitionDescs) {
-            long partitionId = getNextId();
-            DataProperty dataProperty = partitionDesc.getPartitionDataProperty();
-            String partitionName = partitionDesc.getPartitionName();
-            Long version = partitionDesc.getVersionInfo();
-            Set<Long> tabletIdSet = Sets.newHashSet();
+        try {
+            List<Partition> partitionList = Lists.newArrayListWithCapacity(partitionDescs.size());
+            for (PartitionDesc partitionDesc : partitionDescs) {
+                long partitionId = getNextId();
+                DataProperty dataProperty = partitionDesc.getPartitionDataProperty();
+                String partitionName = partitionDesc.getPartitionName();
+                Long version = partitionDesc.getVersionInfo();
+                Set<Long> tabletIdSet = Sets.newHashSet();
 
-            copiedTable.getPartitionInfo().setDataProperty(partitionId, dataProperty);
-            copiedTable.getPartitionInfo().setTabletType(partitionId, partitionDesc.getTabletType());
-            copiedTable.getPartitionInfo()
-                    .setReplicationNum(partitionId, partitionDesc.getReplicationNum());
-            copiedTable.getPartitionInfo().setIsInMemory(partitionId, partitionDesc.isInMemory());
+                copiedTable.getPartitionInfo().setDataProperty(partitionId, dataProperty);
+                copiedTable.getPartitionInfo().setTabletType(partitionId, partitionDesc.getTabletType());
+                copiedTable.getPartitionInfo()
+                        .setReplicationNum(partitionId, partitionDesc.getReplicationNum());
+                copiedTable.getPartitionInfo().setIsInMemory(partitionId, partitionDesc.isInMemory());
 
-            Partition partition =
-                    createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet);
+                Partition partition =
+                        createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet);
 
-            partitionList.add(partition);
-            tabletIdSetForAll.addAll(tabletIdSet);
-            partitionNameToTabletSet.put(partitionName, tabletIdSet);
+                partitionList.add(partition);
+                tabletIdSetForAll.addAll(tabletIdSet);
+                partitionNameToTabletSet.put(partitionName, tabletIdSet);
+            }
+            return partitionList;
+        } catch (NotImplementedException e) {
+            throw new DdlException(e.getMessage());
         }
-        return partitionList;
+
     }
 
     private void checkIfMetaChange(OlapTable olapTable, OlapTable copiedTable, String tableName) throws DdlException {
@@ -1149,52 +1162,57 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private void addRangePartitionLog(Database db, OlapTable olapTable, List<PartitionDesc> partitionDescs,
                                       AddPartitionClause addPartitionClause, PartitionInfo partitionInfo,
-                                      List<Partition> partitionList, Set<String> existPartitionNameSet) {
-        boolean isTempPartition = addPartitionClause.isTempPartition();
-        int partitionLen = partitionList.size();
-        // Forward compatible with previous log formats
-        // Version 1.15 is compatible if users only use single-partition syntax.
-        // Otherwise, the followers will be crash when reading the new log
-        if (partitionLen == 1) {
-            Partition partition = partitionList.get(0);
-            if (existPartitionNameSet.contains(partition.getName())) {
-                LOG.info("add partition[{}] which already exists", partition.getName());
-                return;
-            }
-            long partitionId = partition.getId();
-            PartitionPersistInfo info = new PartitionPersistInfo(db.getId(), olapTable.getId(), partition,
-                    ((RangePartitionInfo) partitionInfo).getRange(partitionId),
-                    partitionDescs.get(0).getPartitionDataProperty(),
-                    partitionInfo.getReplicationNum(partitionId),
-                    partitionInfo.getIsInMemory(partitionId),
-                    isTempPartition);
-            editLog.logAddPartition(info);
+                                      List<Partition> partitionList, Set<String> existPartitionNameSet)
+            throws DdlException {
+        try {
+            boolean isTempPartition = addPartitionClause.isTempPartition();
+            int partitionLen = partitionList.size();
+            // Forward compatible with previous log formats
+            // Version 1.15 is compatible if users only use single-partition syntax.
+            // Otherwise, the followers will be crash when reading the new log
+            if (partitionLen == 1) {
+                Partition partition = partitionList.get(0);
+                if (existPartitionNameSet.contains(partition.getName())) {
+                    LOG.info("add partition[{}] which already exists", partition.getName());
+                    return;
+                }
+                long partitionId = partition.getId();
+                PartitionPersistInfo info = new PartitionPersistInfo(db.getId(), olapTable.getId(), partition,
+                        ((RangePartitionInfo) partitionInfo).getRange(partitionId),
+                        partitionDescs.get(0).getPartitionDataProperty(),
+                        partitionInfo.getReplicationNum(partitionId),
+                        partitionInfo.getIsInMemory(partitionId),
+                        isTempPartition);
+                editLog.logAddPartition(info);
 
-            LOG.info("succeed in creating partition[{}], name: {}, temp: {}", partitionId,
-                    partition.getName(), isTempPartition);
-        } else {
-            List<PartitionPersistInfo> partitionInfoList = Lists.newArrayListWithCapacity(partitionLen);
-            for (int i = 0; i < partitionLen; i++) {
-                Partition partition = partitionList.get(i);
-                if (!existPartitionNameSet.contains(partition.getName())) {
-                    PartitionPersistInfo info =
-                            new PartitionPersistInfo(db.getId(), olapTable.getId(), partition,
-                                    ((RangePartitionInfo) partitionInfo).getRange(partition.getId()),
-                                    partitionDescs.get(i).getPartitionDataProperty(),
-                                    partitionInfo.getReplicationNum(partition.getId()),
-                                    partitionInfo.getIsInMemory(partition.getId()),
-                                    isTempPartition);
-                    partitionInfoList.add(info);
+                LOG.info("succeed in creating partition[{}], name: {}, temp: {}", partitionId,
+                        partition.getName(), isTempPartition);
+            } else {
+                List<PartitionPersistInfo> partitionInfoList = Lists.newArrayListWithCapacity(partitionLen);
+                for (int i = 0; i < partitionLen; i++) {
+                    Partition partition = partitionList.get(i);
+                    if (!existPartitionNameSet.contains(partition.getName())) {
+                        PartitionPersistInfo info =
+                                new PartitionPersistInfo(db.getId(), olapTable.getId(), partition,
+                                        ((RangePartitionInfo) partitionInfo).getRange(partition.getId()),
+                                        partitionDescs.get(i).getPartitionDataProperty(),
+                                        partitionInfo.getReplicationNum(partition.getId()),
+                                        partitionInfo.getIsInMemory(partition.getId()),
+                                        isTempPartition);
+                        partitionInfoList.add(info);
+                    }
+                }
+
+                AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
+                editLog.logAddPartitions(infos);
+
+                for (Partition partition : partitionList) {
+                    LOG.info("succeed in creating partitions[{}], name: {}, temp: {}", partition.getId(),
+                            partition.getName(), isTempPartition);
                 }
             }
-
-            AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
-            editLog.logAddPartitions(infos);
-
-            for (Partition partition : partitionList) {
-                LOG.info("succeed in creating partitions[{}], name: {}, temp: {}", partition.getId(),
-                        partition.getName(), isTempPartition);
-            }
+        } catch (NotImplementedException e) {
+            throw new DdlException(e.getMessage());
         }
     }
 
@@ -1213,15 +1231,18 @@ public class LocalMetastore implements ConnectorMetadata {
             return;
         }
         long partitionId = partition.getId();
-        PartitionPersistInfoV2 info = new ListPartitionPersistInfo(db.getId(), olapTable.getId(), partition,
-                partitionDescs.get(0).getPartitionDataProperty(),
-                partitionInfo.getReplicationNum(partitionId),
-                partitionInfo.getIsInMemory(partitionId),
-                isTempPartition,
-                ((ListPartitionInfo) partitionInfo).getIdToValues().get(partitionId),
-                ((ListPartitionInfo) partitionInfo).getIdToMultiValues().get(partitionId));
-        editLog.logAddPartition(info);
-
+        try {
+            PartitionPersistInfoV2 info = new ListPartitionPersistInfo(db.getId(), olapTable.getId(), partition,
+                    partitionDescs.get(0).getPartitionDataProperty(),
+                    partitionInfo.getReplicationNum(partitionId),
+                    partitionInfo.getIsInMemory(partitionId),
+                    isTempPartition,
+                    ((ListPartitionInfo) partitionInfo).getIdToValues().get(partitionId),
+                    ((ListPartitionInfo) partitionInfo).getIdToMultiValues().get(partitionId));
+            editLog.logAddPartition(info);
+        } catch (NotImplementedException e) {
+            throw new DdlException(e.getMessage());
+        }
         LOG.info("succeed in creating list partition[{}], name: {}, temp: {}", partitionId,
                 partition.getName(), isTempPartition);
     }
@@ -1904,7 +1925,11 @@ public class LocalMetastore implements ConnectorMetadata {
             } else {
                 throw new DdlException("Currently only support range or list partition with engine type olap");
             }
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+            try {
+                partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+            } catch (NotImplementedException e) {
+                throw new DdlException(e.getMessage());
+            }
         } else {
             if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(stmt.getProperties())) {
                 throw new DdlException("Only support dynamic partition properties on range partition table");
@@ -2271,7 +2296,11 @@ public class LocalMetastore implements ConnectorMetadata {
         PartitionInfo partitionInfo = null;
         Map<String, Long> partitionNameToId = Maps.newHashMap();
         if (partitionDesc != null) {
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+            try {
+                partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+            } catch (NotImplementedException e) {
+                throw new DdlException(e.getMessage());
+            }
         } else {
             long partitionId = getNextId();
             // use table name as single partition name
@@ -3123,7 +3152,13 @@ public class LocalMetastore implements ConnectorMetadata {
         // create partition info
         PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
         Map<String, Long> partitionNameToId = Maps.newHashMap();
-        PartitionInfo partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+        PartitionInfo partitionInfo = null;
+        try {
+            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+        } catch (NotImplementedException e) {
+            throw new DdlException(e.getMessage());
+        }
+
         // create distribution info
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
