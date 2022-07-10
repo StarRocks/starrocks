@@ -1819,14 +1819,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitDropFunctionStatement(StarRocksParser.DropFunctionStatementContext context) {
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
 
+        return new DropFunctionStmt(FunctionName.createFnName(functionName),
+                getFunctionArgsDef(context.typeList()));
+    }
+
+    private FunctionArgsDef getFunctionArgsDef(StarRocksParser.TypeListContext typeList) {
         List<TypeDef> typeDefList = new ArrayList<>();
-        for (StarRocksParser.TypeContext typeContext : context.type()) {
+        for (StarRocksParser.TypeContext typeContext : typeList.type()) {
             typeDefList.add(new TypeDef(getType(typeContext)));
         }
-        boolean isVariadic = context.DOTDOTDOT() != null;
-
-        return new DropFunctionStmt(FunctionName.createFnName(functionName),
-                new FunctionArgsDef(typeDefList, isVariadic));
+        boolean isVariadic = typeList.DOTDOTDOT() != null;
+        return new FunctionArgsDef(typeDefList, isVariadic);
     }
 
     @Override
@@ -1836,12 +1839,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             functionType = context.functionType.getText();
         }
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
-
-        List<TypeDef> typeDefList = new ArrayList<>();
-        for (StarRocksParser.TypeContext typeContext : context.typelist().type()) {
-            typeDefList.add(new TypeDef(getType(typeContext)));
-        }
-        boolean isVariadic = context.typelist().DOTDOTDOT() != null;
 
         TypeDef returnTypeDef = new TypeDef(getType(context.returnType));
         TypeDef intermediateType = null;
@@ -1858,7 +1855,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         return new CreateFunctionStmt(functionType, FunctionName.createFnName(functionName),
-                new FunctionArgsDef(typeDefList, isVariadic), returnTypeDef, intermediateType, properties);
+                getFunctionArgsDef(context.typeList()), returnTypeDef, intermediateType, properties);
     }
 
     // ------------------------------------------- Other Statement -----------------------------------------------------

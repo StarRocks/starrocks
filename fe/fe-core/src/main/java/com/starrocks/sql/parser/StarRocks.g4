@@ -510,17 +510,15 @@ showFunctionsStatement
     ;
 
 dropFunctionStatement
-    : DROP FUNCTION qualifiedName '(' DOTDOTDOT')'
-    | DROP FUNCTION qualifiedName '(' (type (',' type)*)? ')'
-    | DROP FUNCTION qualifiedName '(' (type (',' type)*)? DOTDOTDOT ')'
+    : DROP FUNCTION qualifiedName '(' typeList ')'
     ;
 
 createFunctionStatement
-    : CREATE functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typelist ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
+    : CREATE functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
     ;
 
-typelist
-    : type?  ( ',' type)? DOTDOTDOT
+typeList
+    : type?  ( ',' type)? DOTDOTDOT?
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------

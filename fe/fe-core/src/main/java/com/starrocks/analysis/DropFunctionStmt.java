@@ -68,7 +68,7 @@ public class DropFunctionStmt extends DdlStmt {
         }
 
         // analyze arguments
-        argsDef.analyze(analyzer);
+        argsDef.analyze();
         function = new FunctionSearchDesc(functionName, argsDef.getArgTypes(), argsDef.isVariadic());
     }
 

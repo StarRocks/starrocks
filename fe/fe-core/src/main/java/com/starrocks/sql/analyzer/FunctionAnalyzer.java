@@ -316,7 +316,7 @@ public class FunctionAnalyzer {
 
     public static void analyzeCreateFunction(CreateFunctionStmt statement, ConnectContext context) {
         try {
-            statement.analyze(context);
+            statement.analyze(context, false);
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());
         }

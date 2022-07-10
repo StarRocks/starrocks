@@ -255,19 +255,12 @@ public class CreateFunctionStmt extends DdlStmt {
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
-
-        analyzeCommon(analyzer.getDefaultDb(), analyzer.getClusterName());
-        Preconditions.checkArgument(isStarrocksJar);
-        analysisJar();
+        analyze(analyzer.getContext(), true);
     }
 
-    public void analyze(ConnectContext context) throws AnalysisException {
-        analyzeCommon(context.getDatabase(), context.getDatabase());
+    public void analyze(ConnectContext context, boolean needCheckPrivilege) throws AnalysisException {
+        analyzeCommon(context.getDatabase(), context.getDatabase(), needCheckPrivilege);
         Preconditions.checkArgument(isStarrocksJar);
-        analysisJar();
-    }
-
-    public void analysisJar() throws AnalysisException {
         analyzeUdfClassInStarrocksJar();
         if (isAggregate) {
             analyzeStarrocksJarUdaf();
@@ -278,18 +271,17 @@ public class CreateFunctionStmt extends DdlStmt {
         }
     }
 
-    private void analyzeCommon(String defaultDb, String defaultCluster) throws AnalysisException {
+    private void analyzeCommon(String defaultDb, String defaultCluster, boolean needCheck) throws AnalysisException {
         // check function name
         functionName.analyze(defaultDb, defaultCluster);
 
         // check operation privilege
         if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
-
         }
 
         // check argument
-        argsDef.analyze(null);
+        argsDef.analyze();
         returnType.analyze(null);
         intermediateType = TypeDef.createVarchar(ScalarType.MAX_VARCHAR_LENGTH);
 
