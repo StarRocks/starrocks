@@ -662,10 +662,10 @@ public class Coordinator {
                             params.toThrift(instanceId2Host.keySet(), descTable, dbIds, enablePipelineEngine);
                     List<Pair<BackendExecState, Future<PExecPlanFragmentResult>>> futures = Lists.newArrayList();
 
-                    boolean needCheckBackendState = queryOptions.getQuery_type() == TQueryType.LOAD && profileFragmentId == 0;
-                    // this is a load process, and it is the first fragment.
+                    // This is a load process, and it is the first fragment.
                     // we should add all BackendExecState of this fragment to needCheckBackendExecStates,
                     // so that we can check these backends' state when joining this Coordinator
+                    boolean needCheckBackendState = queryOptions.getQuery_type() == TQueryType.LOAD && profileFragmentId == 0;
 
                     for (TExecPlanFragmentParams tParam : tParams) {
                         // TODO: pool of pre-formatted BackendExecStates?
