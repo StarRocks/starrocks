@@ -98,8 +98,8 @@ public class ShowAlterStmtAnalyzer {
 
             // order by
             List<OrderByElement> orderByElements = statement.getOrderByElements();
-            ArrayList<OrderByPair> orderByPairs = new ArrayList<OrderByPair>();
             if (orderByElements != null && !orderByElements.isEmpty()) {
+                ArrayList<OrderByPair> orderByPairs = new ArrayList<OrderByPair>();
                 for (OrderByElement orderByElement : orderByElements) {
                     if (!(orderByElement.getExpr() instanceof SlotRef)) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Should order by column");
@@ -114,8 +114,8 @@ public class ShowAlterStmtAnalyzer {
                     OrderByPair orderByPair = new OrderByPair(index, !orderByElement.getIsAsc());
                     orderByPairs.add(orderByPair);
                 }
+                statement.setOrderByPairs(orderByPairs);
             }
-            statement.setOrderByPairs(orderByPairs);
         }
 
         private void getPredicateValue(Expr subExpr) {

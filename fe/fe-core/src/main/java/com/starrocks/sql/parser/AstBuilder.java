@@ -577,8 +577,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             alterType = ShowAlterStmt.AlterType.COLUMN;
         }
-        List<OrderByElement> orderByElements = new ArrayList<>();
+        List<OrderByElement> orderByElements = null;
         if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
             orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
         }
         LimitElement limitElement = null;
