@@ -285,31 +285,35 @@ public class CreateMaterializedViewTest {
             Assert.assertEquals(2, materializedView.getBaseSchema().size());
             Assert.assertTrue(materializedView.isActive());
             // test sync
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-            List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
-            Assert.assertEquals(Constants.TaskRunState.SUCCESS, taskRuns.get(0).getState());
-            Collection<Partition> baseTablePartitions = ((OlapTable) baseTable).getPartitions();
-            Collection<Partition> mvPartitions = materializedView.getPartitions();
-            Assert.assertEquals(2, mvPartitions.size());
-            Assert.assertEquals(baseTablePartitions.size(), mvPartitions.size());
-            // add partition p3
-            String addPartitionSql = "ALTER TABLE test.tbl1 ADD PARTITION p3 values less than('2020-04-01');";
-            new StmtExecutor(connectContext, addPartitionSql).execute();
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
-            Assert.assertEquals(3, baseTablePartitions.size());
-            Assert.assertEquals(baseTablePartitions.size(), mvPartitions.size());
-            // delete partition p3
-            String dropPartitionSql = "ALTER TABLE test.tbl1 DROP PARTITION p3\n";
-            new StmtExecutor(connectContext, dropPartitionSql).execute();
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
-            Assert.assertEquals(2, mvPartitions.size());
-            Assert.assertEquals(baseTablePartitions.size(), mvPartitions.size());
+            testFullCreateSync(materializedView, baseTable);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         } finally {
             dropMv("mv1");
         }
+    }
+
+    public void testFullCreateSync(MaterializedView materializedView, Table baseTable) throws Exception {
+        ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
+        Assert.assertEquals(Constants.TaskRunState.SUCCESS, taskRuns.get(0).getState());
+        Collection<Partition> baseTablePartitions = ((OlapTable) baseTable).getPartitions();
+        Collection<Partition> mvPartitions = materializedView.getPartitions();
+        Assert.assertEquals(2, mvPartitions.size());
+        Assert.assertEquals(baseTablePartitions.size(), mvPartitions.size());
+        // add partition p3
+        String addPartitionSql = "ALTER TABLE test.tbl1 ADD PARTITION p3 values less than('2020-04-01');";
+        new StmtExecutor(connectContext, addPartitionSql).execute();
+        ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
+        Assert.assertEquals(3, baseTablePartitions.size());
+        Assert.assertEquals(baseTablePartitions.size(), mvPartitions.size());
+        // delete partition p3
+        String dropPartitionSql = "ALTER TABLE test.tbl1 DROP PARTITION p3\n";
+        new StmtExecutor(connectContext, dropPartitionSql).execute();
+        ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
+        Assert.assertEquals(2, mvPartitions.size());
+        Assert.assertEquals(baseTablePartitions.size(), mvPartitions.size());
     }
 
     @Test
@@ -373,57 +377,63 @@ public class CreateMaterializedViewTest {
             Assert.assertEquals(2, materializedView.getBaseSchema().size());
             Assert.assertTrue(materializedView.isActive());
             // test sync
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-            List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
-            Assert.assertEquals(Constants.TaskRunState.SUCCESS, taskRuns.get(0).getState());
-            Collection<Partition> baseTablePartitions = ((OlapTable) baseTable).getPartitions();
-            Collection<Partition> mvPartitions = materializedView.getPartitions();
-            Assert.assertEquals(2, mvPartitions.size());
-            Assert.assertEquals(baseTablePartitions.size(), mvPartitions.size());
-            Assert.assertEquals(1, materializedView.getTableMvPartitionNameRefMap("p1").size());
-            Assert.assertEquals("p00000101_20200201",
-                    materializedView.getTableMvPartitionNameRefMap("p1").iterator().next());
-            Assert.assertEquals(1, materializedView.getMvTablePartitionNameRefMap("p00000101_20200201").size());
-            Assert.assertEquals("p1",
-                    materializedView.getMvTablePartitionNameRefMap("p00000101_20200201").iterator().next());
-            Assert.assertEquals(1, materializedView.getTableMvPartitionNameRefMap("p2").size());
-            Assert.assertEquals("p20200201_20200301",
-                    materializedView.getTableMvPartitionNameRefMap("p2").iterator().next());
-            Assert.assertEquals(1, materializedView.getMvTablePartitionNameRefMap("p20200201_20200301").size());
-            Assert.assertEquals("p2",
-                    materializedView.getMvTablePartitionNameRefMap("p20200201_20200301").iterator().next());
-            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
-                    materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
-            Assert.assertEquals(2, baseTableVisibleVersionMap.size());
-            Assert.assertNotNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p1"));
-            Assert.assertNotNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p2"));
-            Table tbl2 = testDb.getTable("tbl2");
-            Assert.assertNotNull(baseTableVisibleVersionMap.get(tbl2.getId()).get("p1"));
-            Assert.assertNotNull(baseTableVisibleVersionMap.get(tbl2.getId()).get("p2"));
-            // add partition p3
-            String addPartitionSql = "ALTER TABLE test.tbl1 ADD PARTITION p3 values less than('2020-04-01');";
-            new StmtExecutor(connectContext, addPartitionSql).execute();
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
-            Assert.assertEquals(3, mvPartitions.size());
-            Assert.assertEquals(1, materializedView.getTableMvPartitionNameRefMap("p3").size());
-            Assert.assertEquals("p20200301_20200401", materializedView.getTableMvPartitionNameRefMap("p3").iterator().next());
-            Assert.assertEquals(1, materializedView.getMvTablePartitionNameRefMap("p20200301_20200401").size());
-            Assert.assertEquals("p3", materializedView.getMvTablePartitionNameRefMap("p20200301_20200401").iterator().next());
-            Assert.assertNotNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p3"));
-            // delete partition p3
-            String dropPartitionSql = "ALTER TABLE test.tbl1 DROP PARTITION p3\n";
-            new StmtExecutor(connectContext, dropPartitionSql).execute();
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
-            Assert.assertEquals(2, mvPartitions.size());
-            Assert.assertEquals(0, materializedView.getTableMvPartitionNameRefMap("p3").size());
-            Assert.assertEquals(0, materializedView.getMvTablePartitionNameRefMap("p20200301_20200401").size());
-            Assert.assertNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p3"));
+            testFullCreateMultiTablesSync(materializedView, baseTable);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         } finally {
             dropMv("mv1");
         }
+    }
+
+    public void testFullCreateMultiTablesSync(MaterializedView materializedView, Table baseTable) throws Exception {
+        ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
+        Assert.assertEquals(Constants.TaskRunState.SUCCESS, taskRuns.get(0).getState());
+        Collection<Partition> baseTablePartitions = ((OlapTable) baseTable).getPartitions();
+        Collection<Partition> mvPartitions = materializedView.getPartitions();
+        Assert.assertEquals(2, mvPartitions.size());
+        Assert.assertEquals(baseTablePartitions.size(), mvPartitions.size());
+        Assert.assertEquals(1, materializedView.getTableMvPartitionNameRefMap("p1").size());
+        Assert.assertEquals("p00000101_20200201",
+                materializedView.getTableMvPartitionNameRefMap("p1").iterator().next());
+        Assert.assertEquals(1, materializedView.getMvTablePartitionNameRefMap("p00000101_20200201").size());
+        Assert.assertEquals("p1",
+                materializedView.getMvTablePartitionNameRefMap("p00000101_20200201").iterator().next());
+        Assert.assertEquals(1, materializedView.getTableMvPartitionNameRefMap("p2").size());
+        Assert.assertEquals("p20200201_20200301",
+                materializedView.getTableMvPartitionNameRefMap("p2").iterator().next());
+        Assert.assertEquals(1, materializedView.getMvTablePartitionNameRefMap("p20200201_20200301").size());
+        Assert.assertEquals("p2",
+                materializedView.getMvTablePartitionNameRefMap("p20200201_20200301").iterator().next());
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
+                materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Assert.assertEquals(2, baseTableVisibleVersionMap.size());
+        Assert.assertNotNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p1"));
+        Assert.assertNotNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p2"));
+        Table tbl2 = testDb.getTable("tbl2");
+        Assert.assertNotNull(baseTableVisibleVersionMap.get(tbl2.getId()).get("p1"));
+        Assert.assertNotNull(baseTableVisibleVersionMap.get(tbl2.getId()).get("p2"));
+        // add partition p3
+        String addPartitionSql = "ALTER TABLE test.tbl1 ADD PARTITION p3 values less than('2020-04-01');";
+        new StmtExecutor(connectContext, addPartitionSql).execute();
+        ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
+        Assert.assertEquals(3, mvPartitions.size());
+        Assert.assertEquals(1, materializedView.getTableMvPartitionNameRefMap("p3").size());
+        Assert.assertEquals("p20200301_20200401",
+                materializedView.getTableMvPartitionNameRefMap("p3").iterator().next());
+        Assert.assertEquals(1, materializedView.getMvTablePartitionNameRefMap("p20200301_20200401").size());
+        Assert.assertEquals("p3",
+                materializedView.getMvTablePartitionNameRefMap("p20200301_20200401").iterator().next());
+        Assert.assertNotNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p3"));
+        // delete partition p3
+        String dropPartitionSql = "ALTER TABLE test.tbl1 DROP PARTITION p3\n";
+        new StmtExecutor(connectContext, dropPartitionSql).execute();
+        ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
+        Assert.assertEquals(2, mvPartitions.size());
+        Assert.assertEquals(0, materializedView.getTableMvPartitionNameRefMap("p3").size());
+        Assert.assertEquals(0, materializedView.getMvTablePartitionNameRefMap("p20200301_20200401").size());
+        Assert.assertNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p3"));
     }
 
     @Test
@@ -476,41 +486,45 @@ public class CreateMaterializedViewTest {
             Assert.assertEquals(3, asyncRefreshContext.getStep());
             Assert.assertTrue(materializedView.isActive());
             // test sync
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-            List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
-            Assert.assertEquals(Constants.TaskRunState.SUCCESS, taskRuns.get(0).getState());
-            Collection<Partition> mvPartitions = materializedView.getPartitions();
-            Assert.assertEquals(1, mvPartitions.size());
-            Assert.assertEquals(0, materializedView.getTableMvPartitionNameRefMap("p1").size());
-            Assert.assertEquals(0, materializedView.getTableMvPartitionNameRefMap("p2").size());
-            Assert.assertEquals(0, materializedView.getMvTablePartitionNameRefMap("mv1").size());
-            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
-                    materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
-            Assert.assertEquals(1, baseTableVisibleVersionMap.size());
-            Assert.assertNotNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p1"));
-            Assert.assertNotNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p2"));
-            // add partition p3
-            String addPartitionSql = "ALTER TABLE test.tbl1 ADD PARTITION p3 values less than('2020-04-01');";
-            new StmtExecutor(connectContext, addPartitionSql).execute();
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
-            Assert.assertEquals(1, mvPartitions.size());
-            Assert.assertEquals(0, materializedView.getTableMvPartitionNameRefMap("p3").size());
-            Assert.assertEquals(0, materializedView.getMvTablePartitionNameRefMap("mv1").size());
-            Assert.assertNotNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p3"));
-            // delete partition p3
-            String dropPartitionSql = "ALTER TABLE test.tbl1 DROP PARTITION p3\n";
-            new StmtExecutor(connectContext, dropPartitionSql).execute();
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
-            Assert.assertEquals(1, mvPartitions.size());
-            Assert.assertEquals(0, materializedView.getTableMvPartitionNameRefMap("p3").size());
-            Assert.assertEquals(0, materializedView.getMvTablePartitionNameRefMap("mv1").size());
-            Assert.assertNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p3"));
+            testFullCreateNoPartitionSync(materializedView, baseTable);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         } finally {
             dropMv("mv1");
         }
+    }
+
+    public void testFullCreateNoPartitionSync(MaterializedView materializedView, Table baseTable) throws Exception {
+        ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
+        Assert.assertEquals(Constants.TaskRunState.SUCCESS, taskRuns.get(0).getState());
+        Collection<Partition> mvPartitions = materializedView.getPartitions();
+        Assert.assertEquals(1, mvPartitions.size());
+        Assert.assertEquals(0, materializedView.getTableMvPartitionNameRefMap("p1").size());
+        Assert.assertEquals(0, materializedView.getTableMvPartitionNameRefMap("p2").size());
+        Assert.assertEquals(0, materializedView.getMvTablePartitionNameRefMap("mv1").size());
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
+                materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Assert.assertEquals(1, baseTableVisibleVersionMap.size());
+        Assert.assertNotNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p1"));
+        Assert.assertNotNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p2"));
+        // add partition p3
+        String addPartitionSql = "ALTER TABLE test.tbl1 ADD PARTITION p3 values less than('2020-04-01');";
+        new StmtExecutor(connectContext, addPartitionSql).execute();
+        ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
+        Assert.assertEquals(1, mvPartitions.size());
+        Assert.assertEquals(0, materializedView.getTableMvPartitionNameRefMap("p3").size());
+        Assert.assertEquals(0, materializedView.getMvTablePartitionNameRefMap("mv1").size());
+        Assert.assertNotNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p3"));
+        // delete partition p3
+        String dropPartitionSql = "ALTER TABLE test.tbl1 DROP PARTITION p3\n";
+        new StmtExecutor(connectContext, dropPartitionSql).execute();
+        ThreadUtil.sleepAtLeastIgnoreInterrupts(3000L);
+        Assert.assertEquals(1, mvPartitions.size());
+        Assert.assertEquals(0, materializedView.getTableMvPartitionNameRefMap("p3").size());
+        Assert.assertEquals(0, materializedView.getMvTablePartitionNameRefMap("mv1").size());
+        Assert.assertNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p3"));
     }
 
     // ========== partition test ==========
