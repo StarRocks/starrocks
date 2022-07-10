@@ -9,6 +9,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeShowAlterTest {
@@ -49,4 +50,26 @@ public class AnalyzeShowAlterTest {
         Assert.assertEquals("SHOW ALTER TABLE COLUMN FROM `default_cluster:db` ORDER BY CreateTime ASC",
                 statement.toSql());
     }
+
+    @Test
+    public void testShowAlter4() {
+        ShowAlterStmt statement = (ShowAlterStmt) analyzeSuccess(
+                "SHOW ALTER TABLE COLUMN FROM db WHERE `CreateTime` > '2019-12-04 00:00:00'");
+        Assert.assertEquals("SHOW ALTER TABLE COLUMN FROM `default_cluster:db` " +
+                        "WHERE CreateTime > '2019-12-04 00:00:00'",
+                statement.toSql());
+    }
+
+    @Test
+    public void testShowAlterFail() {
+        analyzeFail("SHOW ALTER TABLE COLUMN FROM errordb",
+                "Unknown database 'default_cluster:errordb'");
+        analyzeFail("SHOW ALTER TABLE COLUMN FROM db WHERE `CreateTime` > '2019-12-04 00:00:00' " +
+                        "AND `bad_column` < '2010-12-04 00:00:00'",
+                "The columns of TableName/CreateTime/FinishTime/State are supported");
+        analyzeFail("SHOW ALTER TABLE COLUMN FROM db WHERE `CreateTime` > '2019-12-04 00:00:00' " +
+                        "OR `FinishTime` < '2022-12-04 00:00:00'",
+                "Only allow compound predicate with operator AND");
+    }
+
 }
