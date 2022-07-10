@@ -941,10 +941,6 @@ alter_table_clause ::=
     {:
         RESULT = new ReorderColumnsClause(cols, rollup, properties);
     :}
-    | KW_SET LPAREN key_value_map:properties RPAREN
-    {:
-        RESULT = new ModifyTablePropertiesClause(properties);
-    :}
     | KW_ADD opt_tmp:isTempPartition single_range_partition_desc:desc opt_distribution:distribution opt_properties:properties
     {:
         RESULT = new AddPartitionClause(desc, distribution, properties, isTempPartition);

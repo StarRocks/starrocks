@@ -400,6 +400,7 @@ alterClause
     | dropComputeNodeClause
     | swapTableClause
     | dropPartitionClause
+    | modifyTablePropertiesClause
     | addPartitionClause
     ;
 
@@ -425,6 +426,10 @@ tableRenameClause
 
 swapTableClause
     : SWAP WITH identifier
+    ;
+
+modifyTablePropertiesClause
+    : SET propertyList
     ;
 
 addBackendClause

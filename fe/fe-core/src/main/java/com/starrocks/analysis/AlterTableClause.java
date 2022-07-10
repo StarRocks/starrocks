@@ -32,4 +32,8 @@ public abstract class AlterTableClause extends AlterClause {
     public boolean isNeedTableStable() {
         return needTableStable;
     }
+
+    public void setNeedTableStable(boolean needTableStable) {
+        this.needTableStable = needTableStable;
+    }
 }
