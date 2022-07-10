@@ -38,6 +38,7 @@ import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -1826,6 +1827,38 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         return new DropFunctionStmt(FunctionName.createFnName(functionName),
                 new FunctionArgsDef(typeDefList, isVariadic));
+    }
+
+    @Override
+    public ParseNode visitCreateFunctionStatement(StarRocksParser.CreateFunctionStatementContext context) {
+        String functionType = null;
+        if (context.functionType != null) {
+            functionType = context.functionType.getText();
+        }
+        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+
+        List<TypeDef> typeDefList = new ArrayList<>();
+        for (StarRocksParser.TypeContext typeContext : context.typelist().type()) {
+            typeDefList.add(new TypeDef(getType(typeContext)));
+        }
+        boolean isVariadic = context.typelist().DOTDOTDOT() != null;
+
+        TypeDef returnTypeDef = new TypeDef(getType(context.returnType));
+        TypeDef intermediateType = null;
+        if (context.intermediateType != null) {
+            intermediateType = new TypeDef(getType(context.intermediateType));
+        }
+
+        Map<String, String> properties = null;
+        if (context.properties() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateFunctionStmt(functionType, FunctionName.createFnName(functionName),
+                new FunctionArgsDef(typeDefList, isVariadic), returnTypeDef, intermediateType, properties);
     }
 
     // ------------------------------------------- Other Statement -----------------------------------------------------

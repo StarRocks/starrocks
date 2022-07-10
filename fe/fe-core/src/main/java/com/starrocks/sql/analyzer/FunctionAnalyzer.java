@@ -4,8 +4,8 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionArgsDef;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
@@ -17,6 +17,7 @@ import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
@@ -310,6 +311,14 @@ public class FunctionAnalyzer {
                             + functionCallExpr.toSql());
                 }
             }
+        }
+    }
+
+    public static void analyzeCreateFunction(CreateFunctionStmt statement, ConnectContext context) {
+        try {
+            statement.analyze(context);
+        } catch (AnalysisException e) {
+            throw new SemanticException(e.getMessage());
         }
     }
 }

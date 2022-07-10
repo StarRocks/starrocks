@@ -256,8 +256,18 @@ public class CreateFunctionStmt extends DdlStmt {
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
 
-        analyzeCommon(analyzer);
+        analyzeCommon(analyzer.getDefaultDb(), analyzer.getClusterName());
         Preconditions.checkArgument(isStarrocksJar);
+        analysisJar();
+    }
+
+    public void analyze(ConnectContext context) throws AnalysisException {
+        analyzeCommon(context.getDatabase(), context.getDatabase());
+        Preconditions.checkArgument(isStarrocksJar);
+        analysisJar();
+    }
+
+    public void analysisJar() throws AnalysisException {
         analyzeUdfClassInStarrocksJar();
         if (isAggregate) {
             analyzeStarrocksJarUdaf();
@@ -268,18 +278,19 @@ public class CreateFunctionStmt extends DdlStmt {
         }
     }
 
-    private void analyzeCommon(Analyzer analyzer) throws AnalysisException {
+    private void analyzeCommon(String defaultDb, String defaultCluster) throws AnalysisException {
         // check function name
-        functionName.analyze(analyzer);
+        functionName.analyze(defaultDb, defaultCluster);
 
         // check operation privilege
         if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+
         }
 
         // check argument
-        argsDef.analyze(analyzer);
-        returnType.analyze(analyzer);
+        argsDef.analyze(null);
+        returnType.analyze(null);
         intermediateType = TypeDef.createVarchar(ScalarType.MAX_VARCHAR_LENGTH);
 
         String type = properties.get(TYPE_KEY);
@@ -530,5 +541,10 @@ public class CreateFunctionStmt extends DdlStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

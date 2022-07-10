@@ -60,7 +60,7 @@ public class DropFunctionStmt extends DdlStmt {
         super.analyze(analyzer);
 
         // analyze function name
-        functionName.analyze(analyzer);
+        functionName.analyze(analyzer.getDefaultDb(), analyzer.getClusterName());
 
         // check operation privilege
         if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
