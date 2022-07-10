@@ -19,6 +19,7 @@ import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropDbStmt;
+import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
@@ -308,6 +309,12 @@ public class Analyzer {
         @Override
         public Void visitShowCatalogsStmt(ShowCatalogsStmt statement, ConnectContext context) {
             CatalogAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropFunction(DropFunctionStmt statement, ConnectContext context) {
+            DropStmtAnalyzer.analyze(statement, context);
             return null;
         }
 

@@ -28,9 +28,15 @@ import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class DropFunctionStmt extends DdlStmt {
     private final FunctionName functionName;
+
+    public FunctionArgsDef getArgsDef() {
+        return argsDef;
+    }
+
     private final FunctionArgsDef argsDef;
 
     // set after analyzed
@@ -47,6 +53,10 @@ public class DropFunctionStmt extends DdlStmt {
 
     public FunctionSearchDesc getFunction() {
         return function;
+    }
+
+    public void setFunction(FunctionSearchDesc function) {
+        this.function = function;
     }
 
     @Override
@@ -70,11 +80,22 @@ public class DropFunctionStmt extends DdlStmt {
     public String toSql() {
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append("DROP FUNCTION ").append(functionName);
+        stringBuilder.append(argsDef.toSql());
         return stringBuilder.toString();
     }
 
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropFunction(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }
