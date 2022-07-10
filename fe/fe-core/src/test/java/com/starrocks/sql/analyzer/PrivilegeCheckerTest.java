@@ -257,6 +257,14 @@ public class PrivilegeCheckerTest {
         Assert.assertEquals(resultSet2.getResultRows().toArray().length, 2);
         Assert.assertEquals(resultSet2.getResultRows().get(0).get(0), "tbl1");
 
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
+        // test no privilege
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx()));
+        // recover privilege
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
+
         String sql3 = "show data from dbNoExist.tbl1"; // dbNoExist no exist
         StatementBase dbNoExist = UtFrameUtils.parseStmtWithNewParser(sql3, starRocksAssert.getCtx());
         Assert.assertThrows(SemanticException.class,
