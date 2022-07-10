@@ -4774,13 +4774,6 @@ admin_stmt ::=
     :}
     ;
 
-truncate_stmt ::=
-    KW_TRUNCATE KW_TABLE base_table_ref:tblRef
-    {:
-        RESULT = new TruncateTableStmt(tblRef);
-    :}
-    ;
-
 unsupported_stmt ::=
     KW_START KW_TRANSACTION opt_with_consistent_snapshot:v
     {:

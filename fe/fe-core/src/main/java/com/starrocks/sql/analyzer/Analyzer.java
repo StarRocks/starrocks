@@ -32,6 +32,7 @@ import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
@@ -340,6 +341,11 @@ public class Analyzer {
 
         public Void visitRecoverTableStatement(RecoverTableStmt statement, ConnectContext context) {
             RecoverTableAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        public Void visitTruncateTableStatement(TruncateTableStmt statement, ConnectContext context) {
+            TruncateTableAnalyzer.analyze(statement, context);
             return null;
         }
 
