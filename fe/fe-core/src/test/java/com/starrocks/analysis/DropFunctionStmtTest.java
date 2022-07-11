@@ -25,7 +25,6 @@ public class DropFunctionStmtTest {
     public void testNormal() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.setDatabase("testDb");
-        ctx.setCluster("default_cluster");
         compareAfterParse("DROP FUNCTION f()", "DROP FUNCTION testDb.f()");
         compareAfterParse("DROP FUNCTION f(int)", "DROP FUNCTION testDb.f(INT)");
         compareAfterParse("DROP FUNCTION f(int, ...)", "DROP FUNCTION testDb.f(INT, ...)");

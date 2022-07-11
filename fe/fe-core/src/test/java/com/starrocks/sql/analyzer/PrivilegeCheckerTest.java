@@ -807,11 +807,33 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("*", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
 
         String sql = "drop function db1.abc(string);";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
+    @Test
+    public void testCreateFunction() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+        starRocksAssert.getCtx().setDatabase("testDb");
+
+        TablePattern db1TablePattern = new TablePattern("*", "*");
+        db1TablePattern.analyze();
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+
+        String sql = "create function abc(string) returns int;";
+        StatementBase statementBase =
+                UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, starRocksAssert.getCtx());
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);

@@ -13,6 +13,7 @@ import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
@@ -270,13 +271,15 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStatement statement, ConnectContext context) {
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStatement statement,
+                                                        ConnectContext context) {
             MaterializedViewAnalyzer.analyze(statement, context);
             return null;
         }
 
         @Override
-        public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement, ConnectContext context) {
+        public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement,
+                                                          ConnectContext context) {
             MaterializedViewAnalyzer.analyze(statement, context);
             return null;
         }
@@ -315,6 +318,12 @@ public class Analyzer {
         @Override
         public Void visitDropFunction(DropFunctionStmt statement, ConnectContext context) {
             DropStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateFunction(CreateFunctionStmt statement, ConnectContext context) {
+            FunctionAnalyzer.analyzeCreateFunction(statement, context);
             return null;
         }
 

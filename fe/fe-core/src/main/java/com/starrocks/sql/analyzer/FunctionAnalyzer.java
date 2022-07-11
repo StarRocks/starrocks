@@ -2,10 +2,9 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionArgsDef;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
@@ -16,41 +15,10 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 
 public class FunctionAnalyzer {
-
-    public static void analyzeFunctionName(FunctionName functionName, ConnectContext context) {
-        String dbName = functionName.getDb();
-        String fn = functionName.getFunction();
-        if (fn.length() == 0) {
-            throw new SemanticException("Function name can not be empty.");
-        }
-        for (int i = 0; i < fn.length(); ++i) {
-            if (!isValidCharacter(fn.charAt(i))) {
-                throw new SemanticException(
-                        "Function names must be all alphanumeric or underscore. " +
-                                "Invalid name: " + fn);
-            }
-        }
-        if (Character.isDigit(fn.charAt(0))) {
-            throw new SemanticException("Function cannot start with a digit: " + fn);
-        }
-        if (dbName == null) {
-            functionName.setDb(context.getDatabase());
-            if (Strings.isNullOrEmpty(dbName)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
-            }
-        } else {
-            if (Strings.isNullOrEmpty(context.getClusterName())) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_CLUSTER_NAME_NULL);
-            }
-            functionName.setDb(ClusterNamespace.getFullName(dbName));
-        }
-    }
 
     private static boolean isValidCharacter(char c) {
         return Character.isLetterOrDigit(c) || c == '_';
@@ -321,6 +289,14 @@ public class FunctionAnalyzer {
                             + functionCallExpr.toSql());
                 }
             }
+        }
+    }
+
+    public static void analyzeCreateFunction(CreateFunctionStmt statement, ConnectContext context) {
+        try {
+            statement.analyze(context, false);
+        } catch (AnalysisException e) {
+            throw new SemanticException(e.getMessage());
         }
     }
 }

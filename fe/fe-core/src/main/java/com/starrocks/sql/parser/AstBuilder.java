@@ -39,6 +39,7 @@ import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -2064,14 +2065,34 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitDropFunctionStatement(StarRocksParser.DropFunctionStatementContext context) {
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
 
-        List<TypeDef> typeDefList = new ArrayList<>();
-        for (StarRocksParser.TypeContext typeContext : context.type()) {
-            typeDefList.add(new TypeDef(getType(typeContext)));
-        }
-        boolean isVariadic = context.DOTDOTDOT() != null;
-
         return new DropFunctionStmt(FunctionName.createFnName(functionName),
-                new FunctionArgsDef(typeDefList, isVariadic));
+                getFunctionArgsDef(context.typeList()));
+    }
+
+    @Override
+    public ParseNode visitCreateFunctionStatement(StarRocksParser.CreateFunctionStatementContext context) {
+        String functionType = "SCALAR";
+        if (context.functionType != null) {
+            functionType = context.functionType.getText();
+        }
+        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+
+        TypeDef returnTypeDef = new TypeDef(getType(context.returnType));
+        TypeDef intermediateType = null;
+        if (context.intermediateType != null) {
+            intermediateType = new TypeDef(getType(context.intermediateType));
+        }
+
+        Map<String, String> properties = null;
+        if (context.properties() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateFunctionStmt(functionType, FunctionName.createFnName(functionName),
+                getFunctionArgsDef(context.typeList()), returnTypeDef, intermediateType, properties);
     }
 
     // ------------------------------------------- Other Statement -----------------------------------------------------
@@ -3311,6 +3332,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return null;
         }
+    }
+
+    private FunctionArgsDef getFunctionArgsDef(StarRocksParser.TypeListContext typeList) {
+        List<TypeDef> typeDefList = new ArrayList<>();
+        for (StarRocksParser.TypeContext typeContext : typeList.type()) {
+            typeDefList.add(new TypeDef(getType(typeContext)));
+        }
+        boolean isVariadic = typeList.DOTDOTDOT() != null;
+        return new FunctionArgsDef(typeDefList, isVariadic);
     }
 
     private QualifiedName getQualifiedName(StarRocksParser.QualifiedNameContext context) {

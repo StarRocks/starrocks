@@ -107,6 +107,7 @@ statement
     //UDF
     | showFunctionsStatement                                                                #showFunctions
     | dropFunctionStatement                                                                 #dropFunctionst
+    | createFunctionStatement                                                               #createFunction
 
 
 
@@ -598,12 +599,16 @@ showFunctionsStatement
     ;
 
 dropFunctionStatement
-    : DROP FUNCTION qualifiedName '(' DOTDOTDOT')'
-    | DROP FUNCTION qualifiedName '(' (type (',' type)*)? ')'
-    | DROP FUNCTION qualifiedName '(' (type (',' type)*)? DOTDOTDOT ')'
+    : DROP FUNCTION qualifiedName '(' typeList ')'
     ;
 
+createFunctionStatement
+    : CREATE functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
+    ;
 
+typeList
+    : type?  ( ',' type)? (',' DOTDOTDOT) ?
+    ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 

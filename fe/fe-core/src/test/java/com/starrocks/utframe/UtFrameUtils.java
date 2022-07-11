@@ -155,6 +155,24 @@ public class UtFrameUtils {
         return statementBase;
     }
 
+    public static StatementBase parseStmtWithNewParserNotIncludeAnalyzer(String originStmt, ConnectContext ctx)
+            throws Exception {
+        StatementBase statementBase;
+        try {
+            statementBase =
+                    com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
+        } catch (ParsingException e) {
+            System.err.println("parse failed: " + e.getMessage());
+            if (e.getMessage() == null) {
+                throw e;
+            } else {
+                throw new AnalysisException(e.getMessage(), e);
+            }
+        }
+
+        return statementBase;
+    }
+
     // Parse an origin stmt and analyze it. Return a StatementBase instance.
     public static StatementBase parseAndAnalyzeStmt(String originStmt, ConnectContext ctx)
             throws Exception {

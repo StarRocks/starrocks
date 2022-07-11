@@ -41,6 +41,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.codec.binary.Hex;
 
@@ -255,8 +256,11 @@ public class CreateFunctionStmt extends DdlStmt {
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
+        analyze(analyzer.getContext(), true);
+    }
 
-        analyzeCommon(analyzer);
+    public void analyze(ConnectContext context, boolean needCheckPrivilege) throws AnalysisException {
+        analyzeCommon(context.getDatabase(), context.getDatabase(), needCheckPrivilege);
         Preconditions.checkArgument(isStarrocksJar);
         analyzeUdfClassInStarrocksJar();
         if (isAggregate) {
@@ -268,18 +272,21 @@ public class CreateFunctionStmt extends DdlStmt {
         }
     }
 
-    private void analyzeCommon(Analyzer analyzer) throws AnalysisException {
+    private void analyzeCommon(String defaultDb, String defaultCluster, boolean needCheck) throws AnalysisException {
         // check function name
-        functionName.analyze(analyzer);
+        functionName.analyze(defaultDb);
 
         // check operation privilege
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+        if (needCheck && !GlobalStateMgr.getCurrentState().getAuth()
+                .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+
         }
 
         // check argument
-        argsDef.analyze(analyzer);
-        returnType.analyze(analyzer);
+        argsDef.analyze();
+        returnType.analyze();
+
         intermediateType = TypeDef.createVarchar(ScalarType.MAX_VARCHAR_LENGTH);
 
         String type = properties.get(TYPE_KEY);
@@ -509,6 +516,11 @@ public class CreateFunctionStmt extends DdlStmt {
         stringBuilder.append(argsDef.toSql());
         stringBuilder.append(" RETURNS ");
         stringBuilder.append(returnType.toString());
+
+        if (intermediateType != null) {
+            stringBuilder.append(" INTERMEDIATE ");
+            stringBuilder.append(intermediateType.toString());
+        }
         if (properties.size() > 0) {
             stringBuilder.append(" PROPERTIES (");
             int i = 0;
@@ -530,5 +542,15 @@ public class CreateFunctionStmt extends DdlStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCreateFunction(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

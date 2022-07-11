@@ -29,6 +29,7 @@ import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.ComputeNodeClause;
 import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -394,6 +395,10 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    public R visitCreateFunction(CreateFunctionStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     // ------------------------------------------- Analyze Statement ---------------------------------------------------
 
     public R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
@@ -659,7 +664,6 @@ public abstract class AstVisitor<R, C> {
     public R visitCloneExpr(CloneExpr node, C context) {
         return visitExpression(node, context);
     }
-
     // ----------------- AST ---------------
 
     public R visitLimitElement(LimitElement node, C context) {
