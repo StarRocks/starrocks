@@ -30,11 +30,11 @@ jobs:
 
       - name: Read Properties
         id: read_property
-        run: cat review/${{ steps.source-run-info.outputs.pullRequestNumber }}
+        run: echo "::set-output name=result::$(cat review/${{ steps.source-run-info.outputs.pullRequestNumber }})"
 
       - name: Label when approved by 2 committers
+        if: steps.read_property.outputs.result == 'true'
         uses: actions-ecosystem/action-add-labels@v1
-        if: ${{ steps.read_property.outputs.stdout }} == 'true'
         with:
           github_token: ${{ secrets.PAT }}
           labels: approved
