@@ -1680,8 +1680,14 @@ public class LocalMetastore implements ConnectorMetadata {
                 } catch (AnalysisException e) {
                     throw new DdlException(e.getMessage());
                 }
+                if (storageCacheTtlS < -1) {
+                    throw new DdlException("Storage cache ttl should not be less than -1");
+                }
+                if (!enableStorageCache && storageCacheTtlS != 0) {
+                    throw new DdlException("Storage cache ttl should be 0 when cache is disabled");
+                }
                 if (enableStorageCache && storageCacheTtlS == 0) {
-                    throw new DdlException("Storage cache ttl should not be 0 when cache is enabled");
+                    storageCacheTtlS = Config.storage_cooldown_second;
                 }
 
                 // get service shard storage info from StarMgr

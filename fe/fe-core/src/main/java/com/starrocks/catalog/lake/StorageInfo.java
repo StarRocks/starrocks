@@ -20,6 +20,8 @@ public class StorageInfo implements GsonPreProcessable, GsonPostProcessable {
     @SerializedName(value = "enableStorageCache")
     private boolean enableStorageCache = false;
 
+    // -1 indicates "cache forever"
+    // 0 indicates "disable cache"
     @SerializedName(value = "storageCacheTtlS")
     private long storageCacheTtlS = 0;
 

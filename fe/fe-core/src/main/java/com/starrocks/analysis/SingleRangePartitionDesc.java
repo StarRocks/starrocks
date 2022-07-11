@@ -29,6 +29,7 @@ import com.starrocks.analysis.PartitionKeyDesc.PartitionRangeType;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.lake.StorageInfo;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
@@ -157,8 +158,14 @@ public class SingleRangePartitionDesc extends PartitionDesc {
                 properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, false);
         long storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(
                 properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
+        if (storageCacheTtlS < -1) {
+            throw new AnalysisException("Storage cache ttl should not be less than -1");
+        }
+        if (!enableStorageCache && storageCacheTtlS != 0) {
+            throw new AnalysisException("Storage cache ttl should be 0 when cache is disabled");
+        }
         if (enableStorageCache && storageCacheTtlS == 0) {
-            throw new AnalysisException("Storage cache ttl should not be 0 when cache is enabled");
+            storageCacheTtlS = Config.storage_cooldown_second;
         }
         storageInfo = new StorageInfo(null, enableStorageCache, storageCacheTtlS);
 

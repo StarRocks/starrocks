@@ -186,8 +186,7 @@ public class CreateLakeTableTest {
                         "engine = starrocks unique key (key1, key2)\n" +
                         "partition by range(key1)\n" +
                         "(partition p1 values less than (\"10\"),\n" +
-                        " partition p2 values less than (\"20\") ('enable_storage_cache' = 'true', " +
-                        "                                         'storage_cache_ttl' = '10800'))\n" +
+                        " partition p2 values less than (\"20\") ('enable_storage_cache' = 'true'))\n" +
                         "distributed by hash(key2) buckets 1\n" +
                         "properties('replication_num' = '1');"));
         {
@@ -204,7 +203,7 @@ public class CreateLakeTableTest {
             long partition2Id = lakeTable.getPartition("p2").getId();
             StorageInfo partition2StorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partition2Id);
             Assert.assertTrue(partition2StorageInfo.isEnableStorageCache());
-            Assert.assertEquals(10800, partition2StorageInfo.getStorageCacheTtlS());
+            Assert.assertEquals(Config.storage_cooldown_second, partition2StorageInfo.getStorageCacheTtlS());
         }
     }
 }
