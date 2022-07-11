@@ -1,7 +1,7 @@
 
  <p align="center">
  <a href="https://www.starrocks.com/en-US/index">
-    <img  width="526" src="https://github.com/kateshaowanjou/starrocks/blob/main/logo%2Bslogan.png">
+    <img  width="526" src="logo%2Bslogan.png">
    </a>
 </p>
 <p align="center">
