@@ -1148,6 +1148,11 @@ void PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const vectorized
     }
 }
 
+void PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
+                          uint32_t idx_end, DeletesMap* deletes) {
+    _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
+}
+
 void PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
                                const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));

@@ -816,6 +816,14 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     }
     int64_t t_apply = MonotonicMillis();
 
+    size_t conditional_column = -1;
+    for (int i = 0; i < _tablet.tablet_schema().columns().size(); ++i) {
+        if (_tablet.tablet_schema().column(i).name() == "dataUpdateTime") {
+            conditional_column = i;
+            break;
+        }
+    }
+
     span->AddEvent("update_index");
     // 3. generate delvec
     // add initial empty delvec for new segments
@@ -827,8 +835,61 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     auto& upserts = state.upserts();
     for (uint32_t i = 0; i < upserts.size(); i++) {
         if (upserts[i] != nullptr) {
-            index.upsert(rowset_id + i, 0, *upserts[i], &new_deletes);
-            manager->index_cache().update_object_size(index_entry, index.memory_usage());
+            if (conditional_column >= 0) {
+                auto tablet_column = _tablet.tablet_schema().column(conditional_column);
+                std::vector<uint32_t> read_column_ids;
+                read_column_ids.push_back(conditional_column);
+
+                std::vector<uint64_t> old_rowids;
+                index.get(*upserts[i], &old_rowids);
+                std::map<uint32_t, std::vector<uint32_t>> old_rowids_by_rssid;
+                size_t num_default = 0;
+                vector<uint32_t> idxes;
+                RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
+                std::vector<std::unique_ptr<vectorized::Column>> old_columns(1);
+                auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+                old_columns[0] = old_column->clone_empty();
+                get_column_values(read_column_ids, false, old_rowids_by_rssid, &old_columns);
+
+                std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
+                std::vector<uint32_t> rowids;
+                for (int j = 0; j < upserts[i]->size(); ++j) {
+                    rowids.push_back(j);
+                }
+                new_rowids_by_rssid[rowset_id + i] = rowids;
+                std::vector<std::unique_ptr<vectorized::Column>> new_columns(1);
+                auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+                new_columns[0] = new_column->clone_empty();
+                get_column_values(read_column_ids, false, new_rowids_by_rssid, &new_columns);
+
+                int idx_begin = 0;
+                int upsert_idx_step = 0;
+                for (int  j = 0;  j < old_columns[0]->size(); ++ j) {
+                    int r = old_columns[0]->compare_at(j, j, *new_columns[0].get(), -1);
+                    if (r > 0) {
+                        index.upsert(rowset_id + i, idx_begin, *upserts[i],
+                                     idx_begin, idx_begin + upsert_idx_step, &new_deletes);
+                        manager->index_cache().update_object_size(index_entry, index.memory_usage());
+
+                        idx_begin = j + 1;
+                        upsert_idx_step = 0;
+
+                        // Update delete vector of current segment which is being applied
+                        new_deletes[rowset_id + i].push_back(j);
+                    } else {
+                        upsert_idx_step++;
+                    }
+                }
+
+                if (idx_begin < old_columns.size()) {
+                    index.upsert(rowset_id + i, idx_begin, *upserts[i],
+                                 idx_begin, idx_begin + upsert_idx_step, &new_deletes);
+                    manager->index_cache().update_object_size(index_entry, index.memory_usage());
+                }
+            } else {
+                index.upsert(rowset_id + i, 0, *upserts[i], &new_deletes);
+                manager->index_cache().update_object_size(index_entry, index.memory_usage());
+            }
         }
     }
 
