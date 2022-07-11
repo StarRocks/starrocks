@@ -34,7 +34,6 @@ jobs:
     - name: echo1
       id: echo1
       run: |
-        echo "" >> temp.txt
         echo "false" >> temp.txt
         cat temp.txt
 
