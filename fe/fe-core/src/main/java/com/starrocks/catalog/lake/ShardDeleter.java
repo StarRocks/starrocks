@@ -22,7 +22,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -94,13 +93,11 @@ public class ShardDeleter extends MasterDaemon {
                 Future<DropTabletResponse> responseFuture = lakeService.dropTablet(request);
                 try {
                     DropTabletResponse response = responseFuture.get();
-                    if (response == null || response.succTablets == null || response.succTablets.isEmpty()) {
-                        continue;
-                    } else {
-                        // for debug
-                        LOG.info("succTablets is {}", response.succTablets);
-                        shards = new HashSet<>(response.succTablets);
-                    }
+                    if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
+                        LOG.info("failedTablets is {}", response.failedTablets);
+                        shards.removeAll(response.failedTablets);
+                    } 
+
                 } catch (Exception e) {
                     LOG.error(e);
                     continue;
@@ -120,7 +117,7 @@ public class ShardDeleter extends MasterDaemon {
             // 3. succ both, remove from the map
             // for debug
             LOG.info("delete shard {} and drop lake tablet succ.", shards);
-            GlobalStateMgr.getCurrentState().getEditLog().logRemoveDeleteShard(shards);
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveUnusedShard(shards);
             try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
                 shardIds.removeAll(shards);
             }

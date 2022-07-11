@@ -88,7 +88,7 @@ public class ShardDeleterTest {
     public void testNormal() throws Exception {
 
         DropTabletResponse response = new DropTabletResponse();
-        response.succTablets = new ArrayList<>(ids);
+        response.failedTablets = new ArrayList<>();
 
         new Expectations() {
             {

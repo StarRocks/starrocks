@@ -29,6 +29,15 @@ message AbortTxnResponse {
     repeated int64 failed_tablets = 1;
 }
 
+message DropTabletRequest {
+    repeated int64 tablet_ids = 1;
+}
+
+message DropTabletResponse {
+    repeated int64 failed_tablets = 1;
+
+}
+
 message CompactRequest {
     repeated int64 tablet_ids = 1;
     optional int64 txn_id = 2;

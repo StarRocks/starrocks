@@ -177,11 +177,11 @@ void LakeServiceImpl::drop_tablet(::google::protobuf::RpcController* controller,
         // for debug
         LOG(INFO) << " tablet_id in LakeServiceImpl::drop_tablet is " << tablet_id;
         auto res = _env->lake_tablet_manager()->drop_tablet(tablet_id);
-        if (res.ok()) {
-            LOG(INFO) << "Drop tablet " << tablet_id << " succ";
-            response->add_succ_tablets(tablet_id);
-        } else {
+        if (!res.ok()) {
             LOG(WARNING) << "Fail to drop tablet " << tablet_id << ": " << res.get_error_msg();
+            response->add_failed_tablets(tablet_id);
+        } else {
+            LOG(INFO) << "Drop tablet " << tablet_id << " succ";
         }
     }
 } 

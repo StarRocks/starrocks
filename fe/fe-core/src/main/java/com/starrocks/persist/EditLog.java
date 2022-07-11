@@ -1499,11 +1499,11 @@ public class EditLog {
         logEdit(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log);
     }
 
-    public void logAddDeleteShard(Set<Long> shardIds) {
+    public void logAddUnusedShard(Set<Long> shardIds) {
         logEdit(OperationType.OP_ADD_UNUSED_SHARD, new ShardInfo(shardIds));
     }
 
-    public void logRemoveDeleteShard(Set<Long> shardIds) {
+    public void logRemoveUnusedShard(Set<Long> shardIds) {
         logEdit(OperationType.OP_DELETE_UNUSED_SHARD, new ShardInfo(shardIds));
     }
 
