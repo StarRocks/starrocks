@@ -59,11 +59,12 @@ public class HiveTableColumnsKey {
         HiveTableColumnsKey other = (HiveTableColumnsKey) o;
         return Objects.equals(databaseName, other.databaseName) &&
                 Objects.equals(tableName, other.tableName) &&
-                Objects.equals(tableType, other.tableType);
+                Objects.equals(tableType, other.tableType) &&
+                Objects.equals(columnNames, other.columnNames);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseName, tableName, tableType);
+        return Objects.hash(databaseName, tableName, tableType, columnNames);
     }
 }
