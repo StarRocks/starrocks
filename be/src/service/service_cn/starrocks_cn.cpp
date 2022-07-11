@@ -69,9 +69,11 @@ void start_cn() {
         exit(1);
     }
 
-    while (!starrocks::k_starrocks_exit) {
+    while (!starrocks::k_starrocks_exit.load()) {
         sleep(10);
     }
+
+    starrocks::wait_for_fragments_finish(exec_env, starrocks::config::cn_loop_count_wait_fragments_finish);
 
     http_service.reset();
 

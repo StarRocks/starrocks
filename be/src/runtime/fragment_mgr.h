@@ -88,6 +88,7 @@ public:
     // execute external query, all query info are packed in TScanOpenParams
     Status exec_external_plan_fragment(const TScanOpenParams& params, const TUniqueId& fragment_instance_id,
                                        std::vector<TScanColumnDesc>* selected_columns);
+    size_t running_fragment_count() const { return _fragment_map.size(); }
 
 private:
     void exec_actual(std::shared_ptr<FragmentExecState> exec_state, const FinishCallback& cb);

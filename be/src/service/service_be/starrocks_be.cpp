@@ -15,6 +15,7 @@
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"
+#include "runtime/fragment_mgr.h"
 #include "service/brpc.h"
 #include "service/service.h"
 #include "service/service_be/http_service.h"
@@ -79,9 +80,11 @@ void start_be() {
         exit(1);
     }
 
-    while (!starrocks::k_starrocks_exit) {
+    while (!starrocks::k_starrocks_exit.load()) {
         sleep(10);
     }
+
+    starrocks::wait_for_fragments_finish(exec_env, starrocks::config::be_loop_count_wait_fragments_finish);
 
     http_service.reset();
 
