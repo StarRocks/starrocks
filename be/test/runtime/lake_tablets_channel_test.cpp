@@ -24,7 +24,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
-#include "storage/lake/test_group_assigner.h"
+#include "storage/lake/test_location_provider.h"
 #include "storage/lake/txn_log.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_iterator.h"
@@ -53,8 +53,8 @@ public:
         _tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
         _tablet_manager->prune_metacache();
 
-        _group_assigner = std::make_unique<lake::TestGroupAssigner>(kTestGroupPath);
-        _backup_group_assigner = _tablet_manager->TEST_set_group_assigner(_group_assigner.get());
+        _location_provider = std::make_unique<lake::TestGroupAssigner>(kTestGroupPath);
+        _backup_location_provider = _tablet_manager->TEST_set_location_provider(_location_provider.get());
 
         auto metadata = new_tablet_metadata(10086);
         _tablet_schema = TabletSchema::create(_mem_tracker.get(), metadata->schema());
@@ -173,7 +173,7 @@ public:
 
 protected:
     void SetUp() override {
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_group_assigner(_group_assigner.get());
+        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(kTestGroupPath));
         CHECK_OK(_tablet_manager->put_tablet_metadata(kTestGroupPath, *new_tablet_metadata(10086)));
@@ -199,7 +199,7 @@ protected:
         tablet.delete_txn_log(kTxnId);
         ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10089));
         tablet.delete_txn_log(kTxnId);
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_group_assigner(_backup_group_assigner);
+        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_backup_location_provider);
         (void)fs::remove_all(kTestGroupPath);
         _tablet_manager->prune_metacache();
     }
@@ -242,8 +242,8 @@ protected:
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
     lake::TabletManager* _tablet_manager;
-    std::unique_ptr<lake::TestGroupAssigner> _group_assigner;
-    lake::GroupAssigner* _backup_group_assigner;
+    std::unique_ptr<lake::TestGroupAssigner> _location_provider;
+    lake::LocationProvider* _backup_location_provider;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<VSchema> _schema;
     PTabletWriterOpenRequest _open_request;

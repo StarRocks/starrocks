@@ -6,7 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "runtime/exec_env.h"
-#include "storage/lake/group_assigner.h"
+#include "storage/lake/location_provider.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
@@ -19,8 +19,8 @@ class LakeServiceTest : public testing::Test {
 public:
     LakeServiceTest() : _lake_service(ExecEnv::GetInstance()), _tablet_id(54321) {
         std::set<std::string> groups;
-        auto group_assigner = ExecEnv::GetInstance()->lake_group_assigner();
-        (void)group_assigner->list_group(&groups);
+        auto location_provider = ExecEnv::GetInstance()->lake_location_provider();
+        (void)location_provider->list_root_locations(&groups);
         CHECK(!groups.empty());
         _group = *groups.begin();
         _tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();

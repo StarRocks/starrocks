@@ -46,7 +46,7 @@ Status GeneralTabletWriter::finish() {
 void GeneralTabletWriter::close() {
     if (!_finished && !_files.empty()) {
         // Delete files
-        auto maybe_fs = FileSystem::CreateSharedFromString(_tablet.group_assemble());
+        auto maybe_fs = FileSystem::CreateSharedFromString(_tablet.root_location());
         if (maybe_fs.ok()) {
             auto fs = std::move(maybe_fs).value();
             for (const auto& name : _files) {

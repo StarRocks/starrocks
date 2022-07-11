@@ -17,7 +17,7 @@ class TCreateTabletReq;
 namespace starrocks::lake {
 
 class CompactionTask;
-class GroupAssigner;
+class LocationProvider;
 class Tablet;
 template <typename T>
 class MetadataIterator;
@@ -30,11 +30,11 @@ class TabletManager {
     friend class Tablet;
 
 public:
-    // Does NOT take the ownership of |group_assigner| and |group_assigner| must outlive
+    // Does NOT take the ownership of |location_provider| and |location_provider| must outlive
     // this TabletManager.
     // |cache_capacity| is the max number of bytes can be used by the
     // metadata cache.
-    explicit TabletManager(GroupAssigner* group_assigner, int64_t cache_capacity);
+    explicit TabletManager(LocationProvider* location_provider, int64_t cache_capacity);
 
     Status create_tablet(const TCreateTabletReq& req);
 
@@ -47,36 +47,36 @@ public:
 
     StatusOr<CompactionTaskPtr> compact(int64_t tablet_id, int64_t version, int64_t txn_id);
 
-    Status put_tablet_metadata(const std::string& group, const TabletMetadata& metadata);
-    Status put_tablet_metadata(const std::string& group, TabletMetadataPtr metadata);
-    StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& group, int64_t tablet_id, int64_t version);
-    StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& group, const std::string& path);
+    Status put_tablet_metadata(const std::string& root, const TabletMetadata& metadata);
+    Status put_tablet_metadata(const std::string& root, TabletMetadataPtr metadata);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& root, int64_t tablet_id, int64_t version);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& root, const std::string& path);
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id, bool filter_tablet);
-    Status delete_tablet_metadata(const std::string& group, int64_t tablet_id, int64_t version);
+    Status delete_tablet_metadata(const std::string& root, int64_t tablet_id, int64_t version);
 
-    Status put_txn_log(const std::string& group, const TxnLog& log);
-    Status put_txn_log(const std::string& group, TxnLogPtr log);
-    StatusOr<TxnLogPtr> get_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id);
-    StatusOr<TxnLogPtr> get_txn_log(const std::string& group, const std::string& path);
+    Status put_txn_log(const std::string& root, const TxnLog& log);
+    Status put_txn_log(const std::string& root, TxnLogPtr log);
+    StatusOr<TxnLogPtr> get_txn_log(const std::string& root, int64_t tablet_id, int64_t txn_id);
+    StatusOr<TxnLogPtr> get_txn_log(const std::string& root, const std::string& path);
     StatusOr<TxnLogIter> list_txn_log(int64_t tablet_id, bool filter_tablet);
-    Status delete_txn_log(const std::string& group, int64_t tablet_id, int64_t txn_id);
+    Status delete_txn_log(const std::string& root, int64_t tablet_id, int64_t txn_id);
 
     void prune_metacache();
 
-    GroupAssigner* TEST_set_group_assigner(GroupAssigner* value) {
-        auto ret = _group_assigner;
-        _group_assigner = value;
+    LocationProvider* TEST_set_location_provider(LocationProvider* value) {
+        auto ret = _location_provider;
+        _location_provider = value;
         return ret;
     }
 
 private:
-    std::string tablet_metadata_path(const std::string& group, int64_t tablet_id, int64_t verson);
-    std::string tablet_metadata_path(const std::string& group, const std::string& metadata_path);
+    std::string tablet_metadata_path(const std::string& root, int64_t tablet_id, int64_t verson);
+    std::string tablet_metadata_path(const std::string& root, const std::string& metadata_path);
     std::string tablet_metadata_cache_key(int64_t tablet_id, int64_t verson);
     StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_path, int64_t tablet_id);
 
-    std::string txn_log_path(const std::string& group, int64_t tablet_id, int64_t txn_id);
-    std::string txn_log_path(const std::string& group, const std::string& txnlog_path);
+    std::string txn_log_path(const std::string& root, int64_t tablet_id, int64_t txn_id);
+    std::string txn_log_path(const std::string& root, const std::string& txnlog_path);
     std::string txn_log_cache_key(int64_t tablet_id, int64_t txn_id);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txnlog_path, int64_t tablet_id);
 
@@ -90,7 +90,7 @@ private:
 
     std::string path_assemble(const std::string& path, int64_t tablet_id);
 
-    GroupAssigner* _group_assigner;
+    LocationProvider* _location_provider;
     std::unique_ptr<Cache> _metacache;
 };
 

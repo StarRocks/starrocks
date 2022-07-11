@@ -12,10 +12,10 @@
 #include "gen_cpp/AgentService_types.h"
 #include "gutil/strings/join.h"
 #include "service/staros_worker.h"
-#include "storage/lake/group_assigner.h"
+#include "storage/lake/location_provider.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet.h"
-#include "storage/lake/test_group_assigner.h"
+#include "storage/lake/test_location_provider.h"
 #include "storage/options.h"
 #include "testutil/assert.h"
 #include "util/filesystem_util.h"
@@ -31,18 +31,18 @@ public:
         starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
         _test_dir = paths[0].path + "/lake";
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_test_dir));
-        _group_assigner = new lake::TestGroupAssigner(_test_dir);
-        _tabletManager = new starrocks::lake::TabletManager(_group_assigner, 16384);
+        _location_provider = new lake::TestGroupAssigner(_test_dir);
+        _tabletManager = new starrocks::lake::TabletManager(_location_provider, 16384);
     }
     std::string tablet_group(int64_t tablet_id) {
-        ASSIGN_OR_ABORT(auto tablet_group, _group_assigner->get_group(tablet_id));
+        ASSIGN_OR_ABORT(auto tablet_group, _location_provider->root_location(tablet_id));
         FileSystemUtil::create_directory(tablet_group);
         return tablet_group;
     }
 
     void TearDown() override {
         delete _tabletManager;
-        delete _group_assigner;
+        delete _location_provider;
         (void)FileSystem::Default()->delete_dir_recursive(_test_dir);
     }
 
@@ -50,7 +50,7 @@ public:
 
 private:
     std::string _test_dir;
-    lake::GroupAssigner* _group_assigner;
+    lake::LocationProvider* _location_provider;
 };
 
 TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
@@ -102,7 +102,7 @@ TEST_F(LakeTabletManagerTest, create_and_drop_tablet) {
     starrocks::lake::TxnLog txnLog;
     txnLog.set_tablet_id(65535);
     txnLog.set_txn_id(2);
-    auto group = res.value().group();
+    auto group = res.value().root();
     EXPECT_OK(_tabletManager->put_txn_log(group, txnLog));
     EXPECT_OK(_tabletManager->drop_tablet(65535));
 
