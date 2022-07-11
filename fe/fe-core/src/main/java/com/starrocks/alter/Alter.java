@@ -64,6 +64,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
@@ -72,6 +73,11 @@ import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
@@ -214,10 +220,9 @@ public class Alter {
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-
+        MaterializedView materializedView = null;
         db.writeLock();
         try {
-            MaterializedView materializedView = null;
             final Table table = db.getTable(oldMvName);
             if (table instanceof MaterializedView) {
                 materializedView = (MaterializedView) table;
@@ -243,6 +248,28 @@ public class Alter {
             }
         } finally {
             db.writeUnlock();
+        }
+        if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC) {
+            //drop task
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+            if (refreshTask != null) {
+                taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
+            }
+            // create task
+            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+            MaterializedView.AsyncRefreshContext asyncRefreshContext =
+                    materializedView.getRefreshScheme().getAsyncRefreshContext();
+            if (asyncRefreshContext.getTimeUnit() != null) {
+                long startTime = asyncRefreshContext.getStartTime();
+                TaskSchedule taskSchedule = new TaskSchedule(startTime, asyncRefreshContext.getStep(),
+                        TimeUtils.convertUnitIdentifierToTimeUnit(asyncRefreshContext.getTimeUnit()));
+                task.setSchedule(taskSchedule);
+                task.setType(Constants.TaskType.PERIODICAL);
+            }
+            taskManager.createTask(task, false);
+            // run task
+            taskManager.executeTask(task.getName());
         }
     }
 
