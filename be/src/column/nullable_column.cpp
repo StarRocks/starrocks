@@ -24,7 +24,7 @@ NullableColumn::NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&
 NullableColumn::NullableColumn(ColumnPtr data_column, NullColumnPtr null_column)
         : _data_column(std::move(data_column)),
           _null_column(std::move(null_column)),
-          _has_null(SIMD::count_nonzero(_null_column->get_data())) {
+          _has_null(SIMD::contain_nonzero(_null_column->get_data(), 0)) {
     DCHECK(!_data_column->is_constant() && !_data_column->is_nullable())
             << "nullable column's data must be single column";
     DCHECK(!_null_column->is_constant() && !_null_column->is_nullable())
