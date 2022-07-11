@@ -217,9 +217,9 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
-import com.starrocks.statistic.Constants;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
@@ -1893,7 +1893,7 @@ public class GlobalStateMgr {
 
             //storageMedium
             String storageMedium = mv.getStorageMedium();
-            sb.append(Constants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
                     .append("\" = \"");
             sb.append(storageMedium).append("\"");
 
@@ -1902,7 +1902,7 @@ public class GlobalStateMgr {
             if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
                 sb.append("\n");
             } else {
-                sb.append(Constants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
                         .append("\" = \"");
                 sb.append(TimeUtils.longToTimeString(
                         Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)))).append("\"");
@@ -2027,14 +2027,14 @@ public class GlobalStateMgr {
             // bloom filter
             Set<String> bfColumnNames = olapTable.getCopiedBfColumns();
             if (bfColumnNames != null) {
-                sb.append(Constants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
                         .append("\" = \"");
                 sb.append(Joiner.on(", ").join(olapTable.getCopiedBfColumns())).append("\"");
             }
 
             if (separatePartition) {
                 // version info
-                sb.append(Constants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_VERSION_INFO)
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_VERSION_INFO)
                         .append("\" = \"");
                 Partition partition = null;
                 if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
@@ -2049,7 +2049,7 @@ public class GlobalStateMgr {
             // colocateTable
             String colocateTable = olapTable.getColocateGroup();
             if (colocateTable != null) {
-                sb.append(Constants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)
                         .append("\" = \"");
                 sb.append(colocateTable).append("\"");
             }
@@ -2060,17 +2060,17 @@ public class GlobalStateMgr {
             }
 
             // in memory
-            sb.append(Constants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
                     .append("\" = \"");
             sb.append(olapTable.isInMemory()).append("\"");
 
             // storage type
-            sb.append(Constants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT)
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT)
                     .append("\" = \"");
             sb.append(olapTable.getStorageFormat()).append("\"");
 
             // enable_persistent_index
-            sb.append(Constants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
                     .append("\" = \"");
             sb.append(olapTable.enablePersistentIndex()).append("\"");
 
@@ -2079,7 +2079,7 @@ public class GlobalStateMgr {
             if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
                 sb.append("\n");
             } else {
-                sb.append(Constants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
                         .append("\" = \"");
                 sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
                 sb.append("\n");
