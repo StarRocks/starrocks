@@ -68,6 +68,7 @@ import com.starrocks.planner.UnionNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -1344,7 +1345,7 @@ public class PlanFragmentBuilder {
                     replaceExpr.getParams().setIsDistinct(false);
                 } else if (functionName.equalsIgnoreCase(FunctionSet.SUM)) {
                     replaceExpr = new FunctionCallExpr(FunctionSet.MULTI_DISTINCT_SUM, functionCallExpr.getParams());
-                    Function multiDistinctSum = Function.convertSumToMultiDistinctSum(
+                    Function multiDistinctSum = DecimalV3FunctionAnalyzer.convertSumToMultiDistinctSum(
                             functionCallExpr.getFn(), functionCallExpr.getChild(0).getType());
                     replaceExpr.setFn(multiDistinctSum);
                     replaceExpr.getParams().setIsDistinct(false);

@@ -8,6 +8,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -117,7 +118,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
                 sumColRef = sumColRef == null ?
                         context.getColumnRefFactory().create(sum, sum.getType(), sum.isNullable()) : sumColRef;
                 newAggMapWithAvg.put(sumColRef, sum);
-                CallOperator multiAvg = new CallOperator("divide", oldFunctionCall.getType(),
+                CallOperator multiAvg = new CallOperator(FunctionSet.DIVIDE, oldFunctionCall.getType(),
                         Lists.newArrayList(sumColRef, countColRef));
                 if (multiAvg.getType().isDecimalV3()) {
                     // There is not need to apply ImplicitCastRule to divide operator of decimal types.
@@ -170,7 +171,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
     }
 
     private CallOperator buildMultiSumDistinct(CallOperator oldFunctionCall) {
-        Function multiDistinctSum = Function.convertSumToMultiDistinctSum(
+        Function multiDistinctSum = DecimalV3FunctionAnalyzer.convertSumToMultiDistinctSum(
                 oldFunctionCall.getFunction(), oldFunctionCall.getChild(0).getType());
         return (CallOperator) scalarRewriter.rewrite(
                 new CallOperator(

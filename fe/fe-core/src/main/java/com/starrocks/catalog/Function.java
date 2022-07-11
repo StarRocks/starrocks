@@ -24,7 +24,6 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.HdfsURI;
 import com.starrocks.common.io.Text;
@@ -745,51 +744,5 @@ public class Function implements Writable {
         return obj != null && obj.getClass() == this.getClass() && isIdentical((Function) obj);
     }
 
-    // This function is used to convert the sum(distinct) function to the multi_distinct_sum function in
-    // optimizing phase and PlanFragment building phase.
-    // Decimal types of multi_distinct_sum must be rectified because the function signature registered in
-    // FunctionSet contains wildcard decimal types which is invalid in BE, so it is forbidden to be used
-    // without decimal type rectification.
-    public static Function convertSumToMultiDistinctSum(Function sumFn, Type argType) {
-        AggregateFunction fn = (AggregateFunction) Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_SUM,
-                new Type[]{argType},
-                IS_NONSTRICT_SUPERTYPE_OF);
-        Preconditions.checkArgument(fn != null);
-        ScalarType decimal128Type = ScalarType.createDecimalV3NarrowestType(38, ((ScalarType) argType).getScalarScale());
-        AggregateFunction newFn = new AggregateFunction(
-                fn.getFunctionName(), Arrays.asList(sumFn.getArgs()), decimal128Type,
-                fn.getIntermediateType(), fn.hasVarArgs());
 
-        newFn.setFunctionId(fn.getFunctionId());
-        newFn.setChecksum(fn.getChecksum());
-        newFn.setBinaryType(fn.getBinaryType());
-        newFn.setHasVarArgs(fn.hasVarArgs());
-        newFn.setId(fn.getId());
-        newFn.setUserVisible(fn.isUserVisible());
-        newFn.setisAnalyticFn(fn.isAnalyticFn());
-        return newFn;
-    }
-
-    // When converting avg(distinct) into sum(distinct)/count(distinct), invoke this function to
-    // rectify the sum function(is_distinct flag is on) that contains wildcard decimal types.
-    public static Function rectifySumDistinct(Function sumFn, Type argType) {
-        if (!argType.isDecimalV3()) {
-            return sumFn;
-        }
-        ScalarType decimalType = (ScalarType) argType;
-        AggregateFunction fn = (AggregateFunction) sumFn;
-        ScalarType decimal128Type = ScalarType.createDecimalV3Type(
-                PrimitiveType.DECIMAL128, 38, decimalType.getScalarScale());
-        AggregateFunction newFn = new AggregateFunction(
-                fn.getFunctionName(), Arrays.asList(decimalType), decimal128Type,
-                fn.getIntermediateType(), fn.hasVarArgs());
-        newFn.setFunctionId(fn.getFunctionId());
-        newFn.setChecksum(fn.getChecksum());
-        newFn.setBinaryType(fn.getBinaryType());
-        newFn.setHasVarArgs(fn.hasVarArgs());
-        newFn.setId(fn.getId());
-        newFn.setUserVisible(fn.isUserVisible());
-        newFn.setisAnalyticFn(fn.isAnalyticFn());
-        return newFn;
-    }
 }

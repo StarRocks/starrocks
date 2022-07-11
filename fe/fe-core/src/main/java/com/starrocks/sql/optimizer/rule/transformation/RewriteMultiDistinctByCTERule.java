@@ -10,6 +10,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -271,7 +272,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
                             cteProduce, factory));
                 }
 
-                CallOperator distinctAvgCallOperator = new CallOperator("divide", avgCallOperator.getType(),
+                CallOperator distinctAvgCallOperator = new CallOperator(FunctionSet.DIVIDE, avgCallOperator.getType(),
                         Lists.newArrayList(sumColumnRef, countColumnRef));
                 if (avgCallOperator.getType().isDecimalV3()) {
                     // There is not need to apply ImplicitCastRule to divide operator of decimal types.
@@ -294,8 +295,8 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
                 avgCallOperator.getFunction().getArgs(), avgCallOperator.getType(), false);
         Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
 
-        if (fn.getFunctionName().getFunction().equalsIgnoreCase(FunctionSet.SUM)) {
-            fn = Function.rectifySumDistinct(fn, avgCallOperator.getChild(0).getType());
+        if (fn.getFunctionName().getFunction().equals(FunctionSet.SUM)) {
+            fn = DecimalV3FunctionAnalyzer.rectifySumDistinct(fn, avgCallOperator.getChild(0).getType());
         }
         return new CallOperator(functionName, fn.getReturnType(), avgCallOperator.getChildren(), fn,
                 avgCallOperator.isDistinct());

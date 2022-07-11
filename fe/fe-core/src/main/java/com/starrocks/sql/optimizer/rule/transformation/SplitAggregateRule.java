@@ -12,6 +12,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -274,8 +275,8 @@ public class SplitAggregateRule extends TransformationRule {
             return new CallOperator(FunctionSet.MULTI_DISTINCT_COUNT, fnCall.getType(), fnCall.getChildren(),
                     Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_COUNT, new Type[] {fnCall.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF), false);
-        } else if (functionName.equalsIgnoreCase(FunctionSet.SUM)) {
-            Function multiDistinctSumFn = Function.convertSumToMultiDistinctSum(
+        } else if (functionName.equals(FunctionSet.SUM)) {
+            Function multiDistinctSumFn = DecimalV3FunctionAnalyzer.convertSumToMultiDistinctSum(
                     fnCall.getFunction(), fnCall.getChild(0).getType());
             return new CallOperator(
                     FunctionSet.MULTI_DISTINCT_SUM, fnCall.getType(), fnCall.getChildren(), multiDistinctSumFn, false);
