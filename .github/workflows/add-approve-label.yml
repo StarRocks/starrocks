@@ -35,11 +35,9 @@ jobs:
       id: echo1
       run: |
         echo "false" >> temp.txt
-        cat temp.txt
+        echo "::set-output name=result::$(cat temp.txt)"
 
-    - run: echo ${{ steps.echo1.outputs.stdout }}
-      env:
-        STDOUT: "```${{ steps.echo1.outputs.stdout }}```"
+    - run: echo ${{ steps.echo1.outputs.result}}
     
     - name: Label when approved by 2 committers
       uses: actions-ecosystem/action-add-labels@v1
