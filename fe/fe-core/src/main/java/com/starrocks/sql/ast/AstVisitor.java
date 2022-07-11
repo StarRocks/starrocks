@@ -71,6 +71,7 @@ import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowOpenTableStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -254,6 +255,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowDatabasesStmt(ShowDbStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowOpenTableStmt(ShowOpenTableStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 

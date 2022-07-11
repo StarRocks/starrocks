@@ -39,6 +39,7 @@ statement
     | showDeleteStatement                                                                   #showDelete
     | descTableStatement                                                                    #descTable
     | recoverTableStatement                                                                 #recoverTable
+    | showOpenTableStatement                                                                #showOpenTable
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -280,6 +281,10 @@ descTableStatement
 
 recoverTableStatement
     : RECOVER TABLE qualifiedName
+    ;
+
+showOpenTableStatement
+    : SHOW OPEN TABLES
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------
