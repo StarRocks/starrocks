@@ -4169,13 +4169,13 @@ public class LocalMetastore implements ConnectorMetadata {
         HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
         if (!isReplay) {
             // drop all replicas
+            Set<Long> tabletIds = new HashSet<>();
             for (Partition partition : olapTable.getAllPartitions()) {
                 List<MaterializedIndex> allIndices =
                         partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 for (MaterializedIndex materializedIndex : allIndices) {
                     long indexId = materializedIndex.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                    Set<Long> tabletIds = new HashSet<>();
                     for (Tablet tablet : materializedIndex.getTablets()) {
                         long tabletId = tablet.getId();
                         if (olapTable.isOlapTable()) {
@@ -4200,15 +4200,14 @@ public class LocalMetastore implements ConnectorMetadata {
                         }
                         
                     } // end for tablets
-
-                    if (olapTable.isLakeTable()) {
-                        GlobalStateMgr.getCurrentState().getShardManager()
-                                .getShardDeleter().addUnusedShardId(tabletIds);
-                        GlobalStateMgr.getCurrentState().getEditLog().logAddUnusedShard(tabletIds);
-                    }
-
                 } // end for indices
             } // end for partitions
+
+            if (olapTable.isLakeTable()) {
+                GlobalStateMgr.getCurrentState().getShardManager()
+                        .getShardDeleter().addUnusedShardId(tabletIds);
+                GlobalStateMgr.getCurrentState().getEditLog().logAddUnusedShard(tabletIds);
+            }
         }
         // colocation
         colocateTableIndex.removeTable(olapTable.getId());
