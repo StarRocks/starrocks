@@ -11,21 +11,20 @@
 #include "util/exclusive_ptr.h"
 
 namespace starrocks {
+
 class RuntimeState;
 class RuntimeProfile;
 
 namespace pipeline {
 
 class BalancedChunkBuffer;
+class ChunkBufferToken;
+using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
 
 class ChunkSource {
 public:
     ChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                BalancedChunkBuffer& chunk_buffer)
-            : _scan_operator_seq(scan_operator_id),
-              _runtime_profile(runtime_profile),
-              _morsel(std::move(morsel)),
-              _chunk_buffer(chunk_buffer) {}
+                BalancedChunkBuffer& chunk_buffer);
 
     virtual ~ChunkSource() = default;
 
@@ -50,6 +49,9 @@ public:
     int64_t get_scan_rows() const { return _scan_rows_num; }
     int64_t get_scan_bytes() const { return _scan_bytes; }
 
+    void pin_chunk_token(ChunkBufferTokenPtr chunk_token);
+    void unpin_chunk_token();
+
 protected:
     // MUST be implemented by different ChunkSource
     virtual Status _read_chunk(RuntimeState* state, vectorized::ChunkPtr* chunk) = 0;
@@ -72,6 +74,7 @@ protected:
 
     BalancedChunkBuffer& _chunk_buffer;
     Status _status = Status::OK();
+    ChunkBufferTokenPtr _chunk_token;
 };
 
 using ChunkSourcePtr = std::shared_ptr<ChunkSource>;
@@ -79,5 +82,6 @@ using ChunkSourcePromise = std::promise<ChunkSourcePtr>;
 using ChunkSourceFromisePtr = starrocks::exclusive_ptr<ChunkSourcePromise>;
 using ChunkSourceFuture = std::future<ChunkSourcePtr>;
 using OptionalChunkSourceFuture = std::optional<ChunkSourceFuture>;
+
 } // namespace pipeline
 } // namespace starrocks

@@ -12,7 +12,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.RangeUtils;
@@ -254,6 +253,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.viewDefineSql = viewDefineSql;
     }
 
+    public Set<String> getTableMvPartitionNameRefMap(String tablePartitionName) {
+        return tableMvPartitionNameRefMap.computeIfAbsent(tablePartitionName, k -> Sets.newHashSet());
+    }
+
+    public Set<String> getMvTablePartitionNameRefMap(String mvPartitionName) {
+        return mvTablePartitionNameRefMap.computeIfAbsent(mvPartitionName, k -> Sets.newHashSet());
+    }
+
     public Set<Long> getBaseTableIds() {
         return baseTableIds;
     }
@@ -311,6 +318,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return basePartitionInfoMap.keySet().stream()
                 .filter(partitionName -> !partitionNames.contains(partitionName))
                 .collect(Collectors.toSet());
+    }
+
+    public Set<String> getSyncedPartitionNames(long baseTableId) {
+        return this.getRefreshScheme().getAsyncRefreshContext()
+                .getBaseTableVisibleVersionMap()
+                .computeIfAbsent(baseTableId, k -> Maps.newHashMap())
+                .keySet();
     }
 
     public boolean needRefreshPartition(long baseTableId, Partition baseTablePartition) {
@@ -447,9 +461,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             Map<Long, Range<PartitionKey>> baseTableIdToRange = baseRangePartitionInfo.getIdToRange(false);
             for (Map.Entry<Long, Range<PartitionKey>> idRangeEntry : baseTableIdToRange.entrySet()) {
                 Partition baseTablePartition = baseTable.getPartition(idRangeEntry.getKey());
-                try {
-                    RangeUtils.checkRangeIntersect(idRangeEntry.getValue(), mvPartitionKeyRange);
-                } catch (DdlException e) {
+                if (RangeUtils.isRangeIntersect(idRangeEntry.getValue(), mvPartitionKeyRange)) {
                     this.addPartitionNameRef(baseTablePartition.getName(), mvPartition.getName());
                 }
             }

@@ -168,9 +168,7 @@ public class PushDownApplyAggFilterRule extends TransformationRule {
 
         // apply node
         OptExpression newApplyOptExpression = new OptExpression(
-                new LogicalApplyOperator(apply.getOutput(), apply.getSubqueryOperator(),
-                        apply.getCorrelationColumnRefs(), apply.getCorrelationConjuncts(), apply.getPredicate(),
-                        false, apply.isUseSemiAnti()));
+                LogicalApplyOperator.builder().withOperator(apply).setNeedCheckMaxRows(false).build());
 
         newApplyOptExpression.getInputs().add(input.getInputs().get(0));
         newApplyOptExpression.getInputs().add(correlationFilterOptExpression);

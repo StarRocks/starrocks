@@ -57,6 +57,7 @@ import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropObserverClause;
+import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
@@ -112,6 +113,7 @@ import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
+import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -644,6 +646,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitShowIndexStatement(StarRocksParser.ShowIndexStatementContext context) {
+        QualifiedName tableName = getQualifiedName(context.table);
+        QualifiedName dbName = null;
+        if (context.db != null) {
+            dbName = getQualifiedName(context.db);
+        }
+
+        return new ShowIndexStmt(dbName == null ? null : dbName.toString(),
+                qualifiedNameToTableName(tableName));
+    }
+
+    @Override
     public ParseNode visitShowTableStatusStatement(StarRocksParser.ShowTableStatusStatementContext context) {
         QualifiedName dbName = null;
         if (context.qualifiedName() != null) {
@@ -674,6 +688,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     .map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         }
         return new RefreshTableStmt(targetTableName, partitionNames);
+    }
+
+    @Override
+    public ParseNode visitDropPartitionClause(StarRocksParser.DropPartitionClauseContext context) {
+        String partitionName = ((Identifier) visit(context.identifier())).getValue();
+        boolean temp = context.TEMPORARY() != null;
+        boolean force = context.FORCE() != null;
+        boolean exists = context.EXISTS() != null;
+        return new DropPartitionClause(exists, partitionName, temp, force);
     }
 
     @Override
@@ -2958,7 +2981,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ------------------------------------------- Procedure Statement -------------------------------------------
 
     @Override
-    public ParseNode visitShowProcedureStatment(StarRocksParser.ShowProcedureStatmentContext context) {
+    public ParseNode visitShowProcedureStatement(StarRocksParser.ShowProcedureStatementContext context) {
         if (context.pattern != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
             return new ShowProcedureStmt(stringLiteral.getValue());

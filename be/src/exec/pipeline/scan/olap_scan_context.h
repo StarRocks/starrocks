@@ -27,9 +27,11 @@ using namespace vectorized;
 
 class OlapScanContext final : public ContextWithDependency {
 public:
-    explicit OlapScanContext(vectorized::OlapScanNode* scan_node, int32_t dop, bool shared_scan)
+    explicit OlapScanContext(vectorized::OlapScanNode* scan_node, int32_t dop, bool shared_scan,
+                             ChunkBufferLimiterPtr chunk_buffer_limiter)
             : _scan_node(scan_node),
-              _chunk_buffer(shared_scan ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect, dop),
+              _chunk_buffer(shared_scan ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect, dop,
+                            std::move(chunk_buffer_limiter)),
               _shared_scan(shared_scan),
               _scan_dop(dop) {}
 
@@ -56,9 +58,6 @@ public:
     bool has_active_input() const;
     BalancedChunkBuffer& get_shared_buffer();
 
-    void update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows);
-    size_t avg_row_bytes() const { return _avg_row_bytes; }
-
 private:
     vectorized::OlapScanNode* _scan_node;
 
@@ -81,11 +80,6 @@ private:
     int32_t _scan_dop;                 // DOP of scan operator
 
     std::atomic<bool> _is_prepare_finished{false};
-
-    std::mutex _mutex;
-    size_t _sum_row_bytes = 0;
-    size_t _num_rows = 0;
-    size_t _avg_row_bytes = 0;
 };
 
 } // namespace pipeline

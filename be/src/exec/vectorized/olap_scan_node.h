@@ -76,7 +76,7 @@ public:
 
     static StatusOr<TabletSharedPtr> get_tablet(const TInternalScanRange* scan_range);
 
-    int max_scan_concurrency() const override;
+    int estimated_max_concurrent_chunks() const;
 
 private:
     friend class TabletScanner;

@@ -38,6 +38,7 @@ statement
     | refreshTableStatement                                                                 #refreshTable
     | showDeleteStatement                                                                   #showDelete
     | descTableStatement                                                                    #descTable
+    | showIndexStatement                                                                    #showIndex
     | recoverTableStatement                                                                 #recoverTable
 
     // View Statement
@@ -108,7 +109,7 @@ statement
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
 
     // procedure
-    | showProcedureStatment                                                                 #showProcedure
+    | showProcedureStatement                                                                 #showProcedure
     ;
 
 
@@ -278,6 +279,10 @@ descTableStatement
     : (DESC | DESCRIBE) table=qualifiedName ALL?
     ;
 
+showIndexStatement
+    : SHOW (INDEX | INDEXES | KEY | KEYS) ((FROM | IN) table=qualifiedName) ((FROM | IN) db=qualifiedName)?
+    ;
+
 recoverTableStatement
     : RECOVER TABLE qualifiedName
     ;
@@ -371,6 +376,7 @@ alterClause
     | addComputeNodeClause
     | dropComputeNodeClause
     | swapTableClause
+    | dropPartitionClause
     | modifyPartitionClause
     ;
 
@@ -380,6 +386,10 @@ createIndexClause
 
 dropIndexClause
     : DROP INDEX indexName=identifier
+    ;
+
+dropPartitionClause
+    : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
     ;
 
 tableRenameClause
@@ -684,7 +694,7 @@ tabletList
     ;
 
 // ------------------------------------------- Procedure Statement ---------------------------------------------------------
-showProcedureStatment
+showProcedureStatement
     : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
     ;
 // ------------------------------------------- Expression --------------------------------------------------------------

@@ -14,15 +14,15 @@
 namespace starrocks::lake {
 
 Status Tablet::put_metadata(const TabletMetadata& metadata) {
-    return _mgr->put_tablet_metadata(_group, metadata);
+    return _mgr->put_tablet_metadata(_root, metadata);
 }
 
 Status Tablet::put_metadata(TabletMetadataPtr metadata) {
-    return _mgr->put_tablet_metadata(_group, std::move(metadata));
+    return _mgr->put_tablet_metadata(_root, std::move(metadata));
 }
 
 StatusOr<TabletMetadataPtr> Tablet::get_metadata(int64_t version) {
-    return _mgr->get_tablet_metadata(_group, _id, version);
+    return _mgr->get_tablet_metadata(_root, _id, version);
 }
 
 StatusOr<TabletMetadataIter> Tablet::list_metadata() {
@@ -30,7 +30,7 @@ StatusOr<TabletMetadataIter> Tablet::list_metadata() {
 }
 
 Status Tablet::delete_metadata(int64_t version) {
-    return _mgr->delete_tablet_metadata(_group, _id, version);
+    return _mgr->delete_tablet_metadata(_root, _id, version);
 }
 
 Status Tablet::delete_metadata() {
@@ -39,20 +39,20 @@ Status Tablet::delete_metadata() {
 
 Status Tablet::put_txn_log(const TxnLog& log) {
     // TODO: Check log.tablet_id() == _id
-    return _mgr->put_txn_log(_group, log);
+    return _mgr->put_txn_log(_root, log);
 }
 
 Status Tablet::put_txn_log(TxnLogPtr log) {
     // TODO: Check log.tablet_id() == _id
-    return _mgr->put_txn_log(_group, std::move(log));
+    return _mgr->put_txn_log(_root, std::move(log));
 }
 
 StatusOr<TxnLogPtr> Tablet::get_txn_log(int64_t txn_id) {
-    return _mgr->get_txn_log(_group, _id, txn_id);
+    return _mgr->get_txn_log(_root, _id, txn_id);
 }
 
 Status Tablet::delete_txn_log(int64_t txn_id) {
-    return _mgr->delete_txn_log(_group, _id, txn_id);
+    return _mgr->delete_txn_log(_root, _id, txn_id);
 }
 
 StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer() {
@@ -100,20 +100,20 @@ StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
 }
 
 std::string Tablet::metadata_path(int64_t version) const {
-    return _mgr->tablet_metadata_path(_group, _id, version);
+    return _mgr->tablet_metadata_path(_root, _id, version);
 }
 
 std::string Tablet::txn_log_path(int64_t txn_id) const {
-    return _mgr->txn_log_path(_group, _id, txn_id);
+    return _mgr->txn_log_path(_root, _id, txn_id);
 }
 
 std::string Tablet::segment_path_assemble(const std::string& segment_name) const {
-    auto path = fmt::format("{}/{}", _group, segment_name);
+    auto path = fmt::format("{}/{}", _root, segment_name);
     return _mgr->path_assemble(path, _id);
 }
 
-std::string Tablet::group_assemble() const {
-    return _mgr->path_assemble(_group, _id);
+std::string Tablet::root_location() const {
+    return _mgr->path_assemble(_root, _id);
 }
 
 } // namespace starrocks::lake

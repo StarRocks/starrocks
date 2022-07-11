@@ -162,7 +162,7 @@ add_library(Storage STATIC
     lake/delta_writer.cpp
     lake/general_tablet_writer.cpp
     lake/rowset.cpp
-    lake/starlet_group_assigner.cpp
+    lake/starlet_location_provider.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp
     lake/tablet_reader.cpp
