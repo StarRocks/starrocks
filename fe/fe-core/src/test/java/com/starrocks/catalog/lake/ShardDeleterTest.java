@@ -105,7 +105,6 @@ public class ShardDeleterTest {
         shardDeleter.addUnusedShardId(ids);
         shardDeleter.runAfterCatalogReady();
 
-        // 判断shardId是不是一个空set
         Assert.assertEquals(Deencapsulation.getField(shardDeleter, "shardIds"), new HashSet<>());
     }
 }
