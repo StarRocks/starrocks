@@ -1503,7 +1503,7 @@ public class EditLog {
         logEdit(OperationType.OP_ADD_UNUSED_SHARD, new ShardInfo(shardIds));
     }
 
-    public void logRemoveUnusedShard(Set<Long> shardIds) {
+    public void logDeleteUnusedShard(Set<Long> shardIds) {
         logEdit(OperationType.OP_DELETE_UNUSED_SHARD, new ShardInfo(shardIds));
     }
 

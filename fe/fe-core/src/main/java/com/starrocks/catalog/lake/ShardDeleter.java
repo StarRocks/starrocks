@@ -117,7 +117,7 @@ public class ShardDeleter extends MasterDaemon {
             // 3. succ both, remove from the map
             // for debug
             LOG.info("delete shard {} and drop lake tablet succ.", shards);
-            GlobalStateMgr.getCurrentState().getEditLog().logRemoveUnusedShard(shards);
+            GlobalStateMgr.getCurrentState().getEditLog().logDeleteUnusedShard(shards);
             try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
                 shardIds.removeAll(shards);
             }
