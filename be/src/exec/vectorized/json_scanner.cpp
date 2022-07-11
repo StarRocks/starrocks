@@ -362,9 +362,14 @@ Status JsonReader::_read_and_parse_json() {
     std::unique_ptr<uint8_t[]> json_binary = nullptr;
     size_t length = 0;
     StreamPipeSequentialFile* stream_file = reinterpret_cast<StreamPipeSequentialFile*>(_file.get());
-    {
+
+    // read until a non-empty message is returned.
+    while (true) {
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
         RETURN_IF_ERROR(stream_file->read_one_message(&json_binary, &length));
+        if (length > 0) {
+            break;
+        }
     }
     _origin_json_doc.Parse((char*)json_binary.get(), length);
 #endif
