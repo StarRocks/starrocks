@@ -38,12 +38,9 @@ public class DictMappingRewriter {
         Rewriter rewriter = new Rewriter();
         ScalarOperator operator = scalarOperator.accept(rewriter, rewriterContext);
         if (rewriterContext.hasAppliedOperator) {
-            if (operator.getType().isVarchar()) {
-                operator = rewriteAsDictMapping(operator,
-                        AddDecodeNodeForDictStringRule.ID_TYPE);
-            } else {
-                operator = rewriteAsDictMapping(operator, operator.getType());
-            }
+            Type returnType = operator.getType().isVarchar() ? AddDecodeNodeForDictStringRule.ID_TYPE :
+                    operator.getType();
+            operator = rewriteAsDictMapping(operator, returnType);
         }
         return operator;
     }
@@ -80,7 +77,8 @@ public class DictMappingRewriter {
                 context.hasAppliedOperator = false;
                 return operator;
             }
-
+            // Currently only single column input is supported using DictExpr rewriting,
+            // multiple columns are only partially supported for rewriting.
             if (usedColumns.cardinality() == 1) {
                 // check child support opt
                 List<ScalarOperator> children = Lists.newArrayList(operator.getChildren());
@@ -111,7 +109,7 @@ public class DictMappingRewriter {
             List<ScalarOperator> children = Lists.newArrayList(scalarOperator.getChildren());
             boolean hasApplied = false;
             boolean disableApplied = context.hasUnsupportedOperator;
-            // For any expression that does not support low-base optimization,
+            // For any expression that does not support low-cardinality optimization,
             // if child already uses optimization, we need to add a DictExpr
             for (int i = 0; i < children.size(); i++) {
                 context.reset();

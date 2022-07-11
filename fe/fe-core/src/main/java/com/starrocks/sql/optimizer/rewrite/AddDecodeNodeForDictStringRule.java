@@ -81,7 +81,7 @@ import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperato
  * else insert the decode operator into the tree
  * 4. The decode operator will translate the encoded int column to string column
  * <p>
- * The concrete example could refer to DecodeRewriteTest
+ * The concrete example could refer to LowCardinalityTest
  */
 public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewriteRule {
     private static final Logger LOG = LogManager.getLogger(AddDecodeNodeForDictStringRule.class);
@@ -177,7 +177,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                                              Projection projection) {
             Set<Integer> stringColumnIds = context.stringColumnIdToDictColumnIds.keySet();
             Collection<Integer> dictColumnIds = context.stringColumnIdToDictColumnIds.values();
-            // if projection has not support operator in dict column,
+            // if projection has not supported operator in dict column,
             // Decode node will be inserted
             if (projection.hasUnsupportedDictOperator(stringColumnIds, context.allStringColumnIds)) {
                 return true;
@@ -474,7 +474,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
             ScalarOperator predicate = operator.getPredicate();
 
-            // now we have not support predicate in sort
+            // now we have not supported predicate in sort
             if (predicate != null) {
                 ColumnRefSet columns = predicate.getUsedColumns();
                 for (Integer stringId : context.stringColumnIdToDictColumnIds.keySet()) {
@@ -520,8 +520,20 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             // rewrite value operator
             final DictMappingRewriter rewriter = new DictMappingRewriter(context);
             final ScalarOperator newCallOperator = rewriter.rewrite(valueOperator.clone());
+            // rewrite result:
+            // 1. If the expression uses all low-cardinality optimizations,
+            // then it can be rewritten as DictExpr
+            // eg:
+            // TYPE_STRING upper(TYPE_STRING) -> ID_TYPE DictExpr(ID_TYPE)
+            // TYPE_INT cast(TYPE_STRING as TYPE_INT) -> TYPE_INT DictExpr(ID_TYPE)
+            //
+            // 2. Expressions can only be partially rewritten
+            // eg:
+            // TYPE_INT IF(TYPE_STRING > "100", rand(), 1) -> TYPE_INT -> IF(DictExpr(ID_TYPE), rand(), 1)
             if (!valueOperator.getType().equals(newCallOperator.getType())) {
                 Preconditions.checkState(valueOperator.getType().isVarchar());
+                Preconditions.checkState(keyColumn.getType().equals(ID_TYPE));
+
                 ColumnRefOperator newDictColumn = context.columnRefFactory.create(
                         keyColumn.getName(), ID_TYPE, keyColumn.isNullable());
                 newProjectMap.remove(keyColumn);
@@ -570,7 +582,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     int columnId = kv.getValue().getUsedColumns().getFirstId();
                     if (context.needRewriteMultiCountDistinctColumns.contains(columnId)) {
                         // we only need rewrite TFunction
-                        Type[] newTypes = new Type[] {ID_TYPE};
+                        Type[] newTypes = new Type[]{ID_TYPE};
                         AggregateFunction newFunction =
                                 (AggregateFunction) Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
                                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);

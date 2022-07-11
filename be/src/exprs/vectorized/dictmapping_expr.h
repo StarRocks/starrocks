@@ -44,6 +44,8 @@ public:
     }
 
 private:
+    // used for dictionary expression calculation.
+    // the input columns are dictionary columns
     Expr* dict_func_expr = nullptr;
 };
 } // namespace starrocks::vectorized
