@@ -365,9 +365,6 @@ Status JsonReader::_read_and_parse_json() {
     {
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
         RETURN_IF_ERROR(stream_file->read_one_message(&json_binary, &length));
-        if (length == 0) {
-            return Status::EndOfFile("EOF of reading file");
-        }
     }
     _origin_json_doc.Parse((char*)json_binary.get(), length);
 #endif

@@ -259,4 +259,50 @@ TEST_F(StreamLoadPipeTest, close) {
     t1.join();
 }
 
+TEST_F(StreamLoadPipeTest, read_one_message) {
+    StreamLoadPipe pipe(66, 64, -1);
+
+    auto appender = [&pipe] {
+        int k = 0;
+        for (int i = 0; i < 2; ++i) {
+            auto byte_buf = ByteBuffer::allocate(64);
+            char buf[64];
+            for (int j = 0; j < 64; ++j) {
+                buf[j] = '0' + (k++ % 10);
+            }
+            byte_buf->put_bytes(buf, 64);
+            byte_buf->flip();
+            pipe.append(byte_buf);
+        }
+        pipe.finish();
+    };
+    std::thread t1(appender);
+
+    size_t buf_len = 128;
+    std::unique_ptr<uint8_t[]> buf(new uint8_t[128]);
+
+    auto st = pipe.read_one_message(&buf, &buf_len);
+    ASSERT_EQ(128, buf_len);
+    for (int i = 0; i < 128; ++i) {
+        ASSERT_EQ('0' + (i % 10), buf[i]);
+    }
+
+    auto st = pipe.read_one_message(&buf, &buf_len);
+    ASSERT_EQ(128, buf_len);
+    for (int i = 0; i < 128; ++i) {
+        ASSERT_EQ('0' + (i % 10), buf[i]);
+    }
+
+    st = pipe.read_one_message(&buf, &buf_len);
+    ASSERT_EQ(128, buf_len);
+    for (int i = 0; i < 128; ++i) {
+        ASSERT_EQ('0' + (i % 10), buf[i]);
+    }
+
+    st = pipe.read_one_message(&buf, &buf_len);
+    ASSERT_TRUE(st.is_end_of_file());
+
+    t1.join();
+}
+
 } // namespace starrocks
