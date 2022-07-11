@@ -695,8 +695,11 @@ public class StmtExecutor {
         context.getMysqlChannel().reset();
 
         if (parsedStmt.isExplain()) {
-            handleExplainStmt(execPlan);
+            handleExplainStmt(buildExplainString(execPlan));
             return;
+        }
+        if (context.getQueryDetail() != null) {
+            context.getQueryDetail().setExplain(buildExplainString(execPlan));
         }
 
         StatementBase queryStmt = parsedStmt;
@@ -932,19 +935,7 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
-    private void handleExplainStmt(ExecPlan execPlan) throws IOException {
-        String explainString = "";
-        if (parsedStmt.isExplain() || context.getSessionVariable().isReportSucc()) {
-            if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
-                if (context.getSessionVariable().isEnableResourceGroup()) {
-                    WorkGroup workGroup = Coordinator.prepareWorkGroup(context);
-                    String workGroupStr = workGroup != null ? workGroup.getName() : WorkGroup.DEFAULT_WORKGROUP_NAME;
-                    explainString += "RESOURCE GROUP: " + workGroupStr + "\n\n";
-                }
-            }
-            explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
-        }
-
+    private void handleExplainStmt(String explainString) throws IOException {
         if (context.getQueryDetail() != null) {
             context.getQueryDetail().setExplain(explainString);
         }
@@ -962,6 +953,21 @@ public class StmtExecutor {
             context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
         }
         context.getState().setEof();
+    }
+
+    private String buildExplainString(ExecPlan execPlan) {
+        String explainString = "";
+        if (parsedStmt.isExplain() || context.getSessionVariable().isReportSucc()) {
+            if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
+                if (context.getSessionVariable().isEnableResourceGroup()) {
+                    WorkGroup workGroup = Coordinator.prepareWorkGroup(context);
+                    String workGroupStr = workGroup != null ? workGroup.getName() : WorkGroup.DEFAULT_WORKGROUP_NAME;
+                    explainString += "RESOURCE GROUP: " + workGroupStr + "\n\n";
+                }
+            }
+            explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
+        }
+        return explainString;
     }
 
     private void handleDdlStmt() {
@@ -1077,7 +1083,7 @@ public class StmtExecutor {
 
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
         if (stmt.isExplain()) {
-            handleExplainStmt(execPlan);
+            handleExplainStmt(buildExplainString(execPlan));
             return;
         }
 
