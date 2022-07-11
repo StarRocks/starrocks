@@ -57,6 +57,7 @@ import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropObserverClause;
+import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
@@ -685,6 +686,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     .map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
         }
         return new RefreshTableStmt(targetTableName, partitionNames);
+    }
+
+    @Override
+    public ParseNode visitDropPartitionClause(StarRocksParser.DropPartitionClauseContext context) {
+        String partitionName = ((Identifier) visit(context.identifier())).getValue();
+        boolean temp = context.TEMPORARY() != null;
+        boolean force = context.FORCE() != null;
+        boolean exists = context.EXISTS() != null;
+        return new DropPartitionClause(exists, partitionName, temp, force);
     }
 
     // ------------------------------------------- View Statement ------------------------------------------------------
