@@ -56,11 +56,7 @@ public:
 
     void fill_default(const Filter& filter) override {}
 
-    void update_has_null() {
-        const NullColumn::Container& v = _null_column->get_data();
-        const auto* p = v.data();
-        _has_null = (p != nullptr) && (nullptr != memchr(p, 1, v.size() * sizeof(v[0])));
-    }
+    void update_has_null();
 
     bool is_nullable() const override { return true; }
 

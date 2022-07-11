@@ -160,6 +160,22 @@ MorselQueue* PipelineBuilderContext::morsel_queue_of_source_operator(const Sourc
     return morsel_queues[source_id].get();
 }
 
+size_t PipelineBuilderContext::degree_of_parallelism_of_source_operator(int32_t source_node_id) const {
+    auto& morsel_queues = _fragment_context->morsel_queues();
+    auto it = morsel_queues.find(source_node_id);
+    if (it == morsel_queues.end()) {
+        return _degree_of_parallelism;
+    }
+
+    // The degree_of_parallelism of the SourceOperator with morsel is not more than the number of morsels
+    // If table is empty, then morsel size is zero and we still set degree of parallelism to 1
+    return std::min<size_t>(std::max<size_t>(1, it->second->num_morsels()), _degree_of_parallelism);
+}
+
+size_t PipelineBuilderContext::degree_of_parallelism_of_source_operator(const SourceOperatorFactory* source_op) const {
+    return degree_of_parallelism_of_source_operator(source_op->plan_node_id());
+}
+
 Pipelines PipelineBuilder::build(const FragmentContext& fragment, ExecNode* exec_node) {
     pipeline::OpFactories operators = exec_node->decompose_to_pipeline(&_context);
     _context.add_pipeline(operators);

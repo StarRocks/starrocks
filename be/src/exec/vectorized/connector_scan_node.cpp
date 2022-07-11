@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "common/config.h"
+#include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "runtime/current_thread.h"
 #include "util/priority_thread_pool.hpp"
@@ -128,7 +129,9 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 }
 
 pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
-    auto scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this);
+    // TODO: apply ChunkBufferLimiter to ConnectorScanOperator.
+    auto scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(
+            context->next_operator_id(), this, std::make_unique<pipeline::UnlimitedChunkBufferLimiter>());
 
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);

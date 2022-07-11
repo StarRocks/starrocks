@@ -38,9 +38,6 @@ public:
     const std::vector<ExprContext*>& not_push_down_conjuncts() const { return _not_push_down_conjuncts; }
     const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges() const { return _key_ranges; }
 
-    void update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows);
-    size_t avg_row_bytes() const { return _avg_row_bytes; }
-
 private:
     vectorized::OlapScanNode* _scan_node;
 
@@ -53,11 +50,6 @@ private:
     ObjectPool _obj_pool;
 
     std::atomic<bool> _is_prepare_finished{false};
-
-    std::mutex _mutex;
-    size_t _sum_row_bytes = 0;
-    size_t _num_rows = 0;
-    size_t _avg_row_bytes = 0;
 };
 
 } // namespace pipeline

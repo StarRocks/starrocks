@@ -5,6 +5,7 @@
 #include "column/chunk.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/vectorized/olap_scan_node.h"
 #include "exec/workgroup/scan_executor.h"
@@ -17,11 +18,11 @@ namespace starrocks::pipeline {
 // ========== ScanOperator ==========
 
 ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
-                           std::atomic<int>& num_committed_scan_tasks)
+                           ChunkBufferLimiter* buffer_limiter)
         : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence),
           _scan_node(scan_node),
           _chunk_source_profiles(MAX_IO_TASKS_PER_OP),
-          _num_committed_scan_tasks(num_committed_scan_tasks),
+          _buffer_limiter(buffer_limiter),
           _is_io_task_running(MAX_IO_TASKS_PER_OP),
           _chunk_sources(MAX_IO_TASKS_PER_OP) {
     for (auto i = 0; i < MAX_IO_TASKS_PER_OP; i++) {
@@ -47,6 +48,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
+    _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter("PeakChunkBufferSize", TUnit::UNIT);
 
     if (_workgroup == nullptr) {
         DCHECK(_io_threads != nullptr);
@@ -70,13 +72,22 @@ void ScanOperator::close(RuntimeState* state) {
     }
     // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
-        if (_chunk_sources[i] != nullptr && !_is_io_task_running[i]) {
-            _chunk_sources[i]->close(state);
-            _chunk_sources[i] = nullptr;
+        if (_chunk_sources[i] != nullptr) {
+            _chunk_sources[i]->set_finished(state);
+            if (!_is_io_task_running[i]) {
+                _chunk_sources[i]->close(state);
+                _chunk_sources[i] = nullptr;
+            }
         }
     }
 
+    auto* default_buffer_capacity_counter = ADD_COUNTER(_unique_metrics, "DefaultChunkBufferCapacity", TUnit::UNIT);
+    COUNTER_SET(default_buffer_capacity_counter, static_cast<int64_t>(_buffer_limiter->default_capacity()));
+    auto* buffer_capacity_counter = ADD_COUNTER(_unique_metrics, "ChunkBufferCapacity", TUnit::UNIT);
+    COUNTER_SET(buffer_capacity_counter, static_cast<int64_t>(_buffer_limiter->capacity()));
+
     _merge_chunk_source_profiles();
+
     do_close(state);
     Operator::close(state);
 }
@@ -96,8 +107,7 @@ bool ScanOperator::has_output() const {
         }
     }
 
-    if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP ||
-        _exceed_max_scan_concurrency(_num_committed_scan_tasks.load())) {
+    if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP || _buffer_limiter->is_full()) {
         return false;
     }
 
@@ -156,6 +166,9 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_ERROR(_get_scan_status());
+
+    _peak_buffer_size_counter->set(_buffer_limiter->size());
+
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
     if (_workgroup != nullptr) {
         _workgroup->incr_period_ask_chunk_num(1);
@@ -218,19 +231,17 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
     _last_growth_cpu_time_ns += cpu_time_ns;
     _last_scan_rows_num += scan_rows;
     _last_scan_bytes += scan_bytes;
-    _decrease_committed_scan_tasks();
     _num_running_io_tasks--;
     _is_io_task_running[chunk_source_index] = false;
 }
 
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
-    if (_chunk_sources[chunk_source_index]->get_buffer_size() >= _buffer_size) {
-        return Status::OK();
-    }
-    if (!_try_to_increase_committed_scan_tasks()) {
+    ChunkBufferTokenPtr buffer_token;
+    if (buffer_token = _buffer_limiter->pin(1); buffer_token == nullptr) {
         return Status::OK();
     }
 
+    _chunk_sources[chunk_source_index]->pin_chunk_token(std::move(buffer_token));
     _num_running_io_tasks++;
     _is_io_task_running[chunk_source_index] = true;
 
@@ -304,6 +315,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     if (offer_task_success) {
         _io_task_retry_cnt = 0;
     } else {
+        _chunk_sources[chunk_source_index]->unpin_chunk_token();
         _num_running_io_tasks--;
         _is_io_task_running[chunk_source_index] = false;
         // TODO(hcf) set a proper retry times
@@ -352,25 +364,12 @@ void ScanOperator::_merge_chunk_source_profiles() {
     _unique_metrics->copy_all_counters_from(merged_profile);
 }
 
-bool ScanOperator::_try_to_increase_committed_scan_tasks() {
-    int old_num = _num_committed_scan_tasks.fetch_add(1);
-    if (_exceed_max_scan_concurrency(old_num)) {
-        _decrease_committed_scan_tasks();
-        return false;
-    }
-    return true;
-}
-
-bool ScanOperator::_exceed_max_scan_concurrency(int num_committed_scan_tasks) const {
-    size_t max = max_scan_concurrency();
-    // max_scan_concurrency takes effect, only when it is positive.
-    return max > 0 && num_committed_scan_tasks >= max;
-}
-
 // ========== ScanOperatorFactory ==========
 
-ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)
-        : SourceOperatorFactory(id, scan_node->name(), scan_node->id()), _scan_node(scan_node) {}
+ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node, ChunkBufferLimiterPtr buffer_limiter)
+        : SourceOperatorFactory(id, scan_node->name(), scan_node->id()),
+          _scan_node(scan_node),
+          _buffer_limiter(std::move(buffer_limiter)) {}
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
@@ -395,13 +394,8 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
                                                       ScanNode* scan_node, pipeline::PipelineBuilderContext* context) {
     OpFactories ops;
 
-    const auto* morsel_queue = context->morsel_queue_of_source_operator(scan_operator.get());
-
-    // ScanOperator's degree_of_parallelism is not more than the number of morsels
-    // If table is empty, then morsel size is zero and we still set degree of parallelism to 1
-    const auto degree_of_parallelism =
-            std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
-    scan_operator->set_degree_of_parallelism(degree_of_parallelism);
+    size_t scan_dop = context->degree_of_parallelism_of_source_operator(scan_operator.get());
+    scan_operator->set_degree_of_parallelism(scan_dop);
 
     ops.emplace_back(std::move(scan_operator));
 

@@ -13,12 +13,19 @@ class ScanNode;
 
 namespace pipeline {
 
+class ChunkBufferLimiter;
+using ChunkBufferLimiterPtr = std::unique_ptr<ChunkBufferLimiter>;
+
 class ScanOperator : public SourceOperator {
 public:
+    static constexpr int MAX_IO_TASKS_PER_OP = 4;
+
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
-                 std::atomic<int>& num_committed_scan_tasks);
+                 ChunkBufferLimiter* buffer_limiter);
 
     ~ScanOperator() override;
+
+    static size_t max_buffer_capacity() { return config::pipeline_io_buffer_size; }
 
     Status prepare(RuntimeState* state) override;
 
@@ -52,9 +59,6 @@ public:
     int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
     int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
 
-    // It takes effect, only when it is positive.
-    virtual size_t max_scan_concurrency() const { return 0; }
-
 private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
@@ -77,10 +81,6 @@ private:
         return _scan_status;
     }
 
-    bool _try_to_increase_committed_scan_tasks();
-    void _decrease_committed_scan_tasks() { _num_committed_scan_tasks.fetch_sub(1); }
-    bool _exceed_max_scan_concurrency(int num_committed_scan_tasks) const;
-
 protected:
     ScanNode* _scan_node = nullptr;
     // ScanOperator may do parallel scan, so each _chunk_sources[i] needs to hold
@@ -91,13 +91,10 @@ protected:
     std::vector<std::shared_ptr<RuntimeProfile>> _chunk_source_profiles;
 
     bool _is_finished = false;
-
-    // Shared by all the ScanOperators created by the same ScanOperatorFactory.
-    std::atomic<int>& _num_committed_scan_tasks;
+    // Shared among scan operators decomposed from a scan node, and owned by ScanOperatorFactory.
+    ChunkBufferLimiter* _buffer_limiter;
 
 private:
-    static constexpr int MAX_IO_TASKS_PER_OP = 4;
-
     const size_t _buffer_size = config::pipeline_io_buffer_size;
 
     int32_t _io_task_retry_cnt = 0;
@@ -113,11 +110,13 @@ private:
     workgroup::WorkGroupPtr _workgroup = nullptr;
     std::atomic_int64_t _last_scan_rows_num = 0;
     std::atomic_int64_t _last_scan_bytes = 0;
+
+    RuntimeProfile::HighWaterMarkCounter* _peak_buffer_size_counter = nullptr;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {
 public:
-    ScanOperatorFactory(int32_t id, ScanNode* scan_node);
+    ScanOperatorFactory(int32_t id, ScanNode* scan_node, ChunkBufferLimiterPtr buffer_limiter);
 
     ~ScanOperatorFactory() override = default;
 
@@ -135,8 +134,7 @@ public:
 
 protected:
     ScanNode* const _scan_node;
-
-    std::atomic<int> _num_committed_scan_tasks{0};
+    ChunkBufferLimiterPtr _buffer_limiter;
 };
 
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> factory, ScanNode* scan_node,

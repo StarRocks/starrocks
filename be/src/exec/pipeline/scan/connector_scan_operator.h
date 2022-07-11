@@ -13,9 +13,13 @@ class ScanNode;
 
 namespace pipeline {
 
+class ChunkBufferToken;
+using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
+class ChunkBufferLimiter;
+
 class ConnectorScanOperatorFactory final : public ScanOperatorFactory {
 public:
-    ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node);
+    ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, ChunkBufferLimiterPtr buffer_limiter);
 
     ~ConnectorScanOperatorFactory() override = default;
 
@@ -27,7 +31,7 @@ public:
 class ConnectorScanOperator final : public ScanOperator {
 public:
     ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
-                          std::atomic<int>& num_committed_scan_tasks);
+                          ChunkBufferLimiter* buffer_limiter);
 
     ~ConnectorScanOperator() override = default;
 
@@ -41,12 +45,13 @@ private:
 class ConnectorChunkSource final : public ChunkSource {
 public:
     ConnectorChunkSource(RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
-                         vectorized::ConnectorScanNode* scan_node);
+                         vectorized::ConnectorScanNode* scan_node, ChunkBufferLimiter* const buffer_limiter);
 
     ~ConnectorChunkSource() override;
 
     Status prepare(RuntimeState* state) override;
 
+    Status set_finished(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     bool has_next_chunk() const override;
@@ -63,6 +68,8 @@ public:
                                                            workgroup::WorkGroupPtr running_wg) override;
 
 private:
+    using ChunkWithToken = std::pair<vectorized::ChunkPtr, ChunkBufferTokenPtr>;
+
     Status _read_chunk(vectorized::ChunkPtr* chunk);
 
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
@@ -88,7 +95,9 @@ private:
     bool _closed = false;
     uint64_t _rows_read = 0;
     uint64_t _bytes_read = 0;
-    UnboundedBlockingQueue<vectorized::ChunkPtr> _chunk_buffer;
+
+    UnboundedBlockingQueue<ChunkWithToken> _chunk_buffer;
+    ChunkBufferLimiter* const _buffer_limiter;
 };
 
 } // namespace pipeline
