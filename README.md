@@ -1,7 +1,7 @@
 
  <p align="center">
  <a href="https://www.starrocks.com/en-US/index">
-    <img  width="526" src="logo%2Bslogan.png">
+    <img  width="526" src="images/logo.png">
    </a>
 </p>
 <p align="center">
@@ -38,7 +38,7 @@ It delivers query speeds 5 to 10 times faster than other popular solutions. Star
 
 <br>
  <p align="center">
-    <img src="new_banner.png">
+    <img src="images/banner.png">
    </a>
 </p>
 </br>
@@ -61,7 +61,7 @@ It delivers query speeds 5 to 10 times faster than other popular solutions. Star
 ## Architecture Overview
 
  <p align="center">
-    <img src="https://github.com/StarRocks/starrocks/blob/main/Arch.png">
+    <img src="images/arch.png">
    </a>
 </p>
 
