@@ -245,8 +245,6 @@ public class StarOSAgent {
     }
 
     public void deleteShards(Set<Long> shardIds) throws DdlException {
-        // for debug
-        LOG.info("deleteShards");
         prepare();
         try {
             client.deleteShard(serviceId, shardIds);

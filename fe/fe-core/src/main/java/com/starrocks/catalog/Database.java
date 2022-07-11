@@ -398,18 +398,12 @@ public class Database extends MetaObject implements Writable {
 
         dropTable(table.getName());
         if (!isForceDrop) {
-            // for debug
-            LOG.info("not force drop");
             Table oldTable = GlobalStateMgr.getCurrentState().getRecycleBin().recycleTable(id, table);
             if (oldTable != null && oldTable.getType() == Table.TableType.OLAP) {
                 batchTaskMap = GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) oldTable, false);
             }
-        } else {
-            // for debug
-            LOG.info("force drop"); 
+        } else { 
             if (table.isOlapOrLakeTable()) {
-                // for debug
-                LOG.info("force drop && tableType is OLAP or LAKE");
                 batchTaskMap = GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) table, isReplay);
             }
         }

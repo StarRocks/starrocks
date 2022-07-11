@@ -2261,8 +2261,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
         int bucketNum = distributionInfo.getBucketNum();
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum, table.getShardStorageInfo());
-        // for debug
-        LOG.info("shardIds in createLakeTablets is {}", shardIds);
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
             index.addTablet(tablet, tabletMeta);
@@ -2381,8 +2379,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-        // for debug
-        LOG.info("call dropTable");
+
         db.dropTable(tableName, stmt.isSetIfExists(), stmt.isForceDrop());
     }
 
@@ -4194,8 +4191,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
                         // drop shard and lake tablet
                         if (olapTable.isLakeTable()) {
-                            // for debug
-                            LOG.info("onEraseOlapTable, isLakeTable");
                             tabletIds.add(tabletId);
                         }
                         

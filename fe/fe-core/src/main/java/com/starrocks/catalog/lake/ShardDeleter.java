@@ -43,8 +43,6 @@ public class ShardDeleter extends MasterDaemon {
     }
 
     public void addUnusedShardId(Set<Long> tableIds) {
-        // for debug
-        LOG.info("add shardId {} in ShardDelete", tableIds);
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             shardIds.addAll(tableIds);
         }
@@ -53,8 +51,6 @@ public class ShardDeleter extends MasterDaemon {
     private void deleteUnusedShard() {
         // delete shard and drop lakeTablet
         if (shardIds.isEmpty()) {
-            // for debug
-            LOG.info("shardIds in deleteShard() is empty.");
             return;
         }
 
@@ -107,16 +103,12 @@ public class ShardDeleter extends MasterDaemon {
             // 2. delete shard
             try {
                 GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(shards);
-                // for debug
-                LOG.info("delete shards {} succ.", shards);
             } catch (DdlException e) {
                 LOG.warn("failed to delete shard from starMgr");
                 continue;
             }
 
             // 3. succ both, remove from the map
-            // for debug
-            LOG.info("delete shard {} and drop lake tablet succ.", shards);
             GlobalStateMgr.getCurrentState().getEditLog().logDeleteUnusedShard(shards);
             try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
                 shardIds.removeAll(shards);
@@ -127,22 +119,16 @@ public class ShardDeleter extends MasterDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        // for debug
-        LOG.info("runAfterCatalogReady of ShardDelete");
         deleteUnusedShard();
     }
 
     public void replayDeleteUnusedShard(ShardInfo shardInfo) {
-        // for debug
-        LOG.info("enter replayDeleteShard");
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             this.shardIds.removeAll(shardInfo.getShardIds());
         }
     }
 
     public void replayAddUnusedShard(ShardInfo shardInfo) {
-        // for debug
-        LOG.info("enter replayAddShard");
         addUnusedShardId(shardInfo.getShardIds());
         LOG.info("shardIds size in replayDeleteShard is {}.", shardIds.size());
     }
