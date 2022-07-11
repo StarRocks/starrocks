@@ -31,7 +31,7 @@ using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 class Tablet {
 public:
     // group: the URI of the storage group for this tablet, e.g, "s3://bucket/serviceID/groupID/"
-    explicit Tablet(TabletManager* mgr, std::string group, int64_t id) : _mgr(mgr), _group(std::move(group)), _id(id) {}
+    explicit Tablet(TabletManager* mgr, std::string group, int64_t id) : _mgr(mgr), _root(std::move(group)), _id(id) {}
 
     ~Tablet() = default;
 
@@ -45,9 +45,9 @@ public:
 
     int64_t id() const { return _id; }
 
-    std::string group() const { return _group; }
+    std::string root() const { return _root; }
 
-    std::string group_assemble() const;
+    std::string root_location() const;
 
     Status put_metadata(const TabletMetadata& metadata);
 
@@ -85,7 +85,8 @@ public:
 
 private:
     TabletManager* _mgr;
-    std::string _group;
+    // TODO: remove this variable.
+    std::string _root;
     int64_t _id;
 };
 

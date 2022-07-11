@@ -25,10 +25,12 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.RecoverDbStmt;
+import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
+import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.StatementBase;
@@ -66,7 +68,7 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.StatsConstants;
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -135,6 +137,15 @@ public class PrivilegeChecker {
         public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext session) {
             if (!checkTblPriv(session, statement.getTbl(), PrivPredicate.ALTER)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "Alter");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowIndexStmt(ShowIndexStmt statement, ConnectContext session) {
+            if (!checkTblPriv(session, statement.getTableName(), PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, session.getQualifiedUser(),
+                        statement.getTableName().toString());
             }
             return null;
         }
@@ -223,6 +234,21 @@ public class PrivilegeChecker {
         public Void visitDropTableStmt(DropTableStmt statement, ConnectContext session) {
             if (!checkTblPriv(session, statement.getTbl(), PrivPredicate.DROP)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
+            }
+            return null;
+        }
+
+        public Void visitRecoverTableStatement(RecoverTableStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), statement.getDbName(),
+                    statement.getTableName(),
+                    PrivPredicate.of(PrivBitSet.of(Privilege.ALTER_PRIV,
+                                    Privilege.CREATE_PRIV,
+                                    Privilege.ADMIN_PRIV),
+                            CompoundPredicate.Operator.OR))) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "RECOVERY",
+                        ConnectContext.get().getQualifiedUser(),
+                        ConnectContext.get().getRemoteIP(),
+                        statement.getTableName());
             }
             return null;
         }
@@ -437,7 +463,7 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
-            if (statement.getDbId() == AnalyzeJob.DEFAULT_ALL_ID) {
+            if (statement.getDbId() == StatsConstants.DEFAULT_ALL_ID) {
                 List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
                 for (Long dbId : dbIds) {
                     Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -457,8 +483,8 @@ public class PrivilegeChecker {
                                 ClusterNamespace.getNameFromFullName(db.getFullName()));
                     }
                 }
-            } else if (AnalyzeJob.DEFAULT_ALL_ID == statement.getTableId()
-                    && AnalyzeJob.DEFAULT_ALL_ID != statement.getDbId()) {
+            } else if (StatsConstants.DEFAULT_ALL_ID == statement.getTableId()
+                    && StatsConstants.DEFAULT_ALL_ID != statement.getDbId()) {
                 Database db = GlobalStateMgr.getCurrentState().getDb(statement.getDbId());
                 for (Table table : db.getTables()) {
                     TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -473,8 +499,8 @@ public class PrivilegeChecker {
                                 session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
                     }
                 }
-            } else if (AnalyzeJob.DEFAULT_ALL_ID != statement.getTableId()
-                    && AnalyzeJob.DEFAULT_ALL_ID != statement.getDbId()) {
+            } else if (StatsConstants.DEFAULT_ALL_ID != statement.getTableId()
+                    && StatsConstants.DEFAULT_ALL_ID != statement.getDbId()) {
                 TableName tableName = statement.getTableName();
 
                 if (!checkTblPriv(session, tableName, PrivPredicate.SELECT)) {

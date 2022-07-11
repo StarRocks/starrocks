@@ -1273,6 +1273,10 @@ public class DatabaseTransactionMgr {
     public void replayUpsertTransactionState(TransactionState transactionState) {
         writeLock();
         try {
+            if (transactionState.getTransactionStatus() == TransactionStatus.UNKNOWN) {
+                LOG.info("remove unknown transaction: {}", transactionState);
+                return;
+            }
             // set transaction status will call txn state change listener
             transactionState.replaySetTransactionStatus();
             Database db = globalStateMgr.getDb(transactionState.getDbId());

@@ -140,6 +140,7 @@ set(EXEC_FILES
     pipeline/result_sink_operator.cpp
     pipeline/olap_table_sink_operator.cpp
     pipeline/scan/balanced_chunk_buffer.cpp
+    pipeline/scan/chunk_source.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/scan_operator.cpp
     pipeline/scan/olap_chunk_source.cpp
@@ -148,6 +149,7 @@ set(EXEC_FILES
     pipeline/scan/olap_scan_context.cpp
     pipeline/scan/connector_scan_operator.cpp
     pipeline/scan/morsel.cpp
+    pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/select_operator.cpp
     pipeline/crossjoin/cross_join_context.cpp
     pipeline/crossjoin/cross_join_right_sink_operator.cpp

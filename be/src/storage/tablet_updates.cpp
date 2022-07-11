@@ -306,6 +306,35 @@ size_t TabletUpdates::num_rows() const {
     return total_row;
 }
 
+std::pair<int64_t, int64_t> TabletUpdates::num_rows_and_data_size() const {
+    string err_rowsets;
+    int64_t total_row = 0;
+    int64_t total_size = 0;
+    {
+        std::lock_guard rl(_lock);
+        if (_edit_version_infos.empty()) {
+            LOG(WARNING) << "tablet deleted when call data_size() tablet:" << _tablet.tablet_id();
+            return {total_row, total_size};
+        }
+        std::lock_guard lg(_rowset_stats_lock);
+        auto& last = _edit_version_infos.back();
+        for (uint32_t rowsetid : last->rowsets) {
+            auto itr = _rowset_stats.find(rowsetid);
+            if (itr != _rowset_stats.end()) {
+                total_row += itr->second->num_rows;
+                total_size += itr->second->byte_size;
+            } else {
+                StringAppendF(&err_rowsets, "%u,", rowsetid);
+            }
+        }
+    }
+    if (!err_rowsets.empty()) {
+        LOG_EVERY_N(WARNING, 10) << "data_size() some rowset stats not found tablet=" << _tablet.tablet_id()
+                                 << " rowset=" << err_rowsets;
+    }
+    return {total_row, total_size};
+}
+
 size_t TabletUpdates::num_rowsets() const {
     std::lock_guard rl(_lock);
     return _edit_version_infos.empty() ? 0 : _edit_version_infos.back()->rowsets.size();
@@ -1296,7 +1325,8 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         uint32_t rssid = rowset_id + i;
         tmp_deletes.clear();
         // replace will not grow hashtable, so don't need to check memory limit
-        index.try_replace(rssid, 0, *sstate.pkeys, sstate.src_rssids, &tmp_deletes);
+        index.try_replace(rssid, 0, *sstate.pkeys, *std::max_element(info->inputs.begin(), info->inputs.end()),
+                          &tmp_deletes);
         DelVectorPtr dv = std::make_shared<DelVector>();
         if (tmp_deletes.empty()) {
             dv->init(version.major(), nullptr, 0);
@@ -2346,7 +2376,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     uint32_t next_rowset_id = 0;
     std::vector<RowsetLoadInfo> new_rowset_load_infos(src_rowsets.size());
 
-    vectorized::Schema base_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
 
     OlapReaderStatistics stats;
 
@@ -2483,11 +2513,11 @@ Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& b
                                                 const std::vector<vectorized::ChunkIteratorPtr>& seg_iterators,
                                                 vectorized::ChunkChanger* chunk_changer,
                                                 const std::unique_ptr<RowsetWriter>& rowset_writer) {
-    vectorized::Schema base_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
-    vectorized::ChunkPtr base_chunk = vectorized::ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
+    vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    vectorized::ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
 
-    vectorized::Schema new_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(_tablet.tablet_schema());
-    vectorized::ChunkPtr new_chunk = vectorized::ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
+    vectorized::Schema new_schema = ChunkHelper::convert_schema_to_format_v2(_tablet.tablet_schema());
+    vectorized::ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
 

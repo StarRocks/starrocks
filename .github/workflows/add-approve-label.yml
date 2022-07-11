@@ -22,20 +22,20 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           sourceRunId: ${{ github.event.workflow_run.id }}
 
-    - uses: dawidd6/action-download-artifact@v2
-      with:
-        workflow: review-pr-trigger.yml
-        pr: ${{ steps.source-run-info.outputs.pullRequestNumber }}
-        path: ${{ github.workspace }}
+      - uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: review-pr-trigger.yml
+          pr: ${{ steps.source-run-info.outputs.pullRequestNumber }}
+          path: ${{ github.workspace }}
 
-    - name: Read Properties
-      id: read_property
-      run: cat review/${{ steps.source-run-info.outputs.pullRequestNumber }}
+      - name: Read Properties
+        id: read_property
+        run: echo "::set-output name=result::$(cat review/${{ steps.source-run-info.outputs.pullRequestNumber }})"
 
-    - name: Label when approved by 2 committers
-      uses: actions-ecosystem/action-add-labels@v1
-      if: ${{ steps.read_property.outputs.stdout }} == 'true'
-      with:
-        github_token: ${{ secrets.PAT }}
-        labels: approved
-        number: ${{ steps.source-run-info.outputs.pullRequestNumber }}
+      - name: Label when approved by 2 committers
+        if: steps.read_property.outputs.result == 'true'
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.PAT }}
+          labels: approved
+          number: ${{ steps.source-run-info.outputs.pullRequestNumber }}

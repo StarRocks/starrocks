@@ -23,7 +23,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
-#include "storage/lake/test_group_assigner.h"
+#include "storage/lake/test_location_provider.h"
 #include "storage/lake/txn_log.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
@@ -42,8 +42,8 @@ public:
 
         _parent_mem_tracker = std::make_unique<MemTracker>(-1);
         _mem_tracker = std::make_unique<MemTracker>(-1, "", _parent_mem_tracker.get());
-        _group_assigner = std::make_unique<TestGroupAssigner>(kTestGroupPath);
-        _backup_group_assigner = _tablet_manager->TEST_set_group_assigner(_group_assigner.get());
+        _location_provider = std::make_unique<TestGroupAssigner>(kTestGroupPath);
+        _backup_location_provider = _tablet_manager->TEST_set_location_provider(_location_provider.get());
 
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
@@ -77,7 +77,7 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
-        _schema = std::make_shared<VSchema>(vectorized::ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
 protected:
@@ -85,7 +85,7 @@ protected:
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_group_assigner(_group_assigner.get());
+        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(kTestGroupPath));
         CHECK_OK(_tablet_manager->put_tablet_metadata(kTestGroupPath, *_tablet_metadata));
@@ -95,7 +95,7 @@ protected:
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
         tablet.delete_txn_log(_txn_id);
         _txn_id++;
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_group_assigner(_backup_group_assigner);
+        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_backup_location_provider);
         (void)fs::remove_all(kTestGroupPath);
     }
 
@@ -140,8 +140,8 @@ protected:
     TabletManager* _tablet_manager;
     std::unique_ptr<MemTracker> _parent_mem_tracker;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<TestGroupAssigner> _group_assigner;
-    GroupAssigner* _backup_group_assigner;
+    std::unique_ptr<TestGroupAssigner> _location_provider;
+    LocationProvider* _backup_location_provider;
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<VSchema> _schema;
@@ -190,8 +190,8 @@ public:
 
         _parent_mem_tracker = std::make_unique<MemTracker>(-1);
         _mem_tracker = std::make_unique<MemTracker>(-1, "", _parent_mem_tracker.get());
-        _group_assigner = std::make_unique<TestGroupAssigner>(kTestGroupPath);
-        _backup_group_assigner = _tablet_manager->TEST_set_group_assigner(_group_assigner.get());
+        _location_provider = std::make_unique<TestGroupAssigner>(kTestGroupPath);
+        _backup_location_provider = _tablet_manager->TEST_set_location_provider(_location_provider.get());
 
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
@@ -226,7 +226,7 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
-        _schema = std::make_shared<VSchema>(vectorized::ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
 protected:
@@ -234,7 +234,7 @@ protected:
     constexpr static const int kChunkSize = 12;
 
     void SetUp() override {
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_group_assigner(_group_assigner.get());
+        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(kTestGroupPath));
         CHECK_OK(_tablet_manager->put_tablet_metadata(kTestGroupPath, *_tablet_metadata));
@@ -244,7 +244,7 @@ protected:
         ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
         tablet.delete_txn_log(_txn_id);
         _txn_id++;
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_group_assigner(_backup_group_assigner);
+        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_backup_location_provider);
         (void)fs::remove_all(kTestGroupPath);
     }
 
@@ -289,8 +289,8 @@ protected:
     TabletManager* _tablet_manager;
     std::unique_ptr<MemTracker> _parent_mem_tracker;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<TestGroupAssigner> _group_assigner;
-    GroupAssigner* _backup_group_assigner;
+    std::unique_ptr<TestGroupAssigner> _location_provider;
+    LocationProvider* _backup_location_provider;
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<VSchema> _schema;

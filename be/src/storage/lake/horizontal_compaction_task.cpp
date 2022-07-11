@@ -49,7 +49,7 @@ Status HorizontalCompactionTask::execute() {
     const int32_t chunk_size = CompactionUtils::get_read_chunk_size(
             config::compaction_memory_limit_per_worker, config::vector_chunk_size, num_rows, num_size, max_input_segs);
 
-    vectorized::RowsetReadOptions rs_opts;
+    RowsetReadOptions rs_opts;
     rs_opts.sorted = true;
     rs_opts.reader_type = READER_CUMULATIVE_COMPACTION;
     rs_opts.chunk_size = chunk_size;
@@ -59,7 +59,7 @@ Status HorizontalCompactionTask::execute() {
     rs_opts.use_page_cache = false;
     rs_opts.tablet_schema = tablet_schema.get();
 
-    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
 
     std::vector<ChunkIteratorPtr> iterators;
     for (auto& rowset : _input_rowsets) {
@@ -81,8 +81,8 @@ Status HorizontalCompactionTask::execute() {
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
-    auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
-    auto char_field_indexes = vectorized::ChunkHelper::get_char_field_indexes(schema);
+    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+    auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
     while (true) {
         if (UNLIKELY(ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped())) {
@@ -96,7 +96,7 @@ Status HorizontalCompactionTask::execute() {
         } else if (!st.ok()) {
             return st;
         }
-        vectorized::ChunkHelper::padding_char_columns(char_field_indexes, schema, *tablet_schema, chunk.get());
+        ChunkHelper::padding_char_columns(char_field_indexes, schema, *tablet_schema, chunk.get());
         RETURN_IF_ERROR(writer->write(*chunk));
         chunk->reset();
     }

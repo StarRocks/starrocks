@@ -26,10 +26,9 @@ Rowset::~Rowset() = default;
 //  1. delete predicates
 //  2. primary key table
 //  3. rowid range and short key range
-StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema,
-                                        const vectorized::RowsetReadOptions& options) {
+StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema, const RowsetReadOptions& options) {
     vectorized::SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet->group_assemble()));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet->root_location()));
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
     seg_options.predicates = options.predicates;
@@ -56,7 +55,7 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema,
             segment_schema = new vectorized::Schema(schema);
             segment_schema_guard.reset(segment_schema);
         }
-        auto f = vectorized::ChunkHelper::convert_field_to_format_v2(cid, col);
+        auto f = ChunkHelper::convert_field_to_format_v2(cid, col);
         segment_schema->append(std::make_shared<vectorized::Field>(std::move(f)));
     }
 
@@ -104,7 +103,7 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema,
 // TODO: load from segment cache
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments) {
     ASSIGN_OR_RETURN(_tablet_schema, _tablet->get_schema());
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_tablet->group_assemble()));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_tablet->root_location()));
     size_t footer_size_hint = 16 * 1024;
     uint32_t seg_id = 0;
     for (const auto& seg_name : _rowset_metadata->segments()) {

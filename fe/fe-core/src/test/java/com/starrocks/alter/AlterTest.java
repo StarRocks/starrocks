@@ -376,15 +376,14 @@ public class AlterTest {
                 "alter table test.tbl1 add partition p3 values less than('2020-04-01'), add partition p4 values less than('2020-05-01')";
         alterTableWithNewParser(stmt, true);
 
-        //todo enable after add new Analyzer for drop partition
-//        stmt = "alter table test.tbl1 add partition p3 values less than('2020-04-01'), drop partition p4";
-//        alterTable(stmt, true);
+        stmt = "alter table test.tbl1 add partition p3 values less than('2020-04-01'), drop partition p4";
+        alterTableWithNewParser(stmt, true);
 
         stmt = "alter table test.tbl1 drop partition p3, drop partition p4";
-        alterTable(stmt, true);
+        alterTableWithNewParser(stmt, true);
 
         stmt = "alter table test.tbl1 drop partition p3, add column k3 int";
-        alterTable(stmt, true);
+//        alterTable(stmt, true);
 
         // no conflict
         stmt = "alter table test.tbl1 add column k3 int, add column k4 int";

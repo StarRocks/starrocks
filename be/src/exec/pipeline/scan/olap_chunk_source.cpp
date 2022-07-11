@@ -26,12 +26,11 @@ using namespace vectorized;
 
 OlapChunkSource::OlapChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                                  vectorized::OlapScanNode* scan_node, OlapScanContext* scan_ctx)
-        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel)),
+        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer()),
           _scan_node(scan_node),
           _scan_ctx(scan_ctx),
           _limit(scan_node->limit()),
-          _scan_range(down_cast<ScanMorsel*>(_morsel.get())->get_olap_scan_range()),
-          _chunk_buffer(scan_ctx->get_chunk_buffer()) {}
+          _scan_range(down_cast<ScanMorsel*>(_morsel.get())->get_olap_scan_range()) {}
 
 OlapChunkSource::~OlapChunkSource() {
     _reader.reset();
@@ -279,95 +278,9 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
-bool OlapChunkSource::has_next_chunk() const {
-    // If we need and could get next chunk from storage engine,
-    // the _status must be ok.
-    return _status.ok();
-}
-
-bool OlapChunkSource::has_output() const {
-    return !_chunk_buffer.empty(_scan_operator_seq);
-}
-
-bool OlapChunkSource::has_shared_output() const {
-    return !_chunk_buffer.all_empty();
-}
-
-size_t OlapChunkSource::get_buffer_size() const {
-    return _chunk_buffer.size(_scan_operator_seq);
-}
-
-StatusOr<vectorized::ChunkPtr> OlapChunkSource::get_next_chunk_from_buffer() {
-    vectorized::ChunkPtr chunk = nullptr;
-    _chunk_buffer.try_get(_scan_operator_seq, &chunk);
-    return chunk;
-}
-
-Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state) {
-    if (!_status.ok()) {
-        return _status;
-    }
-    using namespace vectorized;
-
-    for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
-        ChunkUniquePtr chunk(
-                ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(), true));
-        _status = _read_chunk_from_storage(_runtime_state, chunk.get());
-        if (!_status.ok()) {
-            // end of file is normal case, need process chunk
-            if (_status.is_end_of_file()) {
-                _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
-            }
-            break;
-        }
-
-        _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
-    }
-
-    return _status;
-}
-
-Status OlapChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch_size, RuntimeState* state,
-                                                                        size_t* num_read_chunks, int worker_id,
-                                                                        workgroup::WorkGroupPtr running_wg) {
-    if (!_status.ok()) {
-        return _status;
-    }
-
-    using namespace vectorized;
-    int64_t time_spent = 0;
-    for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
-        {
-            SCOPED_RAW_TIMER(&time_spent);
-
-            ChunkUniquePtr chunk(
-                    ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(), true));
-            _status = _read_chunk_from_storage(_runtime_state, chunk.get());
-            if (!_status.ok()) {
-                // end of file is normal case, need process chunk
-                if (_status.is_end_of_file()) {
-                    ++(*num_read_chunks);
-                    _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
-                }
-                break;
-            }
-
-            ++(*num_read_chunks);
-            _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
-        }
-
-        if (time_spent >= YIELD_MAX_TIME_SPENT) {
-            break;
-        }
-
-        if (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(workgroup::TypeOlapScanExecutor,
-                                                                               worker_id, running_wg)) {
-            break;
-        }
-    }
-
-    return _status;
+Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
+    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(), true));
+    return _read_chunk_from_storage(_runtime_state, (*chunk).get());
 }
 
 // mapping a slot-column-id to schema-columnid
@@ -442,11 +355,11 @@ void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
     _scan_bytes = stats.bytes_read;
     _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
 
-    // Update local countesr
+    // Update local counters.
     _local_sum_row_bytes += chunk->memory_usage();
     _local_num_rows += chunk->num_rows();
     if (_local_sum_chunks++ % UPDATE_AVG_ROW_BYTES_FREQUENCY == 0) {
-        _scan_ctx->update_avg_row_bytes(_local_sum_row_bytes, _local_num_rows);
+        _chunk_buffer.limiter()->update_avg_row_bytes(_local_sum_row_bytes, _local_num_rows);
         _local_sum_row_bytes = 0;
         _local_num_rows = 0;
     }

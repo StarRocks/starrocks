@@ -28,16 +28,16 @@ public class AnalyzeStatus implements Writable {
     private List<String> columns;
 
     @SerializedName("type")
-    private Constants.AnalyzeType type;
+    private StatsConstants.AnalyzeType type;
 
     @SerializedName("scheduleType")
-    private Constants.ScheduleType scheduleType;
+    private StatsConstants.ScheduleType scheduleType;
 
     @SerializedName("properties")
     private Map<String, String> properties;
 
     @SerializedName("status")
-    private Constants.ScheduleStatus status;
+    private StatsConstants.ScheduleStatus status;
 
     @SerializedName("startTime")
     private LocalDateTime startTime;
@@ -49,8 +49,8 @@ public class AnalyzeStatus implements Writable {
     private String reason;
 
     public AnalyzeStatus(long id, long dbId, long tableId, List<String> columns,
-                         Constants.AnalyzeType type,
-                         Constants.ScheduleType scheduleType,
+                         StatsConstants.AnalyzeType type,
+                         StatsConstants.ScheduleType scheduleType,
                          Map<String, String> properties,
                          LocalDateTime startTime) {
         this.id = id;
@@ -79,11 +79,11 @@ public class AnalyzeStatus implements Writable {
         return columns;
     }
 
-    public Constants.AnalyzeType getType() {
+    public StatsConstants.AnalyzeType getType() {
         return type;
     }
 
-    public Constants.ScheduleType getScheduleType() {
+    public StatsConstants.ScheduleType getScheduleType() {
         return scheduleType;
     }
 
@@ -103,11 +103,11 @@ public class AnalyzeStatus implements Writable {
         this.endTime = endTime;
     }
 
-    public void setStatus(Constants.ScheduleStatus status) {
+    public void setStatus(StatsConstants.ScheduleStatus status) {
         this.status = status;
     }
 
-    public Constants.ScheduleStatus getStatus() {
+    public StatsConstants.ScheduleStatus getStatus() {
         return status;
     }
 

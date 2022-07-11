@@ -6,12 +6,12 @@
 #include "gen_cpp/lake_types.pb.h"
 
 namespace starrocks {
+class RowsetReadOptions;
 class Segment;
 class TabletSchema;
 
 namespace vectorized {
 class ChunkIterator;
-class RowsetReadOptions;
 class Schema;
 } // namespace vectorized
 
@@ -33,8 +33,7 @@ public:
 
     ~Rowset();
 
-    [[nodiscard]] StatusOr<ChunkIteratorPtr> read(const vectorized::Schema& schema,
-                                                  const vectorized::RowsetReadOptions& options);
+    [[nodiscard]] StatusOr<ChunkIteratorPtr> read(const vectorized::Schema& schema, const RowsetReadOptions& options);
 
     [[nodiscard]] bool is_overlapped() const { return metadata().overlapped(); }
 
