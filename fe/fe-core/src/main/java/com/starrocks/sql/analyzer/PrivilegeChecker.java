@@ -67,7 +67,7 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.StatsConstants;
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -453,7 +453,7 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
-            if (statement.getDbId() == AnalyzeJob.DEFAULT_ALL_ID) {
+            if (statement.getDbId() == StatsConstants.DEFAULT_ALL_ID) {
                 List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
                 for (Long dbId : dbIds) {
                     Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -473,8 +473,8 @@ public class PrivilegeChecker {
                                 ClusterNamespace.getNameFromFullName(db.getFullName()));
                     }
                 }
-            } else if (AnalyzeJob.DEFAULT_ALL_ID == statement.getTableId()
-                    && AnalyzeJob.DEFAULT_ALL_ID != statement.getDbId()) {
+            } else if (StatsConstants.DEFAULT_ALL_ID == statement.getTableId()
+                    && StatsConstants.DEFAULT_ALL_ID != statement.getDbId()) {
                 Database db = GlobalStateMgr.getCurrentState().getDb(statement.getDbId());
                 for (Table table : db.getTables()) {
                     TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -489,8 +489,8 @@ public class PrivilegeChecker {
                                 session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
                     }
                 }
-            } else if (AnalyzeJob.DEFAULT_ALL_ID != statement.getTableId()
-                    && AnalyzeJob.DEFAULT_ALL_ID != statement.getDbId()) {
+            } else if (StatsConstants.DEFAULT_ALL_ID != statement.getTableId()
+                    && StatsConstants.DEFAULT_ALL_ID != statement.getDbId()) {
                 TableName tableName = statement.getTableName();
 
                 if (!checkTblPriv(session, tableName, PrivPredicate.SELECT)) {
