@@ -43,6 +43,11 @@ inline Status create_directories(const std::string& path) {
     return fs->create_dir_recursive(path);
 }
 
+inline Status delete_file(const std::string& path) {
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    return fs->delete_file(path);
+}
+
 inline Status remove(const std::string& path) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
     ASSIGN_OR_RETURN(auto is_dir, fs->is_directory(path));
