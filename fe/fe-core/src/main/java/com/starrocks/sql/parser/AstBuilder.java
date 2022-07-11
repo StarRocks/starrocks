@@ -2946,7 +2946,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ------------------------------------------- Procedure Statement -------------------------------------------
 
     @Override
-    public ParseNode visitShowProcedureStatment(StarRocksParser.ShowProcedureStatmentContext context) {
+    public ParseNode visitShowProcedureStatement(StarRocksParser.ShowProcedureStatementContext context) {
         if (context.pattern != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
             return new ShowProcedureStmt(stringLiteral.getValue());
