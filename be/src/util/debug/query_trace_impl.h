@@ -99,7 +99,7 @@ private:
     std::string _name;
     std::string _category;
     int64_t _start_ts;
-    int64_t _duration;
+    int64_t _duration = -1;
 };
 
 struct QueryTraceContext {
