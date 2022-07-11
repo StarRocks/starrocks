@@ -145,6 +145,8 @@ public class MetastoreEventsProcessor extends MasterDaemon {
     public void registerTable(HiveTable tbl) {
         tablesLock.writeLock().lock();
         try {
+            LOG.info("Succeed to register {}.{}.{} to Metastore event processor",
+                    tbl.getResourceName(), tbl.getHiveDb(), tbl.getHiveTable());
             tables.put(tbl.getResourceName(), new TableName(tbl.getHiveDb(), tbl.getHiveTable()), tbl);
         } finally {
             tablesLock.writeLock().unlock();
@@ -155,6 +157,8 @@ public class MetastoreEventsProcessor extends MasterDaemon {
         tablesLock.writeLock().lock();
         try {
             tables.remove(tbl.getResourceName(), new TableName(tbl.getHiveDb(), tbl.getHiveTable()));
+            LOG.info("Succeed to remove {}.{}.{} from Metastore event processor",
+                    tbl.getResourceName(), tbl.getHiveDb(), tbl.getHiveTable());
         } finally {
             tablesLock.writeLock().unlock();
         }

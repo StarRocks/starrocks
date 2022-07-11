@@ -524,14 +524,13 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public void onCreate() {
-        if (this.resourceName != null) {
-            Catalog.getCurrentCatalog().getMetastoreEventsProcessor().registerTable(this);
-        }
+        Catalog.getCurrentCatalog().getHiveRepository().getCounter().add(resourceName, hiveDb, hiveTable);
+        Catalog.getCurrentCatalog().getMetastoreEventsProcessor().registerTable(this);
     }
 
     @Override
     public void onDrop() {
-        if (this.resourceName != null) {
+        if (Catalog.getCurrentCatalog().getHiveRepository().getCounter().reduce(resourceName, hiveDb, hiveTable) == 0) {
             Catalog.getCurrentCatalog().getHiveRepository().clearCache(hmsTableInfo);
             Catalog.getCurrentCatalog().getMetastoreEventsProcessor().unregisterTable(this);
         }
