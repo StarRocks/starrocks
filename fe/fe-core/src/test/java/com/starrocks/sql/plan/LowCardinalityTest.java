@@ -674,6 +674,11 @@ public class LowCardinalityTest extends PlanTestBase {
         Assert.assertTrue(plan.contains(
                 "9 <-> substring[(DictExpr(10: S_ADDRESS,[upper(<place-holder>)]), [1: S_SUPPKEY, INT, false], 2); args: VARCHAR,INT,INT; result: VARCHAR; args nullable: true; result nullable: true]"));
 
+        // test two dictionary column
+        // test worth for rewrite
+        sql = "select concat(S_ADDRESS, S_COMMENT) from supplier";
+        plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan.contains("  |  9 <-> concat[([3: S_ADDRESS, VARCHAR, false], [7: S_COMMENT, VARCHAR, false]); args: VARCHAR; result: VARCHAR; args nullable: false; result nullable: true]"));
         // Test common expression reuse 1
         // couldn't reuse case
         // DictExpr return varchar and int

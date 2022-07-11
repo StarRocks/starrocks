@@ -934,7 +934,12 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 couldAppliedOperator = couldAppliedOperator || context.couldAppliedOperator;
             }
 
-            // If there exist expressions that cannot be optimized using low bases.
+            // DictExpr only support one input columnRefs
+            // concat(dict, dict) -> DictExpr(dict)
+            // concat(dict1, dict2) -> nothing to do
+            hasUnsupportedOperator |= operator.getUsedColumns().cardinality() > 1;
+
+            // If there exist expressions that cannot be optimized using low cardinality.
             // We need to avoid unused optimizations
             // eg:
             // if (a=1, dict, c) -> nothing to do
