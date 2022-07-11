@@ -22,6 +22,18 @@ inline int compare_chunk(size_t key_columns, const Chunk& lhs, size_t m, const C
             return r;
         }
     }
+
+    for (size_t i = 0; i < lhs.num_columns(); i++) {
+        if (lhs.get_column_by_index(i)->get_name() == "dataUpdateTime") {
+            const ColumnPtr& lc = lhs.get_column_by_index(i);
+            const ColumnPtr& rc = rhs.get_column_by_index(i);
+            if (int r = lc->compare_at(m, n, *rc, -1); r != 0) {
+                return r;
+            }
+            break;
+        }
+    }
+
     return 0;
 }
 

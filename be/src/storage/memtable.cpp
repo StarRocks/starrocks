@@ -365,6 +365,16 @@ void MemTable::_sort_column_inc() {
         null_firsts.push_back(-1);
     }
 
+    for (int i = 0; i < _vectorized_schema->num_fields(); ++i) {
+        // TODO: check if timestamp is key or not
+        if (_chunk->get_column_by_index(i)->get_name() == "dataUpdateTime") {
+            columns.push_back(_chunk->get_column_by_index(i));
+            // Descending, null first
+            sort_orders.push_back(0);
+            null_firsts.push_back(-1);
+        }
+    }
+
     Status st = stable_sort_and_tie_columns(false, columns, sort_orders, null_firsts, &_permutations);
     CHECK(st.ok());
 }

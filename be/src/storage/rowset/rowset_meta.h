@@ -54,6 +54,7 @@ public:
         return true;
     }
 
+    // TODO: add update condition meta data
     bool init_from_pb(const RowsetMetaPB& rowset_meta_pb) {
         _rowset_meta_pb = rowset_meta_pb;
         _init();

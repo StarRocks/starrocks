@@ -816,6 +816,14 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     }
     int64_t t_apply = MonotonicMillis();
 
+    size_t conditional_column = -1;
+    for (int i = 0; i < _tablet.tablet_schema().columns().size(); ++i) {
+        if (_tablet.tablet_schema().column(i).name() == "dataUpdateTime") {
+            conditional_column = i;
+            break;
+        }
+    }
+
     span->AddEvent("update_index");
     // 3. generate delvec
     // add initial empty delvec for new segments
@@ -827,8 +835,20 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     auto& upserts = state.upserts();
     for (uint32_t i = 0; i < upserts.size(); i++) {
         if (upserts[i] != nullptr) {
-            index.upsert(rowset_id + i, 0, *upserts[i], &new_deletes);
-            manager->index_cache().update_object_size(index_entry, index.memory_usage());
+            if (conditional_column >= 0) {
+                //const ColumnPtr& lc = lhs.get_column_by_index(i);
+                //const ColumnPtr& rc = rhs.get_column_by_index(i);
+                int r = lc->compare_at(m, n, *rc, -1);
+                if (r < 0) {
+
+                } else {
+                    index.upsert(rowset_id + i, 0, *upserts[i], &new_deletes);
+                    manager->index_cache().update_object_size(index_entry, index.memory_usage());
+                }
+            } else {
+                index.upsert(rowset_id + i, 0, *upserts[i], &new_deletes);
+                manager->index_cache().update_object_size(index_entry, index.memory_usage());
+            }
         }
     }
 
