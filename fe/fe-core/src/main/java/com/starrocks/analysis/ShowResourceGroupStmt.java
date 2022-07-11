@@ -2,23 +2,23 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.WorkGroup;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
 
-// Show WorkGroups
-// 1. Show WorkGroup specified by name
+// Show ResourceGroups
+// 1. Show ResourceGroup specified by name
 //  SHOW RESOURCE GROUP <name>
-// 2. Show all WorkGroups
+// 2. Show all ResourceGroups
 //  SHOW RESOURCE GROUPS ALL
-// 3. Show all of WorkGroups that visible to current user
+// 3. Show all of ResourceGroups that visible to current user
 //  SHOW RESOURCE GROUPS
 
-public class ShowWorkGroupStmt extends ShowStmt {
+public class ShowResourceGroupStmt extends ShowStmt {
     private final String name;
     private final boolean listAll;
 
-    public ShowWorkGroupStmt(String name, boolean listAll) {
+    public ShowResourceGroupStmt(String name, boolean listAll) {
         this.name = name;
         this.listAll = listAll;
     }
@@ -29,7 +29,7 @@ public class ShowWorkGroupStmt extends ShowStmt {
 
     @Override
     public ShowResultSetMetaData getMetaData() {
-        return WorkGroup.META_DATA;
+        return ResourceGroup.META_DATA;
     }
 
     public String getName() {
@@ -38,7 +38,7 @@ public class ShowWorkGroupStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowWorkGroupStmt(this, context);
+        return visitor.visitShowResourceGroupStmt(this, context);
     }
 
     @Override

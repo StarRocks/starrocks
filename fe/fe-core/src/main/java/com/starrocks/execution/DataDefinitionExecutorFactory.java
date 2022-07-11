@@ -10,13 +10,13 @@ import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
+import com.starrocks.analysis.AlterResourceGroupStmt;
 import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.AlterRoutineLoadStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.AlterViewStmt;
-import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
@@ -28,6 +28,7 @@ import com.starrocks.analysis.CreateFileStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateRepositoryStmt;
+import com.starrocks.analysis.CreateResourceGroupStmt;
 import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
@@ -35,17 +36,16 @@ import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFileStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropRepositoryStmt;
+import com.starrocks.analysis.DropResourceGroupStmt;
 import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropUserStmt;
-import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.LoadStmt;
@@ -149,9 +149,9 @@ public class DataDefinitionExecutorFactory {
                     .put(CreateAnalyzeJobStmt.class, new CreateAnalyzeJobExecutor())
                     .put(DropAnalyzeJobStmt.class, new DropAnalyzeJobExecutor())
                     .put(RefreshTableStmt.class, new RefreshTableExecutor())
-                    .put(CreateWorkGroupStmt.class, new CreateWorkGroupExecutor())
-                    .put(DropWorkGroupStmt.class, new DropWorkGroupExecutor())
-                    .put(AlterWorkGroupStmt.class, new AlterWorkGroupExecutor())
+                    .put(CreateResourceGroupStmt.class, new CreateResourceGroupExecutor())
+                    .put(DropResourceGroupStmt.class, new DropResourceGroupExecutor())
+                    .put(AlterResourceGroupStmt.class, new AlterResourceGroupExecutor())
                     .put(CreateCatalogStmt.class, new CreateCatalogExecutor())
                     .put(DropCatalogStmt.class, new DropCatalogExecutor())
                     .put(SubmitTaskStmt.class, new SubmitTaskExecutor())

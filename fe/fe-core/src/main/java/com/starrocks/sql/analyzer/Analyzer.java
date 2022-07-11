@@ -8,17 +8,17 @@ import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
+import com.starrocks.analysis.AlterResourceGroupStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateResourceGroupStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -95,7 +95,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitAlterWorkGroupStatement(AlterWorkGroupStmt statement, ConnectContext session) {
+        public Void visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, ConnectContext session) {
             statement.analyze();
             return null;
         }
@@ -158,7 +158,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitCreateWorkGroupStatement(CreateWorkGroupStmt statement, ConnectContext session) {
+        public Void visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, ConnectContext session) {
             statement.analyze();
             return null;
         }

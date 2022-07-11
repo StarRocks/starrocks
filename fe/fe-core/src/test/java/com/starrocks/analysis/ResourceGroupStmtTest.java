@@ -1,8 +1,8 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.catalog.WorkGroup;
-import com.starrocks.catalog.WorkGroupClassifier;
+import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERROR_NO_WG_ERROR;
 
-public class WorkGroupStmtTest {
+public class ResourceGroupStmtTest {
     private static final Pattern idPattern = Pattern.compile("\\bid=(\\b\\d+\\b)");
     private static StarRocksAssert starRocksAssert;
     private String createRg1Sql = "create resource group rg1\n" +
@@ -386,9 +386,9 @@ public class WorkGroupStmtTest {
         starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
         starRocksAssert.getCtx().setRemoteIP(remoteIp);
-        WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+        ResourceGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                 starRocksAssert.getCtx(),
-                WorkGroupClassifier.QueryType.SELECT,
+                ResourceGroupClassifier.QueryType.SELECT,
                 null);
         Assert.assertEquals(wg.getName(), "rg1");
         dropResourceGroups();
@@ -405,18 +405,18 @@ public class WorkGroupStmtTest {
         {
             long dbId = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getId();
             Set<Long> dbIds = ImmutableSet.of(dbId);
-            WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+            ResourceGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                     starRocksAssert.getCtx(),
-                    WorkGroupClassifier.QueryType.SELECT,
+                    ResourceGroupClassifier.QueryType.SELECT,
                     dbIds);
             Assert.assertEquals("rg5", wg.getName());
         }
         {
             long dbId = GlobalStateMgr.getCurrentState().getDb("default_cluster:db2").getId();
             Set<Long> dbIds = ImmutableSet.of(dbId);
-            WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+            ResourceGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                     starRocksAssert.getCtx(),
-                    WorkGroupClassifier.QueryType.SELECT,
+                    ResourceGroupClassifier.QueryType.SELECT,
                     dbIds);
             Assert.assertNotNull(wg);
             Assert.assertEquals("rg1", wg.getName());
@@ -425,9 +425,9 @@ public class WorkGroupStmtTest {
             Set<Long> dbIds = ImmutableSet.of(
                     GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getId(),
                     GlobalStateMgr.getCurrentState().getDb("default_cluster:db2").getId());
-            WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+            ResourceGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
                     starRocksAssert.getCtx(),
-                    WorkGroupClassifier.QueryType.SELECT,
+                    ResourceGroupClassifier.QueryType.SELECT,
                     dbIds);
             Assert.assertEquals("rg1", wg.getName());
         }

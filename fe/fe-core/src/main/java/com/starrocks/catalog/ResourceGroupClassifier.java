@@ -22,7 +22,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-public class WorkGroupClassifier implements Writable {
+public class ResourceGroupClassifier implements Writable {
     public static final Pattern UseRolePattern = Pattern.compile("^\\w+$");
     public static final Set<String> QUERY_TYPES =
             Arrays.stream(QueryType.values()).map(Enum::name).collect(Collectors.toSet());
@@ -44,9 +44,9 @@ public class WorkGroupClassifier implements Writable {
     @SerializedName(value = "databaseIds")
     private Set<Long> databaseIds;
 
-    public static WorkGroupClassifier read(DataInput in) throws IOException {
+    public static ResourceGroupClassifier read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, WorkGroupClassifier.class);
+        return GsonUtils.GSON.fromJson(json, ResourceGroupClassifier.class);
     }
 
     public long getWorkgroupId() {

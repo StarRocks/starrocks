@@ -9,10 +9,10 @@ import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
+import com.starrocks.analysis.AlterResourceGroupStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
-import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
@@ -32,11 +32,11 @@ import com.starrocks.analysis.ComputeNodeClause;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateResourceGroupStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
@@ -45,8 +45,8 @@ import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
+import com.starrocks.analysis.DropResourceGroupStmt;
 import com.starrocks.analysis.DropTableStmt;
-import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FrontendClause;
@@ -80,13 +80,13 @@ import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowProcStmt;
+import com.starrocks.analysis.ShowResourceGroupStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
-import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
@@ -136,7 +136,7 @@ public abstract class AstVisitor<R, C> {
         return visitBaseViewStatement(statement, context);
     }
 
-    public R visitAlterWorkGroupStatement(AlterWorkGroupStmt statement, C context) {
+    public R visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -225,11 +225,11 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitCreateWorkGroupStatement(CreateWorkGroupStmt statement, C context) {
+    public R visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitDropWorkGroupStatement(DropWorkGroupStmt statement, C context) {
+    public R visitDropResourceGroupStatement(DropResourceGroupStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -289,7 +289,7 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    public R visitShowWorkGroupStmt(ShowWorkGroupStmt statement, C context) {
+    public R visitShowResourceGroupStmt(ShowResourceGroupStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 

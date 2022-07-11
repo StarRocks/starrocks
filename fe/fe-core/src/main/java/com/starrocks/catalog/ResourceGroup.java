@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-public class WorkGroup implements Writable {
+public class ResourceGroup implements Writable {
     public static final String USER = "user";
     public static final String ROLE = "role";
     public static final String QUERY_TYPE = "query_type";
@@ -45,10 +45,9 @@ public class WorkGroup implements Writable {
                     .addColumn(new Column("concurrency_limit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("type", ScalarType.createVarchar(200)))
                     .addColumn(new Column("classifiers", ScalarType.createVarchar(1024)))
-                   .build();
-
+                    .build();
     @SerializedName(value = "classifiers")
-    List<WorkGroupClassifier> classifiers;
+    List<ResourceGroupClassifier> classifiers;
     @SerializedName(value = "name")
     private String name;
     @SerializedName(value = "id")
@@ -70,15 +69,15 @@ public class WorkGroup implements Writable {
     @SerializedName(value = "version")
     private long version;
 
-    public WorkGroup() {
+    public ResourceGroup() {
     }
 
-    public static WorkGroup read(DataInput in) throws IOException {
+    public static ResourceGroup read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, WorkGroup.class);
+        return GsonUtils.GSON.fromJson(json, ResourceGroup.class);
     }
 
-    private List<String> showClassifier(WorkGroupClassifier classifier) {
+    private List<String> showClassifier(ResourceGroupClassifier classifier) {
         List<String> row = new ArrayList<>();
         row.add(this.name);
         row.add("" + this.id);
@@ -232,11 +231,11 @@ public class WorkGroup implements Writable {
         this.workGroupType = workGroupType;
     }
 
-    public List<WorkGroupClassifier> getClassifiers() {
+    public List<ResourceGroupClassifier> getClassifiers() {
         return classifiers;
     }
 
-    public void setClassifiers(List<WorkGroupClassifier> classifiers) {
+    public void setClassifiers(List<ResourceGroupClassifier> classifiers) {
         this.classifiers = classifiers;
     }
 
@@ -248,8 +247,8 @@ public class WorkGroup implements Writable {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        WorkGroup workGroup = (WorkGroup) o;
-        return id == workGroup.id && version == workGroup.version;
+        ResourceGroup resourceGroup = (ResourceGroup) o;
+        return id == resourceGroup.id && version == resourceGroup.version;
     }
 
     @Override

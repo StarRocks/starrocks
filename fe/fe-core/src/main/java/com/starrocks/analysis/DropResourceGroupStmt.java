@@ -5,10 +5,10 @@ import com.starrocks.sql.ast.AstVisitor;
 
 // Drop WorkGroup specified by name
 // DROP RESOURCE GROUP <name>
-public class DropWorkGroupStmt extends DdlStmt {
+public class DropResourceGroupStmt extends DdlStmt {
     private final String name;
 
-    public DropWorkGroupStmt(String name) {
+    public DropResourceGroupStmt(String name) {
         this.name = name;
     }
 
@@ -18,7 +18,7 @@ public class DropWorkGroupStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropWorkGroupStatement(this, context);
+        return visitor.visitDropResourceGroupStatement(this, context);
     }
 
     @Override

@@ -3,10 +3,10 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.WorkGroup;
-import com.starrocks.catalog.WorkGroupClassifier;
+import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.catalog.ResourceGroupClassifier;
+import com.starrocks.sql.analyzer.ResourceGroupAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.analyzer.WorkGroupAnalyzer;
 import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.ArrayList;
@@ -24,13 +24,13 @@ import java.util.Map;
 //
 // 3. Modify properties
 //  ALTER RESOURCE GROUP <name> WITH ('cpu_core_limit'='n', 'mem_limit'='m%', 'concurrency_limit'='k')
-public class AlterWorkGroupStmt extends DdlStmt {
+public class AlterResourceGroupStmt extends DdlStmt {
     private String name;
     private SubCommand cmd;
-    private List<WorkGroupClassifier> newAddedClassifiers = Collections.emptyList();
-    private WorkGroup changedProperties = new WorkGroup();
+    private List<ResourceGroupClassifier> newAddedClassifiers = Collections.emptyList();
+    private ResourceGroup changedProperties = new ResourceGroup();
 
-    public AlterWorkGroupStmt(String name, SubCommand cmd) {
+    public AlterResourceGroupStmt(String name, SubCommand cmd) {
         this.name = name;
         this.cmd = cmd;
     }
@@ -46,15 +46,15 @@ public class AlterWorkGroupStmt extends DdlStmt {
     public void analyze() {
         if (cmd instanceof AddClassifiers) {
             AddClassifiers addClassifiers = (AddClassifiers) cmd;
-            List<WorkGroupClassifier> classifierList = new ArrayList<>();
+            List<ResourceGroupClassifier> classifierList = new ArrayList<>();
             for (List<Predicate> predicates : addClassifiers.classifiers) {
-                WorkGroupClassifier classifier = WorkGroupAnalyzer.convertPredicateToClassifier(predicates);
+                ResourceGroupClassifier classifier = ResourceGroupAnalyzer.convertPredicateToClassifier(predicates);
                 classifierList.add(classifier);
             }
             newAddedClassifiers = classifierList;
         } else if (cmd instanceof AlterProperties) {
             AlterProperties alterProperties = (AlterProperties) cmd;
-            WorkGroupAnalyzer.analyzeProperties(changedProperties, alterProperties.properties);
+            ResourceGroupAnalyzer.analyzeProperties(changedProperties, alterProperties.properties);
             if (changedProperties.getWorkGroupType() != null) {
                 throw new SemanticException("type of WorkGroup is immutable");
             }
@@ -71,11 +71,11 @@ public class AlterWorkGroupStmt extends DdlStmt {
         }
     }
 
-    public List<WorkGroupClassifier> getNewAddedClassifiers() {
+    public List<ResourceGroupClassifier> getNewAddedClassifiers() {
         return newAddedClassifiers;
     }
 
-    public WorkGroup getChangedProperties() {
+    public ResourceGroup getChangedProperties() {
         return changedProperties;
     }
 
@@ -120,7 +120,7 @@ public class AlterWorkGroupStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterWorkGroupStatement(this, context);
+        return visitor.visitAlterResourceGroupStatement(this, context);
     }
 
     @Override

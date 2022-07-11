@@ -19,10 +19,10 @@ import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
+import com.starrocks.analysis.AlterResourceGroupStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
-import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -46,7 +46,6 @@ import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DefaultValueExpr;
@@ -61,8 +60,8 @@ import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.DropPartitionClause;
+import com.starrocks.analysis.DropResourceGroupStmt;
 import com.starrocks.analysis.DropTableStmt;
-import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
@@ -122,13 +121,13 @@ import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowProcStmt;
+import com.starrocks.analysis.ShowResourceGroupStmt;
 import com.starrocks.analysis.ShowStatusStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
-import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
@@ -1397,7 +1396,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             properties.put(property.getKey(), property.getValue());
         }
 
-        return new CreateWorkGroupStmt(name,
+        return new CreateResourceGroupStmt(name,
                 context.EXISTS() != null,
                 context.REPLACE() != null,
                 predicatesList,
@@ -1407,7 +1406,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDropWorkGroupStatement(StarRocksParser.DropWorkGroupStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
-        return new DropWorkGroupStmt(identifier.getValue());
+        return new DropResourceGroupStmt(identifier.getValue());
     }
 
     @Override
@@ -1421,12 +1420,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 predicatesList.add(p);
             }
 
-            return new AlterWorkGroupStmt(name, new AlterWorkGroupStmt.AddClassifiers(predicatesList));
+            return new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.AddClassifiers(predicatesList));
         } else if (context.DROP() != null) {
             if (context.ALL() != null) {
-                return new AlterWorkGroupStmt(name, new AlterWorkGroupStmt.DropAllClassifiers());
+                return new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.DropAllClassifiers());
             } else {
-                return new AlterWorkGroupStmt(name, new AlterWorkGroupStmt.DropClassifiers(context.INTEGER_VALUE()
+                return new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.DropClassifiers(context.INTEGER_VALUE()
                         .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList())));
             }
         } else {
@@ -1436,17 +1435,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
 
-            return new AlterWorkGroupStmt(name, new AlterWorkGroupStmt.AlterProperties(properties));
+            return new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.AlterProperties(properties));
         }
     }
 
     @Override
     public ParseNode visitShowWorkGroupStatement(StarRocksParser.ShowWorkGroupStatementContext context) {
         if (context.GROUPS() != null) {
-            return new ShowWorkGroupStmt(null, context.ALL() != null);
+            return new ShowResourceGroupStmt(null, context.ALL() != null);
         } else {
             Identifier identifier = (Identifier) visit(context.identifier());
-            return new ShowWorkGroupStmt(identifier.getValue(), false);
+            return new ShowResourceGroupStmt(identifier.getValue(), false);
         }
     }
 

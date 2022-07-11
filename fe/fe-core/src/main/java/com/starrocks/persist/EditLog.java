@@ -693,7 +693,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_WORKGROUP: {
-                    final WorkGroupOpEntry entry = (WorkGroupOpEntry) journal.getData();
+                    final ResourceGroupOpEntry entry = (ResourceGroupOpEntry) journal.getData();
                     globalStateMgr.getWorkGroupMgr().replayWorkGroupOp(entry);
                     break;
                 }
@@ -1017,7 +1017,7 @@ public class EditLog {
         logEdit(OperationType.OP_CREATE_MATERIALIZED_VIEW, info);
     }
 
-    public void logWorkGroupOp(WorkGroupOpEntry op) {
+    public void logWorkGroupOp(ResourceGroupOpEntry op) {
         logEdit(OperationType.OP_WORKGROUP, op);
     }
 

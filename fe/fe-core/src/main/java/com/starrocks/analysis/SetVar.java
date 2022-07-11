@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.catalog.WorkGroup;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
@@ -161,7 +161,7 @@ public class SetVar implements ParseNode {
         if (getVariable().equalsIgnoreCase(SessionVariable.RESOURCE_GROUP)) {
             String wgName = getValue().getStringValue();
             if (!StringUtils.isEmpty(wgName)) {
-                WorkGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(wgName);
+                ResourceGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(wgName);
                 if (wg == null) {
                     throw new SemanticException("resource group not exists: " + wgName);
                 }

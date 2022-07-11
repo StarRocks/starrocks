@@ -2,16 +2,14 @@
 
 package com.starrocks.metric;
 
-import com.starrocks.catalog.WorkGroup;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.SessionVariable;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class ResourceGroupMetricTest {
@@ -29,9 +27,9 @@ public class ResourceGroupMetricTest {
         sessionVariable.setEnableResourceGroup(true);
         ctx.setSessionVariable(sessionVariable);
 
-        WorkGroup wg1 = new WorkGroup();
+        ResourceGroup wg1 = new ResourceGroup();
         wg1.setName("wg1");
-        WorkGroup wg2 = new WorkGroup();
+        ResourceGroup wg2 = new ResourceGroup();
         wg2.setName("wg2");
 
         ctx.setWorkGroup(wg1);

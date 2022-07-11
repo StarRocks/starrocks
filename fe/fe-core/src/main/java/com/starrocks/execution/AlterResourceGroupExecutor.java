@@ -2,16 +2,16 @@
 
 package com.starrocks.execution;
 
-import com.starrocks.analysis.DropWorkGroupStmt;
+import com.starrocks.analysis.AlterResourceGroupStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 
-public class DropWorkGroupExecutor implements DataDefinitionExecutor {
+public class AlterResourceGroupExecutor implements DataDefinitionExecutor {
 
     public ShowResultSet execute(StatementBase stmt, ConnectContext context) throws DdlException {
-        context.getGlobalStateMgr().getWorkGroupMgr().dropWorkGroup((DropWorkGroupStmt) stmt);
+        context.getGlobalStateMgr().getWorkGroupMgr().alterWorkGroup((AlterResourceGroupStmt) stmt);
         return null;
     }
 }

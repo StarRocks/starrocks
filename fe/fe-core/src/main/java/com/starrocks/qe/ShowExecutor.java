@@ -60,6 +60,7 @@ import com.starrocks.analysis.ShowPluginsStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowProcesslistStmt;
 import com.starrocks.analysis.ShowRepositoriesStmt;
+import com.starrocks.analysis.ShowResourceGroupStmt;
 import com.starrocks.analysis.ShowResourcesStmt;
 import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.ShowRolesStmt;
@@ -76,7 +77,6 @@ import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowUserStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
-import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.backup.AbstractJob;
@@ -279,7 +279,7 @@ public class ShowExecutor {
             handleShowBasicStatsMeta();
         } else if (stmt instanceof ShowHistogramStatsMetaStmt) {
             handleShowHistogramStatsMeta();
-        } else if (stmt instanceof ShowWorkGroupStmt) {
+        } else if (stmt instanceof ShowResourceGroupStmt) {
             handleShowWorkGroup();
         } else if (stmt instanceof ShowUserStmt) {
             handleShowUser();
@@ -1616,9 +1616,9 @@ public class ShowExecutor {
     }
 
     private void handleShowWorkGroup() throws AnalysisException {
-        ShowWorkGroupStmt showWorkGroupStmt = (ShowWorkGroupStmt) stmt;
-        List<List<String>> rows = GlobalStateMgr.getCurrentState().getWorkGroupMgr().showWorkGroup(showWorkGroupStmt);
-        resultSet = new ShowResultSet(showWorkGroupStmt.getMetaData(), rows);
+        ShowResourceGroupStmt showResourceGroupStmt = (ShowResourceGroupStmt) stmt;
+        List<List<String>> rows = GlobalStateMgr.getCurrentState().getWorkGroupMgr().showWorkGroup(showResourceGroupStmt);
+        resultSet = new ShowResultSet(showResourceGroupStmt.getMetaData(), rows);
     }
 
     private void handleShowCatalogs() {

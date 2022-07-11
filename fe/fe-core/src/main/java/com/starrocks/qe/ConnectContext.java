@@ -25,7 +25,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.WorkGroup;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
@@ -150,7 +150,7 @@ public class ConnectContext {
 
     protected PlannerProfile plannerProfile;
 
-    protected WorkGroup workGroup;
+    protected ResourceGroup resourceGroup;
 
     public static ConnectContext get() {
         return threadLocalInfo.get();
@@ -474,12 +474,12 @@ public class ConnectContext {
         return plannerProfile;
     }
 
-    public WorkGroup getWorkGroup() {
-        return workGroup;
+    public ResourceGroup getWorkGroup() {
+        return resourceGroup;
     }
 
-    public void setWorkGroup(WorkGroup workGroup) {
-        this.workGroup = workGroup;
+    public void setWorkGroup(ResourceGroup resourceGroup) {
+        this.resourceGroup = resourceGroup;
     }
 
     public String getCurrentCatalog() {
