@@ -532,7 +532,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             // TYPE_INT IF(TYPE_STRING > "100", rand(), 1) -> TYPE_INT -> IF(DictExpr(ID_TYPE), rand(), 1)
             if (!valueOperator.getType().equals(newCallOperator.getType())) {
                 Preconditions.checkState(valueOperator.getType().isVarchar());
-                Preconditions.checkState(keyColumn.getType().equals(ID_TYPE));
+                Preconditions.checkState(newCallOperator.getType().equals(ID_TYPE));
 
                 ColumnRefOperator newDictColumn = context.columnRefFactory.create(
                         keyColumn.getName(), ID_TYPE, keyColumn.isNullable());
