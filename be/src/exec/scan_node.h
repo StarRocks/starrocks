@@ -99,9 +99,6 @@ public:
 
     const std::string& name() const { return _name; }
 
-    // Used by pipeline, 0 means there is no limitation.
-    virtual int max_scan_concurrency() const { return 0; }
-
 protected:
     RuntimeProfile::Counter* _bytes_read_counter; // # bytes read from the scanner
     // # rows/tuples read from the scanner (including those discarded by eval_conjucts())

@@ -6,6 +6,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
+#include "gutil/macros.h"
 
 namespace starrocks {
 class DataSink;
@@ -40,11 +41,7 @@ public:
         DCHECK(unique_request.params.__isset.sender_id);
     }
 
-    // Disable copy/move ctor and assignment.
-    UnifiedExecPlanFragmentParams(const UnifiedExecPlanFragmentParams&) = delete;
-    UnifiedExecPlanFragmentParams& operator=(const UnifiedExecPlanFragmentParams&) = delete;
-    UnifiedExecPlanFragmentParams(UnifiedExecPlanFragmentParams&&) = delete;
-    UnifiedExecPlanFragmentParams& operator=(UnifiedExecPlanFragmentParams&&) = delete;
+    DISALLOW_COPY_AND_MOVE(UnifiedExecPlanFragmentParams);
 
     // Access the common fields by this method.
     const TExecPlanFragmentParams& common() const { return _common_request; }
