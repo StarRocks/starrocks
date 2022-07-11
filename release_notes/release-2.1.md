@@ -11,7 +11,7 @@ The following bugs are fixed:
 - Data loading into a table of the Primary Key model is suspended in the event of frequent data loads into that table.[#7763](https://github.com/StarRocks/starrocks/issues/7763)
 - Aggregate expressions are processed in an incorrect sequence during low-cardinality optimization, causing the `count distinct` function to return unexpected results. [#7659](https://github.com/StarRocks/starrocks/issues/7659)
 - No results are returned for the LIMIT clause, because the pruning rule in the clause cannot be properly processed. [#7894](https://github.com/StarRocks/starrocks/pull/7894)
-- If the global dictionary for low-cardinality optimization is applied on columns that are defined as join conditions for a query, the query returns unexpected results. [8302](https://github.com/StarRocks/starrocks/issues/8302)
+- If the global dictionary for low-cardinality optimization is applied on columns that are defined as join conditions for a query, the query returns unexpected results. [#8302](https://github.com/StarRocks/starrocks/issues/8302)
 
 ## 2.1.10
 
