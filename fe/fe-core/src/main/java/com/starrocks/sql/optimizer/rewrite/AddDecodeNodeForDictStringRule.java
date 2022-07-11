@@ -151,9 +151,9 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
     public static class DecodeVisitor extends OptExpressionVisitor<OptExpression, DecodeContext> {
 
-        public static boolean couldApplyDictOptimize(ScalarOperator operator, Set<Integer> sids) {
+        public static boolean couldApplyDictOptimize(ScalarOperator operator, Set<Integer> dictEncodedColumnSlotIds) {
             final CouldApplyDictOptimizeContext couldApplyCtx = new CouldApplyDictOptimizeContext();
-            couldApplyCtx.sids = sids;
+            couldApplyCtx.dictEncodedColumnSlotIds = dictEncodedColumnSlotIds;
             operator.accept(new CouldApplyDictOptimizeVisitor(), couldApplyCtx);
             return couldApplyCtx.couldAppliedOperator;
         }
@@ -325,7 +325,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 ScalarOperator newPredicate;
                 List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperator.getPredicate());
 
-                // check column could apply dict optimize
+                // check column could apply dict optimize and replace string column to dict column
                 for (Integer columnId : context.tableIdToStringColumnIds.get(tableId)) {
                     ColumnRefOperator stringColumn = context.columnRefFactory.getColumnRef(columnId);
                     if (!scanOperator.getColRefToColumnMetaMap().containsKey(stringColumn)) {
@@ -378,19 +378,23 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 }
 
                 // rewrite predicate
-                for (Integer columnId : context.tableIdToStringColumnIds.get(tableId)) {
-                    if (context.stringColumnIdToDictColumnIds.containsKey(columnId) &&
-                            scanOperator.getPredicate() != null &&
-                            scanOperator.getPredicate().getUsedColumns().contains(columnId)) {
-                        for (int i = 0; i < predicates.size(); i++) {
-                            ScalarOperator predicate = predicates.get(i);
-                            if (predicate.getUsedColumns().contains(columnId)) {
-                                Preconditions.checkState(
-                                        couldApplyDictOptimize(predicate, context.allStringColumnIds));
-                                final DictMappingRewriter rewriter = new DictMappingRewriter(context);
-                                final ScalarOperator newCallOperator = rewriter.rewrite(predicate.clone());
-                                predicates.set(i, newCallOperator);
-                            }
+                // get all string columns for this table
+                List<Integer> stringColumns = context.tableIdToStringColumnIds.get(tableId);
+                // get all could apply this optimization string columns
+                ColumnRefSet applyOptCols = new ColumnRefSet();
+                stringColumns.stream().filter(cid -> context.stringColumnIdToDictColumnIds.containsKey(cid)).
+                        forEach(applyOptCols::union);
+
+                // if predicate used any apply to optimize column, it should be rewritten
+                if (scanOperator.getPredicate() != null) {
+                    for (int i = 0; i < predicates.size(); i++) {
+                        ScalarOperator predicate = predicates.get(i);
+                        if (predicate.getUsedColumns().isIntersect(applyOptCols)) {
+                            Preconditions.checkState(
+                                    couldApplyDictOptimize(predicate, context.allStringColumnIds));
+                            final DictMappingRewriter rewriter = new DictMappingRewriter(context);
+                            final ScalarOperator newCallOperator = rewriter.rewrite(predicate.clone());
+                            predicates.set(i, newCallOperator);
                         }
                     }
                 }
@@ -888,8 +892,9 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
     // Because we can save the overhead of string filtering
 
     private static class CouldApplyDictOptimizeContext {
-        // can use cardinality optimized dictionary columns
-        private Set<Integer> sids;
+        // can use cardinality optimized dictionary columns.
+        // try to apply a low-cardinality dictionary optimization to these columns
+        private Set<Integer> dictEncodedColumnSlotIds;
         // whether is worth using dictionary optimization
         private boolean worthApplied = false;
         //
@@ -1022,7 +1027,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         @Override
         public Void visitVariableReference(ColumnRefOperator variable, CouldApplyDictOptimizeContext context) {
-            context.couldAppliedOperator = context.sids.contains(variable.getId());
+            context.couldAppliedOperator = context.dictEncodedColumnSlotIds.contains(variable.getId());
             context.hasUnsupportedOperator = !context.couldAppliedOperator;
             return null;
         }
