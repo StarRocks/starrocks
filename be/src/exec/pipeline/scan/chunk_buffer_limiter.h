@@ -6,6 +6,8 @@
 #include <memory>
 #include <mutex>
 
+#include "gutil/macros.h"
+
 namespace starrocks::pipeline {
 
 class ChunkBufferToken;
@@ -55,11 +57,7 @@ public:
 
         ~Token() override { _pinned_tokens_counter.fetch_sub(_num_tokens); }
 
-        // Disable copy/move ctor and assignment.
-        Token(const Token&) = delete;
-        Token& operator=(const Token&) = delete;
-        Token(Token&&) = delete;
-        Token& operator=(Token&&) = delete;
+        DISALLOW_COPY_AND_MOVE(Token);
 
     private:
         std::atomic<int>& _pinned_tokens_counter;
@@ -95,11 +93,7 @@ public:
 
         ~Token() override { _pinned_tokens_counter.fetch_sub(_num_tokens); }
 
-        // Disable copy/move ctor and assignment.
-        Token(const Token&) = delete;
-        Token& operator=(const Token&) = delete;
-        Token(Token&&) = delete;
-        Token& operator=(Token&&) = delete;
+        DISALLOW_COPY_AND_MOVE(Token);
 
     private:
         std::atomic<int>& _pinned_tokens_counter;
