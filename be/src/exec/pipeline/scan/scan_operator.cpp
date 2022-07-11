@@ -288,8 +288,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 _workgroup, [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx](int worker_id) {
                     if (auto sp = wp.lock()) {
                         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-                        // @TODO add scoped?
-                        QUERY_TRACE_ASYNC_START(get_name(), "io_task", query_trace_ctx);
+                        [[maybe_unused]] std::string category = "chunk_source_" + std::to_string(chunk_source_index);
+                        QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
                         auto& chunk_source = _chunk_sources[chunk_source_index];
                         size_t num_read_chunks = 0;
                         int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
@@ -310,7 +310,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                         _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
                                                   chunk_source->get_scan_rows() - prev_scan_rows,
                                                   chunk_source->get_scan_bytes() - prev_scan_bytes);
-                        QUERY_TRACE_ASYNC_FINISH(get_name(), "io_task", query_trace_ctx);
+                        QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
                     }
                 });
         if (dynamic_cast<ConnectorScanOperator*>(this) != nullptr) {
@@ -323,8 +323,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx]() {
             if (auto sp = wp.lock()) {
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-                // @TODO
-                QUERY_TRACE_ASYNC_START(get_name(), "io_task", query_trace_ctx);
+                [[maybe_unused]] std::string category = "chunk_source_" + std::to_string(chunk_source_index);
+                QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
                 auto& chunk_source = _chunk_sources[chunk_source_index];
                 int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
                 int64_t prev_scan_rows = chunk_source->get_scan_rows();
@@ -340,7 +340,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
                                           chunk_source->get_scan_rows() - prev_scan_rows,
                                           chunk_source->get_scan_bytes() - prev_scan_bytes);
-                QUERY_TRACE_ASYNC_FINISH(get_name(), "io_task", query_trace_ctx);
+                QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
             }
         };
         // TODO(by satanson): set a proper priority

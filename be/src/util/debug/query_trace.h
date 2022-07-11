@@ -47,32 +47,32 @@
     starrocks::debug::QueryTrace::set_tls_trace_context(query_trace, fragment_instance_id,  \
                                                         reinterpret_cast<std::uintptr_t>(driver))
 
-#define QUERY_TRACE_BEGIN(category, name)        \
+#define QUERY_TRACE_BEGIN(name, category)        \
     INTERNAL_ADD_EVENT_INTO_THREAD_LOCAL_BUFFER( \
-            INTERNAL_CREATE_EVENT_WITH_CTX(category, name, 'B', starrocks::debug::tls_trace_ctx))
+            INTERNAL_CREATE_EVENT_WITH_CTX(name, category, 'B', starrocks::debug::tls_trace_ctx))
 
-#define QUERY_TRACE_END(category, name)          \
+#define QUERY_TRACE_END(name, category)          \
     INTERNAL_ADD_EVENT_INTO_THREAD_LOCAL_BUFFER( \
-            INTERNAL_CREATE_EVENT_WITH_CTX(category, name, 'E', starrocks::debug::tls_trace_ctx))
+            INTERNAL_CREATE_EVENT_WITH_CTX(name, category, 'E', starrocks::debug::tls_trace_ctx))
 
-#define QUERY_TRACE_SCOPED(category, name) starrocks::debug::ScopedTracer _scoped_tracer(category, name)
+#define QUERY_TRACE_SCOPED(name, category) starrocks::debug::ScopedTracer _scoped_tracer(name, category)
 
-#define QUERY_TRACE_ASYNC_START(category, name, ctx)                                                            \
+#define QUERY_TRACE_ASYNC_START(name, category, ctx)                                                            \
     do {                                                                                                        \
         INTERNAL_ADD_EVENT_INFO_BUFFER(ctx.event_buffer,                                                        \
-                                       INTERNAL_CREATE_ASYNC_EVENT_WITH_CTX(category, name, ctx.id, 'b', ctx)); \
+                                       INTERNAL_CREATE_ASYNC_EVENT_WITH_CTX(name, category, ctx.id, 'b', ctx)); \
     } while (0);
 
-#define QUERY_TRACE_ASYNC_FINISH(category, name, ctx)                                                           \
+#define QUERY_TRACE_ASYNC_FINISH(name, category, ctx)                                                           \
     do {                                                                                                        \
         INTERNAL_ADD_EVENT_INFO_BUFFER(ctx.event_buffer,                                                        \
-                                       INTERNAL_CREATE_ASYNC_EVENT_WITH_CTX(category, name, ctx.id, 'e', ctx)); \
+                                       INTERNAL_CREATE_ASYNC_EVENT_WITH_CTX(name, category, ctx.id, 'e', ctx)); \
     } while (0);
 #else
 #define SET_THREAD_LOCAL_QUERY_TRACE_CONTEXT(query_trace, fragment_instance_id, driver_ptr)
-#define QUERY_TRACE_BEGIN(category, name)
-#define QUERY_TRACE_END(category, name)
-#define QUERY_TRACE_SCOPED(category, name)
-#define QUERY_TRACE_ASYNC_START(category, name, ctx)
-#define QUERY_TRACE_ASYNC_FINISH(category, name, ctx)
+#define QUERY_TRACE_BEGIN(name, category)
+#define QUERY_TRACE_END(name, category)
+#define QUERY_TRACE_SCOPED(name, category)
+#define QUERY_TRACE_ASYNC_START(name, category, ctx)
+#define QUERY_TRACE_ASYNC_FINISH(name, category, ctx)
 #endif

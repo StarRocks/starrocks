@@ -92,12 +92,12 @@ private:
 
 class ScopedTracer {
 public:
-    ScopedTracer(const std::string& category, const std::string& name);
+    ScopedTracer(const std::string& name, const std::string& category);
     ~ScopedTracer();
 
 private:
-    std::string _category;
     std::string _name;
+    std::string _category;
     int64_t _start_ts;
     int64_t _duration;
 };
@@ -120,11 +120,11 @@ struct QueryTraceContext {
 
 inline thread_local QueryTraceContext tls_trace_ctx;
 
-#define INTERNAL_CREATE_EVENT_WITH_CTX(category, name, phase, ctx) \
-    starrocks::debug::QueryTraceEvent::create_with_ctx(category, name, -1, phase, ctx)
+#define INTERNAL_CREATE_EVENT_WITH_CTX(name, category, phase, ctx) \
+    starrocks::debug::QueryTraceEvent::create_with_ctx(name, category, -1, phase, ctx)
 
-#define INTERNAL_CREATE_ASYNC_EVENT_WITH_CTX(category, name, id, phase, ctx) \
-    starrocks::debug::QueryTraceEvent::create_with_ctx(category, name, id, phase, ctx)
+#define INTERNAL_CREATE_ASYNC_EVENT_WITH_CTX(name, category, id, phase, ctx) \
+    starrocks::debug::QueryTraceEvent::create_with_ctx(name, category, id, phase, ctx)
 
 #define INTERNAL_ADD_EVENT_INTO_THREAD_LOCAL_BUFFER(event) \
     INTERNAL_ADD_EVENT_INFO_BUFFER(starrocks::debug::tls_trace_ctx.event_buffer, event)
