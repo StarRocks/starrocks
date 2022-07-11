@@ -28,6 +28,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.DataProperty;
@@ -384,6 +385,34 @@ public class TabletScheduler extends MasterDaemon {
         LOG.info("adjust priority for all tablets. changed: {}, total: {}", changedNum, size);
     }
 
+    private boolean checkIfTabletExpired(TabletSchedCtx ctx) {
+        return checkIfTabletExpired(ctx, GlobalStateMgr.getCurrentRecycleBin(), System.currentTimeMillis());
+    }
+
+    /**
+     * make sure tablet won't expired and erased soon
+     */
+    protected boolean checkIfTabletExpired(TabletSchedCtx ctx, CatalogRecycleBin recycleBin, long currentTimeMs) {
+        // check if about to erase
+        long dbId = ctx.getDbId();
+        if (recycleBin.getDatabase(dbId) != null && !recycleBin.ensureEraseLater(dbId, currentTimeMs)) {
+            LOG.warn("discard ctx because db {} will erase soon: {}", dbId, ctx);
+            return true;
+        }
+        long tableId = ctx.getTblId();
+        if (recycleBin.getTable(dbId, tableId) != null && !recycleBin.ensureEraseLater(tableId, currentTimeMs)) {
+            LOG.warn("discard ctx because table {} will erase soon: {}", tableId, ctx);
+            return true;
+        }
+        long partitionId = ctx.getPartitionId();
+        if (recycleBin.getPartition(partitionId) != null
+                && !recycleBin.ensureEraseLater(partitionId, currentTimeMs)) {
+            LOG.warn("discard ctx because partition {} will erase soon: {}", partitionId, ctx);
+            return true;
+        }
+        return false;
+    }
+
     /**
      * get at most BATCH_NUM tablets from queue, and try to schedule them.
      * After handle, the tablet info should be
@@ -403,7 +432,6 @@ public class TabletScheduler extends MasterDaemon {
             try {
                 // reset errMsg for new scheduler round
                 tabletCtx.setErrMsg(null);
-
                 scheduleTablet(tabletCtx, batchTask);
             } catch (SchedException e) {
                 tabletCtx.increaseFailedSchedCounter();
@@ -1240,6 +1268,10 @@ public class TabletScheduler extends MasterDaemon {
             if (tablet == null) {
                 // no more tablets
                 break;
+            }
+            // ignore tablets that will expire and erase soon
+            if (checkIfTabletExpired(tablet)) {
+                continue;
             }
             list.add(tablet);
             count--;
