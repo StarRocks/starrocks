@@ -129,11 +129,9 @@ void AgentServer::Impl::init_or_die() {
     // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
     // But it seems that there's no limit for the number of tablets of a partition.
     // Since a large queue size brings a little overhead, a big one is chosen here.
-    BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version",
+    BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", config::transaction_publish_version_worker_count,
                                    config::transaction_publish_version_worker_count,
-                                   config::transaction_publish_version_worker_count,
-                                   DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
-                                   _thread_pool_publish_version);
+                                   DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_publish_version);
 #ifndef BE_TEST
     // Currently FE can have at most num_of_storage_path * schedule_slot_num_per_path(default 2) clone tasks
     // scheduled simultaneously, but previously we have only 3 clone worker threads by default,

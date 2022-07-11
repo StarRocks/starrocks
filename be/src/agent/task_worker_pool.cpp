@@ -1466,7 +1466,7 @@ void* TaskWorkerPool::_release_snapshot_thread_callback(void* arg_this) {
 }
 
 AgentStatus TaskWorkerPool::get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
-                                             TTabletInfo* tablet_info) {
+                                            TTabletInfo* tablet_info) {
     AgentStatus status = STARROCKS_SUCCESS;
 
     tablet_info->__set_tablet_id(tablet_id);
