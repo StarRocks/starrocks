@@ -244,20 +244,6 @@ public class StarOSAgent {
         }
     }
 
-    public List<ShardInfo> getShards(List<Long> shardIds) {
-        prepare();
-        List<ShardInfo> shardInfos = null;
-        try {
-            shardInfos = client.getShardInfo(serviceId, shardIds);
-            for (ShardInfo shardInfo : shardInfos) {
-                LOG.info("shardId in getShards is {}", shardInfo.getShardId());
-            }
-        } catch (StarClientException e) {
-            LOG.warn("Failed to get shards. error: {}", e.getMessage());
-        }
-        return shardInfos;
-    }
-
     public void deleteShards(Set<Long> shardIds) throws DdlException {
         // for debug
         LOG.info("deleteShards");
