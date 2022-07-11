@@ -5,25 +5,30 @@ package com.starrocks.scheduler;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.Util;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.Future;
 import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 public class TaskRunManager {
 
     private static final Logger LOG = LogManager.getLogger(TaskRunManager.class);
 
     // taskId -> pending TaskRun Queue, for each Task only support 1 running taskRun currently,
-    // so the map value is FIFO queue need to be sorted by priority from large to small
+    // so the map value is priority queue need to be sorted by priority from large to small
     private final Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = Maps.newConcurrentMap();
 
     // taskId -> running TaskRun, for each Task only support 1 running taskRun currently,
@@ -36,7 +41,9 @@ public class TaskRunManager {
     // Use to execute actual TaskRun
     private final TaskRunExecutor taskRunExecutor = new TaskRunExecutor();
 
-    public SubmitResult submitTaskRun(TaskRun taskRun, int priority) {
+    private final QueryableReentrantLock taskRunLock = new QueryableReentrantLock(true);
+
+    public SubmitResult submitTaskRun(TaskRun taskRun, ExecuteOption option) {
         // duplicate submit
         if (taskRun.getStatus() != null) {
             return new SubmitResult(taskRun.getStatus().getQueryId(), SubmitResult.SubmitStatus.FAILED);
@@ -57,14 +64,78 @@ public class TaskRunManager {
 
         String queryId = UUIDUtil.genUUID().toString();
         TaskRunStatus status = taskRun.initStatus(queryId, System.currentTimeMillis());
-        status.setPriority(priority);
+        status.setPriority(option.getPriority());
+        status.setMergeRedundant(option.isMergeRedundant());
         GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(status);
-        long taskId = taskRun.getTaskId();
-
-        PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.computeIfAbsent(taskId,
-                u -> Queues.newPriorityBlockingQueue());
-        taskRuns.offer(taskRun);
+        arrangeTaskRun(taskRun, option.isMergeRedundant());
         return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED);
+    }
+
+
+    public boolean killTaskRun(Long taskId) {
+        TaskRun taskRun = runningTaskRunMap.get(taskId);
+        if (taskRun == null) {
+            return false;
+        }
+        ConnectContext runCtx = taskRun.getRunCtx();
+        if (runCtx != null) {
+            runCtx.kill(false);
+            return true;
+        }
+        return false;
+    }
+
+    // At present, only the manual and automatic tasks of the materialized view have different priorities.
+    // The manual priority is higher. For manual tasks, we do not merge operations.
+    // For automatic tasks, we will compare the definition, and if they are the same,
+    // we will perform the merge operation.
+    public void arrangeTaskRun(TaskRun taskRun, boolean mergeRedundant) {
+        if (!tryTaskRunLock()) {
+            return;
+        }
+        try {
+            long taskId = taskRun.getTaskId();
+            PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.computeIfAbsent(taskId,
+                    u -> Queues.newPriorityBlockingQueue());
+            if (mergeRedundant) {
+                TaskRun oldTaskRun = getTaskRun(taskRuns, taskRun);
+                if (oldTaskRun != null) {
+                    // The remove here is actually remove the old TaskRun.
+                    // Note that the old TaskRun and new TaskRun may have the same definition,
+                    // but other attributes may be different, such as priority, creation time.
+                    // higher priority and create time will be result after merge is complete
+                    // and queryId will be change.
+                    boolean isRemove = taskRuns.remove(taskRun);
+                    if (!isRemove) {
+                        LOG.warn("failed to remove TaskRun definition is [{}]",
+                                taskRun.getStatus().getDefinition());
+                    }
+                    if (oldTaskRun.getStatus().getPriority() > taskRun.getStatus().getPriority()) {
+                        taskRun.getStatus().setPriority(oldTaskRun.getStatus().getPriority());
+                    }
+                    if (oldTaskRun.getStatus().getCreateTime() > taskRun.getStatus().getCreateTime()) {
+                        taskRun.getStatus().setCreateTime(oldTaskRun.getStatus().getCreateTime());
+                    }
+                }
+            }
+            taskRuns.offer(taskRun);
+        } finally {
+            taskRunUnlock();
+        }
+    }
+
+    // Because java PriorityQueue does not provide an interface for searching by element,
+    // so find it by code O(n), which can be optimized later
+    @Nullable
+    private TaskRun getTaskRun(PriorityBlockingQueue<TaskRun> taskRuns, TaskRun taskRun) {
+        TaskRun oldTaskRun = null;
+        for (TaskRun run : taskRuns) {
+            if (run.equals(taskRun)) {
+                oldTaskRun = run;
+                break;
+            }
+        }
+        return oldTaskRun;
     }
 
     // check if a running TaskRun is complete and remove it from running TaskRun map
@@ -116,6 +187,30 @@ public class TaskRunManager {
                 }
             }
         }
+    }
+
+    public boolean tryTaskRunLock() {
+        try {
+            if (!taskRunLock.tryLock(5, TimeUnit.SECONDS)) {
+                Thread owner = taskRunLock.getOwner();
+                if (owner != null) {
+                    LOG.warn("task run lock is held by: {}", () -> Util.dumpThread(owner, 50));
+                } else {
+                    LOG.warn("task run lock owner is null");
+                }
+                return false;
+            }
+            return true;
+        } catch (InterruptedException e) {
+            LOG.warn("got exception while getting task run lock", e);
+            Thread.currentThread().interrupt();
+        }
+        return false;
+    }
+
+
+    public void taskRunUnlock() {
+        this.taskRunLock.unlock();
     }
 
     public Map<Long, PriorityBlockingQueue<TaskRun>> getPendingTaskRunMap() {

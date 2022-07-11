@@ -229,9 +229,8 @@ public class LimitTest extends PlanTestBase {
         String sql = "select * from (select v1, v2 from t0 limit 10) a join [broadcast] " +
                 "(select v1, v2 from t0 limit 1) b on a.v1 = b.v1";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("    EXCHANGE ID: 03\n" +
-                "    UNPARTITIONED"));
-
+        assertContains(plan, "    EXCHANGE ID: 04\n" +
+                "    UNPARTITIONED");
     }
 
     @Test
@@ -250,9 +249,15 @@ public class LimitTest extends PlanTestBase {
                 "(select v1, v2 from t0 limit 1) b on a.v1 = b.v1";
         String plan = getFragmentPlan(sql);
         assertContains(plan, ("join op: INNER JOIN (PARTITIONED)"));
-        assertContains(plan, ("  |----5:EXCHANGE\n" +
-                "  |       limit: 1"));
-        assertContains(plan, ("  2:EXCHANGE\n" +
+        assertContains(plan, ("  6:SELECT\n" +
+                "  |  predicates: 4: v1 IS NOT NULL\n" +
+                "  |  \n" +
+                "  5:EXCHANGE\n" +
+                "     limit: 1"));
+        assertContains(plan, ("  2:SELECT\n" +
+                "  |  predicates: 1: v1 IS NOT NULL\n" +
+                "  |  \n" +
+                "  1:EXCHANGE\n" +
                 "     limit: 10"));
     }
 

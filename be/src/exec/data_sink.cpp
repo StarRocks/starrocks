@@ -43,29 +43,29 @@ namespace starrocks {
 
 static std::unique_ptr<DataStreamSender> create_data_stream_sink(
         RuntimeState* state, const TDataStreamSink& data_stream_sink, const RowDescriptor& row_desc,
-        const TPlanFragmentExecParams& params, const std::vector<TPlanFragmentDestination>& destinations) {
+        const TPlanFragmentExecParams& params, int32_t sender_id,
+        const std::vector<TPlanFragmentDestination>& destinations) {
     bool send_query_statistics_with_every_batch =
             params.__isset.send_query_statistics_with_every_batch && params.send_query_statistics_with_every_batch;
     bool enable_exchange_pass_through =
             params.__isset.enable_exchange_pass_through && params.enable_exchange_pass_through;
     // TODO: figure out good buffer size based on size of output row
-    auto ret = std::make_unique<DataStreamSender>(state, params.sender_id, row_desc, data_stream_sink, destinations,
-                                                  16 * 1024, send_query_statistics_with_every_batch,
-                                                  enable_exchange_pass_through);
+    auto ret = std::make_unique<DataStreamSender>(state, sender_id, row_desc, data_stream_sink, destinations, 16 * 1024,
+                                                  send_query_statistics_with_every_batch, enable_exchange_pass_through);
     return ret;
 }
 
 Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_sink,
                                   const std::vector<TExpr>& output_exprs, const TPlanFragmentExecParams& params,
-                                  const RowDescriptor& row_desc, std::unique_ptr<DataSink>* sink) {
+                                  int32_t sender_id, const RowDescriptor& row_desc, std::unique_ptr<DataSink>* sink) {
     DCHECK(sink != nullptr);
     switch (thrift_sink.type) {
     case TDataSinkType::DATA_STREAM_SINK: {
         if (!thrift_sink.__isset.stream_sink) {
             return Status::InternalError("Missing data stream sink.");
         }
-        *sink = std::move(
-                create_data_stream_sink(state, thrift_sink.stream_sink, row_desc, params, params.destinations));
+        *sink = std::move(create_data_stream_sink(state, thrift_sink.stream_sink, row_desc, params, sender_id,
+                                                  params.destinations));
         break;
     }
     case TDataSinkType::RESULT_SINK:
@@ -114,7 +114,7 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         for (size_t i = 0; i < thrift_mcast_stream_sink.sinks.size(); i++) {
             const auto& sink = thrift_mcast_stream_sink.sinks[i];
             const auto& destinations = thrift_mcast_stream_sink.destinations[i];
-            auto ret = create_data_stream_sink(state, sink, row_desc, params, destinations);
+            auto ret = create_data_stream_sink(state, sink, row_desc, params, sender_id, destinations);
             mcast_data_stream_sink->add_data_stream_sink(std::move(ret));
         }
         *sink = std::move(mcast_data_stream_sink);

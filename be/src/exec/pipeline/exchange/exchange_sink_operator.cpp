@@ -60,7 +60,8 @@ public:
     // Channel will sent input request directly without batch it.
     // This function is only used when broadcast, because request can be reused
     // by all the channels.
-    Status send_chunk_request(PTransmitChunkParamsPtr chunk_request, const butil::IOBuf& attachment);
+    Status send_chunk_request(PTransmitChunkParamsPtr chunk_request, const butil::IOBuf& attachment,
+                              int64_t attachment_physical_bytes);
 
     // Used when doing shuffle.
     // This function will copy selective rows in chunks to batch.
@@ -224,8 +225,9 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
         _chunk_request->set_eos(eos);
         _chunk_request->set_use_pass_through(_use_pass_through);
         butil::IOBuf attachment;
-        _parent->construct_brpc_attachment(_chunk_request, attachment);
-        TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment};
+        int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
+        TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment,
+                                  attachment_physical_bytes};
         _parent->_buffer->add_request(info);
         _current_request_bytes = 0;
         _chunk_request.reset();
@@ -236,14 +238,16 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
 }
 
 Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr chunk_request,
-                                                         const butil::IOBuf& attachment) {
+                                                         const butil::IOBuf& attachment,
+                                                         int64_t attachment_physical_bytes) {
     chunk_request->set_node_id(_dest_node_id);
     chunk_request->set_sender_id(_parent->_sender_id);
     chunk_request->set_be_number(_parent->_be_number);
     chunk_request->set_eos(false);
     chunk_request->set_use_pass_through(_use_pass_through);
 
-    TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment};
+    TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment,
+                              attachment_physical_bytes};
     _parent->_buffer->add_request(info);
 
     return Status::OK();
@@ -284,7 +288,6 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
           _buffer(buffer),
           _part_type(part_type),
           _destinations(destinations),
-          _is_pipeline_level_shuffle(is_pipeline_level_shuffle),
           _num_shuffles_per_channel(num_shuffles_per_channel > 0 ? num_shuffles_per_channel : 1),
           _sender_id(sender_id),
           _dest_node_id(dest_node_id),
@@ -332,6 +335,8 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
         }
     }
     _num_shuffles = _channels.size() * _num_shuffles_per_channel;
+
+    _is_pipeline_level_shuffle = is_pipeline_level_shuffle && (_num_shuffles > 1);
 }
 
 Status ExchangeSinkOperator::prepare(RuntimeState* state) {
@@ -455,11 +460,12 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
             // 3. if request bytes exceede the threshold, send current request
             if (_current_request_bytes > config::max_transmit_batched_bytes) {
                 butil::IOBuf attachment;
-                construct_brpc_attachment(_chunk_request, attachment);
+                int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
                 for (auto idx : _channel_indices) {
                     if (!_channels[idx]->use_pass_through()) {
                         PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-                        RETURN_IF_ERROR(_channels[idx]->send_chunk_request(copy, attachment));
+                        RETURN_IF_ERROR(
+                                _channels[idx]->send_chunk_request(copy, attachment, attachment_physical_bytes));
                     }
                 }
                 _current_request_bytes = 0;
@@ -572,10 +578,10 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
 
     if (_chunk_request != nullptr) {
         butil::IOBuf attachment;
-        construct_brpc_attachment(_chunk_request, attachment);
+        int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
         for (const auto& [_, channel] : _instance_id2channel) {
             PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-            channel->send_chunk_request(copy, attachment);
+            channel->send_chunk_request(copy, attachment, attachment_physical_bytes);
         }
         _current_request_bytes = 0;
         _chunk_request.reset();
@@ -658,17 +664,25 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
     return Status::OK();
 }
 
-void ExchangeSinkOperator::construct_brpc_attachment(PTransmitChunkParamsPtr chunk_request, butil::IOBuf& attachment) {
+int64_t ExchangeSinkOperator::construct_brpc_attachment(PTransmitChunkParamsPtr chunk_request,
+                                                        butil::IOBuf& attachment) {
+    int64_t attachment_physical_bytes = 0;
     for (int i = 0; i < chunk_request->chunks().size(); ++i) {
         auto chunk = chunk_request->mutable_chunks(i);
         chunk->set_data_size(chunk->data().size());
+
+        int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
         attachment.append(chunk->data());
+        attachment_physical_bytes += CurrentThread::current().get_consumed_bytes() - before_bytes;
+
         chunk->clear_data();
         // If the request is too big, free the memory in order to avoid OOM
         if (_is_large_chunk(chunk->data_size())) {
             chunk->mutable_data()->shrink_to_fit();
         }
     }
+
+    return attachment_physical_bytes;
 }
 
 ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(

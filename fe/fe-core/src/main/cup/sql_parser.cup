@@ -308,7 +308,7 @@ nonterminal SelectStmt select_stmt;
 nonterminal ValueList value_clause;
 
 // No return.
-nonterminal describe_command, opt_full, opt_inner, opt_outer, from_or_in, keys_or_index, opt_storage, opt_wild_where,
+nonterminal opt_full, opt_inner, opt_outer, from_or_in, keys_or_index, opt_storage, opt_wild_where,
             charset, equal, transaction_characteristics, isolation_level,
             transaction_access_mode, isolation_types, insert_ignore;
 
@@ -974,14 +974,6 @@ alter_table_clause ::=
     | KW_REPLACE opt_partition_names:partitions KW_WITH opt_partition_names:tempPartitions opt_properties:properties
     {:
         RESULT = new ReplacePartitionClause(partitions, tempPartitions, properties);
-    :}
-    | KW_SWAP KW_WITH ident:tblName
-    {:
-        RESULT = new SwapTableClause(tblName);
-    :}
-    | KW_RENAME ident:newTableName
-    {:
-        RESULT = new TableRenameClause(newTableName);
     :}
     | KW_RENAME KW_ROLLUP ident:rollupName ident:newRollupName
     {:
@@ -1742,10 +1734,6 @@ recover_stmt ::=
     | KW_RECOVER KW_SCHEMA ident:dbName
     {:
         RESULT = new RecoverDbStmt(dbName);
-    :}
-    | KW_RECOVER KW_TABLE table_name:dbTblName
-    {:
-        RESULT = new RecoverTableStmt(dbTblName);
     :}
     | KW_RECOVER KW_PARTITION ident:partitionName KW_FROM table_name:dbTblName
     {:
@@ -2756,33 +2744,6 @@ opt_explain_level ::=
          RESULT = StatementBase.ExplainLevel.LOGICAL;
      :}
      ;
-
-// Describe statement
-describe_stmt ::=
-    describe_command table_name:table
-    {:
-        RESULT = new DescribeStmt(table, false);
-    :}
-    | describe_command table_name:table KW_ALL
-    {:
-        RESULT = new DescribeStmt(table, true);
-    :}
-    | describe_command opt_explain_level:explain_level query_stmt:query
-     {:
-         query.setIsExplain(true, explain_level);
-         RESULT = query;
-     :}
-    | describe_command insert_stmt:stmt
-    {:
-        stmt.getQueryStmt().setIsExplain(true);
-        RESULT = stmt;
-    :}
-    ;
-
-describe_command ::=
-    KW_DESCRIBE
-    | KW_DESC
-    ;
 
 // Cancel statement
 cancel_stmt ::=

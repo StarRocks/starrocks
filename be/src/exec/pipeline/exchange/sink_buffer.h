@@ -37,6 +37,7 @@ struct TransmitChunkInfo {
     doris::PBackendService_Stub* brpc_stub;
     PTransmitChunkParamsPtr params;
     butil::IOBuf attachment;
+    int64_t attachment_physical_bytes;
 };
 
 struct ClosureContext {
@@ -109,7 +110,7 @@ private:
     int64_t _network_time();
 
     FragmentContext* _fragment_ctx;
-    const MemTracker* _mem_tracker;
+    MemTracker* const _mem_tracker;
     const int32_t _brpc_timeout_ms;
     const bool _is_dest_merge;
 

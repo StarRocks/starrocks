@@ -332,7 +332,7 @@ private:
 };
 
 StatusOr<vectorized::ChunkIteratorPtr> Rowset::new_iterator(const vectorized::Schema& schema,
-                                                            const vectorized::RowsetReadOptions& options) {
+                                                            const RowsetReadOptions& options) {
     std::vector<vectorized::ChunkIteratorPtr> seg_iters;
     RETURN_IF_ERROR(get_segment_iterators(schema, options, &seg_iters));
     if (seg_iters.empty()) {
@@ -344,7 +344,7 @@ StatusOr<vectorized::ChunkIteratorPtr> Rowset::new_iterator(const vectorized::Sc
     }
 }
 
-Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const vectorized::RowsetReadOptions& options,
+Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const RowsetReadOptions& options,
                                      std::vector<vectorized::ChunkIteratorPtr>* segment_iterators) {
     RowsetReleaseGuard guard(shared_from_this());
 
@@ -382,7 +382,7 @@ Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const vec
     for (ColumnId cid : delete_columns) {
         const TabletColumn& col = options.tablet_schema->column(cid);
         if (segment_schema.get_field_by_name(std::string(col.name())) == nullptr) {
-            auto f = vectorized::ChunkHelper::convert_field_to_format_v2(cid, col);
+            auto f = ChunkHelper::convert_field_to_format_v2(cid, col);
             segment_schema.append(std::make_shared<vectorized::Field>(std::move(f)));
         }
     }

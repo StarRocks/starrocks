@@ -3,9 +3,10 @@ on:
   push:
     branches:
       - main
-  pull_request_target:
-#  pull_request:
-#    types: [opened, synchronize, reopened]
+  pull_request:
+    paths:
+      - 'fe/**.java'
+      - 'fe/**.xml'
   
 jobs:
   build:
@@ -40,21 +41,10 @@ jobs:
         with:
           version: 0.13.0
           
-      - name: Changed Java Files
-        id: java-changes
-        uses: tj-actions/changed-files@main
-        with:
-          sha: "${{ github.pull_request.sha }}"
-          base_sha: "${{ github.sha }}"
-          files: |
-            **/*.java
-            **/*.xml
-          
       - name: Analyze FE
-        if: steps.java-changes.outputs.any_changed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: 391d6539e2d09aed3d187353bfd85fefa7a4c281 # ${{ secrets.SONAR_TOKEN }}
         run: |
           cd fe
-          mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }}
+          mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}

@@ -59,9 +59,9 @@ public:
         return Status::OK();
     }
     Status open(RuntimeState* state) {
-        if (_is_open) return Status::OK();
+        if (_opened) return Status::OK();
         RETURN_IF_ERROR(_data_source->open(state));
-        _is_open = true;
+        _opened = true;
         return Status::OK();
     }
     void close(RuntimeState* state) { _data_source->close(state); }
@@ -74,7 +74,7 @@ public:
     int64_t num_rows_read() const { return _data_source->num_rows_read(); }
     void set_keep_priority(bool v) { _keep_priority = v; }
     bool keep_priority() const { return _keep_priority; }
-    bool is_open() { return _is_open; }
+    bool is_open() { return _opened; }
 
     RuntimeState* runtime_state() { return _runtime_state; }
 
@@ -102,7 +102,7 @@ public:
 private:
     connector::DataSourcePtr _data_source = nullptr;
     RuntimeState* _runtime_state = nullptr;
-    bool _is_open = false;
+    bool _opened = false;
     bool _keep_priority = false;
     std::atomic_bool _pending_token = false;
     MonotonicStopWatch _pending_queue_sw;
@@ -114,6 +114,7 @@ ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, c
         : ScanNode(pool, tnode, descs) {
     _name = "connector_scan";
     auto c = connector::ConnectorManager::default_instance()->get(tnode.connector_scan_node.connector_name);
+    _connector_type = c->connector_type();
     _data_source_provider = c->create_data_source_provider(this, tnode);
 }
 
@@ -162,15 +163,15 @@ Status ConnectorScanNode::open(RuntimeState* state) {
 }
 
 Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
-    for (const TScanRangeParams& scan_range : _scan_ranges) {
+    for (TScanRangeParams& scan_range : _scan_ranges) {
         _create_and_init_scanner(state, scan_range.scan_range);
     }
 
     // init chunk pool
     _pending_scanners.reverse();
     _num_scanners = _pending_scanners.size();
-    _chunks_per_scanner = config::doris_scanner_row_num / state->chunk_size();
-    _chunks_per_scanner += static_cast<int>(config::doris_scanner_row_num % state->chunk_size() != 0);
+    _chunks_per_scanner = config::scanner_row_num / state->chunk_size();
+    _chunks_per_scanner += static_cast<int>(config::scanner_row_num % state->chunk_size() != 0);
     int concurrency = std::min<int>(config::max_hdfs_scanner_num, _num_scanners);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
@@ -185,7 +186,10 @@ Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, const TScanRange& scan_range) {
+Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, TScanRange& scan_range) {
+    if (scan_range.__isset.broker_scan_range) {
+        scan_range.broker_scan_range.params.__set_non_blocking_read(false);
+    }
     connector::DataSourcePtr data_source = _data_source_provider->create_data_source(scan_range);
     data_source->set_predicates(_conjunct_ctxs);
     data_source->set_runtime_filters(&_runtime_filter_collector);
@@ -367,7 +371,7 @@ void ConnectorScanNode::_scanner_thread(ConnectorScanner* scanner) {
     scanner->set_keep_priority(false);
 
     bool resubmit = false;
-    int64_t raw_rows_threshold = scanner->raw_rows_read() + config::doris_scanner_row_num;
+    int64_t raw_rows_threshold = scanner->raw_rows_read() + config::scanner_row_num;
 
     ChunkPtr chunk = nullptr;
 
@@ -517,7 +521,6 @@ Status ConnectorScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& s
         // to create at least one data source
         _scan_ranges.emplace_back(TScanRangeParams());
     }
-    COUNTER_UPDATE(_profile.scan_ranges_counter, scan_ranges.size());
     return Status::OK();
 }
 
@@ -528,7 +531,6 @@ bool ConnectorScanNode::accept_empty_scan_ranges() const {
 void ConnectorScanNode::_init_counter() {
     _profile.scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
     _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
-    _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
 }
 
 } // namespace starrocks::vectorized

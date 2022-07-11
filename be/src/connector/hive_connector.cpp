@@ -181,7 +181,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
 
     _profile.scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
-    _profile.scan_files_counter = ADD_COUNTER(_runtime_profile, "ScanFiles", TUnit::UNIT);
+    _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
 
     _profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
     _profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
@@ -208,7 +208,6 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
     const auto& scan_range = _scan_range;
-    COUNTER_UPDATE(_profile.scan_files_counter, 1);
     std::string native_file_path = scan_range.full_path;
     if (_lake_table != nullptr && _lake_table->has_partition()) {
         auto* partition_desc = _lake_table->get_partition(scan_range.partition_id);
@@ -222,6 +221,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path));
 
+    COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
     HdfsScannerParams scanner_params;
     scanner_params.runtime_filter_collector = _runtime_filters;
     scanner_params.scan_ranges = {&scan_range};

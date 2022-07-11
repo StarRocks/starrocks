@@ -30,7 +30,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
     unique_ptr<vectorized::Column> dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1000;
-    auto pchunk = vectorized::ChunkHelper::new_chunk(*sc, n);
+    auto pchunk = ChunkHelper::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
         vectorized::Datum tmp;
         tmp.set_int32(i * 2343);
@@ -51,7 +51,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
     unique_ptr<vectorized::Column> dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1000;
-    auto pchunk = vectorized::ChunkHelper::new_chunk(*sc, n);
+    auto pchunk = ChunkHelper::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
         vectorized::Datum tmp;
         tmp.set_int128(i * 2343);
@@ -77,7 +77,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
     unique_ptr<vectorized::Column> dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1;
-    auto pchunk = vectorized::ChunkHelper::new_chunk(*sc, n);
+    auto pchunk = ChunkHelper::new_chunk(*sc, n);
     for (int i = 0; i < n; i++) {
         vectorized::Datum tmp;
         tmp.set_int32(i * 2343);
@@ -119,7 +119,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
         auto sc = create_key_schema(
                 {OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_SMALLINT, OLAP_FIELD_TYPE_BOOL});
         const int n = 1;
-        auto pchunk = vectorized::ChunkHelper::new_chunk(*sc, n);
+        auto pchunk = ChunkHelper::new_chunk(*sc, n);
         vectorized::Datum tmp;
         tmp.set_int32(42);
         pchunk->columns()[0]->append_datum(tmp);
@@ -139,7 +139,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
         auto sc = create_key_schema(
                 {OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_SMALLINT, OLAP_FIELD_TYPE_BOOL});
         const int n = 1;
-        auto pchunk = vectorized::ChunkHelper::new_chunk(*sc, n);
+        auto pchunk = ChunkHelper::new_chunk(*sc, n);
         vectorized::Datum tmp;
         tmp.set_int32(42);
         pchunk->columns()[0]->append_datum(tmp);

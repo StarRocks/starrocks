@@ -126,7 +126,6 @@ Status HdfsScanner::_build_scanner_context() {
 
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     RETURN_IF_CANCELLED(_runtime_state);
-    SCOPED_RAW_TIMER(&_stats.scan_ns);
     Status status = do_get_next(runtime_state, chunk);
     if (status.ok()) {
         if (!_conjunct_ctxs.empty()) {
@@ -143,7 +142,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
 }
 
 Status HdfsScanner::open(RuntimeState* runtime_state) {
-    if (_is_open) {
+    if (_opened) {
         return Status::OK();
     }
     CHECK(_file == nullptr) << "File has already been opened";
@@ -153,7 +152,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     _build_scanner_context();
     auto status = do_open(runtime_state);
     if (status.ok()) {
-        _is_open = true;
+        _opened = true;
         if (_scanner_params.open_limit != nullptr) {
             _scanner_params.open_limit->fetch_add(1, std::memory_order_relaxed);
         }
@@ -165,7 +164,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
 void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     DCHECK(!has_pending_token());
     bool expect = false;
-    if (!_is_closed.compare_exchange_strong(expect, true)) return;
+    if (!_closed.compare_exchange_strong(expect, true)) return;
     update_counter();
     Expr::close(_conjunct_ctxs, runtime_state);
     Expr::close(_min_max_conjunct_ctxs, runtime_state);
@@ -175,7 +174,7 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     do_close(runtime_state);
     _file.reset(nullptr);
     _raw_file.reset(nullptr);
-    if (_is_open && _scanner_params.open_limit != nullptr) {
+    if (_opened && _scanner_params.open_limit != nullptr) {
         _scanner_params.open_limit->fetch_sub(1, std::memory_order_relaxed);
     }
 }
@@ -221,9 +220,7 @@ void HdfsScanner::update_counter() {
 
     update_hdfs_counter(profile);
 
-    COUNTER_UPDATE(profile->scan_timer, _stats.scan_ns);
     COUNTER_UPDATE(profile->reader_init_timer, _stats.reader_init_ns);
-
     COUNTER_UPDATE(profile->rows_read_counter, _stats.raw_rows_read);
     COUNTER_UPDATE(profile->bytes_read_counter, _stats.bytes_read);
     COUNTER_UPDATE(profile->expr_filter_timer, _stats.expr_filter_ns);

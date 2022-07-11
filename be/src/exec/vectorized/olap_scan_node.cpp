@@ -246,7 +246,7 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
     // judge if we need to yield. So we record all raw data read in this round
     // scan, if this exceed threshold, we yield this thread.
     bool resubmit = false;
-    int64_t raw_rows_threshold = scanner->raw_rows_read() + config::doris_scanner_row_num;
+    int64_t raw_rows_threshold = scanner->raw_rows_read() + config::scanner_row_num;
     while (status.ok()) {
         ChunkPtr chunk;
         {
@@ -344,8 +344,8 @@ void OlapScanNode::enable_shared_scan(bool enable) {
 }
 
 StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_queue(
-        const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams& request,
-        size_t num_total_scan_ranges) {
+        const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
+        bool enable_tablet_internal_parallel, size_t num_total_scan_ranges) {
     pipeline::Morsels morsels;
     for (const auto& scan_range : scan_ranges) {
         morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
@@ -357,17 +357,14 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
     }
 
     // Disable by the session variable shouldn't use tablet internal parallel.
-    const auto& query_options = request.query_options;
-    bool enable =
-            query_options.__isset.enable_tablet_internal_parallel && query_options.enable_tablet_internal_parallel;
-    if (!enable) {
+    if (!enable_tablet_internal_parallel) {
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
     }
 
     int64_t scan_dop;
     int64_t splitted_scan_rows;
-    ASSIGN_OR_RETURN(auto could, _could_tablet_internal_parallel(scan_ranges, request, num_total_scan_ranges, &scan_dop,
-                                                                 &splitted_scan_rows));
+    ASSIGN_OR_RETURN(auto could, _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
+                                                                 &scan_dop, &splitted_scan_rows));
     if (!could) {
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
     }
@@ -382,13 +379,10 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
 }
 
 StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
-                                                             const TExecPlanFragmentParams& request,
-                                                             size_t num_total_scan_ranges, int64_t* scan_dop,
-                                                             int64_t* splitted_scan_rows) const {
+                                                             int32_t pipeline_dop, size_t num_total_scan_ranges,
+                                                             int64_t* scan_dop, int64_t* splitted_scan_rows) const {
     // The enough number of tablets shouldn't use tablet internal parallel.
-    int32_t dop = request.__isset.pipeline_dop ? request.pipeline_dop : 0;
-    dop = ExecEnv::GetInstance()->calc_pipeline_dop(dop);
-    if (num_total_scan_ranges >= dop) {
+    if (num_total_scan_ranges >= pipeline_dop) {
         return false;
     }
 
@@ -405,9 +399,9 @@ StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<T
                      std::min(*splitted_scan_rows, config::tablet_internal_parallel_max_splitted_scan_rows));
     // scan_dop is restricted in the range [1, dop].
     *scan_dop = num_table_rows / *splitted_scan_rows;
-    *scan_dop = std::max<int64_t>(1, std::min<int64_t>(*scan_dop, dop));
+    *scan_dop = std::max<int64_t>(1, std::min<int64_t>(*scan_dop, pipeline_dop));
 
-    bool could = *scan_dop >= dop || *scan_dop >= config::tablet_internal_parallel_min_scan_dop;
+    bool could = *scan_dop >= pipeline_dop || *scan_dop >= config::tablet_internal_parallel_min_scan_dop;
     return could;
 }
 
@@ -447,7 +441,7 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
     if (query_options.__isset.max_scan_key_num && query_options.max_scan_key_num > 0) {
         max_scan_key_num = query_options.max_scan_key_num;
     } else {
-        max_scan_key_num = config::doris_max_scan_key_num;
+        max_scan_key_num = config::max_scan_key_num;
     }
     bool scan_keys_unlimited = (limit() == -1);
     bool enable_column_expr_predicate = false;
@@ -614,8 +608,8 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     }
     _pending_scanners.reverse();
     _num_scanners = _pending_scanners.size();
-    _chunks_per_scanner = config::doris_scanner_row_num / runtime_state()->chunk_size();
-    _chunks_per_scanner += (config::doris_scanner_row_num % runtime_state()->chunk_size() != 0);
+    _chunks_per_scanner = config::scanner_row_num / runtime_state()->chunk_size();
+    _chunks_per_scanner += (config::scanner_row_num % runtime_state()->chunk_size() != 0);
     // TODO: dynamic submit stragety
     int concurrency = _scanner_concurrency();
     COUNTER_SET(_task_concurrency, (int64_t)concurrency);

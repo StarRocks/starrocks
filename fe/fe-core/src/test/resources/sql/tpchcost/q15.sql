@@ -168,6 +168,7 @@ OutPut Exchange Id: 15
 
 14:AGGREGATE (merge finalize)
 |  aggregate: max[([47: max, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
+|  having: 47: max IS NOT NULL
 |  cardinality: 1
 |  column statistics:
 |  * max-->[810.9, 120725.0156485172, 0.0, 8.0, 1.0] ESTIMATE

@@ -58,6 +58,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     private static final LocalDateTime MAX_DATETIME = LocalDateTime.of(9999, 12, 31, 23, 59, 59);
     private static final LocalDateTime MIN_DATETIME = LocalDateTime.of(0, 1, 1, 0, 0, 0);
 
+    public static final ConstantOperator TRUE = ConstantOperator.createBoolean(true);
+
     // Don't need fixWidth
     private static final DateTimeFormatter DATE_TIME_FORMATTER_MS =
             DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.")

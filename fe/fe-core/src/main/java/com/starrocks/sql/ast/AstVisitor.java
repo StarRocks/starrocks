@@ -37,6 +37,7 @@ import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -61,10 +62,12 @@ import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RecoverDbStmt;
+import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
+import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
@@ -76,6 +79,7 @@ import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
@@ -144,9 +148,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
 
     public R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
         return visitStatement(statement, context);
@@ -162,10 +163,6 @@ public abstract class AstVisitor<R, C> {
 
     public R visitBaseViewStatement(BaseViewStmt statement, C context) {
         return visitStatement(statement, context);
-    }
-
-    public R visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, C context) {
-        return visitDDLStatement(statement, context);
     }
 
     public R visitCreateTableStatement(CreateTableStmt statement, C context) {
@@ -252,6 +249,10 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    public R visitRecoverTableStatement(RecoverTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     public R visitShowDatabasesStmt(ShowDbStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -305,11 +306,29 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitShowDataStmt(ShowDataStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     public R visitRecoverDbStmt(RecoverDbStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
     public R visitKillStatement(KillStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ------------------------------------------- Analyze Statement ---------------------------------------------------
+
+    public R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitDropHistogramStatement(DropHistogramStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -358,6 +377,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitModifyBackendHostClause(ModifyBackendAddressClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitSwapTableClause(SwapTableClause clause, C context) {
         return visitNode(clause, context);
     }
 
@@ -541,6 +564,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitGroupByClause(GroupByClause node, C context) {
         return null;
+    }
+
+    public R visitDescTableStmt(DescribeStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
 }

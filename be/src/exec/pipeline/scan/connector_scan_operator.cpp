@@ -96,20 +96,28 @@ ChunkPtr ConnectorScanOperator::get_chunk_from_buffer() {
     return nullptr;
 }
 
+connector::ConnectorType ConnectorScanOperator::connector_type() {
+    auto* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
+    return scan_node->connector_type();
+}
+
 // ==================== ConnectorChunkSource ====================
 ConnectorChunkSource::ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile,
                                            MorselPtr&& morsel, ScanOperator* op,
                                            vectorized::ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
-        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel)),
+        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), chunk_buffer),
           _scan_node(scan_node),
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),
-          _runtime_bloom_filters(op->runtime_bloom_filters()),
-          _chunk_buffer(chunk_buffer) {
+          _runtime_bloom_filters(op->runtime_bloom_filters()) {
     _conjunct_ctxs = scan_node->conjunct_ctxs();
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
     ScanMorsel* scan_morsel = (ScanMorsel*)_morsel.get();
-    const TScanRange* scan_range = scan_morsel->get_scan_range();
+    TScanRange* scan_range = scan_morsel->get_scan_range();
+
+    if (scan_range->__isset.broker_scan_range) {
+        scan_range->broker_scan_range.params.__set_non_blocking_read(true);
+    }
     _data_source = scan_node->data_source_provider()->create_data_source(*scan_range);
     _data_source->set_predicates(_conjunct_ctxs);
     _data_source->set_runtime_filters(_runtime_bloom_filters);
@@ -124,9 +132,7 @@ ConnectorChunkSource::~ConnectorChunkSource() {
 }
 
 Status ConnectorChunkSource::prepare(RuntimeState* state) {
-    // semantics of `prepare` in ChunkSource is identical to `open`
     _runtime_state = state;
-    RETURN_IF_ERROR(_data_source->open(state));
     return Status::OK();
 }
 
@@ -136,93 +142,12 @@ void ConnectorChunkSource::close(RuntimeState* state) {
     _data_source->close(state);
 }
 
-bool ConnectorChunkSource::has_next_chunk() const {
-    // If we need and could get next chunk from storage engine,
-    // the _status must be ok.
-    return _status.ok();
-}
-
-bool ConnectorChunkSource::has_shared_output() const {
-    return !_chunk_buffer.all_empty();
-}
-
-bool ConnectorChunkSource::has_output() const {
-    return !_chunk_buffer.empty(_scan_operator_seq);
-}
-
-size_t ConnectorChunkSource::get_buffer_size() const {
-    return _chunk_buffer.size(_scan_operator_seq);
-}
-
-StatusOr<vectorized::ChunkPtr> ConnectorChunkSource::get_next_chunk_from_buffer() {
-    vectorized::ChunkPtr chunk = nullptr;
-    _chunk_buffer.try_get(_scan_operator_seq, &chunk);
-    return chunk;
-}
-
-Status ConnectorChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state) {
-    // TODO(murphy): refactor it to ChunkSource
-    if (!_status.ok()) {
-        return _status;
+Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkPtr* chunk) {
+    if (!_opened) {
+        RETURN_IF_ERROR(_data_source->open(state));
+        _opened = true;
     }
 
-    for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
-        vectorized::ChunkPtr chunk;
-        _status = _read_chunk(&chunk);
-        if (!_status.ok()) {
-            // end of file is normal case, need process chunk
-            if (_status.is_end_of_file()) {
-                _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
-            }
-            break;
-        }
-        _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
-    }
-    return _status;
-}
-Status ConnectorChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch_size, RuntimeState* state,
-                                                                             size_t* num_read_chunks, int worker_id,
-                                                                             workgroup::WorkGroupPtr running_wg) {
-    if (!_status.ok()) {
-        return _status;
-    }
-
-    int64_t time_spent = 0;
-    for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
-        {
-            SCOPED_RAW_TIMER(&time_spent);
-
-            vectorized::ChunkPtr chunk;
-            _status = _read_chunk(&chunk);
-            if (!_status.ok()) {
-                // end of file is normal case, need process chunk
-                if (_status.is_end_of_file()) {
-                    ++(*num_read_chunks);
-                    _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
-                }
-                break;
-            }
-
-            ++(*num_read_chunks);
-            _chunk_buffer.put(_scan_operator_seq, std::move(chunk));
-        }
-
-        if (time_spent >= YIELD_MAX_TIME_SPENT) {
-            break;
-        }
-
-        if (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(workgroup::TypeHdfsScanExecutor,
-                                                                               worker_id, running_wg)) {
-            break;
-        }
-    }
-
-    return _status;
-}
-
-Status ConnectorChunkSource::_read_chunk(vectorized::ChunkPtr* chunk) {
-    RuntimeState* state = _runtime_state;
     if (state->is_cancelled()) {
         return Status::Cancelled("canceled state");
     }

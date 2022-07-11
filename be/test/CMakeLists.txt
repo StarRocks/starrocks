@@ -36,6 +36,7 @@ set(EXEC_FILES
         ./exec/vectorized/json_parser_test.cpp
         ./exec/vectorized/hdfs_scanner_test.cpp
         ./exec/vectorized/table_function_node_test.cpp
+        ./exec/vectorized/file_scan_node_test.cpp
         ./exec/schema_columns_scanner_test.cpp
         ./exec/tablet_info_test.cpp
         ./exec/vectorized/sorting_test.cpp
@@ -52,6 +53,7 @@ set(EXEC_FILES
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/query_context_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
+        ./exec/pipeline/pipeline_file_scan_node_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/vectorized/arithmetic_expr_test.cpp
@@ -154,6 +156,7 @@ set(EXEC_FILES
         ./storage/lake/async_delta_writer_test.cpp
         ./storage/lake/delta_writer_test.cpp
         ./storage/lake/group_assigner_test.cpp
+        ./storage/lake/horizontal_compaction_task_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/tablet_reader_test.cpp
         ./storage/lake/tablet_writer_test.cpp

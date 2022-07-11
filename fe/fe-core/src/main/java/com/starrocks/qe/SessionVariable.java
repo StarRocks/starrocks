@@ -147,6 +147,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
+    public static final String ENABLE_DELIVER_BATCH_FRAGMENTS = "enable_deliver_batch_fragments";
+
     // Use resource group. It will influence the CPU schedule, I/O scheduler, and
     // memory limit etc. in BE.
     public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
@@ -222,7 +224,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
-    public static final String ENABLE_EXCHANGE_PASS_THROUGH_EXPIRE = "enable_exchange_pass_through_expire";
 
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
 
@@ -263,6 +264,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PREFER_COMPUTE_NODE)
     private boolean preferComputeNode = false;
+
+    /**
+     * If enable this variable (only take effect for pipeline), it will deliver fragment instances
+     * to BE in batch and concurrently.
+     * - Uses `exec_batch_plan_fragments` instead of `exec_plan_fragment` RPC API, which all the instances
+     *   of a fragment to the same destination host are delivered in the same request.
+     * - Send different fragments concurrently according to topological order of the fragment tree
+     */
+    @VariableMgr.VarAttr(name = ENABLE_DELIVER_BATCH_FRAGMENTS)
+    private boolean enableDeliverBatchFragments = true;
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -508,6 +519,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_GLOBAL_RUNTIME_FILTER)
     private boolean enableGlobalRuntimeFilter = true;
 
+    // Parameters to determine the usage of runtime filter
+    // Either the build_max or probe_min equal to 0 would force use the filter,
+    // otherwise would decide based on the cardinality
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_BUILD_MAX_SIZE, flag = VariableMgr.INVISIBLE)
     private long globalRuntimeFilterBuildMaxSize = 64 * 1024 * 1024;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE, flag = VariableMgr.INVISIBLE)
@@ -524,14 +538,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE)
     private boolean enableColumnExprPredicate = false;
 
-    // Currently, if enable_exchange_pass_through is turned on. The performance has no improve on benchmark test,
-    // and it will cause memory statistics problem of fragment instance,
-    // It also which will introduce the problem of cross-thread memory allocate and release,
-    // So i temporarily disable the enable_exchange_pass_through.
-    // I will turn on int after all the above problems are solved.
-    @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH_EXPIRE, alias = ENABLE_EXCHANGE_PASS_THROUGH,
-            show = ENABLE_EXCHANGE_PASS_THROUGH)
-    private boolean enableExchangePassThrough = false;
+    @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH, flag = VariableMgr.INVISIBLE)
+    private boolean enableExchangePassThrough = true;
 
     @VariableMgr.VarAttr(name = ALLOW_DEFAULT_PARTITION, flag = VariableMgr.INVISIBLE)
     private boolean allowDefaultPartition = false;
@@ -868,6 +876,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public float getGlobalRuntimeFilterProbeMinSelectivity() {
         return globalRuntimeFilterProbeMinSelectivity;
+    }
+
+    public boolean isEnableDeliverBatchFragments() {
+        return enableDeliverBatchFragments;
     }
 
     public boolean isEnablePipelineEngine() {

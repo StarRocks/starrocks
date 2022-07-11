@@ -50,8 +50,8 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
-        auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
+        auto schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (size_t i = 0; i < keys.size(); i++) {
             cols[0]->append_datum(vectorized::Datum(keys[i]));

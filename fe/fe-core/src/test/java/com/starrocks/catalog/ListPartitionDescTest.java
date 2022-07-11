@@ -77,7 +77,7 @@ public class ListPartitionDescTest {
         supportedProperties.put("replication_num", "1");
         supportedProperties.put("in_memory", "true");
         supportedProperties.put("tablet_type", "memory");
-        supportedProperties.put("storage_cooldown_time", "2022-07-09 12:12:12");
+        supportedProperties.put("storage_cooldown_time", "2122-07-09 12:12:12");
         if (properties != null) {
             properties.forEach((k, v) -> supportedProperties.put(k, v));
         }
@@ -245,7 +245,7 @@ public class ListPartitionDescTest {
         DataProperty dataProperty = partitionInfo.getDataProperty(10001L);
         Assert.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
         DateFormat sf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        long time = sf.parse("2022-07-09 12:12:12").getTime();
+        long time = sf.parse("2122-07-09 12:12:12").getTime();
         Assert.assertEquals(time, dataProperty.getCooldownTimeMs());
 
         Assert.assertEquals(1, partitionInfo.getReplicationNum(10001L));
@@ -262,7 +262,7 @@ public class ListPartitionDescTest {
         DataProperty dataProperty = partitionInfo.getDataProperty(10001L);
         Assert.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
         DateFormat sf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        long time = sf.parse("2022-07-09 12:12:12").getTime();
+        long time = sf.parse("2122-07-09 12:12:12").getTime();
         Assert.assertEquals(time, dataProperty.getCooldownTimeMs());
 
         Assert.assertEquals(1, partitionInfo.getReplicationNum(10001L));
@@ -342,6 +342,4 @@ public class ListPartitionDescTest {
         ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
         listPartitionDesc.analyze(this.findColumnDefList(), null);
     }
-
-
 }
