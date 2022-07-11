@@ -3,7 +3,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.sql.ast.AstVisitor;
 
-// Drop WorkGroup specified by name
+// Drop ResourceGroup specified by name
 // DROP RESOURCE GROUP <name>
 public class DropResourceGroupStmt extends DdlStmt {
     private final String name;

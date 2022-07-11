@@ -280,7 +280,7 @@ public class ShowExecutor {
         } else if (stmt instanceof ShowHistogramStatsMetaStmt) {
             handleShowHistogramStatsMeta();
         } else if (stmt instanceof ShowResourceGroupStmt) {
-            handleShowWorkGroup();
+            handleShowResourceGroup();
         } else if (stmt instanceof ShowUserStmt) {
             handleShowUser();
         } else if (stmt instanceof ShowCatalogsStmt) {
@@ -1615,9 +1615,9 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
-    private void handleShowWorkGroup() throws AnalysisException {
+    private void handleShowResourceGroup() throws AnalysisException {
         ShowResourceGroupStmt showResourceGroupStmt = (ShowResourceGroupStmt) stmt;
-        List<List<String>> rows = GlobalStateMgr.getCurrentState().getWorkGroupMgr().showWorkGroup(showResourceGroupStmt);
+        List<List<String>> rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup(showResourceGroupStmt);
         resultSet = new ShowResultSet(showResourceGroupStmt.getMetaData(), rows);
     }
 

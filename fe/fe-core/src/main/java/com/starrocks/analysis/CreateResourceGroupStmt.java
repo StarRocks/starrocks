@@ -24,7 +24,7 @@ public class CreateResourceGroupStmt extends DdlStmt {
     private boolean replaceIfExists;
     private List<List<Predicate>> classifiers;
     private Map<String, String> properties;
-    private ResourceGroup workgroup;
+    private ResourceGroup resourceGroup;
 
     public CreateResourceGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists,
                                    List<List<Predicate>> classifiers, Map<String, String> proeprties) {
@@ -52,29 +52,29 @@ public class CreateResourceGroupStmt extends DdlStmt {
     }
 
     public void analyze() throws SemanticException {
-        workgroup = new ResourceGroup();
-        workgroup.setName(name);
+        resourceGroup = new ResourceGroup();
+        resourceGroup.setName(name);
         List<ResourceGroupClassifier> classifierList = new ArrayList<>();
         for (List<Predicate> predicates : classifiers) {
             ResourceGroupClassifier classifier = ResourceGroupAnalyzer.convertPredicateToClassifier(predicates);
             classifierList.add(classifier);
         }
-        workgroup.setClassifiers(classifierList);
-        ResourceGroupAnalyzer.analyzeProperties(workgroup, properties);
+        resourceGroup.setClassifiers(classifierList);
+        ResourceGroupAnalyzer.analyzeProperties(resourceGroup, properties);
 
-        if (workgroup.getWorkGroupType() == null) {
-            workgroup.setWorkGroupType(TWorkGroupType.WG_NORMAL);
+        if (resourceGroup.getResourceGroupType() == null) {
+            resourceGroup.setResourceGroupType(TWorkGroupType.WG_NORMAL);
         }
-        if (workgroup.getCpuCoreLimit() == null) {
+        if (resourceGroup.getCpuCoreLimit() == null) {
             throw new SemanticException("property 'cpu_core_limit' is absent");
         }
-        if (workgroup.getMemLimit() == null) {
+        if (resourceGroup.getMemLimit() == null) {
             throw new SemanticException("property 'mem_limit' is absent");
         }
     }
 
-    public ResourceGroup getWorkgroup() {
-        return workgroup;
+    public ResourceGroup getResourceGroup() {
+        return resourceGroup;
     }
 
     @Override

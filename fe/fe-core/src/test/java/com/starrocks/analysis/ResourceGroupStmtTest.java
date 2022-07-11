@@ -147,28 +147,28 @@ public class ResourceGroupStmtTest {
     private void createResourceGroups() throws Exception {
         String[] sqls = new String[] {createRg1Sql, createRg2Sql, createRg3Sql, createRg4Sql, createRg5Sql};
         for (String sql : sqls) {
-            starRocksAssert.executeWorkGroupDdlSql(sql);
+            starRocksAssert.executeResourceGroupDdlSql(sql);
         }
     }
 
     private void dropResourceGroups() throws Exception {
         String[] rgNames = new String[] {"rg1", "rg2", "rg3", "rg4", "rg5"};
         for (String name : rgNames) {
-            starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP " + name);
+            starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP " + name);
         }
-        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource groups all");
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         Assert.assertTrue(rows.toString(), rows.isEmpty());
     }
 
-    private void assertWorkGroupNotExist(String wg) {
+    private void assertResourceGroupNotExist(String wg) {
         Assert.assertThrows(ERROR_NO_WG_ERROR.formatErrorMsg(wg), AnalysisException.class,
-                () -> starRocksAssert.executeWorkGroupShowSql("show resource group " + wg));
+                () -> starRocksAssert.executeResourceGroupShowSql("show resource group " + wg));
     }
 
     @Test
     public void testCreateResourceGroup() throws Exception {
         createResourceGroups();
-        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource groups all");
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         String result = rowsToString(rows);
         String expect = "" +
                 "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.459375, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)\n" +
@@ -188,56 +188,56 @@ public class ResourceGroupStmtTest {
 
     @Test
     public void testCreateDuplicateResourceGroup() throws Exception {
-        starRocksAssert.executeWorkGroupDdlSql(createRg1Sql);
-        starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP rg1");
-        assertWorkGroupNotExist("rg1");
+        starRocksAssert.executeResourceGroupDdlSql(createRg1Sql);
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
+        assertResourceGroupNotExist("rg1");
 
-        starRocksAssert.executeWorkGroupDdlSql(createRg1IfNotExistsSql);
-        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
+        starRocksAssert.executeResourceGroupDdlSql(createRg1IfNotExistsSql);
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg1");
         Assert.assertEquals(rows.size(), 1);
         String actual = rowsToString(rows);
         Assert.assertTrue(actual.contains("rg1_if_not_exists"));
 
-        starRocksAssert.executeWorkGroupDdlSql(createRg1OrReplaceSql);
-        rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
+        starRocksAssert.executeResourceGroupDdlSql(createRg1OrReplaceSql);
+        rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg1");
         Assert.assertEquals(rows.size(), 1);
         actual = rowsToString(rows);
         Assert.assertTrue(actual.contains("rg1_or_replace"));
 
-        starRocksAssert.executeWorkGroupDdlSql(createRg1IfNotExistsSql);
-        rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
+        starRocksAssert.executeResourceGroupDdlSql(createRg1IfNotExistsSql);
+        rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg1");
         Assert.assertEquals(rows.size(), 1);
         actual = rowsToString(rows);
         Assert.assertTrue(actual.contains("rg1_or_replace"));
 
-        starRocksAssert.executeWorkGroupDdlSql("DROP resource group rg1");
-        assertWorkGroupNotExist("rg1");
+        starRocksAssert.executeResourceGroupDdlSql("DROP resource group rg1");
+        assertResourceGroupNotExist("rg1");
 
-        starRocksAssert.executeWorkGroupDdlSql(createRg1OrReplaceSql);
-        rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
+        starRocksAssert.executeResourceGroupDdlSql(createRg1OrReplaceSql);
+        rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg1");
         Assert.assertEquals(rows.size(), 1);
         actual = rowsToString(rows);
         Assert.assertTrue(actual.contains("rg1_or_replace"));
 
-        starRocksAssert.executeWorkGroupDdlSql(createRg1IfNotExistsOrReplaceSql);
-        rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
+        starRocksAssert.executeResourceGroupDdlSql(createRg1IfNotExistsOrReplaceSql);
+        rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg1");
         Assert.assertEquals(rows.size(), 1);
         actual = rowsToString(rows);
         System.out.println(actual);
         Assert.assertTrue(actual.contains("rg1_if_not_exists_or_replace"));
 
-        starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP rg1");
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
     }
 
     @Test
     public void testCreateDuplicateResourceGroupFail() throws Exception {
-        starRocksAssert.executeWorkGroupDdlSql(createRg1Sql);
+        starRocksAssert.executeResourceGroupDdlSql(createRg1Sql);
         try {
-            starRocksAssert.executeWorkGroupDdlSql(createRg1Sql);
+            starRocksAssert.executeResourceGroupDdlSql(createRg1Sql);
             Assert.fail("should throw error");
         } catch (Exception ignored) {
         }
-        starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP rg1");
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
     }
 
     @Test
@@ -254,7 +254,7 @@ public class ResourceGroupStmtTest {
                 "    'unknown' = 'unknown'" +
                 ");";
         try {
-            starRocksAssert.executeWorkGroupDdlSql(sql);
+            starRocksAssert.executeResourceGroupDdlSql(sql);
             Assert.fail("should throw error");
         } catch (Exception e) {
             Assert.assertEquals("Unknown property: unknown", e.getMessage());
@@ -266,7 +266,7 @@ public class ResourceGroupStmtTest {
         String sql1 = "create resource group rg_insert\n" +
                 "to (user='rg_user3', query_type in ('insert')) with ('cpu_core_limit' = '10', 'mem_limit' = '20%')";
         try {
-            starRocksAssert.executeWorkGroupDdlSql(sql1);
+            starRocksAssert.executeResourceGroupDdlSql(sql1);
             Assert.fail("should throw error");
         } catch (Exception e) {
             Assert.assertEquals("Unsupported query_type: 'insert'", e.getMessage());
@@ -277,16 +277,16 @@ public class ResourceGroupStmtTest {
     @Test
     public void testAlterResourceGroupDropManyClassifiers() throws Exception {
         createResourceGroups();
-        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource groups all");
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         String rgName = rows.get(0).get(0);
         List<String> classifierIds = rows.stream().filter(row -> row.get(0).equals(rgName))
                 .map(row -> getClassifierId(row.get(row.size() - 1))).collect(Collectors.toList());
         rows = rows.stream().filter(row -> !row.get(0).equals(rgName)).collect(Collectors.toList());
         String ids = String.join(",", classifierIds);
         String alterSql = String.format("ALTER RESOURCE GROUP %s DROP (%s)", rgName, ids);
-        starRocksAssert.executeWorkGroupDdlSql(alterSql);
+        starRocksAssert.executeResourceGroupDdlSql(alterSql);
         String expect = rowsToString(rows);
-        rows = starRocksAssert.executeWorkGroupShowSql("show resource groups all");
+        rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         String actual = rowsToString(rows);
         Assert.assertEquals(expect, actual);
         dropResourceGroups();
@@ -295,7 +295,7 @@ public class ResourceGroupStmtTest {
     @Test
     public void testAlterResourceGroupDropOneClassifier() throws Exception {
         createResourceGroups();
-        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource groups all");
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         Random rand = new Random();
         Iterator<List<String>> it = rows.iterator();
         while (it.hasNext()) {
@@ -308,10 +308,10 @@ public class ResourceGroupStmtTest {
             String id = getClassifierId(classifier);
             it.remove();
             String alterSql = String.format("ALTER RESOURCE GROUP %s DROP (%s)", rgName, id);
-            starRocksAssert.executeWorkGroupDdlSql(alterSql);
+            starRocksAssert.executeResourceGroupDdlSql(alterSql);
         }
         String expect = rowsToString(rows);
-        rows = starRocksAssert.executeWorkGroupShowSql("show resource groups all");
+        rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         String actual = rowsToString(rows);
         Assert.assertEquals(expect, actual);
         dropResourceGroups();
@@ -320,13 +320,13 @@ public class ResourceGroupStmtTest {
     @Test
     public void testAlterResourceGroupDropAllClassifier() throws Exception {
         createResourceGroups();
-        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource groups all");
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         String rgName = "rg2";
         rows = rows.stream().filter(row -> !row.get(0).equals(rgName)).collect(Collectors.toList());
         String alterSql = String.format("ALTER RESOURCE GROUP %s DROP ALL", rgName);
-        starRocksAssert.executeWorkGroupDdlSql(alterSql);
+        starRocksAssert.executeResourceGroupDdlSql(alterSql);
         String expect = rowsToString(rows);
-        rows = starRocksAssert.executeWorkGroupShowSql("show resource groups all");
+        rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         String actual = rowsToString(rows);
         Assert.assertEquals(expect, actual);
         dropResourceGroups();
@@ -340,8 +340,8 @@ public class ResourceGroupStmtTest {
                 "ADD \n" +
                 "   (user='rg1_user5', role='rg1_role5', source_ip='192.168.4.1/16')";
 
-        starRocksAssert.executeWorkGroupDdlSql(sql);
-        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("SHOW RESOURCE GROUP rg1");
+        starRocksAssert.executeResourceGroupDdlSql(sql);
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("SHOW RESOURCE GROUP rg1");
         String result = rowsToString(rows);
         Assert.assertTrue(result.contains("rg1_user5"));
         dropResourceGroups();
@@ -357,8 +357,8 @@ public class ResourceGroupStmtTest {
                 "   (role='rg2_role5', source_ip='192.168.5.1/16'),\n" +
                 "   (source_ip='192.169.6.1/16');\n";
 
-        starRocksAssert.executeWorkGroupDdlSql(sql);
-        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("SHOW RESOURCE GROUP rg2");
+        starRocksAssert.executeResourceGroupDdlSql(sql);
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("SHOW RESOURCE GROUP rg2");
         String result = rowsToString(rows);
         Assert.assertTrue(result.contains("rg2_user4"));
         Assert.assertTrue(result.contains("rg2_role5"));
@@ -368,14 +368,14 @@ public class ResourceGroupStmtTest {
 
     @Test
     public void testShowUnknownOrNotExistWorkGroup() throws Exception {
-        starRocksAssert.executeWorkGroupDdlSql(createRg1Sql);
+        starRocksAssert.executeResourceGroupDdlSql(createRg1Sql);
 
-        starRocksAssert.executeWorkGroupDdlSql("ALTER RESOURCE GROUP rg1 DROP ALL;");
-        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("show resource group rg1");
+        starRocksAssert.executeResourceGroupDdlSql("ALTER RESOURCE GROUP rg1 DROP ALL;");
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg1");
         Assert.assertTrue(rows.isEmpty());
 
-        starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP rg1");
-        assertWorkGroupNotExist("rg1");
+        starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg1");
+        assertResourceGroupNotExist("rg1");
     }
 
     @Test
@@ -386,7 +386,7 @@ public class ResourceGroupStmtTest {
         starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
         starRocksAssert.getCtx().setRemoteIP(remoteIp);
-        ResourceGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+        ResourceGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                 starRocksAssert.getCtx(),
                 ResourceGroupClassifier.QueryType.SELECT,
                 null);
@@ -405,7 +405,7 @@ public class ResourceGroupStmtTest {
         {
             long dbId = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getId();
             Set<Long> dbIds = ImmutableSet.of(dbId);
-            ResourceGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+            ResourceGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                     starRocksAssert.getCtx(),
                     ResourceGroupClassifier.QueryType.SELECT,
                     dbIds);
@@ -414,7 +414,7 @@ public class ResourceGroupStmtTest {
         {
             long dbId = GlobalStateMgr.getCurrentState().getDb("default_cluster:db2").getId();
             Set<Long> dbIds = ImmutableSet.of(dbId);
-            ResourceGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+            ResourceGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                     starRocksAssert.getCtx(),
                     ResourceGroupClassifier.QueryType.SELECT,
                     dbIds);
@@ -425,7 +425,7 @@ public class ResourceGroupStmtTest {
             Set<Long> dbIds = ImmutableSet.of(
                     GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getId(),
                     GlobalStateMgr.getCurrentState().getDb("default_cluster:db2").getId());
-            ResourceGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+            ResourceGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                     starRocksAssert.getCtx(),
                     ResourceGroupClassifier.QueryType.SELECT,
                     dbIds);
@@ -442,7 +442,7 @@ public class ResourceGroupStmtTest {
         starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
         starRocksAssert.getCtx().setRemoteIP(remoteIp);
-        List<List<String>> rows = GlobalStateMgr.getCurrentState().getWorkGroupMgr().showAllWorkGroups(
+        List<List<String>> rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr().showAllResourceGroups(
                 starRocksAssert.getCtx(), false);
         String result = rowsToString(rows);
         String expect = "" +
@@ -486,9 +486,9 @@ public class ResourceGroupStmtTest {
                 ")";
         String[] sqls = new String[] {alterRg1Sql, alterRg2Sql, alterRg2Sql, alterRg3Sql, alterRg4Sql};
         for (String sql : sqls) {
-            starRocksAssert.executeWorkGroupDdlSql(sql);
+            starRocksAssert.executeResourceGroupDdlSql(sql);
         }
-        List<List<String>> rows = starRocksAssert.executeWorkGroupShowSql("SHOW RESOURCE GROUPS all");
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("SHOW RESOURCE GROUPS all");
         String result = rowsToString(rows);
         String expect = "" +
                 "rg1|21|20.0%|0|0|0|11|NORMAL|(weight=4.459375, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)\n" +

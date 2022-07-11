@@ -32,13 +32,13 @@ public class ResourceGroupMetricTest {
         ResourceGroup wg2 = new ResourceGroup();
         wg2.setName("wg2");
 
-        ctx.setWorkGroup(wg1);
+        ctx.setResourceGroup(wg1);
         ctx.getAuditEventBuilder().setResourceGroup(wg1.getName());
         ResourceGroupMetricMgr.increaseQuery(ctx, 1L);
         ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
         ResourceGroupMetricMgr.updateQueryLatency(ctx, 10L);
 
-        ctx.setWorkGroup(wg2);
+        ctx.setResourceGroup(wg2);
         ctx.getAuditEventBuilder().setResourceGroup(wg2.getName());
         ResourceGroupMetricMgr.increaseQuery(ctx, 1L);
         ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);

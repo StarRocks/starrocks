@@ -40,7 +40,7 @@ public class ResourceGroupClassifier implements Writable {
     @SerializedName(value = "sourceIp")
     private String sourceIp;
     @SerializedName(value = "workgroupId")
-    private long workgroupId;
+    private long resourceGroupId;
     @SerializedName(value = "databaseIds")
     private Set<Long> databaseIds;
 
@@ -49,12 +49,12 @@ public class ResourceGroupClassifier implements Writable {
         return GsonUtils.GSON.fromJson(json, ResourceGroupClassifier.class);
     }
 
-    public long getWorkgroupId() {
-        return workgroupId;
+    public long getResourceGroupId() {
+        return resourceGroupId;
     }
 
-    public void setWorkgroupId(long workgroupId) {
-        this.workgroupId = workgroupId;
+    public void setResourceGroupId(long resourceGroupId) {
+        this.resourceGroupId = resourceGroupId;
     }
 
     public long getId() {

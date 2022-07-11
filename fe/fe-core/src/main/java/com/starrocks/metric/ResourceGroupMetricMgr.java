@@ -91,7 +91,7 @@ public class ResourceGroupMetricMgr {
         if (!sessionVariable.isEnableResourceGroup() || !sessionVariable.isEnablePipelineEngine()) {
             return null;
         }
-        ResourceGroup resourceGroup = ctx.getWorkGroup();
+        ResourceGroup resourceGroup = ctx.getResourceGroup();
         return resourceGroup == null ? "default_wg" : resourceGroup.getName();
     }
 

@@ -474,11 +474,11 @@ public class ConnectContext {
         return plannerProfile;
     }
 
-    public ResourceGroup getWorkGroup() {
+    public ResourceGroup getResourceGroup() {
         return resourceGroup;
     }
 
-    public void setWorkGroup(ResourceGroup resourceGroup) {
+    public void setResourceGroup(ResourceGroup resourceGroup) {
         this.resourceGroup = resourceGroup;
     }
 

@@ -1379,8 +1379,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     // ------------------------------------------- Work Group Statement -------------------------------------------------
 
-    @Override
-    public ParseNode visitCreateWorkGroupStatement(StarRocksParser.CreateWorkGroupStatementContext context) {
+    public ParseNode visitCreateResourceGroupStatement(StarRocksParser.CreateResourceGroupStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
         String name = identifier.getValue();
 
@@ -1404,13 +1403,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitDropWorkGroupStatement(StarRocksParser.DropWorkGroupStatementContext context) {
+    public ParseNode visitDropResourceGroupStatement(StarRocksParser.DropResourceGroupStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
         return new DropResourceGroupStmt(identifier.getValue());
     }
 
     @Override
-    public ParseNode visitAlterWorkGroupStatement(StarRocksParser.AlterWorkGroupStatementContext context) {
+    public ParseNode visitAlterResourceGroupStatement(StarRocksParser.AlterResourceGroupStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
         String name = identifier.getValue();
         if (context.ADD() != null) {
@@ -1440,7 +1439,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitShowWorkGroupStatement(StarRocksParser.ShowWorkGroupStatementContext context) {
+    public ParseNode visitShowResourceGroupStatement(StarRocksParser.ShowResourceGroupStatementContext context) {
         if (context.GROUPS() != null) {
             return new ShowResourceGroupStmt(null, context.ALL() != null);
         } else {

@@ -46,14 +46,14 @@ import java.util.stream.Collectors;
 public class ResourceGroupMgr implements Writable {
     private static final Logger LOG = LogManager.getLogger(ResourceGroupMgr.class);
 
-    private GlobalStateMgr globalStateMgr;
-    private Map<String, ResourceGroup> workGroupMap = new HashMap<>();
-    private Map<Long, ResourceGroup> id2WorkGroupMap = new HashMap<>();
-    private Map<Long, ResourceGroupClassifier> classifierMap = new HashMap<>();
-    private List<TWorkGroupOp> workGroupOps = new ArrayList<>();
-    private Map<Long, Map<Long, TWorkGroup>> activeWorkGroupsPerBe = new HashMap<>();
-    private Map<Long, Long> minVersionPerBe = new HashMap<>();
-    private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final GlobalStateMgr globalStateMgr;
+    private final Map<String, ResourceGroup> resourceGroupMap = new HashMap<>();
+    private final Map<Long, ResourceGroup> id2ResourceGroupMap = new HashMap<>();
+    private final Map<Long, ResourceGroupClassifier> classifierMap = new HashMap<>();
+    private final List<TWorkGroupOp> resourceGroupOps = new ArrayList<>();
+    private final Map<Long, Map<Long, TWorkGroup>> activeResourceGroupsPerBe = new HashMap<>();
+    private final Map<Long, Long> minVersionPerBe = new HashMap<>();
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public ResourceGroupMgr(GlobalStateMgr globalStateMgr) {
         this.globalStateMgr = globalStateMgr;
@@ -75,48 +75,48 @@ public class ResourceGroupMgr implements Writable {
         lock.writeLock().unlock();
     }
 
-    public void createWorkGroup(CreateResourceGroupStmt stmt) throws DdlException {
+    public void createResourceGroup(CreateResourceGroupStmt stmt) throws DdlException {
         writeLock();
         try {
-            ResourceGroup wg = stmt.getWorkgroup();
-            if (workGroupMap.containsKey(wg.getName())) {
+            ResourceGroup wg = stmt.getResourceGroup();
+            if (resourceGroupMap.containsKey(wg.getName())) {
                 // create resource_group or replace <name> ...
                 if (stmt.isReplaceIfExists()) {
-                    dropWorkGroupUnlocked(wg.getName());
+                    dropResourceGroupUnlocked(wg.getName());
                 } else if (!stmt.isIfNotExists()) {
                     throw new DdlException(String.format("RESOURCE_GROUP(%s) already exists", wg.getName()));
                 } else {
                     return;
                 }
             }
-            wg.setId(globalStateMgr.getCurrentState().getNextId());
+            wg.setId(GlobalStateMgr.getCurrentState().getNextId());
             for (ResourceGroupClassifier classifier : wg.getClassifiers()) {
-                classifier.setWorkgroupId(wg.getId());
-                classifier.setId(globalStateMgr.getCurrentState().getNextId());
+                classifier.setResourceGroupId(wg.getId());
+                classifier.setId(GlobalStateMgr.getCurrentState().getNextId());
                 classifierMap.put(classifier.getId(), classifier);
             }
-            workGroupMap.put(wg.getName(), wg);
-            id2WorkGroupMap.put(wg.getId(), wg);
+            resourceGroupMap.put(wg.getName(), wg);
+            id2ResourceGroupMap.put(wg.getId(), wg);
             wg.setVersion(wg.getId());
             ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_CREATE, wg);
-            globalStateMgr.getCurrentState().getEditLog().logWorkGroupOp(workGroupOp);
-            workGroupOps.add(workGroupOp.toThrift());
+            GlobalStateMgr.getCurrentState().getEditLog().logResourceGroupOp(workGroupOp);
+            resourceGroupOps.add(workGroupOp.toThrift());
         } finally {
             writeUnlock();
         }
     }
 
-    public List<List<String>> showWorkGroup(ShowResourceGroupStmt stmt) throws AnalysisException {
-        if (stmt.getName() != null && !workGroupMap.containsKey(stmt.getName())) {
+    public List<List<String>> showResourceGroup(ShowResourceGroupStmt stmt) throws AnalysisException {
+        if (stmt.getName() != null && !resourceGroupMap.containsKey(stmt.getName())) {
             ErrorReport.reportAnalysisException(ErrorCode.ERROR_NO_WG_ERROR, stmt.getName());
         }
 
         List<List<String>> rows;
         if (stmt.getName() != null) {
-            rows = GlobalStateMgr.getCurrentState().getWorkGroupMgr().showOneWorkGroup(stmt.getName());
+            rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr().showOneResourceGroup(stmt.getName());
         } else {
-            rows = GlobalStateMgr.getCurrentState().getWorkGroupMgr()
-                    .showAllWorkGroups(ConnectContext.get(), stmt.isListAll());
+            rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr()
+                    .showAllResourceGroups(ConnectContext.get(), stmt.isListAll());
         }
         return rows;
     }
@@ -142,10 +142,10 @@ public class ResourceGroupMgr implements Writable {
         return roleName;
     }
 
-    public List<List<String>> showAllWorkGroups(ConnectContext ctx, Boolean isListAll) {
+    public List<List<String>> showAllResourceGroups(ConnectContext ctx, Boolean isListAll) {
         readLock();
         try {
-            List<ResourceGroup> resourceGroupList = new ArrayList<>(workGroupMap.values());
+            List<ResourceGroup> resourceGroupList = new ArrayList<>(resourceGroupMap.values());
             if (isListAll || ConnectContext.get() == null) {
                 resourceGroupList.sort(Comparator.comparing(ResourceGroup::getName));
                 return resourceGroupList.stream().map(ResourceGroup::show)
@@ -162,13 +162,13 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
-    public List<List<String>> showOneWorkGroup(String name) {
+    public List<List<String>> showOneResourceGroup(String name) {
         readLock();
         try {
-            if (!workGroupMap.containsKey(name)) {
+            if (!resourceGroupMap.containsKey(name)) {
                 return Collections.emptyList();
             } else {
-                return workGroupMap.get(name).show();
+                return resourceGroupMap.get(name).show();
             }
         } finally {
             readUnlock();
@@ -177,7 +177,7 @@ public class ResourceGroupMgr implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        List<ResourceGroup> resourceGroups = workGroupMap.values().stream().collect(Collectors.toList());
+        List<ResourceGroup> resourceGroups = resourceGroupMap.values().stream().collect(Collectors.toList());
         SerializeData data = new SerializeData();
         data.resourceGroups = resourceGroups;
 
@@ -191,37 +191,37 @@ public class ResourceGroupMgr implements Writable {
         if (null != data && null != data.resourceGroups) {
             data.resourceGroups.sort(Comparator.comparing(ResourceGroup::getVersion));
             for (ResourceGroup workgroup : data.resourceGroups) {
-                replayAddWorkGroup(workgroup);
+                replayAddResourceGroup(workgroup);
             }
         }
     }
 
-    public long loadWorkGroups(DataInputStream dis, long checksum) throws IOException {
+    public long loadResourceGroups(DataInputStream dis, long checksum) throws IOException {
         try {
             readFields(dis);
-            LOG.info("finished replaying WorkGroups from image");
+            LOG.info("finished replaying ResourceGroups from image");
         } catch (EOFException e) {
-            LOG.info("no WorkGroups to replay.");
+            LOG.info("no ResourceGroups to replay.");
         }
         return checksum;
     }
 
-    public long saveWorkGroups(DataOutputStream dos, long checksum) throws IOException {
+    public long saveResourceGroups(DataOutputStream dos, long checksum) throws IOException {
         write(dos);
         return checksum;
     }
 
-    private void replayAddWorkGroup(ResourceGroup workgroup) {
-        addWorkGroupInternal(workgroup);
+    private void replayAddResourceGroup(ResourceGroup workgroup) {
+        addResourceGroupInternal(workgroup);
         ResourceGroupOpEntry op = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_CREATE, workgroup);
-        workGroupOps.add(op.toThrift());
+        resourceGroupOps.add(op.toThrift());
     }
 
-    public ResourceGroup getWorkGroup(String name) {
+    public ResourceGroup getResourceGroup(String name) {
         readLock();
         try {
-            if (workGroupMap.containsKey(name)) {
-                return workGroupMap.get(name);
+            if (resourceGroupMap.containsKey(name)) {
+                return resourceGroupMap.get(name);
             } else {
                 return null;
             }
@@ -230,20 +230,20 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
-    public void alterWorkGroup(AlterResourceGroupStmt stmt) throws DdlException {
+    public void alterResourceGroup(AlterResourceGroupStmt stmt) throws DdlException {
         writeLock();
         try {
             String name = stmt.getName();
-            if (!workGroupMap.containsKey(name)) {
+            if (!resourceGroupMap.containsKey(name)) {
                 throw new DdlException("RESOURCE_GROUP(" + name + ") does not exist");
             }
-            ResourceGroup wg = workGroupMap.get(name);
+            ResourceGroup wg = resourceGroupMap.get(name);
             AlterResourceGroupStmt.SubCommand cmd = stmt.getCmd();
             if (cmd instanceof AlterResourceGroupStmt.AddClassifiers) {
                 List<ResourceGroupClassifier> newAddedClassifiers = stmt.getNewAddedClassifiers();
                 for (ResourceGroupClassifier classifier : newAddedClassifiers) {
-                    classifier.setWorkgroupId(wg.getId());
-                    classifier.setId(globalStateMgr.getCurrentState().getNextId());
+                    classifier.setResourceGroupId(wg.getId());
+                    classifier.setId(GlobalStateMgr.getCurrentState().getNextId());
                     classifierMap.put(classifier.getId(), classifier);
                 }
                 wg.getClassifiers().addAll(newAddedClassifiers);
@@ -277,9 +277,9 @@ public class ResourceGroupMgr implements Writable {
                 if (concurrentLimit != null) {
                     wg.setConcurrencyLimit(concurrentLimit);
                 }
-                TWorkGroupType workGroupType = changedProperties.getWorkGroupType();
+                TWorkGroupType workGroupType = changedProperties.getResourceGroupType();
                 if (workGroupType != null) {
-                    wg.setWorkGroupType(workGroupType);
+                    wg.setResourceGroupType(workGroupType);
                 }
             } else if (cmd instanceof AlterResourceGroupStmt.DropClassifiers) {
                 Set<Long> classifierToDrop = stmt.getClassifiersToDrop().stream().collect(Collectors.toSet());
@@ -302,105 +302,111 @@ public class ResourceGroupMgr implements Writable {
             // only when changing properties, version is required to update. because changing classifiers needs not
             // propagate to BE.
             if (cmd instanceof AlterResourceGroupStmt.AlterProperties) {
-                wg.setVersion(globalStateMgr.getCurrentState().getNextId());
+                wg.setVersion(GlobalStateMgr.getCurrentState().getNextId());
             }
             ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_ALTER, wg);
-            globalStateMgr.getCurrentState().getEditLog().logWorkGroupOp(workGroupOp);
-            workGroupOps.add(workGroupOp.toThrift());
+            GlobalStateMgr.getCurrentState().getEditLog().logResourceGroupOp(workGroupOp);
+            resourceGroupOps.add(workGroupOp.toThrift());
         } finally {
             writeUnlock();
         }
     }
 
-    public void dropWorkGroup(DropResourceGroupStmt stmt) throws DdlException {
+    public void dropResourceGroup(DropResourceGroupStmt stmt) throws DdlException {
         writeLock();
         try {
             String name = stmt.getName();
-            if (!workGroupMap.containsKey(name)) {
+            if (!resourceGroupMap.containsKey(name)) {
                 throw new DdlException("RESOURCE_GROUP(" + name + ") does not exist");
             }
-            dropWorkGroupUnlocked(name);
+            dropResourceGroupUnlocked(name);
         } finally {
             writeUnlock();
         }
     }
 
-    public void dropWorkGroupUnlocked(String name) {
-        ResourceGroup wg = workGroupMap.get(name);
-        removeWorkGroupInternal(name);
-        wg.setVersion(globalStateMgr.getCurrentState().getNextId());
+    public void dropResourceGroupUnlocked(String name) {
+        ResourceGroup wg = resourceGroupMap.get(name);
+        removeResourceGroupInternal(name);
+        wg.setVersion(GlobalStateMgr.getCurrentState().getNextId());
         ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_DELETE, wg);
-        globalStateMgr.getCurrentState().getEditLog().logWorkGroupOp(workGroupOp);
-        workGroupOps.add(workGroupOp.toThrift());
+        GlobalStateMgr.getCurrentState().getEditLog().logResourceGroupOp(workGroupOp);
+        resourceGroupOps.add(workGroupOp.toThrift());
     }
 
-    public void replayWorkGroupOp(ResourceGroupOpEntry entry) {
+    public void replayResourceGroupOp(ResourceGroupOpEntry entry) {
         writeLock();
         try {
             ResourceGroup workgroup = entry.getResourceGroup();
             TWorkGroupOpType opType = entry.getOpType();
             switch (opType) {
                 case WORKGROUP_OP_CREATE:
-                    addWorkGroupInternal(workgroup);
+                    addResourceGroupInternal(workgroup);
                     break;
                 case WORKGROUP_OP_DELETE:
-                    removeWorkGroupInternal(workgroup.getName());
+                    removeResourceGroupInternal(workgroup.getName());
                     break;
                 case WORKGROUP_OP_ALTER:
-                    removeWorkGroupInternal(workgroup.getName());
-                    addWorkGroupInternal(workgroup);
+                    removeResourceGroupInternal(workgroup.getName());
+                    addResourceGroupInternal(workgroup);
                     break;
             }
-            workGroupOps.add(entry.toThrift());
+            resourceGroupOps.add(entry.toThrift());
         } finally {
             writeUnlock();
         }
     }
 
-    private void removeWorkGroupInternal(String name) {
-        ResourceGroup wg = workGroupMap.remove(name);
-        id2WorkGroupMap.remove(wg.getId());
+    private void removeResourceGroupInternal(String name) {
+        ResourceGroup wg = resourceGroupMap.remove(name);
+        id2ResourceGroupMap.remove(wg.getId());
         for (ResourceGroupClassifier classifier : wg.classifiers) {
             classifierMap.remove(classifier.getId());
         }
     }
 
-    private void addWorkGroupInternal(ResourceGroup wg) {
-        workGroupMap.put(wg.getName(), wg);
-        id2WorkGroupMap.put(wg.getId(), wg);
+    private void addResourceGroupInternal(ResourceGroup wg) {
+        resourceGroupMap.put(wg.getName(), wg);
+        id2ResourceGroupMap.put(wg.getId(), wg);
         for (ResourceGroupClassifier classifier : wg.classifiers) {
             classifierMap.put(classifier.getId(), classifier);
         }
     }
 
-    public List<TWorkGroupOp> getWorkGroupsNeedToDeliver(Long beId) {
+    public List<TWorkGroupOp> getResourceGroupsNeedToDeliver(Long beId) {
         readLock();
         try {
-            List<TWorkGroupOp> currentWorkGroupOps = new ArrayList<>();
-            if (!activeWorkGroupsPerBe.containsKey(beId)) {
-                currentWorkGroupOps.addAll(workGroupOps);
-                return currentWorkGroupOps;
+            List<TWorkGroupOp> currentResourceGroupOps = new ArrayList<>();
+            if (!activeResourceGroupsPerBe.containsKey(beId)) {
+                currentResourceGroupOps.addAll(resourceGroupOps);
+                return currentResourceGroupOps;
             }
             Long minVersion = minVersionPerBe.get(beId);
-            Map<Long, TWorkGroup> activeWorkGroup = activeWorkGroupsPerBe.get(beId);
-            for (TWorkGroupOp op : workGroupOps) {
+            Map<Long, TWorkGroup> activeResourceGroup = activeResourceGroupsPerBe.get(beId);
+            for (TWorkGroupOp op : resourceGroupOps) {
                 TWorkGroup twg = op.getWorkgroup();
                 if (twg.getVersion() < minVersion) {
                     continue;
                 }
+<<<<<<< HEAD
                 boolean active = activeWorkGroup.containsKey(twg.getId());
                 if ((!active && id2WorkGroupMap.containsKey(twg.getId())) ||
                         (active && twg.getVersion() > activeWorkGroup.get(twg.getId()).getVersion())) {
                     currentWorkGroupOps.add(op);
+=======
+                if ((!activeResourceGroup.containsKey(twg.getId()) && id2ResourceGroupMap.containsKey(twg.getId())) ||
+                        twg.getVersion() > activeResourceGroup.get(twg.getId()).getVersion()) {
+                    currentResourceGroupOps.add(op);
+>>>>>>> 6d0746b15 (rename workgroup to resourcegroup 2)
                 }
             }
-            return currentWorkGroupOps;
+            return currentResourceGroupOps;
         } finally {
             readUnlock();
         }
     }
 
-    public void saveActiveWorkGroupsForBe(Long beId, List<TWorkGroup> workGroups) {
+    public void saveActiveResourceGroupsForBe(Long beId, List<TWorkGroup> workGroups) {
         writeLock();
         try {
             Map<Long, TWorkGroup> workGroupOnBe = new HashMap<>();
@@ -411,23 +417,24 @@ public class ResourceGroupMgr implements Writable {
                     minVersion = workgroup.getVersion();
                 }
             }
-            activeWorkGroupsPerBe.put(beId, workGroupOnBe);
+            activeResourceGroupsPerBe.put(beId, workGroupOnBe);
             minVersionPerBe.put(beId, minVersion == Long.MAX_VALUE ? Long.MIN_VALUE : minVersion);
         } finally {
             writeUnlock();
         }
     }
 
-    public ResourceGroup chooseWorkGroupByName(String wgName) {
+    public ResourceGroup chooseResourceGroupByName(String wgName) {
         readLock();
         try {
-            return workGroupMap.get(wgName);
+            return resourceGroupMap.get(wgName);
         } finally {
             readUnlock();
         }
     }
 
-    public ResourceGroup chooseWorkGroup(ConnectContext ctx, ResourceGroupClassifier.QueryType queryType, Set<Long> databases) {
+    public ResourceGroup chooseResourceGroup(ConnectContext ctx, ResourceGroupClassifier.QueryType queryType,
+                                             Set<Long> databases) {
         String user = getUnqualifiedUser(ctx);
         String role = getUnqualifiedRole(ctx);
         String remoteIp = ctx.getRemoteIP();
@@ -438,7 +445,7 @@ public class ResourceGroupMgr implements Writable {
         if (classifierList.isEmpty()) {
             return null;
         } else {
-            return id2WorkGroupMap.get(classifierList.get(classifierList.size() - 1).getWorkgroupId());
+            return id2ResourceGroupMap.get(classifierList.get(classifierList.size() - 1).getResourceGroupId());
         }
     }
 

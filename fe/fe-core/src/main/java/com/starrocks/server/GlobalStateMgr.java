@@ -634,7 +634,7 @@ public class GlobalStateMgr {
         return auth;
     }
 
-    public ResourceGroupMgr getWorkGroupMgr() {
+    public ResourceGroupMgr getResourceGroupMgr() {
         return resourceGroupMgr;
     }
 
@@ -1138,7 +1138,7 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = analyzeManager.loadAnalyze(dis, checksum);
             remoteChecksum = dis.readLong();
-            checksum = resourceGroupMgr.loadWorkGroups(dis, checksum);
+            checksum = resourceGroupMgr.loadResourceGroups(dis, checksum);
             checksum = auth.readAsGson(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = taskManager.loadTasks(dis, checksum);
@@ -1396,7 +1396,7 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = analyzeManager.saveAnalyze(dos, checksum);
             dos.writeLong(checksum);
-            checksum = resourceGroupMgr.saveWorkGroups(dos, checksum);
+            checksum = resourceGroupMgr.saveResourceGroups(dos, checksum);
             checksum = auth.writeAsGson(dos, checksum);
             dos.writeLong(checksum);
             checksum = taskManager.saveTasks(dos, checksum);

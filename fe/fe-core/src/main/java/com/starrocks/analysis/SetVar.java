@@ -161,7 +161,7 @@ public class SetVar implements ParseNode {
         if (getVariable().equalsIgnoreCase(SessionVariable.RESOURCE_GROUP)) {
             String wgName = getValue().getStringValue();
             if (!StringUtils.isEmpty(wgName)) {
-                ResourceGroup wg = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(wgName);
+                ResourceGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(wgName);
                 if (wg == null) {
                     throw new SemanticException("resource group not exists: " + wgName);
                 }

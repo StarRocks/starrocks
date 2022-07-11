@@ -211,7 +211,7 @@ public class StarRocksAssert {
         return this;
     }
 
-    public void executeWorkGroupDdlSql(String sql) throws Exception {
+    public void executeResourceGroupDdlSql(String sql) throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
         StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
@@ -224,7 +224,7 @@ public class StarRocksAssert {
 
     }
 
-    public List<List<String>> executeWorkGroupShowSql(String sql) throws Exception {
+    public List<List<String>> executeResourceGroupShowSql(String sql) throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
 
@@ -232,7 +232,7 @@ public class StarRocksAssert {
         Analyzer.analyze(statement, ctx);
 
         Assert.assertTrue(statement instanceof ShowResourceGroupStmt);
-        return GlobalStateMgr.getCurrentState().getWorkGroupMgr().showWorkGroup((ShowResourceGroupStmt) statement);
+        return GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup((ShowResourceGroupStmt) statement);
     }
 
     private void checkAlterJob() throws InterruptedException {

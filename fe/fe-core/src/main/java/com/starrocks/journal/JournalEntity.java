@@ -506,7 +506,7 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_WORKGROUP: {
+            case OperationType.OP_RESOURCE_GROUP: {
                 data = ResourceGroupOpEntry.read(in);
                 isRead = true;
                 break;

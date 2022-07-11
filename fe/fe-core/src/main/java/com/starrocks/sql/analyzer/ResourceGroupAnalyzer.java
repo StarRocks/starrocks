@@ -123,7 +123,7 @@ public class ResourceGroupAnalyzer {
 
     // Property format:
     // ('cpu_core_limit'='n', 'mem_limit'='m%', 'concurrency_limit'='n', 'type'='normal|default|realtime')
-    public static void analyzeProperties(ResourceGroup workgroup, Map<String, String> properties) throws SemanticException {
+    public static void analyzeProperties(ResourceGroup resourceGroup, Map<String, String> properties) throws SemanticException {
         for (Map.Entry<String, String> e : properties.entrySet()) {
             String key = e.getKey();
             String value = e.getValue();
@@ -133,7 +133,7 @@ public class ResourceGroupAnalyzer {
                 if (cpuCoreLimit <= 0 || cpuCoreLimit > avgCoreNum) {
                     throw new SemanticException(String.format("cpu_core_limit should range from 1 to %d", avgCoreNum));
                 }
-                workgroup.setCpuCoreLimit(Integer.parseInt(value));
+                resourceGroup.setCpuCoreLimit(Integer.parseInt(value));
                 continue;
             }
             if (key.equalsIgnoreCase(ResourceGroup.MEM_LIMIT)) {
@@ -147,7 +147,7 @@ public class ResourceGroupAnalyzer {
                 if (memLimit <= 0.0 || memLimit >= 1.0) {
                     throw new SemanticException("mem_limit should range from 0.00(exclude) to 1.00(exclude)");
                 }
-                workgroup.setMemLimit(memLimit);
+                resourceGroup.setMemLimit(memLimit);
                 continue;
             }
 
@@ -156,7 +156,7 @@ public class ResourceGroupAnalyzer {
                 if (bigQueryMemLimit < 0) {
                     throw new SemanticException("big_query_mem_limit should greater than 0 or equal to 0");
                 }
-                workgroup.setBigQueryMemLimit(bigQueryMemLimit);
+                resourceGroup.setBigQueryMemLimit(bigQueryMemLimit);
                 continue;
             }
 
@@ -165,7 +165,7 @@ public class ResourceGroupAnalyzer {
                 if (bigQueryScanRowsLimit < 0) {
                     throw new SemanticException("big_query_scan_rows_limit should greater than 0 or equal to 0");
                 }
-                workgroup.setBigQueryScanRowsLimit(bigQueryScanRowsLimit);
+                resourceGroup.setBigQueryScanRowsLimit(bigQueryScanRowsLimit);
                 continue;
             }
 
@@ -174,7 +174,7 @@ public class ResourceGroupAnalyzer {
                 if (bigQueryCpuCoreSecondLimit < 0) {
                     throw new SemanticException("big_query_cpu_second_limit should greater than 0 or equal to 0");
                 }
-                workgroup.setBigQueryCpuSecondLimit(bigQueryCpuCoreSecondLimit);
+                resourceGroup.setBigQueryCpuSecondLimit(bigQueryCpuCoreSecondLimit);
                 continue;
             }
 
@@ -183,13 +183,13 @@ public class ResourceGroupAnalyzer {
                 if (concurrencyLimit < 0) {
                     throw new SemanticException("concurrency_limit should be greater than 0");
                 }
-                workgroup.setConcurrencyLimit(concurrencyLimit);
+                resourceGroup.setConcurrencyLimit(concurrencyLimit);
                 continue;
             }
-            if (key.equalsIgnoreCase(ResourceGroup.WORKGROUP_TYPE)) {
+            if (key.equalsIgnoreCase(ResourceGroup.GROUP_TYPE)) {
                 try {
-                    workgroup.setWorkGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
-                    if (workgroup.getWorkGroupType() != TWorkGroupType.WG_NORMAL) {
+                    resourceGroup.setResourceGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
+                    if (resourceGroup.getResourceGroupType() != TWorkGroupType.WG_NORMAL) {
                         throw new SemanticException("Only support 'normal' type");
                     }
                 } catch (Exception ignored) {

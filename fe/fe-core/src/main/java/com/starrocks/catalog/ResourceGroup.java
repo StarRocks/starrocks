@@ -30,7 +30,6 @@ public class ResourceGroup implements Writable {
     public static final String BIG_QUERY_SCAN_ROWS_LIMIT = "big_query_scan_rows_limit";
     public static final String BIG_QUERY_CPU_SECOND_LIMIT = "big_query_cpu_second_limit";
     public static final String CONCURRENCY_LIMIT = "concurrency_limit";
-    public static final String WORKGROUP_TYPE = "type";
     public static final String DEFAULT_WORKGROUP_NAME = "default_wg";
 
     public static final ShowResultSetMetaData META_DATA =
@@ -65,7 +64,7 @@ public class ResourceGroup implements Writable {
     @SerializedName(value = "concurrencyLimit")
     private Integer concurrencyLimit;
     @SerializedName(value = "workGroupType")
-    private TWorkGroupType workGroupType;
+    private TWorkGroupType resourceGroupType;
     @SerializedName(value = "version")
     private long version;
 
@@ -99,7 +98,7 @@ public class ResourceGroup implements Writable {
             row.add("" + 0);
         }
         row.add("" + concurrencyLimit);
-        row.add("" + workGroupType.name().substring("WG_".length()));
+        row.add("" + resourceGroupType.name().substring("WG_".length()));
         row.add(classifier.toString());
         return row;
     }
@@ -168,8 +167,8 @@ public class ResourceGroup implements Writable {
         if (concurrencyLimit != null) {
             twg.setConcurrency_limit(concurrencyLimit);
         }
-        if (workGroupType != null) {
-            twg.setWorkgroup_type(workGroupType);
+        if (resourceGroupType != null) {
+            twg.setWorkgroup_type(resourceGroupType);
         }
         twg.setVersion(version);
         return twg;
@@ -223,12 +222,12 @@ public class ResourceGroup implements Writable {
         this.concurrencyLimit = concurrencyLimit;
     }
 
-    public TWorkGroupType getWorkGroupType() {
-        return workGroupType;
+    public TWorkGroupType getResourceGroupType() {
+        return resourceGroupType;
     }
 
-    public void setWorkGroupType(TWorkGroupType workGroupType) {
-        this.workGroupType = workGroupType;
+    public void setResourceGroupType(TWorkGroupType workGroupType) {
+        this.resourceGroupType = workGroupType;
     }
 
     public List<ResourceGroupClassifier> getClassifiers() {

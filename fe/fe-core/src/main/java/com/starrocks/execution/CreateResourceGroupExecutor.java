@@ -11,7 +11,7 @@ import com.starrocks.qe.ShowResultSet;
 public class CreateResourceGroupExecutor implements DataDefinitionExecutor {
 
     public ShowResultSet execute(StatementBase stmt, ConnectContext context) throws DdlException {
-        context.getGlobalStateMgr().getWorkGroupMgr().createWorkGroup((CreateResourceGroupStmt) stmt);
+        context.getGlobalStateMgr().getResourceGroupMgr().createResourceGroup((CreateResourceGroupStmt) stmt);
         return null;
     }
 }

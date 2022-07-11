@@ -14,8 +14,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-// Alter WorkGroup specified by name
-// 1. Add a new classifier to the WorkGroup
+// Alter ResourceGroup specified by name
+// 1. Add a new classifier to the ResourceGroup
 //  ALTER RESOURCE GROUP <name> ADD (user='<user>', role='<role>', query_type in (...), source_ip='<cidr>')
 //
 // 2. Drop present classifiers by their ids
@@ -55,8 +55,8 @@ public class AlterResourceGroupStmt extends DdlStmt {
         } else if (cmd instanceof AlterProperties) {
             AlterProperties alterProperties = (AlterProperties) cmd;
             ResourceGroupAnalyzer.analyzeProperties(changedProperties, alterProperties.properties);
-            if (changedProperties.getWorkGroupType() != null) {
-                throw new SemanticException("type of WorkGroup is immutable");
+            if (changedProperties.getResourceGroupType() != null) {
+                throw new SemanticException("type of ResourceGroup is immutable");
             }
             if (changedProperties.getCpuCoreLimit() == null &&
                     changedProperties.getMemLimit() == null &&

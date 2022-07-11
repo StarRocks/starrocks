@@ -11,7 +11,7 @@ import com.starrocks.qe.ShowResultSet;
 public class DropResourceGroupExecutor implements DataDefinitionExecutor {
 
     public ShowResultSet execute(StatementBase stmt, ConnectContext context) throws DdlException {
-        context.getGlobalStateMgr().getWorkGroupMgr().dropWorkGroup((DropResourceGroupStmt) stmt);
+        context.getGlobalStateMgr().getResourceGroupMgr().dropResourceGroup((DropResourceGroupStmt) stmt);
         return null;
     }
 }

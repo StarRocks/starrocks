@@ -213,8 +213,8 @@ public class StmtExecutor {
             sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
                     .append(variables.getParallelExecInstanceNum()).append(",");
             sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
-            if (context.getWorkGroup() != null) {
-                sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getWorkGroup().getName()).append(",");
+            if (context.getResourceGroup() != null) {
+                sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName()).append(",");
             }
             sb.deleteCharAt(sb.length() - 1);
             summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
@@ -1027,7 +1027,7 @@ public class StmtExecutor {
                 context.getDatabase(),
                 sql,
                 context.getQualifiedUser(),
-                Optional.ofNullable(context.getWorkGroup()).map(ResourceGroup::getName).orElse(""));
+                Optional.ofNullable(context.getResourceGroup()).map(ResourceGroup::getName).orElse(""));
         context.setQueryDetail(queryDetail);
         //copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
