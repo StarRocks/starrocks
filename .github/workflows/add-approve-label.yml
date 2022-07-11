@@ -37,6 +37,8 @@ jobs:
         echo "false" >> temp.txt
         cat temp.txt
 
+    - run: echo ${{ steps.echo1.outputs.stdout }}
+    
     - name: Label when approved by 2 committers
       uses: actions-ecosystem/action-add-labels@v1
       if: ${{ steps.echo1.outputs.stdout }} == 'true'
