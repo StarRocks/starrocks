@@ -22,13 +22,17 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.CatalogUtils;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.common.MetaUtils;
 
 import java.util.List;
 
@@ -61,6 +65,14 @@ public class AlterTableStmt extends DdlStmt {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_TABLES_USED);
         }
         tbl.analyze(analyzer);
+        // check whether table is materialized view
+        Table table = MetaUtils.getTable(tbl);
+        if (table instanceof MaterializedView) {
+            throw new SemanticException(
+                    "The '%s' cannot be alter by 'ALTER TABLE', because '%s' is a materialized view," +
+                            "you can use 'ALTER MATERIALIZED VIEW' to alter it.",
+                    tbl.getTbl(), tbl.getTbl());
+        }
 
         CatalogUtils.checkOlapTableHasStarOSPartition(tbl.getDb(), tbl.getTbl());
 

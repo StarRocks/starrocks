@@ -5,7 +5,10 @@ import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRenameClause;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryState;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -71,5 +74,36 @@ public class AnalyzeAlterTableStatementTest {
 
         sql = "alter table t0 drop index index1";
         analyzeSuccess(sql);
+    }
+
+    @Test
+    public void testRenameMaterializedViewPartition() throws Exception {
+        AnalyzeTestUtil.getStarRocksAssert().withTable("CREATE TABLE test.table_to_create_mv\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values less than('2020-02-01'),\n" +
+                "    PARTITION p2 values less than('2020-03-01')\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        Config.enable_experimental_mv = true;
+        AnalyzeTestUtil.getStarRocksAssert().withNewMaterializedView("CREATE MATERIALIZED VIEW mv1_partition_by_column \n" +
+                "PARTITION BY k1 \n" +
+                "distributed by hash(k2) \n" +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) \n" +
+                "PROPERTIES('replication_num' = '1') \n" +
+                "as select k1, k2 from table_to_create_mv;");
+        String renamePartition = "alter table mv1_partition_by_column rename partition p00000101_20200201 pbase;";
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, renamePartition);
+        stmtExecutor.execute();
+        Assert.assertEquals(connectContext.getState().getErrType(), QueryState.ErrType.ANALYSIS_ERR);
+        connectContext.getState().getErrorMessage()
+                .contains("cannot be alter by 'ALTER TABLE', because 'mv1_partition_by_column' is a materialized view");
+
     }
 }
