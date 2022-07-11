@@ -3,7 +3,9 @@
 package com.starrocks.persist;
 
 import com.google.common.collect.Sets;
-
+import com.starrocks.journal.JournalEntity;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -16,6 +18,8 @@ import java.io.IOException;
 import java.util.Set;
 
 public class ShardInfoTest {
+
+    private static final Logger LOG = LogManager.getLogger(ImpersonatePrivInfoTest.class);
 
     private String fileName = "./ShardInfoTest";
 
@@ -44,5 +48,34 @@ public class ShardInfoTest {
         in.close();
 
         Assert.assertEquals(info.getShardIds(), shardIds);
+
+        // dump to file
+        File tempFile = File.createTempFile("ShardInfoTest", ".image");
+        LOG.info("dump to file {}", tempFile.getAbsolutePath());
+        DataOutputStream dos = new DataOutputStream(new FileOutputStream(tempFile));
+        JournalEntity je = new JournalEntity();
+        je.setData(info);
+        je.setOpCode(OperationType.OP_ADD_UNUSED_SHARD);
+        je.write(dos);
+
+        // load from file
+        DataInputStream dis = new DataInputStream(new FileInputStream(tempFile));
+        JournalEntity jeReader = new JournalEntity();
+        jeReader.readFields(dis);
+        info = (ShardInfo) jeReader.getData();
+        Assert.assertEquals(info.getShardIds(), shardIds);
+
+
+        Set<Long> shardIds2 = Sets.newHashSet();
+        shardIds.add(3L);
+        shardIds.add(4L);
+        je.setData(new ShardInfo(shardIds2));
+        je.setOpCode(OperationType.OP_DELETE_UNUSED_SHARD);
+        je.write(dos);
+        dos.close();
+
+        jeReader.readFields(dis);
+        info = (ShardInfo) jeReader.getData();
+        Assert.assertEquals(info.getShardIds(), shardIds2);
     }
 }
