@@ -36,6 +36,7 @@ import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UpdateStmt;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
@@ -323,7 +324,11 @@ public class Analyzer {
 
         @Override
         public Void visitCreateFunction(CreateFunctionStmt statement, ConnectContext context) {
-            FunctionAnalyzer.analyzeCreateFunction(statement, context);
+            try {
+                statement.analyze(context, false);
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
             return null;
         }
 

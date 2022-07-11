@@ -3,7 +3,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
@@ -15,14 +14,8 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.qe.ConnectContext;
 
 public class FunctionAnalyzer {
-
-    private static boolean isValidCharacter(char c) {
-        return Character.isLetterOrDigit(c) || c == '_';
-    }
 
     public static void analyze(FunctionCallExpr functionCallExpr) {
         if (functionCallExpr.getFn() instanceof AggregateFunction) {
@@ -289,14 +282,6 @@ public class FunctionAnalyzer {
                             + functionCallExpr.toSql());
                 }
             }
-        }
-    }
-
-    public static void analyzeCreateFunction(CreateFunctionStmt statement, ConnectContext context) {
-        try {
-            statement.analyze(context, false);
-        } catch (AnalysisException e) {
-            throw new SemanticException(e.getMessage());
         }
     }
 }
