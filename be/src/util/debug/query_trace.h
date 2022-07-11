@@ -25,7 +25,7 @@
 // }
 // It should be noted that these QUERY_TRACE_* macros rely on thread local trace context to read some information,
 // remember to set it before use.
-// The asynv event is a bit different, It may record the start and finish in different threads.
+// The async event is a bit different, It may record the start and finish in different threads.
 // Each event needs to be identified with a different id, so you need to pass a context when using it.
 // In many cases, you can directly use the pointer address of an object as id, because it must be unique within the same process.
 // An example is as follows
