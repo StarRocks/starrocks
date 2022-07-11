@@ -932,4 +932,81 @@ TEST_F(JsonScannerTest, test_illegal_input) {
     ASSERT_TRUE(scanner->get_next().status().is_data_quality_error());
 }
 
+TEST_F(JsonScannerTest, test_multi_invalid_json) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_DOUBLE);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    {
+        TBrokerRangeDesc range;
+        range.format_type = TFileFormatType::FORMAT_JSON;
+        range.strip_outer_array = true;
+        range.__isset.strip_outer_array = true;
+        range.__isset.jsonpaths = false;
+        range.__isset.json_root = false;
+        range.__set_path("./be/test/exec/test_data/json_scanner/test1.json");
+        ranges.emplace_back(range);
+    }
+
+    {
+        TBrokerRangeDesc range;
+        range.format_type = TFileFormatType::FORMAT_JSON;
+        range.strip_outer_array = true;
+        range.__isset.strip_outer_array = true;
+        range.__isset.jsonpaths = false;
+        range.__isset.json_root = false;
+        range.__set_path("./be/test/exec/test_data/json_scanner/invalid_test1.json");
+        ranges.emplace_back(range);
+    }
+
+    {
+        TBrokerRangeDesc range;
+        range.format_type = TFileFormatType::FORMAT_JSON;
+        range.strip_outer_array = true;
+        range.__isset.strip_outer_array = true;
+        range.__isset.jsonpaths = false;
+        range.__isset.json_root = false;
+        range.__set_path("./be/test/exec/test_data/json_scanner/invalid_test1.json");
+        ranges.emplace_back(range);
+    }
+
+    {
+        TBrokerRangeDesc range;
+        range.format_type = TFileFormatType::FORMAT_JSON;
+        range.strip_outer_array = true;
+        range.__isset.strip_outer_array = true;
+        range.__isset.jsonpaths = false;
+        range.__isset.json_root = false;
+        range.__set_path("./be/test/exec/test_data/json_scanner/test1.json");
+        ranges.emplace_back(range);
+    }
+
+    auto scanner = create_json_scanner(types, ranges, {"category", "author", "title", "price"});
+
+    ASSERT_TRUE(scanner->open().ok());
+
+    // 2 row from 1st test1.json.
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(4, chunk->num_columns());
+    EXPECT_EQ(2, chunk->num_rows());
+
+    // the data from invalid_test.json is skipped.
+
+    EXPECT_EQ("['reference', 'NigelRees', 'SayingsoftheCentury', 8.95]", chunk->debug_row(0));
+    EXPECT_EQ("['fiction', 'EvelynWaugh', 'SwordofHonour', 12.99]", chunk->debug_row(1));
+
+    // 2 row from 2nd test1.json.
+    chunk = scanner->get_next().value();
+    EXPECT_EQ(4, chunk->num_columns());
+    EXPECT_EQ(2, chunk->num_rows());
+
+    EXPECT_EQ("['reference', 'NigelRees', 'SayingsoftheCentury', 8.95]", chunk->debug_row(0));
+    EXPECT_EQ("['fiction', 'EvelynWaugh', 'SwordofHonour', 12.99]", chunk->debug_row(1));
+
+    EXPECT_TRUE(scanner->get_next().status().is_end_of_file());
+}
+
 } // namespace starrocks::vectorized
