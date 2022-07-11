@@ -74,6 +74,8 @@ public class MetastoreEventFactory implements EventFactory {
             HiveTable table = Catalog.getCurrentCatalog().getMetastoreEventsProcessor()
                     .getHiveTable(resourceName, event.getDbName(), event.getTableName());
             if (table == null) {
+                LOG.debug("The hive external table corresponding to [{}.{}.{}]] cannot be found in StarRocks",
+                        resourceName, event.getDbName(), event.getTableName());
                 continue;
             }
             metastoreEvents.addAll(get(event, metaCache, table));
