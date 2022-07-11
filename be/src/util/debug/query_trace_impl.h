@@ -28,21 +28,24 @@ struct QueryTraceEvent {
     int64_t id; // used for async event
     char phase;
     int64_t timestamp;
-    int64_t duration = -1; // for compelete event, not used now
+    int64_t duration = -1; // used for compelete event
     // TUniqueId::hi is all the same in one query, so we use TUniqueId::lo to specific one fragment instance
     int64_t instance_id;
-    // driver pointer address
+    // driver pointer
     std::uintptr_t driver;
     std::vector<std::pair<std::string, std::string>> args;
 
     std::string to_string();
 
     static QueryTraceEvent create(const std::string& name, const std::string& category, int64_t id, char phase,
-                                  int64_t timestamp, int64_t instance_id, std::uintptr_t driver,
+                                  int64_t timestamp, int64_t duration, int64_t instance_id, std::uintptr_t driver,
                                   std::vector<std::pair<std::string, std::string>>&& args);
 
     static QueryTraceEvent create_with_ctx(const std::string& name, const std::string& category, int64_t id, char phase,
                                            const QueryTraceContext& ctx);
+
+    static QueryTraceEvent create_with_ctx(const std::string& name, const std::string& category, int64_t id, char phase,
+                                           int64_t start_ts, int64_t duration, const QueryTraceContext& ctx);
 
 private:
     std::string args_to_string();
@@ -95,6 +98,8 @@ public:
 private:
     std::string _category;
     std::string _name;
+    int64_t _start_ts;
+    int64_t _duration;
 };
 
 struct QueryTraceContext {

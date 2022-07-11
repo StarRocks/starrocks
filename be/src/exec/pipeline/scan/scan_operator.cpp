@@ -284,8 +284,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     starrocks::debug::QueryTraceContext query_trace_ctx = starrocks::debug::tls_trace_ctx;
     query_trace_ctx.id = reinterpret_cast<int64_t>(_chunk_sources[chunk_source_index].get());
     if (_workgroup != nullptr) {
-        workgroup::ScanTask task =
-                workgroup::ScanTask(_workgroup, [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx](int worker_id) {
+        workgroup::ScanTask task = workgroup::ScanTask(
+                _workgroup, [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx](int worker_id) {
                     if (auto sp = wp.lock()) {
                         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
                         // @TODO add scoped?

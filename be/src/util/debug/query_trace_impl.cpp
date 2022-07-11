@@ -16,7 +16,7 @@ namespace starrocks {
 namespace debug {
 
 QueryTraceEvent QueryTraceEvent::create(const std::string& name, const std::string& category, int64_t id, char phase,
-                                        int64_t timestamp, int64_t instance_id, std::uintptr_t driver,
+                                        int64_t timestamp, int64_t duration, int64_t instance_id, std::uintptr_t driver,
                                         std::vector<std::pair<std::string, std::string>>&& args) {
     QueryTraceEvent event;
     event.name = name;
@@ -24,6 +24,7 @@ QueryTraceEvent QueryTraceEvent::create(const std::string& name, const std::stri
     event.id = id;
     event.phase = phase;
     event.timestamp = timestamp;
+    event.duration = duration;
     event.instance_id = instance_id;
     event.driver = driver;
     event.args = std::move(args);
@@ -32,8 +33,14 @@ QueryTraceEvent QueryTraceEvent::create(const std::string& name, const std::stri
 
 QueryTraceEvent QueryTraceEvent::create_with_ctx(const std::string& name, const std::string& category, int64_t id,
                                                  char phase, const QueryTraceContext& ctx) {
-    return create(name, category, id, phase, MonotonicMicros() - ctx.start_ts, ctx.fragment_instance_id, ctx.driver,
+    return create(name, category, id, phase, MonotonicMicros() - ctx.start_ts, -1, ctx.fragment_instance_id, ctx.driver,
                   {});
+}
+
+QueryTraceEvent QueryTraceEvent::create_with_ctx(const std::string& name, const std::string& category, int64_t id,
+                                                 char phase, int64_t start_ts, int64_t duration,
+                                                 const QueryTraceContext& ctx) {
+    return create(name, category, id, phase, start_ts, duration, ctx.fragment_instance_id, ctx.driver, {});
 }
 
 static const char* kSimpleEventFormat =
@@ -42,10 +49,6 @@ static const char* kSimpleEventFormat =
 static const char* kCompleteEventFormat =
         "{\"cat\":\"%s\",\"name\":\"%s\",\"pid\":\"%ld\",\"tid\":\"%ld\",\"id\":\"%ld\",\"ts\":%ld,\"dur\":%ld,\"ph\":"
         "\"%c\",\"args\":%s}";
-[[maybe_unused]] static const char* kProcessNameMetaEventFormat =
-        "{\"name\":\"process_name\",\"ph\":\"M\",\"pid\":\"%ld\",\"args\":{\"name\":\"%s\"}}";
-[[maybe_unused]] static const char* kThreadNameMetaEventFormat =
-        "{\"name\":\"thread_name\",\"ph\":\"M\",\"pid\":\"%ld\",\"tid\":\"%ld\",\"args\":{\"name\":\"%s\"}}";
 
 std::string QueryTraceEvent::to_string() {
     std::string args_str = args_to_string();
@@ -59,13 +62,14 @@ std::string QueryTraceEvent::to_string() {
 }
 
 std::string QueryTraceEvent::args_to_string() {
+    if (args.empty()) {
+        return "{}";
+    }
     std::ostringstream oss;
     oss << "{";
-    for (size_t i = 0; i < args.size(); i++) {
-        if (i != 0) {
-            oss << ",";
-        }
-        oss << fmt::sprintf("\"%s\":\"%s\"", args[i].first.c_str(), args[i].second.c_str());
+    oss << fmt::sprintf("\"%s\":\"%s\"", args[0].first.c_str(), args[0].second.c_str());
+    for (size_t i = 1; i < args.size(); i++) {
+        oss << fmt::sprintf(",\"%s\":\"%s\"", args[i].first.c_str(), args[i].second.c_str());
     }
     oss << "}";
     return oss.str();
@@ -77,7 +81,11 @@ void EventBuffer::add(QueryTraceEvent&& event) {
 }
 
 QueryTrace::QueryTrace(const TUniqueId& query_id, bool is_enable) : _query_id(query_id), _is_enable(is_enable) {
-    _start_ts = MonotonicMicros();
+#ifdef ENABLE_QUERY_DEBUG_TRACE
+    if (_is_enable) {
+        _start_ts = MonotonicMicros();
+    }
+#endif
 }
 
 void QueryTrace::register_drivers(TUniqueId fragment_instance_id, starrocks::pipeline::Drivers& drivers) {
@@ -164,11 +172,13 @@ void QueryTrace::set_tls_trace_context(QueryTrace* query_trace, TUniqueId fragme
 }
 
 ScopedTracer::ScopedTracer(const std::string& category, const std::string& name) : _category(category), _name(name) {
-    QUERY_TRACE_BEGIN(_category, _name);
+    _start_ts = MonotonicMicros();
 }
-// @TODO: just generate a compelete event to reduce the number of events
+
 ScopedTracer::~ScopedTracer() {
-    QUERY_TRACE_END(_category, _name);
+    _duration = MonotonicMicros() - _start_ts;
+    tls_trace_ctx.event_buffer->add(QueryTraceEvent::create_with_ctx(
+            _name, _category, -1, 'X', _start_ts - tls_trace_ctx.start_ts, _duration, tls_trace_ctx));
 }
 
 } // namespace debug
