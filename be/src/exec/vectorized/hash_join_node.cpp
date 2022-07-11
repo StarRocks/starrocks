@@ -507,11 +507,11 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
 
     lhs_operators.emplace_back(std::move(probe_op));
 
+    lhs_operators.emplace_back(std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), id()));
     if (limit() != -1) {
         lhs_operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
 
-    lhs_operators.emplace_back(std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), id()));
 
     return lhs_operators;
 }
