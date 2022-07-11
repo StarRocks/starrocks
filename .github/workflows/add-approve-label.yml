@@ -41,7 +41,7 @@ jobs:
     
     - name: Label when approved by 2 committers
       uses: actions-ecosystem/action-add-labels@v1
-      if: ${{ steps.echo1.outputs.stdout }} == 'true'
+      if: ${{ steps.echo1.outputs.result }} == 'true'
       with:
         github_token: ${{ secrets.PAT }}
         labels: approved
