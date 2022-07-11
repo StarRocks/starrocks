@@ -26,8 +26,15 @@ constexpr bool IsWindowFunctionSliceState<MaxAggregateData<TYPE_VARCHAR>> = true
 template <>
 constexpr bool IsWindowFunctionSliceState<MinAggregateData<TYPE_VARCHAR>> = true;
 
-template <typename T>
-struct NullableAggregateFunctionState {
+struct NullableAggregateWindowFunctionState {
+    // The following two fields are only used in "update_state_removable_cumulatively"
+    bool is_frame_init = false;
+    int64_t null_count = 0;
+};
+
+template <typename T, bool IsWindowFunc>
+struct NullableAggregateFunctionState
+        : public std::conditional_t<IsWindowFunc, NullableAggregateWindowFunctionState, AggregateFunctionEmptyState> {
     using NestedState = T;
 
     NullableAggregateFunctionState() : _nested_state() {}
@@ -38,10 +45,6 @@ struct NullableAggregateFunctionState {
 
     bool is_null = true;
 
-    // The following two fields are only used in "update_state_removable_cumulatively"
-    bool is_frame_init = false;
-    int64_t null_count = 0;
-
     T _nested_state;
 };
 
@@ -49,7 +52,7 @@ struct NullableAggregateFunctionState {
 // If an aggregate function has at least one nullable argument, we should use this class.
 // If all row all are NULL, we will return NULL.
 // The State must be NullableAggregateFunctionState
-template <typename State, bool IgnoreNull = true>
+template <typename State, bool IsWindowFunc, bool IgnoreNull = true>
 class NullableAggregateFunctionBase : public AggregateFunctionStateHelper<State> {
 public:
     explicit NullableAggregateFunctionBase(AggregateFunctionPtr nested_function_)
@@ -59,8 +62,10 @@ public:
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).is_null = true;
-        this->data(state).is_frame_init = false;
-        this->data(state).null_count = 0;
+        if constexpr (IsWindowFunc) {
+            this->data(state).is_frame_init = false;
+            this->data(state).null_count = 0;
+        }
         nested_function->reset(ctx, args, this->data(state).mutable_nest_state());
     }
 
@@ -219,11 +224,11 @@ protected:
     AggregateFunctionPtr nested_function;
 };
 
-template <typename State, bool IgnoreNull = true>
-class NullableAggregateFunctionUnary final : public NullableAggregateFunctionBase<State, IgnoreNull> {
+template <typename State, bool IsWindowFunc = false, bool IgnoreNull = true>
+class NullableAggregateFunctionUnary final : public NullableAggregateFunctionBase<State, IsWindowFunc, IgnoreNull> {
 public:
     explicit NullableAggregateFunctionUnary(const AggregateFunctionPtr& nested_function)
-            : NullableAggregateFunctionBase<State, IgnoreNull>(nested_function) {}
+            : NullableAggregateFunctionBase<State, IsWindowFunc, IgnoreNull>(nested_function) {}
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {}
@@ -512,93 +517,95 @@ public:
                                              int64_t current_row_position, int64_t partition_start,
                                              int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
                                              bool ignore_subtraction, bool ignore_addition) const override {
-        DCHECK(!ignore_subtraction);
-        DCHECK(!ignore_addition);
-        this->data(state).is_null = true;
-        const auto frame_start =
-                std::min(std::max(current_row_position + rows_start_offset, partition_start), partition_end);
-        const auto frame_end =
-                std::max(std::min(current_row_position + rows_end_offset + 1, partition_end), partition_start);
-        const auto frame_size = frame_end - frame_start;
-        // For cases like: rows between 2 preceding and 1 preceding
-        // If frame_start ge frame_end, means the frame is empty,
-        // we could directly return.
-        if (frame_size <= 0) {
-            return;
-        }
-        if (columns[0]->is_nullable()) {
-            const auto* column = down_cast<const NullableColumn*>(columns[0]);
-            const Column* data_column = &column->data_column_ref();
-
-            // The fast pass
-            if (!column->has_null()) {
-                this->data(state).is_null = false;
-                if (this->data(state).is_frame_init) {
-                    // Since frame has been evaluated, we only need to update the boundary
-                    this->nested_function->update_state_removable_cumulatively(
-                            ctx, this->data(state).mutable_nest_state(), &data_column, current_row_position,
-                            partition_start, partition_end, rows_start_offset, rows_end_offset, ignore_subtraction,
-                            ignore_addition);
-                } else {
-                    // Build the frame for the first time
-                    this->nested_function->update_batch_single_state(ctx, this->data(state).mutable_nest_state(),
-                                                                     &data_column, -1, -1, frame_start, frame_end);
-                    this->data(state).is_frame_init = true;
-                }
+        if constexpr (IsWindowFunc) {
+            DCHECK(!ignore_subtraction);
+            DCHECK(!ignore_addition);
+            this->data(state).is_null = true;
+            const auto frame_start =
+                    std::min(std::max(current_row_position + rows_start_offset, partition_start), partition_end);
+            const auto frame_end =
+                    std::max(std::min(current_row_position + rows_end_offset + 1, partition_end), partition_start);
+            const auto frame_size = frame_end - frame_start;
+            // For cases like: rows between 2 preceding and 1 preceding
+            // If frame_start ge frame_end, means the frame is empty,
+            // we could directly return.
+            if (frame_size <= 0) {
                 return;
             }
+            if (columns[0]->is_nullable()) {
+                const auto* column = down_cast<const NullableColumn*>(columns[0]);
+                const Column* data_column = &column->data_column_ref();
 
-            const uint8_t* f_data = column->null_column()->raw_data();
-            if (this->data(state).is_frame_init) {
-                // Since frame has been evaluated, we only need to update the boundary
-                const int64_t previous_frame_first_position = current_row_position - 1 + rows_start_offset;
-                const int64_t current_frame_last_position = current_row_position + rows_end_offset;
-                bool is_previous_frame_start_null = false;
-                if (previous_frame_first_position >= partition_start && previous_frame_first_position < partition_end &&
-                    f_data[previous_frame_first_position] == 1) {
-                    is_previous_frame_start_null = true;
-                    this->data(state).null_count--;
-                }
-                bool is_current_frame_end_null = false;
-                if (current_frame_last_position >= partition_start && current_frame_last_position < partition_end &&
-                    f_data[current_frame_last_position] == 1) {
-                    is_current_frame_end_null = true;
-                    this->data(state).null_count++;
-                }
-                this->nested_function->update_state_removable_cumulatively(
-                        ctx, this->data(state).mutable_nest_state(), &data_column, current_row_position,
-                        partition_start, partition_end, rows_start_offset, rows_end_offset,
-                        is_previous_frame_start_null, is_current_frame_end_null);
-                if (frame_size != this->data(state).null_count) {
+                // The fast pass
+                if (!column->has_null()) {
                     this->data(state).is_null = false;
-                }
-            } else {
-                // Build the frame for the first time
-                for (size_t i = frame_start; i < frame_end; ++i) {
-                    if (f_data[i] == 0) {
-                        this->data(state).is_null = false;
-                        this->nested_function->update_batch_single_state(ctx, this->data(state).mutable_nest_state(),
-                                                                         &data_column, -1, -1, i, i + 1);
+                    if (this->data(state).is_frame_init) {
+                        // Since frame has been evaluated, we only need to update the boundary
+                        this->nested_function->update_state_removable_cumulatively(
+                                ctx, this->data(state).mutable_nest_state(), &data_column, current_row_position,
+                                partition_start, partition_end, rows_start_offset, rows_end_offset, ignore_subtraction,
+                                ignore_addition);
                     } else {
+                        // Build the frame for the first time
+                        this->nested_function->update_batch_single_state(ctx, this->data(state).mutable_nest_state(),
+                                                                         &data_column, -1, -1, frame_start, frame_end);
+                        this->data(state).is_frame_init = true;
+                    }
+                    return;
+                }
+
+                const uint8_t* f_data = column->null_column()->raw_data();
+                if (this->data(state).is_frame_init) {
+                    // Since frame has been evaluated, we only need to update the boundary
+                    const int64_t previous_frame_first_position = current_row_position - 1 + rows_start_offset;
+                    const int64_t current_frame_last_position = current_row_position + rows_end_offset;
+                    bool is_previous_frame_start_null = false;
+                    if (previous_frame_first_position >= partition_start &&
+                        previous_frame_first_position < partition_end && f_data[previous_frame_first_position] == 1) {
+                        is_previous_frame_start_null = true;
+                        this->data(state).null_count--;
+                    }
+                    bool is_current_frame_end_null = false;
+                    if (current_frame_last_position >= partition_start && current_frame_last_position < partition_end &&
+                        f_data[current_frame_last_position] == 1) {
+                        is_current_frame_end_null = true;
                         this->data(state).null_count++;
                     }
+                    this->nested_function->update_state_removable_cumulatively(
+                            ctx, this->data(state).mutable_nest_state(), &data_column, current_row_position,
+                            partition_start, partition_end, rows_start_offset, rows_end_offset,
+                            is_previous_frame_start_null, is_current_frame_end_null);
+                    if (frame_size != this->data(state).null_count) {
+                        this->data(state).is_null = false;
+                    }
+                } else {
+                    // Build the frame for the first time
+                    for (size_t i = frame_start; i < frame_end; ++i) {
+                        if (f_data[i] == 0) {
+                            this->data(state).is_null = false;
+                            this->nested_function->update_batch_single_state(
+                                    ctx, this->data(state).mutable_nest_state(), &data_column, -1, -1, i, i + 1);
+                        } else {
+                            this->data(state).null_count++;
+                        }
+                    }
+                    this->data(state).is_frame_init = true;
                 }
-                this->data(state).is_frame_init = true;
+            } else {
+                this->data(state).is_null = false;
+                this->nested_function->update_state_removable_cumulatively(
+                        ctx, this->data(state).mutable_nest_state(), columns, current_row_position, partition_start,
+                        partition_end, rows_start_offset, rows_end_offset, ignore_subtraction, ignore_addition);
             }
-        } else {
-            this->data(state).is_null = false;
-            this->nested_function->update_state_removable_cumulatively(
-                    ctx, this->data(state).mutable_nest_state(), columns, current_row_position, partition_start,
-                    partition_end, rows_start_offset, rows_end_offset, ignore_subtraction, ignore_addition);
         }
     }
 };
 
 template <typename State>
-class NullableAggregateFunctionVariadic final : public NullableAggregateFunctionBase<State, true> {
+class NullableAggregateFunctionVariadic final : public NullableAggregateFunctionBase<State, false> {
 public:
     NullableAggregateFunctionVariadic(const AggregateFunctionPtr& nested_function)
-            : NullableAggregateFunctionBase<State>(nested_function) {}
+            : NullableAggregateFunctionBase<State, false>(nested_function) {}
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {

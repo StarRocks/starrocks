@@ -222,5 +222,7 @@ class AggregateFunctionBatchHelper : public AggregateFunctionStateHelper<State> 
 
 using AggregateFunctionPtr = std::shared_ptr<AggregateFunction>;
 
+struct AggregateFunctionEmptyState {};
+
 } // namespace vectorized
 } // namespace starrocks
