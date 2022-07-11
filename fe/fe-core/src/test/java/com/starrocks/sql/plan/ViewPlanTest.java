@@ -1242,11 +1242,15 @@ public class ViewPlanTest extends PlanTestBase {
         testView(sql);
     }
 
-    @Test
-    public void testSql267() throws Exception {
-        String sql = "select v1, sum(v3[1]) from tarray group by v1";
-        testView(sql);
-    }
+        @Test
+        public void testSql267() throws Exception {
+            try {
+                String sql = "select v1, sum(v3[1]) from tarray group by v1";
+                testView(sql);
+            } catch (Exception e){
+                Assert.assertEquals(e.getMessage(), "table column type [v3] transform failed.");
+            }
+        }
 
     @Test
     public void testSql268() throws Exception {
@@ -1286,8 +1290,12 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void testSql275() throws Exception {
-        String sql = "select v3[1] from tarray";
-        testView(sql);
+        try {
+            String sql = "select v3[1] from tarray";
+            testView(sql);
+        } catch (Exception e) {
+            Assert.assertEquals(e.getMessage(), "table column type [v3] transform failed.");
+        }
     }
 
     @Test
@@ -1536,23 +1544,49 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void test314() throws Exception {
-        String sql = "select split('1,2,3', ',') from t1;";
-        testView(sql);
+        String sql = null;
 
-        sql = "select v3 from tarray";
-        testView(sql);
+        try {
+            sql = "select split('1,2,3', ',') from t1;";
+            testView(sql);
+        } catch (Exception e) {
+            Assert.assertEquals(e.getMessage(), "table column type [ARRAY<VARCHAR>] transform failed.");
+        }
 
-        sql = "select array_sum(v3) from tarray";
-        testView(sql);
+        try {
+            sql = "select v3 from tarray";
+            testView(sql);
+        } catch (Exception e) {
+            Assert.assertEquals(e.getMessage(), "table column type [v3] transform failed.");
+        }
 
-        sql = "select v1,unnest from tarray,unnest(v3)";
-        testView(sql);
+        try {
+            sql = "select array_sum(v3) from tarray";
+            testView(sql);
+        } catch (Exception e) {
+            Assert.assertEquals(e.getMessage(), "table column type [v3] transform failed.");
+        }
 
-        sql = "select * from tarray,unnest(v3)";
-        testView(sql);
+        try {
+            sql = "select v1,unnest from tarray,unnest(v3)";
+            testView(sql);
+        } catch (Exception e) {
+            Assert.assertEquals(e.getMessage(), "table column type [v3] transform failed.");
+        }
 
-        sql = "select * from tarray,unnest(v3) t";
-        testView(sql);
+        try {
+            sql = "select * from tarray,unnest(v3)";
+            testView(sql);
+        } catch (Exception e) {
+            Assert.assertEquals(e.getMessage(), "table column type [v3] transform failed.");
+        }
+
+        try {
+            sql = "select * from tarray,unnest(v3) t";
+            testView(sql);
+        } catch (Exception e) {
+            Assert.assertEquals(e.getMessage(), "table column type [v3] transform failed.");
+        }
     }
 
     @Test

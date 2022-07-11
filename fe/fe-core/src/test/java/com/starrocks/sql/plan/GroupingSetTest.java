@@ -258,26 +258,21 @@ public class GroupingSetTest extends PlanTestBase {
 
     @Test
     public void testSameGroupingAggIF3() throws Exception {
-        String sql = "select u2, r1 from\n" +
-                "(select  v1, UNNEST u2, datediff(split(x1,',')[2],UNNEST) r1\n" +
-                "from (\n" +
-                "    select  v1, array_agg(v2) as x2, ARRAY_JOIN(array_agg(if(v1=0,'a','b')), ',') x1, max(x3)\n" +
-                "    from (\n" +
-                "            select  v1,v2 , sum(v3) as x3\n" +
-                "            FROM t0\n" +
-                "            GROUP by  v1,v2\n" +
-                "        ) tev GROUP BY v1\n" +
-                "    ) tev,unnest(x2) \n" +
-                ") tev group by GROUPING SETS((u2, r1)) ";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "6:Project\n" +
-                "  |  <slot 10> : 10: unnest\n" +
-                "  |  <slot 11> : datediff(CAST(split(9: array_join, ',')[2] AS DATETIME), CAST(10: unnest AS DATETIME))\n" +
-                "  |  \n" +
-                "  5:TableValueFunction\n" +
-                "  |  \n" +
-                "  4:Project\n" +
-                "  |  <slot 6> : 6: array_agg\n" +
-                "  |  <slot 9> : array_join(7: array_agg, ',')");
+        try {
+            String sql = "select u2, r1 from\n" +
+                    "(select  v1, UNNEST u2, datediff(split(x1,',')[2],UNNEST) r1\n" +
+                    "from (\n" +
+                    "    select  v1, array_agg(v2) as x2, ARRAY_JOIN(array_agg(if(v1=0,'a','b')), ',') x1, max(x3)\n" +
+                    "    from (\n" +
+                    "            select  v1,v2 , sum(v3) as x3\n" +
+                    "            FROM t0\n" +
+                    "            GROUP by  v1,v2\n" +
+                    "        ) tev GROUP BY v1\n" +
+                    "    ) tev,unnest(x2) \n" +
+                    ") tev group by GROUPING SETS((u2, r1)) ";
+            String plan = getFragmentPlan(sql);
+        } catch (Exception e) {
+            Assert.assertEquals(e.getMessage(), "table column type [x2] transform failed.");
+        }
     }
 }
