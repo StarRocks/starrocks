@@ -30,3 +30,4 @@ jobs:
       with:
         name: review
         path: ${{ github.workspace }}/${{ github.event.pull_request.number }}
+        retention-days: 0
