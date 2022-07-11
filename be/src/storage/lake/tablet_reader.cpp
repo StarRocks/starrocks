@@ -26,7 +26,6 @@ using ConjunctivePredicates = starrocks::vectorized::ConjunctivePredicates;
 using Datum = starrocks::vectorized::Datum;
 using Field = starrocks::vectorized::Field;
 using PredicateParser = starrocks::vectorized::PredicateParser;
-using RowsetReadOptions = starrocks::vectorized::RowsetReadOptions;
 using ZonemapPredicatesRewriter = starrocks::vectorized::ZonemapPredicatesRewriter;
 
 TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema)

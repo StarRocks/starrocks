@@ -11,8 +11,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 public class SubmitTaskExecutor implements DataDefinitionExecutor {
 
     public ShowResultSet execute(StatementBase stmt, ConnectContext context) throws DdlException {
-        context.getGlobalStateMgr().getTaskManager().handleSubmitTaskStmt((SubmitTaskStmt) stmt);
-        return null;
+        return context.getGlobalStateMgr().getTaskManager().handleSubmitTaskStmt((SubmitTaskStmt) stmt);
     }
 }
 

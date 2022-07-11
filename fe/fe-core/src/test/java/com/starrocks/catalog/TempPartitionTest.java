@@ -114,6 +114,22 @@ public class TempPartitionTest {
         }
     }
 
+    private void alterTableWithNewAnalyzer(String sql, boolean expectedException) throws Exception {
+        try {
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+            if (expectedException) {
+                Assert.fail("expected exception not thrown");
+            }
+        } catch (Exception e) {
+            if (expectedException) {
+                System.out.println("got exception: " + e.getMessage());
+            } else {
+                throw e;
+            }
+        }
+    }
+
     private List<List<String>> checkTablet(String tbl, String partitions, boolean isTemp, int expected)
             throws Exception {
         String showStr = "show tablet from " + tbl + (isTemp ? " temporary" : "") + " partition (" + partitions + ");";
@@ -190,7 +206,7 @@ public class TempPartitionTest {
 
         // drop temp partition
         stmtStr = "alter table db1.tbl1 drop temporary partition tbl1;";
-        alterTable(stmtStr, true);
+        alterTableWithNewAnalyzer(stmtStr, true);
 
         // show temp partition
         checkShowPartitionsResultNum("db1.tbl1", true, 0);
@@ -256,13 +272,13 @@ public class TempPartitionTest {
 
         // drop non exist temp partition
         stmtStr = "alter table db2.tbl2 drop temporary partition tp4;";
-        alterTable(stmtStr, true);
+        alterTableWithNewAnalyzer(stmtStr, true);
 
         stmtStr = "alter table db2.tbl2 drop temporary partition if exists tp4;";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
 
         stmtStr = "alter table db2.tbl2 drop temporary partition tp3;";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
 
         Map<String, Long> originPartitionTabletIds2 = Maps.newHashMap();
         getPartitionNameToTabletIdMap("db2.tbl2", false, originPartitionTabletIds2);
@@ -281,7 +297,7 @@ public class TempPartitionTest {
         checkShowPartitionsResultNum("db2.tbl2", true, 3);
 
         stmtStr = "alter table db2.tbl2 drop partition p1;";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
         checkShowPartitionsResultNum("db2.tbl2", true, 3);
         checkShowPartitionsResultNum("db2.tbl2", false, 2);
 
@@ -341,7 +357,7 @@ public class TempPartitionTest {
         checkPartitionExist(tbl2, "tp3", true, true);
 
         stmtStr = "alter table db2.tbl2 drop partition p3;";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
         stmtStr = "alter table db2.tbl2 add partition p31 values less than('25');";
         alterTable(stmtStr, false);
         stmtStr = "alter table db2.tbl2 add partition p32 values less than('35');";
@@ -531,7 +547,7 @@ public class TempPartitionTest {
         alterTable(stmtStr, true);
         // drop the tp4, and add temp partition tp4 [10,30) to to replace tp1, tp2, tp3
         stmtStr = "alter table db3.tbl3 drop temporary partition tp4";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
         stmtStr = "alter table db3.tbl3 add temporary partition tp4 values [('10'), ('30'))";
         alterTable(stmtStr, false);
         stmtStr = "alter table db3.tbl3 replace partition (tp1, tp2, tp3) with temporary partition(tp4)";

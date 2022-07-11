@@ -5,23 +5,21 @@
 #include <set>
 
 #include "common/statusor.h"
-#include "storage/lake/group_assigner.h"
+#include "storage/lake/location_provider.h"
 
 namespace starrocks::lake {
 
-class StarletGroupAssigner : public GroupAssigner {
+class StarletLocationProvider : public LocationProvider {
 public:
-    std::string get_fs_prefix() override;
+    // The result should be guaranteed to not end with "/"
+    StatusOr<std::string> root_location(int64_t tablet_id) override;
 
     // The result should be guaranteed to not end with "/"
-    StatusOr<std::string> get_group(int64_t tablet_id) override;
-
-    // The result should be guaranteed to not end with "/"
-    Status list_group(std::set<std::string>* groups) override;
+    Status list_root_locations(std::set<std::string>* groups) override;
 
     // 1. Add "staros://" prefix
     // 2. Add "?ShardId=tablet_id" suffix
-    std::string path_assemble(const std::string& path, int64_t tablet_id) override;
+    std::string location(const std::string& file_name, int64_t tablet_id) override;
 };
 
 } // namespace starrocks::lake

@@ -88,4 +88,25 @@ public class HiveRepositoryTest {
             Assert.assertSame(client, queue.poll());
         }
     }
+
+    @Test
+    public void testHiveExternalTableCounter() {
+        HiveRepository repo = GlobalStateMgr.getCurrentState().getHiveRepository();
+        String resource = "hive_resource";
+        String database = "hive_db";
+        String table = "hive_tbl";
+        Assert.assertEquals(0, repo.getCounter().get(resource, database, table));
+        Assert.assertEquals(0, repo.getCounter().reduce(resource, database, table));
+        Assert.assertEquals(0, repo.getCounter().get(resource, database, table));
+        Assert.assertEquals(1, repo.getCounter().add(resource, database, table));
+        Assert.assertEquals(1, repo.getCounter().get(resource, database, table));
+        Assert.assertEquals(2, repo.getCounter().add(resource, database, table));
+        Assert.assertEquals(2, repo.getCounter().get(resource, database, table));
+        Assert.assertEquals(1, repo.getCounter().reduce(resource, database, table));
+        Assert.assertEquals(1, repo.getCounter().get(resource, database, table));
+        Assert.assertEquals(0, repo.getCounter().reduce(resource, database, table));
+        Assert.assertEquals(0, repo.getCounter().get(resource, database, table));
+        Assert.assertEquals(0, repo.getCounter().reduce(resource, database, table));
+        Assert.assertEquals(0, repo.getCounter().get(resource, database, table));
+    }
 }

@@ -21,7 +21,7 @@ public:
             ActiveInputKey, typename phmap::Hash<ActiveInputKey>, typename phmap::EqualTo<ActiveInputKey>,
             typename std::allocator<ActiveInputKey>, NUM_LOCK_SHARD_LOG, std::mutex, true>;
 
-    ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop);
+    ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop, ChunkBufferLimiterPtr buffer_limiter);
 
     ~ConnectorScanOperatorFactory() override = default;
 
@@ -39,8 +39,7 @@ private:
 
 class ConnectorScanOperator final : public ScanOperator {
 public:
-    ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
-                          std::atomic<int>& num_committed_scan_tasks);
+    ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node);
 
     ~ConnectorScanOperator() override = default;
 
@@ -54,8 +53,13 @@ public:
     void detach_chunk_source(int32_t source_index) override;
     bool has_shared_chunk_source() const override;
     bool has_buffer_output() const override;
-    bool has_available_buffer() const override;
     ChunkPtr get_chunk_from_buffer() override;
+    size_t buffer_size() const override;
+    size_t buffer_capacity() const override;
+    size_t default_buffer_capacity() const override;
+    ChunkBufferTokenPtr pin_chunk(int num_chunks);
+    bool is_buffer_full() const override;
+    void set_buffer_finished() override;
 };
 
 class ConnectorChunkSource final : public ChunkSource {

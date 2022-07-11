@@ -16,6 +16,7 @@ import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
+import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowStmt;
@@ -139,6 +140,18 @@ public class ShowStmtAnalyzer {
             String dbName = node.getDbName();
             dbName = getFullDatabaseName(dbName, context);
             node.setDbName(dbName);
+            return null;
+        }
+
+        @Override
+        public Void visitShowIndexStmt(ShowIndexStmt node, ConnectContext context) {
+            node.init();
+            String db = node.getTableName().getDb();
+            db = getFullDatabaseName(db, context);
+            node.getTableName().setDb(db);
+            if (Strings.isNullOrEmpty(node.getTableName().getCatalog())) {
+                node.getTableName().setCatalog(context.getCurrentCatalog());
+            }
             return null;
         }
 

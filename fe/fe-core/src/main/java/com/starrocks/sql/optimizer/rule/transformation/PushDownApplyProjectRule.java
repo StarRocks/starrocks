@@ -48,10 +48,9 @@ public class PushDownApplyProjectRule extends TransformationRule {
             newPredicate = rewriter.rewrite(apply.getPredicate());
         }
 
-        OptExpression newApply = new OptExpression(
-                new LogicalApplyOperator(apply.getOutput(), newScalarOperator, apply.getCorrelationColumnRefs(),
-                        apply.getCorrelationConjuncts(), newPredicate, apply.isNeedCheckMaxRows(),
-                        apply.isUseSemiAnti()));
+        OptExpression newApply = new OptExpression(LogicalApplyOperator.builder().withOperator(apply)
+                .setSubqueryOperator(newScalarOperator)
+                .setPredicate(newPredicate).build());
 
         newApply.getInputs().add(input.getInputs().get(0));
         newApply.getInputs().addAll(child.getInputs());
