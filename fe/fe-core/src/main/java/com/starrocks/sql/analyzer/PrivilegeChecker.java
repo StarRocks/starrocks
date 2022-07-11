@@ -30,6 +30,7 @@ import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
+import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.StatementBase;
@@ -136,6 +137,15 @@ public class PrivilegeChecker {
         public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext session) {
             if (!checkTblPriv(session, statement.getTbl(), PrivPredicate.ALTER)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "Alter");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowIndexStmt(ShowIndexStmt statement, ConnectContext session) {
+            if (!checkTblPriv(session, statement.getTableName(), PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, session.getQualifiedUser(),
+                        statement.getTableName().toString());
             }
             return null;
         }

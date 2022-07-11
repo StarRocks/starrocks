@@ -2506,10 +2506,6 @@ show_param ::=
     {:
         RESULT = new ShowSmallFilesStmt(dbName);
     :}
-    | keys_or_index from_or_in table_name:dbTblName opt_db:dbName
-    {:
-        RESULT = new ShowIndexStmt(dbName, dbTblName);
-    :}
     | KW_TRANSACTION opt_db:dbName opt_wild_where
     {:
         RESULT = new ShowTransactionStmt(dbName, parser.where);
