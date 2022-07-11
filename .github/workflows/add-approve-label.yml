@@ -31,9 +31,16 @@ jobs:
       id: read_property
       run: cat review/${{ steps.source-run-info.outputs.pullRequestNumber }}
 
+    - name: echo1
+      id: echo1
+      run: |
+        echo "" >> temp.txt
+        echo "false" >> temp.txt
+        cat temp.txt
+
     - name: Label when approved by 2 committers
       uses: actions-ecosystem/action-add-labels@v1
-      if: ${{ steps.read_property.outputs.stdout }} == 'true'
+      if: ${{ steps.echo1.outputs.stdout }} == 'true'
       with:
         github_token: ${{ secrets.PAT }}
         labels: approved
