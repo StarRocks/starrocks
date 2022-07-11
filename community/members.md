@@ -1,4 +1,4 @@
-﻿See [membership.md](https://github.com/StarRocks/starrocks/blob/main/Community-Membership.md) for the definition of these community contributor roles.
+﻿See [membership.md](https://github.com/StarRocks/starrocks/blob/main/community/membership.md) for the definition of these community contributor roles.
 
 ### PMC
 - chaoyli
