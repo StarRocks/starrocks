@@ -171,6 +171,7 @@ public class ScalarOperatorsReuse {
             return tryRewrite(operator);
         }
 
+        @Override
         public ScalarOperator visitInPredicate(InPredicateOperator predicate, Void context) {
             ScalarOperator operator = new InPredicateOperator(predicate.isNotIn(),
                     predicate.getChildren().stream().map(argument -> argument.accept(this, null))
@@ -178,12 +179,14 @@ public class ScalarOperatorsReuse {
             return tryRewrite(operator);
         }
 
+        @Override
         public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
             ScalarOperator operator = new IsNullPredicateOperator(predicate.isNotNull(),
                     predicate.getChild(0).accept(this, null));
             return tryRewrite(operator);
         }
 
+        @Override
         public ScalarOperator visitLikePredicateOperator(LikePredicateOperator predicate, Void context) {
             ScalarOperator operator = new LikePredicateOperator(predicate.getLikeType(),
                     predicate.getChildren().stream().map(argument -> argument.accept(this, null))
@@ -191,6 +194,7 @@ public class ScalarOperatorsReuse {
             return tryRewrite(operator);
         }
 
+        @Override
         public ScalarOperator visitDictMappingOperator(DictMappingOperator operator, Void context) {
             return tryRewrite(operator.clone());
         }

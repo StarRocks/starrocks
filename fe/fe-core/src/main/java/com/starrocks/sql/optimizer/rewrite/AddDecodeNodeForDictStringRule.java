@@ -887,15 +887,15 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
     // select if (dict = 1, x, y) from table; could use dictionary optimize.
     // Because we can save the overhead of string filtering
 
-    public static class CouldApplyDictOptimizeContext {
+    private static class CouldApplyDictOptimizeContext {
         // can use cardinality optimized dictionary columns
-        public Set<Integer> sids;
+        private Set<Integer> sids;
         // whether is worth using dictionary optimization
-        boolean worthApplied = false;
+        private boolean worthApplied = false;
         //
-        boolean couldAppliedOperator = false;
+        private boolean couldAppliedOperator = false;
         // indicates the existence of expressions that do not support optimization using dictionaries
-        boolean hasUnsupportedOperator = false;
+        private boolean hasUnsupportedOperator = false;
 
         void reset() {
             couldAppliedOperator = false;

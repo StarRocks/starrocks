@@ -39,10 +39,10 @@ public class DictMappingRewriter {
         ScalarOperator operator = scalarOperator.accept(rewriter, rewriterContext);
         if (rewriterContext.hasAppliedOperator) {
             if (operator.getType().isVarchar()) {
-                operator = rewriteAsDictMapping(operator, rewriterContext,
+                operator = rewriteAsDictMapping(operator,
                         AddDecodeNodeForDictStringRule.ID_TYPE);
             } else {
-                operator = rewriteAsDictMapping(operator, rewriterContext, operator.getType());
+                operator = rewriteAsDictMapping(operator, operator.getType());
             }
         }
         return operator;
@@ -62,7 +62,7 @@ public class DictMappingRewriter {
     }
 
     // rewrite scalar operator as dict mapping operator
-    ScalarOperator rewriteAsDictMapping(ScalarOperator scalarOperator, RewriterContext context, Type type) {
+    ScalarOperator rewriteAsDictMapping(ScalarOperator scalarOperator, Type type) {
         final ColumnRefSet usedColumns = scalarOperator.getUsedColumns();
         Preconditions.checkState(usedColumns.cardinality() == 1);
         final Integer dictColumnId = decodeContext.stringColumnIdToDictColumnIds.get(usedColumns.getFirstId());
@@ -118,7 +118,7 @@ public class DictMappingRewriter {
                 ScalarOperator child = scalarOperator.getChild(i).accept(this, context);
                 // wrapper using DictExpr
                 if (context.hasAppliedOperator) {
-                    child = rewriteAsDictMapping(child, context, child.getType());
+                    child = rewriteAsDictMapping(child, child.getType());
                     context.hasUnsupportedOperator = true;
                 }
                 scalarOperator.setChild(i, child);
