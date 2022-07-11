@@ -853,7 +853,7 @@ bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowse
             std::string err_msg = Substitute(
                     "failed to execute schema change. base tablet:$0, new_tablet:$1. err msg: failed to add chunk to "
                     "rowset writer: $2",
-                    base_tablet->tablet_id(), new_tablet->tablet_id(), st.to_string());
+                    base_tablet->tablet_id(), new_tablet->tablet_id(), st.get_error_msg());
             LOG(WARNING) << err_msg;
             return false;
         }
@@ -931,7 +931,7 @@ Status SchemaChangeDirectly::processV2(TabletReader* reader, RowsetWriter* new_r
             std::string err_msg = Substitute(
                     "failed to execute schema change. base tablet:$0, new_tablet:$1. err msg: failed to add chunk to "
                     "rowset writer: $2",
-                    base_tablet->tablet_id(), new_tablet->tablet_id(), st.to_string());
+                    base_tablet->tablet_id(), new_tablet->tablet_id(), st.get_error_msg());
             LOG(WARNING) << err_msg;
             return Status::InternalError(err_msg);
         }
