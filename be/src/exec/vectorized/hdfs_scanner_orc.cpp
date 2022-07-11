@@ -86,6 +86,7 @@ public:
             const uint8_t* ptr = nullptr;
             size_t nbytes = length;
             status = _buffer_stream.get_bytes(&ptr, offset, &nbytes);
+            DCHECK_EQ(nbytes, length);
             if (status.ok()) {
                 ::memcpy(buf, ptr, length);
             }
