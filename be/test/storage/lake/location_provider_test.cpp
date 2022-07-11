@@ -14,6 +14,7 @@ namespace starrocks {
 
 extern std::shared_ptr<StarOSWorker> g_worker;
 
+// TODO: fix broken UTs
 class StarletGroupAssignerTest : public testing::Test {
 public:
     StarletGroupAssignerTest() = default;

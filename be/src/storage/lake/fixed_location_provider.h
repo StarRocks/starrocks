@@ -2,18 +2,17 @@
 
 #pragma once
 
-#include <set>
-
-#include "common/statusor.h"
 #include "storage/lake/location_provider.h"
 
 namespace starrocks::lake {
 
-class StarletLocationProvider : public LocationProvider {
+class FixedLocationProvider : public LocationProvider {
 public:
-    ~StarletLocationProvider() = default;
+    explicit FixedLocationProvider(std::string root) : _root(std::move(root)) {}
 
-    std::string root_location(int64_t tablet_id) const override;
+    ~FixedLocationProvider() override = default;
+
+    std::string root_location(int64_t tablet_id) const override { return _root; }
 
     std::string tablet_metadata_location(int64_t tablet_id, int64_t version) const override;
 
@@ -23,7 +22,10 @@ public:
 
     std::string join_path(std::string_view parent, std::string_view child) const override;
 
-    Status list_root_locations(std::set<std::string>* groups) const override;
+    Status list_root_locations(std::set<std::string>* roots) const override;
+
+private:
+    std::string _root;
 };
 
 } // namespace starrocks::lake

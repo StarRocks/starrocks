@@ -61,7 +61,7 @@ public:
 
         auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
         ASSERT_TRUE(tablet_mgr != nullptr);
-        ASSERT_OK(tablet_mgr->put_tablet_metadata(_group, metadata));
+        ASSERT_OK(tablet_mgr->put_tablet_metadata(metadata));
     }
 
     void SetUp() override {
@@ -135,7 +135,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(0);
         txnlog.mutable_op_write()->mutable_rowset()->set_data_size(0);
         txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(false);
-        ASSERT_OK(_tablet_mgr->put_txn_log(_group, txnlog));
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
     }
     // TxnLog with 2 segments
     {
@@ -147,7 +147,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         txnlog.mutable_op_write()->mutable_rowset()->set_data_size(4096);
         txnlog.mutable_op_write()->mutable_rowset()->add_segments("1.dat");
         txnlog.mutable_op_write()->mutable_rowset()->add_segments("2.dat");
-        ASSERT_OK(_tablet_mgr->put_txn_log(_group, txnlog));
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
     }
 
     // Publish txn 1000
@@ -251,7 +251,7 @@ TEST_F(LakeServiceTest, test_abort) {
         txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(0);
         txnlog.mutable_op_write()->mutable_rowset()->set_data_size(0);
         txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(false);
-        ASSERT_OK(_tablet_mgr->put_txn_log(_group, txnlog));
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
     }
     // TxnLog with 2 segments
     {
@@ -263,7 +263,7 @@ TEST_F(LakeServiceTest, test_abort) {
         txnlog.mutable_op_write()->mutable_rowset()->set_data_size(4096);
         txnlog.mutable_op_write()->mutable_rowset()->add_segments("1.dat");
         txnlog.mutable_op_write()->mutable_rowset()->add_segments("2.dat");
-        ASSERT_OK(_tablet_mgr->put_txn_log(_group, txnlog));
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
     }
     // Send AbortTxn request
     {

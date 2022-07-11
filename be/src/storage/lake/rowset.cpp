@@ -107,7 +107,7 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments) {
     size_t footer_size_hint = 16 * 1024;
     uint32_t seg_id = 0;
     for (const auto& seg_name : _rowset_metadata->segments()) {
-        auto seg_path = _tablet->segment_path_assemble(seg_name);
+        auto seg_path = _tablet->segment_location(seg_name);
         ASSIGN_OR_RETURN(auto segment, Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path,
                                                      seg_id++, _tablet_schema.get(), &footer_size_hint));
         segments->emplace_back(std::move(segment));
