@@ -167,7 +167,7 @@ public class KafkaUtil {
                 }
                 Collections.shuffle(backendIds);
                 Backend be = Catalog.getCurrentSystemInfo().getBackend(backendIds.get(0));
-                TNetworkAddress address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
+                address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info
                 Future<PProxyResult> future = BackendServiceProxy.getInstance().getInfo(address, request);
