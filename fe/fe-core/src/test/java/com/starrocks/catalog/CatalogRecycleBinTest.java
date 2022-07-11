@@ -9,6 +9,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -19,6 +20,8 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 
 public class CatalogRecycleBinTest {
@@ -207,5 +210,267 @@ public class CatalogRecycleBinTest {
         Assert.assertEquals(replica1, invertedIndex.getReplica(tabletId, backendId));
         Assert.assertEquals(replica2, invertedIndex.getReplica(tabletId, backendId + 1));
         Assert.assertEquals(replica3, invertedIndex.getReplica(tabletId, backendId + 2));
+    }
+
+    @Test
+    public void testEnsureEraseLater() {
+        Config.catalog_trash_expire_second = 600; // set expire in 10 minutes
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+        Database db = new Database(111, "uno");
+        recycleBin.recycleDatabase(db, new HashSet<>());
+
+        // no need to set enable erase later if there are a lot of time left
+        long now = System.currentTimeMillis();
+        Assert.assertTrue(recycleBin.ensureEraseLater(db.getId(), now));
+        Assert.assertFalse(recycleBin.enableEraseLater.contains(db.getId()));
+
+        // no need to set enable erase later if already exipre
+        long moreThanTenMinutesLater = now + 620 * 1000L;
+        Assert.assertFalse(recycleBin.ensureEraseLater(db.getId(), moreThanTenMinutesLater));
+        Assert.assertFalse(recycleBin.enableEraseLater.contains(db.getId()));
+
+        // now we should set enable erase later because we are about to expire
+        long moreThanNineMinutesLater = now + 550 * 1000L;
+        Assert.assertTrue(recycleBin.ensureEraseLater(db.getId(), moreThanNineMinutesLater));
+        Assert.assertTrue(recycleBin.enableEraseLater.contains(db.getId()));
+
+        // if already expired, we should return false but won't erase the flag
+        Assert.assertFalse(recycleBin.ensureEraseLater(db.getId(), moreThanTenMinutesLater));
+        Assert.assertTrue(recycleBin.enableEraseLater.contains(db.getId()));
+     }
+
+    @Test
+    public void testRecycleDb(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+        Database db1 = new Database(111, "uno");
+        Database db2SameName = new Database(22, "dos"); // samename
+        Database db2 = new Database(222, "dos");
+
+        // 1. recycle 2 dbs
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+        recycleBin.recycleDatabase(db1, new HashSet<>());
+        recycleBin.recycleDatabase(db2SameName, new HashSet<>());  // will remove same name
+        recycleBin.recycleDatabase(db2, new HashSet<>());
+
+        Assert.assertEquals(recycleBin.getDatabase(db1.getId()), db1);
+        Assert.assertEquals(recycleBin.getDatabase(db2.getId()), db2);
+        Assert.assertEquals(recycleBin.getDatabase(999), null);
+        Assert.assertEquals(2, recycleBin.idToRecycleTime.size());
+        Assert.assertEquals(0, recycleBin.enableEraseLater.size());
+
+        // 2. manually set db expire time & recycle db1
+        Config.catalog_trash_expire_second = 3600;
+        long now = System.currentTimeMillis();
+        long expireFromNow = now - 3600 * 1000L;
+        recycleBin.idToRecycleTime.put(db1.getId(), expireFromNow - 1000);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+        new Expectations() {
+            {
+                globalStateMgr.onEraseDatabase(anyLong);
+                minTimes = 0;
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+            }
+        };
+        new Expectations() {
+            {
+                editLog.logEraseDb(anyLong);
+                minTimes = 0;
+            }
+        };
+
+        recycleBin.eraseDatabase(now);
+
+        Assert.assertEquals(recycleBin.getDatabase(db1.getId()), null);
+        Assert.assertEquals(recycleBin.getDatabase(db2.getId()), db2);
+        Assert.assertEquals(1, recycleBin.idToRecycleTime.size());
+        Assert.assertEquals(0, recycleBin.enableEraseLater.size());
+
+        // 3. set recyle later, check if recycle now
+        CatalogRecycleBin.LATE_RECYCLE_INTERVAL_SECONDS = 10;
+        Assert.assertFalse(recycleBin.ensureEraseLater(db1.getId(), now));  // already erased
+        Assert.assertTrue(recycleBin.ensureEraseLater(db2.getId(), now));
+        Assert.assertEquals(0, recycleBin.enableEraseLater.size());
+        recycleBin.idToRecycleTime.put(db2.getId(), expireFromNow + 1000);
+        Assert.assertTrue(recycleBin.ensureEraseLater(db2.getId(), now));
+        Assert.assertEquals(1, recycleBin.enableEraseLater.size());
+        Assert.assertTrue(recycleBin.enableEraseLater.contains(db2.getId()));
+
+        // 4. won't erase on expire time
+        recycleBin.idToRecycleTime.put(db2.getId(), expireFromNow - 1000);
+        recycleBin.eraseDatabase(now);
+        Assert.assertEquals(recycleBin.getDatabase(db2.getId()), db2);
+        Assert.assertEquals(1, recycleBin.idToRecycleTime.size());
+
+        // 5. will erase after expire time + latency time
+        recycleBin.idToRecycleTime.put(db2.getId(), expireFromNow - 11000);
+        Assert.assertFalse(recycleBin.ensureEraseLater(db2.getId(), now));
+        recycleBin.eraseDatabase(now);
+        Assert.assertEquals(recycleBin.getDatabase(db2.getId()), null);
+        Assert.assertEquals(0, recycleBin.idToRecycleTime.size());
+        Assert.assertEquals(0, recycleBin.enableEraseLater.size());
+    }
+
+    @Test
+    public void testRecycleTable(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+        Table table1 = new Table(111, "uno", Table.TableType.VIEW, null);
+        Table table2SameName = new Table(22, "dos", Table.TableType.VIEW, null);
+        Table table2 = new Table(222, "dos", Table.TableType.VIEW, null);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+        new Expectations() {
+            {
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+            }
+        };
+        new Expectations() {
+            {
+                editLog.logEraseMultiTables((List<Long>)any);
+                minTimes = 0;
+            }
+        };
+
+        // 1. add 2 tables
+        long DB_ID = 1;
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+        recycleBin.recycleTable(DB_ID, table1);
+        recycleBin.recycleTable(DB_ID, table2SameName);
+        recycleBin.recycleTable(DB_ID, table2);
+
+        Assert.assertEquals(recycleBin.getTables(DB_ID), Arrays.asList(table1, table2));
+        Assert.assertEquals(recycleBin.getTable(DB_ID, table1.getId()), table1);
+        Assert.assertEquals(recycleBin.getTable(DB_ID, table2.getId()), table2);
+        Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(table1.getId()));
+        Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(table2.getId()));
+
+        // 2. manually set table expire time & recycle table1
+        Config.catalog_trash_expire_second = 3600;
+        long now = System.currentTimeMillis();
+        long expireFromNow = now - 3600 * 1000L;
+        recycleBin.idToRecycleTime.put(table1.getId(), expireFromNow - 1000);
+        recycleBin.eraseTable(now);
+
+        Assert.assertEquals(recycleBin.getTables(DB_ID), Arrays.asList(table2));
+        Assert.assertEquals(recycleBin.getTable(DB_ID, table1.getId()), null);
+        Assert.assertEquals(recycleBin.getTable(DB_ID, table2.getId()), table2);
+
+        // 3. set recyle later, check if recycle now
+        CatalogRecycleBin.LATE_RECYCLE_INTERVAL_SECONDS = 10;
+        Assert.assertFalse(recycleBin.ensureEraseLater(table1.getId(), now));  // already erased
+        Assert.assertTrue(recycleBin.ensureEraseLater(table2.getId(), now));
+        Assert.assertEquals(0, recycleBin.enableEraseLater.size());
+        recycleBin.idToRecycleTime.put(table2.getId(), expireFromNow + 1000);
+        Assert.assertTrue(recycleBin.ensureEraseLater(table2.getId(), now));
+        Assert.assertEquals(1, recycleBin.enableEraseLater.size());
+        Assert.assertTrue(recycleBin.enableEraseLater.contains(table2.getId()));
+
+        // 4. won't erase on expire time
+        recycleBin.idToRecycleTime.put(table2.getId(), expireFromNow - 1000);
+        recycleBin.eraseTable(now);
+        Assert.assertEquals(recycleBin.getTable(DB_ID, table2.getId()), table2);
+        Assert.assertEquals(1, recycleBin.idToRecycleTime.size());
+
+        // 5. will erase after expire time + latency time
+        recycleBin.idToRecycleTime.put(table2.getId(), expireFromNow - 11000);
+        Assert.assertFalse(recycleBin.ensureEraseLater(table2.getId(), now));
+        recycleBin.eraseTable(now);
+        Assert.assertEquals(recycleBin.getTable(DB_ID, table2.getId()), null);
+        Assert.assertEquals(0, recycleBin.idToRecycleTime.size());
+        Assert.assertEquals(0, recycleBin.enableEraseLater.size());
+    }
+
+    @Test
+    public void testRecyclePartition(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+        Partition p1 = new Partition(111, "uno", null, null);
+        Partition p2SameName = new Partition(22, "dos", null, null);
+        Partition p2 = new Partition(222, "dos", null, null);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+        new Expectations() {
+            {
+                globalStateMgr.onErasePartition((Partition)any);
+                minTimes = 0;
+
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+            }
+        };
+        new Expectations() {
+            {
+                editLog.logErasePartition(anyLong);
+                minTimes = 0;
+            }
+        };
+
+        // 1. add 2 partitions
+        long DB_ID = 1;
+        long TABLE_ID = 2;
+        DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+
+        recycleBin.recyclePartition(DB_ID, TABLE_ID, p1, null, dataProperty, (short) 2, false);
+        recycleBin.recyclePartition(DB_ID, TABLE_ID, p2SameName, null, dataProperty, (short) 2, false);
+        recycleBin.recyclePartition(DB_ID, TABLE_ID, p2, null, dataProperty, (short) 2, false);
+
+        Assert.assertEquals(recycleBin.getPartition(p1.getId()), p1);
+        Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
+        Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(p1.getId()));
+        Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(p2.getId()));
+
+        // 2. manually set table expire time & recycle table1
+        Config.catalog_trash_expire_second = 3600;
+        long now = System.currentTimeMillis();
+        long expireFromNow = now - 3600 * 1000L;
+        recycleBin.idToRecycleTime.put(p1.getId(), expireFromNow - 1000);
+        recycleBin.erasePartition(now);
+
+        Assert.assertEquals(recycleBin.getPartition(p1.getId()), null);
+        Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
+
+        // 3. set recyle later, check if recycle now
+        CatalogRecycleBin.LATE_RECYCLE_INTERVAL_SECONDS = 10;
+        Assert.assertFalse(recycleBin.ensureEraseLater(p1.getId(), now));  // already erased
+        Assert.assertTrue(recycleBin.ensureEraseLater(p2.getId(), now));
+        Assert.assertEquals(0, recycleBin.enableEraseLater.size());
+        recycleBin.idToRecycleTime.put(p2.getId(), expireFromNow + 1000);
+        Assert.assertTrue(recycleBin.ensureEraseLater(p2.getId(), now));
+        Assert.assertEquals(1, recycleBin.enableEraseLater.size());
+        Assert.assertTrue(recycleBin.enableEraseLater.contains(p2.getId()));
+
+        // 4. won't erase on expire time
+        recycleBin.idToRecycleTime.put(p2.getId(), expireFromNow - 1000);
+        recycleBin.erasePartition(now);
+        Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
+        Assert.assertEquals(1, recycleBin.idToRecycleTime.size());
+
+        // 5. will erase after expire time + latency time
+        recycleBin.idToRecycleTime.put(p2.getId(), expireFromNow - 11000);
+        Assert.assertFalse(recycleBin.ensureEraseLater(p2.getId(), now));
+        recycleBin.erasePartition(now);
+        Assert.assertEquals(recycleBin.getPartition(p2.getId()), null);
+        Assert.assertEquals(0, recycleBin.idToRecycleTime.size());
+        Assert.assertEquals(0, recycleBin.enableEraseLater.size());
     }
 }
