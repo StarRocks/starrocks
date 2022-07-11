@@ -1314,7 +1314,8 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         uint32_t rssid = rowset_id + i;
         tmp_deletes.clear();
         // replace will not grow hashtable, so don't need to check memory limit
-        index.try_replace(rssid, 0, *sstate.pkeys, sstate.src_rssids, &tmp_deletes);
+        index.try_replace(rssid, 0, *sstate.pkeys, *std::max_element(info->inputs.begin(), info->inputs.end()),
+                          &tmp_deletes);
         DelVectorPtr dv = std::make_shared<DelVector>();
         if (tmp_deletes.empty()) {
             dv->init(version.major(), nullptr, 0);

@@ -55,17 +55,32 @@ public:
     // [not thread-safe]
     void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, DeletesMap* deletes);
 
+    // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
     // input rowsets' rowid doesn't exist, this indicates that the row of output rowset is
     // deleted during compaction, so append it's rowid into |deletes|
     // |rssid| output segment's rssid
-    // |key_col| each output segment row's *encoded* primary key
+    // |rowid_start| row id left open interval
+    // |pks| each output segment row's *encoded* primary key
     // |src_rssid| each output segment row's source segment rssid
     // |failed| rowids of output segment's rows that failed to replace
     //
     // [not thread-safe]
-    void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
-                     const vector<uint32_t>& src_rssid, vector<uint32_t>* failed);
+    [[maybe_unused]] void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
+                                      const vector<uint32_t>& src_rssid, vector<uint32_t>* failed);
+
+    // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
+    // input rowsets' rowid greater than the max src rssid, this indicates that the row of output rowset is
+    // deleted during compaction, so append it's rowid into |deletes|
+    // |rssid| output segment's rssid
+    // |rowid_start| row id left open interval
+    // |pks| each output segment row's *encoded* primary key
+    // |max_src_rssid| each output segment row's source segment rssid
+    // |failed| rowids of output segment's rows that failed to replace
+    //
+    // [not thread-safe]
+    void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, const uint32_t max_src_rssid,
+                     vector<uint32_t>* failed);
 
     // |key_col| contains the *encoded* primary keys to be deleted from this index.
     // The position of deleted keys will be appended into |new_deletes|.
@@ -119,8 +134,11 @@ private:
 
     void _get_from_persistent_index(const vectorized::Column& key_col, std::vector<uint64_t>* rowids) const;
 
+    // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
+    [[maybe_unused]] void _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
+                                                    const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes);
     void _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
-                                   const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes);
+                                   const uint32_t max_src_rssid, vector<uint32_t>* deletes);
 
     std::mutex _lock;
     std::atomic<bool> _loaded{false};

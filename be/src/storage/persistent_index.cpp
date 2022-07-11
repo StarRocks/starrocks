@@ -1580,8 +1580,9 @@ Status PersistentIndex::erase(size_t n, const void* keys, IndexValue* old_values
     return Status::OK();
 }
 
-Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue* values,
-                                    const std::vector<uint32_t>& src_rssid, std::vector<uint32_t>* failed) {
+[[maybe_unused]] Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue* values,
+                                                     const std::vector<uint32_t>& src_rssid,
+                                                     std::vector<uint32_t>* failed) {
     std::vector<IndexValue> found_values;
     found_values.reserve(n);
     RETURN_IF_ERROR(get(n, keys, found_values.data()));
@@ -1589,6 +1590,37 @@ Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue
     for (size_t i = 0; i < n; ++i) {
         if (values[i].get_value() != NullIndexValue &&
             ((uint32_t)(found_values[i].get_value() >> 32)) == src_rssid[i]) {
+            replace_idxes.emplace_back(i);
+        } else {
+            failed->emplace_back(values[i].get_value() & 0xFFFFFFFF);
+        }
+    }
+    RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
+    _dump_snapshot |= _can_dump_directly();
+    if (!_dump_snapshot) {
+        // write wal
+        const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(keys);
+        faststring fixed_buf;
+        fixed_buf.reserve(replace_idxes.size() * (_key_size + sizeof(IndexValue)));
+        for (size_t i = 0; i < replace_idxes.size(); ++i) {
+            fixed_buf.append(fkeys + replace_idxes[i] * _key_size, _key_size);
+            put_fixed64_le(&fixed_buf, values[replace_idxes[i]].get_value());
+        }
+        RETURN_IF_ERROR(_index_file->append(fixed_buf));
+        _page_size += fixed_buf.size();
+    }
+    return Status::OK();
+}
+
+Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue* values, const uint32_t max_src_rssid,
+                                    std::vector<uint32_t>* failed) {
+    std::vector<IndexValue> found_values;
+    found_values.reserve(n);
+    RETURN_IF_ERROR(get(n, keys, found_values.data()));
+    std::vector<size_t> replace_idxes;
+    for (size_t i = 0; i < n; ++i) {
+        if (values[i].get_value() != NullIndexValue &&
+            ((uint32_t)(found_values[i].get_value() >> 32)) <= max_src_rssid) {
             replace_idxes.emplace_back(i);
         } else {
             failed->emplace_back(values[i].get_value() & 0xFFFFFFFF);

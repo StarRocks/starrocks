@@ -308,13 +308,23 @@ public:
     // |old_values|: return old values if key exist, or set to NullValue if not
     Status erase(size_t n, const void* keys, IndexValue* old_values);
 
+    // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // batch replace
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
     // |src_rssid|: rssid array
     // |failed|: return not match rowid
-    Status try_replace(size_t n, const void* keys, const IndexValue* values, const std::vector<uint32_t>& src_rssid,
+    [[maybe_unused]] Status try_replace(size_t n, const void* keys, const IndexValue* values,
+                                        const std::vector<uint32_t>& src_rssid, std::vector<uint32_t>* failed);
+
+    // batch replace
+    // |n|: size of key/value array
+    // |keys|: key array as raw buffer
+    // |values|: value array
+    // |max_src_rssid|: maximum of rssid array
+    // |failed|: return not match rowid
+    Status try_replace(size_t n, const void* keys, const IndexValue* values, const uint32_t max_src_rssid,
                        std::vector<uint32_t>* failed);
 
     size_t mutable_index_size();
