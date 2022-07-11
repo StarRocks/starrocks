@@ -59,10 +59,10 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/thread_resource_mgr.h"
-#include "storage/lake/group_assigner.h"
+#include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #ifdef USE_STAROS
-#include "storage/lake/starlet_group_assigner.h"
+#include "storage/lake/starlet_location_provider.h"
 #endif
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
@@ -78,23 +78,21 @@
 
 namespace starrocks {
 
-class FixedGroupAssigner : public lake::GroupAssigner {
+class FixedLocationProvider : public lake::LocationProvider {
 public:
-    explicit FixedGroupAssigner(std::string path) : _path(std::move(path)) {
+    explicit FixedLocationProvider(std::string path) : _path(std::move(path)) {
         if (_path.back() == '/') _path.pop_back();
     }
 
-    ~FixedGroupAssigner() override = default;
+    ~FixedLocationProvider() override = default;
 
-    std::string get_fs_prefix() override { return "posix://"; }
+    StatusOr<std::string> root_location(int64_t /*tablet_id*/) override { return _path; }
 
-    StatusOr<std::string> get_group(int64_t /*tablet_id*/) override { return _path; }
-
-    [[maybe_unused]] Status list_group(std::set<std::string>* groups) override {
+    [[maybe_unused]] Status list_root_locations(std::set<std::string>* groups) override {
         groups->emplace(_path);
         return Status::OK();
     }
-    std::string path_assemble(const std::string& path, int64_t tablet_id) { return path; }
+    std::string location(const std::string& path, int64_t tablet_id) { return path; }
 
 private:
     std::string _path;
@@ -273,12 +271,13 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             exit(-1);
         }
 #ifndef USE_STAROS
-        _lake_group_assigner = new FixedGroupAssigner(_store_paths.front().path);
+        _lake_location_provider = new FixedLocationProvider(_store_paths.front().path);
 #else
-        _lake_group_assigner = new lake::StarletGroupAssigner();
+        _lake_location_provider = new lake::StarletLocationProvider();
 #endif
         // TODO: cache capacity configurable
-        _lake_tablet_manager = new lake::TabletManager(_lake_group_assigner, /*cache_capacity=1GB*/ 1024 * 1024 * 1024);
+        _lake_tablet_manager =
+                new lake::TabletManager(_lake_location_provider, /*cache_capacity=1GB*/ 1024 * 1024 * 1024);
     }
     _broker_mgr->init();
     _small_file_mgr->init();
@@ -579,9 +578,9 @@ void ExecEnv::_destroy() {
         delete _lake_tablet_manager;
         _lake_tablet_manager = nullptr;
     }
-    if (_lake_group_assigner) {
-        delete _lake_group_assigner;
-        _lake_group_assigner = nullptr;
+    if (_lake_location_provider) {
+        delete _lake_location_provider;
+        _lake_location_provider = nullptr;
     }
     _metrics = nullptr;
 }

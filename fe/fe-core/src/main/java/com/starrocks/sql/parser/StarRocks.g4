@@ -38,6 +38,7 @@ statement
     | refreshTableStatement                                                                 #refreshTable
     | showDeleteStatement                                                                   #showDelete
     | descTableStatement                                                                    #descTable
+    | showIndexStatement                                                                    #showIndex
     | recoverTableStatement                                                                 #recoverTable
 
     // View Statement
@@ -108,7 +109,7 @@ statement
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
 
     // procedure
-    | showProcedureStatment                                                                 #showProcedure
+    | showProcedureStatement                                                                 #showProcedure
     ;
 
 
@@ -276,6 +277,10 @@ showDeleteStatement
 
 descTableStatement
     : (DESC | DESCRIBE) table=qualifiedName ALL?
+    ;
+
+showIndexStatement
+    : SHOW (INDEX | INDEXES | KEY | KEYS) ((FROM | IN) table=qualifiedName) ((FROM | IN) db=qualifiedName)?
     ;
 
 recoverTableStatement
@@ -679,7 +684,7 @@ tabletList
     ;
 
 // ------------------------------------------- Procedure Statement ---------------------------------------------------------
-showProcedureStatment
+showProcedureStatement
     : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
     ;
 // ------------------------------------------- Expression --------------------------------------------------------------

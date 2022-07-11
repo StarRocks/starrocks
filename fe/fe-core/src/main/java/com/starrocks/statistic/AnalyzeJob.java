@@ -3,13 +3,13 @@
 package com.starrocks.statistic;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.statistic.Constants.AnalyzeType;
-import com.starrocks.statistic.Constants.ScheduleStatus;
-import com.starrocks.statistic.Constants.ScheduleType;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.StatsConstants.AnalyzeType;
+import com.starrocks.statistic.StatsConstants.ScheduleStatus;
+import com.starrocks.statistic.StatsConstants.ScheduleType;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -19,8 +19,6 @@ import java.util.List;
 import java.util.Map;
 
 public class AnalyzeJob implements Writable {
-
-    public static final long DEFAULT_ALL_ID = -1;
 
     @SerializedName("id")
     private long id;
@@ -78,32 +76,20 @@ public class AnalyzeJob implements Writable {
         return dbId;
     }
 
-    public void setDbId(long dbId) {
-        this.dbId = dbId;
-    }
-
     public long getTableId() {
         return tableId;
-    }
-
-    public void setTableId(long tableId) {
-        this.tableId = tableId;
     }
 
     public List<String> getColumns() {
         return columns;
     }
 
-    public void setColumns(List<String> columns) {
-        this.columns = columns;
-    }
-
-    public AnalyzeType getType() {
+    public AnalyzeType getAnalyzeType() {
         return type;
     }
 
-    public void setType(AnalyzeType type) {
-        this.type = type;
+    public ScheduleType getScheduleType() {
+        return scheduleType;
     }
 
     public LocalDateTime getWorkTime() {
@@ -122,24 +108,6 @@ public class AnalyzeJob implements Writable {
         this.reason = reason;
     }
 
-    public long getUpdateIntervalSec() {
-        return Long.parseLong(properties.getOrDefault(Constants.PROP_UPDATE_INTERVAL_SEC_KEY,
-                String.valueOf(Config.statistic_update_interval_sec)));
-    }
-
-    public long getSampleCollectRows() {
-        return Long.parseLong(properties.getOrDefault(Constants.PROP_SAMPLE_COLLECT_ROWS_KEY,
-                String.valueOf(Config.statistic_sample_collect_rows)));
-    }
-
-    public ScheduleType getScheduleType() {
-        return scheduleType;
-    }
-
-    public void setScheduleType(ScheduleType scheduleType) {
-        this.scheduleType = scheduleType;
-    }
-
     public ScheduleStatus getStatus() {
         return status;
     }
@@ -148,12 +116,34 @@ public class AnalyzeJob implements Writable {
         this.status = status;
     }
 
-    public void setProperties(Map<String, String> properties) {
-        this.properties = properties;
-    }
-
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public void run(StatisticExecutor statisticExecutor) {
+        setStatus(StatsConstants.ScheduleStatus.RUNNING);
+        GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithoutLog(this);
+        List<StatisticsCollectJob> statisticsCollectJobList =
+                StatisticsCollectJobFactory.buildStatisticsCollectJob(this);
+
+        boolean hasFailedCollectJob = false;
+        for (StatisticsCollectJob statsJob : statisticsCollectJobList) {
+            AnalyzeStatus analyzeStatus = statisticExecutor.collectStatistics(statsJob);
+            if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.FAILED)) {
+                setStatus(StatsConstants.ScheduleStatus.FAILED);
+                setWorkTime(LocalDateTime.now());
+                setReason(analyzeStatus.getReason());
+                GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(this);
+                hasFailedCollectJob = true;
+                break;
+            }
+        }
+
+        if (!hasFailedCollectJob) {
+            setStatus(StatsConstants.ScheduleStatus.PENDING);
+            setWorkTime(LocalDateTime.now());
+            GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(this);
+        }
     }
 
     @Override
@@ -182,5 +172,4 @@ public class AnalyzeJob implements Writable {
                 ", reason='" + reason + '\'' +
                 '}';
     }
-
 }

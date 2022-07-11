@@ -111,6 +111,7 @@ import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
+import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -639,6 +640,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 pattern,
                 context.FULL() != null,
                 where);
+    }
+
+    @Override
+    public ParseNode visitShowIndexStatement(StarRocksParser.ShowIndexStatementContext context) {
+        QualifiedName tableName = getQualifiedName(context.table);
+        QualifiedName dbName = null;
+        if (context.db != null) {
+            dbName = getQualifiedName(context.db);
+        }
+
+        return new ShowIndexStmt(dbName == null ? null : dbName.toString(),
+                qualifiedNameToTableName(tableName));
     }
 
     @Override
@@ -2933,7 +2946,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ------------------------------------------- Procedure Statement -------------------------------------------
 
     @Override
-    public ParseNode visitShowProcedureStatment(StarRocksParser.ShowProcedureStatmentContext context) {
+    public ParseNode visitShowProcedureStatement(StarRocksParser.ShowProcedureStatementContext context) {
         if (context.pattern != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
             return new ShowProcedureStmt(stringLiteral.getValue());

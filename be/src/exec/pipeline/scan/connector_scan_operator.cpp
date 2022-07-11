@@ -13,8 +13,9 @@ namespace starrocks::pipeline {
 
 // ==================== ConnectorScanOperatorFactory ====================
 
-ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop)
-        : ScanOperatorFactory(id, scan_node), _chunk_buffer(BalanceStrategy::kDirect, dop) {}
+ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop,
+                                                           ChunkBufferLimiterPtr buffer_limiter)
+        : ScanOperatorFactory(id, scan_node), _chunk_buffer(BalanceStrategy::kDirect, dop, std::move(buffer_limiter)) {}
 
 Status ConnectorScanOperatorFactory::do_prepare(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
@@ -30,14 +31,14 @@ void ConnectorScanOperatorFactory::do_close(RuntimeState* state) {
 }
 
 OperatorPtr ConnectorScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
-    return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, _scan_node, _num_committed_scan_tasks);
+    return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, _scan_node);
 }
 
 // ==================== ConnectorScanOperator ====================
 
 ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence,
-                                             ScanNode* scan_node, std::atomic<int>& num_committed_scan_tasks)
-        : ScanOperator(factory, id, driver_sequence, scan_node, num_committed_scan_tasks) {}
+                                             ScanNode* scan_node)
+        : ScanOperator(factory, id, driver_sequence, scan_node) {}
 
 Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     return Status::OK();
@@ -80,12 +81,6 @@ bool ConnectorScanOperator::has_buffer_output() const {
     return !buffer.empty(_driver_sequence);
 }
 
-bool ConnectorScanOperator::has_available_buffer() const {
-    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-    auto& buffer = factory->get_chunk_buffer();
-    return buffer.size(_driver_sequence) <= _buffer_size;
-}
-
 ChunkPtr ConnectorScanOperator::get_chunk_from_buffer() {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     auto& buffer = factory->get_chunk_buffer();
@@ -94,6 +89,42 @@ ChunkPtr ConnectorScanOperator::get_chunk_from_buffer() {
         return chunk;
     }
     return nullptr;
+}
+
+size_t ConnectorScanOperator::buffer_size() const {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& buffer = factory->get_chunk_buffer();
+    return buffer.limiter()->size();
+}
+
+size_t ConnectorScanOperator::buffer_capacity() const {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& buffer = factory->get_chunk_buffer();
+    return buffer.limiter()->capacity();
+}
+
+size_t ConnectorScanOperator::default_buffer_capacity() const {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& buffer = factory->get_chunk_buffer();
+    return buffer.limiter()->default_capacity();
+}
+
+ChunkBufferTokenPtr ConnectorScanOperator::pin_chunk(int num_chunks) {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& buffer = factory->get_chunk_buffer();
+    return buffer.limiter()->pin(num_chunks);
+}
+
+bool ConnectorScanOperator::is_buffer_full() const {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& buffer = factory->get_chunk_buffer();
+    return buffer.limiter()->is_full();
+}
+
+void ConnectorScanOperator::set_buffer_finished() {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& buffer = factory->get_chunk_buffer();
+    buffer.set_finished(_driver_sequence);
 }
 
 connector::ConnectorType ConnectorScanOperator::connector_type() {

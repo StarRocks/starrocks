@@ -70,6 +70,7 @@ import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
+import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -274,6 +275,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowTableStatusStmt(ShowTableStatusStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowIndexStmt(ShowIndexStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 

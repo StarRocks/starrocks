@@ -19,7 +19,7 @@ import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.AnalyzeStatus;
-import com.starrocks.statistic.Constants;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.statistic.FullStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.StatisticSQLBuilder;
@@ -80,8 +80,8 @@ public class AnalyzeStmtTest {
         String sql = "show analyze";
         ShowAnalyzeJobStmt showAnalyzeJobStmt = (ShowAnalyzeJobStmt) analyzeSuccess(sql);
 
-        AnalyzeJob analyzeJob = new AnalyzeJob(10002, 10004, Lists.newArrayList(), Constants.AnalyzeType.FULL,
-                Constants.ScheduleType.ONCE, Maps.newHashMap(), Constants.ScheduleStatus.FINISH, LocalDateTime.MIN);
+        AnalyzeJob analyzeJob = new AnalyzeJob(10002, 10004, Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
         Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, {}, FINISH, None, ]",
                 ShowAnalyzeJobStmt.showAnalyzeJobs(analyzeJob).toString());
 
@@ -91,10 +91,10 @@ public class AnalyzeStmtTest {
         sql = "show analyze status";
         ShowAnalyzeStatusStmt showAnalyzeStatusStatement = (ShowAnalyzeStatusStmt) analyzeSuccess(sql);
 
-        AnalyzeStatus analyzeStatus = new AnalyzeStatus(-1, 10002, 10004, Lists.newArrayList(), Constants.AnalyzeType.FULL,
-                Constants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(2020, 1, 1, 1, 1));
+        AnalyzeStatus analyzeStatus = new AnalyzeStatus(-1, 10002, 10004, Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(2020, 1, 1, 1, 1));
         analyzeStatus.setEndTime(LocalDateTime.of(2020, 1, 1, 1, 1));
-        analyzeStatus.setStatus(Constants.ScheduleStatus.FAILED);
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         analyzeStatus.setReason("Test Failed");
         Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, {}, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00, Test Failed]",
                 ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
@@ -102,7 +102,7 @@ public class AnalyzeStmtTest {
         sql = "show stats meta";
         ShowBasicStatsMetaStmt showAnalyzeMetaStmt = (ShowBasicStatsMetaStmt) analyzeSuccess(sql);
 
-        BasicStatsMeta basicStatsMeta = new BasicStatsMeta(10002, 10004, Constants.AnalyzeType.FULL,
+        BasicStatsMeta basicStatsMeta = new BasicStatsMeta(10002, 10004, StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
         Assert.assertEquals("[test, t0, FULL, 2020-01-01 01:01:00, {}, 100%]",
                 ShowBasicStatsMetaStmt.showBasicStatsMeta(basicStatsMeta).toString());
@@ -110,7 +110,7 @@ public class AnalyzeStmtTest {
         sql = "show histogram meta";
         ShowHistogramStatsMetaStmt showHistogramStatsMetaStmt = (ShowHistogramStatsMetaStmt) analyzeSuccess(sql);
         HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(10002, 10004, "v1",
-                Constants.AnalyzeType.HISTOGRAM, LocalDateTime.of(2020, 1, 1, 1, 1),
+                StatsConstants.AnalyzeType.HISTOGRAM, LocalDateTime.of(2020, 1, 1, 1, 1),
                 Maps.newHashMap());
         Assert.assertEquals("[test, t0, v1, HISTOGRAM, 2020-01-01 01:01:00, {}]",
                 ShowHistogramStatsMetaStmt.showHistogramStatsMeta(histogramStatsMeta).toString());
@@ -131,9 +131,10 @@ public class AnalyzeStmtTest {
                         "FROM table_statistic_v1 WHERE db_id = 10002 and table_id = 10004 and column_name in ('v1', 'v2')",
                 StatisticSQLBuilder.buildQuerySampleStatisticsSQL(10002L, 10004L, Lists.newArrayList("v1", "v2")));
 
-        FullStatisticsCollectJob collectJob = new FullStatisticsCollectJob(null, database, table,
+        FullStatisticsCollectJob collectJob = new FullStatisticsCollectJob(database, table,
                 Lists.newArrayList(10003L),
-                Lists.newArrayList("v1", "v2"));
+                Lists.newArrayList("v1", "v2"), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap());
         Assert.assertEquals("INSERT INTO column_statistics  SELECT 10004, 10003, 'v1', 10002, 'test.t0', 't0', " +
                         "COUNT(1), COUNT(1) * 8, IFNULL(hll_union(hll_hash(`v1`)), hll_empty()), COUNT(1) - COUNT(`v1`), " +
                         "IFNULL(MAX(`v1`), ''), IFNULL(MIN(`v1`), ''), NOW() FROM test.t0 partition t0 " +
