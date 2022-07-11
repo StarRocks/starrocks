@@ -50,31 +50,10 @@ class UnlimitedChunkBufferLimiter final : public ChunkBufferLimiter {
 public:
     class Token final : public ChunkBufferToken {
     public:
-        ~Token() override = default;
-    };
+        Token(std::atomic<int>& pinned_tokens_counter, int num_tokens)
+                : _pinned_tokens_counter(pinned_tokens_counter), _num_tokens(num_tokens) {}
 
-public:
-    ~UnlimitedChunkBufferLimiter() override = default;
-
-    void update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows) override {}
-
-    ChunkBufferTokenPtr pin(int num_chunks) override { return std::make_unique<Token>(); }
-
-    bool is_full() const override { return false; }
-    size_t size() const override { return 0; }
-    size_t capacity() const override { return 0; }
-    size_t default_capacity() const override { return 0; }
-};
-
-// Use the dynamic chunk memory usage statistics to compute the capacity.
-class DynamicChunkBufferLimiter final : public ChunkBufferLimiter {
-public:
-    class Token final : public ChunkBufferToken {
-    public:
-        Token(std::atomic<int>& acquired_tokens_counter, int num_tokens)
-                : _acquired_tokens_counter(acquired_tokens_counter), _num_tokens(num_tokens) {}
-
-        ~Token() override { _acquired_tokens_counter.fetch_sub(_num_tokens); }
+        ~Token() override { _pinned_tokens_counter.fetch_sub(_num_tokens); }
 
         // Disable copy/move ctor and assignment.
         Token(const Token&) = delete;
@@ -83,7 +62,47 @@ public:
         Token& operator=(Token&&) = delete;
 
     private:
-        std::atomic<int>& _acquired_tokens_counter;
+        std::atomic<int>& _pinned_tokens_counter;
+        const int _num_tokens;
+    };
+
+public:
+    ~UnlimitedChunkBufferLimiter() override = default;
+
+    void update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows) override {}
+
+    ChunkBufferTokenPtr pin(int num_chunks) override {
+        _pinned_chunks_counter.fetch_add(num_chunks);
+        return std::make_unique<UnlimitedChunkBufferLimiter::Token>(_pinned_chunks_counter, num_chunks);
+    }
+
+    bool is_full() const override { return false; }
+    size_t size() const override { return _pinned_chunks_counter; }
+    size_t capacity() const override { return std::numeric_limits<int64_t>::max(); }
+    size_t default_capacity() const override { return std::numeric_limits<int64_t>::max(); }
+
+private:
+    std::atomic<int> _pinned_chunks_counter = 0;
+};
+
+// Use the dynamic chunk memory usage statistics to compute the capacity.
+class DynamicChunkBufferLimiter final : public ChunkBufferLimiter {
+public:
+    class Token final : public ChunkBufferToken {
+    public:
+        Token(std::atomic<int>& pinned_tokens_counter, int num_tokens)
+                : _pinned_tokens_counter(pinned_tokens_counter), _num_tokens(num_tokens) {}
+
+        ~Token() override { _pinned_tokens_counter.fetch_sub(_num_tokens); }
+
+        // Disable copy/move ctor and assignment.
+        Token(const Token&) = delete;
+        Token& operator=(const Token&) = delete;
+        Token(Token&&) = delete;
+        Token& operator=(Token&&) = delete;
+
+    private:
+        std::atomic<int>& _pinned_tokens_counter;
         const int _num_tokens;
     };
 
