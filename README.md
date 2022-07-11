@@ -101,7 +101,7 @@ We welcome all kinds of contributions from the community, individuals and partne
 
 **📝 License:** Please note StaRocks is licensed under [Elastic License 2.0](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt), with small portions of code under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). See [FAQ](https://www.starrocks.com/en-US/product/license-FAQ) to learn more.  
 
-**👥 Community Membership:** Learn more about different [contributor roles](hcommunity/membership.md) in StarRocks community.
+**👥 Community Membership:** Learn more about different [contributor roles](community/membership.md) in StarRocks community.
   
 <br>
   
