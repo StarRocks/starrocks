@@ -430,11 +430,11 @@ ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
     switch (type) {
     case TTaskType::PUBLISH_VERSION:
         return _thread_pool_publish_version.get();
+    case TTaskType::CLONE:
+        return _thread_pool_clone.get();
     case TTaskType::CREATE:
     case TTaskType::DROP:
     case TTaskType::PUSH:
-    case TTaskType::CLONE:
-        return _thread_pool_clone.get();
     case TTaskType::STORAGE_MEDIUM_MIGRATE:
     case TTaskType::ROLLUP:
     case TTaskType::SCHEMA_CHANGE:
