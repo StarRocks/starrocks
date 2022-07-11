@@ -871,10 +871,18 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
                                      idx_begin, idx_begin + upsert_idx_step, &new_deletes);
                         manager->index_cache().update_object_size(index_entry, index.memory_usage());
 
-                        
+                        idx_begin = j + 1;
+                        upsert_idx_step = 0;
+                        // TODO: update delete vector of current segment
                     } else {
                         upsert_idx_step++;
                     }
+                }
+                
+                if (idx_begin < old_columns.size()) {
+                    index.upsert(rowset_id + i, idx_begin, *upserts[i],
+                                 idx_begin, idx_begin + upsert_idx_step, &new_deletes);
+                    manager->index_cache().update_object_size(index_entry, index.memory_usage());
                 }
             } else {
                 index.upsert(rowset_id + i, 0, *upserts[i], &new_deletes);
