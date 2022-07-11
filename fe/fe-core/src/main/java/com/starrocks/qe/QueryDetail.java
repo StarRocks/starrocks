@@ -56,7 +56,9 @@ public class QueryDetail implements Serializable {
     private String sql;
     private String user;
     private String errorMessage;
+    private String explain;
     private String profile;
+    private String workGroupName;
 
     public QueryDetail() {
     }
@@ -101,6 +103,7 @@ public class QueryDetail implements Serializable {
         queryDetail.sql = this.sql;
         queryDetail.user = this.user;
         queryDetail.errorMessage = this.errorMessage;
+        queryDetail.explain = this.explain;
         queryDetail.profile = this.profile;
         return queryDetail;
     }
@@ -201,6 +204,14 @@ public class QueryDetail implements Serializable {
         this.errorMessage = errorMessage;
     }
 
+    public String getExplain() {
+        return explain;
+    }
+
+    public void setExplain(String explain) {
+        this.explain = explain;
+    }
+
     public String getProfile() {
         return profile;
     }
@@ -209,4 +220,11 @@ public class QueryDetail implements Serializable {
         this.profile = profile;
     }
 
+    public String getWorkGroupName() {
+        return workGroupName;
+    }
+
+    public void setWorkGroupName(String workGroupName) {
+        this.workGroupName = workGroupName;
+    }
 }

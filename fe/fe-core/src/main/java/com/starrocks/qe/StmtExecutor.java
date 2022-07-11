@@ -945,6 +945,10 @@ public class StmtExecutor {
             explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
         }
 
+        if (context.getQueryDetail() != null) {
+            context.getQueryDetail().setExplain(explainString);
+        }
+
         ShowResultSetMetaData metaData =
                 ShowResultSetMetaData.builder()
                         .addColumn(new Column("Explain String", ScalarType.createVarchar(20)))
