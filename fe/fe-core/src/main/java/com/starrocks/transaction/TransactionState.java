@@ -38,7 +38,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TPartitionVersionInfo;
-import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -116,11 +115,6 @@ public class TransactionState implements Writable {
         public static TxnStatusChangeReason fromString(String reasonString) {
             if (Strings.isNullOrEmpty(reasonString)) {
                 return null;
-            }
-
-            // Pause on unrecoverable error.
-            if (reasonString.contains(TStatusCode.UNRECOVERABLE_ERROR.toString())) {
-                return PAUSE;
             }
 
             for (TxnStatusChangeReason txnStatusChangeReason : TxnStatusChangeReason.values()) {

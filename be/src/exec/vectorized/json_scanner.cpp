@@ -75,12 +75,8 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
         _cur_file_eof = false;
     }
     Status status = _cur_file_reader->read_chunk(src_chunk.get(), _max_chunk_size, _src_slot_descriptors);
-    if (!status.ok()) {
-        if (status.is_end_of_file()) {
-            _cur_file_eof = true;
-        } else {
-            return status;
-        }
+    if (status.is_end_of_file()) {
+        _cur_file_eof = true;
     }
 
     if (src_chunk->num_rows() == 0) {
@@ -382,7 +378,7 @@ Status JsonReader::_read_and_parse_json() {
                                                   rapidjson::GetParseError_En(_origin_json_doc.GetParseError()));
         _state->append_error_msg_to_file(JsonFunctions::get_raw_json_string(_origin_json_doc), err_msg);
         _counter->num_rows_filtered++;
-        return FileScanner::UnrecoverableError(Status::DataQualityError(err_msg.c_str()));
+        return Status::DataQualityError(err_msg.c_str());
     }
 
     _json_doc = &_origin_json_doc;
@@ -393,7 +389,7 @@ Status JsonReader::_read_and_parse_json() {
             std::string err_msg("Root is not valid");
             _state->append_error_msg_to_file(JsonFunctions::get_raw_json_string(_origin_json_doc), err_msg);
             _counter->num_rows_filtered++;
-            return FileScanner::UnrecoverableError(Status::DataQualityError(err_msg.c_str()));
+            return Status::DataQualityError(err_msg.c_str());
         }
     }
 
@@ -401,14 +397,14 @@ Status JsonReader::_read_and_parse_json() {
         std::string err_msg("JSON data is an array, strip_outer_array must be set true");
         _state->append_error_msg_to_file(JsonFunctions::get_raw_json_string(_origin_json_doc), err_msg);
         _counter->num_rows_filtered++;
-        return FileScanner::UnrecoverableError(Status::DataQualityError(err_msg.c_str()));
+        return Status::DataQualityError(err_msg.c_str());
     }
 
     if (!_json_doc->IsArray() && _scanner->_strip_outer_array) {
         std::string err_msg("JSON data is not an arrayobject, strip_outer_array must be set false");
         _state->append_error_msg_to_file(JsonFunctions::get_raw_json_string(_origin_json_doc), err_msg);
         _counter->num_rows_filtered++;
-        return FileScanner::UnrecoverableError(Status::DataQualityError(err_msg.c_str()));
+        return Status::DataQualityError(err_msg.c_str());
     }
 
     return Status::OK();
