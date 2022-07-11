@@ -1052,10 +1052,6 @@ propertyList
     : '(' property (',' property)* ')'
     ;
 
-userPropertyList
-    : property (',' property)*
-    ;
-
 property
     : key=string '=' value=string
     ;
