@@ -201,7 +201,7 @@ private:
             DCHECK(_finished);
             data->reset();
             *length = 0;
-            return Status::OK();
+            return Status::EndOfFile("all data has been read");
         }
         auto buf = _buf_queue.front();
         *length = buf->remaining();
