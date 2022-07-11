@@ -107,7 +107,7 @@ statement
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
 
     // procedure
-    | showProcedureStatment                                                                 #showProcedure
+    | showProcedureStatement                                                                 #showProcedure
     ;
 
 
@@ -670,7 +670,7 @@ tabletList
     ;
 
 // ------------------------------------------- Procedure Statement ---------------------------------------------------------
-showProcedureStatment
+showProcedureStatement
     : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
     ;
 // ------------------------------------------- Expression --------------------------------------------------------------
