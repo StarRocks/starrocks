@@ -16,7 +16,7 @@ public class ShardManagerTest {
     @Test
     public void test() {
         ShardManager info = new ShardManager();
-        Assert.assertEquals(null, info.getShardDeleter());
+        Assert.assertNotNull(info.getShardDeleter());
     }
 
     @Test

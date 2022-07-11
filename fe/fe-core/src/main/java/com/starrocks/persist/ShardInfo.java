@@ -40,6 +40,7 @@ public class ShardInfo implements Writable {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, ShardInfo.class);
     }
+
 }
 
 
