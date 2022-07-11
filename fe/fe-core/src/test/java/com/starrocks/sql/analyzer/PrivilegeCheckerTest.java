@@ -32,7 +32,7 @@ public class PrivilegeCheckerTest {
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db1");
-        starRocksAssert.withDatabase("db2");
+        starRocksAssert.withDatabase("db0");
         starRocksAssert.withTable(createTblStmtStr);
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
 
@@ -436,7 +436,7 @@ public class PrivilegeCheckerTest {
                 (CreateAnalyzeJobStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         PrivilegeChecker.check(createAnalyzeJobStmt1, starRocksAssert.getCtx());
 
-        sql = "create analyze database db2";
+        sql = "create analyze database db0";
         CreateAnalyzeJobStmt createAnalyzeJobStmt2 =
                 (CreateAnalyzeJobStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         Assert.assertThrows(SemanticException.class, () -> PrivilegeChecker.check(createAnalyzeJobStmt2, starRocksAssert.getCtx()));

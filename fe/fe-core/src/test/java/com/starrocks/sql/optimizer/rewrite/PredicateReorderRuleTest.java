@@ -27,7 +27,7 @@ import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRul
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.statistic.Constants;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -92,14 +92,14 @@ public class PredicateReorderRuleTest {
                         "\"in_memory\" = \"false\",\n" +
                         "\"storage_format\" = \"DEFAULT\"\n" +
                         ");");
-        CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
+        CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
             GlobalStateMgr.getCurrentState().createDb(dbStmt);
         } catch (DdlException e) {
             return;
         }
-        starRocksAssert.useDatabase(Constants.StatisticsDBName);
+        starRocksAssert.useDatabase(StatsConstants.STATISTICS_DB_NAME);
         starRocksAssert.withTable(DEFAULT_CREATE_TABLE_TEMPLATE);
         FeConstants.runningUnitTest = true;
 

@@ -23,7 +23,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
@@ -115,12 +114,12 @@ public class StatisticsMetaManager extends MasterDaemon {
     }
 
     private boolean checkDatabaseExist() {
-        return GlobalStateMgr.getCurrentState().getDb(Constants.StatisticsDBName) != null;
+        return GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME) != null;
     }
 
     private boolean createDatabase() {
         LOG.info("create statistics db start");
-        CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
+        CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
             GlobalStateMgr.getCurrentState().createDb(dbStmt);
@@ -133,7 +132,7 @@ public class StatisticsMetaManager extends MasterDaemon {
     }
 
     private boolean checkTableExist(String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(Constants.StatisticsDBName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME);
         Preconditions.checkState(db != null);
         return db.getTable(tableName) != null;
     }
@@ -147,7 +146,7 @@ public class StatisticsMetaManager extends MasterDaemon {
             return true;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(Constants.StatisticsDBName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME);
         Preconditions.checkState(db != null);
         OlapTable table = (OlapTable) db.getTable(tableName);
         Preconditions.checkState(table != null);
@@ -185,8 +184,8 @@ public class StatisticsMetaManager extends MasterDaemon {
 
     private boolean createSampleStatisticsTable() {
         LOG.info("create statistics table start");
-        TableName tableName = new TableName(Constants.StatisticsDBName,
-                Constants.SampleStatisticsTableName);
+        TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
+                StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
         int defaultReplicationNum = Math.min(3,
                 GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
@@ -208,13 +207,13 @@ public class StatisticsMetaManager extends MasterDaemon {
         }
         LOG.info("create statistics table done");
         refreshAnalyzeJob();
-        return checkTableExist(Constants.SampleStatisticsTableName);
+        return checkTableExist(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
     }
 
     private boolean createFullStatisticsTable() {
         LOG.info("create statistics table v2 start");
-        TableName tableName = new TableName(Constants.StatisticsDBName,
-                Constants.FullStatisticsTableName);
+        TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
+                StatsConstants.FULL_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
         int defaultReplicationNum = Math.min(3,
                 GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
@@ -236,13 +235,13 @@ public class StatisticsMetaManager extends MasterDaemon {
         }
         LOG.info("create statistics table done");
         refreshAnalyzeJob();
-        return checkTableExist(Constants.FullStatisticsTableName);
+        return checkTableExist(StatsConstants.FULL_STATISTICS_TABLE_NAME);
     }
 
     private boolean createHistogramStatisticsTable() {
         LOG.info("create statistics table v2 start");
-        TableName tableName = new TableName(Constants.StatisticsDBName,
-                Constants.HistogramStatisticsTableName);
+        TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
+                StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
         int defaultReplicationNum = Math.min(3,
                 GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
@@ -270,7 +269,7 @@ public class StatisticsMetaManager extends MasterDaemon {
                     histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn(),
                     histogramStatsMeta.getType(), LocalDateTime.MIN, histogramStatsMeta.getProperties()));
         }
-        return checkTableExist(Constants.HistogramStatisticsTableName);
+        return checkTableExist(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
     }
 
     private void refreshAnalyzeJob() {
@@ -291,7 +290,7 @@ public class StatisticsMetaManager extends MasterDaemon {
     private boolean dropTable(String tableName) {
         LOG.info("drop statistics table start");
         DropTableStmt stmt = new DropTableStmt(true,
-                new TableName(Constants.StatisticsDBName, tableName), true);
+                new TableName(StatsConstants.STATISTICS_DB_NAME, tableName), true);
 
         try {
             GlobalStateMgr.getCurrentState().dropTable(stmt);
@@ -312,11 +311,11 @@ public class StatisticsMetaManager extends MasterDaemon {
     }
 
     private boolean createTable(String tableName) {
-        if (tableName.equals(Constants.SampleStatisticsTableName)) {
+        if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
             return createSampleStatisticsTable();
-        } else if (tableName.equals(Constants.FullStatisticsTableName)) {
+        } else if (tableName.equals(StatsConstants.FULL_STATISTICS_TABLE_NAME)) {
             return createFullStatisticsTable();
-        } else if (tableName.equals(Constants.HistogramStatisticsTableName)) {
+        } else if (tableName.equals(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME)) {
             return createHistogramStatisticsTable();
         } else {
             throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
@@ -353,10 +352,10 @@ public class StatisticsMetaManager extends MasterDaemon {
             trySleep(10000);
         }
 
-        refreshStatisticsTable(Constants.SampleStatisticsTableName);
+        refreshStatisticsTable(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
         if (Config.enable_collect_full_statistics) {
-            refreshStatisticsTable(Constants.FullStatisticsTableName);
-            refreshStatisticsTable(Constants.HistogramStatisticsTableName);
+            refreshStatisticsTable(StatsConstants.FULL_STATISTICS_TABLE_NAME);
+            refreshStatisticsTable(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
         }
     }
 }

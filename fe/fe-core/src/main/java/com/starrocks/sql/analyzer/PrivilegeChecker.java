@@ -30,16 +30,18 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
+import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.StatsConstants;
 
 import java.util.List;
 import java.util.Map;
@@ -67,9 +69,9 @@ public class PrivilegeChecker {
     }
 
     public static boolean checkDbPriv(ConnectContext context,
-                                       String catalogName,
-                                       String dbName,
-                                       PrivPredicate predicate) {
+                                      String catalogName,
+                                      String dbName,
+                                      PrivPredicate predicate) {
         return !CatalogMgr.isInternalCatalog(catalogName) ||
                 GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(context, dbName, predicate);
     }
@@ -313,18 +315,6 @@ public class PrivilegeChecker {
             return null;
         }
 
-        @Override
-        public Void visitShowCreateTableStmt(ShowCreateTableStmt statement, ConnectContext session) {
-            if (!GlobalStateMgr.getCurrentState().getAuth()
-                    .checkTblPriv(ConnectContext.get(), statement.getDb(), statement.getTable(),
-                            PrivPredicate.SHOW)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW CREATE TABLE",
-                        ConnectContext.get().getQualifiedUser(),
-                        ConnectContext.get().getRemoteIP(),
-                        statement.getTable());
-            }
-            return null;
-        }
 
         @Override
         public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
@@ -343,29 +333,43 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
-            if (statement.getDbId() == AnalyzeJob.DEFAULT_ALL_ID) {
+            if (statement.getDbId() == StatsConstants.DEFAULT_ALL_ID) {
                 List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
                 for (Long dbId : dbIds) {
                     Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
                     if (!checkDbPriv(session, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                            ClusterNamespace.getNameFromFullName(db.getFullName()),
-                            PrivPredicate.SELECT)) {
+                            db.getFullName(), PrivPredicate.SELECT)) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "SELECT",
                                 session.getQualifiedUser(), session.getRemoteIP(),
                                 ClusterNamespace.getNameFromFullName(db.getFullName()));
                     }
 
                     if (!checkDbPriv(session, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                            ClusterNamespace.getNameFromFullName(db.getFullName()),
-                            PrivPredicate.LOAD)) {
+                            db.getFullName(), PrivPredicate.LOAD)) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "LOAD",
                                 session.getQualifiedUser(), session.getRemoteIP(),
                                 ClusterNamespace.getNameFromFullName(db.getFullName()));
                     }
                 }
-            } else if (AnalyzeJob.DEFAULT_ALL_ID == statement.getTableId()
-                    && AnalyzeJob.DEFAULT_ALL_ID != statement.getDbId()) {
+            } else if (StatsConstants.DEFAULT_ALL_ID == statement.getTableId()
+                    && StatsConstants.DEFAULT_ALL_ID != statement.getDbId()) {
                 Database db = GlobalStateMgr.getCurrentState().getDb(statement.getDbId());
+                if (!checkDbPriv(session, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        db.getFullName(),
+                        PrivPredicate.SELECT)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "SELECT",
+                            session.getQualifiedUser(), session.getRemoteIP(),
+                            ClusterNamespace.getNameFromFullName(db.getFullName()));
+                }
+
+                if (!checkDbPriv(session, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        db.getFullName(),
+                        PrivPredicate.LOAD)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "LOAD",
+                            session.getQualifiedUser(), session.getRemoteIP(),
+                            ClusterNamespace.getNameFromFullName(db.getFullName()));
+                }
+
                 for (Table table : db.getTables()) {
                     TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                             db.getFullName(), table.getName());
@@ -379,8 +383,8 @@ public class PrivilegeChecker {
                                 session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
                     }
                 }
-            } else if (AnalyzeJob.DEFAULT_ALL_ID != statement.getTableId()
-                    && AnalyzeJob.DEFAULT_ALL_ID != statement.getDbId()) {
+            } else if (StatsConstants.DEFAULT_ALL_ID != statement.getTableId()
+                    && StatsConstants.DEFAULT_ALL_ID != statement.getDbId()) {
                 TableName tableName = statement.getTableName();
 
                 if (!checkTblPriv(session, tableName, PrivPredicate.SELECT)) {

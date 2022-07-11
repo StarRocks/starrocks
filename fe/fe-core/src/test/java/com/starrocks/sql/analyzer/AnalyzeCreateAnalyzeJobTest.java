@@ -2,8 +2,9 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.Database;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
-import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -35,8 +36,8 @@ public class AnalyzeCreateAnalyzeJobTest {
         String sql = "create analyze all";
         CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
 
-        Assert.assertEquals(AnalyzeJob.DEFAULT_ALL_ID, analyzeStmt.getDbId());
-        Assert.assertEquals(AnalyzeJob.DEFAULT_ALL_ID, analyzeStmt.getTableId());
+        Assert.assertEquals(StatsConstants.DEFAULT_ALL_ID, analyzeStmt.getDbId());
+        Assert.assertEquals(StatsConstants.DEFAULT_ALL_ID, analyzeStmt.getTableId());
         Assert.assertTrue(analyzeStmt.getColumnNames().isEmpty());
     }
 
@@ -45,8 +46,9 @@ public class AnalyzeCreateAnalyzeJobTest {
         String sql = "create analyze full database db";
         CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
 
-        Assert.assertEquals(10110, analyzeStmt.getDbId());
-        Assert.assertEquals(AnalyzeJob.DEFAULT_ALL_ID, analyzeStmt.getTableId());
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("default_cluster:db");
+        Assert.assertEquals(db.getId(), analyzeStmt.getDbId());
+        Assert.assertEquals(StatsConstants.DEFAULT_ALL_ID, analyzeStmt.getTableId());
         Assert.assertTrue(analyzeStmt.getColumnNames().isEmpty());
     }
 

@@ -5,10 +5,8 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.TableName;
-import com.starrocks.statistic.AnalyzeJob;
-import com.starrocks.statistic.Constants;
+import com.starrocks.statistic.StatsConstants;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -31,8 +29,8 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     public CreateAnalyzeJobStmt(TableName tbl, List<String> columnNames, boolean isSample,
                                 Map<String, String> properties) {
         this.tbl = tbl;
-        this.dbId = AnalyzeJob.DEFAULT_ALL_ID;
-        this.tableId = AnalyzeJob.DEFAULT_ALL_ID;
+        this.dbId = StatsConstants.DEFAULT_ALL_ID;
+        this.tableId = StatsConstants.DEFAULT_ALL_ID;
         this.columnNames = columnNames;
         this.isSample = isSample;
         this.properties = properties;
@@ -72,13 +70,6 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
 
     public void setProperties(Map<String, String> properties) {
         this.properties = properties;
-    }
-
-    public AnalyzeJob toAnalyzeJob() {
-        return new AnalyzeJob(dbId, tableId, columnNames,
-                isSample ? Constants.AnalyzeType.SAMPLE : Constants.AnalyzeType.FULL,
-                Constants.ScheduleType.SCHEDULE, properties, Constants.ScheduleStatus.PENDING,
-                LocalDateTime.MIN);
     }
 
     @Override

@@ -12,7 +12,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.statistic.Constants;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStatisticData;
@@ -56,14 +56,14 @@ public class CachedStatisticStorageTest {
             + ");";
 
     public static void createStatisticsTable() throws Exception {
-        CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
+        CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
             GlobalStateMgr.getCurrentState().createDb(dbStmt);
         } catch (DdlException e) {
             return;
         }
-        starRocksAssert.useDatabase(Constants.StatisticsDBName);
+        starRocksAssert.useDatabase(StatsConstants.STATISTICS_DB_NAME);
         starRocksAssert.withTable(DEFAULT_CREATE_TABLE_TEMPLATE);
     }
 

@@ -31,11 +31,6 @@ public class DropHistogramStmt extends StatementBase {
     }
 
     @Override
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-
-    @Override
     public RedirectStatus getRedirectStatus() {
         return null;
     }

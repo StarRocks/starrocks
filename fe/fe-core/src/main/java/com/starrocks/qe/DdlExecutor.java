@@ -95,6 +95,11 @@ import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.StatisticExecutor;
+import com.starrocks.statistic.StatsConstants;
+
+import java.time.LocalDateTime;
 
 public class DdlExecutor {
     public static ShowResultSet execute(GlobalStateMgr globalStateMgr, DdlStmt ddlStmt) throws Exception {
@@ -240,7 +245,22 @@ public class DdlExecutor {
         } else if (ddlStmt instanceof CancelExportStmt) {
             globalStateMgr.getExportMgr().cancelExportJob((CancelExportStmt) ddlStmt);
         } else if (ddlStmt instanceof CreateAnalyzeJobStmt) {
-            globalStateMgr.getAnalyzeManager().addAnalyzeJob(((CreateAnalyzeJobStmt) ddlStmt).toAnalyzeJob());
+            CreateAnalyzeJobStmt createAnalyzeJobStmt = (CreateAnalyzeJobStmt) ddlStmt;
+            AnalyzeJob analyzeJob = new AnalyzeJob(createAnalyzeJobStmt.getDbId(),
+                    createAnalyzeJobStmt.getTableId(),
+                    createAnalyzeJobStmt.getColumnNames(),
+                    createAnalyzeJobStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL,
+                    StatsConstants.ScheduleType.SCHEDULE,
+                    createAnalyzeJobStmt.getProperties(), StatsConstants.ScheduleStatus.PENDING,
+                    LocalDateTime.MIN);
+
+            globalStateMgr.getAnalyzeManager().addAnalyzeJob(analyzeJob);
+
+            Thread thread = new Thread(() -> {
+                StatisticExecutor statisticExecutor = new StatisticExecutor();
+                analyzeJob.run(statisticExecutor);
+            });
+            thread.start();
         } else if (ddlStmt instanceof DropAnalyzeJobStmt) {
             globalStateMgr.getAnalyzeManager().removeAnalyzeJob(((DropAnalyzeJobStmt) ddlStmt).getId());
         } else if (ddlStmt instanceof RefreshTableStmt) {

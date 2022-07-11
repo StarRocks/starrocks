@@ -70,7 +70,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
-import com.starrocks.statistic.Constants;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
@@ -379,8 +379,8 @@ public class UtFrameUtils {
         // mock statistics table
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         if (!starRocksAssert.databaseExist("_statistics_")) {
-            starRocksAssert.withDatabaseWithoutAnalyze(Constants.StatisticsDBName)
-                    .useDatabase(Constants.StatisticsDBName);
+            starRocksAssert.withDatabaseWithoutAnalyze(StatsConstants.STATISTICS_DB_NAME)
+                    .useDatabase(StatsConstants.STATISTICS_DB_NAME);
             starRocksAssert.withTable(createStatisticsTableStmt);
         }
         // prepare dump mock environment

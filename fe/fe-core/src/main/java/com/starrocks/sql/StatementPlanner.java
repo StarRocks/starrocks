@@ -41,6 +41,7 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
@@ -197,6 +198,7 @@ public class StatementPlanner {
                 || statement instanceof DmlStmt
                 || statement instanceof DropAnalyzeJobStmt
                 || statement instanceof DropCatalogStmt
+                || statement instanceof DropHistogramStmt
                 || statement instanceof DropMaterializedViewStmt
                 || statement instanceof DropTableStmt
                 || statement instanceof DropWorkGroupStmt
