@@ -244,7 +244,7 @@ public class OperationType {
     public static final short OP_ADD_COMPUTE_NODE = 10201;
     public static final short OP_DROP_COMPUTE_NODE = 10202;
 
-    // shard operate
-    public static final short OP_ADD_UNUSED_SHARD = 10301;
-    public static final short OP_DELETE_UNUSED_SHARD = 10302;
+    // shard operate 10221 ~ 10222
+    public static final short OP_ADD_UNUSED_SHARD = 10221;
+    public static final short OP_DELETE_UNUSED_SHARD = 10222;
 }

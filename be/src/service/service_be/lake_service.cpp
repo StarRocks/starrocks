@@ -182,7 +182,6 @@ void LakeServiceImpl::drop_tablet(::google::protobuf::RpcController* controller,
             response->add_succ_tablets(tablet_id);
         } else {
             LOG(WARNING) << "Fail to drop tablet " << tablet_id << ": " << res.get_error_msg();
-            continue;
         }
     }
 } 

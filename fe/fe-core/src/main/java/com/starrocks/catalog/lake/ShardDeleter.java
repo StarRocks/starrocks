@@ -27,7 +27,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -76,7 +75,6 @@ public class ShardDeleter extends MasterDaemon {
 
         Iterator<Map.Entry<Long, Set<Long>>> it = shardIdsByBeMap.entrySet().iterator();
         while (it.hasNext()) {
-            boolean finished = true;
             Map.Entry<Long, Set<Long>> entry = it.next();
             long backendId = entry.getKey();
             Set<Long> shards = entry.getValue();
@@ -103,9 +101,9 @@ public class ShardDeleter extends MasterDaemon {
                         LOG.info("succTablets is {}", response.succTablets);
                         shards = new HashSet<>(response.succTablets);
                     }
-                } catch (ExecutionException | InterruptedException e) {
+                } catch (Exception e) {
                     LOG.error(e);
-                    finished = false;
+                    continue;
                 }
             }
 
@@ -120,14 +118,13 @@ public class ShardDeleter extends MasterDaemon {
             }
 
             // 3. succ both, remove from the map
-            if (finished == true) {
-                // for debug
-                LOG.info("delete shard {} and drop lake tablet succ.", shards);
-                GlobalStateMgr.getCurrentState().getEditLog().logRemoveDeleteShard(shards);
-                try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-                    shardIds.removeAll(shards);
-                }
+            // for debug
+            LOG.info("delete shard {} and drop lake tablet succ.", shards);
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveDeleteShard(shards);
+            try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+                shardIds.removeAll(shards);
             }
+            
         }
     }
 

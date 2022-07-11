@@ -745,12 +745,11 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         for (RecycleTableInfo tableInfo : tableToRemove) {
             Table table = tableInfo.getTable();
             long tableId = table.getId();
-            TableType tableType = table.getType();
-            if (tableType == TableType.OLAP) {
+            if (table.isOlapTable()) {
                 HashMap<Long, AgentBatchTask> batchTaskMap =
                         GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) table, false);
                 GlobalStateMgr.getCurrentState().sendDropTabletTasks(batchTaskMap);
-            } else if (tableType == TableType.LAKE) {
+            } else if (table.isLakeTable()) {
                 GlobalStateMgr.getCurrentState().onEraseOlapTable((LakeTable) table, true);
             }
             LOG.info("erased table [{}-{}].", tableId, table.getName());
