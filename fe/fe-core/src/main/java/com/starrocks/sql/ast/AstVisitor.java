@@ -62,6 +62,7 @@ import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RecoverDbStmt;
+import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
@@ -78,6 +79,7 @@ import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
@@ -247,6 +249,10 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    public R visitRecoverTableStatement(RecoverTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     public R visitShowDatabasesStmt(ShowDbStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -371,6 +377,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitModifyBackendHostClause(ModifyBackendAddressClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitSwapTableClause(SwapTableClause clause, C context) {
         return visitNode(clause, context);
     }
 

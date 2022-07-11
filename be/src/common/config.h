@@ -179,9 +179,9 @@ CONF_mInt32(status_report_interval, "5");
 // Local directory to copy UDF libraries from HDFS into.
 CONF_String(local_library_dir, "${UDF_RUNTIME_DIR}");
 // Number of olap/external scanner thread pool size.
-CONF_mInt32(doris_scanner_thread_pool_thread_num, "48");
+CONF_mInt32(scanner_thread_pool_thread_num, "48");
 // Number of olap/external scanner thread pool size.
-CONF_Int32(doris_scanner_thread_pool_queue_size, "102400");
+CONF_Int32(scanner_thread_pool_queue_size, "102400");
 CONF_mDouble(scan_use_query_mem_ratio, "0.25");
 // Number of etl thread pool size.
 CONF_Int32(etl_thread_pool_size, "8");
@@ -197,11 +197,11 @@ CONF_Int32(broker_write_timeout_seconds, "30");
 // Default thrift client retry interval (in milliseconds).
 CONF_mInt64(thrift_client_retry_interval_ms, "100");
 // Single read execute fragment row size.
-CONF_mInt32(doris_scanner_row_num, "16384");
+CONF_mInt32(scanner_row_num, "16384");
 // Number of max hdfs scanners.
 CONF_Int32(max_hdfs_scanner_num, "50");
 // Number of max scan keys.
-CONF_mInt32(doris_max_scan_key_num, "1024");
+CONF_mInt32(max_scan_key_num, "1024");
 // The max number of push down values of a single column.
 // if exceed, no conditions will be pushed down for that column.
 CONF_mInt32(max_pushdown_conditions_per_column, "1024");

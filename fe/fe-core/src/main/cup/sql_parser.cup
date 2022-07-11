@@ -975,14 +975,6 @@ alter_table_clause ::=
     {:
         RESULT = new ReplacePartitionClause(partitions, tempPartitions, properties);
     :}
-    | KW_SWAP KW_WITH ident:tblName
-    {:
-        RESULT = new SwapTableClause(tblName);
-    :}
-    | KW_RENAME ident:newTableName
-    {:
-        RESULT = new TableRenameClause(newTableName);
-    :}
     | KW_RENAME KW_ROLLUP ident:rollupName ident:newRollupName
     {:
         RESULT = new RollupRenameClause(rollupName, newRollupName);
@@ -1742,10 +1734,6 @@ recover_stmt ::=
     | KW_RECOVER KW_SCHEMA ident:dbName
     {:
         RESULT = new RecoverDbStmt(dbName);
-    :}
-    | KW_RECOVER KW_TABLE table_name:dbTblName
-    {:
-        RESULT = new RecoverTableStmt(dbTblName);
     :}
     | KW_RECOVER KW_PARTITION ident:partitionName KW_FROM table_name:dbTblName
     {:

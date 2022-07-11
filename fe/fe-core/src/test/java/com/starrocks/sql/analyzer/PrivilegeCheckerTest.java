@@ -202,6 +202,26 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
+    public void testRecoverTable() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        db1TablePattern.analyze("default_cluster");
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        String sql = "recover table db1.test";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertTrue(statementBase.isSupportNewPlanner());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
+    @Test
     public void testShowData() throws Exception {
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         starRocksAssert.getCtx().setQualifiedUser("test");
@@ -236,6 +256,14 @@ public class PrivilegeCheckerTest {
         System.out.print(resultSet2.getResultRows());
         Assert.assertEquals(resultSet2.getResultRows().toArray().length, 2);
         Assert.assertEquals(resultSet2.getResultRows().get(0).get(0), "tbl1");
+
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
+        // test no privilege
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx()));
+        // recover privilege
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
 
         String sql3 = "show data from dbNoExist.tbl1"; // dbNoExist no exist
         StatementBase dbNoExist = UtFrameUtils.parseStmtWithNewParser(sql3, starRocksAssert.getCtx());
@@ -331,16 +359,18 @@ public class PrivilegeCheckerTest {
     @Test
     public void testSelectTable() throws Exception {
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
-        TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
 
+        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        db1TablePattern.analyze("default_cluster");
+
         String sql = "select count(*) from db1.tbl1 as a";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));

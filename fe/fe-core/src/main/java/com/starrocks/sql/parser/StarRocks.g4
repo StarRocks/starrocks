@@ -38,6 +38,7 @@ statement
     | refreshTableStatement                                                                 #refreshTable
     | showDeleteStatement                                                                   #showDelete
     | descTableStatement                                                                    #descTable
+    | recoverTableStatement                                                                 #recoverTable
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -277,6 +278,10 @@ descTableStatement
     : (DESC | DESCRIBE) table=qualifiedName ALL?
     ;
 
+recoverTableStatement
+    : RECOVER TABLE qualifiedName
+    ;
+
 // ------------------------------------------- View Statement ----------------------------------------------------------
 
 createViewStatement
@@ -357,7 +362,6 @@ alterClause
     : createIndexClause
     | dropIndexClause
     | tableRenameClause
-
     | addBackendClause
     | dropBackendClause
     | modifyBackendHostClause
@@ -366,6 +370,7 @@ alterClause
     | modifyFrontendHostClause
     | addComputeNodeClause
     | dropComputeNodeClause
+    | swapTableClause
     ;
 
 createIndexClause
@@ -378,6 +383,10 @@ dropIndexClause
 
 tableRenameClause
     : RENAME identifier
+    ;
+
+swapTableClause
+    : SWAP WITH identifier
     ;
 
 addBackendClause

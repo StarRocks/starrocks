@@ -48,7 +48,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
         long sampleRowCount = Long.parseLong(properties.getOrDefault(StatsConstants.PROP_SAMPLE_COLLECT_ROWS_KEY,
                 String.valueOf(Config.statistic_sample_collect_rows)));
         List<List<String>> splitColumns = Lists.partition(columns,
-                (int) (sampleRowCount * columns.size() / Config.statistics_collect_max_row_count + 1));
+                (int) (sampleRowCount * columns.size() / Config.statistics_collect_max_row_count_per_query + 1));
 
         for (List<String> splitColItem : splitColumns) {
             for (String columnName : splitColItem) {

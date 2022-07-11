@@ -125,7 +125,7 @@ PARALLEL_TEST(ConvertHelperTest, testDecimalToDecimalV2Column) {
             trim_trailing_zeros(values[4].to_string()),
     };
     {
-        auto c0 = vectorized::ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DECIMAL, false);
+        auto c0 = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DECIMAL, false);
         c0->append_datum({values[0]});
         c0->append_datum({values[1]});
         c0->append_datum({values[2]});
@@ -140,7 +140,7 @@ PARALLEL_TEST(ConvertHelperTest, testDecimalToDecimalV2Column) {
         EXPECT_EQ(values_string[4], c1->get(4).get_decimal().to_string());
     }
     {
-        auto c0 = vectorized::ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DECIMAL, true);
+        auto c0 = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DECIMAL, true);
         c0->append_datum({values[0]});
         c0->append_datum({});
         c0->append_datum({values[1]});

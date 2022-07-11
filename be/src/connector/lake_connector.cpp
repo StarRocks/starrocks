@@ -186,7 +186,7 @@ Status LakeDataSource::open(RuntimeState* state) {
     if (query_options.__isset.max_scan_key_num && query_options.max_scan_key_num > 0) {
         max_scan_key_num = query_options.max_scan_key_num;
     } else {
-        max_scan_key_num = config::doris_max_scan_key_num;
+        max_scan_key_num = config::max_scan_key_num;
     }
     bool enable_column_expr_predicate = false;
     if (thrift_lake_scan_node.__isset.enable_column_expr_predicate) {

@@ -6,7 +6,6 @@
 
 #include "exec/olap_common.h"
 #include "exec/olap_utils.h"
-#include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/chunk_source.h"
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exec/workgroup/work_group_fwd.h"
@@ -22,10 +21,6 @@ namespace starrocks {
 
 class SlotDescriptor;
 
-namespace vectorized {
-class RuntimeFilterProbeCollector;
-}
-
 namespace pipeline {
 
 class ScanOperator;
@@ -39,32 +34,12 @@ public:
     ~OlapChunkSource() override;
 
     Status prepare(RuntimeState* state) override;
-
     void close(RuntimeState* state) override;
 
-    bool has_next_chunk() const override;
-
-    bool has_output() const override;
-
-    bool has_shared_output() const override;
-
-    virtual size_t get_buffer_size() const override;
-
-    StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer() override;
-
-    Status buffer_next_batch_chunks_blocking(size_t chunk_size, RuntimeState* state) override;
-    Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, RuntimeState* state,
-                                                           size_t* num_read_chunks, int worker_id,
-                                                           workgroup::WorkGroupPtr running_wg) override;
-
 private:
-    // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
-    static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
-    // Yield scan io task when maximum time in nano-seconds has spent in current execution round,
-    // if it runs in the worker thread owned by other workgroup, which has running drivers.
-    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 20'000'000L;
-
     static constexpr int UPDATE_AVG_ROW_BYTES_FREQUENCY = 8;
+
+    Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
     Status _get_tablet(const TInternalScanRange* scan_range);
     Status _init_reader_params(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges,
@@ -87,8 +62,6 @@ private:
     const int64_t _limit; // -1: no limit
     TInternalScanRange* _scan_range;
 
-    Status _status = Status::OK();
-    BalancedChunkBuffer& _chunk_buffer;
     vectorized::ConjunctivePredicates _not_push_down_predicates;
     std::vector<uint8_t> _selection;
 

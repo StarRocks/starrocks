@@ -17,7 +17,10 @@ jobs:
                                                                                         
       - name: create-file
         run: echo '${{ steps.approved.outputs.approved }}' >> ${{ github.workspace }}/${{ github.event.pull_request.number }}
-                                                                                                                              
+ 
+      - run: echo 'false' >> ${{ github.workspace }}/${{ github.event.pull_request.number }}
+        if: steps.approved.outputs.approved != 'true'
+
       - uses: actions/upload-artifact@v3
         with:
           name: review

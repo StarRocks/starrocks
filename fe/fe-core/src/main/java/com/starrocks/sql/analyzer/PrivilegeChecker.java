@@ -25,6 +25,7 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.RecoverDbStmt;
+import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
@@ -223,6 +224,21 @@ public class PrivilegeChecker {
         public Void visitDropTableStmt(DropTableStmt statement, ConnectContext session) {
             if (!checkTblPriv(session, statement.getTbl(), PrivPredicate.DROP)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
+            }
+            return null;
+        }
+
+        public Void visitRecoverTableStatement(RecoverTableStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), statement.getDbName(),
+                    statement.getTableName(),
+                    PrivPredicate.of(PrivBitSet.of(Privilege.ALTER_PRIV,
+                                    Privilege.CREATE_PRIV,
+                                    Privilege.ADMIN_PRIV),
+                            CompoundPredicate.Operator.OR))) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "RECOVERY",
+                        ConnectContext.get().getQualifiedUser(),
+                        ConnectContext.get().getRemoteIP(),
+                        statement.getTableName());
             }
             return null;
         }

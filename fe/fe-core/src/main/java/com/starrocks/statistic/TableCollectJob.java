@@ -28,7 +28,7 @@ public class TableCollectJob extends StatisticsCollectJob {
     @Override
     public void collect() throws Exception {
         List<List<String>> splitColumns = Lists.partition(columns,
-                (int) (table.getRowCount() * columns.size() / Config.statistics_collect_max_row_count + 1));
+                (int) (table.getRowCount() * columns.size() / Config.statistics_collect_max_row_count_per_query + 1));
         for (List<String> splitColItem : splitColumns) {
             for (String columnName : splitColItem) {
                 String sql = buildFullInsertSQL(db, table, Lists.newArrayList(columnName));

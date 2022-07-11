@@ -7,7 +7,6 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
@@ -36,7 +35,7 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private Task task;
 
-    private ConnectContext ctx;
+    private ConnectContext runCtx;
 
     private TaskRunProcessor processor;
 
@@ -85,25 +84,16 @@ public class TaskRun implements Comparable<TaskRun> {
     public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
         taskRunContext.setDefinition(status.getDefinition());
-        // copy a ConnectContext to avoid concurrency leading to abnormal results.
-        ConnectContext newCtx = new ConnectContext(null);
-        if (ctx == null) {
-            ctx = new ConnectContext(null);
-            ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
-            ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            ctx.setDatabase(task.getDbName());
-            ctx.setQualifiedUser(Auth.ROOT_USER);
-            ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        }
-        newCtx.setCluster(ctx.getClusterName());
-        newCtx.setGlobalStateMgr(ctx.getGlobalStateMgr());
-        newCtx.setDatabase(task.getDbName());
-        newCtx.setQualifiedUser(ctx.getQualifiedUser());
-        newCtx.setCurrentUserIdentity(ctx.getCurrentUserIdentity());
-        newCtx.getState().reset();
-        newCtx.setQueryId(UUID.fromString(status.getQueryId()));
+        runCtx = new ConnectContext(null);
+        runCtx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
+        runCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        runCtx.setDatabase(task.getDbName());
+        runCtx.setQualifiedUser(status.getUser());
+        runCtx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
+        runCtx.getState().reset();
+        runCtx.setQueryId(UUID.fromString(status.getQueryId()));
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
-        SessionVariable sessionVariable = (SessionVariable) ctx.getSessionVariable().clone();
+        SessionVariable sessionVariable = VariableMgr.newSessionVariable();
         if (properties != null) {
             for (String key : properties.keySet()) {
                 try {
@@ -115,13 +105,13 @@ public class TaskRun implements Comparable<TaskRun> {
                 }
             }
         }
-        newCtx.setSessionVariable(sessionVariable);
-        taskRunContext.setCtx(newCtx);
-        taskRunContext.setRemoteIp(ctx.getMysqlChannel().getRemoteHostPortString());
+        runCtx.setSessionVariable(sessionVariable);
+        taskRunContext.setCtx(runCtx);
+        taskRunContext.setRemoteIp(runCtx.getMysqlChannel().getRemoteHostPortString());
         taskRunContext.setProperties(taskRunContextProperties);
         processor.processTaskRun(taskRunContext);
-        QueryState queryState = newCtx.getState();
-        if (newCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+        QueryState queryState = runCtx.getState();
+        if (runCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
             status.setErrorMessage(queryState.getErrorMessage());
             int errorCode = -1;
             if (queryState.getErrorCode() != null) {
@@ -133,12 +123,8 @@ public class TaskRun implements Comparable<TaskRun> {
         return true;
     }
 
-    public ConnectContext getCtx() {
-        return ctx;
-    }
-
-    public void setCtx(ConnectContext ctx) {
-        this.ctx = ctx;
+    public ConnectContext getRunCtx() {
+        return runCtx;
     }
 
     public TaskRunStatus getStatus() {
@@ -154,6 +140,7 @@ public class TaskRun implements Comparable<TaskRun> {
         } else {
             status.setCreateTime(createTime);
         }
+        status.setUser(task.getCreateUser());
         status.setDbName(task.getDbName());
         status.setDefinition(task.getDefinition());
         status.setExpireTime(System.currentTimeMillis() + Config.task_runs_ttl_second * 1000L);

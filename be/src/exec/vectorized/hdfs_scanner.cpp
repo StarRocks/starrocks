@@ -142,7 +142,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
 }
 
 Status HdfsScanner::open(RuntimeState* runtime_state) {
-    if (_is_open) {
+    if (_opened) {
         return Status::OK();
     }
     CHECK(_file == nullptr) << "File has already been opened";
@@ -152,7 +152,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     _build_scanner_context();
     auto status = do_open(runtime_state);
     if (status.ok()) {
-        _is_open = true;
+        _opened = true;
         if (_scanner_params.open_limit != nullptr) {
             _scanner_params.open_limit->fetch_add(1, std::memory_order_relaxed);
         }
@@ -164,7 +164,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
 void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     DCHECK(!has_pending_token());
     bool expect = false;
-    if (!_is_closed.compare_exchange_strong(expect, true)) return;
+    if (!_closed.compare_exchange_strong(expect, true)) return;
     update_counter();
     Expr::close(_conjunct_ctxs, runtime_state);
     Expr::close(_min_max_conjunct_ctxs, runtime_state);
@@ -174,7 +174,7 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     do_close(runtime_state);
     _file.reset(nullptr);
     _raw_file.reset(nullptr);
-    if (_is_open && _scanner_params.open_limit != nullptr) {
+    if (_opened && _scanner_params.open_limit != nullptr) {
         _scanner_params.open_limit->fetch_sub(1, std::memory_order_relaxed);
     }
 }

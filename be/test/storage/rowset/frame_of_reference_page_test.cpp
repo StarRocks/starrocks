@@ -123,7 +123,7 @@ public:
         ASSERT_EQ(0, for_page_decoder.current_index());
         ASSERT_EQ(size, for_page_decoder.count());
 
-        auto column = vectorized::ChunkHelper::column_from_field_type(Type, false);
+        auto column = ChunkHelper::column_from_field_type(Type, false);
         size_t size_to_fetch = size;
         status = for_page_decoder.next_batch(&size_to_fetch, column.get());
         ASSERT_TRUE(status.ok());
@@ -138,7 +138,7 @@ public:
         ASSERT_EQ(0, for_page_decoder.current_index());
         ASSERT_EQ(size, for_page_decoder.count());
 
-        auto column1 = vectorized::ChunkHelper::column_from_field_type(Type, false);
+        auto column1 = ChunkHelper::column_from_field_type(Type, false);
         vectorized::SparseRange read_range;
         read_range.add(vectorized::Range(0, size / 3));
         read_range.add(vectorized::Range(size / 2, (size * 2 / 3)));
