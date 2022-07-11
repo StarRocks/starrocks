@@ -68,20 +68,32 @@ Status JsonScanner::open() {
 StatusOr<ChunkPtr> JsonScanner::get_next() {
     SCOPED_RAW_TIMER(&_counter->total_ns);
     ChunkPtr src_chunk;
-    RETURN_IF_ERROR(_create_src_chunk(&src_chunk));
 
-    if (_cur_file_eof) {
-        RETURN_IF_ERROR(_open_next_reader());
-        _cur_file_eof = false;
-    }
-    Status status = _cur_file_reader->read_chunk(src_chunk.get(), _max_chunk_size, _src_slot_descriptors);
-    if (status.is_end_of_file()) {
-        _cur_file_eof = true;
-    }
+    // Read until we get a non-empty chunk.
+    do {
+        RETURN_IF_ERROR(_create_src_chunk(&src_chunk));
 
-    if (src_chunk->num_rows() == 0) {
-        return Status::EndOfFile("EOF of reading json file");
-    }
+        if (_cur_file_eof) {
+            // If all readers have been read, a EOF would be returned.
+            RETURN_IF_ERROR(_open_next_reader());
+            _cur_file_eof = false;
+        }
+        Status status = _cur_file_reader->read_chunk(src_chunk.get(), _max_chunk_size, _src_slot_descriptors);
+        if (!status.ok()) {
+            if (status.is_end_of_file()) {
+                // Set _cur_file_eof to open a new reader.
+                _cur_file_eof = true;
+            } else {
+                // To read all readers, we just log and ignore the error returned by read_chunk.
+                if (++_error_chunk_num <= _kMaxErrorChunkNum) {
+                    LOG(WARNING) << "read chunk failed: : " << status;
+                }
+            }
+        }
+
+    } while (src_chunk->num_rows() == 0);
+
+    // Materialize non-empty chunk.
     auto cast_chunk = _cast_chunk(src_chunk);
     return materialize(src_chunk, cast_chunk);
 }
