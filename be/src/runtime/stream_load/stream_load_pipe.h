@@ -93,7 +93,7 @@ public:
         } else if (_total_length == 0) {
             // no data
             *length = 0;
-            return Status::OK();
+            return Status::EndOfFile("empty pipe");
         }
 
         if (_total_length == -1) {
@@ -107,6 +107,7 @@ public:
         Status st = read(data->get(), length, &eof);
         if (eof) {
             *length = 0;
+            return Status::EndOfFile("all data has been read");
         }
         return st;
     }
@@ -200,7 +201,7 @@ private:
             DCHECK(_finished);
             data->reset();
             *length = 0;
-            return Status::OK();
+            return Status::EndOfFile("all data has been read");
         }
         auto buf = _buf_queue.front();
         *length = buf->remaining();

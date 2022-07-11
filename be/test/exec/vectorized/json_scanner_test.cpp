@@ -306,7 +306,7 @@ TEST_F(JsonScannerTest, test_invalid_nested_level2) {
     EXPECT_EQ("[[NULL, NULL]]", chunk->debug_row(0));
 }
 
-TEST_F(JsonScannerTest, test_json_with_long_string) {
+TEST_F(JsonScannerTest, test_empty) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TypeDescriptor::create_varchar_type(100));
     types.emplace_back(TypeDescriptor::create_varchar_type(100));
@@ -318,20 +318,13 @@ TEST_F(JsonScannerTest, test_json_with_long_string) {
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = false;
     range.__isset.json_root = false;
-    range.__set_path("./be/test/exec/test_data/json_scanner/test8.json");
+    range.__set_path("./be/test/exec/test_data/json_scanner/empty.json");
     ranges.emplace_back(range);
 
     auto scanner = create_json_scanner(types, ranges, {"request", "ids"});
 
-    Status st;
-    st = scanner->open();
-    ASSERT_TRUE(st.ok());
-
-    ChunkPtr chunk = scanner->get_next().value();
-    EXPECT_EQ(2, chunk->num_columns());
-    EXPECT_EQ(1, chunk->num_rows());
-
-    EXPECT_EQ("['{\"area\":\"beijing\",\"country\":\"china\"}', '[\"478472290\",\"478473274\"]']", chunk->debug_row(0));
+    ASSERT_TRUE(scanner->open().ok());
+    ASSERT_TRUE(scanner->get_next().status().is_end_of_file());
 }
 
 } // namespace starrocks::vectorized
