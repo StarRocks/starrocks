@@ -876,8 +876,8 @@ public class Coordinator {
 
                     Map<TNetworkAddress, List<FInstanceExecParam>> requestsPerHost = params.instanceExecParams.stream()
                             .collect(Collectors.groupingBy(FInstanceExecParam::getHost, HashMap::new,
-                                    Collectors.mapping(Function.identity(), Collectors.toList())));
-                                    
+                                    Collectors.mapping(Function.identity(), Collectors.toList())));   
+            
                     for (Map.Entry<TNetworkAddress, List<FInstanceExecParam>> hostAndRequests : requestsPerHost.entrySet()) {
                         TNetworkAddress host = hostAndRequests.getKey();
                         List<FInstanceExecParam> requests = hostAndRequests.getValue();
