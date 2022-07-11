@@ -72,6 +72,8 @@ public:
                 this->data(state).sum += column->get_data()[row_num];
             } else if constexpr (pt_is_decimal<PT>) {
                 this->data(state).sum += column->get_data()[row_num];
+            } else {
+                DCHECK(false) << "Invalid PrimitiveTypes for avg function";
             }
             this->data(state).count++;
         } else {
@@ -85,6 +87,8 @@ public:
                 this->data(state).sum -= column->get_data()[row_num];
             } else if constexpr (pt_is_decimal<PT>) {
                 this->data(state).sum -= column->get_data()[row_num];
+            } else {
+                DCHECK(false) << "Invalid PrimitiveTypes for avg function";
             }
             this->data(state).count--;
         }
