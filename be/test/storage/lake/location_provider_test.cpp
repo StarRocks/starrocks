@@ -1,13 +1,13 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/lake/group_assigner.h"
+#include "storage/lake/location_provider.h"
 
 #ifdef USE_STAROS
 
 #include <gtest/gtest.h>
 
 #include "service/staros_worker.h"
-#include "storage/lake/starlet_group_assigner.h"
+#include "storage/lake/starlet_location_provider.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
@@ -20,14 +20,14 @@ public:
     ~StarletGroupAssignerTest() override = default;
     void SetUp() override {
         g_worker = std::make_shared<StarOSWorker>();
-        _assigner = new lake::StarletGroupAssigner();
+        _assigner = new lake::StarletLocationProvider();
     }
     void TearDown() override {
         delete _assigner;
         g_worker.reset();
     }
 
-    lake::StarletGroupAssigner* _assigner;
+    lake::StarletLocationProvider* _assigner;
 };
 
 TEST_F(StarletGroupAssignerTest, starlet_group_test) {

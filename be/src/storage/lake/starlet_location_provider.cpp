@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/lake/starlet_group_assigner.h"
+#include "storage/lake/starlet_location_provider.h"
 
 #ifdef USE_STAROS
 
@@ -18,11 +18,7 @@ static std::string normalize_group(const std::string& group) {
     return group.substr(0, group.length() - 1);
 }
 
-std::string StarletGroupAssigner::get_fs_prefix() {
-    return kStarletPrefix;
-}
-
-StatusOr<std::string> StarletGroupAssigner::get_group(int64_t tablet_id) {
+StatusOr<std::string> StarletLocationProvider::root_location(int64_t tablet_id) {
     if (g_worker == nullptr) {
         return Status::InternalError("init_staros_worker() must be called before get_shard_info()");
     }
@@ -30,7 +26,7 @@ StatusOr<std::string> StarletGroupAssigner::get_group(int64_t tablet_id) {
     return normalize_group(shard_info.obj_store_info.s3_obj_store.uri);
 }
 
-Status StarletGroupAssigner::list_group(std::set<std::string>* groups) {
+Status StarletLocationProvider::list_root_locations(std::set<std::string>* groups) {
     if (g_worker == nullptr) {
         return Status::InternalError("init_staros_worker() must be called before get_shard_info()");
     }
@@ -42,7 +38,7 @@ Status StarletGroupAssigner::list_group(std::set<std::string>* groups) {
     return Status::OK();
 }
 
-std::string StarletGroupAssigner::path_assemble(const std::string& path, int64_t tablet_id) {
+std::string StarletLocationProvider::location(const std::string& path, int64_t tablet_id) {
     return fmt::format("{}{}?ShardId={}", kStarletPrefix, path, tablet_id);
 }
 
