@@ -71,7 +71,7 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
         RETURN_IF_ERROR(_create_src_chunk(&src_chunk));
 
         if (_cur_file_eof) {
-            // If all readers have been read, a EOF would be returned.
+            // If all readers have been read, an EOF would be returned.
             RETURN_IF_ERROR(_open_next_reader());
             _cur_file_eof = false;
         }
