@@ -1,40 +1,58 @@
-# 数组
+# 使用数组类型
 
-## 什么是数组
+本文介绍如何使用 StarRocks 中的数组类型相关特性。
 
-数组，作为数据库的一种扩展类型，在 PG、ClickHouse、Snowflake 等系统中都有相关特性支持，可以广泛的应用于 A/B Test 对比、用户标签分析、人群画像等场景。StarRocks 当前支持了 多维数组嵌套、数组切片、比较、过滤等特性。
+数组是数据库中的一种扩展数据类型，其相关特性在众多数据库系统中均有支持，可以广泛的应用于 A/B Test 对比、用户标签分析、人群画像等场景。StarRocks 当前支持多维数组嵌套、数组切片、比较、过滤等特性。
 
-下面简要介绍一些是使用方式，更详细的函数语法请查看 [数组函数](https://docs.starrocks.com/zh-cn/main/sql-reference/sql-functions/array-functions/array_agg)。
+## 定义数组类型的列
 
-<br/>
-
-## 使用数组
-
-### 定义数组类型的列
-
-下面是在 StarRocks 中定义数组列的例子
+您可以在建表时定义数组类型的列。
 
 ~~~SQL
--- 一维数组
+-- 定义一维数组。
+ARRAY<type>
+
+-- 定义嵌套数组。
+ARRAY<ARRAY<type>>
+
+-- 定义 NOT NULL 数组列。
+ARRAY<type> NOT NULL
+~~~
+
+数组列的定义形式为 `ARRAY`，其中 `type` 是数组元素类型，默认为 nullable，暂时不支持指定数组元素类型为 NOT NULL，但是您可以定义数组列本身为 NOT NULL。
+
+数组元素支持以下数据类型：BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、VARCHAR、CHAR、DATETIME、DATE。
+
+> 注意
+> 数组类型有以下限制：
+>
+> * StarRocks 2.1 以前版本中，您只能在明细模型（Duplicate Key Table）中定义数组列。StarRocks 自 2.1 版本开始支持 Primary Key 和 Unique Key 中使用数组类型。
+> * 数组列暂时不能作为 Key 列。
+> * 数组列不能作为分桶（Distribution By）列。
+> * 数组列不能作为分区（Partition By）列。
+> * 数组列暂不支持 DECIMAL V3 数据类型。
+> * 数组列最多支持 14 层嵌套。
+
+示例：
+
+~~~SQL
+-- 建表并指定其中的 `c1` 列为一维数组，元素类型为 INT。
 create table t0(
   c0 INT,
   c1 ARRAY<INT>
 )
 duplicate key(c0)
-distributed by hash(c0) buckets 3;  -- 以分3个桶为例。
+distributed by hash(c0) buckets 3;
 
--- 定义嵌套数组
+-- 建表并指定 `c1` 为两层的嵌套数组，元素类型为 VARCHAR。
 create table t1(
   c0 INT,
   c1 ARRAY<ARRAY<VARCHAR(10)>>
 )
 duplicate key(c0)
 distributed by hash(c0) buckets 3;
-~~~
 
-如上，数组列的定义形式为 `ARRAY`，其中 TYPE 是数组元素类型，默认 nullable，暂时不支持指定元素类型为 NOT NULL，但是可以定义数组本身为 NOT NULL。
-
-~~~SQL
+-- 建表并定义 NOT NULL 数组的列。
 create table t2(
   c0 INT,
   c1 ARRAY<INT> NOT NULL
@@ -43,84 +61,151 @@ duplicate key(c0)
 distributed by hash(c0) buckets 3;
 ~~~
 
-数组类型有以下限制
+## 使用 SELECT 语句构造数组
 
-* 只能在 duplicate table 中定义数组列（2.1版本开始支持 Primary key 和 Unique key 中使用数组类型）
-* 数组列不能作为 key 列(以后可能支持)
-* 数组列不能作为 distribution 列
-* 数组列不能作为 partition 列
+您可以在 SQL 语句中通过中括号（ `[]` ）来构造数组常量，每个数组元素通过逗号（`,`）分隔。
 
-<br/>
+示例：
 
-### 使用SELECT语句构造数组
+~~~Plain Text
+mysql> select [1, 2, 3] as numbers;
 
-可以在 SQL 中通过中括号（ "[" 和 "]" ）来构造数组常量，每个数组元素通过逗号(",")分割
++---------+
+| numbers |
++---------+
+| [1,2,3] |
++---------+
 
-~~~SQL
-select [1, 2, 3] as numbers;
-select ["apple", "orange", "pear"] as fruit;
-select [true, false] as booleans;
+mysql> select ["apple", "orange", "pear"] as fruit;
+
++---------------------------+
+| fruit                     |
++---------------------------+
+| ["apple","orange","pear"] |
++---------------------------+
+
+mysql> select [true, false] as booleans;
+
++----------+
+| booleans |
++----------+
+| [1,0]    |
++----------+
 ~~~
 
-当数组元素具有不同类型时，StarRocks 会自动推导出合适的类型(supertype)
+当数组元素具有不同类型时，StarRocks 会自动推导出合适的类型（supertype）。
 
-~~~SQL
-select [1, 1.2] as floats;
-select [12, "100"]; -- 结果是 ["12", "100"]
+~~~Plain Text
+mysql> select [1, 1.2] as floats;
+
++---------+
+| floats  |
++---------+
+| [1,1.2] |
++---------+
+
+mysql> select [12, "100"];
+
++--------------+
+| [12,'100']   |
++--------------+
+| ["12","100"] |
++--------------+
 ~~~
 
-可以使用尖括号(`<>`)显示声明数组类型
+您可以使用尖括号（`<>`）声明数组类型。
 
-~~~SQL
-select ARRAY<float>[1, 2];
-select ARRAY<INT>["12", "100"]; -- 结果是 [12, 100]
+~~~Plain Text
+mysql> select ARRAY<float>[1, 2];
+
++-----------------------+
+| ARRAY<float>[1.0,2.0] |
++-----------------------+
+| [1,2]                 |
++-----------------------+
+
+mysql> select ARRAY<INT>["12", "100"];
+
++------------------------+
+| ARRAY<int(11)>[12,100] |
++------------------------+
+| [12,100]               |
++------------------------+
 ~~~
 
-元素中可以包含NULL
+数组元素中可以包含 NULL。
 
-~~~SQL
-select [1, NULL];
+~~~Plain Text
+mysql> select [1, NULL];
+
++----------+
+| [1,NULL] |
++----------+
+| [1,null] |
++----------+
 ~~~
 
-对于空数组，可以使用尖括号显示声明其类型，也可以直接写\[\]，此时 StarRocks 会根据上下文推断其类型，如果无法推断则会报错。
+定义空数组时，您可以使用尖括号声明其类型。您也可以直接定义为 `[]`，此时 StarRocks 会根据上下文推断其类型，如果无法推断则会报错。
 
-~~~SQL
-select [];
-select ARRAY<VARCHAR(10)>[];
-select array_append([], 10);
+~~~Plain Text
+mysql> select [];
+
++------+
+| []   |
++------+
+| []   |
++------+
+
+mysql> select ARRAY<VARCHAR(10)>[];
+
++----------------------------------+
+| ARRAY<unknown type: NULL_TYPE>[] |
++----------------------------------+
+| []                               |
++----------------------------------+
+
+mysql> select array_append([], 10);
+
++----------------------+
+| array_append([], 10) |
++----------------------+
+| [10]                 |
++----------------------+
 ~~~
 
-<br/>
+## 导入数组类型的数据
 
-### 导入数组类型的数据
+StarRocks 当前支持三种方式写入数组数据。
 
-目前有三种方式向 StarRocks 中写入数组值，insert into 适合小规模数据测试。后面两种适合大规模数据导入。
+### 通过 INSERT INTO 语句导入数组
 
-* **INSERT INTO**
+INSERT INTO 语句导入方式适合小批量数据逐行导入或对 StarRocks 内外部表数据进行 ETL 处理并导入。
 
-  ~~~SQL
-  create table t0(
-    c0 INT,
-    c1 ARRAY<INT>
-  )
-  duplicate key(c0)
-  distributed by hash(c0) buckets 3;
-  INSERT INTO t0 VALUES(1, [1,2,3]);
-  ~~~
+示例：
 
-* **从 ORC/Parquet 文件导入**
+~~~SQL
+create table t0(
+  c0 INT,
+  c1 ARRAY<INT>
+)
+duplicate key(c0)
+distributed by hash(c0) buckets 3;
+INSERT INTO t0 VALUES(1, [1,2,3]);
+~~~
 
-  StarRocks 中的数组类型，与 ORC/Parquet 格式中的list结构相对应，不需要额外指定，具体请参考 StarRocks 企业文档中 `broker load` 导入相关章节。当前 ORC 的 list 结构可以直接导入，Parquet 格式正在开发中。
+### 通过 Broker Load 批量导入 ORC 或 Parquet 文件中的数组
 
-* **从CSV文件导入**
+StarRocks 中的数组类型，与 ORC 或 Parquet 格式中的 List 结构相对应，所以无需额外指定。具体导入方法请参考 [Broker load](../loading/BrokerLoad.md)。
 
-  CSV 文件导入数组，默认采用逗号分隔，可以用 stream load / routine load 导入 CSV 文本文件或 Kafka 中的 CSV 格式数据。
+当前 StarRocks 支持直接导入 ORC 文件的 List 结构。Parquet 格式导入正在开发中。
 
-<br/>
+### 通过 Stream Load 或 Routine Load 导入 CSV 格式数组
 
-### 访问数组中的元素
+您可以使用 [Stream Load](../loading/StreamLoad.md) 或 [Routine Load](../loading/RoutineLoad.md) 方式导入 CSV 文本文件或 Kafka 中的 CSV 格式数据，默认采用逗号分隔。
 
-使用中括号（ "[" 和 "]" ）加下标形式访问数组中某个元素，下标从 `1` 开始
+## 访问数组中的元素
+
+您可以使用中括号（`[]`）加下标形式访问数组中某个元素。下标从 `1` 开始。
 
 ~~~Plain Text
 mysql> select [1,2,3][1];
@@ -130,10 +215,9 @@ mysql> select [1,2,3][1];
 +------------+
 |          1 |
 +------------+
-1 row in set (0.00 sec)
 ~~~
 
-如果下标为 0，或者为负数，**不会报错，会返回NULL**
+如果您标记下标为 `0` 或负数，StarRocks **不会报错，会返回 NULL**。
 
 ~~~Plain Text
 mysql> select [1,2,3][0];
@@ -143,10 +227,9 @@ mysql> select [1,2,3][0];
 +------------+
 |       NULL |
 +------------+
-1 row in set (0.01 sec)
 ~~~
 
-如果下标超过数组大小，**也会返回NULL**
+如果您标记的下标超过数组大小，StarRocks **会返回 NULL**。
 
 ~~~Plain Text
 mysql> select [1,2,3][4];
@@ -156,20 +239,18 @@ mysql> select [1,2,3][4];
 +------------+
 |       NULL |
 +------------+
-1 row in set (0.01 sec)
 ~~~
 
-对于多维数组，可以**递归**访问内部元素
+对于多维数组，您可以通过**递归**方式访问内部元素。
 
 ~~~Plain Text
-mysql(ARRAY)> select [[1,2],[3,4]][2];
+mysql> select [[1,2],[3,4]][2];
 
 +------------------+
 | [[1,2],[3,4]][2] |
 +------------------+
 | [3,4]            |
 +------------------+
-1 row in set (0.00 sec)
 
 mysql> select [[1,2],[3,4]][2][1];
 
@@ -178,5 +259,4 @@ mysql> select [[1,2],[3,4]][2][1];
 +---------------------+
 |                   3 |
 +---------------------+
-1 row in set (0.01 sec)
 ~~~
