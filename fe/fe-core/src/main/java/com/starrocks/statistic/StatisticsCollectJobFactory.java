@@ -72,7 +72,7 @@ public class StatisticsCollectJobFactory {
                                                                  StatsConstants.ScheduleType scheduleType,
                                                                  Map<String, String> properties) {
         if (columns == null) {
-            columns = table.getFullSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
+            columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                     .collect(Collectors.toList());
         }
 

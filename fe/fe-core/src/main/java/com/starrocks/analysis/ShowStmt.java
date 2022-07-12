@@ -27,6 +27,16 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
 
 public abstract class ShowStmt extends StatementBase {
+    protected Predicate predicate;
+
+    public void setPredicate(Predicate predicate) {
+        this.predicate = predicate;
+    }
+
+    public Predicate getPredicate() {
+        return predicate;
+    }
+
     public abstract ShowResultSetMetaData getMetaData();
 
     public QueryStatement toSelectStmt() throws AnalysisException {
