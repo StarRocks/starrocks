@@ -7,6 +7,7 @@ jobs:
   stale:
     runs-on: ubuntu-latest
     steps:
+      - run: echo "stale"
       - uses: actions/stale@v5
         with:
           stale-issue-message: 'Message to comment on stale issues. If none provided, will not mark issues stale'
