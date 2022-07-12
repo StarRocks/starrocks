@@ -66,6 +66,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -94,6 +95,7 @@ public class DataDefinitionExecutorFactory {
                     .put(DropMaterializedViewStmt.class, new DropMaterializedViewExecutor())
                     .put(AlterMaterializedViewStatement.class, new AlterMaterializedViewExecutor())
                     .put(RefreshMaterializedViewStatement.class, new RefreshMaterializedViewExecutor())
+                    .put(CancelRefreshMaterializedViewStatement.class, new CancelRefreshMaterializedViewExecutor())
                     .put(AlterTableStmt.class, new AlterTableExecutor())
                     .put(AlterViewStmt.class, new AlterViewExecutor())
                     .put(CancelAlterTableStmt.class, new CancelAlterTableExecutor())
