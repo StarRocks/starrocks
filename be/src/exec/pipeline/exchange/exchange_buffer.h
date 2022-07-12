@@ -71,8 +71,11 @@ private:
     int32_t _buffer_capacity = -1;
     // fixed size ring buffer
     std::vector<TransmitChunkInfo> _buffer;
+    // because the allocation of request seqs and the assignment of buffer item are not atomic,
+    // we introduce _available_flags to identify whether the buffer item is avaiable
     std::vector<std::atomic_bool> _available_flags;
     std::vector<TransmitChunkResult> _results;
+    // _finish_flags is used to identify whether the corresponding rpc is finished
     std::vector<std::atomic_bool> _finish_flags;
 
     std::atomic_int64_t _last_arrived_seqs = -1;
