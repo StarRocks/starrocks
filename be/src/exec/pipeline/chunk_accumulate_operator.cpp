@@ -20,7 +20,8 @@ Status ChunkAccumulateOperator::push_chunk(RuntimeState* state, const vectorized
         _in_chunk->append(*chunk);
     }
 
-    if (_out_chunk == nullptr && _in_chunk->num_rows() >= state->chunk_size() * LOW_WAITER_CHUNK) {
+    if (_out_chunk == nullptr && (_in_chunk->num_rows() >= state->chunk_size() * LOW_WATERMARK_ROWS_RATE ||
+                                  _in_chunk->memory_usage() >= LOW_WATERMARK_BYTES)) {
         _out_chunk = std::move(_in_chunk);
     }
 

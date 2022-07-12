@@ -29,7 +29,8 @@ public:
     Status set_finished(RuntimeState* state) override;
 
 private:
-    static constexpr double LOW_WAITER_CHUNK = 0.75;
+    static constexpr double LOW_WATERMARK_ROWS_RATE = 0.75;          // 0.75 * chunk_size
+    static constexpr size_t LOW_WATERMARK_BYTES = 256 * 1024 * 1024; // 256MB.
 
     bool _is_finished = false;
     vectorized::ChunkPtr _in_chunk = nullptr;
