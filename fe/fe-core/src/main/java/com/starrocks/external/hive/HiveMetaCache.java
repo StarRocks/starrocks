@@ -12,6 +12,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -19,7 +20,12 @@ import com.starrocks.common.DdlException;
 import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.ObjectStorageUtils;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.avro.Schema;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
+import org.apache.hudi.avro.HoodieAvroUtils;
+import org.apache.hudi.common.table.HoodieTableMetaClient;
+import org.apache.hudi.common.table.TableSchemaResolver;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -68,7 +74,6 @@ public class HiveMetaCache {
 
     LoadingCache<String, List<String>> databaseNamesCache;
     LoadingCache<String, List<String>> tableNamesCache;
-
 
     public HiveMetaCache(HiveMetaClient hiveMetaClient, Executor executor) {
         this(hiveMetaClient, executor, null);
@@ -124,7 +129,7 @@ public class HiveMetaCache {
         databaseNamesCache = newCacheBuilder(MAX_NAMES_CACHE_SIZE)
                 .build(asyncReloading(new CacheLoader<String, List<String>>() {
                     @Override
-                        public List<String> load(String key) throws Exception {
+                    public List<String> load(String key) throws Exception {
                         return loadAllDatabaseNames();
                     }
                 }, executor));
@@ -320,11 +325,31 @@ public class HiveMetaCache {
 
     private Table loadTable(HiveTableName hiveTableName) throws TException, DdlException {
         org.apache.hadoop.hive.metastore.api.Table hiveTable = client.getTable(hiveTableName);
-        HiveTable table =  HiveMetaStoreTableUtils.convertToSRTable(hiveTable, resourceName);
+        Table table = null;
+        if (HudiTable.fromInputFormat(hiveTable.getSd().getInputFormat()) != HudiTable.HoodieTableType.UNKNOWN) {
+            table = HiveMetaStoreTableUtils.convertHudiConnTableToSRTable(hiveTable, resourceName);
+        } else {
+            table = HiveMetaStoreTableUtils.convertHiveConnTableToSRTable(hiveTable, resourceName);
+        }
         tableColumnStatsCache.invalidate(new HiveTableColumnsKey(hiveTableName.getDatabaseName(),
                 hiveTableName.getTableName(), null, null, table.getType()));
 
         return table;
+    }
+
+    public static Schema loadHudiSchema(org.apache.hadoop.hive.metastore.api.Table hiveTable) throws DdlException {
+        String hudiBasePath = hiveTable.getSd().getLocation();
+        Configuration conf = new Configuration();
+        HoodieTableMetaClient metaClient =
+                HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
+        TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
+        Schema hudiTable;
+        try {
+            hudiTable = HoodieAvroUtils.createHoodieWriteSchema(schemaUtil.getTableAvroSchema());
+        } catch (Exception e) {
+            throw new DdlException("Cannot get hudi table schema.");
+        }
+        return hudiTable;
     }
 
     public Database getDb(String dbName) {
@@ -425,8 +450,13 @@ public class HiveMetaCache {
     public void refreshConnectorTable(String db, String name) throws TException, DdlException, ExecutionException {
         HiveTableName hiveTableName = HiveTableName.of(db, name);
         refreshConnectorTableSchema(hiveTableName);
-        HiveTable newHiveTable = (HiveTable) tableCache.get(hiveTableName);
-        refreshTable(newHiveTable.getHmsTableInfo());
+        if (tableCache.get(hiveTableName) instanceof HiveTable) {
+            HiveTable hiveTable = (HiveTable) tableCache.get(hiveTableName);
+            refreshTable(hiveTable.getHmsTableInfo());
+        } else if (tableCache.get(hiveTableName) instanceof HudiTable) {
+            HudiTable hudiTable = (HudiTable) tableCache.get(hiveTableName);
+            refreshTable(hudiTable.getHmsTableInfo());
+        }
     }
 
     public void refreshConnectorTableSchema(HiveTableName hiveTableName) throws TException, DdlException {
