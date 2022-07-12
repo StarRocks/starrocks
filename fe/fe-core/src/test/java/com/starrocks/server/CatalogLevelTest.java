@@ -51,7 +51,7 @@ public class CatalogLevelTest {
         msTable1.setPartitionKeys(partKeys);
         msTable1.setSd(sd);
         msTable1.setTableType("MANAGED_TABLE");
-        com.starrocks.catalog.Table hiveTable = HiveMetaStoreTableUtils.convertToSRTable(msTable1, "thrift://127.0.0.1:9083");
+        com.starrocks.catalog.Table hiveTable = HiveMetaStoreTableUtils.convertHiveConnTableToSRTable(msTable1, "thrift://127.0.0.1:9083");
         GlobalStateMgr.getCurrentState().setMetadataMgr(metadataMgr);
         new Expectations(metadataMgr) {
             {
