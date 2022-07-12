@@ -121,8 +121,8 @@ cd ${CMAKE_BUILD_DIR}
 
 if [ "${USE_STAROS}" == "ON"  ]; then
   if [ -z "$STARLET_INSTALL_DIR" ] ; then
-     # assume starlet_thirdparty is installed to ${STARROCKS_THIRDPARTY}/installed/starlet/
-     STARLET_INSTALL_DIR=${STARROCKS_THIRDPARTY}/installed/starlet
+    # assume starlet_thirdparty is installed to ${STARROCKS_THIRDPARTY}/installed/starlet/
+    STARLET_INSTALL_DIR=${STARROCKS_THIRDPARTY}/installed/starlet
   fi
   ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
               -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
@@ -136,7 +136,6 @@ if [ "${USE_STAROS}" == "ON"  ]; then
               -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
               -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
               -Dstarlet_DIR=${STARLET_INSTALL_DIR}/starlet_install/lib64/cmake ..
-
 else
   ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
               -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
