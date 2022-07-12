@@ -2,15 +2,19 @@
 
 #pragma once
 
+#include "gutil/macros.h"
 #include "storage/lake/location_provider.h"
 
 namespace starrocks::lake {
 
 class FixedLocationProvider : public LocationProvider {
 public:
-    explicit FixedLocationProvider(std::string root) : _root(std::move(root)) {}
+    explicit FixedLocationProvider(std::string root);
 
     ~FixedLocationProvider() override = default;
+
+    // No usage now.
+    DISALLOW_COPY_AND_MOVE(FixedLocationProvider);
 
     std::string root_location(int64_t tablet_id) const override { return _root; }
 

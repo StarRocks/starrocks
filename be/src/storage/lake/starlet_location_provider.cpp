@@ -35,8 +35,7 @@ std::string StarletLocationProvider::join_path(std::string_view parent, std::str
     return fmt::format("{}/{}{}", parent.substr(0, pos), child, parent.substr(pos));
 }
 
-Status StarletLocationProvider::list_root_locations(std::set<std::string>* roots) const {
-    (void)roots;
+Status StarletLocationProvider::list_root_locations(std::set<std::string>*) const {
     return Status::NotSupported("StarletLocationProvider::list_root_locations");
 }
 

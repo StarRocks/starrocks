@@ -6,6 +6,12 @@
 
 namespace starrocks::lake {
 
+FixedLocationProvider::FixedLocationProvider(std::string root) : _root(std::move(root)) {
+    while (!_root.empty() && _root.back() == '/') {
+        _root.pop_back();
+    }
+}
+
 std::string FixedLocationProvider::tablet_metadata_location(int64_t tablet_id, int64_t version) const {
     return fmt::format("{}/tbl_{:016X}_{:016X}", _root, tablet_id, version);
 }

@@ -2,16 +2,22 @@
 
 #pragma once
 
+#ifdef USE_STAROS
+
 #include <set>
 
 #include "common/statusor.h"
+#include "gutil/macros.h"
 #include "storage/lake/location_provider.h"
 
 namespace starrocks::lake {
 
 class StarletLocationProvider : public LocationProvider {
 public:
+    StarletLocationProvider() = default;
     ~StarletLocationProvider() = default;
+
+    DISALLOW_COPY_AND_MOVE(StarletLocationProvider);
 
     std::string root_location(int64_t tablet_id) const override;
 
@@ -27,3 +33,5 @@ public:
 };
 
 } // namespace starrocks::lake
+
+#endif // USE_STAROS

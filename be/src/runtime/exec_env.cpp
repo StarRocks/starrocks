@@ -59,13 +59,10 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/thread_resource_mgr.h"
-#include "storage/lake/location_provider.h"
-#include "storage/lake/tablet_manager.h"
-#ifdef USE_STAROS
-#include "storage/lake/starlet_location_provider.h"
-#else
 #include "storage/lake/fixed_location_provider.h"
-#endif
+#include "storage/lake/location_provider.h"
+#include "storage/lake/starlet_location_provider.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
