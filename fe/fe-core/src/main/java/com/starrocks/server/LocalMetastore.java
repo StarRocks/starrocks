@@ -2390,8 +2390,12 @@ public class LocalMetastore implements ConnectorMetadata {
                 true, true, storageMedium);
         if (chosenBackendIds == null) {
             throw new DdlException(
-                    "Failed to find enough host with storage medium is " + storageMedium + " in all backends. need: " +
-                            replicationNum);
+                    "Failed to find enough hosts with storage medium " + storageMedium +
+                            " at all backends, number of replicas needed: " +
+                            replicationNum + ". You can forcefully ignore this error by executing " +
+                            "'ADMIN SET FRONTEND CONFIG (\"enable_strict_storage_medium_check\" = \"false\");', " +
+                            "but incompatible medium type can cause balance problem, so we strongly recommend" +
+                            " creating table with compatible 'storage_medium' property set.");
         }
         return chosenBackendIds;
     }
