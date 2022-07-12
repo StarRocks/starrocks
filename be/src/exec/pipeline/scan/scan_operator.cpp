@@ -17,22 +17,14 @@ namespace starrocks::pipeline {
 // ========== ScanOperator ==========
 
 ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node)
-        : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence),
-          _scan_node(scan_node),
-          _chunk_source_profiles(MAX_IO_TASKS_PER_OP),
-          _is_io_task_running(MAX_IO_TASKS_PER_OP),
-          _chunk_sources(MAX_IO_TASKS_PER_OP) {
-    for (auto i = 0; i < MAX_IO_TASKS_PER_OP; i++) {
-        _chunk_source_profiles[i] = std::make_shared<RuntimeProfile>(strings::Substitute("ChunkSource$0", i));
-    }
-}
+        : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence), _scan_node(scan_node) {}
+} // namespace starrocks::pipeline
 
 ScanOperator::~ScanOperator() {
     auto* state = runtime_state();
     if (state == nullptr) {
         return;
     }
-
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
         _close_chunk_source(state, i);
     }
@@ -40,6 +32,13 @@ ScanOperator::~ScanOperator() {
 
 Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
+
+    _chunk_source_profiles.reserve(_io_tasks_per_op);
+    _is_io_task_running.reserve(_io_tasks_per_op);
+    _chunk_sources.reserve(_io_tasks_per_op);
+    for (auto i = 0; i < _io_tasks_per_op; i++) {
+        _chunk_source_profiles[i] = std::make_shared<RuntimeProfile>(strings::Substitute("ChunkSource$0", i));
+    }
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
     _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter("PeakChunkBufferSize", TUnit::UNIT);
@@ -289,7 +288,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                     }
                 });
         if (dynamic_cast<ConnectorScanOperator*>(this) != nullptr) {
-            offer_task_success = ExecEnv::GetInstance()->hdfs_scan_executor()->submit(std::move(task));
+            offer_task_success = ExecEnv::GetInstance()->connector_scan_executor()->submit(std::move(task));
         } else {
             offer_task_success = ExecEnv::GetInstance()->scan_executor()->submit(std::move(task));
         }

@@ -384,7 +384,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
                         scan_operator->set_workgroup(_wg);
                     } else {
                         if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
-                            scan_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());
+                            scan_operator->set_io_threads(exec_env->pipeline_connector_scan_io_thread_pool());
                         } else {
                             scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
                         }

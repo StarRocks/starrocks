@@ -292,7 +292,7 @@ private:
 
     std::unique_ptr<WorkerOwnerManager> _driver_worker_owner_manager;
     std::unique_ptr<WorkerOwnerManager> _scan_worker_owner_manager;
-    std::unique_ptr<WorkerOwnerManager> _hdfs_scan_worker_owner_manager;
+    std::unique_ptr<WorkerOwnerManager> _connector_scan_worker_owner_manager;
 
     std::once_flag init_metrics_once_flag;
     std::unordered_map<std::string, int128_t> _wg_metrics;
