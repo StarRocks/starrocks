@@ -49,11 +49,11 @@ public class BDBJournalCursor implements JournalCursor {
     private long currentKey;
     private BDBEnvironment environment;
     // names of all local databases, will set on initialization, and will update every time `prelong()` is called
-    protected List<Long> dbNames = null;
+    protected List<Long> localDBNames = null;
     // index of next db to be opened
     protected int nextDbPositionIndex = -1;
     // the database of current log
-    protected CloseSafeDatabase currentDatabase = null;
+    protected CloseSafeDatabase database = null;
 
     /**
      * handle DatabaseException carefully
@@ -101,7 +101,7 @@ public class BDBJournalCursor implements JournalCursor {
         int dbIndex = 0;
         // find the db which may contain the fromKey
         String dbName = null;
-        for (long db : dbNames) {
+        for (long db : localDBNames) {
             if (currentKey >= db) {
                 dbName = Long.toString(db);
                 dbIndex++;
@@ -115,7 +115,7 @@ public class BDBJournalCursor implements JournalCursor {
         // will open current db in next()
         nextDbPositionIndex = dbIndex - 1;
         LOG.info("currentKey {}, currentDatabase {}, index of next opened db is {}",
-                currentKey, currentDatabase, nextDbPositionIndex);
+                currentKey, database, nextDbPositionIndex);
     }
 
     protected BDBJournalCursor(BDBEnvironment env, long fromKey, long toKey) {
@@ -150,33 +150,36 @@ public class BDBJournalCursor implements JournalCursor {
         }
 
         // 2. no db changed ( roll new db / delete db after checkpoint )
-        if (dbNames.equals(this.dbNames)) {
+        if (dbNames.equals(localDBNames)) {
             return;
         }
 
         // 3. update db index
-        LOG.info("update dbnames {} -> {}", this.dbNames, dbNames);
-        this.dbNames = dbNames;
+        LOG.info("update dbnames {} -> {}", localDBNames, dbNames);
+        localDBNames = dbNames;
         calculateNextDbIndex();
     }
 
     private boolean shouldOpenDatabase() {
         // the very first time
-        if (currentDatabase == null) {
+        if (database == null) {
             return true;
         }
         // if current db does not contain any more data, then we go to search the next db
-        return nextDbPositionIndex < dbNames.size() && currentKey == dbNames.get(nextDbPositionIndex);
+        return nextDbPositionIndex < localDBNames.size() && currentKey == localDBNames.get(nextDbPositionIndex);
     }
 
     protected void openDatabaseIfNecessary()
             throws InterruptedException, JournalException, JournalInconsistentException {
-        // close previous db
-        if (currentDatabase != null) {
-            currentDatabase.close();
-            currentDatabase = null;
+        if (!shouldOpenDatabase()) {
+            return;
         }
-        Long dbName = dbNames.get(nextDbPositionIndex);
+        // close previous db
+        if (database != null) {
+            database.close();
+            database = null;
+        }
+        String dbName = Long.toString(localDBNames.get(nextDbPositionIndex));
         JournalException exception = null;
         for (int i = 0; i < RETRY_TIME; ++ i) {
             try {
@@ -184,8 +187,9 @@ public class BDBJournalCursor implements JournalCursor {
                     Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
                 }
 
-                currentDatabase = environment.openDatabase(Long.toString(dbName));
-                LOG.info("open next database {}", currentDatabase);
+                database = environment.openDatabase(dbName);
+                LOG.info("open next database {}", database);
+                nextDbPositionIndex++;
                 return;
             } catch (DatabaseException e) {
                 String errMsg = String.format("failed to open %s for %s times!", dbName, i + 1);
@@ -223,10 +227,7 @@ public class BDBJournalCursor implements JournalCursor {
         }
 
         // if current db does not contain any more data, then we go to search the next db
-        if (shouldOpenDatabase()) {
-            openDatabaseIfNecessary();
-            nextDbPositionIndex += 1;
-        }
+        openDatabaseIfNecessary();
 
         // make the key
         Long key = currentKey;
@@ -244,7 +245,7 @@ public class BDBJournalCursor implements JournalCursor {
 
             // 2. read from bdb & error handling
             try {
-                OperationStatus operationStatus = currentDatabase.get(null, theKey, theData, LockMode.READ_COMMITTED);
+                OperationStatus operationStatus = database.get(null, theKey, theData, LockMode.READ_COMMITTED);
 
                 if (operationStatus == OperationStatus.SUCCESS) {
                     // 3. serialized
@@ -266,18 +267,18 @@ public class BDBJournalCursor implements JournalCursor {
                     // we will get NOTFOUND.
                     // So we simply throw a exception and let the replayer get the max id again.
                     LOG.warn("canot find journal {} in db {}, maybe because master switched, will try again.",
-                            key, currentDatabase);
+                            key, database);
                     return null;
                 } else {
                     // other error status, will record error message and retry
                     String errMsg = String.format("failed to read after retried %d times! key = %d, db = %s, status = %s",
-                            i + 1, key, currentDatabase, operationStatus);
+                            i + 1, key, database, operationStatus);
                     LOG.warn(errMsg);
                     exception = new JournalException(errMsg);
                 }
             } catch (DatabaseException e) {
                 String errMsg = String.format("failed to read after retried %d times! key = %d, db = %s",
-                        i + 1, key, currentDatabase);
+                        i + 1, key, database);
                 exception = wrapDatabaseException(e, errMsg);
             }
         } // for i in retry
@@ -288,8 +289,8 @@ public class BDBJournalCursor implements JournalCursor {
 
     @Override
     public void close() {
-        if (currentDatabase != null) {
-            currentDatabase.close();
+        if (database != null) {
+            database.close();
         }
     }
 }

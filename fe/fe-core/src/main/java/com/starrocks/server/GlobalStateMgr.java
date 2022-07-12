@@ -1488,14 +1488,10 @@ public class GlobalStateMgr {
         };
     }
 
-    public void createReplayer()  {
+    public void createReplayer() {
         replayer = new Daemon("replayer", REPLAY_INTERVAL_MS) {
             private JournalCursor cursor = null;
 
-            @Override
-            public void run() {
-                super.run();
-            }
             @Override
             protected void runOneCycle() {
                 boolean err = false;
@@ -1735,9 +1731,11 @@ public class GlobalStateMgr {
                 break;
             }
 
+            // apply
             EditLog.loadJournal(this, entity);
             replayedJournalId.incrementAndGet();
             LOG.debug("journal {} replayed.", replayedJournalId);
+
             if (feType != FrontendNodeType.MASTER) {
                 journalObservable.notifyObservers(replayedJournalId.get());
             }
@@ -1757,6 +1755,7 @@ public class GlobalStateMgr {
                 lineCnt += 1;
                 if (lineCnt > REPLAYER_MAX_LOGS_PER_LOOP) {
                     LOG.warn("replay too many journals: lineCnt {}, replayedJournalId: {}", lineCnt, replayedJournalId);
+                    break;
                 }
             }
 

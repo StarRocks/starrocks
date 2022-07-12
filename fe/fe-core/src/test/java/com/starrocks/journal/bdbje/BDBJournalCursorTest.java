@@ -12,6 +12,7 @@ import com.sleepycat.je.rep.InsufficientLogException;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
+import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalInconsistentException;
@@ -132,16 +133,16 @@ public class BDBJournalCursorTest {
         //
         BDBJournalCursor bdbJournalCursor = BDBJournalCursor.getJournalCursor(environment, 4, -1);
         JournalEntity entity = bdbJournalCursor.next();
-        Assert.assertEquals(entity.getOpCode(), OperationType.OP_SAVE_NEXTID);
-        Assert.assertEquals(entity.getData().toString(), Long.toString(4));
+        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.getOpCode());
+        Assert.assertEquals("4", entity.getData().toString());
 
         entity = bdbJournalCursor.next();
-        Assert.assertEquals(entity.getOpCode(), OperationType.OP_SAVE_NEXTID);
-        Assert.assertEquals(entity.getData().toString(), Long.toString(5));
+        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.getOpCode());
+        Assert.assertEquals("5", entity.getData().toString());
 
         entity = bdbJournalCursor.next();
-        Assert.assertEquals(entity.getOpCode(), OperationType.OP_SAVE_NEXTID);
-        Assert.assertEquals(entity.getData().toString(), Long.toString(6));
+        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.getOpCode());
+        Assert.assertEquals("6", entity.getData().toString());
 
         Assert.assertNull(bdbJournalCursor.next());
 
@@ -158,8 +159,8 @@ public class BDBJournalCursorTest {
         bdbJournalCursor.refresh();
 
         entity = bdbJournalCursor.next();
-        Assert.assertEquals(entity.getOpCode(), OperationType.OP_SAVE_NEXTID);
-        Assert.assertEquals(entity.getData().toString(), Long.toString(7));
+        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.getOpCode());
+        Assert.assertEquals("7", entity.getData().toString());
 
         Assert.assertNull(bdbJournalCursor.next());
 
@@ -183,12 +184,12 @@ public class BDBJournalCursorTest {
         bdbJournalCursor.refresh();
 
         entity = bdbJournalCursor.next();
-        Assert.assertEquals(entity.getOpCode(), OperationType.OP_SAVE_NEXTID);
-        Assert.assertEquals(entity.getData().toString(), Long.toString(8));
+        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.getOpCode());
+        Assert.assertEquals("8", entity.getData().toString());
 
         entity = bdbJournalCursor.next();
-        Assert.assertEquals(entity.getOpCode(), OperationType.OP_SAVE_NEXTID);
-        Assert.assertEquals(entity.getData().toString(), Long.toString(9));
+        Assert.assertEquals(OperationType.OP_SAVE_NEXTID, entity.getOpCode());
+        Assert.assertEquals("9", entity.getData().toString());
 
         Assert.assertNull(bdbJournalCursor.next());
 
@@ -288,6 +289,7 @@ public class BDBJournalCursorTest {
         };
         BDBJournalCursor bdbJournalCursor = BDBJournalCursor.getJournalCursor(environment, 12, 13);
         bdbJournalCursor.openDatabaseIfNecessary();
+        Assert.assertEquals(database, bdbJournalCursor.database);
     }
 
     @Test(expected = JournalException.class)
@@ -408,15 +410,15 @@ public class BDBJournalCursorTest {
             @Mocked BDBEnvironment environment, @Mocked CloseSafeDatabase database) throws Exception {
         BDBJournalCursor cursor = new BDBJournalCursor(environment, 11, 13);
 
-        cursor.dbNames = Arrays.asList(10L, 14L);
+        cursor.localDBNames = Arrays.asList(10L, 14L);
         cursor.calculateNextDbIndex();
         Assert.assertEquals(0, cursor.nextDbPositionIndex);
 
-        cursor.dbNames = Arrays.asList(10L, 11L, 14L);
+        cursor.localDBNames = Arrays.asList(10L, 11L, 14L);
         cursor.calculateNextDbIndex();
         Assert.assertEquals(1, cursor.nextDbPositionIndex);
 
-        cursor.dbNames = Arrays.asList(10L);
+        cursor.localDBNames = Arrays.asList(10L);
         cursor.calculateNextDbIndex();
         Assert.assertEquals(0, cursor.nextDbPositionIndex);
    }
@@ -449,4 +451,31 @@ public class BDBJournalCursorTest {
         long interval = System.currentTimeMillis() - start;
         LOG.info("call environment.getDatabaseNames() {} times cost {} ms", CNT, interval);
    }
+
+     @Test
+     public void refreshFailedRetriedSucceed(@Mocked BDBEnvironment environment) throws Exception {
+        new Expectations(environment) {
+            {
+                environment.getDatabaseNames();
+                times = 2;
+                result = new DatabaseNotFoundException("mock mock");
+                result = Arrays.asList(3L, 23L, 45L);
+            }
+        };
+         BDBJEJournal journal = new BDBJEJournal(environment);
+         journal.read(10, 10);
+     }
+
+     @Test(expected = JournalException.class)
+     public void refreshFailed(@Mocked BDBEnvironment environment) throws Exception {
+         new Expectations(environment) {
+            {
+                environment.getDatabaseNames();
+                result = new DatabaseNotFoundException("mock mock");
+            }
+        };
+         BDBJEJournal journal = new BDBJEJournal(environment);
+         JournalCursor cursor = journal.read(10, 10);
+         cursor.refresh();
+     }
 }

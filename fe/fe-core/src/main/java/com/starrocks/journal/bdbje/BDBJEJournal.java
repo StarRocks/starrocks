@@ -54,7 +54,6 @@ public class BDBJEJournal implements Journal {
     static int SLEEP_INTERVAL_SEC = 5;
 
     private BDBEnvironment bdbEnvironment = null;
-    protected String currentJournalDBName = null;
     protected CloseSafeDatabase currentJournalDB = null;
     protected Transaction currentTrasaction = null;
 
@@ -160,7 +159,7 @@ public class BDBJEJournal implements Journal {
                 if (dbNames == null) {  // bdb environment is closing
                     throw new JournalException("fail to get dbNames while open bdbje journal. will exit");
                 }
-
+                String dbName = null;
                 if (dbNames.size() == 0) {
                     /*
                      *  This is the very first time to open. Usually, we will open a new database named "1".
@@ -168,19 +167,19 @@ public class BDBJEJournal implements Journal {
                      *  here we should open database with name image max journal id + 1.
                      *  (default GlobalStateMgr.getCurrentState().getReplayedJournalId() is 0)
                      */
-                    currentJournalDBName = Long.toString(GlobalStateMgr.getCurrentState().getReplayedJournalId() + 1);
-                    LOG.info("the very first time to open bdb, dbname is {}", currentJournalDBName);
+                    dbName = Long.toString(GlobalStateMgr.getCurrentState().getReplayedJournalId() + 1);
+                    LOG.info("the very first time to open bdb, dbname is {}", dbName);
                 } else {
                     // get last database as current journal database
-                    currentJournalDBName = dbNames.get(dbNames.size() - 1).toString();
+                    dbName = dbNames.get(dbNames.size() - 1).toString();
                 }
 
                 if (currentJournalDB != null) {
                     currentJournalDB.close();
                 }
-                currentJournalDB = bdbEnvironment.openDatabase(currentJournalDBName);
+                currentJournalDB = bdbEnvironment.openDatabase(dbName);
                 if (currentJournalDB == null) {
-                    LOG.warn("fail to open database {}. retried {} times", currentJournalDBName, i);
+                    LOG.warn("fail to open database {}. retried {} times", dbName, i);
                     continue;
                 }
                 return;
@@ -321,7 +320,7 @@ public class BDBJEJournal implements Journal {
                 if (status != OperationStatus.SUCCESS) {
                     throw new JournalException(String.format(
                             "failed to append journal after retried %d times! status[%s] db[%s] key[%s] data[%s]",
-                            i + 1, status.toString(), currentJournalDB.toString(), theKey, theData));
+                            i + 1, status, currentJournalDB, theKey, theData));
                 }
                 // success
                 uncommitedDatas.add(Pair.create(theKey, theData));
