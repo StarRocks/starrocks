@@ -72,9 +72,10 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         Database database = GlobalStateMgr.getCurrentState().getDb(context.ctx.getDatabase());
         MaterializedView materializedView = (MaterializedView) database.getTable(mvId);
         if (!materializedView.isActive()) {
-            LOG.warn("Materialized view: {} is not active, " +
-                    "skip sync partition and data with base tables", mvId);
-            return;
+            String errorMsg = String.format("Materialized view: %s, id: %d is not active, " +
+                    "skip sync partition and data with base tables", materializedView.getName(), mvId);
+            LOG.warn(errorMsg);
+            throw new RuntimeException(errorMsg);
         }
         Set<Long> baseTableIds = materializedView.getBaseTableIds();
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
