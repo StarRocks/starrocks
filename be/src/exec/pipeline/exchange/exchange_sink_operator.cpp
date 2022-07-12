@@ -276,7 +276,7 @@ void ExchangeSinkOperator::Channel::close(RuntimeState* state, FragmentContext* 
 }
 
 ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
-                                           int32_t driver_sequence, const std::shared_ptr<SinkBuffer>& buffer,
+                                           int32_t driver_sequence, const std::shared_ptr<BufferType>& buffer,
                                            TPartitionType::type part_type,
                                            const std::vector<TPlanFragmentDestination>& destinations,
                                            bool is_pipeline_level_shuffle, const int32_t num_shuffles_per_channel,
@@ -686,9 +686,9 @@ int64_t ExchangeSinkOperator::construct_brpc_attachment(PTransmitChunkParamsPtr 
 }
 
 ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
-        int32_t id, int32_t plan_node_id, std::shared_ptr<SinkBuffer> buffer, TPartitionType::type part_type,
-        const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle,
-        int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
+        int32_t id, int32_t plan_node_id, std::shared_ptr<ExchangeSinkOperator::BufferType> buffer,
+        TPartitionType::type part_type, const std::vector<TPlanFragmentDestination>& destinations,
+        bool is_pipeline_level_shuffle, int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
         std::vector<ExprContext*> partition_expr_ctxs, bool enable_exchange_pass_through,
         FragmentContext* const fragment_ctx, const std::vector<int32_t>& output_columns)
         : OperatorFactory(id, "exchange_sink", plan_node_id),
