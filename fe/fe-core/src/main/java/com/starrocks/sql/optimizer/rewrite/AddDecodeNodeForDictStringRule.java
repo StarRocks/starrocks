@@ -916,11 +916,11 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         //
         private boolean canDictOptBeApplied = false;
         // indicates the existence of expressions that do not support optimization using dictionaries
-        private boolean canDictOptPropagateUpwards = false;
+        private boolean stopOptPropagateUpward = false;
 
         void reset() {
             canDictOptBeApplied = false;
-            canDictOptPropagateUpwards = false;
+            stopOptPropagateUpward = false;
         }
     }
 
@@ -932,7 +932,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         @Override
         public Void visit(ScalarOperator scalarOperator, CouldApplyDictOptimizeContext context) {
-            context.canDictOptPropagateUpwards = true;
+            context.stopOptPropagateUpward = true;
             return null;
         }
 
@@ -951,7 +951,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             for (ScalarOperator child : operator.getChildren()) {
                 context.reset();
                 child.accept(this, context);
-                hasUnsupportedOperator = hasUnsupportedOperator || context.canDictOptPropagateUpwards;
+                hasUnsupportedOperator = hasUnsupportedOperator || context.stopOptPropagateUpward;
                 couldAppliedOperator = couldAppliedOperator || context.canDictOptBeApplied;
             }
 
@@ -970,7 +970,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             } else {
                 context.canDictOptBeApplied = couldAppliedOperator;
             }
-            context.canDictOptPropagateUpwards = hasUnsupportedOperator;
+            context.stopOptPropagateUpward = hasUnsupportedOperator;
 
             return null;
         }
@@ -978,7 +978,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         @Override
         public Void visitCall(CallOperator call, CouldApplyDictOptimizeContext context) {
             if (!call.getFunction().isCouldApplyDictOptimize()) {
-                context.canDictOptPropagateUpwards = true;
+                context.stopOptPropagateUpward = true;
                 return null;
             }
 
@@ -992,7 +992,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             if (predicate.getBinaryType() == EQ_FOR_NULL || !predicate.getChild(1).isConstant() ||
                     !predicate.getChild(0).isColumnRef()) {
                 context.canDictOptBeApplied = false;
-                context.canDictOptPropagateUpwards = true;
+                context.stopOptPropagateUpward = true;
                 return null;
             }
 
@@ -1005,7 +1005,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         public Void visitInPredicate(InPredicateOperator predicate, CouldApplyDictOptimizeContext context) {
             if (!predicate.allValuesMatch(ScalarOperator::isConstantRef) || !predicate.getChild(0).isColumnRef()) {
                 context.canDictOptBeApplied = false;
-                context.canDictOptPropagateUpwards = true;
+                context.stopOptPropagateUpward = true;
                 return null;
             }
 
@@ -1018,7 +1018,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         public Void visitIsNullPredicate(IsNullPredicateOperator predicate, CouldApplyDictOptimizeContext context) {
             if (!predicate.getChild(0).isColumnRef()) {
                 context.canDictOptBeApplied = false;
-                context.canDictOptPropagateUpwards = true;
+                context.stopOptPropagateUpward = true;
                 return null;
             }
 
@@ -1044,14 +1044,14 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         @Override
         public Void visitVariableReference(ColumnRefOperator variable, CouldApplyDictOptimizeContext context) {
             context.canDictOptBeApplied = context.dictEncodedColumnSlotIds.contains(variable.getId());
-            context.canDictOptPropagateUpwards = !context.canDictOptBeApplied;
+            context.stopOptPropagateUpward = !context.canDictOptBeApplied;
             return null;
         }
 
         @Override
         public Void visitConstant(ConstantOperator literal, CouldApplyDictOptimizeContext context) {
             context.canDictOptBeApplied = false;
-            context.canDictOptPropagateUpwards = false;
+            context.stopOptPropagateUpward = false;
             return null;
         }
 

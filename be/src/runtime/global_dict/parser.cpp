@@ -239,14 +239,14 @@ Status DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeCo
 }
 
 Status DictOptimizeParser::rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slot_id) {
-    //
+    // call rewrite for each DictMappingExpr
     if (auto f = dynamic_cast<DictMappingExpr*>(expr)) {
         auto* dict_ctx_handle = _free_pool.add(new DictOptimizeContext());
-        _eval_and_rewrite(ctx, f, dict_ctx_handle, slot_id);
+        RETURN_IF_ERROR(_eval_and_rewrite(ctx, f, dict_ctx_handle, slot_id));
         f->rewrite(_free_pool.add(new DictFuncExpr(*f, dict_ctx_handle)));
         return Status::OK();
     }
-    //
+
     for (auto child : expr->children()) {
         RETURN_IF_ERROR(rewrite_expr(ctx, child, -1));
     }
