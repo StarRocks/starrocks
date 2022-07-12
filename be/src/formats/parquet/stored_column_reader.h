@@ -11,6 +11,7 @@
 #include "formats/parquet/column_chunk_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/types.h"
+#include "formats/parquet/utils.h"
 #include "gen_cpp/parquet_types.h"
 
 namespace starrocks {
@@ -59,13 +60,23 @@ public:
     }
 
 protected:
-    virtual Status next_selected_page(size_t records_to_read, size_t* records_to_skip);
+    virtual bool page_selected(size_t num_values);
 
-    virtual bool select_page(size_t num_values);
+    Status next_page(size_t records_to_read, ColumnContentType content_type, size_t* records_read,
+                     vectorized::Column* dst);
+
+    void update_read_context(size_t records_read);
 
     std::unique_ptr<ColumnChunkReader> _reader;
     size_t _num_values_left_in_cur_page = 0;
+    size_t _num_values_skip_in_cur_page = 0;
     const ColumnReaderOptions& _opts;
+
+private:
+    Status _next_selected_page(size_t records_to_read, ColumnContentType content_type, size_t* records_to_skip,
+                               vectorized::Column* dst);
+
+    Status _lazy_load_page_rows(size_t batch_size, ColumnContentType content_type, vectorized::Column* dst);
 };
 
 } // namespace starrocks::parquet

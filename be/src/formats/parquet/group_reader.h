@@ -64,7 +64,7 @@ struct GroupReaderParam {
 
 class GroupReader {
 public:
-    GroupReader(const GroupReaderParam& param, int row_group_number);
+    GroupReader(GroupReaderParam& param, int row_group_number);
     ~GroupReader() = default;
 
     Status init();
@@ -89,6 +89,7 @@ private:
     void _init_read_chunk();
 
     Status _read(const std::vector<int>& read_columns, size_t* row_count, vectorized::ChunkPtr* chunk);
+    Status _lazy_skip_rows(const std::vector<int>& read_columns, vectorized::ChunkPtr chunk, size_t chunk_size);
     void _dict_filter(vectorized::ChunkPtr* chunk, vectorized::Filter* filter_ptr);
     Status _dict_decode(vectorized::ChunkPtr* chunk);
 
@@ -120,7 +121,7 @@ private:
     vectorized::ChunkPtr _read_chunk;
 
     // param for read row group
-    const GroupReaderParam& _param;
+    GroupReaderParam& _param;
 
     ObjectPool _obj_pool;
 

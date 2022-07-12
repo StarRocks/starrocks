@@ -4,8 +4,10 @@
 
 #include "column/column.h"
 #include "column_reader.h"
+#include "common/status.h"
 #include "exec/vectorized/hdfs_scanner.h"
 #include "formats/parquet/types.h"
+#include "formats/parquet/utils.h"
 #include "simd/simd.h"
 #include "util/runtime_profile.h"
 
@@ -35,7 +37,7 @@ public:
     }
 
 protected:
-    bool select_page(size_t num_values) override;
+    bool page_selected(size_t num_values) override;
 
 private:
     // Try to deocde enough levels in levels buffer, except there is no enough levels in current
@@ -168,12 +170,9 @@ Status RepeatedStoredColumnReader::read_records(size_t* num_records, ColumnConte
     size_t records_read = 0;
     do {
         if (_num_values_left_in_cur_page == 0) {
-            size_t records_to_skip = 0;
-            auto st = next_selected_page(*num_records - records_read, &records_to_skip);
-            if (records_to_skip > 0) {
-                dst->append_default(records_to_skip);
-                records_read += records_to_skip;
-            }
+            size_t read_count = 0;
+            auto st = next_page(*num_records - records_read, content_type, &read_count, dst);
+            records_read += read_count;
             if (!st.ok()) {
                 if (st.is_end_of_file()) {
                     if (_meet_first_record) {
@@ -214,6 +213,7 @@ Status RepeatedStoredColumnReader::read_records(size_t* num_records, ColumnConte
         records_read += records_to_read;
         _levels_parsed += num_parsed_levels;
         _num_values_left_in_cur_page -= num_parsed_levels;
+        update_read_context(records_to_read);
     } while (records_read < *num_records);
 
     *num_records = records_read;
@@ -222,7 +222,7 @@ Status RepeatedStoredColumnReader::read_records(size_t* num_records, ColumnConte
 
 // For repeated columns, it is difficult to skip rows according the num_values in header because
 // there may be multiple values in one row. So we don't realize it util the page index is ready later.
-bool RepeatedStoredColumnReader::select_page(size_t num_values) {
+bool RepeatedStoredColumnReader::page_selected(size_t num_values) {
     return true;
 }
 
@@ -303,12 +303,9 @@ Status OptionalStoredColumnReader::_read_records_and_levels(size_t* num_records,
     do {
         if (_num_values_left_in_cur_page == 0) {
             SCOPED_RAW_TIMER(&_opts.stats->page_read_ns);
-            size_t records_to_skip = 0;
-            auto st = next_selected_page(*num_records - records_read, &records_to_skip);
-            if (records_to_skip > 0) {
-                dst->append_default(records_to_skip);
-                records_read += records_to_skip;
-            }
+            size_t read_count = 0;
+            auto st = next_page(*num_records - records_read, content_type, &read_count, dst);
+            records_read += read_count;
             if (!st.ok()) {
                 if (st.is_end_of_file()) {
                     _eof = true;
@@ -344,6 +341,7 @@ Status OptionalStoredColumnReader::_read_records_and_levels(size_t* num_records,
         _num_values_left_in_cur_page -= records_to_read;
         _levels_parsed += records_to_read;
         records_read += records_to_read;
+        update_read_context(records_to_read);
     } while (records_read < *num_records);
     *num_records = records_read;
     return Status::OK();
@@ -359,12 +357,9 @@ Status OptionalStoredColumnReader::_read_records_only(size_t* num_records, Colum
     do {
         if (_num_values_left_in_cur_page == 0) {
             SCOPED_RAW_TIMER(&_opts.stats->page_read_ns);
-            size_t records_to_skip = 0;
-            auto st = next_selected_page(*num_records - records_read, &records_to_skip);
-            if (records_to_skip > 0) {
-                dst->append_default(records_to_skip);
-                records_read += records_to_skip;
-            }
+            size_t read_count = 0;
+            auto st = next_page(*num_records - records_read, content_type, &read_count, dst);
+            records_read += read_count;
             if (!st.ok()) {
                 if (st.is_end_of_file()) {
                     _eof = true;
@@ -428,6 +423,7 @@ Status OptionalStoredColumnReader::_read_records_only(size_t* num_records, Colum
 
         _num_values_left_in_cur_page -= records_to_read;
         records_read += records_to_read;
+        update_read_context(records_to_read);
     } while (records_read < *num_records);
     *num_records = records_read;
     return Status::OK();
@@ -460,12 +456,9 @@ Status RequiredStoredColumnReader::read_records(size_t* num_records, ColumnConte
     size_t records_read = 0;
     while (records_read < *num_records) {
         if (_num_values_left_in_cur_page == 0) {
-            size_t records_to_skip = 0;
-            auto st = next_selected_page(*num_records - records_read, &records_to_skip);
-            if (records_to_skip > 0) {
-                dst->append_default(records_to_skip);
-                records_read += records_to_skip;
-            }
+            size_t read_count = 0;
+            auto st = next_page(*num_records - records_read, content_type, &read_count, dst);
+            records_read += read_count;
             if (!st.ok()) {
                 if (st.is_end_of_file()) {
                     break;
@@ -482,6 +475,7 @@ Status RequiredStoredColumnReader::read_records(size_t* num_records, ColumnConte
         RETURN_IF_ERROR(_reader->decode_values(records_to_read, content_type, dst));
         records_read += records_to_read;
         _num_values_left_in_cur_page -= records_to_read;
+        update_read_context(records_to_read);
     }
     *num_records = records_read;
     return Status::OK();
@@ -506,45 +500,110 @@ Status StoredColumnReader::create(const ColumnReaderOptions& opts, const Parquet
     return Status::OK();
 }
 
-Status StoredColumnReader::next_selected_page(size_t records_to_read, size_t* records_to_skip) {
-    *records_to_skip = 0;
-    do {
-        RETURN_IF_ERROR(_reader->load_header());
-        size_t num_values = _reader->num_values();
-        if (num_values == 0) {
-            if (_reader->current_page_is_dict()) {
-                RETURN_IF_ERROR(_reader->load_page());
-            } else {
-                RETURN_IF_ERROR(_reader->skip_page());
-            }
-            continue;
-        }
-        if (select_page(num_values)) {
-            RETURN_IF_ERROR(_reader->load_page());
-            _num_values_left_in_cur_page = num_values;
-            _opts.context->advance(num_values);
-            break;
-        }
-        RETURN_IF_ERROR(_reader->skip_page());
-        *records_to_skip += num_values;
-        _opts.context->advance(num_values);
-    } while (*records_to_skip < records_to_read);
+Status StoredColumnReader::next_page(size_t records_to_read, ColumnContentType content_type, size_t* records_read,
+                                     vectorized::Column* dst) {
+    *records_read = 0;
+    size_t records_to_skip = 0;
+    RETURN_IF_ERROR(_next_selected_page(records_to_read, content_type, &records_to_skip, dst));
+    if (records_to_skip == 0) {
+        return Status::OK();
+    }
 
-    if (*records_to_skip > records_to_read) {
-        *records_to_skip = records_to_read;
+    if (_opts.context->rows_to_skip > 0) {
+        _opts.context->rows_to_skip -= records_to_skip;
+    }
+    if (_opts.context->filter) {
+        dst->append_default(records_to_skip);
+        *records_read = records_to_skip;
+        _opts.context->advance(records_to_skip);
     }
     return Status::OK();
 }
 
-bool StoredColumnReader::select_page(size_t num_values) {
+Status StoredColumnReader::_next_selected_page(size_t records_to_read, ColumnContentType content_type,
+                                               size_t* records_to_skip, vectorized::Column* dst) {
+    *records_to_skip = 0;
+    do {
+        size_t remain_values =
+                _num_values_skip_in_cur_page > 0 ? _reader->num_values() - _num_values_skip_in_cur_page : 0;
+        if (remain_values == 0) {
+            RETURN_IF_ERROR(_reader->load_header());
+            size_t num_values = _reader->num_values();
+            if (num_values == 0) {
+                if (_reader->current_page_is_dict()) {
+                    RETURN_IF_ERROR(_reader->load_page());
+                } else {
+                    RETURN_IF_ERROR(_reader->skip_page());
+                }
+                continue;
+            }
+            _num_values_skip_in_cur_page = 0;
+            remain_values = num_values;
+        }
+
+        size_t to_read = records_to_read - *records_to_skip;
+        if (page_selected(remain_values)) {
+            RETURN_IF_ERROR(_reader->load_page());
+            _num_values_left_in_cur_page = _reader->num_values();
+            size_t batch_size = records_to_read;
+            _lazy_load_page_rows(batch_size, content_type, dst);
+            _num_values_skip_in_cur_page = 0;
+            break;
+        }
+        if (to_read < remain_values) {
+            _num_values_skip_in_cur_page += to_read;
+            *records_to_skip += to_read;
+            break;
+        }
+        RETURN_IF_ERROR(_reader->skip_page());
+        *records_to_skip += remain_values;
+        _num_values_skip_in_cur_page = 0;
+    } while (*records_to_skip < records_to_read);
+
+    return Status::OK();
+}
+
+Status StoredColumnReader::_lazy_load_page_rows(size_t batch_size, ColumnContentType content_type,
+                                                vectorized::Column* dst) {
+    size_t load_rows = _num_values_skip_in_cur_page;
+    if (load_rows == 0) {
+        return Status::OK();
+    }
+
+    // TODO: We simply use reading records to decode and seek rows position now, it may cause some extra
+    // memory copy. A more efficient way requires major changes to the current code, but it is necessary.
+    auto filter = _opts.context->filter;
+    auto rows_to_skip = _opts.context->rows_to_skip;
+    _opts.context->filter = nullptr;
+    _opts.context->rows_to_skip = 0;
+    while (load_rows > 0) {
+        size_t to_read = std::min(load_rows, batch_size);
+        auto temp_column = dst->clone_empty();
+        RETURN_IF_ERROR(read_records(&to_read, content_type, temp_column.get()));
+        load_rows -= to_read;
+    }
+    _opts.context->filter = filter;
+    _opts.context->rows_to_skip = rows_to_skip;
+    return Status::OK();
+}
+
+bool StoredColumnReader::page_selected(size_t num_values) {
     auto filter = _opts.context->filter;
     if (!filter) {
         return true;
     }
-
     int start_row = _opts.context->next_row;
     int end_row = std::min(start_row + num_values, filter->size()) - 1;
     return SIMD::find_nonzero(*filter, start_row) <= end_row;
+}
+
+void StoredColumnReader::update_read_context(size_t records_read) {
+    if (_opts.context->rows_to_skip > 0) {
+        _opts.context->rows_to_skip -= records_read;
+    }
+    if (_opts.context->filter) {
+        _opts.context->advance(records_read);
+    }
 }
 
 } // namespace starrocks::parquet

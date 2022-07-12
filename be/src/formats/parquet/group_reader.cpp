@@ -17,7 +17,7 @@ namespace starrocks::parquet {
 constexpr static const PrimitiveType kDictCodePrimitiveType = TYPE_INT;
 constexpr static const FieldType kDictCodeFieldType = OLAP_FIELD_TYPE_INT;
 
-GroupReader::GroupReader(const GroupReaderParam& param, int row_group_number) : _param(param) {
+GroupReader::GroupReader(GroupReaderParam& param, int row_group_number) : _param(param) {
     _row_group_metadata =
             std::make_shared<tparquet::RowGroup>(param.file_metadata->t_metadata().row_groups[row_group_number]);
 }
@@ -45,6 +45,9 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
 
     vectorized::ChunkPtr active_chunk = _create_read_chunk(_active_column_indices);
     {
+        int rows_to_skip = _column_reader_opts.context->rows_to_skip;
+        _column_reader_opts.context->rows_to_skip = 0;
+
         SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
         // read data into active_chunk
         _column_reader_opts.context->filter = nullptr;
@@ -53,6 +56,8 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
         if (!status.ok() && !status.is_end_of_file()) {
             return status;
         }
+
+        _column_reader_opts.context->rows_to_skip = rows_to_skip;
     }
 
     bool has_filter = false;
@@ -87,6 +92,8 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
     size_t active_rows = active_chunk->num_rows();
     if (active_rows > 0 && !_lazy_column_indices.empty()) {
         vectorized::ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
+        RETURN_IF_ERROR(_lazy_skip_rows(_lazy_column_indices, lazy_chunk, *row_count));
+
         SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
         // read data into lazy chunk
         _column_reader_opts.context->filter = has_filter ? &chunk_filter : nullptr;
@@ -103,30 +110,21 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
         }
         active_chunk->merge(std::move(*lazy_chunk));
     } else if (active_rows == 0) {
-        ++_param.stats->skip_row_group;
+        _param.stats->skip_read_rows += count;
+        _column_reader_opts.context->rows_to_skip += count;
         *row_count = 0;
         return status;
     }
 
     // We don't care about the column order as they will be reordered in HiveDataSource
-    // _read_chunk->swap_chunk(*active_chunk);
-
-    // TODO: Replace following recorder code with above after #8597 has been merged
-    const auto& read_chunk_index_map = _read_chunk->get_slot_id_to_index_map();
-    const auto& active_chunk_index_map = active_chunk->get_slot_id_to_index_map();
-    for (auto& slot_to_index : read_chunk_index_map) {
-        auto iter = active_chunk_index_map.find(slot_to_index.first);
-        if (iter == active_chunk_index_map.end()) {
-            continue;
-        }
-        _read_chunk->columns()[slot_to_index.second]->swap_column(*active_chunk->columns()[iter->second]);
-    }
+    _read_chunk->swap_chunk(*active_chunk);
     *row_count = _read_chunk->num_rows();
 
     SCOPED_RAW_TIMER(&_param.stats->group_dict_decode_ns);
     // convert from _read_chunk
     RETURN_IF_ERROR(_dict_decode(chunk));
 
+    _column_reader_opts.context->filter = nullptr;
     return status;
 }
 
@@ -182,13 +180,17 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
         } else {
             column.content_type = ColumnContentType::VALUE;
             _direct_read_columns.emplace_back(column);
+            bool has_conjunct = false;
             if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
                 for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
                     _left_conjunct_ctxs.emplace_back(ctx);
                 }
-                _active_column_indices.emplace_back(read_col_idx);
-            } else {
+                has_conjunct = true;
+            }
+            if (config::parquet_late_materialization_enable && !has_conjunct) {
                 _lazy_column_indices.emplace_back(read_col_idx);
+            } else {
+                _active_column_indices.emplace_back(read_col_idx);
             }
         }
         ++read_col_idx;
@@ -387,7 +389,6 @@ Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_coun
     }
 
     size_t count = *row_count;
-
     for (int col_idx : read_columns) {
         auto& column = _param.read_cols[col_idx];
         SlotId slot_id = column.slot_id;
@@ -406,6 +407,36 @@ Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_coun
     }
 
     *row_count = count;
+    return Status::OK();
+}
+
+Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, vectorized::ChunkPtr chunk,
+                                    size_t chunk_size) {
+    auto& ctx = _column_reader_opts.context;
+    if (ctx->rows_to_skip == 0) {
+        return Status::OK();
+    }
+
+    int rows_to_skip = ctx->rows_to_skip;
+    vectorized::Filter empty_filter(1, 0);
+    ctx->filter = &empty_filter;
+    for (int col_idx : read_columns) {
+        auto& column = _param.read_cols[col_idx];
+        SlotId slot_id = column.slot_id;
+        _column_reader_opts.context->next_row = 0;
+
+        ctx->rows_to_skip = rows_to_skip;
+        while (ctx->rows_to_skip > 0) {
+            size_t to_read = std::min(ctx->rows_to_skip, chunk_size);
+            auto temp_column = chunk->get_column_by_slot_id(slot_id)->clone_empty();
+            Status status = _column_readers[slot_id]->next_batch(&to_read, column.content_type, temp_column.get());
+            if (!status.ok()) {
+                return status;
+            }
+        }
+    }
+
+    ctx->rows_to_skip = 0;
     return Status::OK();
 }
 
@@ -454,5 +485,4 @@ Status GroupReader::_dict_decode(vectorized::ChunkPtr* chunk) {
     }
     return Status::OK();
 }
-
 } // namespace starrocks::parquet

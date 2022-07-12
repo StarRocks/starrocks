@@ -82,13 +82,9 @@ Status ColumnChunkReader::skip_page() {
     uint32_t uncompressed_size = header.uncompressed_page_size;
     size_t size = _compress_codec != nullptr ? compressed_size : uncompressed_size;
     RETURN_IF_ERROR(_page_reader->skip_bytes(size));
+    _opts.stats->skip_read_rows += _num_values;
+
     _page_parse_state = PAGE_DATA_PARSED;
-
-    auto stats = _opts.stats;
-    stats->skip_bytes += size;
-    stats->skip_rows += _num_values;
-    ++stats->skip_pages;
-
     return Status::OK();
 }
 
@@ -102,6 +98,7 @@ Status ColumnChunkReader::_parse_page_header() {
         const auto& header = *_page_reader->current_header();
         _num_values = header.data_page_header.num_values;
     }
+
     _page_parse_state = PAGE_HEADER_PARSED;
     return Status::OK();
 }

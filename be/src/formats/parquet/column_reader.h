@@ -14,7 +14,8 @@ class HdfsScanStats;
 namespace starrocks::parquet {
 struct ColumnReaderContext {
     vectorized::Buffer<uint8_t>* filter = nullptr;
-    int next_row = 0;
+    size_t next_row = 0;
+    size_t rows_to_skip = 0;
 
     void advance(int num_rows) { next_row += num_rows; }
 };
