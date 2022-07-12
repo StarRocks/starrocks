@@ -14,6 +14,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.HiveMetaStoreTableUtils;
+import org.apache.avro.Schema;
 import org.apache.hadoop.hive.common.StatsSetupConst;
 
 import java.util.ArrayList;
@@ -170,7 +171,7 @@ public class Utils {
         if (matcher.find()) {
             itemType = new ArrayType(convertToArrayType(matcher.group(1)));
         } else {
-            itemType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
+            itemType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
         }
         return itemType;
     }
@@ -192,4 +193,10 @@ public class Utils {
         }
         throw new DdlException("Failed to get varchar length at " + typeStr);
     }
+
+    public static ArrayType convertToArrayType(Schema typeSchema) throws DdlException {
+        Type itemType = HiveMetaStoreTableUtils.convertHudiTableColumnType(typeSchema.getElementType());
+        return new ArrayType(itemType);
+    }
+
 }
