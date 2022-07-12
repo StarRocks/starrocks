@@ -299,7 +299,7 @@ private:
 
     void _stop_and_wait_apply_done();
 
-    Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo, bool wait_apply);
+    Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo);
 
     void _calc_compaction_score(RowsetStats* stats);
 
