@@ -842,7 +842,8 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
 
                 std::vector<uint64_t> old_rowids(upserts[i]->size());
                 index.get(*upserts[i], &old_rowids);
-                if (!std::all_of(old_rowids.begin(), old_rowids.end(), [](int &id) {return -1 == id; })) {
+                bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int id) { return -1 == id; });
+                if (!non_old_value) {
                     std::vector<uint32_t> old_real_rowids(upserts[i]->size());
                     for (int j = 0; j < upserts[i]->size(); ++j) {
                         old_real_rowids.push_back((uint32_t)(old_rowids[j] & ROWID_MASK));
