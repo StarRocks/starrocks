@@ -61,7 +61,8 @@ public class AnalyzeShowAlterTest {
     }
 
     @Test
-    public void testShowAlterFail() {
+    public void normalTest() {
+        analyzeSuccess("SHOW ALTER TABLE COLUMN ORDER BY CreateTime DESC LIMIT 1;");
         analyzeFail("SHOW ALTER TABLE COLUMN FROM errordb",
                 "Unknown database 'default_cluster:errordb'");
         analyzeFail("SHOW ALTER TABLE COLUMN FROM db WHERE `CreateTime` > '2019-12-04 00:00:00' " +
@@ -71,5 +72,4 @@ public class AnalyzeShowAlterTest {
                         "OR `FinishTime` < '2022-12-04 00:00:00'",
                 "Only allow compound predicate with operator AND");
     }
-
 }

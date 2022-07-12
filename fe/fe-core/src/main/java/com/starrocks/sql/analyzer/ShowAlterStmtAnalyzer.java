@@ -3,6 +3,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
@@ -21,7 +22,6 @@ import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.ArrayList;
@@ -79,8 +79,12 @@ public class ShowAlterStmtAnalyzer {
 
         public void analyzeSyntax(ShowAlterStmt statement, ConnectContext context) {
             String dbName = statement.getDbName();
-            String catalog = context.getCurrentCatalog();
-            if (CatalogMgr.isInternalCatalog(catalog)) {
+            if (Strings.isNullOrEmpty(dbName)) {
+                dbName = context.getDatabase();
+                if (Strings.isNullOrEmpty(dbName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR, dbName);
+                }
+            } else {
                 dbName = ClusterNamespace.getFullName(dbName);
             }
             statement.setDbName(dbName);

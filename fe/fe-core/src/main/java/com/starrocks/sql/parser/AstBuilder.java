@@ -569,7 +569,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowAlterStatement(StarRocksParser.ShowAlterStatementContext context) {
-        QualifiedName dbName = getQualifiedName(context.db);
+        QualifiedName dbName = null;
+        if (context.db != null) {
+            dbName = getQualifiedName(context.db);
+        }
         Expr where = null;
         if (context.expression() != null) {
             where = (Expr) visit(context.expression());
