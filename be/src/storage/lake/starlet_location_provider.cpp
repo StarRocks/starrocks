@@ -32,7 +32,10 @@ std::string StarletLocationProvider::segment_location(int64_t tablet_id, std::st
 std::string StarletLocationProvider::join_path(std::string_view parent, std::string_view child) const {
     auto pos = parent.find("?ShardId=");
     CHECK(pos != std::string::npos);
-    return fmt::format("{}/{}{}", parent.substr(0, pos), child, parent.substr(pos));
+    auto prefix = parent.substr(0, pos);
+    auto suffix = parent.substr(pos);
+    return prefix.back() == '/' ? fmt::format("{}{}{}", prefix, child, suffix
+                                              : fmt::format("{}/{}{}", prefix, child, suffix);
 }
 
 Status StarletLocationProvider::list_root_locations(std::set<std::string>*) const {
