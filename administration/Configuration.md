@@ -101,6 +101,8 @@ After the service is started, you may adjust the configuration parameters to mee
 |max_routine_load_batch_size|524288000| The maximum amount of data to import per routine load task, default by 500M |
 |routine_load_task_consume_second|3|Maximum time to consume data per routine load task, default by 3s|
 |routine_load_task_timeout_second|15|Timeout for  routine load task, default by 15s|
+|enable_strict_storage_medium_check|TRUE|Swtich value to control if FE checks the available storage space.|
+|storage_cooldown_second|-1|The delay of cooldown from HDD storage to SSD storage. Unit: second. The default value indicates to disable the auto-cooldown.|
 
 ## BE Configuration Items
 
