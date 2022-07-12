@@ -41,7 +41,7 @@ If you perform only UPSERT operations on a file, you do not need to add the `__o
         http://localhost:8030/api/demo_db/demo_tbl1/_stream_load
     # Load the data with an operation type specified for the __op field column.
     curl --location-trusted -u root: -H "label:lineorder" \
-        -H "column_separator:," -H " columns:__op ='upsert'" -T demo.csv \
+        -H "column_separator:," -H "columns:__op ='upsert'" -T demo.csv \
         http://localhost:8030/api/demo_db/demo_tbl1/_stream_load
     ~~~
 
@@ -116,7 +116,7 @@ If you perform both UPSERT and DELETE operations on a file, you must use the `__
 
     ~~~bash
     curl --location-trusted -u root: -H "label:lineorder" -H "column_separator:," \
-        -H " columns: c1,c2,c3,pk=c1,col0=c2,__op=c3 " -T demo.csv \
+        -H "columns: c1,c2,c3,pk=c1,col0=c2,__op=c3 " -T demo.csv \
         http://localhost:8030/api/demo_db/demo_tbl1/_stream_load
     ~~~
 
