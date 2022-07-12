@@ -1,7 +1,7 @@
 name: 'Close stale issues and PRs'
 on:
   schedule:
-    - cron: '5 * * * *'
+    - cron: '48 * * * *'
 
 jobs:
   stale:
