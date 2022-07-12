@@ -320,7 +320,7 @@ public class HiveMetaCache {
 
     private Table loadTable(HiveTableName hiveTableName) throws TException, DdlException {
         org.apache.hadoop.hive.metastore.api.Table hiveTable = client.getTable(hiveTableName);
-        HiveTable table =  HiveMetaStoreTableUtils.convertToSRTable(hiveTable, resourceName);
+        HiveTable table =  HiveMetaStoreTableUtils.convertHiveConnTableToSRTable(hiveTable, resourceName);
         tableColumnStatsCache.invalidate(new HiveTableColumnsKey(hiveTableName.getDatabaseName(),
                 hiveTableName.getTableName(), null, null, table.getType()));
 
