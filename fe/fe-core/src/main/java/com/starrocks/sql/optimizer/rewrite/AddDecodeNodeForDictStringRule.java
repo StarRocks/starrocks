@@ -937,40 +937,40 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         }
 
         private Void couldApply(ScalarOperator operator, CouldApplyDictOptimizeContext context) {
-            boolean hasUnsupportedOperator = false;
-            boolean couldAppliedOperator = false;
+            boolean stopOptPropagateUpward = false;
+            boolean canDictOptBeApplied = false;
             // For any expression, if his child supports low cardinality optimization.
             // Then it must support low cardinality optimization.
             // Because we can let child do a low cardinality optimization,
             // the expression itself does not do any optimization
             // eg:
             // Expression(child1, child2)
-            // if only child1 support, but child2 has unsupported expression.
+            // if only child1 support, but child2 has unsupported function such as rand().
             // we can rewrite to
-            // Expression(DictExpr(child1), DictExpr(child2))
+            // Expression(DictExpr(child1), child2)
             for (ScalarOperator child : operator.getChildren()) {
                 context.reset();
                 child.accept(this, context);
-                hasUnsupportedOperator = hasUnsupportedOperator || context.stopOptPropagateUpward;
-                couldAppliedOperator = couldAppliedOperator || context.canDictOptBeApplied;
+                stopOptPropagateUpward = stopOptPropagateUpward || context.stopOptPropagateUpward;
+                canDictOptBeApplied = canDictOptBeApplied || context.canDictOptBeApplied;
             }
 
             // DictExpr only support one input columnRefs
             // concat(dict, dict) -> DictExpr(dict)
             // concat(dict1, dict2) -> nothing to do
-            hasUnsupportedOperator |= operator.getUsedColumns().cardinality() > 1;
+            stopOptPropagateUpward |= operator.getUsedColumns().cardinality() > 1;
 
             // If there exist expressions that cannot be optimized using low cardinality.
             // We need to avoid unused optimizations
             // eg:
             // if (a=1, dict, c) -> nothing to do
             // if (a=1, upper(dict), c) -> if (a = 1, DictExpr(dict), c)
-            if (hasUnsupportedOperator) {
-                context.canDictOptBeApplied = context.worthApplied && couldAppliedOperator;
+            if (stopOptPropagateUpward) {
+                context.canDictOptBeApplied = context.worthApplied && canDictOptBeApplied;
             } else {
-                context.canDictOptBeApplied = couldAppliedOperator;
+                context.canDictOptBeApplied = canDictOptBeApplied;
             }
-            context.stopOptPropagateUpward = hasUnsupportedOperator;
+            context.stopOptPropagateUpward = stopOptPropagateUpward;
 
             return null;
         }

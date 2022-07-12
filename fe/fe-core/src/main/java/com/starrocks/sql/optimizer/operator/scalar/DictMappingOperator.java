@@ -55,13 +55,16 @@ public class DictMappingOperator extends ScalarOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(dictColumn, originScalaOperator);
+        return Objects.hash(getType(), dictColumn, originScalaOperator);
     }
 
     @Override
     public boolean equals(Object other) {
         if (other == null) {
             return false;
+        }
+        if (this == other) {
+            return true;
         }
         if (other instanceof DictMappingOperator) {
             final DictMappingOperator mapping = (DictMappingOperator) other;
