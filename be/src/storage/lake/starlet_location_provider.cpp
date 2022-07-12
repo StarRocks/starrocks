@@ -6,40 +6,37 @@
 
 #include <fmt/format.h>
 
+#include "common/logging.h"
 #include "fs/fs_starlet.h"
+#include "gutil/strings/util.h"
 #include "service/staros_worker.h"
 
 namespace starrocks::lake {
 
-static std::string normalize_group(const std::string& group) {
-    if (group.back() != '/') {
-        return group;
-    }
-    return group.substr(0, group.length() - 1);
+std::string StarletLocationProvider::root_location(int64_t tablet_id) const {
+    return fmt::format("{}?ShardId={}", kStarletPrefix, tablet_id);
 }
 
-StatusOr<std::string> StarletLocationProvider::root_location(int64_t tablet_id) {
-    if (g_worker == nullptr) {
-        return Status::InternalError("init_staros_worker() must be called before get_shard_info()");
-    }
-    ASSIGN_OR_RETURN(auto shard_info, g_worker->get_shard_info(tablet_id));
-    return normalize_group(shard_info.obj_store_info.s3_obj_store.uri);
+std::string StarletLocationProvider::tablet_metadata_location(int64_t tablet_id, int64_t version) const {
+    return fmt::format("{}tbl_{:016X}_{:016X}?ShardId={}", kStarletPrefix, tablet_id, version, tablet_id);
 }
 
-Status StarletLocationProvider::list_root_locations(std::set<std::string>* groups) {
-    if (g_worker == nullptr) {
-        return Status::InternalError("init_staros_worker() must be called before get_shard_info()");
-    }
-
-    std::vector<staros::starlet::ShardInfo> shards = g_worker->shards();
-    for (const auto& shard : shards) {
-        groups->emplace(std::move(normalize_group(shard.obj_store_info.s3_obj_store.uri)));
-    }
-    return Status::OK();
+std::string StarletLocationProvider::txn_log_location(int64_t tablet_id, int64_t txn_id) const {
+    return fmt::format("{}txn_{:016X}_{:016X}?ShardId={}", kStarletPrefix, tablet_id, txn_id, tablet_id);
 }
 
-std::string StarletLocationProvider::location(const std::string& path, int64_t tablet_id) {
-    return fmt::format("{}{}?ShardId={}", kStarletPrefix, path, tablet_id);
+std::string StarletLocationProvider::segment_location(int64_t tablet_id, std::string_view segment_name) const {
+    return fmt::format("{}{}?ShardId={}", kStarletPrefix, segment_name, tablet_id);
+}
+
+std::string StarletLocationProvider::join_path(std::string_view parent, std::string_view child) const {
+    auto pos = parent.find("?ShardId=");
+    CHECK(pos != std::string::npos);
+    return fmt::format("{}/{}{}", parent.substr(0, pos), child, parent.substr(pos));
+}
+
+Status StarletLocationProvider::list_root_locations(std::set<std::string>*) const {
+    return Status::NotSupported("StarletLocationProvider::list_root_locations");
 }
 
 } // namespace starrocks::lake

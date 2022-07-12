@@ -59,11 +59,10 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/thread_resource_mgr.h"
+#include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/location_provider.h"
-#include "storage/lake/tablet_manager.h"
-#ifdef USE_STAROS
 #include "storage/lake/starlet_location_provider.h"
-#endif
+#include "storage/lake/tablet_manager.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
@@ -77,26 +76,6 @@
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
-
-class FixedLocationProvider : public lake::LocationProvider {
-public:
-    explicit FixedLocationProvider(std::string path) : _path(std::move(path)) {
-        if (_path.back() == '/') _path.pop_back();
-    }
-
-    ~FixedLocationProvider() override = default;
-
-    StatusOr<std::string> root_location(int64_t /*tablet_id*/) override { return _path; }
-
-    [[maybe_unused]] Status list_root_locations(std::set<std::string>* groups) override {
-        groups->emplace(_path);
-        return Status::OK();
-    }
-    std::string location(const std::string& path, int64_t tablet_id) { return path; }
-
-private:
-    std::string _path;
-};
 
 // Calculate the total memory limit of all load tasks on this BE
 static int64_t calc_max_load_memory(int64_t process_mem_limit) {
@@ -271,7 +250,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             exit(-1);
         }
 #ifndef USE_STAROS
-        _lake_location_provider = new FixedLocationProvider(_store_paths.front().path);
+        _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
 #else
         _lake_location_provider = new lake::StarletLocationProvider();
 #endif

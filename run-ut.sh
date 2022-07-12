@@ -117,15 +117,13 @@ if [ ! -d ${CMAKE_BUILD_DIR} ]; then
     mkdir -p ${CMAKE_BUILD_DIR}
 fi
 
-# need config STAROS_DIR in custom.sh if USE_STAROS
-if [ "${USE_STAROS}" == "ON"  -a -z "${STAROS_DIR}" ]; then
-    echo "Please set STAROS_DIR when using staros"
-    exit 1
-fi
-
 cd ${CMAKE_BUILD_DIR}
 
 if [ "${USE_STAROS}" == "ON"  ]; then
+  if [ -z "$STARLET_INSTALL_DIR" ] ; then
+     # assume starlet_thirdparty is installed to ${STARROCKS_THIRDPARTY}/installed/starlet/
+     STARLET_INSTALL_DIR=${STARROCKS_THIRDPARTY}/installed/starlet
+  fi
   ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
               -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
               -DSTARROCKS_HOME=${STARROCKS_HOME} \
@@ -134,10 +132,11 @@ if [ "${USE_STAROS}" == "ON"  ]; then
               -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_BENCH=${WITH_BENCH}  \
               -DUSE_STAROS=${USE_STAROS} \
-              -Dprotobuf_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/third_party/grpc_install/lib64/cmake/protobuf \
-              -Dabsl_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/third_party/grpc_install/lib64/cmake/absl \
-              -DgRPC_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/third_party/grpc_install/lib/cmake/grpc \
-              -Dstarlet_DIR=${STARROCKS_THIRDPARTY}/installed/starlet/starlet_install/lib64/cmake ../
+              -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
+              -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
+              -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
+              -Dstarlet_DIR=${STARLET_INSTALL_DIR}/starlet_install/lib64/cmake ..
+
 else
   ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
               -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\

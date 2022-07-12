@@ -155,7 +155,7 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
         // TODO: batch deletion
         for (const auto& txn_id : request->txn_ids()) {
             auto st = tablet->delete_txn_log(txn_id);
-            LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_log_path(txn_id) << ": " << st;
+            LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_log_location(txn_id) << ": " << st;
         }
     }
 }
