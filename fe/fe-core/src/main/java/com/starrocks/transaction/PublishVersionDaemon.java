@@ -357,17 +357,21 @@ public class PublishVersionDaemon extends MasterDaemon {
         // Refresh materialized view when base table update transaction has been visible
         long dbId = transactionState.getDbId();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        for (long tableId : transactionState.getTableIdList()) {
-            Table table = db.getTable(tableId);
-            Set<Long> relatedMvs = ((OlapTable) table).getRelatedMaterializedViews();
-            // TODO: try read lock?
-            for (long mvId : relatedMvs) {
-                MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
-                if (materializedView.isLoadTriggeredRefresh()) {
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                            db.getFullName(), db.getTable(mvId).getName(), Constants.TaskRunPriority.NORMAL.value());
+        db.readLock();
+        try {
+            for (long tableId : transactionState.getTableIdList()) {
+                Table table = db.getTable(tableId);
+                Set<Long> relatedMvs = ((OlapTable) table).getRelatedMaterializedViews();
+                for (long mvId : relatedMvs) {
+                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
+                    if (materializedView.isLoadTriggeredRefresh()) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
+                                db.getFullName(), db.getTable(mvId).getName(), Constants.TaskRunPriority.NORMAL.value());
+                    }
                 }
             }
+        } finally {
+            db.readUnlock();
         }
     }
 }
