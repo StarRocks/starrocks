@@ -2392,7 +2392,7 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException(
                     "Failed to find enough hosts with storage medium " + storageMedium +
                             " at all backends, number of replicas needed: " +
-                            replicationNum + ". You can forcefully ignore this error by executing " +
+                            replicationNum + ". Storage medium check failure can be forcefully ignored by executing " +
                             "'ADMIN SET FRONTEND CONFIG (\"enable_strict_storage_medium_check\" = \"false\");', " +
                             "but incompatible medium type can cause balance problem, so we strongly recommend" +
                             " creating table with compatible 'storage_medium' property set.");
