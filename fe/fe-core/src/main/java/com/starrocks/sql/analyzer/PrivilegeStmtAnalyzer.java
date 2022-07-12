@@ -116,11 +116,11 @@ public class PrivilegeStmtAnalyzer {
             byte[] scramblePassword;
             if (!Strings.isNullOrEmpty(stmt.getOriginalPassword())) {
                 try {
-                    // plain password should check for validation & reuse
-                    Auth.validatePassword(stmt.getOriginalPassword());
-                    GlobalStateMgr.getCurrentState().getAuth()
-                            .checkPasswordReuse(stmt.getUserIdent(), stmt.getOriginalPassword());
                     if (stmt.isPasswordPlain()) {
+                        // plain password should check for validation & reuse
+                        Auth.validatePassword(stmt.getOriginalPassword());
+                        GlobalStateMgr.getCurrentState().getAuth()
+                                .checkPasswordReuse(stmt.getUserIdent(), stmt.getOriginalPassword());
                         // convert plain password to scramble
                         scramblePassword = MysqlPassword.makeScrambledPassword(stmt.getOriginalPassword());
                     } else {
@@ -141,7 +141,6 @@ public class PrivilegeStmtAnalyzer {
              * IDENTIFIED WITH
              */
             if (!Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
-                stmt.setAuthPlugin(stmt.getAuthPlugin().toUpperCase());
                 if (AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name().equals(stmt.getAuthPlugin())) {
                     stmt.setUserForAuthPlugin(stmt.getAuthString());
                 } else if (AuthPlugin.MYSQL_NATIVE_PASSWORD.name().equals(stmt.getAuthPlugin())) {
@@ -165,7 +164,7 @@ public class PrivilegeStmtAnalyzer {
                         scramblePassword = new byte[0];
                     }
                     stmt.setScramblePassword(scramblePassword);
-                } else if (AuthPlugin.AUTHENTICATION_KERBEROS.name().equalsIgnoreCase(stmt.getAuthPlugin()) &&
+                } else if (AuthPlugin.AUTHENTICATION_KERBEROS.name().equals(stmt.getAuthPlugin()) &&
                         GlobalStateMgr.getCurrentState().getAuth().isSupportKerberosAuth()) {
                     // In kerberos authentication, userForAuthPlugin represents the user principal realm.
                     // If user realm is not specified when creating user, the service principal realm will be used as
