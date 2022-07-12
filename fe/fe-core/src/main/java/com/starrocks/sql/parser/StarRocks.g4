@@ -129,7 +129,7 @@ createDbStatement
 dropDbStatement
     : DROP (DATABASE | SCHEMA) (IF EXISTS)? identifier FORCE?
     ;
-    
+
 showCreateDbStatement
     : SHOW CREATE (DATABASE | SCHEMA) identifier
     ;
@@ -480,15 +480,15 @@ dropAnalyzeJobStatement
     ;
 
 showAnalyzeStatement
-    : SHOW ANALYZE (JOB | STATUS)?
+    : SHOW ANALYZE (JOB | STATUS)? (WHERE expression)?
     ;
 
 showStatsMetaStatement
-    : SHOW STATS META
+    : SHOW STATS META (WHERE expression)?
     ;
 
 showHistogramMetaStatement
-    : SHOW HISTOGRAM META
+    : SHOW HISTOGRAM META (WHERE expression)?
     ;
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
