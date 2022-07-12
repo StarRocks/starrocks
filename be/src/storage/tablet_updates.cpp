@@ -1089,7 +1089,7 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
     return Status::OK();
 }
 
-Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, bool wait_apply) {
+Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     int64_t input_rowsets_size = 0;
     int64_t input_row_num = 0;
     auto info = (*pinfo).get();
@@ -1148,10 +1148,8 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
     // 4. commit compaction
     EditVersion version;
     RETURN_IF_ERROR(_commit_compaction(pinfo, *output_rowset, &version));
-    if (wait_apply) {
-        // already committed, so we can only ignore timeout error
-        _wait_for_version(version, 120000);
-    }
+    // already committed, so we can ignore timeout error here
+    _wait_for_version(version, 120000);
     return Status::OK();
 }
 
@@ -1740,7 +1738,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    Status st = _do_compaction(&info, true);
+    Status st = _do_compaction(&info);
     if (!st.ok()) {
         _last_compaction_failure_millis = UnixMillis();
     } else {
@@ -1814,7 +1812,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    Status st = _do_compaction(&info, true);
+    Status st = _do_compaction(&info);
     if (!st.ok()) {
         _last_compaction_failure_millis = UnixMillis();
     } else {
