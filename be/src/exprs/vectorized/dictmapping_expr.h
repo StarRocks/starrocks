@@ -28,6 +28,7 @@ public:
 
     void rewrite(Expr* expr) {
         DCHECK(dict_func_expr == nullptr);
+        DCHECK(expr != nullptr);
         dict_func_expr = expr;
         add_child(dict_func_expr);
     }

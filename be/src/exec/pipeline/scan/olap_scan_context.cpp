@@ -92,7 +92,7 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
 
     _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
-    _dict_optimize_parser.rewrite_conjuncts<false>(&_not_push_down_conjuncts, state);
+    _dict_optimize_parser.rewrite_conjuncts(&_not_push_down_conjuncts, state);
 
     return Status::OK();
 }

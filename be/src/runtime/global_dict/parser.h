@@ -44,7 +44,7 @@ public:
 
     Status rewrite_exprs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
                          const std::vector<SlotId>& target_slotids);
-    template <bool close_original_expr>
+
     Status rewrite_conjuncts(std::vector<ExprContext*>* conjuncts_ctxs, RuntimeState* state);
 
     void close(RuntimeState* state) noexcept;
@@ -64,7 +64,6 @@ private:
     Status _check_could_apply_dict_optimize(Expr* expr, DictOptimizeContext* dict_opt_ctx);
 
     // use code mapping rewrite expr
-    template <bool close_original_expr>
     Status _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
                               const std::vector<SlotId>& slot_ids);
     Status rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slot_id);

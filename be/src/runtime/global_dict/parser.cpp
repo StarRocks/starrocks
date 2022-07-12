@@ -253,7 +253,6 @@ Status DictOptimizeParser::rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slo
     return Status::OK();
 }
 
-template <bool close_original_expr>
 Status DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
                                               const std::vector<SlotId>& slot_ids) {
     auto& expr_ctxs = *pexpr_ctxs;
@@ -265,20 +264,13 @@ Status DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_c
     return Status::OK();
 }
 
-template <bool close_original_expr>
 Status DictOptimizeParser::rewrite_conjuncts(std::vector<ExprContext*>* pconjuncts_ctxs, RuntimeState* state) {
-    return _rewrite_expr_ctxs<close_original_expr>(pconjuncts_ctxs, state,
-                                                   std::vector<SlotId>(pconjuncts_ctxs->size(), -1));
+    return _rewrite_expr_ctxs(pconjuncts_ctxs, state, std::vector<SlotId>(pconjuncts_ctxs->size(), -1));
 }
-
-template Status DictOptimizeParser::rewrite_conjuncts<true>(std::vector<ExprContext*>* conjuncts_ctxs,
-                                                            RuntimeState* state);
-template Status DictOptimizeParser::rewrite_conjuncts<false>(std::vector<ExprContext*>* conjuncts_ctxs,
-                                                             RuntimeState* state);
 
 Status DictOptimizeParser::rewrite_exprs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
                                          const std::vector<SlotId>& target_slotids) {
-    return _rewrite_expr_ctxs<true>(pexpr_ctxs, state, target_slotids);
+    return _rewrite_expr_ctxs(pexpr_ctxs, state, target_slotids);
 }
 
 void DictOptimizeParser::close(RuntimeState* state) noexcept {
