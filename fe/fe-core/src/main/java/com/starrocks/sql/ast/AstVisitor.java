@@ -65,6 +65,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.ShowAlterStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
@@ -284,6 +285,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowIndexStmt(ShowIndexStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowAlterStmt(ShowAlterStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 

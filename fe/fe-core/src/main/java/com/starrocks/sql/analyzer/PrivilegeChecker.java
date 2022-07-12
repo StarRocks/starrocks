@@ -26,6 +26,7 @@ import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverTableStmt;
+import com.starrocks.analysis.ShowAlterStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
@@ -290,6 +291,15 @@ public class PrivilegeChecker {
         public Void visitShowTableStatusStmt(ShowTableStatusStmt statement, ConnectContext session) {
             String db = statement.getDb();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowAlterStmt(ShowAlterStmt statement, ConnectContext session) {
+            String db = statement.getDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), db, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
             }
             return null;
