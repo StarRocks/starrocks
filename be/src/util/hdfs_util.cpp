@@ -13,6 +13,7 @@
 namespace starrocks {
 
 static const char* kFileSysPrefixHdfs = "hdfs://";
+static const char* kFileSysPrefixViewfs = "viewfs://";
 static const char* kFileSysPrefixS3 = "s3a://";
 static const char* KFileSysPrefixOSS = "oss://";
 
@@ -82,7 +83,7 @@ static bool is_specific_path(const char* path, const char* specific_prefix) {
 }
 
 bool is_hdfs_path(const char* path) {
-    return is_specific_path(path, kFileSysPrefixHdfs);
+    return is_specific_path(path, kFileSysPrefixHdfs) || is_specific_path(path, kFileSysPrefixViewfs);
 }
 
 bool is_s3a_path(const char* path) {
