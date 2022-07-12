@@ -61,11 +61,6 @@ public class ShowOpenTableStmtTest {
 
     @Test
     public void testNormal() throws Exception {
-//        String originStmt = "SHOW OPEN TABLES";
-//        ShowOpenTableStmt stmt = (ShowOpenTableStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, ctx);
-//        Assert.assertEquals(originStmt.toUpperCase(Locale.ROOT), stmt.toString());
-//        Assert.assertEquals("SHOW OPEN TABLES", stmt.toString());
-
         ShowOpenTableStmt stmt = new ShowOpenTableStmt();
         stmt.analyze(analyzer);
         Assert.assertEquals("SHOW OPEN TABLES", stmt.toString());
