@@ -408,9 +408,6 @@ if (ENABLE_QUERY_DEBUG_TRACE)
     message(STATUS "enable query debug trace")
 endif()
 
-# to compresss debug section. https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html
-set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -gz=zlib")
-
 # For CMAKE_BUILD_TYPE=Debug
 #   -ggdb: Enable gdb debugging
 # Debug information is stored as dwarf2 to be as compatible as possible
