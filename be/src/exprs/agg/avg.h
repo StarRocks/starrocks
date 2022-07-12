@@ -170,6 +170,8 @@ public:
                 result = src_column->get_data()[i];
             } else if constexpr (pt_is_decimal<PT>) {
                 result = src_column->get_data()[i];
+            } else {
+                DCHECK(false) << "Invalid PrimitiveTypes for avg function";
             }
             memcpy(bytes.data() + old_size, &result, sizeof(ImmediateType));
             memcpy(bytes.data() + old_size + sizeof(ImmediateType), &count, sizeof(int64_t));
@@ -201,6 +203,8 @@ public:
             ResultType sum = ResultType(this->data(state).sum);
             ResultType count = ResultType(this->data(state).count);
             result = decimal_div_integer<ResultType>(sum, count, ctx->get_arg_type(0)->scale);
+        } else {
+            DCHECK(false) << "Invalid PrimitiveTypes for avg function";
         }
         column->append(result);
     }
@@ -225,6 +229,8 @@ public:
             ResultType sum = ResultType(this->data(state).sum);
             ResultType count = ResultType(this->data(state).count);
             result = decimal_div_integer<ResultType>(sum, count, ctx->get_arg_type(0)->scale);
+        } else {
+            DCHECK(false) << "Invalid PrimitiveTypes for avg function";
         }
         for (size_t i = start; i < end; ++i) {
             column->get_data()[i] = result;
