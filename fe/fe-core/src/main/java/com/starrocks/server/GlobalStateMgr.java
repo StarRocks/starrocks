@@ -1874,9 +1874,11 @@ public class GlobalStateMgr {
             sb.append("\nREFRESH ").append(refreshScheme.getType());
             if (refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
                 MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
-                sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
-                                .format(DateUtils.DATE_TIME_FORMATTER))
-                        .append("\")");
+                if (asyncRefreshContext.isDefineStartTime()) {
+                    sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
+                                    .format(DateUtils.DATE_TIME_FORMATTER))
+                            .append("\")");
+                }
                 if (asyncRefreshContext.getTimeUnit() != null) {
                     sb.append(" EVERY(INTERVAL ").append(asyncRefreshContext.getStep()).append(" ")
                             .append(asyncRefreshContext.getTimeUnit()).append(")");
@@ -1891,13 +1893,13 @@ public class GlobalStateMgr {
             sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
             sb.append(replicationNum).append("\"");
 
-            //storageMedium
+            // storageMedium
             String storageMedium = mv.getStorageMedium();
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
                     .append("\" = \"");
             sb.append(storageMedium).append("\"");
 
-            //storageCooldownTime
+            // storageCooldownTime
             Map<String, String> properties = mv.getTableProperty().getProperties();
             if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
                 sb.append("\n");

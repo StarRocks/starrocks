@@ -8,12 +8,15 @@ import java.time.LocalDateTime;
 
 public class AsyncRefreshSchemeDesc extends RefreshSchemeDesc {
 
+    private boolean defineStartTime;
+
     private LocalDateTime startTime;
 
     private IntervalLiteral intervalLiteral;
 
-    public AsyncRefreshSchemeDesc(LocalDateTime startTime, IntervalLiteral intervalLiteral) {
+    public AsyncRefreshSchemeDesc(boolean defineStartTime,LocalDateTime startTime, IntervalLiteral intervalLiteral) {
         super(RefreshType.ASYNC);
+        this.defineStartTime = defineStartTime;
         this.startTime = startTime;
         this.intervalLiteral = intervalLiteral;
     }
@@ -24,6 +27,10 @@ public class AsyncRefreshSchemeDesc extends RefreshSchemeDesc {
 
     public IntervalLiteral getIntervalLiteral() {
         return intervalLiteral;
+    }
+
+    public boolean isDefineStartTime() {
+        return defineStartTime;
     }
 }
 
