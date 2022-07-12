@@ -27,6 +27,7 @@ import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.qe.ConnectContext;
@@ -94,6 +95,16 @@ public class Analyzer {
         public Void visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement,
                                                                ConnectContext session) {
             AdminStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitShowUserPropertyStmt(ShowUserPropertyStmt statement, ConnectContext session) {
+            return null;
+        }
+
+        @Override
+        public Void visitSetUserPropertyStmt(ShowUserPropertyStmt statement, ConnectContext context) {
             return null;
         }
 
