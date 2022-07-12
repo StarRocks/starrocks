@@ -10,7 +10,6 @@
 namespace starrocks {
 
 static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* handle) {
-    const char* nn = namenode.c_str();
     handle->type = HdfsFsHandle::Type::HDFS;
     auto hdfs_builder = hdfsNewBuilder();
     hdfsBuilderSetNameNode(hdfs_builder, namenode.c_str());
