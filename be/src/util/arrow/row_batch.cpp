@@ -36,6 +36,7 @@
 #include <memory>
 
 #include "common/logging.h"
+#include "exprs/vectorized/column_ref.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -94,21 +95,47 @@ Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::
     return Status::OK();
 }
 
-Status convert_to_arrow_field(SlotDescriptor* desc, std::shared_ptr<arrow::Field>* field) {
+Status convert_to_arrow_field(const TypeDescriptor& desc, const string& col_name, bool is_nullable,
+                              std::shared_ptr<arrow::Field>* field) {
     std::shared_ptr<arrow::DataType> type;
-    RETURN_IF_ERROR(convert_to_arrow_type(desc->type(), &type));
-    *field = arrow::field(desc->col_name(), type, desc->is_nullable());
+    RETURN_IF_ERROR(convert_to_arrow_type(desc, &type));
+    // we keep the col_name here just for compatibility, col_names are from the first RefSlot,
+    // users of arrow should not adjust the order of columns based on the colname.
+    *field = arrow::field(col_name, type, is_nullable);
     return Status::OK();
 }
 
-Status convert_to_arrow_schema(const RowDescriptor& row_desc, std::shared_ptr<arrow::Schema>* result) {
+Status convert_to_arrow_schema(const RowDescriptor& row_desc, std::shared_ptr<arrow::Schema>* result,
+                               const std::vector<ExprContext*>& output_expr_ctxs) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
-    for (auto tuple_desc : row_desc.tuple_descriptors()) {
-        for (auto desc : tuple_desc->slots()) {
-            std::shared_ptr<arrow::Field> field;
-            RETURN_IF_ERROR(convert_to_arrow_field(desc, &field));
-            fields.push_back(field);
+    for (const auto& expr_context : output_expr_ctxs) {
+        Expr* expr = expr_context->root();
+        std::shared_ptr<arrow::Field> field;
+        string col_name;
+        vectorized::ColumnRef* col_ref = expr->get_column_ref();
+        if (col_ref != nullptr) {
+            SlotId slot_id = col_ref->slot_id();
+            TupleId tuple_id = col_ref->tuple_id();
+            bool find = false;
+            for (auto* tuple_desc : row_desc.tuple_descriptors()) {
+                if (tuple_desc->id() == tuple_id) {
+                    auto& slots = tuple_desc->slots();
+                    for (auto* slot : slots) {
+                        if (slot->id() == slot_id) {
+                            col_name = slot->col_name();
+                            find = true;
+                            break;
+                        }
+                    }
+                    if (find) {
+                        break;
+                    }
+                }
+            }
+            DCHECK(find);
         }
+        RETURN_IF_ERROR(convert_to_arrow_field(expr->type(), col_name, expr->is_nullable(), &field));
+        fields.push_back(field);
     }
     *result = arrow::schema(std::move(fields));
     return Status::OK();

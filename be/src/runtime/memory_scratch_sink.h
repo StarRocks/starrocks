@@ -69,16 +69,16 @@ public:
 
     RuntimeProfile* profile() override { return _profile; }
 
+    // only for ut
+    std::shared_ptr<arrow::Schema> schema() { return _arrow_schema; }
+
 private:
     Status prepare_exprs(RuntimeState* state);
-    void convert_to_slot_types_and_ids();
 
     ObjectPool* _obj_pool = nullptr;
     // Owned by the RuntimeState.
     const RowDescriptor& _row_desc;
     std::shared_ptr<arrow::Schema> _arrow_schema;
-    std::vector<const TypeDescriptor*> _slot_types;
-    std::vector<SlotId> _slot_ids;
 
     BlockQueueSharedPtr _queue;
 
