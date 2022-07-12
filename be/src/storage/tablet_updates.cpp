@@ -842,6 +842,10 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
 
                 std::vector<uint64_t> old_rowids(upserts[i]->size());
                 index.get(*upserts[i], &old_rowids);
+                std::vector<uint32_t> old_real_rowids(upserts[i]->size());
+                for (int j = 0; j < upserts[i]->size(); ++j) {
+                    old_real_rowids.push_back((uint32_t)(old_rowids[j] & ROWID_MASK));
+                }
                 std::map<uint32_t, std::vector<uint32_t>> old_rowids_by_rssid;
                 size_t num_default = 0;
                 vector<uint32_t> idxes;
