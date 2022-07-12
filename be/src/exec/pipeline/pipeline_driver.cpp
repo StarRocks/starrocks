@@ -358,6 +358,9 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
                 }
             }
             QUERY_TRACE_END("finalize", "");
+            // @TODO(silverbullet233): if necessary, remove the dump from the execution thread
+            // considering that this feature is generally used for debugging,
+            // I think it should not have a big impact now
             query_trace->dump();
             return;
         }
