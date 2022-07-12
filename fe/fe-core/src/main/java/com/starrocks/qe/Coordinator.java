@@ -741,19 +741,19 @@ public class Coordinator {
      * - Each group should be delivered sequentially, and fragments in a group can be delivered concurrently.
      * <p>
      * For example, the following tree will produce four groups: [[1], [2, 3, 4], [5, 6], [7]]
-     * 1
-     * │
-     * ┌────┼────┐
-     * │    │    │
-     * 2    3    4
-     * │    │    │
+     *         1
+     *         │
+     *    ┌────┼────┐
+     *    │    │    │
+     *    2    3    4
+     *    │    │    │
      * ┌──┴─┐  │    │
      * │    │  │    │
      * 5    6  │    │
-     * │  │    │
-     * └──┼────┘
-     * │
-     * 7
+     *      │  │    │
+     *      └──┼────┘
+     *         │
+     *         7
      *
      * @return multiple fragment groups.
      */
