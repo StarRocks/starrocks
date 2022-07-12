@@ -55,6 +55,7 @@ statement
     | dropMaterializedViewStatement                                                         #dropMaterializedView
     | alterMaterializedViewStatement                                                        #alterMaterializedView
     | refreshMaterializedViewStatement                                                      #refreshMaterializedView
+    | cancelRefreshMaterializedViewStatement                                                #cancelRefreshMaterializedView
 
     // Catalog Statement
     | createExternalCatalogStatement                                                        #createCatalog
@@ -338,6 +339,10 @@ alterMaterializedViewStatement
 
 refreshMaterializedViewStatement
     : REFRESH MATERIALIZED VIEW mvName=qualifiedName
+    ;
+
+cancelRefreshMaterializedViewStatement
+    : CANCEL REFRESH MATERIALIZED VIEW mvName=qualifiedName
     ;
 
 // ------------------------------------------- Cluster Mangement Statement ---------------------------------------------
