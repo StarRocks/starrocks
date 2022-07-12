@@ -12,14 +12,8 @@
 namespace starrocks {
 
 class Rowset;
-using RowsetSharedPtr = std::shared_ptr<Rowset>;
 
 namespace vectorized {
-
-struct CompactionSemgentState {
-    ColumnPtr pkeys;
-    std::vector<uint32_t> src_rssids;
-};
 
 class CompactionState {
 public:
@@ -33,7 +27,7 @@ public:
 
     size_t memory_usage() const { return _memory_usage; }
 
-    std::vector<CompactionSemgentState> segment_states;
+    std::vector<ColumnPtr> pk_cols;
 
 private:
     Status _do_load(Rowset* rowset);

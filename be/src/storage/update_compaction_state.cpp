@@ -55,27 +55,7 @@ Status CompactionState::_do_load(Rowset* rowset) {
         CHECK(false) << "create column for primary key encoder failed";
     }
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
-    auto update_manager = StorageEngine::instance()->update_manager();
-    auto tracker = update_manager->compaction_state_mem_tracker();
-    segment_states.resize(rowset->num_segments());
-    for (auto i = 0; i < rowset->num_segments(); i++) {
-        std::string rssid_file = BetaRowset::segment_srcrssid_file_path(rowset->rowset_path(), rowset->rowset_id(), i);
-        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(rssid_file));
-        ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
-        std::vector<uint32_t>& src_rssids = segment_states[i].src_rssids;
-        src_rssids.resize(file_size / sizeof(uint32_t));
-        _memory_usage += file_size;
-        tracker->consume(file_size);
-        if (tracker->any_limit_exceeded()) {
-            // currently we can only log error here, and allow memory over usage
-            LOG(ERROR) << " memory limit exceeded when loading compaction state rssid tablet_id:"
-                       << rowset->rowset_meta()->tablet_id() << " rowset #rows:" << rowset->num_rows()
-                       << " size:" << rowset->data_disk_size() << " seg:" << i << " memory:" << _memory_usage
-                       << " stats:" << update_manager->memory_stats();
-        }
-        RETURN_IF_ERROR(read_file->read_at_fully(0, src_rssids.data(), file_size));
-    }
+    pk_cols.resize(rowset->num_segments());
 
     RowsetReleaseGuard guard(rowset->shared_from_this());
     OlapReaderStatistics stats;
@@ -88,6 +68,9 @@ Status CompactionState::_do_load(Rowset* rowset) {
     auto& itrs = res.value();
     CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
 
+    auto update_manager = StorageEngine::instance()->update_manager();
+    auto tracker = update_manager->compaction_state_mem_tracker();
+
     // only hold pkey, so can use larger chunk size
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
     auto chunk = chunk_shared_ptr.get();
@@ -97,7 +80,7 @@ Status CompactionState::_do_load(Rowset* rowset) {
         if (itr == nullptr) {
             continue;
         }
-        auto& dest = segment_states[i].pkeys;
+        auto& dest = pk_cols[i];
         auto col = pk_column->clone();
         auto num_rows = beta_rowset->segments()[i]->num_rows();
         col->reserve(num_rows);

@@ -52,8 +52,6 @@ public:
     RowsetId rowset_id() override { return _context.rowset_id; }
 
 protected:
-    Status flush_src_rssids(uint32_t segment_id);
-
     RowsetWriterContext _context;
     std::shared_ptr<FileSystem> _fs;
     std::unique_ptr<RowsetMetaPB> _rowset_meta_pb;
@@ -76,9 +74,6 @@ protected:
     int64_t _total_data_size;
     int64_t _total_index_size;
 
-    // used for updatable tablet's compaction
-    std::unique_ptr<vector<uint32_t>> _src_rssids;
-
     bool _is_pending = false;
     bool _already_built = false;
 
@@ -94,7 +89,6 @@ public:
     ~HorizontalBetaRowsetWriter() override;
 
     Status add_chunk(const vectorized::Chunk& chunk) override;
-    Status add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) override;
 
     Status flush_chunk(const vectorized::Chunk& chunk) override;
     Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override;
@@ -130,9 +124,6 @@ public:
 
     Status add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
                        bool is_key) override;
-
-    Status add_columns_with_rssid(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
-                                  const std::vector<uint32_t>& rssid) override;
 
     Status flush_columns() override;
 

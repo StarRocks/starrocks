@@ -158,7 +158,7 @@ public:
         return Status::OK();
     }
 
-    Status get_next(Chunk* chunk, vector<uint32_t>* rssids, vector<RowSourceMask>* source_masks) {
+    Status get_next(Chunk* chunk, vector<RowSourceMask>* source_masks) {
         size_t nrow = 0;
         while (!_heap.empty() && nrow < _chunk_size) {
             MergeEntry<T>& top = *_heap.top();
@@ -168,7 +168,6 @@ public:
             if (_heap.empty() || *(top.pk_last) < *(_heap.top()->pk_cur)) {
                 if (nrow == 0 && top.at_start()) {
                     chunk->swap_chunk(*top.chunk);
-                    rssids->insert(rssids->end(), chunk->num_rows(), top.rowset_seg_id);
                     if (source_masks) {
                         source_masks->insert(source_masks->end(), chunk->num_rows(), RowSourceMask{top.order, false});
                     }
@@ -179,7 +178,6 @@ public:
                     int nappend = std::min((int)(top.pk_last - top.pk_cur + 1), (int)(_chunk_size - nrow));
                     auto start_offset = top.offset(top.pk_cur);
                     chunk->append(*top.chunk, start_offset, nappend);
-                    rssids->insert(rssids->end(), nappend, top.rowset_seg_id);
                     if (source_masks) {
                         source_masks->insert(source_masks->end(), nappend, RowSourceMask{top.order, false});
                     }
@@ -199,7 +197,6 @@ public:
             while (true) {
                 nrow++;
                 top.pk_cur++;
-                rssids->push_back(top.rowset_seg_id);
                 if (source_masks) {
                     source_masks->emplace_back(RowSourceMask{top.order, false});
                 }
@@ -330,12 +327,9 @@ private:
         }
 
         auto chunk = ChunkHelper::new_chunk(schema, _chunk_size);
-        vector<uint32_t> rssids;
-        rssids.reserve(_chunk_size);
         while (true) {
             chunk->reset();
-            rssids.clear();
-            Status status = get_next(chunk.get(), &rssids, source_masks.get());
+            Status status = get_next(chunk.get(), source_masks.get());
             if (!status.ok()) {
                 if (status.is_end_of_file()) {
                     break;
@@ -352,9 +346,8 @@ private:
             (*total_chunk)++;
 
             if (mask_buffer) {
-                if (auto st = writer->add_columns_with_rssid(*chunk, column_indexes, rssids); !st.ok()) {
-                    LOG(WARNING) << "writer add_columns_with_rssid error, tablet=" << tablet.tablet_id()
-                                 << ", err=" << st;
+                if (auto st = writer->add_columns(*chunk, column_indexes, true); !st.ok()) {
+                    LOG(WARNING) << "writer add_columns error, tablet=" << tablet.tablet_id() << ", err=" << st;
                     return st;
                 }
 
@@ -363,9 +356,8 @@ private:
                     source_masks->clear();
                 }
             } else {
-                if (auto st = writer->add_chunk_with_rssid(*chunk, rssids); !st.ok()) {
-                    LOG(WARNING) << "writer add_chunk_with_rssid error, tablet=" << tablet.tablet_id()
-                                 << ", err=" << st;
+                if (auto st = writer->add_chunk(*chunk); !st.ok()) {
+                    LOG(WARNING) << "writer add_chunk error, tablet=" << tablet.tablet_id() << ", err=" << st;
                     return st;
                 }
             }

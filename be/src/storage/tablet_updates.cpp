@@ -1308,14 +1308,13 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     size_t total_rows = 0;
     vector<std::pair<uint32_t, DelVectorPtr>> delvecs;
     vector<uint32_t> tmp_deletes;
-    for (size_t i = 0; i < _compaction_state->segment_states.size(); i++) {
-        auto& sstate = _compaction_state->segment_states[i];
-        total_rows += sstate.src_rssids.size();
+    for (size_t i = 0; i < _compaction_state->pk_cols.size(); i++) {
+        auto& pk_col = _compaction_state->pk_cols[i];
+        total_rows += pk_col->size();
         uint32_t rssid = rowset_id + i;
         tmp_deletes.clear();
         // replace will not grow hashtable, so don't need to check memory limit
-        index.try_replace(rssid, 0, *sstate.pkeys, *std::max_element(info->inputs.begin(), info->inputs.end()),
-                          &tmp_deletes);
+        index.try_replace(rssid, 0, *pk_col, *std::max_element(info->inputs.begin(), info->inputs.end()), &tmp_deletes);
         DelVectorPtr dv = std::make_shared<DelVector>();
         if (tmp_deletes.empty()) {
             dv->init(version.major(), nullptr, 0);
@@ -1325,8 +1324,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         }
         delvecs.emplace_back(rssid, dv);
         // release memory early
-        sstate.pkeys.reset();
-        sstate.src_rssids.clear();
+        pk_col.reset();
     }
     // release memory
     _compaction_state.reset();
