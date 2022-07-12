@@ -407,6 +407,24 @@ Status HashJoinNode::close(RuntimeState* state) {
     return ExecNode::close(state);
 }
 
+bool _is_left_join(TJoinOp::type join_type) {
+    switch (join_type) {
+    case TJoinOp::LEFT_OUTER_JOIN:
+    case TJoinOp::LEFT_SEMI_JOIN:
+    case TJoinOp::LEFT_ANTI_JOIN:
+    case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
+        return true;
+    case TJoinOp::INNER_JOIN:
+    case TJoinOp::FULL_OUTER_JOIN:
+    case TJoinOp::CROSS_JOIN:
+    case TJoinOp::RIGHT_OUTER_JOIN:
+    case TJoinOp::RIGHT_SEMI_JOIN:
+    case TJoinOp::RIGHT_ANTI_JOIN:
+    default:
+        return false;
+    }
+}
+
 pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
@@ -507,7 +525,17 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
 
     lhs_operators.emplace_back(std::move(probe_op));
 
-    lhs_operators.emplace_back(std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), id()));
+    // Use ChunkAccumulateOperator, when any following condition occurs:
+    // - inner join or right join.
+    // - left join, with conjuncts or runtime in filters or runtime bloom filters.
+    const auto* global_rf_collector = rc_rf_probe_collector->get_rf_probe_collector();
+    bool need_accumulate_chunk = !_is_left_join(_join_type) || !_conjunct_ctxs.empty() ||
+                                 !_other_join_conjunct_ctxs.empty() || !local_rf_waiting_set().empty() ||
+                                 (global_rf_collector != nullptr && !global_rf_collector->descriptors().empty());
+    if (need_accumulate_chunk) {
+        lhs_operators.emplace_back(std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), id()));
+    }
+
     if (limit() != -1) {
         lhs_operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
