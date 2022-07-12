@@ -881,7 +881,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
                     }
                 }
 
-                if (idx_begin < old_columns.size()) {
+                if (idx_begin < old_columns[0]->size()) {
                     index.upsert(rowset_id + i, idx_begin, *upserts[i],
                                  idx_begin, idx_begin + upsert_idx_step, &new_deletes);
                     manager->index_cache().update_object_size(index_entry, index.memory_usage());
