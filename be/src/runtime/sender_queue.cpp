@@ -7,10 +7,11 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_recvr.h"
-#include "util/block_compression.h"
+#include "util/compression/block_compression.h"
 #include "util/faststring.h"
 #include "util/logging.h"
 #include "util/runtime_profile.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 
