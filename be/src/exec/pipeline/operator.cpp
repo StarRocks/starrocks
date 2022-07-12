@@ -13,6 +13,7 @@
 
 namespace starrocks::pipeline {
 
+/// Operator.
 const int32_t Operator::s_pseudo_plan_node_id_for_result_sink = -99;
 const int32_t Operator::s_pseudo_plan_node_id_upper_bound = -100;
 
@@ -204,6 +205,7 @@ Status OperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+/// OperatorFactory.
 void OperatorFactory::close(RuntimeState* state) {
     if (_runtime_filter_collector) {
         _runtime_filter_collector->close(state);
@@ -225,6 +227,20 @@ void OperatorFactory::_prepare_runtime_in_filters(RuntimeState* state) {
             _runtime_in_filters.push_back(filter);
         }
     }
+}
+
+bool OperatorFactory::has_runtime_filters() const {
+    // Check runtime in-filters.
+    if (!_rf_waiting_set.empty()) {
+        return true;
+    }
+
+    // Check runtime bloom-filters.
+    if (_runtime_filter_collector == nullptr) {
+        return false;
+    }
+    auto* global_rf_collector = _runtime_filter_collector->get_rf_probe_collector();
+    return global_rf_collector != nullptr && !global_rf_collector->descriptors().empty();
 }
 
 } // namespace starrocks::pipeline

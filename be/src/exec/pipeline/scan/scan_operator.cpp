@@ -3,6 +3,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 
 #include "column/chunk.h"
+#include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
@@ -398,6 +399,11 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
     scan_operator->set_degree_of_parallelism(scan_dop);
 
     ops.emplace_back(std::move(scan_operator));
+
+    if (!scan_node->conjunct_ctxs().empty() || ops.back()->has_runtime_filters()) {
+        ops.emplace_back(
+                std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), scan_node->id()));
+    }
 
     size_t limit = scan_node->limit();
     if (limit != -1) {
