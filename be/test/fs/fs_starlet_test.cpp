@@ -24,7 +24,7 @@ public:
         staros::starlet::fslib::register_builtin_filesystems();
         staros::starlet::ShardInfo shard_info;
         shard_info.id = 10086;
-        shard_info.obj_store_info.uri = "";
+        shard_info.obj_store_info.s3_obj_store.uri = "";
         shard_info.properties[staros::starlet::fslib::kS3AccessKeyId] = "5LXNPOQY3KB1LH4X4UQ6";
         shard_info.properties[staros::starlet::fslib::kS3AccessKeySecret] = "EhniJDQcMAFQwpulH1jLomfu1b+VaJboCJO+Cytb";
         shard_info.properties[staros::starlet::fslib::kS3OverrideEndpoint] = "172.26.92.205:39000";

@@ -1,9 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+#ifdef USE_STAROS
 
 #include "storage/lake/location_provider.h"
 
-#ifdef USE_STAROS
-
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include "service/staros_worker.h"
@@ -14,70 +14,39 @@ namespace starrocks {
 
 extern std::shared_ptr<StarOSWorker> g_worker;
 
-// TODO: fix broken UTs
-class StarletGroupAssignerTest : public testing::Test {
+class StarletLocationProviderTest : public testing::Test {
 public:
-    StarletGroupAssignerTest() = default;
-    ~StarletGroupAssignerTest() override = default;
+    StarletLocationProviderTest() = default;
+    ~StarletLocationProviderTest() override = default;
     void SetUp() override {
         g_worker = std::make_shared<StarOSWorker>();
-        _assigner = new lake::StarletLocationProvider();
+        _provider = new lake::StarletLocationProvider();
     }
     void TearDown() override {
-        delete _assigner;
+        delete _provider;
         g_worker.reset();
     }
 
-    lake::StarletLocationProvider* _assigner;
+    lake::StarletLocationProvider* _provider;
 };
 
-TEST_F(StarletGroupAssignerTest, starlet_group_test) {
-    {
-        staros::starlet::S3ObjectStoreInfo s3_store_info;
-        s3_store_info.uri = "s3://starlet_test/1001";
-        staros::starlet::ShardInfo shardInfo = {12345, {ObjectStoreType::S3, s3_store_info}, {}};
-        (void)g_worker->add_shard(shardInfo);
-    }
-    {
-        staros::starlet::S3ObjectStoreInfo s3_store_info;
-        s3_store_info.uri = "s3://starlet_test/1001/";
-        staros::starlet::ShardInfo shardInfo = {23456, {ObjectStoreType::S3, s3_store_info}, {}};
-        (void)g_worker->add_shard(shardInfo);
-    }
+TEST_F(StarletLocationProviderTest, test_location) {
+    auto location = _provider->root_location(12345);
+    EXPECT_EQ("staros://?ShardId=12345", location);
 
-    ASSIGN_OR_ABORT(auto group_path, _assigner->get_group(12345));
-    EXPECT_EQ(group_path, "s3://starlet_test/1001");
+    location = _provider->tablet_metadata_location(12345, 1);
+    EXPECT_EQ(fmt::format("staros://tbl_{:016X}_{:016X}?ShardId=12345", 12345, 1), location);
 
-    ASSIGN_OR_ABORT(group_path, _assigner->get_group(23456));
-    EXPECT_EQ(group_path, "s3://starlet_test/1001");
+    location = _provider->txn_log_location(12345, 45678);
+    EXPECT_EQ(fmt::format("staros://txn_{:016X}_{:016X}?ShardId=12345", 12345, 45678), location);
 
-    auto res = _assigner->get_group(34567);
-    EXPECT_TRUE(res.status().is_not_found());
+    location = _provider->segment_location(12345, "c805dab9-4048-4909-8239-6d5431989044.dat");
+    EXPECT_EQ("staros://c805dab9-4048-4909-8239-6d5431989044.dat?ShardId=12345", location);
 
-    {
-        staros::starlet::S3ObjectStoreInfo s3_store_info;
-        s3_store_info.uri = "s3://starlet_test/1002/";
-        staros::starlet::ShardInfo shardInfo = {34567, {ObjectStoreType::S3, s3_store_info}, {}};
-        (void)g_worker->add_shard(shardInfo);
-    }
-
-    std::set<std::string> groups;
-    EXPECT_OK(_assigner->list_group(&groups));
-    EXPECT_EQ(2, groups.size());
-    auto iter = std::find(groups.begin(), groups.end(), "s3://starlet_test/1001");
-    EXPECT_TRUE(iter != groups.end());
-    iter = std::find(groups.begin(), groups.end(), "s3://starlet_test/1002");
-    EXPECT_TRUE(iter != groups.end());
-
-    (void)g_worker->remove_shard(34567);
-    res = _assigner->get_group(34567);
-    EXPECT_TRUE(res.status().is_not_found());
-
-    groups.clear();
-    EXPECT_OK(_assigner->list_group(&groups));
-    EXPECT_EQ(1, groups.size());
-    iter = std::find(groups.begin(), groups.end(), "s3://starlet_test/1001");
-    EXPECT_TRUE(iter != groups.end());
+    std::set<std::string> roots;
+    auto st = _provider->list_root_locations(&roots);
+    // TODO
+    ASSERT_TRUE(st.is_not_supported());
 }
 
 } // namespace starrocks

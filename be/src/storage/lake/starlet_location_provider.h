@@ -23,7 +23,7 @@ public:
 
     std::string join_path(std::string_view parent, std::string_view child) const override;
 
-    Status list_root_locations(std::set<std::string>* groups) const override;
+    Status list_root_locations(std::set<std::string>* roots) const override;
 };
 
 } // namespace starrocks::lake
