@@ -22,6 +22,7 @@
 #include "exec/exchange_node.h"
 
 #include "column/chunk.h"
+#include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
