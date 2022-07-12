@@ -200,11 +200,13 @@ public class ReplayFromDumpTest {
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
         // Check the size of the left and right tables
-        Assert.assertTrue(replayPair.second.contains(" |  \n" +
-                "  |----30:EXCHANGE\n" +
-                "  |       cardinality: 6304\n" +
-                "  |    \n" +
-                "  14:OlapScanNode\n" +
+        Assert.assertTrue(replayPair.second.contains("PLAN FRAGMENT 15(F08)\n" +
+                "\n" +
+                "  Input Partition: RANDOM\n" +
+                "  OutPut Partition: HASH_PARTITIONED: 848: c_customer_sk\n" +
+                "  OutPut Exchange Id: 17\n" +
+                "\n" +
+                "  16:OlapScanNode\n" +
                 "     table: customer, rollup: customer"));
     }
 
@@ -471,7 +473,8 @@ public class ReplayFromDumpTest {
     @Test
     public void testMergeGroupWithDeleteBestExpression() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/merge_group_delete_best_expression"), null, TExplainLevel.NORMAL);
+                getPlanFragment(getDumpInfoFromFile("query_dump/merge_group_delete_best_expression"), null,
+                        TExplainLevel.NORMAL);
         // check without exception
         Assert.assertTrue(replayPair.second.contains("14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)"));
@@ -480,7 +483,8 @@ public class ReplayFromDumpTest {
     @Test
     public void testJoinReOrderPruneColumns() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null, TExplainLevel.NORMAL);
+                getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null,
+                        TExplainLevel.NORMAL);
         // check without exception
         Assert.assertTrue(replayPair.second.contains("<slot 19> : 19: id_tinyint"));
     }

@@ -10,6 +10,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -107,5 +108,19 @@ public class SubqueryUtils {
         Function count = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {Type.BIGINT},
                 Function.CompareMode.IS_IDENTICAL);
         return new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(column), count, false);
+    }
+
+    public static boolean isUnCorrelationScalarSubquery(LogicalApplyOperator apply) {
+        if (!apply.isScalar()) {
+            return false;
+        }
+
+        if (!apply.getCorrelationColumnRefs().isEmpty()) {
+            return false;
+        }
+
+        // only un-correlation scalar subquery
+        return apply.getUnCorrelationSubqueryOuterColumns() != null &&
+                !apply.getUnCorrelationSubqueryOuterColumns().isEmpty();
     }
 }
