@@ -290,12 +290,12 @@ DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
 
 ##### 设置数据的初始存储介质、存储到期时间和副本数
 
-如果 ENGINE 类型为 olap, 可以在 properties 设置该表数据的初始存储介质、存储到期时间和副本数。
+如果 ENGINE 类型为 olap, 可以在 properties 设置该表数据的初始存储介质、存储降冷时间和副本数。
 
 ``` sql
 PROPERTIES (
     "storage_medium" = "[SSD|HDD]",
-    [ "storage_cooldown_time" = "yyyy-MM-dd HH: mm: ss", ]
+    [ "storage_cooldown_time" = "INTEGER", ]
     [ "replication_num" = "3" ]
 )
 ```
@@ -304,12 +304,12 @@ PROPERTIES (
 
 * 默认初始存储介质可通过 fe 的配置文件 `fe.conf` 中指定 `default_storage_medium=xxx`，如果没有指定，则默认为 HDD。
 
-> 注意：当 FE 配置项 `enable_strict_storage_medium_check` 为 `True` 时，若集群中没有设置对应的存储介质时，建表语句会报错 `Failed to find enough host in all backends with storage medium is SSD|HDD`.
+> 注意：当 FE 配置项 `enable_strict_storage_medium_check` 为 `true` 时，若集群中没有设置对应的存储介质时，建表语句会报错 `Failed to find enough hosts with storage medium [SSD|HDD] at all backends...`。设置 `enable_strict_storage_medium_check` 为 `false` 可以忽略该报错强行建表，但是后续可能会导致集群磁盘空间分布出现不均衡，所以强烈建议在建表时指定和集群存储介质相匹配的 `storage_medium` 属性。
 
-**storage_cooldown_time**：当设置存储介质为 SSD 时，指定该分区在 SSD 上的存储到期时间。
+**storage_cooldown_time**：当设置存储介质为 SSD 时，指定该分区在多久之后（从建表时间点开始计算）从 SSD 降冷到 HDD。
 
-* 默认存放 30 天。
-* 格式为："yyyy-MM-dd HH: mm: ss"
+* 默认不进行自动降冷。
+* 格式为：一个整数，单位为秒
 
 **replication_num**：指定分区的副本数。
 
@@ -437,7 +437,7 @@ DISTRIBUTED BY HASH (k1, k2) BUCKETS 32
 PROPERTIES(
     "storage_type" = "column",
     "storage_medium" = "SSD",
-    "storage_cooldown_time" = "2015-06-04 00: 00: 00"
+    "storage_cooldown_time" = "1296000" // 15 天
 );
 ```
 
@@ -457,7 +457,7 @@ DISTRIBUTED BY HASH (k1, k2) BUCKETS 32
 PROPERTIES(
     "storage_type" = "column",
     "storage_medium" = "SSD",
-    "storage_cooldown_time" = "2015-06-04 00: 00: 00"
+    "storage_cooldown_time" = "1296000" // 15 天
 );
 ```
 
@@ -486,7 +486,7 @@ PARTITION BY RANGE (k1)
 )
 DISTRIBUTED BY HASH(k2) BUCKETS 32
 PROPERTIES(
-    "storage_medium" = "SSD", "storage_cooldown_time" = "2015-06-04 00: 00: 00"
+    "storage_medium" = "SSD", "storage_cooldown_time" = "1296000" // 15 天
 );
 ```
 
