@@ -98,6 +98,7 @@ private:
 
 protected:
     ScanNode* _scan_node = nullptr;
+    int _io_tasks_per_scan_operator;
     // ScanOperator may do parallel scan, so each _chunk_sources[i] needs to hold
     // a profile indenpendently, to be more specificly, _chunk_sources[i] will go through
     // many ChunkSourcePtr in the entire life time, all these ChunkSources of _chunk_sources[i]
@@ -127,8 +128,6 @@ private:
     std::atomic_int64_t _last_scan_bytes = 0;
 
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_size_counter = nullptr;
-
-    int _io_tasks_per_scan_operator;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {

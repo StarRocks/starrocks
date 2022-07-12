@@ -288,7 +288,6 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     std::vector<ExecNode*> scan_nodes;
     plan->collect_scan_nodes(&scan_nodes);
 
-    int64_t sum_scan_limit = 0;
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
     for (auto& i : scan_nodes) {
         auto* scan_node = down_cast<ScanNode*>(i);
@@ -303,6 +302,11 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         if (auto* olap_scan = dynamic_cast<vectorized::OlapScanNode*>(scan_node)) {
             olap_scan->enable_shared_scan(enable_shared_scan);
         }
+    }
+
+    int64_t sum_scan_limit = 0;
+    for (auto& i : scan_nodes) {
+        auto* scan_node = down_cast<ScanNode*>(i);
         if (scan_node->limit() > 0) {
             // the upper bound of records we actually will scan is `limit * dop * io_parallelism`.
             // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism

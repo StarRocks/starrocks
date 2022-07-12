@@ -38,7 +38,7 @@ OperatorPtr ConnectorScanOperatorFactory::do_create(int32_t dop, int32_t driver_
 
 ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence,
                                              ScanNode* scan_node)
-        : ScanOperator(factory, id, driver_sequence, scan_node, config::connector_io_tasks_per_scan_operator) {}
+        : ScanOperator(factory, id, driver_sequence, scan_node) {}
 
 Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     return Status::OK();
