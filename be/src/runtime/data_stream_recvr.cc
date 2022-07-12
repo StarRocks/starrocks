@@ -22,6 +22,7 @@
 #include "runtime/data_stream_recvr.h"
 
 #include <fmt/format.h>
+#include <util/time.h>
 
 #include <condition_variable>
 #include <deque>
@@ -124,6 +125,8 @@ private:
         // A Request may have multiple Chunks, so only when the last Chunk of the Request is consumed,
         // the callback is closed- >run() Let the sender continue to send data
         google::protobuf::Closure* closure = nullptr;
+        // Time in nano of saving closure
+        int64_t queue_enter_time;
     };
 
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
@@ -147,6 +150,7 @@ private:
 
     typedef std::list<ChunkItem> ChunkQueue;
     ChunkQueue _chunk_queue;
+    bool _is_pipeline_level_shuffle_init = false;
     bool _is_pipeline_level_shuffle = false;
     std::vector<bool> _has_chunks_per_driver_sequence;
     serde::ProtobufChunkMeta _chunk_meta;
@@ -181,6 +185,7 @@ void DataStreamRecvr::SenderQueue::short_circuit_for_pipeline(const int32_t driv
     while (iter != _chunk_queue.end()) {
         if (_is_pipeline_level_shuffle && iter->driver_sequence == driver_sequence) {
             if (iter->closure != nullptr) {
+                _recvr->_closure_block_timer->update(MonotonicNanos() - iter->queue_enter_time);
                 iter->closure->Run();
             }
             iter = _chunk_queue.erase(iter);
@@ -268,9 +273,11 @@ bool DataStreamRecvr::SenderQueue::try_get_chunk(vectorized::Chunk** chunk) {
         *chunk = _chunk_queue.front().chunk_ptr.release();
         _recvr->_num_buffered_bytes -= _chunk_queue.front().chunk_bytes;
         auto* closure = _chunk_queue.front().closure;
+        auto queue_enter_time = _chunk_queue.front().queue_enter_time;
         VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
         _chunk_queue.pop_front();
         if (closure != nullptr) {
+            _recvr->_closure_block_timer->update(MonotonicNanos() - queue_enter_time);
             closure->Run();
         }
         return true;
@@ -296,12 +303,14 @@ Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
 
     *chunk = _chunk_queue.front().chunk_ptr.release();
     auto* closure = _chunk_queue.front().closure;
+    auto queue_enter_time = _chunk_queue.front().queue_enter_time;
 
     _recvr->_num_buffered_bytes -= _chunk_queue.front().chunk_bytes;
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
     _chunk_queue.pop_front();
 
     if (closure != nullptr) {
+        _recvr->_closure_block_timer->update(MonotonicNanos() - queue_enter_time);
         // When the execution thread is blocked and the Chunk queue exceeds the memory limit,
         // the execution thread will hold done and will not return, block brpc from sending packets,
         // and the execution thread will call run() to let brpc continue to send packets,
@@ -333,11 +342,13 @@ Status DataStreamRecvr::SenderQueue::get_chunk_for_pipeline(vectorized::Chunk** 
         if (!_is_pipeline_level_shuffle || iter->driver_sequence == driver_sequence) {
             *chunk = iter->chunk_ptr.release();
             auto* closure = iter->closure;
+            auto queue_enter_time = iter->queue_enter_time;
             _recvr->_num_buffered_bytes -= iter->chunk_bytes;
             VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
             _chunk_queue.erase(iter);
 
             if (closure != nullptr) {
+                _recvr->_closure_block_timer->update(MonotonicNanos() - queue_enter_time);
                 // When the execution thread is blocked and the Chunk queue exceeds the memory limit,
                 // the execution thread will hold done and will not return, block brpc from sending packets,
                 // and the execution thread will call run() to let brpc continue to send packets,
@@ -460,8 +471,12 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
     ChunkQueue chunks;
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
+    bool prev_is_pipeline_level_shuffle = _is_pipeline_level_shuffle;
     _is_pipeline_level_shuffle =
             _recvr->_is_pipeline && request.has_is_pipeline_level_shuffle() && request.is_pipeline_level_shuffle();
+    // _is_pipeline_level_shuffle must be stable after first assignment
+    DCHECK(!_is_pipeline_level_shuffle_init || (prev_is_pipeline_level_shuffle == _is_pipeline_level_shuffle));
+    _is_pipeline_level_shuffle_init = true;
 
     if (use_pass_through) {
         ChunkUniquePtrVector swap_chunks;
@@ -527,6 +542,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
         bool has_new_chunks = _chunk_queue.size() > original_size;
         if (has_new_chunks && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             _chunk_queue.back().closure = *done;
+            _chunk_queue.back().queue_enter_time = MonotonicNanos();
             *done = nullptr;
         }
 
@@ -588,8 +604,12 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
     ChunkQueue local_chunk_queue;
+    bool prev_is_pipeline_level_shuffle = _is_pipeline_level_shuffle;
     _is_pipeline_level_shuffle =
             _recvr->_is_pipeline && request.has_is_pipeline_level_shuffle() && request.is_pipeline_level_shuffle();
+    // _is_pipeline_level_shuffle must be stable after first assignment
+    DCHECK(!_is_pipeline_level_shuffle_init || (prev_is_pipeline_level_shuffle == _is_pipeline_level_shuffle));
+    _is_pipeline_level_shuffle_init = true;
 
     if (use_pass_through) {
         ChunkUniquePtrVector swap_chunks;
@@ -646,6 +666,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
 
         if (!local_chunk_queue.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             local_chunk_queue.back().closure = *done;
+            local_chunk_queue.back().queue_enter_time = MonotonicNanos();
             *done = nullptr;
         }
 
@@ -674,6 +695,7 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
                         // We may buffered closure in last reception, but the branch of the driver_sequence may
                         // become short-circuit now, so we make sure to invoke the closure
                         if (item.closure != nullptr) {
+                            _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
                             item.closure->Run();
                         }
                         continue;
@@ -778,6 +800,7 @@ void DataStreamRecvr::SenderQueue::close() {
 void DataStreamRecvr::SenderQueue::clean_buffer_queues() {
     for (auto& item : _chunk_queue) {
         if (item.closure != nullptr) {
+            _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
             item.closure->Run();
         }
     }
@@ -786,6 +809,7 @@ void DataStreamRecvr::SenderQueue::clean_buffer_queues() {
         for (auto& [_, chunk_queue] : chunk_queues) {
             for (auto& item : chunk_queue) {
                 if (item.closure != nullptr) {
+                    _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
                     item.closure->Run();
                 }
             }
@@ -889,6 +913,7 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
     _bytes_received_counter = ADD_COUNTER(_profile, "BytesReceived", TUnit::BYTES);
     _bytes_pass_through_counter = ADD_COUNTER(_profile, "BytesPassThrough", TUnit::BYTES);
     _request_received_counter = ADD_COUNTER(_profile, "RequestReceived", TUnit::UNIT);
+    _closure_block_timer = ADD_TIMER(_profile, "ClosureBlockTime");
     _deserialize_chunk_timer = ADD_TIMER(_profile, "DeserializeChunkTime");
     _decompress_chunk_timer = ADD_TIMER(_profile, "DecompressChunkTime");
     _process_total_timer = ADD_TIMER(_profile, "ReceiverProcessTotalTime");
@@ -951,6 +976,8 @@ void DataStreamRecvr::close() {
     _mgr->deregister_recvr(fragment_instance_id(), dest_node_id());
     _mgr = nullptr;
     _chunks_merger.reset();
+
+    _closure_block_timer->update(_closure_block_timer->value() / std::max(1, _degree_of_parallelism));
 }
 
 DataStreamRecvr::~DataStreamRecvr() {

@@ -18,26 +18,26 @@ class RuntimeProfile;
 class RowCursor;
 class RuntimeState;
 class TabletSchema;
-} // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace vectorized {
 
 class ColumnPredicate;
 class DeletePredicates;
-class Schema;
 struct RowidRangeOption;
-using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 struct ShortKeyRangeOption;
-using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
+
+} // namespace vectorized
 
 class RowsetReadOptions {
-public:
-    using PredicateList = std::vector<const ColumnPredicate*>;
+    using RowidRangeOptionPtr = std::shared_ptr<vectorized::RowidRangeOption>;
+    using ShortKeyRangeOptionPtr = std::shared_ptr<vectorized::ShortKeyRangeOption>;
+    using PredicateList = std::vector<const vectorized::ColumnPredicate*>;
 
+public:
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
 
-    std::vector<SeekRange> ranges;
+    std::vector<vectorized::SeekRange> ranges;
 
     std::unordered_map<ColumnId, PredicateList> predicates;
     std::unordered_map<ColumnId, PredicateList> predicates_for_zone_map;
@@ -45,7 +45,7 @@ public:
     // whether rowset should return rows in sorted order.
     bool sorted = true;
 
-    const DeletePredicates* delete_predicates = nullptr;
+    const vectorized::DeletePredicates* delete_predicates = nullptr;
 
     const TabletSchema* tablet_schema = nullptr;
 
@@ -53,16 +53,16 @@ public:
     int64_t version = 0;
     KVStore* meta = nullptr;
 
-    starrocks::OlapReaderStatistics* stats = nullptr;
-    starrocks::RuntimeState* runtime_state = nullptr;
-    starrocks::RuntimeProfile* profile = nullptr;
+    OlapReaderStatistics* stats = nullptr;
+    RuntimeState* runtime_state = nullptr;
+    RuntimeProfile* profile = nullptr;
     bool use_page_cache = false;
 
-    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
+    vectorized::ColumnIdToGlobalDictMap* global_dictmaps = &vectorized::EMPTY_GLOBAL_DICTMAPS;
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
 
     RowidRangeOptionPtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

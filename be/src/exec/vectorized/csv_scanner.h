@@ -27,7 +27,7 @@ public:
 
     StatusOr<ChunkPtr> get_next() override;
 
-    void close() override{};
+    void close() override;
 
 private:
     class ScannerCSVReader : public CSVReader {

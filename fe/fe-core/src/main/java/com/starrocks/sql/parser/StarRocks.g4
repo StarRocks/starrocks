@@ -22,7 +22,7 @@ statement
     | showCreateDbStatement                                                                 #showCreateDb
     | alterDatabaseRename                                                                   #databaseRename
     | recoverDbStmt                                                                         #revoverDb
-
+    | showDataStmt                                                                          #showData
 
     // Table Statement
     | createTableStatement                                                                  #createTable
@@ -37,6 +37,9 @@ statement
     | dropIndexStatement                                                                    #dropIndex
     | refreshTableStatement                                                                 #refreshTable
     | showDeleteStatement                                                                   #showDelete
+    | descTableStatement                                                                    #descTable
+    | showIndexStatement                                                                    #showIndex
+    | recoverTableStatement                                                                 #recoverTable
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -81,7 +84,7 @@ statement
     | createAnalyzeStatement                                                                #createAnalyze
     | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
     | analyzeHistogramStatement                                                             #analyzeHistogram
-    | dropAnalyzeHistogramStatement                                                         #dropHistogram
+    | dropHistogramStatement                                                                #dropHistogram
     | showAnalyzeStatement                                                                  #showAnalyze
     | showStatsMetaStatement                                                                #showStatsMeta
     | showHistogramMetaStatement                                                            #showHistogramMeta
@@ -104,6 +107,9 @@ statement
     | REVOKE identifierOrString FROM user                                                   #revokeRole
     | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
+
+    // procedure
+    | showProcedureStatement                                                                 #showProcedure
     ;
 
 
@@ -133,6 +139,11 @@ alterDatabaseRename
 
 recoverDbStmt
     : RECOVER (DATABASE | SCHEMA) identifier
+    ;
+
+showDataStmt
+    : SHOW DATA
+    | SHOW DATA FROM qualifiedName
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
@@ -264,6 +275,18 @@ showDeleteStatement
     : SHOW DELETE ((FROM | IN) db=qualifiedName)?
     ;
 
+descTableStatement
+    : (DESC | DESCRIBE) table=qualifiedName ALL?
+    ;
+
+showIndexStatement
+    : SHOW (INDEX | INDEXES | KEY | KEYS) ((FROM | IN) table=qualifiedName) ((FROM | IN) db=qualifiedName)?
+    ;
+
+recoverTableStatement
+    : RECOVER TABLE qualifiedName
+    ;
+
 // ------------------------------------------- View Statement ----------------------------------------------------------
 
 createViewStatement
@@ -344,7 +367,6 @@ alterClause
     : createIndexClause
     | dropIndexClause
     | tableRenameClause
-
     | addBackendClause
     | dropBackendClause
     | modifyBackendHostClause
@@ -353,6 +375,8 @@ alterClause
     | modifyFrontendHostClause
     | addComputeNodeClause
     | dropComputeNodeClause
+    | swapTableClause
+    | dropPartitionClause
     ;
 
 createIndexClause
@@ -363,8 +387,16 @@ dropIndexClause
     : DROP INDEX indexName=identifier
     ;
 
+dropPartitionClause
+    : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
+    ;
+
 tableRenameClause
     : RENAME identifier
+    ;
+
+swapTableClause
+    : SWAP WITH identifier
     ;
 
 addBackendClause
@@ -426,7 +458,7 @@ analyzeHistogramStatement
         (WITH bucket=INTEGER_VALUE BUCKETS)? properties?
     ;
 
-dropAnalyzeHistogramStatement
+dropHistogramStatement
     : ANALYZE TABLE qualifiedName DROP HISTOGRAM ON identifier (',' identifier)*
     ;
 
@@ -641,7 +673,7 @@ columnAliases
     ;
 
 relationPrimary
-    : qualifiedName partitionNames? tabletList? bracketHint?                                     #tableName
+    : qualifiedName partitionNames? tabletList? bracketHint?                              #tableName
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'                                 #inlineTable
     | subquery                                                                            #subqueryRelation
     | qualifiedName '(' expression (',' expression)* ')'                                  #tableFunction
@@ -656,6 +688,10 @@ tabletList
     : TABLET '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     ;
 
+// ------------------------------------------- Procedure Statement ---------------------------------------------------------
+showProcedureStatement
+    : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
+    ;
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -858,7 +894,7 @@ frameBound
 // ------------------------------------------- COMMON AST --------------------------------------------------------------
 
 explainDesc
-    : EXPLAIN (LOGICAL | VERBOSE | COSTS)?
+    : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?
     ;
 
 partitionDesc

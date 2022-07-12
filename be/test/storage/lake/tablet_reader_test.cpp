@@ -13,13 +13,14 @@
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
-#include "storage/lake/group_assigner.h"
+#include "storage/lake/location_provider.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/lake/test_group_assigner.h"
+#include "storage/lake/test_location_provider.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
+#include "testutil/id_generator.h"
 
 namespace starrocks::lake {
 
@@ -32,10 +33,10 @@ class DuplicateTabletReaderTest : public testing::Test {
 public:
     DuplicateTabletReaderTest() {
         _mem_tracker = std::make_unique<MemTracker>(-1);
-        _group_assigner = std::make_unique<TestGroupAssigner>(kTestGroupPath);
-        _tablet_manager = std::make_unique<TabletManager>(_group_assigner.get(), 0);
+        _location_provider = std::make_unique<TestGroupAssigner>(kTestGroupPath);
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), 0);
         _tablet_metadata = std::make_unique<TabletMetadata>();
-        _tablet_metadata->set_id(20000);
+        _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         //
         //  | column | type | KEY | NULL |
@@ -43,14 +44,14 @@ public:
         //  |   c0   |  INT | YES |  NO  |
         //  |   c1   |  INT | NO  |  NO  |
         auto schema = _tablet_metadata->mutable_schema();
-        schema->set_id(20000);
+        schema->set_id(next_id());
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(DUP_KEYS);
         schema->set_num_rows_per_row_block(65535);
         schema->set_compress_kind(COMPRESS_LZ4);
         auto c0 = schema->add_column();
         {
-            c0->set_unique_id(0);
+            c0->set_unique_id(next_id());
             c0->set_name("c0");
             c0->set_type("INT");
             c0->set_is_key(true);
@@ -58,7 +59,7 @@ public:
         }
         auto c1 = schema->add_column();
         {
-            c1->set_unique_id(1);
+            c1->set_unique_id(next_id());
             c1->set_name("c1");
             c1->set_type("INT");
             c1->set_is_key(false);
@@ -66,7 +67,7 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
-        _schema = std::make_shared<VSchema>(vectorized::ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
     void SetUp() override {
@@ -81,7 +82,7 @@ protected:
     constexpr static const char* const kTestGroupPath = "test_duplicate_lake_tablet_reader";
 
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<TestGroupAssigner> _group_assigner;
+    std::unique_ptr<TestGroupAssigner> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
@@ -177,10 +178,10 @@ class AggregateTabletReaderTest : public testing::Test {
 public:
     AggregateTabletReaderTest() {
         _mem_tracker = std::make_unique<MemTracker>(-1);
-        _group_assigner = std::make_unique<TestGroupAssigner>(kTestGroupPath);
-        _tablet_manager = std::make_unique<TabletManager>(_group_assigner.get(), 0);
+        _location_provider = std::make_unique<TestGroupAssigner>(kTestGroupPath);
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), 0);
         _tablet_metadata = std::make_unique<TabletMetadata>();
-        _tablet_metadata->set_id(20001);
+        _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         //
         //  | column | type | KEY | NULL |
@@ -188,14 +189,14 @@ public:
         //  |   c0   |  INT | YES |  NO  |
         //  |   c1   |  INT | NO  |  NO  |
         auto schema = _tablet_metadata->mutable_schema();
-        schema->set_id(20001);
+        schema->set_id(next_id());
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(AGG_KEYS);
         schema->set_num_rows_per_row_block(65535);
         schema->set_compress_kind(COMPRESS_LZ4);
         auto c0 = schema->add_column();
         {
-            c0->set_unique_id(0);
+            c0->set_unique_id(next_id());
             c0->set_name("c0");
             c0->set_type("INT");
             c0->set_is_key(true);
@@ -203,7 +204,7 @@ public:
         }
         auto c1 = schema->add_column();
         {
-            c1->set_unique_id(1);
+            c1->set_unique_id(next_id());
             c1->set_name("c1");
             c1->set_type("INT");
             c1->set_is_key(false);
@@ -212,7 +213,7 @@ public:
         }
 
         _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
-        _schema = std::make_shared<VSchema>(vectorized::ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
     void SetUp() override {
@@ -227,7 +228,7 @@ protected:
     constexpr static const char* const kTestGroupPath = "test_aggregate_lake_tablet_reader";
 
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<TestGroupAssigner> _group_assigner;
+    std::unique_ptr<TestGroupAssigner> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;

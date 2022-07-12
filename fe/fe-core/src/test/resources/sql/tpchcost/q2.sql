@@ -274,6 +274,7 @@ OutPut Exchange Id: 31
 25:AGGREGATE (update finalize)
 |  aggregate: min[([37: PS_SUPPLYCOST, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [34: PS_PARTKEY, INT, false]
+|  having: 57: min IS NOT NULL
 |  cardinality: 16000000
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1.6E7] ESTIMATE

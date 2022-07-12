@@ -31,6 +31,7 @@ constexpr size_t page_size = 4096;
 constexpr size_t page_header_size = 64;
 constexpr size_t bucket_per_page = 16;
 constexpr size_t shard_max = 1 << 16;
+constexpr uint64_t page_max = 1ULL << 32;
 constexpr size_t pack_size = 16;
 constexpr size_t page_pack_limit = (page_size - page_header_size) / pack_size;
 constexpr size_t bucket_size_max = 256;
@@ -149,6 +150,9 @@ struct ImmutableIndexShard {
     }
 
     Status write(WritableFile& wb) const;
+
+    static StatusOr<std::unique_ptr<ImmutableIndexShard>> try_create(size_t kv_size, const std::vector<KVRef>& kv_refs,
+                                                                     size_t npage_hint);
 
     static StatusOr<std::unique_ptr<ImmutableIndexShard>> create(size_t kv_size, const std::vector<KVRef>& kv_refs,
                                                                  size_t npage_hint);
@@ -315,7 +319,20 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_
     if (kv_refs.size() == 0) {
         return std::make_unique<ImmutableIndexShard>(0);
     }
-    size_t npage = npage_hint;
+    for (size_t npage = npage_hint; npage < page_max; npage++) {
+        auto rs_create = ImmutableIndexShard::try_create(kv_size, kv_refs, npage);
+        // increase npage and retry
+        if (!rs_create.ok()) {
+            continue;
+        }
+        return std::move(rs_create.value());
+    }
+    return Status::InternalError("failed to create immutable index shard");
+}
+
+StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(size_t kv_size,
+                                                                               const std::vector<KVRef>& kv_refs,
+                                                                               size_t npage) {
     size_t bucket_size_limit = std::min(bucket_size_max, (page_size - page_header_size) / (kv_size + 1));
     size_t nbucket = npage * bucket_per_page;
     std::vector<uint8_t> bucket_sizes(nbucket);
@@ -332,7 +349,6 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_
         auto bid = page * bucket_per_page + bucket;
         auto& sz = bucket_sizes[bid];
         if (sz == bucket_size_limit) {
-            // TODO: increase npage and retry
             return Status::InternalError("bucket size limit exceeded");
         }
         sz++;
@@ -396,7 +412,6 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_
             copy_kv_to_page(kv_size, bucket_info.size, bucket_kv_ptrs_tags[bid].first.data(),
                             bucket_kv_ptrs_tags[bid].second.data(), page.pack(cur_packid));
             cur_packid += bucket_packs[bid];
-            //LOG(INFO) << "cur_packid is " << cur_packid;
             DCHECK(cur_packid <= page_size / pack_size);
         }
         for (auto& move : moves) {
@@ -1146,7 +1161,7 @@ Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetShared
     OlapReaderStatistics stats;
     std::vector<uint32_t> rowids;
     rowids.reserve(4096);
-    auto chunk_shared_ptr = vectorized::ChunkHelper::new_chunk(pkey_schema, 4096);
+    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
     auto chunk = chunk_shared_ptr.get();
     for (auto& rowset : rowsets) {
         RowsetReleaseGuard guard(rowset);
@@ -1252,7 +1267,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     for (auto i = 0; i < tablet_schema.num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    auto pkey_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, pk_columns);
+    auto pkey_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, pk_columns);
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
     if (fix_size == 0) {
         LOG(WARNING) << "Build persistent index failed because get key cloumn size failed";
@@ -1386,6 +1401,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         data->set_offset(0);
         data->set_size(0);
         l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_1);
+        // if _flushed is true, we will create a new empty _l0 file, set _offset to 0
         _offset = 0;
         _page_size = 0;
         // clear _l0 and reload _l1
@@ -1413,7 +1429,8 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         data->set_offset(0);
         data->set_size(snapshot_size);
         l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_1);
-        _offset += snapshot_size;
+        // if _dump_snapshot is true, we will dump a snapshot to new _l0 file, set _offset to snapshot_size
+        _offset = snapshot_size;
         _page_size = 0;
     } else {
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
@@ -1518,8 +1535,9 @@ Status PersistentIndex::erase(size_t n, const void* keys, IndexValue* old_values
     return Status::OK();
 }
 
-Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue* values,
-                                    const std::vector<uint32_t>& src_rssid, std::vector<uint32_t>* failed) {
+[[maybe_unused]] Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue* values,
+                                                     const std::vector<uint32_t>& src_rssid,
+                                                     std::vector<uint32_t>* failed) {
     std::vector<IndexValue> found_values;
     found_values.reserve(n);
     RETURN_IF_ERROR(get(n, keys, found_values.data()));
@@ -1527,6 +1545,37 @@ Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue
     for (size_t i = 0; i < n; ++i) {
         if (values[i].get_value() != NullIndexValue &&
             ((uint32_t)(found_values[i].get_value() >> 32)) == src_rssid[i]) {
+            replace_idxes.emplace_back(i);
+        } else {
+            failed->emplace_back(values[i].get_value() & 0xFFFFFFFF);
+        }
+    }
+    RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
+    _dump_snapshot |= _can_dump_directly();
+    if (!_dump_snapshot) {
+        // write wal
+        const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(keys);
+        faststring fixed_buf;
+        fixed_buf.reserve(replace_idxes.size() * (_key_size + sizeof(IndexValue)));
+        for (size_t i = 0; i < replace_idxes.size(); ++i) {
+            fixed_buf.append(fkeys + replace_idxes[i] * _key_size, _key_size);
+            put_fixed64_le(&fixed_buf, values[replace_idxes[i]].get_value());
+        }
+        RETURN_IF_ERROR(_index_file->append(fixed_buf));
+        _page_size += fixed_buf.size();
+    }
+    return Status::OK();
+}
+
+Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue* values, const uint32_t max_src_rssid,
+                                    std::vector<uint32_t>* failed) {
+    std::vector<IndexValue> found_values;
+    found_values.reserve(n);
+    RETURN_IF_ERROR(get(n, keys, found_values.data()));
+    std::vector<size_t> replace_idxes;
+    for (size_t i = 0; i < n; ++i) {
+        if (values[i].get_value() != NullIndexValue &&
+            ((uint32_t)(found_values[i].get_value() >> 32)) <= max_src_rssid) {
             replace_idxes.emplace_back(i);
         } else {
             failed->emplace_back(values[i].get_value() & 0xFFFFFFFF);

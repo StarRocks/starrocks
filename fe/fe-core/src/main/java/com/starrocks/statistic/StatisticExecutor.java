@@ -54,17 +54,16 @@ import java.util.Map;
 public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
 
-
-    private static final String DELETE_TEMPLATE = "DELETE FROM " + Constants.SampleStatisticsTableName + " WHERE ";
+    private static final String DELETE_TEMPLATE = "DELETE FROM " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME + " WHERE ";
 
     private static final String SELECT_EXPIRE_TABLE_TEMPLATE =
-            "SELECT DISTINCT table_id" + " FROM " + Constants.SampleStatisticsTableName + " WHERE 1 = 1 ";
+            "SELECT DISTINCT table_id" + " FROM " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME + " WHERE 1 = 1 ";
 
     public List<TStatisticData> queryStatisticSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
         String sql;
         if (Config.enable_collect_full_statistics) {
             BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
-            if (meta != null && meta.getType().equals(Constants.AnalyzeType.FULL)) {
+            if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
                 sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNames);
             } else {
                 sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
@@ -110,6 +109,20 @@ public class StatisticExecutor {
         }
     }
 
+    public void dropHistogram(Long tableId, List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropHistogramSQL(tableId, columnNames);
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        StatementBase parsedStmt;
+        try {
+            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            executor.execute();
+        } catch (Exception e) {
+            LOG.warn("Execute statistic table expire fail.", e);
+        }
+        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(tableId, columnNames);
+    }
+
     // If you call this function, you must ensure that the db lock is added
     public static Pair<List<TStatisticData>, Status> queryDictSync(Long dbId, Long tableId, String column)
             throws Exception {
@@ -127,7 +140,7 @@ public class StatisticExecutor {
         String tableName = db.getTable(tableId).getName();
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 
-        String sql = "select cast(" + Constants.STATISTIC_DICT_VERSION + " as Int), " +
+        String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
                 "cast(" + version + " as bigint), " +
                 "dict_merge(" + "`" + column +
                 "`) as _dict_merge_" + column +
@@ -173,9 +186,9 @@ public class StatisticExecutor {
             return statistics;
         }
 
-        if (version == Constants.STATISTIC_DATA_VERSION
-                || version == Constants.STATISTIC_DICT_VERSION
-                || version == Constants.STATISTIC_HISTOGRAM_VERSION) {
+        if (version == StatsConstants.STATISTIC_DATA_VERSION
+                || version == StatsConstants.STATISTIC_DICT_VERSION
+                || version == StatsConstants.STATISTIC_HISTOGRAM_VERSION) {
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             for (TResultBatch resultBatch : sqlResult) {
                 for (ByteBuffer bb : resultBatch.rows) {
@@ -191,70 +204,44 @@ public class StatisticExecutor {
         return statistics;
     }
 
-    public void collectStatistics(StatisticsCollectJob tcj) {
-        AnalyzeJob analyzeJob = tcj.getAnalyzeJob();
-        Database db = tcj.getDb();
-        Table table = tcj.getTable();
-        List<String> columns = tcj.getAnalyzeJob().getColumns();
+    public AnalyzeStatus collectStatistics(StatisticsCollectJob statsJob) {
+        Database db = statsJob.getDb();
+        Table table = statsJob.getTable();
+        List<String> columns = statsJob.getColumns();
 
         AnalyzeStatus analyzeStatus = new AnalyzeStatus(
                 GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), table.getId(), analyzeJob.getColumns(),
-                analyzeJob.getType(),
-                analyzeJob.getScheduleType(),
-                analyzeJob.getProperties(),
+                db.getId(), table.getId(), columns,
+                statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(),
                 LocalDateTime.now());
-        analyzeStatus.setStatus(Constants.ScheduleStatus.RUNNING);
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
-        if (analyzeJob.getId() != -1) {
-            analyzeJob.setStatus(Constants.ScheduleStatus.RUNNING);
-            GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithoutLog(analyzeJob);
-        }
-
         try {
-            LOG.info("Statistic collect work job: {}, type: {}, db: {}, table: {}",
-                    analyzeJob.getId(), analyzeJob.getType(), db.getFullName(), table.getName());
-            tcj.collect();
-
-            GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
+            statsJob.collect();
         } catch (Exception e) {
-            // If the job id is equal to -1, it represents the automatic full statistics collection of the new version.
-            // Automatic full statistics collection is an implicit task
-            // that is not recorded in the analyze job list, nor does it update the status of the analyze job.
-            if (analyzeJob.getId() != -1) {
-                analyzeJob.setStatus(Constants.ScheduleStatus.FAILED);
-                analyzeJob.setReason(e.getMessage());
-                GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(analyzeJob);
-            }
-
-            analyzeStatus.setStatus(Constants.ScheduleStatus.FAILED);
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             analyzeStatus.setEndTime(LocalDateTime.now());
             analyzeStatus.setReason(e.getMessage());
             GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
-            return;
+            return analyzeStatus;
         }
+        GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
 
-        if (analyzeJob.getId() != -1) {
-            analyzeJob.setStatus(Constants.ScheduleStatus.PENDING);
-            analyzeJob.setWorkTime(LocalDateTime.now());
-            GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(analyzeJob);
-        }
-
-        analyzeStatus.setStatus(Constants.ScheduleStatus.FINISH);
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
         analyzeStatus.setEndTime(LocalDateTime.now());
-
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
-        if (analyzeJob.getType().equals(Constants.AnalyzeType.HISTOGRAM)) {
-            for (String columnName : analyzeJob.getColumns()) {
+        if (statsJob.getType().equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
+            for (String columnName : statsJob.getColumns()) {
                 GlobalStateMgr.getCurrentAnalyzeMgr().addHistogramStatsMeta(new HistogramStatsMeta(db.getId(),
-                        table.getId(), columnName, analyzeJob.getType(), analyzeStatus.getEndTime(),
-                        analyzeJob.getProperties()));
+                        table.getId(), columnName, statsJob.getType(), analyzeStatus.getEndTime(),
+                        statsJob.getProperties()));
             }
         } else {
             GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), table.getId(),
-                    analyzeJob.getType(), analyzeStatus.getEndTime(), analyzeJob.getProperties()));
+                    statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties()));
         }
+        return analyzeStatus;
     }
 
     public void expireStatisticSync(List<String> tableIds) {
@@ -370,22 +357,6 @@ public class StatisticExecutor {
         }
         return Pair.create(sqlResult, coord.getExecStatus());
     }
-
-    private int splitColumnsByRows(Long dbId, Long tableId, long rows, boolean isSample) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        OlapTable table = (OlapTable) db.getTable(tableId);
-
-        long count =
-                table.getPartitions().stream().map(p -> p.getBaseIndex().getRowCount()).reduce(Long::sum).orElse(1L);
-        if (isSample) {
-            count = Math.min(count, rows);
-        }
-        count = Math.max(count, 1L);
-
-        // 500w data per query
-        return (int) (5000000L / count + 1);
-    }
-
 
     // Lock all database before analyze
     private static void lock(Map<String, Database> dbs) {

@@ -36,9 +36,7 @@ JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBr
           _cur_file_reader(nullptr),
           _cur_file_eof(true) {}
 
-JsonScanner::~JsonScanner() {
-    close();
-}
+JsonScanner::~JsonScanner() = default;
 
 Status JsonScanner::open() {
     RETURN_IF_ERROR(FileScanner::open());
@@ -85,19 +83,27 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
     if (!status.ok()) {
         if (status.is_end_of_file()) {
             _cur_file_eof = true;
-        } else {
+        } else if (!status.is_time_out()) {
             return status;
         }
     }
 
     if (src_chunk->num_rows() == 0) {
-        return Status::EndOfFile("EOF of reading json file, nothing read");
+        if (status.is_end_of_file()) {
+            return Status::EndOfFile("EOF of reading json file, nothing read");
+        } else if (status.is_time_out()) {
+            // if timeout happens at the beginning of reading src_chunk, we return the error state
+            // else we will _materialize the lines read before timeout and return ok()
+            return status;
+        }
     }
     auto cast_chunk = _cast_chunk(src_chunk);
     return materialize(src_chunk, cast_chunk);
 }
 
-void JsonScanner::close() {}
+void JsonScanner::close() {
+    FileScanner::close();
+}
 
 Status JsonScanner::_construct_json_types() {
     size_t slot_size = _src_slot_descriptors.size();
@@ -373,6 +379,10 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
             if (!st.ok()) {
                 if (st.is_end_of_file()) {
                     // all data has been exhausted.
+                    return st;
+                }
+                if (st.is_time_out()) {
+                    // read time out
                     return st;
                 }
                 // Parse error.

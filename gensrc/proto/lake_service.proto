@@ -29,8 +29,19 @@ message AbortTxnResponse {
     repeated int64 failed_tablets = 1;
 }
 
+message CompactRequest {
+    repeated int64 tablet_ids = 1;
+    optional int64 txn_id = 2;
+    optional int64 version = 3;
+}
+
+message CompactResponse {
+    repeated int64 failed_tablets = 1;
+}
+
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc abort_txn(AbortTxnRequest) returns (AbortTxnResponse);
+    rpc compact(CompactRequest) returns (CompactResponse);
 }
 

@@ -77,7 +77,7 @@ class DriverLimiter;
 } // namespace pipeline
 
 namespace lake {
-class GroupAssigner;
+class LocationProvider;
 class TabletManager;
 } // namespace lake
 
@@ -143,6 +143,7 @@ public:
     size_t increment_num_scan_operators(size_t n) { return _num_scan_operators.fetch_add(n); }
     size_t decrement_num_scan_operators(size_t n) { return _num_scan_operators.fetch_sub(n); }
     PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
+    PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     starrocks::pipeline::DriverExecutor* driver_executor() { return _driver_executor; }
     starrocks::pipeline::DriverExecutor* wg_driver_executor() { return _wg_driver_executor; }
@@ -177,13 +178,14 @@ public:
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
 
     pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
+
     int64_t max_executor_threads() const { return _max_executor_threads; }
 
     int32_t calc_pipeline_dop(int32_t pipeline_dop) const;
 
     lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager; }
 
-    lake::GroupAssigner* lake_group_assigner() const { return _lake_group_assigner; }
+    lake::LocationProvider* lake_location_provider() const { return _lake_location_provider; }
 
     AgentServer* agent_server() const { return _agent_server; }
 
@@ -242,6 +244,7 @@ private:
     PriorityThreadPool* _pipeline_hdfs_scan_io_thread_pool = nullptr;
     std::atomic<size_t> _num_scan_operators{0};
     PriorityThreadPool* _udf_call_pool = nullptr;
+    PriorityThreadPool* _pipeline_prepare_pool = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
     starrocks::pipeline::QueryContextManager* _query_context_mgr = nullptr;
     starrocks::pipeline::DriverExecutor* _driver_executor = nullptr;
@@ -273,7 +276,7 @@ private:
     RuntimeFilterCache* _runtime_filter_cache = nullptr;
 
     lake::TabletManager* _lake_tablet_manager = nullptr;
-    lake::GroupAssigner* _lake_group_assigner = nullptr;
+    lake::LocationProvider* _lake_location_provider = nullptr;
 
     AgentServer* _agent_server = nullptr;
 };

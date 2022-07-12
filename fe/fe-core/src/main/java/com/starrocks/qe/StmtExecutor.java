@@ -50,7 +50,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.WorkGroup;
@@ -99,6 +98,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -108,14 +108,11 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.statistic.AnalyzeJob;
-import com.starrocks.statistic.Constants;
-import com.starrocks.statistic.FullStatisticsCollectJob;
+import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
-import com.starrocks.statistic.SampleStatisticsCollectJob;
 import com.starrocks.statistic.StatisticExecutor;
-import com.starrocks.statistic.StatisticsCollectJob;
-import com.starrocks.statistic.TableCollectJob;
+import com.starrocks.statistic.StatisticsCollectJobFactory;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExplainLevel;
@@ -133,8 +130,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -476,6 +471,8 @@ public class StmtExecutor {
                 handleUnsupportedStmt();
             } else if (parsedStmt instanceof AnalyzeStmt) {
                 handleAnalyzeStmt();
+            } else if (parsedStmt instanceof DropHistogramStmt) {
+                handleDropHistogramStmt();
             } else if (parsedStmt instanceof AddSqlBlackListStmt) {
                 handleAddSqlBlackListStmt();
             } else if (parsedStmt instanceof DelSqlBlackListStmt) {
@@ -799,34 +796,33 @@ public class StmtExecutor {
         Database db = MetaUtils.getDatabase(context, analyzeStmt.getTableName());
         OlapTable table = (OlapTable) MetaUtils.getTable(context, analyzeStmt.getTableName());
 
-        AnalyzeJob analyzeJob = new AnalyzeJob(db.getId(), table.getId(), analyzeStmt.getColumnNames(),
-                analyzeStmt.isSample() ? Constants.AnalyzeType.SAMPLE : Constants.AnalyzeType.FULL,
-                Constants.ScheduleType.ONCE,
-                analyzeStmt.getProperties(),
-                Constants.ScheduleStatus.RUNNING,
-                LocalDateTime.MIN);
-
-        StatisticsCollectJob collectJob;
+        AnalyzeStatus analyzeStatus;
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
         if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
-            analyzeJob.setType(Constants.AnalyzeType.HISTOGRAM);
-            collectJob = new HistogramStatisticsCollectJob(analyzeJob, db, table, analyzeStmt.getColumnNames());
+            analyzeStatus = statisticExecutor.collectStatistics(
+                    new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
+                            StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()));
         } else {
-            if (Constants.AnalyzeType.FULL == analyzeJob.getType()) {
-                if (Config.enable_collect_full_statistics) {
-                    List<Long> partitionIdList = new ArrayList<>();
-                    table.getPartitions().stream().map(Partition::getId).forEach(partitionIdList::add);
-                    collectJob = new FullStatisticsCollectJob(analyzeJob, db, table, partitionIdList,
-                            analyzeStmt.getColumnNames());
-                } else {
-                    collectJob = new TableCollectJob(analyzeJob, db, table, analyzeStmt.getColumnNames());
-                }
-            } else {
-                collectJob = new SampleStatisticsCollectJob(analyzeJob, db, table, analyzeStmt.getColumnNames());
-            }
+            analyzeStatus = statisticExecutor.collectStatistics(
+                    StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
+                            analyzeStmt.getColumnNames(),
+                            analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL,
+                            StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()));
         }
 
+        if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.FINISH)) {
+            context.getState().setOk();
+        } else {
+            context.getState().setError(analyzeStatus.getReason());
+        }
+    }
+
+    private void handleDropHistogramStmt() {
+        DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) parsedStmt;
+        OlapTable table = (OlapTable) MetaUtils.getTable(context, dropHistogramStmt.getTableName());
+
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        statisticExecutor.collectStatistics(collectJob);
+        statisticExecutor.dropHistogram(table.getId(), dropHistogramStmt.getColumnNames());
     }
 
     private void handleAddSqlBlackListStmt() {
@@ -1043,7 +1039,7 @@ public class StmtExecutor {
      * Below function is added by new analyzer
      */
     private boolean isStatisticsOrAnalyzer(StatementBase statement, ConnectContext context) {
-        return (statement instanceof InsertStmt && context.getDatabase().equalsIgnoreCase(Constants.StatisticsDBName))
+        return (statement instanceof InsertStmt && context.getDatabase().equalsIgnoreCase(StatsConstants.STATISTICS_DB_NAME))
                 || statement instanceof AnalyzeStmt
                 || statement instanceof CreateAnalyzeJobStmt;
     }

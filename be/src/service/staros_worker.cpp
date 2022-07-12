@@ -81,7 +81,6 @@ void init_staros_worker() {
     g_worker = std::make_shared<StarOSWorker>();
     g_starlet = new staros::starlet::Starlet(g_worker);
     g_starlet->init(starlet_config);
-    g_starlet->set_star_mgr_addr(config::starmgr_addr);
     g_starlet->start();
 }
 

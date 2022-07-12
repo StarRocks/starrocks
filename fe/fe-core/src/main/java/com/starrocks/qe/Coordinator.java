@@ -67,6 +67,7 @@ import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.UnionNode;
+import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.StatusPB;
@@ -83,6 +84,7 @@ import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TEsScanRange;
+import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TNetworkAddress;
@@ -123,6 +125,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentNavigableMap;
@@ -133,6 +136,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class Coordinator {
@@ -518,6 +522,28 @@ public class Coordinator {
         for (TUniqueId instanceId : instanceIds) {
             profileDoneSignal.addMark(instanceId, -1L /* value is meaningless */);
         }
+
+        deliverExecFragments();
+    }
+
+    private void deliverExecFragments() throws Exception {
+        // Disable pipeline engine for `INSERT INTO`.
+        // TODO: remove this when load supports pipeline engine.
+        boolean enablePipelineEngine = connectContext != null &&
+                connectContext.getSessionVariable().isEnablePipelineEngine() &&
+                fragments.stream().allMatch(PlanFragment::canUsePipeline);
+        // Only pipeline uses deliver_batch_fragments.
+        boolean enableDeliverBatchFragments = enablePipelineEngine
+                && connectContext.getSessionVariable().isEnableDeliverBatchFragments();
+
+        if (enableDeliverBatchFragments) {
+            deliverExecBatchFragmentsRequests(enablePipelineEngine);
+        } else {
+            deliverExecFragmentRequests(enablePipelineEngine);
+        }
+    }
+
+    private void deliverExecFragmentRequests(boolean enablePipelineEngine) throws Exception {
         long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
         lock();
         try {
@@ -525,11 +551,6 @@ public class Coordinator {
             int backendId = 0;
             int profileFragmentId = 0;
 
-            // Disable pipeline engine for `INSERT INTO`.
-            // TODO: remove this when load supports pipeline engine.
-            boolean isEnablePipelineEngine = connectContext != null &&
-                    connectContext.getSessionVariable().isEnablePipelineEngine() &&
-                    fragments.stream().allMatch(PlanFragment::canUsePipeline);
             Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
 
             Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
@@ -543,15 +564,15 @@ public class Coordinator {
 
                 // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
                 // shuffle partitions' ordinals in DataStreamSink. backendIds of Fragment instances that
-                // contains shuffle join determine the ordinals of GRF components in the GRF. For a
+                // contain shuffle join determine the ordinals of GRF components in the GRF. For a
                 // shuffle join, its shuffle partitions and corresponding one-map-one GRF components
                 // should have the same ordinals. so here assign monotonic unique backendIds to
                 // Fragment instances to keep consistent order with Fragment instances in
                 // FragmentExecParams.instanceExecParams.
                 for (FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
-                    fInstanceExecParam.backendId = backendId++;
+                    fInstanceExecParam.backendNum = backendId++;
                 }
-                if (isEnablePipelineEngine) {
+                if (enablePipelineEngine) {
                     List<FInstanceExecParam> firstFInstanceParamList = new ArrayList<>();
                     List<FInstanceExecParam> remainingFInstanceParamList = new ArrayList<>();
 
@@ -587,7 +608,7 @@ public class Coordinator {
                     Map<TUniqueId, TNetworkAddress> instanceId2Host =
                             fInstanceExecParamList.stream().collect(Collectors.toMap(f -> f.instanceId, f -> f.host));
                     List<TExecPlanFragmentParams> tParams =
-                            params.toThrift(instanceId2Host.keySet(), descTable, dbIds, isEnablePipelineEngine);
+                            params.toThrift(instanceId2Host.keySet(), descTable, dbIds, enablePipelineEngine);
                     List<Pair<BackendExecState, Future<PExecPlanFragmentResult>>> futures = Lists.newArrayList();
 
                     boolean needCheckBackendState = false;
@@ -658,6 +679,277 @@ public class Coordinator {
                 }
                 profileFragmentId += 1;
             }
+            attachInstanceProfileToFragmentProfile();
+        } finally {
+            unlock();
+        }
+    }
+
+    /**
+     * Compute the topological order of the fragment tree.
+     * It will divide fragments to several groups.
+     * - There is no data dependency among fragments in a group.
+     * - All the upstream fragments of the fragments in a group must belong to the previous groups.
+     * - Each group should be delivered sequentially, and fragments in a group can be delivered concurrently.
+     * <p>
+     * For example, the following tree will produce four groups: [[1], [2, 3, 4], [5, 6], [7]]
+     *         1
+     *         │
+     *    ┌────┼────┐
+     *    │    │    │
+     *    2    3    4
+     *    │    │    │
+     * ┌──┴─┐  │    │
+     * │    │  │    │
+     * 5    6  │    │
+     *      │  │    │
+     *      └──┼────┘
+     *         │
+     *         7
+     *
+     * @return multiple fragment groups.
+     */
+    private List<List<PlanFragment>> computeTopologicalOrderFragments() {
+        Queue<PlanFragment> queue = Lists.newLinkedList();
+        Map<PlanFragment, Integer> inDegrees = Maps.newHashMap();
+
+        PlanFragment root = fragments.get(0);
+
+        // Compute in-degree of each fragment by BFS.
+        // `queue` contains the fragments need to visit its in-edges.
+        inDegrees.put(root, 0);
+        queue.add(root);
+        while (!queue.isEmpty()) {
+            PlanFragment fragment = queue.poll();
+            for (PlanFragment child : fragment.getChildren()) {
+                Integer v = inDegrees.get(child);
+                if (v != null) {
+                    // Has added this child to queue before, don't add again.
+                    inDegrees.put(child, v + 1);
+                } else {
+                    inDegrees.put(child, 1);
+                    queue.add(child);
+                }
+            }
+        }
+
+        if (fragments.size() != inDegrees.size()) {
+            for (PlanFragment fragment : fragments) {
+                if (!inDegrees.containsKey(fragment)) {
+                    LOG.warn("This fragment does not belong to the fragment tree: {}", fragment.getFragmentId());
+                }
+            }
+            throw new StarRocksPlannerException("Some fragments do not belong to the fragment tree",
+                    ErrorType.INTERNAL_ERROR);
+        }
+
+        // Compute fragment groups by BFS.
+        // `queue` contains the fragments whose in-degree is zero.
+        queue.add(root);
+        List<List<PlanFragment>> groups = Lists.newArrayList();
+        int numOutputFragments = 0;
+        while (!queue.isEmpty()) {
+            int groupSize = queue.size();
+            List<PlanFragment> group = new ArrayList<>(groupSize);
+            // The next `groupSize` fragments can be delivered concurrently, because zero in-degree indicates that
+            // they don't depend on each other and all the fragments depending on them have been delivered.
+            for (int i = 0; i < groupSize; ++i) {
+                PlanFragment fragment = queue.poll();
+                group.add(fragment);
+
+                for (PlanFragment child : fragment.getChildren()) {
+                    int degree = inDegrees.compute(child, (k, v) -> v - 1);
+                    if (degree == 0) {
+                        queue.add(child);
+                    }
+                }
+            }
+
+            groups.add(group);
+            numOutputFragments += groupSize;
+        }
+
+        if (fragments.size() != numOutputFragments) {
+            throw new StarRocksPlannerException("There are some circles in the fragment tree",
+                    ErrorType.INTERNAL_ERROR);
+        }
+
+        return groups;
+    }
+
+    /**
+     * Deliver multiple fragments concurrently according to the topological order,
+     * and all the instances of a fragment to the same destination host are delivered in the same request.
+     */
+    private void deliverExecBatchFragmentsRequests(boolean enablePipelineEngine) throws Exception {
+        long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
+        List<List<PlanFragment>> fragmentGroups = computeTopologicalOrderFragments();
+
+        lock();
+        try {
+            // execute all instances from up to bottom
+            int backendNum = 0;
+            int profileFragmentId = 0;
+
+            Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
+
+            this.descTable.setIs_cached(false);
+            TDescriptorTable emptyDescTable = new TDescriptorTable();
+            emptyDescTable.setIs_cached(true);
+            emptyDescTable.setTupleDescriptors(Collections.emptyList());
+
+            // Record the first groupIndex of each host.
+            // Each host only sends descTable once in the first batch request.
+            Map<TNetworkAddress, Integer> host2firstGroupIndex = Maps.newHashMap();
+            for (int groupIndex = 0; groupIndex < fragmentGroups.size(); ++groupIndex) {
+                List<PlanFragment> fragmentGroup = fragmentGroups.get(groupIndex);
+
+                // Divide requests of fragments in the current group to two stages.
+                // If a request need send descTable, the other requests to the same host will be in the second stage.
+                // Otherwise, the request will be in the first stage, including
+                // - the request need send descTable.
+                // - the request to the host, where some request in the previous group has already sent descTable.
+                List<List<Pair<BackendExecState, TExecBatchPlanFragmentsParams>>> inflightRequestsList =
+                        ImmutableList.of(new ArrayList<>(), new ArrayList<>());
+                for (PlanFragment fragment : fragmentGroup) {
+                    FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
+                    Preconditions.checkState(!params.instanceExecParams.isEmpty());
+
+                    // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
+                    // shuffle partitions' ordinals in DataStreamSink. backendIds of Fragment instances that
+                    // contain shuffle join determine the ordinals of GRF components in the GRF. For a
+                    // shuffle join, its shuffle partitions and corresponding one-map-one GRF components
+                    // should have the same ordinals. so here assign monotonic unique backendIds to
+                    // Fragment instances to keep consistent order with Fragment instances in
+                    // FragmentExecParams.instanceExecParams.
+                    for (FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
+                        fInstanceExecParam.backendNum = backendNum++;
+                    }
+
+                    Map<TNetworkAddress, List<FInstanceExecParam>> requestsPerHost = params.instanceExecParams.stream()
+                            .collect(Collectors.groupingBy(FInstanceExecParam::getHost, HashMap::new,
+                                    Collectors.mapping(Function.identity(), Collectors.toList())));
+
+                    for (Map.Entry<TNetworkAddress, List<FInstanceExecParam>> hostAndRequests : requestsPerHost.entrySet()) {
+                        TNetworkAddress host = hostAndRequests.getKey();
+                        List<FInstanceExecParam> requests = hostAndRequests.getValue();
+                        if (requests.isEmpty()) {
+                            continue;
+                        }
+
+                        int inflightIndex = 0;
+                        TDescriptorTable curDescTable = this.descTable;
+                        if (enablePipelineEngine) {
+                            Integer firstGroupIndex = host2firstGroupIndex.get(host);
+                            if (firstGroupIndex == null) {
+                                // Hasn't sent descTable for this host,
+                                // so send descTable this time.
+                                host2firstGroupIndex.put(host, groupIndex);
+                            } else if (firstGroupIndex < groupIndex) {
+                                // Has sent descTable for this host in the previous fragment group,
+                                // so needn't wait and use cached descTable.
+                                curDescTable = emptyDescTable;
+                            } else {
+                                // The previous fragment for this host int the current fragment group will send descTable,
+                                // so this fragment need wait until the previous one finishes delivering.
+                                inflightIndex = 1;
+                                curDescTable = emptyDescTable;
+                            }
+                        }
+
+                        Set<TUniqueId> curInstanceIds = requests.stream()
+                                .map(FInstanceExecParam::getInstanceId)
+                                .collect(Collectors.toSet());
+                        TExecBatchPlanFragmentsParams tRequest =
+                                params.toThriftInBatch(curInstanceIds, host, curDescTable, dbIds, enablePipelineEngine);
+                        TExecPlanFragmentParams tCommonParams = tRequest.getCommon_param();
+                        List<TExecPlanFragmentParams> tUniqueParamsList = tRequest.getUnique_param_per_instance();
+                        Preconditions.checkState(!tUniqueParamsList.isEmpty());
+
+                        // this is a load process, and it is the first fragment.
+                        // we should add all BackendExecState of this fragment to needCheckBackendExecStates,
+                        // so that we can check these backends' state when joining this Coordinator
+                        boolean needCheckBackendState =
+                                queryOptions.getQuery_type() == TQueryType.LOAD && profileFragmentId == 0;
+
+                        // Create ExecState for each fragment instance.
+                        BackendExecState lastExecState = null;
+                        for (TExecPlanFragmentParams tUniquePrams : tUniqueParamsList) {
+                            // TODO: pool of pre-formatted BackendExecStates?
+                            BackendExecState execState = new BackendExecState(fragment.getFragmentId(), host,
+                                    profileFragmentId, tCommonParams, tUniquePrams, this.addressToBackendID);
+                            backendExecStates.put(tUniquePrams.backend_num, execState);
+                            if (needCheckBackendState) {
+                                needCheckBackendExecStates.add(execState);
+                                if (LOG.isDebugEnabled()) {
+                                    LOG.debug("add need check backend {} for fragment, {} job: {}",
+                                            execState.backend.getId(),
+                                            fragment.getFragmentId().asInt(), jobId);
+                                }
+                            }
+                            lastExecState = execState;
+                        }
+
+                        if (lastExecState != null) {
+                            // Just choose any instance ExecState to send the RPC request.
+                            inflightRequestsList.get(inflightIndex).add(Pair.create(lastExecState, tRequest));
+                        }
+                    }
+
+                    profileFragmentId += 1;
+                }
+
+                for (List<Pair<BackendExecState, TExecBatchPlanFragmentsParams>> inflightRequests : inflightRequestsList) {
+                    List<Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>>> futures = Lists.newArrayList();
+                    for (Pair<BackendExecState, TExecBatchPlanFragmentsParams> inflightRequest : inflightRequests) {
+                        futures.add(Pair.create(inflightRequest.first,
+                                inflightRequest.first.execRemoteBatchFragmentsAsync(inflightRequest.second)));
+                    }
+
+                    for (Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>> pair : futures) {
+                        TStatusCode code;
+                        String errMsg = null;
+                        try {
+                            PExecBatchPlanFragmentsResult result =
+                                    pair.second.get(queryDeliveryTimeoutMs, TimeUnit.MILLISECONDS);
+                            code = TStatusCode.findByValue(result.status.statusCode);
+                            if (result.status.errorMsgs != null && !result.status.errorMsgs.isEmpty()) {
+                                errMsg = result.status.errorMsgs.get(0);
+                            }
+                        } catch (ExecutionException e) {
+                            LOG.warn("catch a execute exception", e);
+                            code = TStatusCode.THRIFT_RPC_ERROR;
+                        } catch (InterruptedException e) {
+                            LOG.warn("catch a interrupt exception", e);
+                            code = TStatusCode.INTERNAL_ERROR;
+                        } catch (TimeoutException e) {
+                            LOG.warn("catch a timeout exception", e);
+                            code = TStatusCode.TIMEOUT;
+                        }
+
+                        if (code != TStatusCode.OK) {
+                            if (errMsg == null) {
+                                errMsg = "exec rpc error. backend id: " + pair.first.backend.getId();
+                            }
+                            queryStatus.setStatus(errMsg);
+                            LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
+                                    errMsg, code, pair.first.fragmentId,
+                                    pair.first.address.hostname, pair.first.address.port);
+                            cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
+                            switch (Objects.requireNonNull(code)) {
+                                case TIMEOUT:
+                                    throw new UserException("query timeout. backend id: " + pair.first.backend.getId());
+                                case THRIFT_RPC_ERROR:
+                                    SimpleScheduler.addToBlacklist(pair.first.backend.getId());
+                                    throw new RpcException(pair.first.backend.getHost(), "rpc failed");
+                                default:
+                                    throw new UserException(errMsg);
+                            }
+                        }
+                    }
+                }
+            }
+
             attachInstanceProfileToFragmentProfile();
         } finally {
             unlock();
@@ -1179,7 +1471,8 @@ public class Coordinator {
         ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
         if (computeNode == null) {
-            computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
+            computeNode =
+                    GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
             if (computeNode == null) {
                 throw new UserException("Backend not found. Check if any backend is down or not");
             }
@@ -1191,7 +1484,8 @@ public class Coordinator {
         ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
         if (computeNode == null) {
-            computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
+            computeNode =
+                    GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
             if (computeNode == null) {
                 throw new UserException("Backend not found. Check if any backend is down or not");
             }
@@ -1999,7 +2293,7 @@ public class Coordinator {
 
         Map<Integer, Integer> bucketSeqToDriverSeq = Maps.newHashMap();
 
-        int backendId;
+        int backendNum;
 
         FragmentExecParams fragmentExecParams;
 
@@ -2040,6 +2334,14 @@ public class Coordinator {
         public Map<Integer, Map<Integer, List<TScanRangeParams>>> getNodeToPerDriverSeqScanRanges() {
             return nodeToPerDriverSeqScanRanges;
         }
+
+        public TNetworkAddress getHost() {
+            return host;
+        }
+
+        public TUniqueId getInstanceId() {
+            return instanceId;
+        }
     }
 
     // map from an impalad host address to the per-node assigned scan ranges;
@@ -2059,7 +2361,8 @@ public class Coordinator {
     // record backend execute state
     // TODO(zhaochun): add profile information and others
     public class BackendExecState {
-        TExecPlanFragmentParams rpcParams;
+        TExecPlanFragmentParams commonRpcParams;
+        TExecPlanFragmentParams uniqueRpcParams;
         PlanFragmentId fragmentId;
         boolean initiated;
         boolean done;
@@ -2071,10 +2374,18 @@ public class Coordinator {
         long lastMissingHeartbeatTime = -1;
 
         public BackendExecState(PlanFragmentId fragmentId, TNetworkAddress host, int profileFragmentId,
-                                TExecPlanFragmentParams rpcParams, Map<TNetworkAddress, Long> addressToBackendID) {
+                                TExecPlanFragmentParams rpcParams,
+                                Map<TNetworkAddress, Long> addressToBackendID) {
+            this(fragmentId, host, profileFragmentId, rpcParams, rpcParams, addressToBackendID);
+        }
+
+        public BackendExecState(PlanFragmentId fragmentId, TNetworkAddress host, int profileFragmentId,
+                                TExecPlanFragmentParams commonRpcParams, TExecPlanFragmentParams uniqueRpcParams,
+                                Map<TNetworkAddress, Long> addressToBackendID) {
             this.profileFragmentId = profileFragmentId;
             this.fragmentId = fragmentId;
-            this.rpcParams = rpcParams;
+            this.commonRpcParams = commonRpcParams;
+            this.uniqueRpcParams = uniqueRpcParams;
             this.initiated = false;
             this.done = false;
             this.address = host;
@@ -2084,7 +2395,8 @@ public class Coordinator {
                 backend = idToComputeNode.get(addressToBackendID.get(address));
             }
             String name =
-                    "Instance " + DebugUtil.printId(rpcParams.params.fragment_instance_id) + " (host=" + address + ")";
+                    "Instance " + DebugUtil.printId(uniqueRpcParams.params.fragment_instance_id) + " (host=" + address +
+                            ")";
             this.profile = new RuntimeProfile(name);
             this.hasCanceled = false;
             this.lastMissingHeartbeatTime = backend.getLastMissingHeartbeatTime();
@@ -2134,7 +2446,7 @@ public class Coordinator {
 
                 try {
                     BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
-                            queryId, fragmentInstanceId(), cancelReason, rpcParams.is_pipeline);
+                            queryId, fragmentInstanceId(), cancelReason, commonRpcParams.is_pipeline);
                 } catch (RpcException e) {
                     LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
                             brpcAddress.getPort());
@@ -2175,7 +2487,7 @@ public class Coordinator {
             }
             this.initiated = true;
             try {
-                return BackendServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, rpcParams);
+                return BackendServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, uniqueRpcParams);
             } catch (RpcException e) {
                 // DO NOT throw exception here, return a complete future with error code,
                 // so that the following logic will cancel the fragment.
@@ -2215,6 +2527,56 @@ public class Coordinator {
             }
         }
 
+        public Future<PExecBatchPlanFragmentsResult> execRemoteBatchFragmentsAsync(
+                TExecBatchPlanFragmentsParams tRequest) throws TException {
+            TNetworkAddress brpcAddress;
+            try {
+                brpcAddress = new TNetworkAddress(backend.getHost(), backend.getBrpcPort());
+            } catch (Exception e) {
+                throw new TException(e.getMessage());
+            }
+            this.initiated = true;
+            try {
+                return BackendServiceClient.getInstance().execBatchPlanFragmentsAsync(brpcAddress, tRequest);
+            } catch (RpcException e) {
+                // DO NOT throw exception here, return a complete future with error code,
+                // so that the following logic will cancel the fragment.
+                return new Future<PExecBatchPlanFragmentsResult>() {
+                    @Override
+                    public boolean cancel(boolean mayInterruptIfRunning) {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean isCancelled() {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean isDone() {
+                        return true;
+                    }
+
+                    @Override
+                    public PExecBatchPlanFragmentsResult get() {
+                        PExecBatchPlanFragmentsResult result = new PExecBatchPlanFragmentsResult();
+                        StatusPB pStatus = new StatusPB();
+                        pStatus.errorMsgs = Lists.newArrayList();
+                        pStatus.errorMsgs.add(e.getMessage());
+                        // use THRIFT_RPC_ERROR so that this BE will be added to the blacklist later.
+                        pStatus.statusCode = TStatusCode.THRIFT_RPC_ERROR.getValue();
+                        result.status = pStatus;
+                        return result;
+                    }
+
+                    @Override
+                    public PExecBatchPlanFragmentsResult get(long timeout, TimeUnit unit) {
+                        return get();
+                    }
+                };
+            }
+        }
+
         public FragmentInstanceInfo buildFragmentInstanceInfo() {
             return new QueryStatisticsItem.FragmentInstanceInfo.Builder()
                     .instanceId(fragmentInstanceId()).fragmentId(String.valueOf(fragmentId)).address(this.address)
@@ -2222,7 +2584,7 @@ public class Coordinator {
         }
 
         private TUniqueId fragmentInstanceId() {
-            return this.rpcParams.params.getFragment_instance_id();
+            return this.uniqueRpcParams.params.getFragment_instance_id();
         }
     }
 
@@ -2260,19 +2622,7 @@ public class Coordinator {
             }
         }
 
-        List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
-                                               TDescriptorTable descTable,
-                                               Set<Long> dbIds,
-                                               boolean isEnablePipelineEngine) throws Exception {
-            // add instance number in file name prefix when export job
-            DataSink sink = fragment.getSink();
-            ExportSink exportSink = null;
-            String fileNamePrefix = null;
-            if (sink instanceof ExportSink) {
-                exportSink = (ExportSink) sink;
-                fileNamePrefix = exportSink.getFileNamePrefix();
-            }
-
+        private WorkGroup chooseWorkGroup(Set<Long> dbIds) {
             WorkGroup workgroup = null;
             if (connectContext != null && connectContext.getSessionVariable().isEnableResourceGroup()) {
                 SessionVariable sessionVariable = connectContext.getSessionVariable();
@@ -2294,7 +2644,193 @@ public class Coordinator {
                     connectContext.setWorkGroup(workgroup);
                 }
             }
+
+            return workgroup;
+        }
+
+        /**
+         * Set the common fields of all the fragment instances to the destination common thrift params.
+         *
+         * @param commonParams           The destination common thrift params.
+         * @param destHost               The destination host to delivery these instances.
+         * @param descTable              The descriptor table, empty for the non-first instance
+         *                               when enable pipeline and disable multi fragments in one request.
+         * @param workgroup              The workgroup for this query, used when enable pipeline and enable resource group.
+         * @param isEnablePipelineEngine Whether enable pipeline engine.
+         */
+        private void toThriftForCommonParams(TExecPlanFragmentParams commonParams,
+                                             TNetworkAddress destHost, TDescriptorTable descTable,
+                                             WorkGroup workgroup,
+                                             boolean isEnablePipelineEngine) {
+            commonParams.setProtocol_version(InternalServiceVersion.V1);
+            commonParams.setFragment(fragment.toThrift());
+            commonParams.setDesc_tbl(descTable);
+            commonParams.setFunc_version(3);
+            commonParams.setCoord(coordAddress);
+
+            commonParams.setParams(new TPlanFragmentExecParams());
+            commonParams.params.setUse_vectorized(true);
+            commonParams.params.setQuery_id(queryId);
+            commonParams.params.setInstances_number(hostToNumbers.get(destHost));
+            commonParams.params.setDestinations(destinations);
+            commonParams.params.setNum_senders(instanceExecParams.size());
+            commonParams.params.setPer_exch_num_senders(perExchNumSenders);
+            if (runtimeFilterParams.isSetRuntime_filter_builder_number()) {
+                commonParams.params.setRuntime_filter_params(runtimeFilterParams);
+            }
+            commonParams.params.setSend_query_statistics_with_every_batch(
+                    fragment.isTransferQueryStatisticsWithEveryBatch());
+
+            commonParams.setQuery_globals(queryGlobals);
+            if (isEnablePipelineEngine) {
+                commonParams.setQuery_options(new TQueryOptions(queryOptions));
+            } else {
+                commonParams.setQuery_options(queryOptions);
+            }
+            // For broker load, the ConnectContext.get() is null
+            if (connectContext != null) {
+                SessionVariable sessionVariable = connectContext.getSessionVariable();
+
+                if (isEnablePipelineEngine) {
+                    commonParams.setIs_pipeline(true);
+                    commonParams.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
+                    commonParams.setEnable_shared_scan(
+                            sessionVariable.isEnableSharedScan() && fragment.isEnableSharedScan());
+                    commonParams.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
+
+                    boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
+                    commonParams.setEnable_resource_group(enableResourceGroup);
+                    if (enableResourceGroup) {
+                        // session variable workgroup_id is just for verification of resource isolation.
+                        long workgroupId = connectContext.getSessionVariable().getWorkGroupId();
+                        if (workgroupId > 0) {
+                            TWorkGroup wg = new TWorkGroup();
+                            wg.setName("");
+                            wg.setId(connectContext.getSessionVariable().getWorkGroupId());
+                            wg.setVersion(0);
+                            commonParams.setWorkgroup(wg);
+                        } else if (workgroup != null) {
+                            commonParams.setWorkgroup(workgroup.toThrift());
+                        }
+                    }
+                }
+            }
+        }
+
+        /**
+         * Set the unique fields for a fragment instance to the destination unique thrift params, including:
+         * - backend_num
+         * - pipeline_dop (used when isEnablePipelineEngine is true)
+         * - params.fragment_instance_id
+         * - params.sender_id
+         * - params.per_node_scan_ranges
+         * - fragment.output_sink (only for MultiCastDataStreamSink and ExportSink)
+         *
+         * @param uniqueParams         The destination unique thrift params.
+         * @param fragmentIndex        The index of this instance in this.instanceExecParams.
+         * @param instanceExecParam    The instance param.
+         * @param enablePipelineEngine Whether enable pipeline engine.
+         */
+        private void toThriftForUniqueParams(TExecPlanFragmentParams uniqueParams, int fragmentIndex,
+                                             FInstanceExecParam instanceExecParam, boolean enablePipelineEngine)
+                throws Exception {
+            uniqueParams.setProtocol_version(InternalServiceVersion.V1);
+            uniqueParams.setBackend_num(instanceExecParam.backendNum);
+            if (enablePipelineEngine) {
+                if (instanceExecParam.isSetPipelineDop()) {
+                    uniqueParams.setPipeline_dop(instanceExecParam.pipelineDop);
+                } else {
+                    uniqueParams.setPipeline_dop(fragment.getPipelineDop());
+                }
+            }
+
+            /// Set thrift fragment with the unique fields.
+
+            // Add instance number in file name prefix when export job.
+            if (fragment.getSink() instanceof ExportSink) {
+                ExportSink exportSink = (ExportSink) fragment.getSink();
+                if (exportSink.getFileNamePrefix() != null) {
+                    exportSink.setFileNamePrefix(exportSink.getFileNamePrefix() + fragmentIndex + "_");
+                }
+            }
+            if (!uniqueParams.isSetFragment()) {
+                uniqueParams.setFragment(fragment.toThriftForUniqueFields());
+            }
+            /*
+             * For MultiCastDataFragment, output only send to local, and the instance is keep
+             * same with MultiCastDataFragment
+             * */
+            if (fragment instanceof MultiCastPlanFragment) {
+                List<List<TPlanFragmentDestination>> multiFragmentDestinations =
+                        uniqueParams.getFragment().getOutput_sink().getMulti_cast_stream_sink().getDestinations();
+                List<List<TPlanFragmentDestination>> newDestinations = Lists.newArrayList();
+                for (List<TPlanFragmentDestination> destinations : multiFragmentDestinations) {
+                    Preconditions.checkState(instanceExecParams.size() == destinations.size());
+                    TPlanFragmentDestination ndes = destinations.get(fragmentIndex);
+
+                    Preconditions.checkState(ndes.getServer().equals(toRpcHost(instanceExecParam.host)));
+                    newDestinations.add(Lists.newArrayList(ndes));
+                }
+
+                uniqueParams.getFragment().getOutput_sink().getMulti_cast_stream_sink()
+                        .setDestinations(newDestinations);
+            }
+
+            if (!uniqueParams.isSetParams()) {
+                uniqueParams.setParams(new TPlanFragmentExecParams());
+            }
+            uniqueParams.params.setFragment_instance_id(instanceExecParam.instanceId);
+
+            Map<Integer, List<TScanRangeParams>> scanRanges = instanceExecParam.perNodeScanRanges;
+            if (scanRanges == null) {
+                scanRanges = Maps.newHashMap();
+            }
+            uniqueParams.params.setPer_node_scan_ranges(scanRanges);
+            uniqueParams.params.setNode_to_per_driver_seq_scan_ranges(instanceExecParam.nodeToPerDriverSeqScanRanges);
+
+            uniqueParams.params.setSender_id(fragmentIndex);
+        }
+
+        /**
+         * Fill required fields of thrift params with meaningless values.
+         *
+         * @param params The thrift params need to be filled required fields.
+         */
+        private void fillRequiredFieldsToThrift(TExecPlanFragmentParams params) {
+            TPlanFragmentExecParams fragmentExecParams = params.getParams();
+
+            if (!fragmentExecParams.isSetFragment_instance_id()) {
+                fragmentExecParams.setFragment_instance_id(new TUniqueId(0, 0));
+            }
+
+            if (!fragmentExecParams.isSetInstances_number()) {
+                fragmentExecParams.setInstances_number(0);
+            }
+
+            if (!fragmentExecParams.isSetSender_id()) {
+                fragmentExecParams.setSender_id(0);
+            }
+
+            if (!fragmentExecParams.isSetPer_node_scan_ranges()) {
+                fragmentExecParams.setPer_node_scan_ranges(Maps.newHashMap());
+            }
+
+            if (!fragmentExecParams.isSetPer_exch_num_senders()) {
+                fragmentExecParams.setPer_exch_num_senders(Maps.newHashMap());
+            }
+
+            if (!fragmentExecParams.isSetQuery_id()) {
+                fragmentExecParams.setQuery_id(new TUniqueId(0, 0));
+            }
+        }
+
+        List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
+                                               TDescriptorTable descTable,
+                                               Set<Long> dbIds,
+                                               boolean enablePipelineEngine) throws Exception {
+            WorkGroup workgroup = chooseWorkGroup(dbIds);
             setBucketSeqToInstanceForRuntimeFilters();
+
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
             for (int i = 0; i < instanceExecParams.size(); ++i) {
                 final FInstanceExecParam instanceExecParam = instanceExecParams.get(i);
@@ -2303,100 +2839,45 @@ public class Coordinator {
                 }
                 TExecPlanFragmentParams params = new TExecPlanFragmentParams();
 
-                if (exportSink != null && fileNamePrefix != null) {
-                    exportSink.setFileNamePrefix(fileNamePrefix + i + "_");
-                }
+                toThriftForCommonParams(params, instanceExecParam.getHost(), descTable, workgroup,
+                        enablePipelineEngine);
+                toThriftForUniqueParams(params, i, instanceExecParam, enablePipelineEngine);
 
-                params.setProtocol_version(InternalServiceVersion.V1);
-                params.setFragment(fragment.toThrift());
-
-                /*
-                 * For MultiCastDataFragment, output only send to local, and the instance is keep
-                 * same with MultiCastDataFragment
-                 * */
-                if (fragment instanceof MultiCastPlanFragment) {
-                    List<List<TPlanFragmentDestination>> multiFragmentDestinations =
-                            params.getFragment().getOutput_sink().getMulti_cast_stream_sink().getDestinations();
-                    List<List<TPlanFragmentDestination>> newDestinations = Lists.newArrayList();
-                    for (List<TPlanFragmentDestination> destinations : multiFragmentDestinations) {
-                        Preconditions.checkState(instanceExecParams.size() == destinations.size());
-                        TPlanFragmentDestination ndes = destinations.get(i);
-
-                        Preconditions.checkState(ndes.getServer().equals(toRpcHost(instanceExecParam.host)));
-                        newDestinations.add(Lists.newArrayList(ndes));
-                    }
-                    params.getFragment().getOutput_sink().getMulti_cast_stream_sink().setDestinations(newDestinations);
-                }
-
-                params.setDesc_tbl(descTable);
-                params.setParams(new TPlanFragmentExecParams());
-                params.setFunc_version(3);
-                params.params.setUse_vectorized(true);
-                params.params.setQuery_id(queryId);
-                params.params.setFragment_instance_id(instanceExecParam.instanceId);
-                Map<Integer, List<TScanRangeParams>> scanRanges = instanceExecParam.perNodeScanRanges;
-                if (scanRanges == null) {
-                    scanRanges = Maps.newHashMap();
-                }
-
-                params.params.setPer_node_scan_ranges(scanRanges);
-                params.params.setNode_to_per_driver_seq_scan_ranges(instanceExecParam.nodeToPerDriverSeqScanRanges);
-                params.params.setPer_exch_num_senders(perExchNumSenders);
-
-                params.params.setDestinations(destinations);
-                params.params.setSender_id(i);
-                params.params.setNum_senders(instanceExecParams.size());
-                if (runtimeFilterParams.isSetRuntime_filter_builder_number()) {
-                    params.params.setRuntime_filter_params(runtimeFilterParams);
-                }
-                params.setCoord(coordAddress);
-                params.setBackend_num(instanceExecParam.backendId);
-                params.setQuery_globals(queryGlobals);
-                if (isEnablePipelineEngine) {
-                    params.setQuery_options(new TQueryOptions(queryOptions));
-                } else {
-                    params.setQuery_options(queryOptions);
-                }
-                params.params.setSend_query_statistics_with_every_batch(
-                        fragment.isTransferQueryStatisticsWithEveryBatch());
-                params.params.setInstances_number(hostToNumbers.get(instanceExecParams.get(i).host));
-                // For broker load, the ConnectContext.get() is null
-                if (connectContext != null) {
-                    SessionVariable sessionVariable = connectContext.getSessionVariable();
-
-                    if (isEnablePipelineEngine) {
-                        params.setIs_pipeline(true);
-                        params.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
-                        params.setEnable_shared_scan(sessionVariable.isEnableSharedScan() && fragment.isEnableSharedScan());
-
-                        if (instanceExecParam.isSetPipelineDop()) {
-                            params.setPipeline_dop(instanceExecParam.pipelineDop);
-                        } else {
-                            params.setPipeline_dop(fragment.getPipelineDop());
-                        }
-
-                        boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
-                        params.setEnable_resource_group(enableResourceGroup);
-                        if (enableResourceGroup) {
-                            // session variable workgroup_id is just for verification of resource isolation.
-                            long workgroupId = connectContext.getSessionVariable().getWorkGroupId();
-                            if (workgroupId > 0) {
-                                TWorkGroup wg = new TWorkGroup();
-                                wg.setName("");
-                                wg.setId(connectContext.getSessionVariable().getWorkGroupId());
-                                wg.setVersion(0);
-                                params.setWorkgroup(wg);
-                            } else if (workgroup != null) {
-                                params.setWorkgroup(workgroup.toThrift());
-                            }
-                        }
-                    }
-
-                    params.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
-                }
                 paramsList.add(params);
             }
             return paramsList;
+        }
+
+        TExecBatchPlanFragmentsParams toThriftInBatch(
+                Set<TUniqueId> inFlightInstanceIds, TNetworkAddress destHost, TDescriptorTable descTable,
+                Set<Long> dbIds,
+                boolean enablePipelineEngine) throws Exception {
+
+            WorkGroup workgroup = chooseWorkGroup(dbIds);
+            setBucketSeqToInstanceForRuntimeFilters();
+
+            TExecPlanFragmentParams commonParams = new TExecPlanFragmentParams();
+            toThriftForCommonParams(commonParams, destHost, descTable, workgroup, enablePipelineEngine);
+            fillRequiredFieldsToThrift(commonParams);
+
+            List<TExecPlanFragmentParams> uniqueParamsList = Lists.newArrayList();
+            for (int i = 0; i < instanceExecParams.size(); ++i) {
+                final FInstanceExecParam instanceExecParam = instanceExecParams.get(i);
+                if (!inFlightInstanceIds.contains(instanceExecParam.instanceId)) {
+                    continue;
+                }
+
+                TExecPlanFragmentParams uniqueParams = new TExecPlanFragmentParams();
+                toThriftForUniqueParams(uniqueParams, i, instanceExecParam, enablePipelineEngine);
+                fillRequiredFieldsToThrift(uniqueParams);
+
+                uniqueParamsList.add(uniqueParams);
+            }
+
+            TExecBatchPlanFragmentsParams request = new TExecBatchPlanFragmentsParams();
+            request.setCommon_param(commonParams);
+            request.setUnique_param_per_instance(uniqueParamsList);
+            return request;
         }
 
         // Append range information

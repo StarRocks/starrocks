@@ -6,10 +6,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import org.apache.velocity.VelocityContext;
 
 import java.io.StringWriter;
 import java.util.List;
+import java.util.Map;
 
 public class TableCollectJob extends StatisticsCollectJob {
     private static final String INSERT_SELECT_FULL_TEMPLATE =
@@ -17,15 +19,21 @@ public class TableCollectJob extends StatisticsCollectJob {
                     + "$dataSize, $countDistinctFunction, $countNullFunction, $maxFunction, $minFunction, NOW() "
                     + "FROM $tableName";
 
-    public TableCollectJob(AnalyzeJob analyzeJob, Database db, OlapTable table, List<String> columns) {
-        super(analyzeJob, db, table, columns);
+    public TableCollectJob(Database db, OlapTable table, List<String> columns,
+                           StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
+                           Map<String, String> properties) {
+        super(db, table, columns, type, scheduleType, properties);
     }
 
     @Override
     public void collect() throws Exception {
-        for (String column : columns) {
-            String sql = buildFullInsertSQL(db, table, Lists.newArrayList(column));
-            collectStatisticSync(sql);
+        List<List<String>> splitColumns = Lists.partition(columns,
+                (int) (table.getRowCount() * columns.size() / Config.statistics_collect_max_row_count_per_query + 1));
+        for (List<String> splitColItem : splitColumns) {
+            for (String columnName : splitColItem) {
+                String sql = buildFullInsertSQL(db, table, Lists.newArrayList(columnName));
+                collectStatisticSync(sql);
+            }
         }
     }
 

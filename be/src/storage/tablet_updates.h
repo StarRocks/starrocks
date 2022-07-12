@@ -24,6 +24,7 @@ using RowsetSharedPtr = std::shared_ptr<Rowset>;
 class DelVector;
 using DelVectorPtr = std::shared_ptr<DelVector>;
 class MemTracker;
+class RowsetReadOptions;
 class SnapshotMeta;
 class Tablet;
 class TTabletInfo;
@@ -31,7 +32,6 @@ class TTabletInfo;
 namespace vectorized {
 class ChunkIterator;
 class CompactionState;
-class RowsetReadOptions;
 class Schema;
 class TabletReader;
 class ChunkChanger;
@@ -65,6 +65,9 @@ public:
 
     // get total size of latest version's rowset files
     size_t data_size() const;
+
+    // get number of rows and total size of latest version's rowset files together
+    std::pair<int64_t, int64_t> num_rows_and_data_size() const;
 
     // get latest version's number of rowsets
     size_t num_rowsets() const;

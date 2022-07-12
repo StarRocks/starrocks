@@ -45,15 +45,12 @@ public enum AggregateType {
         compatibilityMap = new EnumMap<>(AggregateType.class);
         List<PrimitiveType> primitiveTypeList = Lists.newArrayList();
 
-        primitiveTypeList.add(PrimitiveType.TINYINT);
-        primitiveTypeList.add(PrimitiveType.SMALLINT);
         primitiveTypeList.add(PrimitiveType.INT);
         primitiveTypeList.add(PrimitiveType.BIGINT);
         primitiveTypeList.add(PrimitiveType.LARGEINT);
         primitiveTypeList.add(PrimitiveType.FLOAT);
         primitiveTypeList.add(PrimitiveType.DOUBLE);
         primitiveTypeList.add(PrimitiveType.DECIMALV2);
-        primitiveTypeList.add(PrimitiveType.DECIMAL32);
         primitiveTypeList.add(PrimitiveType.DECIMAL64);
         primitiveTypeList.add(PrimitiveType.DECIMAL128);
         compatibilityMap.put(SUM, EnumSet.copyOf(primitiveTypeList));
@@ -146,6 +143,13 @@ public enum AggregateType {
     public boolean checkCompatibility(Type type) {
         return checkPrimitiveTypeCompatibility(this, type.getPrimitiveType()) ||
                 (this.isReplaceFamily() && type.isArrayType());
+    }
+
+    public static Type extendedPrecision(Type type) {
+        if (type.isDecimalV3()) {
+            return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, ((ScalarType) type).getScalarScale());
+        }
+        return type;
     }
 
     public boolean isReplaceFamily() {

@@ -77,7 +77,7 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     if (query_options.__isset.max_scan_key_num && query_options.max_scan_key_num > 0) {
         max_scan_key_num = query_options.max_scan_key_num;
     } else {
-        max_scan_key_num = config::doris_max_scan_key_num;
+        max_scan_key_num = config::max_scan_key_num;
     }
     bool enable_column_expr_predicate = false;
     if (thrift_olap_scan_node.__isset.enable_column_expr_predicate) {
@@ -95,15 +95,6 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     _dict_optimize_parser.rewrite_conjuncts<false>(&_not_push_down_conjuncts, state);
 
     return Status::OK();
-}
-
-void OlapScanContext::update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows) {
-    std::lock_guard<std::mutex> lock(_mutex);
-    _sum_row_bytes += added_sum_row_bytes;
-    _num_rows += added_num_rows;
-    if (_num_rows > 0) {
-        _avg_row_bytes = _sum_row_bytes / _num_rows;
-    }
 }
 
 } // namespace starrocks::pipeline

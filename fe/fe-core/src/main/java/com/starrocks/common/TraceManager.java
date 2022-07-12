@@ -18,7 +18,7 @@ import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
 
 public class TraceManager {
     private static final String SERVICE_NAME = "starrocks-fe";
-    private static Tracer instance = null;
+    private static volatile Tracer instance = null;
 
     public static Tracer getTracer() {
         if (instance == null) {
@@ -53,6 +53,40 @@ public class TraceManager {
 
     public static Span startSpan(String name) {
         return getTracer().spanBuilder(name).startSpan();
+    }
+
+    /**
+     * Start a fake noop span, there are many code paths run in replay process, these events are duplicates in most cases,
+     * so we should disable tracing for these cases, using this noop span in those cases, just to avoid null checks in code.
+     * For example:
+     * <pre>
+     *  Span span;
+     *  if (not in replay) {
+     *      span = startSpan();
+     *  }
+     *  if (not in replay) {
+     *      span.setAttribute("key", "value");
+     *  }
+     *  ...
+     *  if (not in replay) {
+     *      span.end();
+     *  }
+     *
+     *  become:
+     *  Span span;
+     *  if (not in replay) {
+     *      span = startSpan();
+     *  } else {
+     *      span = startNoopSpan();
+     *  }
+     *
+     *  span.setAttribute("key", "value");
+     *  ...
+     *  span.end();
+     *  </pre>
+     */
+    public static Span startNoopSpan() {
+        return new NoopSpan();
     }
 
     public static String toTraceParent(SpanContext spanContext) {

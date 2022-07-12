@@ -286,6 +286,26 @@ public class AlterTest {
     }
 
     @Test
+    public void testRenameTable() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE test.testRenameTable1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        String alterStmt = "alter table test.testRenameTable1 rename testRenameTable2";
+        alterTableWithNewParser(alterStmt, false);
+    }
+
+    @Test
     public void testChangeMaterializedViewRefreshScheme() throws Exception {
         starRocksAssert.useDatabase("test")
                 .withTable("CREATE TABLE test.testTable2\n" +
@@ -357,13 +377,13 @@ public class AlterTest {
         alterTable(stmt, true);
 
         stmt = "alter table test.tbl1 add partition p3 values less than('2020-04-01'), drop partition p4";
-        alterTable(stmt, true);
+//        alterTable(stmt, true);
 
         stmt = "alter table test.tbl1 drop partition p3, drop partition p4";
-        alterTable(stmt, true);
+        alterTableWithNewParser(stmt, true);
 
         stmt = "alter table test.tbl1 drop partition p3, add column k3 int";
-        alterTable(stmt, true);
+//        alterTable(stmt, true);
 
         // no conflict
         stmt = "alter table test.tbl1 add column k3 int, add column k4 int";
@@ -699,7 +719,7 @@ public class AlterTest {
 
         // name conflict
         String replaceStmt = "ALTER TABLE test.replace1 SWAP WITH r1";
-        alterTable(replaceStmt, true);
+        alterTableWithNewParser(replaceStmt, true);
 
         // replace1 with replace2
         replaceStmt = "ALTER TABLE test.replace1 SWAP WITH replace2";
@@ -712,7 +732,7 @@ public class AlterTest {
                 replace2.getPartition("replace2").getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
                         .size());
 
-        alterTable(replaceStmt, false);
+        alterTableWithNewParser(replaceStmt, false);
 
         replace1 = (OlapTable) db.getTable("replace1");
         replace2 = (OlapTable) db.getTable("replace2");

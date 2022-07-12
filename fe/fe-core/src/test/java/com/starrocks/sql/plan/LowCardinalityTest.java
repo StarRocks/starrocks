@@ -691,6 +691,15 @@ public class LowCardinalityTest extends PlanTestBase {
         String sql;
         String plan;
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql =
+                "select count(*) from supplier l join [shuffle] (select max(S_ADDRESS) as S_ADDRESS from supplier) r on l.S_ADDRESS = r.S_ADDRESS;";
+        plan = getVerboseExplain(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+        sql =
+                "select count(*) from supplier l join [broadcast] (select max(S_ADDRESS) as S_ADDRESS from supplier) r on l.S_ADDRESS = r.S_ADDRESS;";
+        plan = getVerboseExplain(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+
         sql = "select *\n" +
                 "from(\n" +
                 "        select S_SUPPKEY,\n" +
@@ -706,7 +715,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "    and l.S_NATIONKEY = r.MS;";
         plan = getVerboseExplain(sql);
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
-        Assert.assertTrue(plan.contains("OutPut Partition: HASH_PARTITIONED: 9: S_SUPPKEY, 21: S_ADDRESS"));
+        Assert.assertTrue(plan.contains("OutPut Partition: HASH_PARTITIONED: 9: S_SUPPKEY, 17"));
 
         sql = "select * from test.join1 right join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         plan = getFragmentPlan(sql);
@@ -896,8 +905,8 @@ public class LowCardinalityTest extends PlanTestBase {
         String sql = "select t0.S_ADDRESS from (select S_ADDRESS, S_NATIONKEY from supplier_nullable limit 10) t0" +
                 " inner join supplier on t0.S_NATIONKEY = supplier.S_NATIONKEY;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  6:Decode\n" +
-                "  |  <dict id 17> : <string id 3>"));
+        assertContains(plan, "  2:Decode\n" +
+                "  |  <dict id 17> : <string id 3>\n");
     }
 
     @Test
@@ -1010,7 +1019,8 @@ public class LowCardinalityTest extends PlanTestBase {
         String sql =
                 "with v1 as( select S_ADDRESS a, count(*) b from supplier group by S_ADDRESS) select x1.a, x1.b from v1 x1 join v1 x2 on x1.a=x2.a";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("query_global_dicts:[TGlobalDict(columnId:28, strings:[6D 6F 63 6B], ids:[1])"));
+        Assert.assertTrue(
+                plan.contains("query_global_dicts:[TGlobalDict(columnId:28, strings:[6D 6F 63 6B], ids:[1])"));
         connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setEnablePipelineEngine(false);
     }

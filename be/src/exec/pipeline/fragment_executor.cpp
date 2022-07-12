@@ -40,6 +40,32 @@ using WorkGroupManager = workgroup::WorkGroupManager;
 using WorkGroup = workgroup::WorkGroup;
 using WorkGroupPtr = workgroup::WorkGroupPtr;
 
+/// UnifiedExecPlanFragmentParams.
+const std::vector<TScanRangeParams> UnifiedExecPlanFragmentParams::_no_scan_ranges;
+const std::map<int32_t, std::vector<TScanRangeParams>> UnifiedExecPlanFragmentParams::_no_scan_ranges_per_driver_seq;
+
+const std::vector<TScanRangeParams>& UnifiedExecPlanFragmentParams::scan_ranges_of_node(TPlanNodeId node_id) const {
+    return FindWithDefault(_unique_request.params.per_node_scan_ranges, node_id, _no_scan_ranges);
+}
+
+const std::map<int32_t, std::vector<TScanRangeParams>>&
+UnifiedExecPlanFragmentParams::per_driver_seq_scan_ranges_of_node(TPlanNodeId node_id) const {
+    if (!_unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
+        return _no_scan_ranges_per_driver_seq;
+    }
+
+    return FindWithDefault(_unique_request.params.node_to_per_driver_seq_scan_ranges, node_id,
+                           _no_scan_ranges_per_driver_seq);
+}
+
+const TDataSink& UnifiedExecPlanFragmentParams::output_sink() const {
+    if (_unique_request.fragment.__isset.output_sink) {
+        return _unique_request.fragment.output_sink;
+    }
+    return _common_request.fragment.output_sink;
+}
+
+/// Profile methods.
 static void setup_profile_hierarchy(RuntimeState* runtime_state, const PipelinePtr& pipeline) {
     runtime_state->runtime_profile()->add_child(pipeline->runtime_profile(), true, nullptr);
 }
@@ -57,12 +83,13 @@ static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr
     }
 }
 
-Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
+/// FragmentExecutor.
+Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     // prevent an identical fragment instance from multiple execution caused by FE's
     // duplicate invocations of rpc exec_plan_fragment.
-    const auto& params = request.params;
+    const auto& params = request.common().params;
     const auto& query_id = params.query_id;
-    const auto& fragment_instance_id = params.fragment_instance_id;
+    const auto& fragment_instance_id = request.fragment_instance_id();
 
     auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
     if (existing_query_ctx) {
@@ -87,12 +114,11 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const TExecPlanFr
     return Status::OK();
 }
 
-Status FragmentExecutor::_prepare_fragment_ctx(const TExecPlanFragmentParams& request) {
-    const auto& coord = request.coord;
-    const auto& params = request.params;
-    const auto& query_id = params.query_id;
-    const auto& fragment_instance_id = params.fragment_instance_id;
-    const auto& query_options = request.query_options;
+Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentParams& request) {
+    const auto& coord = request.common().coord;
+    const auto& query_id = request.common().params.query_id;
+    const auto& fragment_instance_id = request.fragment_instance_id();
+    const auto& query_options = request.common().query_options;
 
     _fragment_ctx = std::make_shared<FragmentContext>();
 
@@ -108,19 +134,18 @@ Status FragmentExecutor::_prepare_fragment_ctx(const TExecPlanFragmentParams& re
     }
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
-              << " fragment_instance_id=" << print_id(params.fragment_instance_id)
-              << " backend_num=" << request.backend_num;
+              << " fragment_instance_id=" << print_id(fragment_instance_id) << " backend_num=" << request.backend_num();
 
     return Status::OK();
 }
 
-Status FragmentExecutor::_prepare_workgroup(const TExecPlanFragmentParams& request) {
+Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams& request) {
     // wg is always non-nullable, when request.enable_resource_group is true.
     WorkGroupPtr wg = nullptr;
-    if (request.__isset.enable_resource_group && request.enable_resource_group) {
+    if (request.common().__isset.enable_resource_group && request.common().enable_resource_group) {
         _fragment_ctx->set_enable_resource_group();
-        if (request.__isset.workgroup && request.workgroup.id != WorkGroup::DEFAULT_WG_ID) {
-            wg = std::make_shared<WorkGroup>(request.workgroup);
+        if (request.common().__isset.workgroup && request.common().workgroup.id != WorkGroup::DEFAULT_WG_ID) {
+            wg = std::make_shared<WorkGroup>(request.common().workgroup);
             wg = WorkGroupManager::instance()->add_workgroup(wg);
         } else {
             wg = WorkGroupManager::instance()->get_default_workgroup();
@@ -134,13 +159,13 @@ Status FragmentExecutor::_prepare_workgroup(const TExecPlanFragmentParams& reque
     return Status::OK();
 }
 
-Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
-    const auto& params = request.params;
+Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
+    const auto& params = request.common().params;
     const auto& query_id = params.query_id;
-    const auto& fragment_instance_id = params.fragment_instance_id;
-    const auto& query_globals = request.query_globals;
-    const auto& query_options = request.query_options;
-    const auto& t_desc_tbl = request.desc_tbl;
+    const auto& fragment_instance_id = request.fragment_instance_id();
+    const auto& query_globals = request.common().query_globals;
+    const auto& query_options = request.common().query_options;
+    const auto& t_desc_tbl = request.common().desc_tbl;
     const int32_t degree_of_parallelism = _calc_dop(exec_env, request);
     auto& wg = _wg;
 
@@ -163,17 +188,16 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPl
 
     auto* runtime_state = _fragment_ctx->runtime_state();
     runtime_state->set_enable_pipeline_engine(true);
-    int func_version = request.__isset.func_version ? request.func_version : 2;
+    int func_version = request.common().__isset.func_version ? request.common().func_version : 2;
     runtime_state->set_func_version(func_version);
     runtime_state->init_mem_trackers(query_mem_tracker);
-    runtime_state->set_be_number(request.backend_num);
+    runtime_state->set_be_number(request.backend_num());
     runtime_state->set_query_ctx(_query_ctx);
 
     // RuntimeFilterWorker::open_query is idempotent
-    if (params.__isset.runtime_filter_params && params.runtime_filter_params.id_to_prober_params.size() != 0) {
+    if (params.__isset.runtime_filter_params && !params.runtime_filter_params.id_to_prober_params.empty()) {
         _query_ctx->set_is_runtime_filter_coordinator(true);
-        exec_env->runtime_filter_worker()->open_query(query_id, request.query_options, params.runtime_filter_params,
-                                                      true);
+        exec_env->runtime_filter_worker()->open_query(query_id, query_options, params.runtime_filter_params, true);
     }
     _fragment_ctx->prepare_pass_through_chunk_buffer();
 
@@ -199,13 +223,13 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPl
     return Status::OK();
 }
 
-int32_t FragmentExecutor::_calc_dop(ExecEnv* exec_env, const TExecPlanFragmentParams& request) const {
-    int32_t degree_of_parallelism = request.__isset.pipeline_dop ? request.pipeline_dop : 0;
+int32_t FragmentExecutor::_calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const {
+    int32_t degree_of_parallelism = request.pipeline_dop();
     return exec_env->calc_pipeline_dop(degree_of_parallelism);
 }
 
-int FragmentExecutor::_calc_delivery_expired_seconds(const TExecPlanFragmentParams& request) const {
-    const auto& query_options = request.query_options;
+int FragmentExecutor::_calc_delivery_expired_seconds(const UnifiedExecPlanFragmentParams& request) const {
+    const auto& query_options = request.common().query_options;
 
     int expired_seconds = QueryContext::DEFAULT_EXPIRE_SECONDS;
     if (query_options.__isset.query_delivery_timeout) {
@@ -221,8 +245,8 @@ int FragmentExecutor::_calc_delivery_expired_seconds(const TExecPlanFragmentPara
     return std::max<int>(1, expired_seconds);
 }
 
-int FragmentExecutor::_calc_query_expired_seconds(const TExecPlanFragmentParams& request) const {
-    const auto& query_options = request.query_options;
+int FragmentExecutor::_calc_query_expired_seconds(const UnifiedExecPlanFragmentParams& request) const {
+    const auto& query_options = request.common().query_options;
 
     if (query_options.__isset.query_timeout) {
         return std::max<int>(1, query_options.query_timeout);
@@ -231,13 +255,18 @@ int FragmentExecutor::_calc_query_expired_seconds(const TExecPlanFragmentParams&
     return QueryContext::DEFAULT_EXPIRE_SECONDS;
 }
 
-Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
+Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     auto* runtime_state = _fragment_ctx->runtime_state();
     auto* obj_pool = runtime_state->obj_pool();
     const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
-    const auto& params = request.params;
-    const auto& fragment = request.fragment;
+    const auto& params = request.common().params;
+    const auto& fragment = request.common().fragment;
     const auto dop = _calc_dop(exec_env, request);
+    const auto& query_options = request.common().query_options;
+
+    bool enable_shared_scan = request.common().__isset.enable_shared_scan && request.common().enable_shared_scan;
+    bool enable_tablet_internal_parallel =
+            query_options.__isset.enable_tablet_internal_parallel && query_options.enable_tablet_internal_parallel;
 
     // Set up plan
     RETURN_IF_ERROR(ExecNode::create_tree(runtime_state, obj_pool, fragment.plan, desc_tbl, &_fragment_ctx->plan()));
@@ -252,47 +281,53 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
     plan->collect_nodes(TPlanNodeType::EXCHANGE_NODE, &exch_nodes);
     for (auto* exch_node : exch_nodes) {
         int num_senders = FindWithDefault(params.per_exch_num_senders, exch_node->id(), 0);
-        static_cast<ExchangeNode*>(exch_node)->set_num_senders(num_senders);
+        down_cast<ExchangeNode*>(exch_node)->set_num_senders(num_senders);
     }
 
     // set scan ranges
     std::vector<ExecNode*> scan_nodes;
-    std::vector<TScanRangeParams> no_scan_ranges;
-    std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
     plan->collect_scan_nodes(&scan_nodes);
 
-    bool enable_shared_scan = false;
-    if (request.__isset.enable_shared_scan) {
-        enable_shared_scan = request.enable_shared_scan;
-    }
-
+    int64_t sum_scan_limit = 0;
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
     for (auto& i : scan_nodes) {
         auto* scan_node = down_cast<ScanNode*>(i);
-        const std::vector<TScanRangeParams>& scan_ranges =
-                FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
-        auto& scan_ranges_per_driver_seq = params.__isset.node_to_per_driver_seq_scan_ranges
-                                                   ? FindWithDefault(params.node_to_per_driver_seq_scan_ranges,
-                                                                     scan_node->id(), no_scan_ranges_per_driver_seq)
-                                                   : no_scan_ranges_per_driver_seq;
+        const std::vector<TScanRangeParams>& scan_ranges = request.scan_ranges_of_node(scan_node->id());
+        const auto& scan_ranges_per_driver_seq = request.per_driver_seq_scan_ranges_of_node(scan_node->id());
 
-        ASSIGN_OR_RETURN(auto morsel_queue_factory,
-                         scan_node->convert_scan_range_to_morsel_queue_factory(scan_ranges, scan_ranges_per_driver_seq,
-                                                                               scan_node->id(), request, dop));
+        ASSIGN_OR_RETURN(auto morsel_queue_factory, scan_node->convert_scan_range_to_morsel_queue_factory(
+                                                            scan_ranges, scan_ranges_per_driver_seq, scan_node->id(),
+                                                            dop, enable_tablet_internal_parallel));
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
 
         if (auto* olap_scan = dynamic_cast<vectorized::OlapScanNode*>(scan_node)) {
             olap_scan->enable_shared_scan(enable_shared_scan);
+        }
+        if (scan_node->limit() > 0) {
+            sum_scan_limit += scan_node->limit();
+        }
+    }
+
+    if (_wg && _wg->big_query_scan_rows_limit() > 0) {
+        // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
+        // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
+        if (sum_scan_limit <= _wg->big_query_scan_rows_limit()) {
+            int parallelism = dop * ScanOperator::MAX_IO_TASKS_PER_OP;
+            int64_t parallel_scan_limit = sum_scan_limit * parallelism;
+            _query_ctx->set_scan_limit(parallel_scan_limit);
+        } else {
+            _query_ctx->set_scan_limit(_wg->big_query_scan_rows_limit());
         }
     }
 
     return Status::OK();
 }
 
-Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
-    const auto fragment_instance_id = request.params.fragment_instance_id;
+Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
+    const auto fragment_instance_id = request.fragment_instance_id();
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
-    const auto& fragment = request.fragment;
+    const auto& fragment = request.common().fragment;
+    const auto& params = request.common().params;
     ExecNode* plan = _fragment_ctx->plan();
 
     Drivers drivers;
@@ -307,10 +342,11 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
 
     // Set up sink if required
     std::unique_ptr<DataSink> datasink;
-    if (fragment.__isset.output_sink) {
+    if (request.isset_output_sink()) {
+        const auto& tsink = request.output_sink();
         RowDescriptor row_desc;
-        RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, request.fragment.output_sink,
-                                                   request.fragment.output_exprs, request.params, row_desc, &datasink));
+        RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, tsink, fragment.output_exprs, params,
+                                                   request.sender_id(), row_desc, &datasink));
         RuntimeProfile* sink_profile = datasink->profile();
         if (sink_profile != nullptr) {
             runtime_state->runtime_profile()->add_child(sink_profile, true, nullptr);
@@ -389,22 +425,26 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
     return Status::OK();
 }
 
-Status FragmentExecutor::_prepare_global_dict(const TExecPlanFragmentParams& request) {
+Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParams& request) {
+    const auto& fragment = request.common().fragment;
     // Set up global dict
     auto* runtime_state = _fragment_ctx->runtime_state();
-    if (request.fragment.__isset.query_global_dicts) {
-        RETURN_IF_ERROR(runtime_state->init_query_global_dict(request.fragment.query_global_dicts));
+    if (fragment.__isset.query_global_dicts) {
+        RETURN_IF_ERROR(runtime_state->init_query_global_dict(fragment.query_global_dicts));
     }
 
-    if (request.fragment.__isset.load_global_dicts) {
-        RETURN_IF_ERROR(runtime_state->init_load_global_dict(request.fragment.load_global_dicts));
+    if (fragment.__isset.load_global_dicts) {
+        RETURN_IF_ERROR(runtime_state->init_load_global_dict(fragment.load_global_dicts));
     }
     return Status::OK();
 }
 
-Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
-    DCHECK(request.__isset.desc_tbl);
-    DCHECK(request.__isset.fragment);
+Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
+                                 const TExecPlanFragmentParams& unique_request) {
+    DCHECK(common_request.__isset.desc_tbl);
+    DCHECK(common_request.__isset.fragment);
+
+    UnifiedExecPlanFragmentParams request(common_request, unique_request);
 
     bool prepare_success = false;
     DeferOp defer([this, &prepare_success]() {
@@ -422,7 +462,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     RETURN_IF_ERROR(_prepare_global_dict(request));
     RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
 
-    _query_ctx->fragment_mgr()->register_ctx(request.params.fragment_instance_id, _fragment_ctx);
+    _query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx);
     prepare_success = true;
 
     return Status::OK();
@@ -470,7 +510,7 @@ void FragmentExecutor::_fail_cleanup() {
 }
 
 Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
-                                                          const TExecPlanFragmentParams& params,
+                                                          const UnifiedExecPlanFragmentParams& request,
                                                           std::unique_ptr<starrocks::DataSink>& datasink) {
     auto fragment_ctx = context->fragment_context();
     if (typeid(*datasink) == typeid(starrocks::ResultSink)) {
@@ -484,7 +524,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
     } else if (typeid(*datasink) == typeid(starrocks::DataStreamSender)) {
         starrocks::DataStreamSender* sender = down_cast<starrocks::DataStreamSender*>(datasink.get());
         auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
-        auto& t_stream_sink = params.fragment.output_sink.stream_sink;
+        auto& t_stream_sink = request.output_sink().stream_sink;
         bool is_dest_merge = false;
         if (t_stream_sink.__isset.is_merge && t_stream_sink.is_merge) {
             is_dest_merge = true;
@@ -527,7 +567,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         // Further workflow explanation is in mcast_local_exchange.h file.
         starrocks::MultiCastDataStreamSink* mcast_sink = down_cast<starrocks::MultiCastDataStreamSink*>(datasink.get());
         const auto& sinks = mcast_sink->get_sinks();
-        auto& t_multi_case_stream_sink = params.fragment.output_sink.multi_cast_stream_sink;
+        auto& t_multi_case_stream_sink = request.output_sink().multi_cast_stream_sink;
 
         // === create exchange ===
         auto mcast_local_exchanger = std::make_shared<MultiCastLocalExchanger>(runtime_state, sinks.size());
@@ -574,8 +614,8 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             fragment_ctx->pipelines().emplace_back(pp);
         }
     } else if (typeid(*datasink) == typeid(starrocks::stream_load::OlapTableSink)) {
-        runtime_state->set_per_fragment_instance_idx(params.params.sender_id);
-        runtime_state->set_num_per_fragment_instances(params.params.num_senders);
+        runtime_state->set_per_fragment_instance_idx(request.sender_id());
+        runtime_state->set_num_per_fragment_instances(request.common().params.num_senders);
         OpFactoryPtr op =
                 std::make_shared<OlapTableSinkOperatorFactory>(context->next_operator_id(), datasink, fragment_ctx);
         fragment_ctx->pipelines().back()->add_op_factory(op);

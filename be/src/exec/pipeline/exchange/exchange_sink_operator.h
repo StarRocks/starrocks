@@ -63,7 +63,8 @@ public:
     // For other chunk, only serialize the chunk data to ChunkPB.
     Status serialize_chunk(const vectorized::Chunk* chunk, ChunkPB* dst, bool* is_first_chunk, int num_receivers = 1);
 
-    void construct_brpc_attachment(PTransmitChunkParamsPtr _chunk_request, butil::IOBuf& attachment);
+    // Return the physical bytes of attachment.
+    int64_t construct_brpc_attachment(PTransmitChunkParamsPtr _chunk_request, butil::IOBuf& attachment);
 
 private:
     bool _is_large_chunk(size_t sz) const {
@@ -83,7 +84,7 @@ private:
     const std::vector<TPlanFragmentDestination> _destinations;
     // If the pipeline of dest be is ExchangeSourceOperator -> AggregateBlockingSinkOperator(with group by)
     // then we shuffle for different parallelism at sender side(ExchangeSinkOperator) if _is_pipeline_level_shuffle is true
-    const bool _is_pipeline_level_shuffle;
+    bool _is_pipeline_level_shuffle;
     // Degree of pipeline level shuffle
     // - If _is_pipeline_level_shuffle is false, it is set to 1.
     // - If _is_pipeline_level_shuffle is true,

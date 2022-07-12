@@ -68,10 +68,10 @@ public:
     virtual StatusOr<pipeline::MorselQueueFactoryPtr> convert_scan_range_to_morsel_queue_factory(
             const std::vector<TScanRangeParams>& scan_ranges,
             const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
-            const TExecPlanFragmentParams& request, int pipeline_dop);
+            int pipeline_dop, bool enable_tablet_internal_parallel);
     virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
-            const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams& request,
-            size_t num_total_scan_ranges);
+            const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
+            bool enable_tablet_internal_parallel, size_t num_total_scan_ranges);
 
     // If this scan node accept empty scan ranges.
     virtual bool accept_empty_scan_ranges() const { return true; }
@@ -98,9 +98,6 @@ public:
     static const std::string _s_num_scanner_threads_started;
 
     const std::string& name() const { return _name; }
-
-    // Used by pipeline, 0 means there is no limitation.
-    virtual int max_scan_concurrency() const { return 0; }
 
 protected:
     RuntimeProfile::Counter* _bytes_read_counter; // # bytes read from the scanner

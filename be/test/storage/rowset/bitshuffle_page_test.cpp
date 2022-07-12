@@ -129,7 +129,7 @@ public:
     template <FieldType Type, class PageBuilderType, class PageDecoderType>
     void test_encode_decode_page_vectorized() {
         using CppType = typename CppTypeTraits<Type>::CppType;
-        auto src = vectorized::ChunkHelper::column_from_field_type(Type, false);
+        auto src = ChunkHelper::column_from_field_type(Type, false);
         CppType value = 0;
         size_t count = 64 * 1024 / sizeof(CppType);
         src->reserve(count);
@@ -163,7 +163,7 @@ public:
             ASSERT_TRUE(status.ok());
             ASSERT_EQ(0, page_decoder.current_index());
 
-            auto dst = vectorized::ChunkHelper::column_from_field_type(Type, false);
+            auto dst = ChunkHelper::column_from_field_type(Type, false);
             dst->reserve(count);
             size_t size = count;
             status = page_decoder.next_batch(&size, dst.get());
@@ -185,7 +185,7 @@ public:
             ASSERT_TRUE(status.ok());
             ASSERT_EQ(0, page_decoder.current_index());
 
-            auto dst = vectorized::ChunkHelper::column_from_field_type(Type, false);
+            auto dst = ChunkHelper::column_from_field_type(Type, false);
             size_t size = count / 2;
             dst->reserve(size);
             status = page_decoder.next_batch(&size, dst.get());
@@ -207,7 +207,7 @@ public:
             ASSERT_TRUE(status.ok());
             ASSERT_EQ(0, page_decoder.current_index());
 
-            auto dst = vectorized::ChunkHelper::column_from_field_type(Type, false);
+            auto dst = ChunkHelper::column_from_field_type(Type, false);
             vectorized::SparseRange read_range;
             read_range.add(vectorized::Range(0, count / 3));
             read_range.add(vectorized::Range(count / 2, (count * 2 / 3)));

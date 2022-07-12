@@ -32,6 +32,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class ShowIndexStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
@@ -55,6 +56,12 @@ public class ShowIndexStmt extends ShowStmt {
     public ShowIndexStmt(String dbName, TableName tableName) {
         this.dbName = dbName;
         this.tableName = tableName;
+    }
+
+    public void init() {
+        if (!Strings.isNullOrEmpty(dbName)) {
+            tableName.setDb(dbName);
+        }
     }
 
     @Override
@@ -103,5 +110,15 @@ public class ShowIndexStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowIndexStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

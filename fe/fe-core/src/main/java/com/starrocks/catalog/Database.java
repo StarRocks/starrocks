@@ -469,11 +469,6 @@ public class Database extends MetaObject implements Writable {
             } else {
                 idToTable.put(materializedView.getId(), materializedView);
                 nameToTable.put(materializedView.getName(), materializedView);
-                // ref base table with mv
-                Set<Long> baseTableIds = materializedView.getBaseTableIds();
-                for (Long baseTableId : baseTableIds) {
-                    ((OlapTable) idToTable.get(baseTableId)).addRelatedMaterializedView(materializedView.getId());
-                }
                 if (!isReplay) {
                     // Write edit log
                     CreateTableInfo info = new CreateTableInfo(fullQualifiedName, materializedView);

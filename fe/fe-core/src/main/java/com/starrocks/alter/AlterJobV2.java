@@ -28,10 +28,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
+import com.starrocks.common.TraceManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import io.opentelemetry.api.trace.Span;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -87,6 +89,8 @@ public abstract class AlterJobV2 implements Writable {
     @SerializedName(value = "timeoutMs")
     protected long timeoutMs = -1;
 
+    protected Span span;
+
     public AlterJobV2(long jobId, JobType jobType, long dbId, long tableId, String tableName, long timeoutMs) {
         this.jobId = jobId;
         this.type = jobType;
@@ -97,10 +101,14 @@ public abstract class AlterJobV2 implements Writable {
 
         this.createTimeMs = System.currentTimeMillis();
         this.jobState = JobState.PENDING;
+        this.span = TraceManager.startSpan(jobType.toString().toLowerCase());
+        span.setAttribute("jobId", jobId);
+        span.setAttribute("tabletName", tableName);
     }
 
     protected AlterJobV2(JobType type) {
         this.type = type;
+        this.span = TraceManager.startNoopSpan();
     }
 
     public long getJobId() {

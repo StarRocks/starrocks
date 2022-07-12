@@ -25,7 +25,7 @@ public class BasicStatsMeta implements Writable {
     private long tableId;
 
     @SerializedName("type")
-    private Constants.AnalyzeType type;
+    private StatsConstants.AnalyzeType type;
 
     @SerializedName("updateTime")
     private LocalDateTime updateTime;
@@ -37,7 +37,7 @@ public class BasicStatsMeta implements Writable {
     private long updateRows;
 
     public BasicStatsMeta(long dbId, long tableId,
-                          Constants.AnalyzeType type,
+                          StatsConstants.AnalyzeType type,
                           LocalDateTime updateTime,
                           Map<String, String> properties) {
         this.dbId = dbId;
@@ -67,7 +67,7 @@ public class BasicStatsMeta implements Writable {
         return tableId;
     }
 
-    public Constants.AnalyzeType getType() {
+    public StatsConstants.AnalyzeType getType() {
         return type;
     }
 
@@ -84,13 +84,16 @@ public class BasicStatsMeta implements Writable {
         OlapTable table = (OlapTable) database.getTable(tableId);
         long minRowCount = Long.MAX_VALUE;
         for (Partition partition : table.getPartitions()) {
+            if (partition.getRowCount() == 0) {
+                //skip empty partition
+                continue;
+            }
             if (partition.getRowCount() < minRowCount) {
                 minRowCount = partition.getRowCount();
             }
         }
 
         /*
-         * health = totalLoadRows / totalRowCount.
          * The ratio of the number of modified lines to the total number of lines.
          * Because we cannot obtain complete table-level information, we use the row count of
          * the partition with the smallest row count as totalRowCount.
@@ -98,7 +101,8 @@ public class BasicStatsMeta implements Writable {
          * are concentrated in only one partition
          */
         double healthy;
-        if (minRowCount == 0) {
+        if (minRowCount == Long.MAX_VALUE) {
+            //All partition is empty
             healthy = 1;
         } else if (updateRows > minRowCount) {
             healthy = 0;

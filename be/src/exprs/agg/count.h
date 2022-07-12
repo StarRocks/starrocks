@@ -33,6 +33,12 @@ public:
     void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                    int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                    int64_t frame_end) const override {
+        // For cases like: rows between 2 preceding and 1 preceding
+        // If frame_start ge frame_end, means the frame is empty,
+        // we could directly return.
+        if (frame_start >= frame_end) {
+            return;
+        }
         this->data(state).count += (frame_end - frame_start);
     }
 
@@ -112,6 +118,12 @@ public:
     void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                    int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                    int64_t frame_end) const override {
+        // For cases like: rows between 2 preceding and 1 preceding
+        // If frame_start ge frame_end, means the frame is empty,
+        // we could directly return.
+        if (frame_start >= frame_end) {
+            return;
+        }
         if (columns[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(columns[0]);
             if (nullable_column->has_null()) {

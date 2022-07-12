@@ -87,7 +87,7 @@ SCAN (columns[1: v1] predicate[null])
 [sql]
 select v1 from t0 where (null * null) is null
 [result]
-SCAN (columns[1: v1] predicate[true])
+SCAN (columns[1: v1] predicate[null])
 [end]
 
 [sql]
@@ -142,7 +142,7 @@ SCAN (columns[4: t1d, 9: id_date] predicate[9: id_date = 2020-01-01])
 [sql]
 select v1 from t0 where ((NULL) - (NULL)) <=> ((NULL) % (NULL))
 [result]
-SCAN (columns[1: v1] predicate[true])
+SCAN (columns[1: v1] predicate[null])
 [end]
 
 [sql]

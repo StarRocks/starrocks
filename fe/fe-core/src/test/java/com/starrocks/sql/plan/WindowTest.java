@@ -8,11 +8,12 @@ import org.junit.Assert;
 import org.junit.Test;
 
 public class WindowTest extends PlanTestBase {
+
     @Test
     public void testLagWindowFunction() throws Exception {
         String sql = "select lag(id_datetime, 1, '2020-01-01') over(partition by t1c) from test_all_type;";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("signature:lag(DATETIME, BIGINT, DATETIME)"));
+        assertContains(plan, "signature:lag(DATETIME, BIGINT, DATETIME)");
 
         sql = "select lag(id_decimal, 1, 10000) over(partition by t1c) from test_all_type;";
         plan = getThriftPlan(sql);
@@ -25,7 +26,7 @@ public class WindowTest extends PlanTestBase {
 
         sql = "select lag(null, 1,1) OVER () from t0";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("functions: [, lag(NULL, 1, 1), ]"));
+        assertContains(plan, "functions: [, lag(NULL, 1, 1), ]");
 
         sql = "select lag(id_datetime, 1, '2020-01-01xxx') over(partition by t1c) from test_all_type;";
         expectedEx.expect(SemanticException.class);
@@ -38,7 +39,7 @@ public class WindowTest extends PlanTestBase {
         String sql = "select sum(t1c) from (select t1c, lag(id_datetime, 1, '2020-01-01') over( partition by t1c)" +
                 "from test_all_type) a ;";
         String plan = getFragmentPlan(sql);
-        Assert.assertFalse(plan.contains("ANALYTIC"));
+        assertNotContains(plan, "ANALYTIC");
     }
 
     @Test
@@ -53,29 +54,38 @@ public class WindowTest extends PlanTestBase {
     public void testSameWindowFunctionReuse() throws Exception {
         String sql = "select sum(v1) over() as c1, sum(v1) over() as c2 from t0";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:Project\n" +
+        assertContains(plan, "  3:Project\n" +
                 "  |  <slot 4> : 4: sum(1: v1)\n" +
                 "  |  \n" +
                 "  2:ANALYTIC\n" +
-                "  |  functions: [, sum(1: v1), ]"));
+                "  |  functions: [, sum(1: v1), ]");
+
+        sql = "select sum(v1) over(order by v2 rows between 1 preceding and 1 following) as sum_v1_1," +
+                " sum(v1) over(order by v2 rows between 1 preceding and 1 following) as sum_v1_2 from t0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:Project\n" +
+                "  |  <slot 4> : 4: sum(1: v1)\n" +
+                "  |  \n" +
+                "  3:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ]");
 
         sql = "select c1+1, c2+2 from (select sum(v1) over() as c1, sum(v1) over() as c2 from t0) t";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:Project\n" +
+        assertContains(plan, "  3:Project\n" +
                 "  |  <slot 5> : 4: sum(1: v1) + 1\n" +
                 "  |  <slot 6> : 4: sum(1: v1) + 2\n" +
                 "  |  \n" +
                 "  2:ANALYTIC\n" +
-                "  |  functions: [, sum(1: v1), ]"));
+                "  |  functions: [, sum(1: v1), ]");
 
         sql = "select c1+1, c2+2 from (select sum(v1) over() as c1, sum(v3) over() as c2 from t0) t";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:Project\n" +
+        assertContains(plan, "  3:Project\n" +
                 "  |  <slot 6> : 4: sum(1: v1) + 1\n" +
                 "  |  <slot 7> : 5: sum(3: v3) + 2\n" +
                 "  |  \n" +
                 "  2:ANALYTIC\n" +
-                "  |  functions: [, sum(1: v1), ], [, sum(3: v3), ]"));
+                "  |  functions: [, sum(1: v1), ], [, sum(3: v3), ]");
     }
 
     @Test
@@ -101,12 +111,12 @@ public class WindowTest extends PlanTestBase {
     public void testWindowWithAgg() throws Exception {
         String sql = "SELECT v1, sum(v2),  sum(v2) over (ORDER BY v1) AS `rank` FROM t0 group BY v1, v2";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
+        assertContains(plan, "window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
         sql =
                 "SELECT v1, sum(v2),  sum(v2) over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS `rank`  FROM t0 group BY v1, v2";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"));
+        assertContains(plan, "RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
     }
 
     @Test
@@ -114,31 +124,31 @@ public class WindowTest extends PlanTestBase {
         String sql = "SELECT v1, sum(v2) as x1, row_number() over (ORDER BY CASE WHEN v1 THEN 1 END DESC) AS `rank` " +
                 "FROM t0 group BY v1";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  2:Project\n" +
+        assertContains(plan, "  2:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 4: sum\n" +
-                "  |  <slot 8> : if(CAST(1: v1 AS BOOLEAN), 1, NULL)"));
+                "  |  <slot 8> : if(CAST(1: v1 AS BOOLEAN), 1, NULL)");
     }
 
     @Test
     public void testWindowPartitionAndSortSameColumn() throws Exception {
         String sql = "SELECT k3, avg(k3) OVER (partition by k3 order by k3) AS sum FROM baseall;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:ANALYTIC\n" +
+        assertContains(plan, "  3:ANALYTIC\n" +
                 "  |  functions: [, avg(3: k3), ]\n" +
                 "  |  partition by: 3: k3\n" +
-                "  |  order by: 3: k3 ASC"));
-        Assert.assertTrue(plan.contains("  2:SORT\n" +
-                "  |  order by: <slot 3> 3: k3 ASC"));
+                "  |  order by: 3: k3 ASC");
+        assertContains(plan, "  2:SORT\n" +
+                "  |  order by: <slot 3> 3: k3 ASC");
     }
 
     @Test
     public void testWindowDuplicatePartition() throws Exception {
         String sql = "select max(v3) over (partition by v2,v2,v2 order by v2,v2) from t0;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  2:SORT\n"
+        assertContains(plan, "  2:SORT\n"
                 + "  |  order by: <slot 2> 2: v2 ASC\n"
-                + "  |  offset: 0"));
+                + "  |  offset: 0");
 
     }
 

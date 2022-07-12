@@ -59,10 +59,10 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "runtime/thread_resource_mgr.h"
-#include "storage/lake/group_assigner.h"
+#include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #ifdef USE_STAROS
-#include "storage/lake/starlet_group_assigner.h"
+#include "storage/lake/starlet_location_provider.h"
 #endif
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
@@ -78,23 +78,21 @@
 
 namespace starrocks {
 
-class FixedGroupAssigner : public lake::GroupAssigner {
+class FixedLocationProvider : public lake::LocationProvider {
 public:
-    explicit FixedGroupAssigner(std::string path) : _path(std::move(path)) {
+    explicit FixedLocationProvider(std::string path) : _path(std::move(path)) {
         if (_path.back() == '/') _path.pop_back();
     }
 
-    ~FixedGroupAssigner() override = default;
+    ~FixedLocationProvider() override = default;
 
-    std::string get_fs_prefix() override { return "posix://"; }
+    StatusOr<std::string> root_location(int64_t /*tablet_id*/) override { return _path; }
 
-    StatusOr<std::string> get_group(int64_t /*tablet_id*/) override { return _path; }
-
-    [[maybe_unused]] Status list_group(std::set<std::string>* groups) override {
+    [[maybe_unused]] Status list_root_locations(std::set<std::string>* groups) override {
         groups->emplace(_path);
         return Status::OK();
     }
-    std::string path_assemble(const std::string& path, int64_t tablet_id) { return path; }
+    std::string location(const std::string& path, int64_t tablet_id) { return path; }
 
 private:
     std::string _path;
@@ -165,9 +163,9 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     // query_context_mgr keeps slotted map with 64 slot to reduce contention
     _query_context_mgr = new pipeline::QueryContextManager(6);
     RETURN_IF_ERROR(_query_context_mgr->init());
-    _thread_pool = new PriorityThreadPool("table_scan_io", // olap/external table scan thread pool
-                                          config::doris_scanner_thread_pool_thread_num,
-                                          config::doris_scanner_thread_pool_queue_size);
+    _thread_pool =
+            new PriorityThreadPool("table_scan_io", // olap/external table scan thread pool
+                                   config::scanner_thread_pool_thread_num, config::scanner_thread_pool_queue_size);
 
     int hdfs_num_io_threads = config::pipeline_hdfs_scan_thread_pool_thread_num;
     CHECK_GT(hdfs_num_io_threads, 0) << "pipeline_hdfs_scan_thread_pool_thread_num should greater than 0";
@@ -189,6 +187,13 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     _udf_call_pool = new PriorityThreadPool("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
     _fragment_mgr = new FragmentMgr(this);
+
+    int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
+    if (num_prepare_threads <= 0) {
+        num_prepare_threads = std::thread::hardware_concurrency();
+    }
+    _pipeline_prepare_pool =
+            new PriorityThreadPool("pip_prepare", num_prepare_threads, config::pipeline_prepare_thread_pool_queue_size);
 
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
     _max_executor_threads = std::thread::hardware_concurrency();
@@ -266,12 +271,13 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             exit(-1);
         }
 #ifndef USE_STAROS
-        _lake_group_assigner = new FixedGroupAssigner(_store_paths.front().path);
+        _lake_location_provider = new FixedLocationProvider(_store_paths.front().path);
 #else
-        _lake_group_assigner = new lake::StarletGroupAssigner();
+        _lake_location_provider = new lake::StarletLocationProvider();
 #endif
         // TODO: cache capacity configurable
-        _lake_tablet_manager = new lake::TabletManager(_lake_group_assigner, /*cache_capacity=1GB*/ 1024 * 1024 * 1024);
+        _lake_tablet_manager =
+                new lake::TabletManager(_lake_location_provider, /*cache_capacity=1GB*/ 1024 * 1024 * 1024);
     }
     _broker_mgr->init();
     _small_file_mgr->init();
@@ -451,6 +457,10 @@ void ExecEnv::_destroy() {
         delete _udf_call_pool;
         _udf_call_pool = nullptr;
     }
+    if (_pipeline_prepare_pool) {
+        delete _pipeline_prepare_pool;
+        _pipeline_prepare_pool = nullptr;
+    }
     if (_pipeline_scan_io_thread_pool) {
         delete _pipeline_scan_io_thread_pool;
         _pipeline_scan_io_thread_pool = nullptr;
@@ -568,9 +578,9 @@ void ExecEnv::_destroy() {
         delete _lake_tablet_manager;
         _lake_tablet_manager = nullptr;
     }
-    if (_lake_group_assigner) {
-        delete _lake_group_assigner;
-        _lake_group_assigner = nullptr;
+    if (_lake_location_provider) {
+        delete _lake_location_provider;
+        _lake_location_provider = nullptr;
     }
     _metrics = nullptr;
 }
