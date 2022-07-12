@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSortedSet;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.Expr;
@@ -18,6 +19,8 @@ import com.starrocks.sql.common.TypeManager;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+
+import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 
 public class DecimalV3FunctionAnalyzer {
     public static final Set<String> DECIMAL_UNARY_FUNCTION_SET =
@@ -195,6 +198,54 @@ public class DecimalV3FunctionAnalyzer {
         AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), Arrays.asList(argType), returnType,
                 fn.getIntermediateType(), fn.hasVarArgs());
 
+        newFn.setFunctionId(fn.getFunctionId());
+        newFn.setChecksum(fn.getChecksum());
+        newFn.setBinaryType(fn.getBinaryType());
+        newFn.setHasVarArgs(fn.hasVarArgs());
+        newFn.setId(fn.getId());
+        newFn.setUserVisible(fn.isUserVisible());
+        newFn.setisAnalyticFn(fn.isAnalyticFn());
+        return newFn;
+    }
+
+    // This function is used to convert the sum(distinct) function to the multi_distinct_sum function in
+    // optimizing phase and PlanFragment building phase.
+    // Decimal types of multi_distinct_sum must be rectified because the function signature registered in
+    // FunctionSet contains wildcard decimal types which is invalid in BE, so it is forbidden to be used
+    // without decimal type rectification.
+    public static Function convertSumToMultiDistinctSum(Function sumFn, Type argType) {
+        AggregateFunction fn = (AggregateFunction) Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_SUM,
+                new Type[]{argType},
+                IS_NONSTRICT_SUPERTYPE_OF);
+        Preconditions.checkArgument(fn != null);
+        ScalarType decimal128Type = ScalarType.createDecimalV3NarrowestType(38, ((ScalarType) argType).getScalarScale());
+        AggregateFunction newFn = new AggregateFunction(
+                fn.getFunctionName(), Arrays.asList(sumFn.getArgs()), decimal128Type,
+                fn.getIntermediateType(), fn.hasVarArgs());
+
+        newFn.setFunctionId(fn.getFunctionId());
+        newFn.setChecksum(fn.getChecksum());
+        newFn.setBinaryType(fn.getBinaryType());
+        newFn.setHasVarArgs(fn.hasVarArgs());
+        newFn.setId(fn.getId());
+        newFn.setUserVisible(fn.isUserVisible());
+        newFn.setisAnalyticFn(fn.isAnalyticFn());
+        return newFn;
+    }
+
+    // When converting avg(distinct) into sum(distinct)/count(distinct), invoke this function to
+    // rectify the sum function(is_distinct flag is on) that contains wildcard decimal types.
+    public static Function rectifySumDistinct(Function sumFn, Type argType) {
+        if (!argType.isDecimalV3()) {
+            return sumFn;
+        }
+        ScalarType decimalType = (ScalarType) argType;
+        AggregateFunction fn = (AggregateFunction) sumFn;
+        ScalarType decimal128Type = ScalarType.createDecimalV3Type(
+                PrimitiveType.DECIMAL128, 38, decimalType.getScalarScale());
+        AggregateFunction newFn = new AggregateFunction(
+                fn.getFunctionName(), Arrays.asList(decimalType), decimal128Type,
+                fn.getIntermediateType(), fn.hasVarArgs());
         newFn.setFunctionId(fn.getFunctionId());
         newFn.setChecksum(fn.getChecksum());
         newFn.setBinaryType(fn.getBinaryType());
