@@ -20,6 +20,7 @@ set(EXEC_FILES
         ./common/config_test.cpp
         ./common/status_test.cpp
         ./common/s3_uri_test.cpp
+<<<<<<< HEAD
         ./env/compressed_file_test.cpp
         ./env/env_broker_test.cpp
         ./env/env_posix_test.cpp
@@ -27,6 +28,14 @@ set(EXEC_FILES
         ./env/env_s3_test.cpp
         ./env/output_stream_wrapper_test.cpp
         ./exec/buffered_reader_test.cpp
+=======
+        ./fs/fs_broker_test.cpp
+        ./fs/fs_posix_test.cpp
+        ./fs/fs_memory_test.cpp
+        ./fs/fs_s3_test.cpp
+        ./fs/fs_test.cpp
+        ./fs/output_stream_wrapper_test.cpp
+>>>>>>> c141d7bc3 ([Feature] support reading viewfs:// (#8582))
         ./exec/es_query_builder_test.cpp
         ./exec/column_value_range_test.cpp
         ./exec/vectorized/agg_hash_map_test.cpp
