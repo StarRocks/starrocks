@@ -16,15 +16,25 @@ namespace starrocks::pipeline {
 
 // ========== ScanOperator ==========
 
-ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node)
-        : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence), _scan_node(scan_node) {}
-} // namespace starrocks::pipeline
+ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
+                           int io_tasks_per_scan_operator)
+        : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence),
+          _scan_node(scan_node),
+          _chunk_source_profiles(io_tasks_per_scan_operator),
+          _is_io_task_running(io_tasks_per_scan_operator),
+          _chunk_sources(io_tasks_per_scan_operator),
+          _io_tasks_per_scan_operator(io_tasks_per_scan_operator) {
+    for (auto i = 0; i < io_tasks_per_scan_operator; i++) {
+        _chunk_source_profiles[i] = std::make_shared<RuntimeProfile>(strings::Substitute("ChunkSource$0", i));
+    }
+}
 
 ScanOperator::~ScanOperator() {
     auto* state = runtime_state();
     if (state == nullptr) {
         return;
     }
+
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
         _close_chunk_source(state, i);
     }
@@ -32,13 +42,6 @@ ScanOperator::~ScanOperator() {
 
 Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
-
-    _chunk_source_profiles.reserve(_io_tasks_per_op);
-    _is_io_task_running.reserve(_io_tasks_per_op);
-    _chunk_sources.reserve(_io_tasks_per_op);
-    for (auto i = 0; i < _io_tasks_per_op; i++) {
-        _chunk_source_profiles[i] = std::make_shared<RuntimeProfile>(strings::Substitute("ChunkSource$0", i));
-    }
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
     _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter("PeakChunkBufferSize", TUnit::UNIT);
@@ -95,7 +98,7 @@ bool ScanOperator::has_output() const {
         return true;
     }
 
-    if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP || is_buffer_full()) {
+    if (_num_running_io_tasks >= _io_tasks_per_scan_operator || is_buffer_full()) {
         return false;
     }
 
@@ -108,7 +111,7 @@ bool ScanOperator::has_output() const {
     }
 
     // Can trigger_next_scan for the picked-up morsel.
-    for (int i = 0; i < MAX_IO_TASKS_PER_OP; ++i) {
+    for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         std::shared_lock guard(_task_mutex);
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
             return true;
@@ -185,15 +188,15 @@ int64_t ScanOperator::global_rf_wait_timeout_ns() const {
 }
 
 Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
-    if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP) {
+    if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return Status::OK();
     }
 
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
-    int cnt = MAX_IO_TASKS_PER_OP;
+    int cnt = _io_tasks_per_scan_operator;
     while (--cnt >= 0) {
-        if (++_chunk_source_idx >= MAX_IO_TASKS_PER_OP) {
+        if (++_chunk_source_idx >= _io_tasks_per_scan_operator) {
             _chunk_source_idx = 0;
         }
         int i = _chunk_source_idx;

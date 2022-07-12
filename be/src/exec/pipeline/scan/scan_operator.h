@@ -20,7 +20,8 @@ class ScanOperator : public SourceOperator {
 public:
     static constexpr int MAX_IO_TASKS_PER_OP = 4;
 
-    ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node);
+    ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
+                 int io_tasks_per_scan_operator);
 
     ~ScanOperator() override;
 
@@ -57,8 +58,6 @@ public:
 
     int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
     int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
-
-    void set_io_tasks_per_op(int value) { _io_tasks_per_op = value; }
 
 protected:
     const size_t _buffer_size = config::pipeline_io_buffer_size;
@@ -132,7 +131,7 @@ private:
 
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_size_counter = nullptr;
 
-    int _io_tasks_per_op = MAX_IO_TASKS_PER_OP;
+    int _io_tasks_per_scan_operator;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {
