@@ -14,7 +14,7 @@ public class AsyncRefreshSchemeDesc extends RefreshSchemeDesc {
 
     private IntervalLiteral intervalLiteral;
 
-    public AsyncRefreshSchemeDesc(boolean defineStartTime,LocalDateTime startTime, IntervalLiteral intervalLiteral) {
+    public AsyncRefreshSchemeDesc(boolean defineStartTime, LocalDateTime startTime, IntervalLiteral intervalLiteral) {
         super(RefreshType.ASYNC);
         this.defineStartTime = defineStartTime;
         this.startTime = startTime;
