@@ -77,7 +77,7 @@ public class DictMappingRewriter {
                 context.hasAppliedOperator = false;
                 return operator;
             }
-            // Currently only single column input is supported using DictExpr rewriting,
+            // Currently, only single column input is supported using DictExpr rewriting,
             // multiple columns are only partially supported for rewriting.
             if (usedColumns.cardinality() == 1) {
                 // check child support opt
@@ -104,8 +104,7 @@ public class DictMappingRewriter {
             }
         }
 
-        @Override
-        public ScalarOperator visit(ScalarOperator scalarOperator, RewriterContext context) {
+        private ScalarOperator addDictExprToBlockDictOpt(ScalarOperator scalarOperator, RewriterContext context) {
             List<ScalarOperator> children = Lists.newArrayList(scalarOperator.getChildren());
             boolean hasApplied = false;
             boolean disableApplied = context.hasUnsupportedOperator;
@@ -126,6 +125,15 @@ public class DictMappingRewriter {
             context.hasAppliedOperator = false;
             context.hasUnsupportedOperator = disableApplied;
             return scalarOperator;
+        }
+
+        @Override
+        public ScalarOperator visit(ScalarOperator scalarOperator, RewriterContext context) {
+            // When we call the function "visit(ScalarOperator,...)",
+            // this means that this current operator no longer supports using dictionary optimization,
+            // and at this time we need to block the dictionary optimization if child has already applied it.
+            // So at this time we need to rewrite the child using DictExpr in time
+            return addDictExprToBlockDictOpt(scalarOperator, context);
         }
 
         @Override

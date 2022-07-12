@@ -155,7 +155,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             final CouldApplyDictOptimizeContext couldApplyCtx = new CouldApplyDictOptimizeContext();
             couldApplyCtx.dictEncodedColumnSlotIds = dictEncodedColumnSlotIds;
             operator.accept(new CouldApplyDictOptimizeVisitor(), couldApplyCtx);
-            return couldApplyCtx.couldAppliedOperator;
+            return couldApplyCtx.canDictOptBeApplied;
         }
 
         public static boolean isSimpleStrictPredicate(ScalarOperator operator) {
@@ -206,6 +206,13 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             }
 
             return false;
+        }
+
+        // create a new dictionary column and assign the same property except for the type and column id
+        // the input column maybe a dictionary column or a string column
+        private ColumnRefOperator createNewDictColumn(DecodeContext context, ColumnRefOperator inputColumn) {
+            return context.columnRefFactory.create(
+                    inputColumn.getName(), ID_TYPE, inputColumn.isNullable());
         }
 
         public OptExpression visitProjectionAfter(OptExpression optExpression, DecodeContext context) {
@@ -353,8 +360,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                         continue;
                     }
 
-                    ColumnRefOperator newDictColumn = context.columnRefFactory.create(
-                            stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
+                    ColumnRefOperator newDictColumn = createNewDictColumn(context, stringColumn);
 
                     if (newOutputColumns.contains(stringColumn)) {
                         newOutputColumns.remove(stringColumn);
@@ -534,8 +540,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 Preconditions.checkState(valueOperator.getType().isVarchar());
                 Preconditions.checkState(newCallOperator.getType().equals(ID_TYPE));
 
-                ColumnRefOperator newDictColumn = context.columnRefFactory.create(
-                        keyColumn.getName(), ID_TYPE, keyColumn.isNullable());
+                ColumnRefOperator newDictColumn = createNewDictColumn(context, keyColumn);
                 newProjectMap.remove(keyColumn);
                 newProjectMap.put(newDictColumn, newCallOperator);
 
@@ -582,7 +587,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     int columnId = kv.getValue().getUsedColumns().getFirstId();
                     if (context.needRewriteMultiCountDistinctColumns.contains(columnId)) {
                         // we only need rewrite TFunction
-                        Type[] newTypes = new Type[]{ID_TYPE};
+                        Type[] newTypes = new Type[] {ID_TYPE};
                         AggregateFunction newFunction =
                                 (AggregateFunction) Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
                                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -620,8 +625,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                         // Add decode node to aggregate function that returns a string
                         if (fnName.equals(FunctionSet.MAX) || fnName.equals(FunctionSet.MIN)) {
                             ColumnRefOperator outputStringColumn = kv.getKey();
-                            final ColumnRefOperator newDictColumn = context.columnRefFactory.create(
-                                    dictColumn.getName(), ID_TYPE, dictColumn.isNullable());
+                            final ColumnRefOperator newDictColumn = createNewDictColumn(context, dictColumn);
                             newStringToDicts.put(outputStringColumn.getId(), newDictColumn.getId());
 
                             for (Pair<Integer, ColumnDict> globalDict : context.globalDicts) {
@@ -910,13 +914,13 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         // whether is worth using dictionary optimization
         private boolean worthApplied = false;
         //
-        private boolean couldAppliedOperator = false;
+        private boolean canDictOptBeApplied = false;
         // indicates the existence of expressions that do not support optimization using dictionaries
-        private boolean hasUnsupportedOperator = false;
+        private boolean canDictOptPropagateUpwards = false;
 
         void reset() {
-            couldAppliedOperator = false;
-            hasUnsupportedOperator = false;
+            canDictOptBeApplied = false;
+            canDictOptPropagateUpwards = false;
         }
     }
 
@@ -928,7 +932,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         @Override
         public Void visit(ScalarOperator scalarOperator, CouldApplyDictOptimizeContext context) {
-            context.hasUnsupportedOperator = true;
+            context.canDictOptPropagateUpwards = true;
             return null;
         }
 
@@ -947,8 +951,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             for (ScalarOperator child : operator.getChildren()) {
                 context.reset();
                 child.accept(this, context);
-                hasUnsupportedOperator = hasUnsupportedOperator || context.hasUnsupportedOperator;
-                couldAppliedOperator = couldAppliedOperator || context.couldAppliedOperator;
+                hasUnsupportedOperator = hasUnsupportedOperator || context.canDictOptPropagateUpwards;
+                couldAppliedOperator = couldAppliedOperator || context.canDictOptBeApplied;
             }
 
             // DictExpr only support one input columnRefs
@@ -962,11 +966,11 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             // if (a=1, dict, c) -> nothing to do
             // if (a=1, upper(dict), c) -> if (a = 1, DictExpr(dict), c)
             if (hasUnsupportedOperator) {
-                context.couldAppliedOperator = context.worthApplied && couldAppliedOperator;
+                context.canDictOptBeApplied = context.worthApplied && couldAppliedOperator;
             } else {
-                context.couldAppliedOperator = couldAppliedOperator;
+                context.canDictOptBeApplied = couldAppliedOperator;
             }
-            context.hasUnsupportedOperator = hasUnsupportedOperator;
+            context.canDictOptPropagateUpwards = hasUnsupportedOperator;
 
             return null;
         }
@@ -974,12 +978,12 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         @Override
         public Void visitCall(CallOperator call, CouldApplyDictOptimizeContext context) {
             if (!call.getFunction().isCouldApplyDictOptimize()) {
-                context.hasUnsupportedOperator = true;
+                context.canDictOptPropagateUpwards = true;
                 return null;
             }
 
             couldApply(call, context);
-            context.worthApplied |= context.couldAppliedOperator;
+            context.worthApplied |= context.canDictOptBeApplied;
             return null;
         }
 
@@ -987,74 +991,74 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         public Void visitBinaryPredicate(BinaryPredicateOperator predicate, CouldApplyDictOptimizeContext context) {
             if (predicate.getBinaryType() == EQ_FOR_NULL || !predicate.getChild(1).isConstant() ||
                     !predicate.getChild(0).isColumnRef()) {
-                context.couldAppliedOperator = false;
-                context.hasUnsupportedOperator = true;
+                context.canDictOptBeApplied = false;
+                context.canDictOptPropagateUpwards = true;
                 return null;
             }
 
             predicate.getChild(0).accept(this, context);
-            context.worthApplied |= context.couldAppliedOperator;
+            context.worthApplied |= context.canDictOptBeApplied;
             return null;
         }
 
         @Override
         public Void visitInPredicate(InPredicateOperator predicate, CouldApplyDictOptimizeContext context) {
             if (!predicate.allValuesMatch(ScalarOperator::isConstantRef) || !predicate.getChild(0).isColumnRef()) {
-                context.couldAppliedOperator = false;
-                context.hasUnsupportedOperator = true;
+                context.canDictOptBeApplied = false;
+                context.canDictOptPropagateUpwards = true;
                 return null;
             }
 
             predicate.getChild(0).accept(this, context);
-            context.worthApplied |= context.couldAppliedOperator;
+            context.worthApplied |= context.canDictOptBeApplied;
             return null;
         }
 
         @Override
         public Void visitIsNullPredicate(IsNullPredicateOperator predicate, CouldApplyDictOptimizeContext context) {
             if (!predicate.getChild(0).isColumnRef()) {
-                context.couldAppliedOperator = false;
-                context.hasUnsupportedOperator = true;
+                context.canDictOptBeApplied = false;
+                context.canDictOptPropagateUpwards = true;
                 return null;
             }
 
             predicate.getChild(0).accept(this, context);
-            context.worthApplied |= context.couldAppliedOperator;
+            context.worthApplied |= context.canDictOptBeApplied;
             return null;
         }
 
         @Override
         public Void visitCastOperator(CastOperator operator, CouldApplyDictOptimizeContext context) {
             operator.getChild(0).accept(this, context);
-            context.worthApplied |= context.couldAppliedOperator;
+            context.worthApplied |= context.canDictOptBeApplied;
             return null;
         }
 
         @Override
         public Void visitCaseWhenOperator(CaseWhenOperator operator, CouldApplyDictOptimizeContext context) {
             couldApply(operator, context);
-            context.worthApplied |= context.couldAppliedOperator;
+            context.worthApplied |= context.canDictOptBeApplied;
             return null;
         }
 
         @Override
         public Void visitVariableReference(ColumnRefOperator variable, CouldApplyDictOptimizeContext context) {
-            context.couldAppliedOperator = context.dictEncodedColumnSlotIds.contains(variable.getId());
-            context.hasUnsupportedOperator = !context.couldAppliedOperator;
+            context.canDictOptBeApplied = context.dictEncodedColumnSlotIds.contains(variable.getId());
+            context.canDictOptPropagateUpwards = !context.canDictOptBeApplied;
             return null;
         }
 
         @Override
         public Void visitConstant(ConstantOperator literal, CouldApplyDictOptimizeContext context) {
-            context.couldAppliedOperator = false;
-            context.hasUnsupportedOperator = false;
+            context.canDictOptBeApplied = false;
+            context.canDictOptPropagateUpwards = false;
             return null;
         }
 
         @Override
         public Void visitLikePredicateOperator(LikePredicateOperator predicate, CouldApplyDictOptimizeContext context) {
             predicate.getChild(0).accept(this, context);
-            context.worthApplied |= context.couldAppliedOperator;
+            context.worthApplied |= context.canDictOptBeApplied;
             return null;
         }
     }
