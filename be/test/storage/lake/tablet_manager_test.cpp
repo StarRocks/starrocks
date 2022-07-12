@@ -9,6 +9,7 @@
 #include <fstream>
 
 #include "common/config.h"
+#include "fs/fs.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gutil/strings/join.h"
 #include "service/staros_worker.h"
