@@ -34,8 +34,8 @@ std::string StarletLocationProvider::join_path(std::string_view parent, std::str
     CHECK(pos != std::string::npos);
     auto prefix = parent.substr(0, pos);
     auto suffix = parent.substr(pos);
-    return prefix.back() == '/' ? fmt::format("{}{}{}", prefix, child, suffix
-                                              : fmt::format("{}/{}{}", prefix, child, suffix);
+    return prefix.back() == '/' ? fmt::format("{}{}{}", prefix, child, suffix)
+                                : fmt::format("{}/{}{}", prefix, child, suffix);
 }
 
 Status StarletLocationProvider::list_root_locations(std::set<std::string>*) const {
