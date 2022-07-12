@@ -268,6 +268,10 @@ public:
 
     RowDescriptor* row_desc() { return &_row_desc; }
 
+    // Whether it has any runtime in-filter or bloom-filter.
+    // MUST be invoked after init_runtime_filter.
+    bool has_runtime_filters() const;
+
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state);
 
