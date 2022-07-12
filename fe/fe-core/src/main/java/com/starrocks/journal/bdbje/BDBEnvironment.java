@@ -461,9 +461,7 @@ public class BDBEnvironment {
      * open database and return a CloseSafeDatabase instance
      */
     public CloseSafeDatabase openDatabase(String dbName) {
-        CloseSafeDatabase db = new CloseSafeDatabase(replicatedEnvironment.openDatabase(null, dbName, dbConfig));
-        LOG.info("successfully open new db {}", db);
-        return db;
+        return new CloseSafeDatabase(replicatedEnvironment.openDatabase(null, dbName, dbConfig));
     }
 
     /**

@@ -33,6 +33,7 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalException;
+import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -53,7 +54,8 @@ public class BDBJEJournal implements Journal {
     static int SLEEP_INTERVAL_SEC = 5;
 
     private BDBEnvironment bdbEnvironment = null;
-    private CloseSafeDatabase currentJournalDB = null;
+    protected String currentJournalDBName = null;
+    protected CloseSafeDatabase currentJournalDB = null;
     protected Transaction currentTrasaction = null;
 
     // store uncommitted kv, used for rebuilding txn on commit fails
@@ -100,7 +102,7 @@ public class BDBJEJournal implements Journal {
 
     @Override
     public JournalCursor read(long fromKey, long toKey)
-            throws JournalException {
+            throws JournalException, JournalInconsistentException, InterruptedException {
         return BDBJournalCursor.getJournalCursor(bdbEnvironment, fromKey, toKey);
     }
 
@@ -118,6 +120,7 @@ public class BDBJEJournal implements Journal {
         int index = dbNames.size() - 1;
         String dbName = dbNames.get(index).toString();
         long dbNumberName = dbNames.get(index);
+        // open database temporarily and close after count
         Database database = bdbEnvironment.openDatabase(dbName).getDb();
         try {
             ret = dbNumberName + database.count() - 1;
@@ -158,7 +161,6 @@ public class BDBJEJournal implements Journal {
                     throw new JournalException("fail to get dbNames while open bdbje journal. will exit");
                 }
 
-                String dbName = null;
                 if (dbNames.size() == 0) {
                     /*
                      *  This is the very first time to open. Usually, we will open a new database named "1".
@@ -166,19 +168,19 @@ public class BDBJEJournal implements Journal {
                      *  here we should open database with name image max journal id + 1.
                      *  (default GlobalStateMgr.getCurrentState().getReplayedJournalId() is 0)
                      */
-                    dbName = Long.toString(GlobalStateMgr.getCurrentState().getReplayedJournalId() + 1);
-                    LOG.info("the very first time to open bdb, dbname is {}", dbName);
+                    currentJournalDBName = Long.toString(GlobalStateMgr.getCurrentState().getReplayedJournalId() + 1);
+                    LOG.info("the very first time to open bdb, dbname is {}", currentJournalDBName);
                 } else {
                     // get last database as current journal database
-                    dbName = dbNames.get(dbNames.size() - 1).toString();
+                    currentJournalDBName = dbNames.get(dbNames.size() - 1).toString();
                 }
 
                 if (currentJournalDB != null) {
                     currentJournalDB.close();
                 }
-                currentJournalDB = bdbEnvironment.openDatabase(dbName);
+                currentJournalDB = bdbEnvironment.openDatabase(currentJournalDBName);
                 if (currentJournalDB == null) {
-                    LOG.warn("fail to open database {}. retried {} times", dbName, i);
+                    LOG.warn("fail to open database {}. retried {} times", currentJournalDBName, i);
                     continue;
                 }
                 return;
@@ -194,6 +196,9 @@ public class BDBJEJournal implements Journal {
         throw exception;
     }
 
+    /**
+     * delete all journals that < deleteToJournalId
+     */
     @Override
     public void deleteJournals(long deleteToJournalId) {
         List<Long> dbNames = bdbEnvironment.getDatabaseNames();

@@ -54,10 +54,6 @@ public class MockJournal implements Journal {
 
     @Override
     public JournalCursor read(long fromKey, long toKey) throws JournalException {
-        if (toKey < fromKey || fromKey < 0) {
-            return null;
-        }
-
         return new MockJournalCursor(this, fromKey, toKey);
     }
 
@@ -122,7 +118,7 @@ public class MockJournal implements Journal {
 
         @Override
         public JournalEntity next() {
-            if (start > end) {
+            if (end > 0 && start > end) {
                 return null;
             }
             JournalEntity je = instance.read(start);

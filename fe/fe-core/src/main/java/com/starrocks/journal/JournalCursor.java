@@ -30,7 +30,7 @@ public interface JournalCursor {
     public JournalEntity next() throws InterruptedException, JournalException, JournalInconsistentException;
 
     // refresh offer a way to update environment, such as update databases in current environment
-    public void refresh() throws JournalException;
+    public void refresh() throws InterruptedException, JournalException, JournalInconsistentException;
 
     public void close();
 }

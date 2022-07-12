@@ -265,6 +265,9 @@ public class GlobalStateMgr {
     private static final int STATE_CHANGE_CHECK_INTERVAL_MS = 100;
     private static final int REPLAY_INTERVAL_MS = 1;
     private static final String IMAGE_DIR = "/image";
+    // will break the loop and refresh in-memory data after at most 1k logs or at most 1 seconds
+    private static final long REPLAYER_MAX_MS_PER_LOOP = 1000L;
+    private static final long REPLAYER_MAX_LOGS_PER_LOOP = 1000L;
 
     private String metaDir;
     private String imageDir;
@@ -890,7 +893,7 @@ public class GlobalStateMgr {
             }
             long replayStartTime = System.currentTimeMillis();
             // replay journals. -1 means replay all the journals larger than current journal id.
-            replayJournalInner(JournalCursor.CUROSR_END_KEY);
+            replayJournal(JournalCursor.CUROSR_END_KEY);
             long replayEndTime = System.currentTimeMillis();
             LOG.info("finish replay in " + (replayEndTime - replayStartTime) + " msec");
 
@@ -1500,12 +1503,13 @@ public class GlobalStateMgr {
                 try {
                     if (cursor == null) {
                         // 1. set replay to the end
-                        cursor = journal.read(replayedJournalId.get(), JournalCursor.CUROSR_END_KEY);
+                        LOG.info("start to replay from {}", replayedJournalId.get());
+                        cursor = journal.read(replayedJournalId.get() + 1, JournalCursor.CUROSR_END_KEY);
                     } else {
                         cursor.refresh();
                     }
-                    // 2. replay
-                    hasLog = replayJournalInner(cursor);
+                    // 2. replay with flow control
+                    hasLog = replayJournalInner(cursor, true);
                     metaReplayState.setOk();
                 } catch (JournalInconsistentException | InterruptedException e) {
                     LOG.warn("got interrupt exception or inconsistent exception when replay journal, will exit, ", e);
@@ -1693,20 +1697,22 @@ public class GlobalStateMgr {
      * Replay journal from replayedJournalId + 1 to toJournalId
      * used by checkpointer/replay after state change
      */
-    public boolean replayJournalInner(long toJournalId) throws JournalException {
+    public boolean replayJournal(long toJournalId) throws JournalException {
         LOG.info("replayed journal id is {}, replay to journal id is {}", replayedJournalId, toJournalId);
         boolean hasLog = false;
         JournalCursor cursor = null;
         try {
             cursor = journal.read(replayedJournalId.get() + 1, toJournalId);
-            hasLog = replayJournalInner(cursor);
+            hasLog = replayJournalInner(cursor, false);
         } catch (InterruptedException | JournalInconsistentException e) {
             LOG.warn("got interrupt exception or inconsistent exception when replay journal, will exit, ", e);
             // TODO exit gracefully
             Util.stdoutWithTime(e.getMessage());
             System.exit(-1);
         } finally {
-            cursor.close();
+            if (cursor != null) {
+                cursor.close();
+            }
         }
         return hasLog;
     }
@@ -1715,10 +1721,11 @@ public class GlobalStateMgr {
      * replay journal until cursor returns null(suggest EOF)
      * return true if any journal is replayed
      */
-    protected boolean replayJournalInner(JournalCursor cursor)
+    protected boolean replayJournalInner(JournalCursor cursor, boolean flowControl)
             throws JournalException, InterruptedException, JournalInconsistentException {
+        long startReplayId = replayedJournalId.get();
         long startTime = System.currentTimeMillis();
-        boolean hasLog = false;
+        long lineCnt = 0;
         while (true) {
             JournalEntity entity = null;
             entity = cursor.next();
@@ -1728,7 +1735,6 @@ public class GlobalStateMgr {
                 break;
             }
 
-            hasLog = true;
             EditLog.loadJournal(this, entity);
             replayedJournalId.incrementAndGet();
             LOG.debug("journal {} replayed.", replayedJournalId);
@@ -1739,12 +1745,27 @@ public class GlobalStateMgr {
                 // Metric repo may not init after this replay thread start
                 MetricRepo.COUNTER_EDIT_LOG_READ.increase(1L);
             }
+
+            if (flowControl) {
+                // cost too much time
+                long cost = System.currentTimeMillis() - startTime;
+                if (cost > REPLAYER_MAX_MS_PER_LOOP) {
+                    LOG.warn("replay journal cost too much time: {} replayedJournalId: {}", cost, replayedJournalId);
+                    break;
+                }
+                // consume too much lines
+                lineCnt += 1;
+                if (lineCnt > REPLAYER_MAX_LOGS_PER_LOOP) {
+                    LOG.warn("replay too many journals: lineCnt {}, replayedJournalId: {}", lineCnt, replayedJournalId);
+                }
+            }
+
         }
-        long cost = System.currentTimeMillis() - startTime;
-        if (cost >= 1000) {
-            LOG.warn("replay journal cost too much time: {} replayedJournalId: {}", cost, replayedJournalId);
+        if (replayedJournalId.get() - startReplayId > 0) {
+            LOG.info("replayed journal from {} - {}", startReplayId, replayedJournalId);
+            return true;
         }
-        return hasLog;
+        return false;
     }
 
     public void createTimePrinter() {

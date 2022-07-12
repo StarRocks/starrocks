@@ -25,6 +25,7 @@ import org.apache.logging.log4j.Logger;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
@@ -171,11 +172,10 @@ public class BDBJournalCursorTest {
         journal.batchWriteAppend(8, makeBuffer(8));
         journal.batchWriteAppend(9, makeBuffer(9));
         journal.batchWriteCommit();
-        journal.close();
 
         // drop db1, db3, now we only have  5, 8
-        environment.removeDatabase("1");
-        environment.removeDatabase("3");
+        journal.deleteJournals(5);
+        journal.close();
 
         //
         // <<< read 8-9
@@ -375,38 +375,6 @@ public class BDBJournalCursorTest {
         Assert.fail();
     }
 
-    @Test(expected = JournalInconsistentException.class)
-    public void testNextFailedOnInsufficientLogException(@Mocked BDBEnvironment environment, @Mocked CloseSafeDatabase database) throws Exception {
-        // db = [10, 12]
-        // from 12->13
-        new Expectations(environment) {
-            {
-                environment.getDatabaseNames();
-                minTimes = 0;
-                result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
-
-                environment.openDatabase("10");
-                times = 1;
-                result = database;
-
-                environment.refreshLog((InsufficientLogException)any);
-                times = 1;
-            }
-        };
-
-        new Expectations(database) {
-            {
-                database.get(null, makeKey(11), (DatabaseEntry) any, (LockMode) any);
-                times = 1;
-                result = new InsufficientLogException("mock mock");
-            }
-        };
-        BDBJournalCursor bdbJournalCursor = BDBJournalCursor.getJournalCursor(environment, 11, 13);
-        bdbJournalCursor.next();
-        Assert.fail();
-    }
-
-
     @Test(expected = JournalException.class)
     public void testDatabaseNamesFails(@Mocked BDBEnvironment environment) throws Exception {
         new Expectations(environment) {
@@ -451,20 +419,34 @@ public class BDBJournalCursorTest {
         cursor.dbNames = Arrays.asList(10L);
         cursor.calculateNextDbIndex();
         Assert.assertEquals(0, cursor.nextDbPositionIndex);
+   }
 
-        // current db already opened
-        cursor.currentDatabase = database;
+    @Ignore
+    @Test
+    public void testRefreshTime() throws Exception {
+        BDBEnvironment environment = initBDBEnv();
+        BDBJEJournal journal = new BDBJEJournal(environment);
+        journal.open();
+        for (int i = 1; i < 10; ++ i) {
+            if (i % 2 == 1) {
+                journal.batchWriteBegin();
+            }
+            journal.batchWriteAppend(i, makeBuffer(i));
+            if (i % 2 == 0) {
+                journal.batchWriteCommit();
+                journal.rollJournal(i + 1);
+            }
+        }
+        journal.batchWriteCommit();
+        journal.close();
+        Assert.assertEquals(Arrays.asList(1L, 3L, 5L, 7L, 9L), environment.getDatabaseNames());
 
-        cursor.dbNames = Arrays.asList(10L, 14L);
-        cursor.calculateNextDbIndex();
-        Assert.assertEquals(1, cursor.nextDbPositionIndex);
-
-        cursor.dbNames = Arrays.asList(10L, 11L, 14L);
-        cursor.calculateNextDbIndex();
-        Assert.assertEquals(2, cursor.nextDbPositionIndex);
-
-        cursor.dbNames = Arrays.asList(10L);
-        cursor.calculateNextDbIndex();
-        Assert.assertEquals(1, cursor.nextDbPositionIndex);
-    }
+        long CNT = 1000000;
+        long start = System.currentTimeMillis();
+        for (int i = 0; i < CNT; ++ i) {
+            environment.getDatabaseNames();
+        }
+        long interval = System.currentTimeMillis() - start;
+        LOG.info("call environment.getDatabaseNames() {} times cost {} ms", CNT, interval);
+   }
 }

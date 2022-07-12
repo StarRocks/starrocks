@@ -56,11 +56,39 @@ public class BDBJournalCursor implements JournalCursor {
     protected CloseSafeDatabase currentDatabase = null;
 
     /**
+     * handle DatabaseException carefully
+     *
+     * 1. wrap as JournalException and return if it's a normal DatabaseException.
+     * 2. RestartRequiredException is a fatal error since we're replaying as a follower, we must exit by raising an
+     * JournalInconsistentException.
+     * 3. If it is an InsufficientLogException, we should call refreshLog() to restore the data as much as possible.
+     */
+    protected JournalException wrapDatabaseException(DatabaseException originException, String errMsg)
+            throws JournalInconsistentException {
+        if (originException instanceof RestartRequiredException) {
+            errMsg += "Got RestartRequiredException, will exit.";
+            LOG.warn(errMsg, originException);
+            if (originException instanceof InsufficientLogException) {
+                // for InsufficientLogException we should refresh the log and
+                // then exit the process because we may have read dirty data.
+                environment.refreshLog((InsufficientLogException) originException);
+            }
+            JournalInconsistentException journalInconsistentException = new JournalInconsistentException(errMsg);
+            journalInconsistentException.initCause(originException);
+            throw journalInconsistentException;
+        }
+        LOG.warn(errMsg);
+        JournalException exception = new JournalException(errMsg);
+        exception.initCause(originException);
+        return exception;
+    }
+
+    /**
      * init journal cursor
      * if toKey = -1(CUROSR_END_KEY), it will automatically search the end.
      */
     public static BDBJournalCursor getJournalCursor(BDBEnvironment env, long fromKey, long toKey)
-            throws JournalException {
+            throws JournalException, JournalInconsistentException, InterruptedException {
         if (fromKey < 0 || toKey > 0 && toKey < fromKey || toKey <= 0 && toKey != JournalCursor.CUROSR_END_KEY) {
             throw new JournalException(String.format("Invalid key range! fromKey %s toKey %s", fromKey, toKey));
         }
@@ -84,12 +112,8 @@ public class BDBJournalCursor implements JournalCursor {
         if (dbName == null) {
             throw new JournalException(String.format("Can not find the key:%d, fail to get journal cursor!", currentKey));
         }
-        if (currentDatabase != null) {
-            nextDbPositionIndex = dbIndex;
-        } else {
-            // will open current db in next()
-            nextDbPositionIndex = dbIndex - 1;
-        }
+        // will open current db in next()
+        nextDbPositionIndex = dbIndex - 1;
         LOG.info("currentKey {}, currentDatabase {}, index of next opened db is {}",
                 currentKey, currentDatabase, nextDbPositionIndex);
     }
@@ -101,16 +125,39 @@ public class BDBJournalCursor implements JournalCursor {
     }
 
     @Override
-    public void refresh() throws JournalException {
-        List<Long> dbNames = environment.getDatabaseNames();
+    public void refresh() throws JournalException, JournalInconsistentException, InterruptedException {
+        // 1. refresh current db names
+        List<Long> dbNames = null;
+        JournalException exception = null;
+        for (int i = 0; i < RETRY_TIME; ++ i) {
+            if (i != 0) {
+                Thread.sleep(SLEEP_INTERVAL_SEC * 1000L);
+            }
+            try {
+                dbNames = environment.getDatabaseNames();
+                break;
+            } catch (DatabaseException e) {
+                String errMsg = String.format("failed to get DB names for %s times!", i + 1);
+                exception = wrapDatabaseException(e, errMsg);
+            }
+        }
         if (dbNames == null) {
-            throw new JournalException("failed to get db names!");
+            if (exception != null) {
+                throw exception;
+            } else {
+                throw new JournalException("failed to get db names!");
+            }
         }
-        if (! dbNames.equals(this.dbNames)) {
-            LOG.info("update dbnames {} -> {}", this.dbNames, dbNames);
-            this.dbNames = dbNames;
-            calculateNextDbIndex();
+
+        // 2. no db changed ( roll new db / delete db after checkpoint )
+        if (dbNames.equals(this.dbNames)) {
+            return;
         }
+
+        // 3. update db index
+        LOG.info("update dbnames {} -> {}", this.dbNames, dbNames);
+        this.dbNames = dbNames;
+        calculateNextDbIndex();
     }
 
     private boolean shouldOpenDatabase() {
@@ -140,23 +187,9 @@ public class BDBJournalCursor implements JournalCursor {
                 currentDatabase = environment.openDatabase(Long.toString(dbName));
                 LOG.info("open next database {}", currentDatabase);
                 return;
-            } catch (RestartRequiredException e) {
-                String errMsg = String.format(
-                        "failed to open database because of RestartRequiredException, will exit. db[%s]", dbName);
-                LOG.warn(errMsg, e);
-                if (e instanceof InsufficientLogException) {
-                    // for InsufficientLogException we should refresh the log and
-                    // then exit the process because we may have read dirty data.
-                    environment.refreshLog((InsufficientLogException) e);
-                }
-                JournalInconsistentException journalInconsistentException = new JournalInconsistentException(errMsg);
-                journalInconsistentException.initCause(e);
-                throw journalInconsistentException;
             } catch (DatabaseException e) {
                 String errMsg = String.format("failed to open %s for %s times!", dbName, i + 1);
-                LOG.warn(errMsg);
-                exception = new JournalException(errMsg);
-                exception.initCause(e);
+                exception = wrapDatabaseException(e, errMsg);
             }
         }
 
@@ -219,8 +252,8 @@ public class BDBJournalCursor implements JournalCursor {
                     currentKey++;
                     return entity;
                 } else if (operationStatus == OperationStatus.NOTFOUND) {
+                    // read until there is no more log exists, return
                     if (toKey == JournalCursor.CUROSR_END_KEY) {
-                        LOG.info("cursor reaches the end: return {} when set toKey {}", operationStatus, toKey);
                         return null;
                     }
                     // In the case:
@@ -242,25 +275,10 @@ public class BDBJournalCursor implements JournalCursor {
                     LOG.warn(errMsg);
                     exception = new JournalException(errMsg);
                 }
-            } catch (RestartRequiredException e) {
-                String errMsg = String.format(
-                        "failed to read next because of RestartRequiredException, will exit. db[%s], current key[%s]",
-                        currentDatabase, theKey);
-                LOG.warn(errMsg, e);
-                if (e instanceof InsufficientLogException) {
-                    // for InsufficientLogException we should refresh the log and
-                    // then exit the process because we may have read dirty data.
-                    environment.refreshLog((InsufficientLogException) e);
-                }
-                JournalInconsistentException journalInconsistentException = new JournalInconsistentException(errMsg);
-                journalInconsistentException.initCause(e);
-                throw journalInconsistentException;
             } catch (DatabaseException e) {
                 String errMsg = String.format("failed to read after retried %d times! key = %d, db = %s",
                         i + 1, key, currentDatabase);
-                LOG.error(errMsg, e);
-                exception = new JournalException(errMsg);
-                exception.initCause(e);
+                exception = wrapDatabaseException(e, errMsg);
             }
         } // for i in retry
 

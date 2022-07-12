@@ -113,8 +113,8 @@ public class BDBJEJournalTest {
     @Test
     public void testWrieNoMock() throws Exception {
         BDBEnvironment environment = initBDBEnv("testWrieNormal");
-        CloseSafeDatabase database = environment.openDatabase("testWrieNormal");
-        BDBJEJournal journal = new BDBJEJournal(environment, database);
+        BDBJEJournal journal = new BDBJEJournal(environment);
+        journal.open();
 
         String data = "petals on a wet black bough";
         Writable writable = new Writable() {
@@ -153,7 +153,7 @@ public class BDBJEJournalTest {
 
         // 5. check by read
         for (int i = 1; i != 4; i ++) {
-            String value = readDBStringValue(i, database.getDb());
+            String value = readDBStringValue(i, journal.currentJournalDB.getDb());
             Assert.assertEquals(data, value);
         }
 
@@ -170,7 +170,15 @@ public class BDBJEJournalTest {
         journal.batchWriteBegin();
         journal.batchWriteAppend(4, buffer);
         journal.batchWriteAbort();
-        Assert.assertFalse(checkKeyExists(4, database.getDb()));
+        Assert.assertFalse(checkKeyExists(4, journal.currentJournalDB.getDb()));
+
+        Assert.assertEquals(Arrays.asList(1L), journal.getDatabaseNames());
+        Assert.assertEquals(3, journal.getMaxJournalId());
+        journal.rollJournal(4);
+        Assert.assertEquals(3, journal.getMaxJournalId());
+        Assert.assertEquals(Arrays.asList(1L, 4L), journal.getDatabaseNames());
+        journal.deleteJournals(4);
+        Assert.assertEquals(Arrays.asList(4L), journal.getDatabaseNames());
 
         journal.close();
     }
@@ -681,8 +689,6 @@ public class BDBJEJournalTest {
                 closeSafeDatabase.getDb();
                 times = 1;
                 result = database;
-                closeSafeDatabase.close();
-                times = 1;
             }
         };
         new Expectations(database) {
@@ -690,6 +696,9 @@ public class BDBJEJournalTest {
                 database.count();
                 times = 1;
                 result = 10;
+
+                database.close();
+                times = 1;
             }
         };
         Assert.assertEquals(54, journal.getMaxJournalId());
