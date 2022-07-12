@@ -12,6 +12,13 @@ class HdfsScanStats;
 } // namespace starrocks
 
 namespace starrocks::parquet {
+struct ColumnReaderContext {
+    vectorized::Buffer<uint8_t>* filter = nullptr;
+    int next_row = 0;
+
+    void advance(int num_rows) { next_row += num_rows; }
+};
+
 struct ColumnReaderOptions {
     std::string timezone;
     int chunk_size = 0;
@@ -19,6 +26,7 @@ struct ColumnReaderOptions {
     RandomAccessFile* file = nullptr;
     SharedBufferedInputStream* sb_stream = nullptr;
     tparquet::RowGroup* row_group_meta = nullptr;
+    ColumnReaderContext* context = nullptr;
     bool use_sb_stream = true;
 };
 

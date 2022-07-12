@@ -4,6 +4,7 @@
 #include "formats/parquet/group_reader.h"
 
 #include "column/column_helper.h"
+#include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/vectorized/hdfs_scanner.h"
 #include "exprs/expr.h"
@@ -44,31 +45,84 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
     bool has_more_filter = !_left_conjunct_ctxs.empty();
     Status status;
 
+    vectorized::ChunkPtr active_chunk = _create_read_chunk(_active_column_indices);
     {
         SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
-        // read data into _read_chunk
-        status = _read(&count);
+        // read data into active_chunk
+        _column_reader_opts.context->filter = nullptr;
+        status = _read(_active_column_indices, &count, &active_chunk);
         _param.stats->raw_rows_read += count;
         if (!status.ok() && !status.is_end_of_file()) {
             return status;
         }
     }
 
+    bool has_filter = false;
+    int chunk_size = -1;
+    vectorized::Filter chunk_filter(count, 1);
     // dict filter
     if (has_dict_filter) {
         SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
         SCOPED_RAW_TIMER(&_param.stats->group_dict_filter_ns);
-        _dict_filter();
-        _read_chunk->check_or_die();
+        _dict_filter(&active_chunk, &chunk_filter);
+        has_filter = true;
     }
 
     // other filter that not dict
     if (has_more_filter) {
         SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_left_conjunct_ctxs, _read_chunk.get()));
-        _read_chunk->check_or_die();
+        ASSIGN_OR_RETURN(chunk_size,
+                         ExecNode::eval_conjuncts_into_filter(_left_conjunct_ctxs, active_chunk.get(), &chunk_filter));
+        has_filter = true;
     }
 
+    if (has_filter) {
+        size_t hit_count = chunk_size >= 0 ? chunk_size : SIMD::count_nonzero(chunk_filter.data(), count);
+        if (hit_count == 0) {
+            active_chunk->set_num_rows(0);
+        } else if (hit_count != count) {
+            active_chunk->filter_range(chunk_filter, 0, count);
+        }
+        active_chunk->check_or_die();
+    }
+
+    size_t active_rows = active_chunk->num_rows();
+    if (active_rows > 0 && !_lazy_column_indices.empty()) {
+        vectorized::ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
+        SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
+        // read data into lazy chunk
+        _column_reader_opts.context->filter = has_filter ? &chunk_filter : nullptr;
+        Status st = _read(_lazy_column_indices, &count, &lazy_chunk);
+        if (!st.ok() && !st.is_end_of_file()) {
+            return st;
+        }
+        if (has_filter) {
+            lazy_chunk->filter_range(chunk_filter, 0, lazy_chunk->num_rows());
+        }
+        if (lazy_chunk->num_rows() != active_rows) {
+            return Status::InternalError(strings::Substitute("Unmatched row count, active_rows=$0, lazy_rows=$1",
+                                                             active_rows, lazy_chunk->num_rows()));
+        }
+        active_chunk->merge(std::move(*lazy_chunk));
+    } else if (active_rows == 0) {
+        ++_param.stats->skip_row_group;
+        *row_count = 0;
+        return status;
+    }
+
+    // We don't care about the column order as they will be reordered in HiveDataSource
+    // _read_chunk->swap_chunk(*active_chunk);
+
+    // TODO: Replace following recorder code with above after #8597 has been merged
+    const auto& read_chunk_index_map = _read_chunk->get_slot_id_to_index_map();
+    const auto& active_chunk_index_map = active_chunk->get_slot_id_to_index_map();
+    for (auto& slot_to_index : read_chunk_index_map) {
+        auto iter = active_chunk_index_map.find(slot_to_index.first);
+        if (iter == active_chunk_index_map.end()) {
+            continue;
+        }
+        _read_chunk->columns()[slot_to_index.second]->swap_column(*active_chunk->columns()[iter->second]);
+    }
     *row_count = _read_chunk->num_rows();
 
     SCOPED_RAW_TIMER(&_param.stats->group_dict_decode_ns);
@@ -95,6 +149,7 @@ Status GroupReader::_init_column_readers() {
     opts.file = _file;
     opts.row_group_meta = _row_group_metadata.get();
     opts.use_sb_stream = config::parquet_coalesce_read_enable;
+    opts.context = _obj_pool.add(new ColumnReaderContext);
 
     if (opts.use_sb_stream) {
         RETURN_IF_ERROR(_set_io_ranges());
@@ -121,23 +176,45 @@ Status GroupReader::_create_column_reader(const GroupReaderParam::Column& column
 void GroupReader::_process_columns_and_conjunct_ctxs() {
     const auto& conjunct_ctxs_by_slot = _param.conjunct_ctxs_by_slot;
     const auto& slots = _param.tuple_desc->slots();
-    for (const auto& column : _param.read_cols) {
+    int read_col_idx = 0;
+    for (auto& column : _param.read_cols) {
         int chunk_index = column.col_idx_in_chunk;
         SlotId slot_id = column.slot_id;
         const tparquet::ColumnMetaData& column_metadata =
                 _row_group_metadata->columns[column.col_idx_in_parquet].meta_data;
         if (_can_using_dict_filter(slots[chunk_index], conjunct_ctxs_by_slot, column_metadata)) {
+            column.content_type = ColumnContentType::DICT_CODE;
             _dict_filter_columns.emplace_back(column);
             _dict_filter_conjunct_ctxs[slot_id] = conjunct_ctxs_by_slot.at(slot_id);
+            _active_column_indices.emplace_back(read_col_idx);
         } else {
+            column.content_type = ColumnContentType::VALUE;
             _direct_read_columns.emplace_back(column);
             if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
                 for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
                     _left_conjunct_ctxs.emplace_back(ctx);
                 }
+                _active_column_indices.emplace_back(read_col_idx);
+            } else {
+                _lazy_column_indices.emplace_back(read_col_idx);
             }
         }
+        ++read_col_idx;
     }
+    if (_active_column_indices.empty()) {
+        _active_column_indices.swap(_lazy_column_indices);
+    }
+}
+
+vectorized::ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& column_indices) {
+    auto chunk = std::make_shared<vectorized::Chunk>();
+    chunk->columns().reserve(column_indices.size());
+    for (auto col_idx : column_indices) {
+        SlotId slot_id = _param.read_cols[col_idx].slot_id;
+        ColumnPtr& column = _read_chunk->get_column_by_slot_id(slot_id);
+        chunk->append_column(column, slot_id);
+    }
+    return chunk;
 }
 
 Status GroupReader::_set_io_ranges() {
@@ -301,7 +378,6 @@ void GroupReader::_init_read_chunk() {
 
     size_t chunk_size = _chunk_size;
     _read_chunk = ChunkHelper::new_chunk(read_slots, chunk_size);
-    raw::stl_vector_resize_uninitialized(&_selection, chunk_size);
 
     // replace dict filter column
     for (const auto& column : _dict_filter_columns) {
@@ -313,24 +389,21 @@ void GroupReader::_init_read_chunk() {
     }
 }
 
-Status GroupReader::_read(size_t* row_count) {
-    size_t count = *row_count;
-
-    for (const auto& column : _dict_filter_columns) {
-        SlotId slot_id = column.slot_id;
-        count = *row_count;
-        Status status = _column_readers[slot_id]->next_batch(&count, ColumnContentType::DICT_CODE,
-                                                             _read_chunk->get_column_by_slot_id(slot_id).get());
-        if (!status.ok() && !status.is_end_of_file()) {
-            return status;
-        }
+Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_count, vectorized::ChunkPtr* chunk) {
+    if (read_columns.empty()) {
+        *row_count = 0;
+        return Status::OK();
     }
 
-    for (const auto& column : _direct_read_columns) {
+    size_t count = *row_count;
+
+    for (int col_idx : read_columns) {
+        auto& column = _param.read_cols[col_idx];
         SlotId slot_id = column.slot_id;
+        _column_reader_opts.context->next_row = 0;
         count = *row_count;
-        Status status = _column_readers[slot_id]->next_batch(&count, ColumnContentType::VALUE,
-                                                             _read_chunk->get_column_by_slot_id(slot_id).get());
+        Status status = _column_readers[slot_id]->next_batch(&count, column.content_type,
+                                                             (*chunk)->get_column_by_slot_id(slot_id).get());
         if (!status.ok() && !status.is_end_of_file()) {
             return status;
         }
@@ -345,25 +418,17 @@ Status GroupReader::_read(size_t* row_count) {
     return Status::OK();
 }
 
-void GroupReader::_dict_filter() {
+void GroupReader::_dict_filter(vectorized::ChunkPtr* chunk, vectorized::Filter* filter) {
     DCHECK(!_dict_filter_preds.empty());
 
-    size_t count = _read_chunk->num_rows();
     auto iter = _dict_filter_preds.begin();
     SlotId slot_id = iter->first;
     auto pred = iter->second;
-    pred->evaluate(_read_chunk->get_column_by_slot_id(slot_id).get(), _selection.data());
+    pred->evaluate((*chunk)->get_column_by_slot_id(slot_id).get(), filter->data());
     while (++iter != _dict_filter_preds.end()) {
         slot_id = iter->first;
         pred = iter->second;
-        pred->evaluate_and(_read_chunk->get_column_by_slot_id(slot_id).get(), _selection.data());
-    }
-
-    auto hit_count = SIMD::count_nonzero(_selection.data(), count);
-    if (hit_count == 0) {
-        _read_chunk->set_num_rows(0);
-    } else if (hit_count != count) {
-        _read_chunk->filter_range(_selection, 0, count);
+        pred->evaluate_and((*chunk)->get_column_by_slot_id(slot_id).get(), filter->data());
     }
 }
 
@@ -398,4 +463,5 @@ Status GroupReader::_dict_decode(vectorized::ChunkPtr* chunk) {
     }
     return Status::OK();
 }
+
 } // namespace starrocks::parquet

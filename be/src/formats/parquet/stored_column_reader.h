@@ -26,6 +26,7 @@ class StoredColumnReader {
 public:
     static Status create(const ColumnReaderOptions& opts, const ParquetField* field,
                          const tparquet::ColumnChunk* _chunk_metadata, std::unique_ptr<StoredColumnReader>* out);
+    StoredColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
 
     virtual ~StoredColumnReader() = default;
 
@@ -58,7 +59,13 @@ public:
     }
 
 protected:
+    virtual Status next_selected_page(size_t records_to_read, size_t* records_to_skip);
+
+    virtual bool select_page(size_t num_values);
+
     std::unique_ptr<ColumnChunkReader> _reader;
+    size_t _num_values_left_in_cur_page = 0;
+    const ColumnReaderOptions& _opts;
 };
 
 } // namespace starrocks::parquet
