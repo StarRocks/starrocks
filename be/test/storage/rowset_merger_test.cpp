@@ -27,7 +27,10 @@ public:
 
     Status init() override { return Status::OK(); }
 
-    Status add_chunk(const vectorized::Chunk& chunk) override { return Status::NotSupported(""); }
+    Status add_chunk(const vectorized::Chunk& chunk) override {
+        all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
+        return Status::OK();
+    }
 
     Status flush_chunk(const vectorized::Chunk& chunk) override { return Status::NotSupported(""); }
 
@@ -55,12 +58,6 @@ public:
     Status flush_columns() override { return Status::OK(); }
     Status final_flush() override { return Status::OK(); }
 
-    Status add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) {
-        all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
-        all_rssids.insert(all_rssids.end(), rssid.begin(), rssid.end());
-        return Status::OK();
-    }
-
     Status add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) {
         if (is_key) {
             all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
@@ -74,11 +71,8 @@ public:
         return Status::OK();
     }
 
-    Status add_columns_with_rssid(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
-                                  const std::vector<uint32_t>& rssid) {
-        RETURN_IF_ERROR(add_columns(chunk, column_indexes, true));
-        all_rssids.insert(all_rssids.end(), rssid.begin(), rssid.end());
-        return Status::OK();
+    const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const override {
+        return _global_dict_columns_valid_info;
     }
 
     std::unique_ptr<Column> all_pks;
