@@ -16,14 +16,13 @@ namespace starrocks::pipeline {
 
 // ========== ScanOperator ==========
 
-ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
-                           int io_tasks_per_scan_operator)
-        : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence),
-          _scan_node(scan_node),
-          _chunk_source_profiles(io_tasks_per_scan_operator),
-          _is_io_task_running(io_tasks_per_scan_operator),
-          _chunk_sources(io_tasks_per_scan_operator),
-          _io_tasks_per_scan_operator(io_tasks_per_scan_operator) {
+ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node)
+        : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence), _scan_node(scan_node) {
+    int io_tasks_per_scan_operator = scan_node->io_tasks_per_scan_operator();
+    _chunk_source_profiles.resize(io_tasks_per_scan_operator);
+    _is_io_task_running.resize(io_tasks_per_scan_operator);
+    _chunk_sources.resize(io_tasks_per_scan_operator);
+    _io_tasks_per_scan_operator = io_tasks_per_scan_operator;
     for (auto i = 0; i < io_tasks_per_scan_operator; i++) {
         _chunk_source_profiles[i] = std::make_shared<RuntimeProfile>(strings::Substitute("ChunkSource$0", i));
     }

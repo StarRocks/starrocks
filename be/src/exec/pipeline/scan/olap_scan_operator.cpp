@@ -35,8 +35,7 @@ OperatorPtr OlapScanOperatorFactory::do_create(int32_t dop, int32_t driver_seque
 
 OlapScanOperator::OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
                                    OlapScanContextPtr ctx)
-        : ScanOperator(factory, id, driver_sequence, scan_node, ScanOperator::MAX_IO_TASKS_PER_OP),
-          _ctx(std::move(ctx)) {
+        : ScanOperator(factory, id, driver_sequence, scan_node), _ctx(std::move(ctx)) {
     _ctx->ref();
 }
 

@@ -535,4 +535,8 @@ void ConnectorScanNode::_init_counter() {
     _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
 }
 
+int ConnectorScanNode::io_tasks_per_scan_operator() const {
+    return config::connector_io_tasks_per_scan_operator;
+}
+
 } // namespace starrocks::vectorized

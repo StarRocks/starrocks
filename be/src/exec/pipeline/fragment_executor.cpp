@@ -304,17 +304,20 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             olap_scan->enable_shared_scan(enable_shared_scan);
         }
         if (scan_node->limit() > 0) {
-            sum_scan_limit += scan_node->limit();
+            // the upper bound of records we actually will scan is `limit * dop * io_parallelism`.
+            // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
+            // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
+            sum_scan_limit += scan_node->limit() * dop * scan_node->io_tasks_per_scan_operator();
+        } else {
+            // Not sure how many rows will be scan.
+            sum_scan_limit = -1;
+            break;
         }
     }
 
     if (_wg && _wg->big_query_scan_rows_limit() > 0) {
-        // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
-        // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
-        if (sum_scan_limit <= _wg->big_query_scan_rows_limit()) {
-            int parallelism = dop * ScanOperator::MAX_IO_TASKS_PER_OP;
-            int64_t parallel_scan_limit = sum_scan_limit * parallelism;
-            _query_ctx->set_scan_limit(parallel_scan_limit);
+        if (sum_scan_limit >= 0 && sum_scan_limit <= _wg->big_query_scan_rows_limit()) {
+            _query_ctx->set_scan_limit(sum_scan_limit);
         } else {
             _query_ctx->set_scan_limit(_wg->big_query_scan_rows_limit());
         }
