@@ -11,6 +11,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "common/status.h"
 #include "fslib/configuration.h"
 #include "fslib/file_system.h"
 
