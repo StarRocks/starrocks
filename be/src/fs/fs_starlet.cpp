@@ -1,5 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#ifdef USE_STAROS
+
 #include "fs/fs_starlet.h"
 
 #include <fmt/core.h>
@@ -467,3 +469,5 @@ std::unique_ptr<FileSystem> new_fs_starlet() {
     return std::make_unique<StarletFileSystem>();
 }
 } // namespace starrocks
+
+#endif // USE_STAROS

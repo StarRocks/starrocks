@@ -5,25 +5,31 @@
 #include <brpc/controller.h>
 #include <gtest/gtest.h>
 
+#include "fs/fs_util.h"
 #include "runtime/exec_env.h"
-#include "storage/lake/location_provider.h"
+#include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "testutil/assert.h"
+#include "testutil/id_generator.h"
 
 namespace starrocks {
 
 class LakeServiceTest : public testing::Test {
 public:
-    LakeServiceTest() : _lake_service(ExecEnv::GetInstance()), _tablet_id(54321) {
-        std::set<std::string> groups;
-        auto location_provider = ExecEnv::GetInstance()->lake_location_provider();
-        (void)location_provider->list_root_locations(&groups);
-        CHECK(!groups.empty());
-        _group = *groups.begin();
+    LakeServiceTest() : _lake_service(ExecEnv::GetInstance()), _tablet_id(next_id()) {
+        CHECK_OK(fs::create_directories("./lake_service_test"));
+        _location_provider = new lake::FixedLocationProvider("./lake_service_test");
         _tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+        _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
+    }
+
+    ~LakeServiceTest() {
+        CHECK_OK(fs::remove_all("./lake_service_test"));
+        (void)_tablet_mgr->TEST_set_location_provider(_backup_location_provider);
+        delete _location_provider;
     }
 
     void create_tablet() {
@@ -37,7 +43,7 @@ public:
         //  |   c0   |  INT | YES |  NO  |
         //  |   c1   |  INT | NO  |  NO  |
         auto schema = metadata->mutable_schema();
-        schema->set_id(10);
+        schema->set_id(next_id());
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(DUP_KEYS);
         schema->set_num_rows_per_row_block(65535);
@@ -61,7 +67,7 @@ public:
 
         auto* tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
         ASSERT_TRUE(tablet_mgr != nullptr);
-        ASSERT_OK(tablet_mgr->put_tablet_metadata(_group, metadata));
+        ASSERT_OK(tablet_mgr->put_tablet_metadata(metadata));
     }
 
     void SetUp() override {
@@ -74,8 +80,9 @@ public:
 protected:
     LakeServiceImpl _lake_service;
     int64_t _tablet_id;
-    std::string _group;
     lake::TabletManager* _tablet_mgr;
+    lake::LocationProvider* _location_provider;
+    lake::LocationProvider* _backup_location_provider;
 };
 
 TEST_F(LakeServiceTest, test_publish_version_missing_tablet_ids) {
@@ -135,7 +142,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(0);
         txnlog.mutable_op_write()->mutable_rowset()->set_data_size(0);
         txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(false);
-        ASSERT_OK(_tablet_mgr->put_txn_log(_group, txnlog));
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
     }
     // TxnLog with 2 segments
     {
@@ -147,7 +154,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         txnlog.mutable_op_write()->mutable_rowset()->set_data_size(4096);
         txnlog.mutable_op_write()->mutable_rowset()->add_segments("1.dat");
         txnlog.mutable_op_write()->mutable_rowset()->add_segments("2.dat");
-        ASSERT_OK(_tablet_mgr->put_txn_log(_group, txnlog));
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
     }
 
     // Publish txn 1000
@@ -251,7 +258,7 @@ TEST_F(LakeServiceTest, test_abort) {
         txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(0);
         txnlog.mutable_op_write()->mutable_rowset()->set_data_size(0);
         txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(false);
-        ASSERT_OK(_tablet_mgr->put_txn_log(_group, txnlog));
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
     }
     // TxnLog with 2 segments
     {
@@ -263,7 +270,7 @@ TEST_F(LakeServiceTest, test_abort) {
         txnlog.mutable_op_write()->mutable_rowset()->set_data_size(4096);
         txnlog.mutable_op_write()->mutable_rowset()->add_segments("1.dat");
         txnlog.mutable_op_write()->mutable_rowset()->add_segments("2.dat");
-        ASSERT_OK(_tablet_mgr->put_txn_log(_group, txnlog));
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
     }
     // Send AbortTxn request
     {
