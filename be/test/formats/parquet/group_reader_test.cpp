@@ -356,7 +356,7 @@ TEST_F(GroupReaderTest, TestInit) {
     auto* group_reader = _pool.add(new GroupReader(*param, 0));
 
     // init row group reader
-    status = group_reader->init(*param);
+    status = group_reader->init();
     // timezone is empty
     ASSERT_FALSE(status.ok());
     //ASSERT_TRUE(status.is_end_of_file());
@@ -390,7 +390,7 @@ TEST_F(GroupReaderTest, TestGetNext) {
     auto* group_reader = _pool.add(new GroupReader(*param, 0));
 
     // init row group reader
-    status = group_reader->init(*param);
+    status = group_reader->init();
     ASSERT_FALSE(status.ok());
 
     // replace column readers

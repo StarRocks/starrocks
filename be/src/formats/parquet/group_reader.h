@@ -64,7 +64,7 @@ struct GroupReaderParam {
 
 class GroupReader {
 public:
-    GroupReader(const GroupReaderParam& param, int row_group_number);
+    GroupReader(GroupReaderParam& param, int row_group_number);
     ~GroupReader() = default;
 
     Status init();
@@ -120,7 +120,7 @@ private:
     vectorized::ChunkPtr _read_chunk;
 
     // param for read row group
-    const GroupReaderParam& _param;
+    GroupReaderParam& _param;
 
     ObjectPool _obj_pool;
 
