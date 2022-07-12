@@ -23,6 +23,10 @@ import java.util.List;
 
 import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType.EQ_FOR_NULL;
 
+// Rewrite ScalarOperator as DictMappingOperator
+// if a ScalarOperator support dictionary optimization, we will rewrite it to DictMappingOperator
+// if a ScalarOperator don't support dictionary optimization but its children support dictionary optimization,
+// we will rewrite its child as DictMappingOperator
 public class DictMappingRewriter {
     AddDecodeNodeForDictStringRule.DecodeContext decodeContext;
     RewriterContext rewriterContext = new RewriterContext();
