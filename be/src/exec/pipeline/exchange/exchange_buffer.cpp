@@ -131,10 +131,9 @@ bool ExchangeBuffer::try_to_send_rpc() {
     // try to send request in (_last_in_flight_seqs, _last_arrived_seqs]
     int64_t last_in_flight_seqs = _last_in_flight_seqs;
     int64_t last_arrived_seqs = _last_arrived_seqs;
-    // we should make sure _results won't overlap
+
     int64_t target_seqs = std::min(last_arrived_seqs, _last_acked_seqs + _buffer_capacity);
     bool has_sent_new_request = false;
-    // max send rpcs depends on kBufferSize
     for (int64_t seq = last_in_flight_seqs + 1; seq <= target_seqs; seq++) {
         if (_is_finishing) {
             return has_sent_new_request;
@@ -190,7 +189,7 @@ bool ExchangeBuffer::try_to_send_rpc() {
                                                     status.message());
                     } else {
                         int64_t seq = ctx.sequence;
-                        int index = seq % ExchangeBuffer::kBufferSize;
+                        int index = seq % _buffer_capacity;
                         _results[index].send_timestamp = ctx.send_timestamp;
                         _results[index].received_timestamp = result.receive_timestamp();
                         _results[index].start_timestamp = ctx.start_timestamp;
@@ -222,7 +221,7 @@ bool ExchangeBuffer::process_rpc_result() {
     int64_t last_acked_seqs = _last_acked_seqs;
     int64_t last_in_flight_seqs = _last_in_flight_seqs;
     for (int64_t seq = last_acked_seqs + 1; seq <= last_in_flight_seqs; seq++) {
-        int index = seq % kBufferSize;
+        int index = seq % _buffer_capacity;
         if (_finish_flags[index].load()) {
             _last_acked_seqs++;
             auto& result = _results[index];
