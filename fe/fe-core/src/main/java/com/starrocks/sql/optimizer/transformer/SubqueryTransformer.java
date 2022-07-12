@@ -159,7 +159,7 @@ public class SubqueryTransformer {
 	    } 
 
             List<Expr> outerExprs = Collections.emptyList();
-            if (node.getChildren().stream().filter(c -> c instanceof Subquery).count() == 1) {
+            if (node.getChildren().stream().filter(Subquery.class::isInstance).count() == 1) {
                 outerExprs = node.getChildren().stream().filter(c -> !(c instanceof Subquery))
                         .collect(Collectors.toList());
             }
