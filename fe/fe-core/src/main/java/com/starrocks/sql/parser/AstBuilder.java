@@ -2126,7 +2126,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Identifier authPlugin = (Identifier) visit(context.identifierOrString());
         String authString = context.string() == null ? null : ((StringLiteral) visit(context.string())).getStringValue();
         boolean isPasswordPlain = context.AS() == null;
-        return new UserAuthOption(null, authPlugin.getValue(), authString, isPasswordPlain);
+        return new UserAuthOption(null, authPlugin.getValue().toUpperCase(), authString, isPasswordPlain);
     }
 
     // ------------------------------------------- Other Statement -----------------------------------------------------
