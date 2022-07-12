@@ -842,55 +842,60 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
 
                 std::vector<uint64_t> old_rowids(upserts[i]->size());
                 index.get(*upserts[i], &old_rowids);
-                std::vector<uint32_t> old_real_rowids(upserts[i]->size());
-                for (int j = 0; j < upserts[i]->size(); ++j) {
-                    old_real_rowids.push_back((uint32_t)(old_rowids[j] & ROWID_MASK));
-                }
-                std::map<uint32_t, std::vector<uint32_t>> old_rowids_by_rssid;
-                size_t num_default = 0;
-                vector<uint32_t> idxes;
-                RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
-                std::vector<std::unique_ptr<vectorized::Column>> old_columns(1);
-                auto old_unordered_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
-                old_columns[0] = old_unordered_column->clone_empty();
-                get_column_values(read_column_ids, false, old_rowids_by_rssid, &old_columns);
+                if (!std::all_of(old_rowids.begin(), old_rowids.end(), [](int &id) {return -1 == id; })) {
+                    std::vector<uint32_t> old_real_rowids(upserts[i]->size());
+                    for (int j = 0; j < upserts[i]->size(); ++j) {
+                        old_real_rowids.push_back((uint32_t)(old_rowids[j] & ROWID_MASK));
+                    }
+                    std::map<uint32_t, std::vector<uint32_t>> old_rowids_by_rssid;
+                    size_t num_default = 0;
+                    vector<uint32_t> idxes;
+                    RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
+                    std::vector<std::unique_ptr<vectorized::Column>> old_columns(1);
+                    auto old_unordered_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+                    old_columns[0] = old_unordered_column->clone_empty();
+                    get_column_values(read_column_ids, false, old_rowids_by_rssid, &old_columns);
 
-                auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
-                old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
+                    auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+                    old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
-                std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
-                std::vector<uint32_t> rowids;
-                for (int j = 0; j < upserts[i]->size(); ++j) {
-                    rowids.push_back(j);
-                }
-                new_rowids_by_rssid[rowset_id + i] = rowids;
-                std::vector<std::unique_ptr<vectorized::Column>> new_columns(1);
-                auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
-                new_columns[0] = new_column->clone_empty();
-                get_column_values(read_column_ids, false, new_rowids_by_rssid, &new_columns);
+                    std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
+                    std::vector<uint32_t> rowids;
+                    for (int j = 0; j < upserts[i]->size(); ++j) {
+                        rowids.push_back(j);
+                    }
+                    new_rowids_by_rssid[rowset_id + i] = rowids;
+                    std::vector<std::unique_ptr<vectorized::Column>> new_columns(1);
+                    auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+                    new_columns[0] = new_column->clone_empty();
+                    get_column_values(read_column_ids, false, new_rowids_by_rssid, &new_columns);
 
-                int idx_begin = 0;
-                int upsert_idx_step = 0;
-                for (int  j = 0;  j < old_columns[0]->size(); ++ j) {
-                    int r = old_columns[0]->compare_at(j, j, *new_columns[0].get(), -1);
-                    if (r > 0) {
+                    int idx_begin = 0;
+                    int upsert_idx_step = 0;
+                    for (int  j = 0;  j < old_columns[0]->size(); ++ j) {
+                        int r = old_columns[0]->compare_at(j, j, *new_columns[0].get(), -1);
+                        if (r > 0) {
+                            index.upsert(rowset_id + i, idx_begin, *upserts[i],
+                                         idx_begin, idx_begin + upsert_idx_step, &new_deletes);
+                            manager->index_cache().update_object_size(index_entry, index.memory_usage());
+
+                            idx_begin = j + 1;
+                            upsert_idx_step = 0;
+
+                            // Update delete vector of current segment which is being applied
+                            new_deletes[rowset_id + i].push_back(j);
+                        } else {
+                            upsert_idx_step++;
+                        }
+                    }
+
+                    if (idx_begin < old_columns[0]->size()) {
                         index.upsert(rowset_id + i, idx_begin, *upserts[i],
                                      idx_begin, idx_begin + upsert_idx_step, &new_deletes);
                         manager->index_cache().update_object_size(index_entry, index.memory_usage());
-
-                        idx_begin = j + 1;
-                        upsert_idx_step = 0;
-
-                        // Update delete vector of current segment which is being applied
-                        new_deletes[rowset_id + i].push_back(j);
-                    } else {
-                        upsert_idx_step++;
                     }
-                }
-
-                if (idx_begin < old_columns[0]->size()) {
-                    index.upsert(rowset_id + i, idx_begin, *upserts[i],
-                                 idx_begin, idx_begin + upsert_idx_step, &new_deletes);
+                } else {
+                    index.upsert(rowset_id + i, 0, *upserts[i], &new_deletes);
                     manager->index_cache().update_object_size(index_entry, index.memory_usage());
                 }
             } else {
