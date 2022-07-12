@@ -36,9 +36,8 @@ import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.task.DeriveStatsTask;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
+import com.starrocks.sql.optimizer.task.RewriteTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
-import com.starrocks.sql.optimizer.task.TopDownRewriteIterativeTask;
-import com.starrocks.sql.optimizer.task.TopDownRewriteOnceTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -333,27 +332,33 @@ public class Optimizer {
         rootTaskContext.setAllScanOperators(Collections.unmodifiableList(list));
     }
 
-    void ruleRewriteIterative(Memo memo, TaskContext rootTaskContext, RuleSetType ruleSetType) {
-        context.getTaskScheduler().pushTask(new TopDownRewriteIterativeTask(rootTaskContext,
-                memo.getRootGroup(), ruleSetType));
+    private void ruleRewriteIterative(Memo memo, TaskContext rootTaskContext, RuleSetType ruleSetType) {
+        List<Rule> rules = context.getRuleSet().getRewriteRulesByType(ruleSetType);
+        context.getTaskScheduler().pushTask(RewriteTask.topDown(rootTaskContext, memo.getRootGroup(), rules, false));
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
     }
 
-    void ruleRewriteIterative(Memo memo, TaskContext rootTaskContext, Rule rule) {
-        context.getTaskScheduler().pushTask(new TopDownRewriteIterativeTask(rootTaskContext,
-                memo.getRootGroup(), rule));
+    private void ruleRewriteIterative(Memo memo, TaskContext rootTaskContext, Rule rule) {
+        List<Rule> rules = Lists.newArrayList(rule);
+        context.getTaskScheduler().pushTask(RewriteTask.topDown(rootTaskContext, memo.getRootGroup(), rules, false));
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
     }
 
-    void ruleRewriteOnlyOnce(Memo memo, TaskContext rootTaskContext, RuleSetType ruleSetType) {
-        context.getTaskScheduler().pushTask(new TopDownRewriteOnceTask(rootTaskContext,
-                memo.getRootGroup(), ruleSetType));
+    private void ruleRewriteOnlyOnce(Memo memo, TaskContext rootTaskContext, RuleSetType ruleSetType) {
+        List<Rule> rules = context.getRuleSet().getRewriteRulesByType(ruleSetType);
+        context.getTaskScheduler().pushTask(RewriteTask.topDown(rootTaskContext, memo.getRootGroup(), rules, true));
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
     }
 
-    void ruleRewriteOnlyOnce(Memo memo, TaskContext rootTaskContext, Rule rule) {
-        context.getTaskScheduler().pushTask(new TopDownRewriteOnceTask(rootTaskContext,
-                memo.getRootGroup(), rule));
+    private void ruleRewriteOnlyOnce(Memo memo, TaskContext rootTaskContext, Rule rule) {
+        List<Rule> rules = Lists.newArrayList(rule);
+        context.getTaskScheduler().pushTask(RewriteTask.topDown(rootTaskContext, memo.getRootGroup(), rules, true));
+        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+    }
+
+    private void bottomUpIterative(Memo memo, TaskContext rootTaskContext, RuleSetType ruleSetType) {
+        List<Rule> rules = context.getRuleSet().getRewriteRulesByType(ruleSetType);
+        context.getTaskScheduler().pushTask(RewriteTask.bottomUp(rootTaskContext, memo.getRootGroup(), rules, false));
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
     }
 }
