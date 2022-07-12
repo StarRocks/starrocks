@@ -22,11 +22,13 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.common.MetaUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -40,6 +42,9 @@ public class AlterTableStmtTest {
 
     @Mocked
     private Auth auth;
+
+    @Mocked
+    private MetaUtils metaUtils;
 
     @Before
     public void setUp() {
