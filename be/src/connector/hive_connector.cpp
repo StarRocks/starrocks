@@ -50,8 +50,8 @@ Status HiveDataSource::open(RuntimeState* state) {
 
     _runtime_state = state;
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
-    _lake_table = dynamic_cast<const LakeTableDescriptor*>(_tuple_desc->table_desc());
-    if (_lake_table == nullptr) {
+    _hive_table = dynamic_cast<const HiveTableDescriptor*>(_tuple_desc->table_desc());
+    if (_hive_table == nullptr) {
         return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi table are supported");
     }
 
@@ -87,9 +87,9 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
 }
 
 Status HiveDataSource::_init_partition_values() {
-    if (!(_lake_table != nullptr && _has_partition_columns)) return Status::OK();
+    if (!(_hive_table != nullptr && _has_partition_columns)) return Status::OK();
 
-    auto* partition_desc = _lake_table->get_partition(_scan_range.partition_id);
+    auto* partition_desc = _hive_table->get_partition(_scan_range.partition_id);
     const auto& partition_values = partition_desc->partition_key_value_evals();
     _partition_values = partition_values;
 
@@ -129,10 +129,10 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
 
     const auto& slots = _tuple_desc->slots();
     for (int i = 0; i < slots.size(); i++) {
-        if (_lake_table != nullptr && _lake_table->is_partition_col(slots[i])) {
+        if (_hive_table != nullptr && _hive_table->is_partition_col(slots[i])) {
             _partition_slots.push_back(slots[i]);
             _partition_index_in_chunk.push_back(i);
-            _partition_index_in_hdfs_partition_columns.push_back(_lake_table->get_partition_col_index(slots[i]));
+            _partition_index_in_hdfs_partition_columns.push_back(_hive_table->get_partition_col_index(slots[i]));
             _has_partition_columns = true;
         } else {
             _materialize_slots.push_back(slots[i]);
@@ -209,8 +209,13 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
     const auto& scan_range = _scan_range;
     std::string native_file_path = scan_range.full_path;
-    if (_lake_table != nullptr && _lake_table->has_partition()) {
-        auto* partition_desc = _lake_table->get_partition(scan_range.partition_id);
+    if (_hive_table != nullptr && _hive_table->has_partition()) {
+        auto* partition_desc = _hive_table->get_partition(scan_range.partition_id);
+        if (partition_desc == nullptr) {
+            return Status::InternalError(fmt::format(
+                    "Plan inconsistency. scan_range.partition_id = {} not found in partition description map",
+                    scan_range.partition_id));
+        }
 
         SCOPED_TIMER(_profile.open_file_timer);
 
