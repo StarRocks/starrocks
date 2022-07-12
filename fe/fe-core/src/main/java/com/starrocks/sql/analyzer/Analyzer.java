@@ -26,6 +26,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
@@ -104,7 +105,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitSetUserPropertyStmt(ShowUserPropertyStmt statement, ConnectContext context) {
+        public Void visitSetUserPropertyStmt(SetUserPropertyStmt statement, ConnectContext context) {
             return null;
         }
 
