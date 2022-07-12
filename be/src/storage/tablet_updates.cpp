@@ -851,9 +851,12 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
                 vector<uint32_t> idxes;
                 RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
                 std::vector<std::unique_ptr<vectorized::Column>> old_columns(1);
-                auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
-                old_columns[0] = old_column->clone_empty();
+                auto old_unordered_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+                old_columns[0] = old_unordered_column->clone_empty();
                 get_column_values(read_column_ids, false, old_rowids_by_rssid, &old_columns);
+
+                auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+                old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
 
                 std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
                 std::vector<uint32_t> rowids;
