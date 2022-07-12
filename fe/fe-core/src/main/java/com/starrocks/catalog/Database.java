@@ -414,7 +414,6 @@ public class Database extends MetaObject implements Writable {
                 if (tmpTable != null) {
                     MaterializedView mv = (MaterializedView) tmpTable;
                     mv.setActive(false);
-                    LOG.info("materialized view:{} active is set to false", mv.getName());
                 }
             }
         }
