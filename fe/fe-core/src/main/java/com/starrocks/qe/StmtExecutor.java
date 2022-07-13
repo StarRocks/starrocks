@@ -957,16 +957,14 @@ public class StmtExecutor {
 
     private String buildExplainString(ExecPlan execPlan) {
         String explainString = "";
-        if (parsedStmt.isExplain() || context.getSessionVariable().isReportSucc()) {
-            if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
-                if (context.getSessionVariable().isEnableResourceGroup()) {
-                    WorkGroup workGroup = Coordinator.prepareWorkGroup(context);
-                    String workGroupStr = workGroup != null ? workGroup.getName() : WorkGroup.DEFAULT_WORKGROUP_NAME;
-                    explainString += "RESOURCE GROUP: " + workGroupStr + "\n\n";
-                }
+        if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
+            if (context.getSessionVariable().isEnableResourceGroup()) {
+                WorkGroup workGroup = Coordinator.prepareWorkGroup(context);
+                String workGroupStr = workGroup != null ? workGroup.getName() : WorkGroup.DEFAULT_WORKGROUP_NAME;
+                explainString += "RESOURCE GROUP: " + workGroupStr + "\n\n";
             }
-            explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
         }
+        explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
         return explainString;
     }
 
@@ -1085,6 +1083,9 @@ public class StmtExecutor {
         if (stmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan));
             return;
+        }
+        if (context.getQueryDetail() != null) {
+            context.getQueryDetail().setExplain(buildExplainString(execPlan));
         }
 
         // special handling for delete of non-primary key table, using old handler
