@@ -795,7 +795,7 @@ public class ReportHandler extends Daemon {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         for (Long tabletId : backendTablets.keySet()) {
             TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
-            if (tabletMeta == null) {
+            if (tabletMeta == null && maxTaskSendPerBe > 0) {
                 // We need to clean these ghost tablets from current backend, or else it will
                 // continue to report them to FE forever and add some processing overhead(the tablet report
                 // process is protected with DB S lock).
@@ -806,7 +806,7 @@ public class ReportHandler extends Daemon {
                 continue;
             }
 
-            if (tabletMeta.isUseStarOS()) {
+            if (tabletMeta != null && tabletMeta.isUseStarOS()) {
                 continue;
             }
 
