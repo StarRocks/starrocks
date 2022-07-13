@@ -305,6 +305,8 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
         EXPECT_EQ(records, exp);                                                       \
     } while (0)
 
+// ====================================================================================================
+
 static SlotDesc mtypes_orc_descs[] = {
         {"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
         {"col_float", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_FLOAT)},
@@ -504,11 +506,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     scanner->close(_runtime_state);
 }
 
-static SlotDesc string_key_value_orc_desc[] = {
-        {"key", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"value", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {""}};
-std::string string_key_value_orc_file = "./be/test/exec/test_data/orc_scanner/string_key_value_10k.orc.zstd";
+// ====================================================================================================
 
 /**
 File be/test/exec/test_data/orc_scanner/string_key_value_10k.orc.zstd has 2 stripes
@@ -540,6 +538,11 @@ Total length: 48800
  */
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
+    SlotDesc string_key_value_orc_desc[] = {{"key", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                                            {"value", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                                            {""}};
+    const std::string string_key_value_orc_file = "./be/test/exec/test_data/orc_scanner/string_key_value_10k.orc.zstd";
+
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
     auto* range = _create_scan_range(string_key_value_orc_file, 0, 0);
@@ -588,8 +591,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
     scanner->close(_runtime_state);
 }
 
-static SlotDesc datetime_orc_descs[] = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)}, {""}};
-std::string datetime_orc_file = "./be/test/exec/test_data/orc_scanner/datetime_20k.orc.zlib";
+// ====================================================================================================
 
 /**
  *
@@ -645,6 +647,9 @@ Stripes:
 */
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
+    SlotDesc datetime_orc_descs[] = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)}, {""}};
+    const std::string datetime_orc_file = "./be/test/exec/test_data/orc_scanner/datetime_20k.orc.zlib";
+
     _create_runtime_state("GMT");
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
@@ -685,10 +690,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
     scanner->close(_runtime_state);
 }
 
-static SlotDesc padding_char_varchar_desc[] = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR)},
-                                               {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-                                               {""}};
-std::string padding_char_varchar_orc_file = "./be/test/exec/test_data/orc_scanner/padding_char_varchar_10k.orc";
+// ====================================================================================================
 
 /**
 Type: struct<c0:char(100),c1:varchar(100)>
@@ -748,6 +750,12 @@ Padding ratio: 0%
  */
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
+    SlotDesc padding_char_varchar_desc[] = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR)},
+                                            {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                                            {""}};
+    const std::string padding_char_varchar_orc_file =
+            "./be/test/exec/test_data/orc_scanner/padding_char_varchar_10k.orc";
+
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
     auto* range = _create_scan_range(padding_char_varchar_orc_file, 0, 0);
@@ -794,12 +802,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
     scanner->close(_runtime_state);
 }
 
-static SlotDesc timezone_datetime_slot_descs[] = {
-        {"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
-        {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATE)},
-        {""}};
-static const std::string timzone_datetime_shanghai_orc_file =
-        "./be/test/exec/test_data/orc_scanner/writer_tz_shanghai.orc";
+// ====================================================================================================
 
 /*
 
@@ -830,8 +833,6 @@ Stripes:
  
 */
 
-static const std::string timzone_datetime_utc_orc_file = "./be/test/exec/test_data/orc_scanner/writer_tz_utc.orc";
-
 /*
 
 Structure for writer_tz_utc.orc
@@ -861,6 +862,14 @@ Stripes:
 */
 
 TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
+    SlotDesc timezone_datetime_slot_descs[] = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
+                                               {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATE)},
+                                               {""}};
+
+    const std::string timzone_datetime_shanghai_orc_file =
+            "./be/test/exec/test_data/orc_scanner/writer_tz_shanghai.orc";
+    const std::string timzone_datetime_utc_orc_file = "./be/test/exec/test_data/orc_scanner/writer_tz_utc.orc";
+
     struct Case {
         std::string file;
         std::string literal;
@@ -1013,56 +1022,4 @@ TEST_F(HdfsScannerTest, TestZeroSizeStream) {
     scanner->close(_runtime_state);
 }
 
-// =============================================================================
-
-/*
-file:         file:/Users/dirlt/repo/private/project/pyscript/starrocks/small_row_group_data.parquet 
-creator:      parquet-cpp-arrow version 7.0.0 
-extra:        ARROW:schema = /////9gAAAAQAAAAAAAKAAwABgAFAAgACgAAAAABBAAMAAAACAAIAAAABAAIAAAABAAAAAMAAABwAAAAMAAAAAQAAACs////AAABBRAAAAAYAAAABAAAAAAAAAACAAAAYzMAAAQABAAEAAAA1P///wAAAQIQAAAAFAAAAAQAAAAAAAAAAgAAAGMyAADE////AAAAAUAAAAAQABQACAAGAAcADAAAABAAEAAAAAAAAQIQAAAAHAAAAAQAAAAAAAAAAgAAAGMxAAAIAAwACAAHAAgAAAAAAAABQAAAAAAAAAA= 
-
-file schema:  schema 
---------------------------------------------------------------------------------
-c1:           OPTIONAL INT64 R:0 D:1
-c2:           OPTIONAL INT64 R:0 D:1
-c3:           OPTIONAL BINARY O:UTF8 R:0 D:1
-
-row group 1:  RC:5120 TS:1197023 OFFSET:4 
---------------------------------------------------------------------------------
-c1:            INT64 SNAPPY DO:4 FPO:20522 SZ:28928/49384/1.71 VC:5120 ENC:PLAIN,PLAIN_DICTIONARY,RLE
-c2:            INT64 SNAPPY DO:29030 FPO:53541 SZ:32921/49384/1.50 VC:5120 ENC:PLAIN,PLAIN_DICTIONARY,RLE
-c3:            BINARY SNAPPY DO:62051 FPO:134420 SZ:81159/1098255/13.53 VC:5120 ENC:PLAIN,PLAIN_DICTIONARY,RLE
-
-...
-
-row group 20: RC:2720 TS:638517 OFFSET:2732382 
---------------------------------------------------------------------------------
-c1:            INT64 SNAPPY DO:2732382 FPO:2743296 SZ:15077/25937/1.72 VC:2720 ENC:PLAIN,PLAIN_DICTIONARY,RLE
-c2:            INT64 SNAPPY DO:2747562 FPO:2760616 SZ:17217/25937/1.51 VC:2720 ENC:PLAIN,PLAIN_DICTIONARY,RLE
-c3:            BINARY SNAPPY DO:2764882 FPO:2803392 SZ:43059/586643/13.62 VC:2720 ENC:PLAIN,PLAIN_DICTIONARY,RLE
- */
-
-TEST_F(HdfsScannerTest, TestParquetCoalesceReadAcrossRowGroup) {
-    SlotDesc parquet_descs[] = {{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-                                {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-                                {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
-                                {""}};
-
-    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/small_row_group_data.parquet";
-
-    auto scanner = std::make_shared<HdfsParquetScanner>();
-
-    auto* range = _create_scan_range(parquet_file, 0, 0);
-    auto* tuple_desc = _create_tuple_desc(parquet_descs);
-    auto* param = _create_param(parquet_file, range, tuple_desc);
-
-    Status status = scanner->init(_runtime_state, *param);
-    ASSERT_TRUE(status.ok()) << status.get_error_msg();
-
-    status = scanner->open(_runtime_state);
-    ASSERT_TRUE(status.ok()) << status.get_error_msg();
-
-    READ_SCANNER_ROWS(scanner, 100000);
-
-    scanner->close(_runtime_state);
-}
 } // namespace starrocks::vectorized
