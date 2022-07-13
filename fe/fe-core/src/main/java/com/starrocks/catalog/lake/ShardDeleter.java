@@ -110,13 +110,12 @@ public class ShardDeleter extends MasterDaemon {
                 continue;
             }
 
-            // 3. succ both, remove from the map
-            try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-                shardIds.removeAll(shards);
-                deletedShards.addAll(shards);
-            }
+            deletedShards.addAll(shards);
         }
-        
+         // 3. succ both, remove from the map
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            shardIds.removeAll(deletedShards);
+        }
         GlobalStateMgr.getCurrentState().getEditLog().logDeleteUnusedShard(deletedShards);
     }
 
