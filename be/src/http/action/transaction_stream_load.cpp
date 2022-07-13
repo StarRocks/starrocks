@@ -179,10 +179,10 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
         }
     });
 
-    if (ctx->db != req->param(HTTP_DB_KEY)) {
+    if (ctx->db != req->header(HTTP_DB_KEY)) {
         _send_error_reply(req,
                           Status::InvalidArgument(fmt::format("Request database {} not equal transaction database {}",
-                                                              req->param(HTTP_DB_KEY), ctx->db)));
+                                                              req->header(HTTP_DB_KEY), ctx->db)));
         return -1;
     }
 
@@ -190,7 +190,7 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
         _send_error_reply(req, Status::TransactionInProcessing("Transaction in processing, please retry later"));
         return -1;
     }
-    ctx->table = req->param(HTTP_TABLE_KEY);
+    ctx->table = req->header(HTTP_TABLE_KEY);
     ctx->last_active_ts = MonotonicNanos();
 
     LOG(INFO) << "new streaming load request." << ctx->brief() << ", db=" << ctx->db << ", tbl=" << ctx->table;

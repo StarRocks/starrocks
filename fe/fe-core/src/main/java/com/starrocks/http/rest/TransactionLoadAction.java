@@ -21,8 +21,11 @@
 
 package com.starrocks.http.rest;
 
+<<<<<<< HEAD
 import com.google.common.base.Strings;
 import com.starrocks.cluster.ClusterNamespace;
+=======
+>>>>>>> 7edc3b808 ([Refactor] Refactor transaction stream load interface (#8344))
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -57,13 +60,14 @@ public class TransactionLoadAction extends RestBaseAction {
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
         TransactionLoadAction ac = new TransactionLoadAction(controller);
-        controller.registerHandler(HttpMethod.POST, "/api/{" + DB_KEY + "}/transaction/{" + TXN_OP_KEY + "}", ac);
+        controller.registerHandler(HttpMethod.POST, "/api/transaction/{" + TXN_OP_KEY + "}", ac);
         controller.registerHandler(HttpMethod.PUT,
-                "/api/{" + DB_KEY + "}/transaction/{" + TXN_OP_KEY + "}/{" + TABLE_KEY + "}", ac);
+                "/api/transaction/{" + TXN_OP_KEY + "}", ac);
     }
 
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+<<<<<<< HEAD
 
         final String clusterName = ConnectContext.get().getClusterName();
         if (Strings.isNullOrEmpty(clusterName)) {
@@ -77,6 +81,10 @@ public class TransactionLoadAction extends RestBaseAction {
 
         String fullDbName = ClusterNamespace.getFullName(clusterName, dbName);
 
+=======
+        String dbName = request.getRequest().headers().get(DB_KEY);
+        String tableName = request.getRequest().headers().get(TABLE_KEY);
+>>>>>>> 7edc3b808 ([Refactor] Refactor transaction stream load interface (#8344))
         String label = request.getRequest().headers().get(LABEL_KEY);
         String op = request.getSingleParameter(TXN_OP_KEY);
         Long backendID = null;
@@ -106,8 +114,8 @@ public class TransactionLoadAction extends RestBaseAction {
 
         TNetworkAddress redirectAddr = new TNetworkAddress(backend.getHost(), backend.getHttpPort());
 
-        LOG.info("redirect transaction action to destination={}, db: {}, op: {}, label: {}",
-                redirectAddr.toString(), dbName, op, label);
+        LOG.info("redirect transaction action to destination={}, db: {}, table: {}, op: {}, label: {}",
+                redirectAddr, dbName, tableName, op, label);
         redirectTo(request, response, redirectAddr);
     }
 }

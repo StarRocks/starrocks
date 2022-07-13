@@ -68,14 +68,20 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/{db}/{table}/_stream_load", stream_load_action);
     _http_handlers.emplace_back(stream_load_action);
 
-    // register transaction load
+    // Currently, we only support single-DB and single-table transactions.
+    // In the future, when we support multi-table transactions across DBs,
+    // we can keep the interface compatible, and users do not need to modify the URL.
+    //
+    // BeginTrasaction:     POST /api/transaction/begin
+    // CommitTransaction:   POST /api/transaction/commit
+    // RollbackTransaction: POST /api/transaction/rollback
     TransactionManagerAction* transaction_manager_action = new TransactionManagerAction(_env);
-    _ev_http_server->register_handler(HttpMethod::POST, "/api/{db}/transaction/{txn_op}", transaction_manager_action);
+    _ev_http_server->register_handler(HttpMethod::POST, "/api/transaction/{txn_op}", transaction_manager_action);
     _http_handlers.emplace_back(transaction_manager_action);
 
+    // LoadData:            PUT /api/transaction/load
     TransactionStreamLoadAction* transaction_stream_load_action = new TransactionStreamLoadAction(_env);
-    _ev_http_server->register_handler(HttpMethod::PUT, "/api/{db}/transaction/load/{table}",
-                                      transaction_stream_load_action);
+    _ev_http_server->register_handler(HttpMethod::PUT, "/api/transaction/load", transaction_stream_load_action);
     _http_handlers.emplace_back(transaction_stream_load_action);
 
     // register download action
