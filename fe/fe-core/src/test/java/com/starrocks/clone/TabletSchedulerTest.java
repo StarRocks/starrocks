@@ -69,7 +69,6 @@ public class TabletSchedulerTest {
         for (Triple<Database, Table, Partition> triple : arguments) {
             allCtxs.add(new TabletSchedCtx(
                     TabletSchedCtx.Type.REPAIR,
-                    SystemInfoService.DEFAULT_CLUSTER,
                     triple.getLeft().getId(),
                     triple.getMiddle().getId(),
                     triple.getRight().getId(),

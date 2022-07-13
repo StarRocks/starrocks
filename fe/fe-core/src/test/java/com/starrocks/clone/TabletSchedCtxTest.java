@@ -144,7 +144,7 @@ public class TabletSchedCtxTest {
 
         // mock tabletScheduler
         tabletScheduler = new TabletScheduler(globalStateMgr, systemInfoService, invertedIndex, stat);
-        tabletScheduler.getStatisticMap().put(SystemInfoService.DEFAULT_CLUSTER, clusterLoadStatistic);
+        tabletScheduler.loadStatistic = clusterLoadStatistic;
         systemInfoService.getBackends().forEach(be -> {
             List<Long> pathHashes =
                     be.getDisks().values().stream().map(DiskInfo::getPathHash).collect(Collectors.toList());
@@ -159,7 +159,7 @@ public class TabletSchedCtxTest {
         be1.setAlive(false);
         LocalTablet MissedTablet = new LocalTablet(TABLET_ID_1, invertedIndex.getReplicasByTabletId(TABLET_ID_1));
         TabletSchedCtx ctx =
-                new TabletSchedCtx(Type.REPAIR, SystemInfoService.DEFAULT_CLUSTER, DB_ID, TB_ID, PART_ID, INDEX_ID,
+                new TabletSchedCtx(Type.REPAIR, DB_ID, TB_ID, PART_ID, INDEX_ID,
                         TABLET_ID_1, System.currentTimeMillis(), systemInfoService);
         ctx.setTablet(MissedTablet);
         ctx.setStorageMedium(TStorageMedium.HDD);
@@ -183,17 +183,17 @@ public class TabletSchedCtxTest {
     public void testPriorityCompare() {
         // equal priority, but info3's last visit time is earlier than info2 and info1, so info1 should ranks ahead
         PriorityQueue<TabletSchedCtx> pendingTablets = new PriorityQueue<>();
-        TabletSchedCtx ctx1 = new TabletSchedCtx(Type.REPAIR, "default_cluster",
+        TabletSchedCtx ctx1 = new TabletSchedCtx(Type.REPAIR,
                 1, 2, 3, 4, 1000, System.currentTimeMillis());
         ctx1.setOrigPriority(Priority.NORMAL);
         ctx1.setLastVisitedTime(2);
 
-        TabletSchedCtx ctx2 = new TabletSchedCtx(Type.REPAIR, "default_cluster",
+        TabletSchedCtx ctx2 = new TabletSchedCtx(Type.REPAIR,
                 1, 2, 3, 4, 1001, System.currentTimeMillis());
         ctx2.setOrigPriority(Priority.NORMAL);
         ctx2.setLastVisitedTime(3);
 
-        TabletSchedCtx ctx3 = new TabletSchedCtx(Type.REPAIR, "default_cluster",
+        TabletSchedCtx ctx3 = new TabletSchedCtx(Type.REPAIR,
                 1, 2, 3, 4, 1001, System.currentTimeMillis());
         ctx3.setOrigPriority(Priority.NORMAL);
         ctx3.setLastVisitedTime(1);
