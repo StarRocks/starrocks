@@ -81,7 +81,7 @@ public class AnalyzeStmtTest {
         String sql = "analyze table db.tbl (kk1, kk2)";
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
 
-        Assert.assertTrue(analyzeStmt.isSample());
+        Assert.assertTrue(!analyzeStmt.isSample());
         Assert.assertEquals(2, analyzeStmt.getColumnNames().size());
     }
 
