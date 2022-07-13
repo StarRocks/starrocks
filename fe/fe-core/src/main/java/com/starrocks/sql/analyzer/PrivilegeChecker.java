@@ -1,41 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.AdminSetConfigStmt;
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.AdminShowConfigStmt;
-import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
-import com.starrocks.analysis.AdminShowReplicaStatusStmt;
-import com.starrocks.analysis.AlterDatabaseQuotaStmt;
-import com.starrocks.analysis.AlterDatabaseRename;
-import com.starrocks.analysis.AlterSystemStmt;
-import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.AlterViewStmt;
-import com.starrocks.analysis.AlterWorkGroupStmt;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.CreateWorkGroupStmt;
-import com.starrocks.analysis.DeleteStmt;
-import com.starrocks.analysis.DescribeStmt;
-import com.starrocks.analysis.DropDbStmt;
-import com.starrocks.analysis.DropMaterializedViewStmt;
-import com.starrocks.analysis.DropTableStmt;
-import com.starrocks.analysis.DropWorkGroupStmt;
-import com.starrocks.analysis.InsertStmt;
-import com.starrocks.analysis.RecoverDbStmt;
-import com.starrocks.analysis.RecoverTableStmt;
-import com.starrocks.analysis.ShowCreateDbStmt;
-import com.starrocks.analysis.ShowCreateTableStmt;
-import com.starrocks.analysis.ShowDataStmt;
-import com.starrocks.analysis.ShowDeleteStmt;
-import com.starrocks.analysis.ShowIndexStmt;
-import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.analysis.ShowTableStatusStmt;
-import com.starrocks.analysis.StatementBase;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UpdateStmt;
+import com.starrocks.analysis.*;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedIndex;
@@ -207,6 +173,36 @@ public class PrivilegeChecker {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
+            return null;
+        }
+
+        @Override
+        public Void visitShowUserPropertyStmt(ShowUserPropertyStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+                try {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                } catch (AnalysisException e) {
+                    throw new SemanticException(e.getMessage());
+                }
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitSetUserPropertyStmt(SetUserPropertyStmt statement, ConnectContext session) {
+            if (statement.getPropertyList() == null || statement.getPropertyList().isEmpty()) {
+                throw new SemanticException("Empty properties");
+            }
+
+            boolean isSelf = statement.getUser().equals(ConnectContext.get().getQualifiedUser());
+            try {
+                for (SetVar var : statement.getPropertyList()) {
+                    ((SetUserPropertyVar) var).analyze(isSelf);
+                }
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+
             return null;
         }
 

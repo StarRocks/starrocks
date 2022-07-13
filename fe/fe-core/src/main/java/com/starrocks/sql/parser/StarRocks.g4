@@ -520,7 +520,7 @@ showVariablesStatement
     ;
 
 showUserPropertyStatement
-    : SHOW PROPERTY (FOR SINGLE_QUOTED_TEXT)? (LIKE SINGLE_QUOTED_TEXT)?
+    : SHOW PROPERTY (FOR string)? (LIKE string)?
     ;
 
 killStatement
@@ -528,7 +528,7 @@ killStatement
     ;
 
 setUserPropertyStatement
-    : SET PROPERTY (FOR SINGLE_QUOTED_TEXT)? userPropertyList
+    : SET PROPERTY (FOR string)? userPropertyList
     ;
 
 showNodesStatement

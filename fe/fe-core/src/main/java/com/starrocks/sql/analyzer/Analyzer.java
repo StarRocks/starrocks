@@ -101,11 +101,13 @@ public class Analyzer {
 
         @Override
         public Void visitShowUserPropertyStmt(ShowUserPropertyStmt statement, ConnectContext session) {
+            ShowUserPropertyAnalyzer.analyze(statement, session);
             return null;
         }
 
         @Override
-        public Void visitSetUserPropertyStmt(SetUserPropertyStmt statement, ConnectContext context) {
+        public Void visitSetUserPropertyStmt(SetUserPropertyStmt statement, ConnectContext session) {
+            SetUserPropertyAnalyzer.analyze(statement, session);
             return null;
         }
 

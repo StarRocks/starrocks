@@ -42,6 +42,14 @@ public class SetUserPropertyStmt extends DdlStmt {
         return user;
     }
 
+    public void setUser(String user) {
+        this.user = user;
+    }
+
+    public List<SetVar> getPropertyList() {
+        return this.propertyList;
+    }
+
     // using List because we need retain the origin property order
     public List<Pair<String, String>> getPropertyPairList() {
         List<Pair<String, String>> list = Lists.newArrayList();
