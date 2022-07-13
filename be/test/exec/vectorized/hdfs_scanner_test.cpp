@@ -1017,7 +1017,7 @@ TEST_F(HdfsScannerTest, TestZeroSizeStream) {
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 1);
+    READ_SCANNER_ROWS(scanner, 1);
     EXPECT_EQ(scanner->raw_rows_read(), 1);
     scanner->close(_runtime_state);
 }
