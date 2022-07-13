@@ -32,6 +32,7 @@ public:
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeIntersectCountAggregateFunction();
 
+    template <bool IsWindowFunc>
     static AggregateFunctionPtr MakeCountAggregateFunction();
 
     template <PrimitiveType PT>
@@ -42,6 +43,7 @@ public:
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeGroupConcatAggregateFunction();
 
+    template <bool IsWindowFunc>
     static AggregateFunctionPtr MakeCountNullableAggregateFunction();
 
     template <PrimitiveType PT>
@@ -53,7 +55,7 @@ public:
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeAnyValueAggregateFunction();
 
-    template <typename NestedState, bool IgnoreNull = true>
+    template <typename NestedState, bool IsWindowFunc = false, bool IgnoreNull = true>
     static AggregateFunctionPtr MakeNullableAggregateFunctionUnary(AggregateFunctionPtr nested_function);
 
     template <typename NestedState>

@@ -920,7 +920,7 @@ TEST_F(AggregateTest, test_dict_merge) {
 }
 
 TEST_F(AggregateTest, test_sum_nullable) {
-    using NullableSumInt64 = NullableAggregateFunctionState<SumAggregateState<int64_t>>;
+    using NullableSumInt64 = NullableAggregateFunctionState<SumAggregateState<int64_t>, false>;
     const AggregateFunction* sum_null = get_aggregate_function("sum", TYPE_INT, TYPE_BIGINT, true);
     auto state = ManagedAggrState::create(ctx, sum_null);
 
