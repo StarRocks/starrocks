@@ -1173,23 +1173,38 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowAnalyzeStatement(StarRocksParser.ShowAnalyzeStatementContext context) {
+        Predicate predicate = null;
+        if (context.expression() != null) {
+            predicate = (Predicate) visit(context.expression());
+        }
+
         if (context.STATUS() != null) {
-            return new ShowAnalyzeStatusStmt();
+            return new ShowAnalyzeStatusStmt(predicate);
         } else if (context.JOB() != null) {
-            return new ShowAnalyzeJobStmt();
+            return new ShowAnalyzeJobStmt(predicate);
         } else {
-            return new ShowAnalyzeJobStmt();
+            return new ShowAnalyzeJobStmt(predicate);
         }
     }
 
     @Override
     public ParseNode visitShowStatsMetaStatement(StarRocksParser.ShowStatsMetaStatementContext context) {
-        return new ShowBasicStatsMetaStmt();
+        Predicate predicate = null;
+        if (context.expression() != null) {
+            predicate = (Predicate) visit(context.expression());
+        }
+
+        return new ShowBasicStatsMetaStmt(predicate);
     }
 
     @Override
     public ParseNode visitShowHistogramMetaStatement(StarRocksParser.ShowHistogramMetaStatementContext context) {
-        return new ShowHistogramStatsMetaStmt();
+        Predicate predicate = null;
+        if (context.expression() != null) {
+            predicate = (Predicate) visit(context.expression());
+        }
+
+        return new ShowHistogramStatsMetaStmt(predicate);
     }
 
     @Override

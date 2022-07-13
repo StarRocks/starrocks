@@ -457,7 +457,7 @@ deleteStatement
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
-    : ANALYZE FULL? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    : ANALYZE (SAMPLE | FULL)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
     ;
 
 analyzeHistogramStatement
@@ -480,15 +480,15 @@ dropAnalyzeJobStatement
     ;
 
 showAnalyzeStatement
-    : SHOW ANALYZE (JOB | STATUS)?
+    : SHOW ANALYZE (JOB | STATUS)? (WHERE expression)?
     ;
 
 showStatsMetaStatement
-    : SHOW STATS META
+    : SHOW STATS META (WHERE expression)?
     ;
 
 showHistogramMetaStatement
-    : SHOW HISTOGRAM META
+    : SHOW HISTOGRAM META (WHERE expression)?
     ;
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
@@ -1136,7 +1136,7 @@ nonReserved
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
     | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE | STRING
-    | STATS | SUBMIT | SYNC
+    | SAMPLE | STATS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER
