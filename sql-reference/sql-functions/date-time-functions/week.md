@@ -6,7 +6,7 @@
 
 ## 语法
 
-```undefined
+```sql
 INT WEEK(DATETIME/DATE date, INT mode)
 ```
 

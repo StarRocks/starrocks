@@ -30,7 +30,7 @@ execute as test2 with no revert;
 
 语句执行成功后，可以通过 `select current_user()` 命令获取当前用户。
 
-```undefined
+```plain text
 select current_user();
 +-----------------------------+
 | CURRENT_USER()              |

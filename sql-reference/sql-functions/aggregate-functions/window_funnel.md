@@ -14,7 +14,7 @@
 
 ## 语法
 
-```undefined
+```sql
 BIGINT output window_funnel(BIGINT window, DATE|DATETIME time, INT mode, array[cond1, cond2, ..., condN])
 ```
 
