@@ -475,7 +475,7 @@ public class MaterializedViewTest {
         String dropSql = "drop table tbl_drop;";
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, dropSql);
         stmtExecutor.execute();
-        Assert.assertTrue(mv != null);
+        Assert.assertNotNull(mv);
         Assert.assertFalse(mv.isActive());
     }
 }
