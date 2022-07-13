@@ -120,15 +120,15 @@ public class TaskManager {
 
             LocalDateTime startTime = Utils.getDatetimeFromLong(taskSchedule.getStartTime());
             Duration duration = Duration.between(LocalDateTime.now(), startTime);
-            long initialDelay =
-                    TimeUtils.convertSecondToTimeUnitValue(duration.getSeconds(), taskSchedule.getTimeUnit());
+            long initialDelay = duration.getSeconds();
             // if startTime < now, start scheduling now
             if (initialDelay < 0) {
                 initialDelay = 0;
             }
             ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                            executeTask(task.getName()), initialDelay, taskSchedule.getPeriod(),
-                    taskSchedule.getTimeUnit());
+                            executeTask(task.getName()), initialDelay,
+                    TimeUtils.convertTimeUnitValuetoSecond(taskSchedule.getPeriod(),
+                            taskSchedule.getTimeUnit()), TimeUnit.SECONDS);
             periodFutureMap.put(task.getId(), future);
         }
     }

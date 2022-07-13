@@ -270,22 +270,22 @@ public class TimeUtils {
         }
     }
 
-    public static long convertSecondToTimeUnitValue(long second, TimeUnit unit) {
+    public static long convertTimeUnitValuetoSecond(long value, TimeUnit unit) {
         switch (unit) {
             case DAYS:
-                return second / 60 / 60 / 24;
+                return value * 60 * 60 * 24;
             case HOURS:
-                return second / 60 / 60;
+                return value * 60 * 60;
             case MINUTES:
-                return second / 60;
+                return value * 60;
             case SECONDS:
-                return second;
+                return value;
             case MILLISECONDS:
-                return second * 1000;
+                return value / 1000;
             case MICROSECONDS:
-                return second * 1000 * 1000;
+                return value / 1000 / 1000;
             case NANOSECONDS:
-                return second * 1000 * 1000 * 1000;
+                return value / 1000 / 1000 / 1000;
             default:
                 return 0;
         }
