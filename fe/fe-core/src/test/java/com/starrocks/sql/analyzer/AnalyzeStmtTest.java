@@ -4,6 +4,8 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.SetUserPropertyStmt;
+import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -58,6 +60,20 @@ public class AnalyzeStmtTest {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
 
         Assert.assertEquals(4, analyzeStmt.getColumnNames().size());
+    }
+
+    @Test
+    public void testShowUserProperty(){
+        String sql = "SHOW PROPERTY FOR 'jack' LIKE '%load_cluster%'";
+        ShowUserPropertyStmt showUserPropertyStmt = (ShowUserPropertyStmt)analyzeSuccess(sql);
+        Assert.assertEquals("default_cluster:jack", showUserPropertyStmt.getUser());
+    }
+
+    @Test
+    public void testSetUserProperty(){
+        String sql = "SET PROPERTY FOR 'tom' 'max_user_connections' = 'value', 'test' = 'true'";
+        SetUserPropertyStmt setUserPropertyStmt = (SetUserPropertyStmt)analyzeSuccess(sql);
+        Assert.assertEquals("default_cluster:tom", setUserPropertyStmt.getUser());
     }
 
     @Test
