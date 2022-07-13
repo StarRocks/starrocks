@@ -150,6 +150,11 @@ public class Frontend implements Writable {
                 }
                 heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
             }
+            // When master received hb info status not ok, the hb info also need to be synced to follower.
+            // Otherwise, the failed heartbeat information will not be synchronized to the follower.
+            // Since the failed heartbeat info also modifies fe's memory, (this.heartbeatRetryTimes++;)
+            // if it is not synchronized to the follower, 
+            // this will cause the master and follower's metadata to be inconsistent
             isChanged = true;
         }
         return isChanged;
