@@ -4150,7 +4150,7 @@ public class LocalMetastore implements ConnectorMetadata {
         stateMgr.getGlobalTransactionMgr().removeDatabaseTransactionMgr(dbId);
     }
 
-    public HashMap<Long, AgentBatchTask> onEraseOlapTable(OlapTable olapTable, boolean isReplay) {
+    public HashMap<Long, AgentBatchTask> onEraseOlapOrLakeTable(OlapTable olapTable, boolean isReplay) {
         // inverted index
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         Collection<Partition> allPartitions = olapTable.getAllPartitions();

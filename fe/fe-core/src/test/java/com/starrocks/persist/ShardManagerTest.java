@@ -3,6 +3,8 @@
 package com.starrocks.persist;
 
 import com.starrocks.catalog.lake.ShardManager;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -12,6 +14,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 
+import java.util.Set;
 public class ShardManagerTest {
     @Test
     public void test() {
@@ -30,8 +33,10 @@ public class ShardManagerTest {
         dos.close();
 
         DataInputStream dis = new DataInputStream(new FileInputStream(tempFile));
-        long loadChecksum = info.loadShardManager(dis, checksum);
+        long loadChecksum = GlobalStateMgr.getCurrentState().loadShardManager(dis, checksum);
         Assert.assertEquals(saveChecksum, loadChecksum);
+        Set<Long> shardIds = Deencapsulation.getField(GlobalStateMgr.getCurrentState().getShardManager().getShardDeleter(), "shardIds");
+        Assert.assertEquals(Deencapsulation.getField(info.getShardDeleter(), "shardIds"), shardIds);
     }
 
 }

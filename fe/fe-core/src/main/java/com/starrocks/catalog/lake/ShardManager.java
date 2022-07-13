@@ -10,7 +10,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -28,11 +27,6 @@ public class ShardManager implements Writable {
 
     public ShardDeleter getShardDeleter() {
         return shardDeleter;
-    }
-
-    public long loadShardManager(DataInputStream in, long checksum) throws IOException {
-        read(in);
-        return checksum;
     }
 
     public long saveShardManager(DataOutputStream out, long checksum) throws IOException {

@@ -1145,7 +1145,7 @@ public class GlobalStateMgr {
             checksum = loadInsertOverwriteJobs(dis, checksum);
             checksum = nodeMgr.loadComputeNodes(dis, checksum);
             remoteChecksum = dis.readLong();
-            checksum = shardManager.loadShardManager(dis, checksum);
+            checksum = loadShardManager(dis, checksum);
             remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
@@ -1332,6 +1332,12 @@ public class GlobalStateMgr {
             resourceMgr = ResourceMgr.read(in);
         }
         LOG.info("finished replay resources from image");
+        return checksum;
+    }
+
+    public long loadShardManager(DataInputStream in, long checksum) throws IOException {
+        shardManager = ShardManager.read(in);
+        LOG.info("finished replay shardManager from image");
         return checksum;
     }
 
@@ -3065,8 +3071,8 @@ public class GlobalStateMgr {
         localMetastore.onEraseDatabase(dbId);
     }
 
-    public HashMap<Long, AgentBatchTask> onEraseOlapTable(OlapTable olapTable, boolean isReplay) {
-        return localMetastore.onEraseOlapTable(olapTable, isReplay);
+    public HashMap<Long, AgentBatchTask> onEraseOlapOrLakeTable(OlapTable olapTable, boolean isReplay) {
+        return localMetastore.onEraseOlapOrLakeTable(olapTable, isReplay);
     }
 
     public void onErasePartition(Partition partition) {

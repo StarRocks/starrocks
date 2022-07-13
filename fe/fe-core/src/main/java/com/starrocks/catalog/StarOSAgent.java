@@ -249,10 +249,8 @@ public class StarOSAgent {
         try {
             client.deleteShard(serviceId, shardIds);
         } catch (StarClientException e) {
-            if (e.getCode() != StatusCode.NOT_EXIST) {
-                LOG.warn("Failed to delete shards. error: {}", e.getMessage());
-                throw new DdlException("Failed to delete shards. error: " + e.getMessage());
-            }
+            LOG.warn("Failed to delete shards. error: {}", e.getMessage());
+            throw new DdlException("Failed to delete shards. error: " + e.getMessage());
         }
     }
 

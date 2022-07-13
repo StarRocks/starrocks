@@ -375,10 +375,9 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             RecycleTableInfo tableInfo = idToTableInfo.remove(dbId, tableId);
             if (tableInfo != null) {
                 Table table = tableInfo.getTable();
-                TableType tableType = table.getType();
                 nameToTableInfo.remove(dbId, table.getName());
                 if (table.isOlapOrLakeTable() && !isCheckpointThread()) {
-                    GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) table, true);
+                    GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((OlapTable) table, true);
                 }
             }
         }
@@ -747,10 +746,10 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             long tableId = table.getId();
             if (table.isOlapTable()) {
                 HashMap<Long, AgentBatchTask> batchTaskMap =
-                        GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) table, false);
+                        GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((OlapTable) table, false);
                 GlobalStateMgr.getCurrentState().sendDropTabletTasks(batchTaskMap);
             } else if (table.isLakeTable()) {
-                GlobalStateMgr.getCurrentState().onEraseOlapTable((LakeTable) table, true);
+                GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((LakeTable) table, true);
             }
             LOG.info("erased table [{}-{}].", tableId, table.getName());
         }
