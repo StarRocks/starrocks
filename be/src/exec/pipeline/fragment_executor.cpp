@@ -6,6 +6,7 @@
 
 #include "common/config.h"
 #include "exec/exchange_node.h"
+#include "exec/pipeline/exchange/exchange_buffer.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
@@ -509,6 +510,27 @@ void FragmentExecutor::_fail_cleanup() {
     }
 }
 
+std::shared_ptr<ExchangeSinkBuffer> create_exchange_sink_buffer(
+        const UnifiedExecPlanFragmentParams& request, FragmentContext* fragment_ctx,
+        const std::vector<TPlanFragmentDestination>& destinations, bool is_dest_merge, int32_t dop) {
+    const auto& query_options = request.common().query_options;
+    auto sink_buffer_type = query_options.__isset.exchange_sink_buffer_type ? query_options.exchange_sink_buffer_type
+                                                                            : TExchangeSinkBufferType::NORMAL;
+    std::shared_ptr<ExchangeSinkBuffer> sink_buffer;
+    switch (sink_buffer_type) {
+    case TExchangeSinkBufferType::NORMAL:
+        sink_buffer = std::make_shared<SinkBuffer>(fragment_ctx, destinations, is_dest_merge, dop);
+        break;
+    case TExchangeSinkBufferType::LOCK_FREE:
+        sink_buffer = std::make_shared<MultiExchangeBuffer>(fragment_ctx, destinations, is_dest_merge, dop);
+        break;
+    default:
+        DCHECK(false);
+        break;
+    }
+    return sink_buffer;
+}
+
 Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
                                                           const UnifiedExecPlanFragmentParams& request,
                                                           std::unique_ptr<starrocks::DataSink>& datasink) {
@@ -543,9 +565,8 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             DCHECK_GT(dest_dop, 0);
         }
 
-        std::shared_ptr<ExchangeSinkOperator::BufferType> sink_buffer =
-                std::make_shared<ExchangeSinkOperator::BufferType>(fragment_ctx, sender->destinations(), is_dest_merge,
-                                                                   dop);
+        auto sink_buffer =
+                create_exchange_sink_buffer(request, fragment_ctx, sender->destinations(), is_dest_merge, dop);
 
         OpFactoryPtr exchange_sink = std::make_shared<ExchangeSinkOperatorFactory>(
                 context->next_operator_id(), t_stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),
@@ -602,8 +623,9 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             source_op->set_degree_of_parallelism(dop);
 
             // sink op
-            auto sink_buffer = std::make_shared<ExchangeSinkOperator::BufferType>(fragment_ctx, sender->destinations(),
-                                                                                  is_dest_merge, dop);
+            auto sink_buffer =
+                    create_exchange_sink_buffer(request, fragment_ctx, sender->destinations(), is_dest_merge, dop);
+
             auto sink_op = std::make_shared<ExchangeSinkOperatorFactory>(
                     context->next_operator_id(), t_stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),
                     sender->destinations(), is_pipeline_level_shuffle, dest_dop, sender->sender_id(),

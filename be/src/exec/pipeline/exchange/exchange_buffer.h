@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "column/chunk.h"
-#include "exec/pipeline/exchange/sink_buffer.h"
+#include "exec/pipeline/exchange/exchange_sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
 #include "runtime/current_thread.h"
@@ -102,25 +102,24 @@ private:
 
 using ExchangeBufferPtr = std::shared_ptr<ExchangeBuffer>;
 
-class MultiExchangeBuffer {
+class MultiExchangeBuffer : public ExchangeSinkBuffer {
 public:
     MultiExchangeBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFragmentDestination>& destinations,
                         bool is_dest_merge, size_t num_sinkers);
-    ~MultiExchangeBuffer();
 
-    Status prepare();
+    ~MultiExchangeBuffer() override = default;
 
-    void add_request(TransmitChunkInfo& request);
+    void add_request(TransmitChunkInfo& request) override;
 
-    bool is_full();
+    bool is_full() const override;
 
-    void set_finishing();
+    void set_finishing() override;
 
-    bool is_finished();
+    bool is_finished() const override;
 
-    void cancel_one_sinker();
+    void update_profile(RuntimeProfile* profile) override;
 
-    void update_profile(RuntimeProfile* profile);
+    void cancel_one_sinker() override;
 
 private:
     friend class ExchangeBuffer;
@@ -137,8 +136,8 @@ private:
     phmap::flat_hash_map<int64_t, ExchangeBufferPtr> _buffers;
 
     // runtime profiles
-    std::atomic_int64_t _full_time = 0;
-    std::atomic_int64_t _last_full_timestamp = -1;
+    mutable std::atomic_int64_t _full_time = 0;
+    mutable std::atomic_int64_t _last_full_timestamp = -1;
     std::atomic_int64_t _pending_timestamp = -1;
 };
 

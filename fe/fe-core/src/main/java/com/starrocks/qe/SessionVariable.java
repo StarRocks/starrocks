@@ -31,6 +31,7 @@ import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TExchangeSinkBufferType;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
 import org.apache.logging.log4j.LogManager;
@@ -238,6 +239,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String STATISTIC_COLLECT_PARALLEL = "statistic_collect_parallel";
 
     public static final String ENABLE_SHOW_ALL_VARIABLES = "enable_show_all_variables";
+
+    public static final String EXCHANGE_SINK_BUFFER_TYPE = "exchange_sink_buffer_type";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -564,6 +567,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_PRUNE_SHUFFLE_COLUMN_RATE, flag = VariableMgr.INVISIBLE)
     private double cboPruneShuffleColumnRate = 0.1;
+
+    @VarAttr(name = EXCHANGE_SINK_BUFFER_TYPE, flag = VariableMgr.INVISIBLE)
+    private String exchangeSinkBufferType = "NORMAL";
 
     public double getCboPruneShuffleColumnRate() {
         return cboPruneShuffleColumnRate;
@@ -1076,6 +1082,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
 
         tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
+
+        if (exchangeSinkBufferType.equals("lock_free")) {
+            tResult.setExchange_sink_buffer_type(TExchangeSinkBufferType.LOCK_FREE);
+        } else {
+            tResult.setExchange_sink_buffer_type(TExchangeSinkBufferType.NORMAL);
+        }
 
         return tResult;
     }

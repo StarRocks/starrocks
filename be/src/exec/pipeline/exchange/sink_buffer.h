@@ -16,6 +16,7 @@ DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 DIAGNOSTIC_POP
 
 #include "column/chunk.h"
+#include "exec/pipeline/exchange/exchange_sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
 #include "runtime/current_thread.h"
@@ -27,64 +28,31 @@ DIAGNOSTIC_POP
 
 namespace starrocks::pipeline {
 
-using PTransmitChunkParamsPtr = std::shared_ptr<PTransmitChunkParams>;
-
-struct TransmitChunkInfo {
-    // For BUCKET_SHUFFLE_HASH_PARTITIONED, multiple channels may be related to
-    // a same exchange source fragment instance, so we should use fragment_instance_id
-    // of the destination as the key of destination instead of channel_id.
-    TUniqueId fragment_instance_id;
-    doris::PBackendService_Stub* brpc_stub;
-    PTransmitChunkParamsPtr params;
-    butil::IOBuf attachment;
-    int64_t attachment_physical_bytes;
-};
-
 struct ClosureContext {
     TUniqueId instance_id;
     int64_t sequence;
     int64_t send_timestamp;
 };
 
-// TimeTrace is introduced to estimate time more accurately.
-// For every update
-// 1. times will be increased by 1.
-// 2. sample time will be accumulated to accumulated_time.
-// 3. sample concurrency will be accumulated to accumulated_concurrency.
-// So we can get the average time of each direction by
-// `average_concurrency = accumulated_concurrency / times`
-// `average_time = accumulated_time / average_concurrency`
-struct TimeTrace {
-    int32_t times = 0;
-    int64_t accumulated_time = 0;
-    int32_t accumulated_concurrency = 0;
-
-    void update(int64_t time, int32_t concurrency) {
-        times++;
-        accumulated_time += time;
-        accumulated_concurrency += concurrency;
-    }
-};
-
 // TODO(hcf) how to export brpc error
-class SinkBuffer {
+class SinkBuffer : public ExchangeSinkBuffer {
 public:
     SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFragmentDestination>& destinations,
                bool is_dest_merge, size_t num_sinkers);
-    ~SinkBuffer();
+    ~SinkBuffer() override;
 
-    void add_request(TransmitChunkInfo& request);
-    bool is_full() const;
+    void add_request(TransmitChunkInfo& request) override;
+    bool is_full() const override;
 
-    void set_finishing();
-    bool is_finished() const;
+    void set_finishing() override;
+    bool is_finished() const override;
 
     // Add counters to the given profile
-    void update_profile(RuntimeProfile* profile);
+    void update_profile(RuntimeProfile* profile) override;
 
     // When all the ExchangeSinkOperator shared this SinkBuffer are cancelled,
     // the rest chunk request and EOS request needn't be sent anymore.
-    void cancel_one_sinker();
+    void cancel_one_sinker() override;
 
 private:
     using Mutex = bthread::Mutex;

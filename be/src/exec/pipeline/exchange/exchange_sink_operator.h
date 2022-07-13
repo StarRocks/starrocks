@@ -9,8 +9,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
-#include "exec/pipeline/exchange/exchange_buffer.h"
-#include "exec/pipeline/exchange/sink_buffer.h"
+#include "exec/pipeline/exchange/exchange_sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
 #include "gen_cpp/data.pb.h"
@@ -28,13 +27,11 @@ class BlockCompressionCodec;
 class ExprContext;
 
 namespace pipeline {
-class SinkBuffer;
+class ExchangeSinkBuffer;
 class ExchangeSinkOperator final : public Operator {
 public:
-    typedef MultiExchangeBuffer BufferType;
-
     ExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                         const std::shared_ptr<BufferType>& buffer, TPartitionType::type part_type,
+                         const std::shared_ptr<ExchangeSinkBuffer>& buffer, TPartitionType::type part_type,
                          const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle,
                          const int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
                          const std::vector<ExprContext*>& partition_expr_ctxs, bool enable_exchange_pass_through,
@@ -80,7 +77,7 @@ private:
 
     static const int32_t DEFAULT_DRIVER_SEQUENCE = 0;
 
-    const std::shared_ptr<BufferType>& _buffer;
+    const std::shared_ptr<ExchangeSinkBuffer>& _buffer;
 
     const TPartitionType::type _part_type;
 
@@ -191,8 +188,7 @@ private:
 
 class ExchangeSinkOperatorFactory final : public OperatorFactory {
 public:
-    ExchangeSinkOperatorFactory(int32_t id, int32_t plan_node_id,
-                                std::shared_ptr<ExchangeSinkOperator::BufferType> buffer,
+    ExchangeSinkOperatorFactory(int32_t id, int32_t plan_node_id, std::shared_ptr<ExchangeSinkBuffer> buffer,
                                 TPartitionType::type part_type,
                                 const std::vector<TPlanFragmentDestination>& destinations,
                                 bool is_pipeline_level_shuffle, int32_t num_shuffles_per_channel, int32_t sender_id,
@@ -209,7 +205,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    std::shared_ptr<ExchangeSinkOperator::BufferType> _buffer;
+    std::shared_ptr<ExchangeSinkBuffer> _buffer;
     const TPartitionType::type _part_type;
 
     const std::vector<TPlanFragmentDestination>& _destinations;

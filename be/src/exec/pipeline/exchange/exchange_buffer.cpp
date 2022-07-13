@@ -278,18 +278,12 @@ MultiExchangeBuffer::MultiExchangeBuffer(FragmentContext* fragment_ctx,
     }
 }
 
-MultiExchangeBuffer::~MultiExchangeBuffer() {}
-
-Status MultiExchangeBuffer::prepare() {
-    return Status::OK();
-}
-
 void MultiExchangeBuffer::add_request(TransmitChunkInfo& request) {
     auto& buffer = _buffers.at(request.fragment_instance_id.lo);
     buffer->add_request(request);
 }
 
-bool MultiExchangeBuffer::is_full() {
+bool MultiExchangeBuffer::is_full() const {
     bool is_full = false;
     for (auto& [_, buffer] : _buffers) {
         if (buffer->is_full()) {
@@ -321,7 +315,7 @@ void MultiExchangeBuffer::set_finishing() {
     }
 }
 
-bool MultiExchangeBuffer::is_finished() {
+bool MultiExchangeBuffer::is_finished() const {
     for (auto& [_, buffer] : _buffers) {
         if (!buffer->is_finished()) {
             return false;
