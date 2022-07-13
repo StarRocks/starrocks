@@ -304,24 +304,26 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         }
     }
 
-    int64_t sum_scan_limit = 0;
+    int64_t logical_scan_limit = 0;
+    int64_t physical_scan_limit = 0;
     for (auto& i : scan_nodes) {
         auto* scan_node = down_cast<ScanNode*>(i);
         if (scan_node->limit() > 0) {
             // the upper bound of records we actually will scan is `limit * dop * io_parallelism`.
             // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
             // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
-            sum_scan_limit += scan_node->limit() * dop * scan_node->io_tasks_per_scan_operator();
+            logical_scan_limit += scan_node->limit();
+            physical_scan_limit += scan_node->limit() * dop * scan_node->io_tasks_per_scan_operator();
         } else {
             // Not sure how many rows will be scan.
-            sum_scan_limit = -1;
+            logical_scan_limit = -1;
             break;
         }
     }
 
     if (_wg && _wg->big_query_scan_rows_limit() > 0) {
-        if (sum_scan_limit >= 0 && sum_scan_limit <= _wg->big_query_scan_rows_limit()) {
-            _query_ctx->set_scan_limit(sum_scan_limit);
+        if (logical_scan_limit >= 0 && logical_scan_limit <= _wg->big_query_scan_rows_limit()) {
+            _query_ctx->set_scan_limit(physical_scan_limit);
         } else {
             _query_ctx->set_scan_limit(_wg->big_query_scan_rows_limit());
         }
