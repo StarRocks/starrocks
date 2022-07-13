@@ -10,12 +10,8 @@ public class QueryDetailTest {
         QueryDetail queryDetail = new QueryDetail("219a2d5443c542d4-8fc938db37c892e3", true, 1, "127.0.0.1",
                 System.currentTimeMillis(), -1, -1, QueryDetail.QueryMemState.RUNNING,
                 "default_cluster:testDb", "select * from table1 limit 1",
-<<<<<<< HEAD
                 "root");
         queryDetail.setExplain("aaaaa");
-=======
-                "root", "");
->>>>>>> 0273a98f1 ([Feature] display resource group info in explain verbose (#8481))
         queryDetail.setProfile("bbbbb");
         queryDetail.setErrorMessage("cancelled");
 

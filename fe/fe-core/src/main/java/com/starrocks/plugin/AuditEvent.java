@@ -85,6 +85,8 @@ public class AuditEvent {
     public String stmt = "";
     @AuditField(value = "Digest")
     public String digest = "";
+    @AuditField(value = "ResourceGroup")
+    public String resourceGroup = "";
 
     public static class AuditEventBuilder {
 
@@ -187,6 +189,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setDigest(String digest) {
             auditEvent.digest = digest;
+            return this;
+        }
+
+        public AuditEventBuilder setResourceGroup(String rg) {
+            auditEvent.resourceGroup = rg;
             return this;
         }
 
