@@ -42,6 +42,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.ViewDefBuilder;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ExpressionPartitionUtil;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.parser.SqlParser;
@@ -75,7 +76,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             String errorMsg = String.format("Materialized view: %s, id: %d is not active, " +
                     "skip sync partition and data with base tables", materializedView.getName(), mvId);
             LOG.warn(errorMsg);
-            throw new RuntimeException(errorMsg);
+            throw new DmlException(errorMsg);
         }
         Set<Long> baseTableIds = materializedView.getBaseTableIds();
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
