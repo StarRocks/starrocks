@@ -54,9 +54,9 @@ struct GroupReaderParam {
 
     int chunk_size;
 
-    RandomAccessFile* file;
+    RandomAccessFile* file = nullptr;
 
-    FileMetaData* file_metadata;
+    FileMetaData* file_metadata = nullptr;
 };
 
 class GroupReader {
