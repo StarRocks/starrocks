@@ -240,8 +240,6 @@ DISTRIBUTED BY HASH(order_id) BUCKETS 8;
 
 - 建表时，不支持为指标列创建 BITMAP、Bloom Filter 等索引。
 
-- 更新模型目前还不支持物化视图。
-
 ### 下一步
 
 建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入概览](../loading/Loading_intro.md)。
