@@ -217,7 +217,7 @@ public class StarRocksAssert {
         StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statement, ctx);
 
-        Assert.assertTrue(statement.getClass().getSimpleName().contains("WorkGroupStmt"));
+        Assert.assertTrue(statement.getClass().getSimpleName().contains("ResourceGroupStmt"));
         ConnectContext connectCtx = new ConnectContext();
         connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         DataDefinitionExecutorFactory.execute((DdlStmt) statement, connectCtx);
