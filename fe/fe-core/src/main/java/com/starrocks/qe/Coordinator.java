@@ -459,16 +459,6 @@ public class Coordinator {
         return workgroup;
     }
 
-    private void prepareProfile() {
-        // to keep things simple, make async Cancel() calls wait until plan fragment
-        // execution has been initiated, otherwise we might try to cancel fragment
-        // execution at backends where it hasn't even started
-        profileDoneSignal = new MarkedCountDownLatch<>(instanceIds.size());
-        for (TUniqueId instanceId : instanceIds) {
-            profileDoneSignal.addMark(instanceId, -1L /* value is meaningless */);
-        }
-    }
-
     private void prepareResultSink() throws Exception {
         PlanFragmentId topId = fragments.get(0).getFragmentId();
         FragmentExecParams topParams = fragmentExecParamsMap.get(topId);
