@@ -44,6 +44,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
     _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter("PeakChunkBufferSize", TUnit::UNIT);
+    _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
 
     if (_workgroup == nullptr) {
         DCHECK(_io_threads != nullptr);
@@ -74,10 +75,13 @@ void ScanOperator::close(RuntimeState* state) {
         }
     }
 
-    auto* default_buffer_capacity_counter = ADD_COUNTER(_unique_metrics, "DefaultChunkBufferCapacity", TUnit::UNIT);
-    COUNTER_SET(default_buffer_capacity_counter, static_cast<int64_t>(default_buffer_capacity()));
-    auto* buffer_capacity_counter = ADD_COUNTER(_unique_metrics, "ChunkBufferCapacity", TUnit::UNIT);
-    COUNTER_SET(buffer_capacity_counter, static_cast<int64_t>(buffer_capacity()));
+    _default_buffer_capacity_counter = ADD_COUNTER(_unique_metrics, "DefaultChunkBufferCapacity", TUnit::UNIT);
+    COUNTER_SET(_default_buffer_capacity_counter, static_cast<int64_t>(default_buffer_capacity()));
+    _buffer_capacity_counter = ADD_COUNTER(_unique_metrics, "ChunkBufferCapacity", TUnit::UNIT);
+    COUNTER_SET(_buffer_capacity_counter, static_cast<int64_t>(buffer_capacity()));
+
+    _tablets_counter = ADD_COUNTER(_unique_metrics, "TabletCount", TUnit::UNIT);
+    COUNTER_SET(_tablets_counter, static_cast<int64_t>(_source_factory()->num_total_original_morsels()));
 
     _merge_chunk_source_profiles();
 
@@ -355,6 +359,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
     if (morsel != nullptr) {
+        COUNTER_UPDATE(_morsels_counter, 1);
         _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {

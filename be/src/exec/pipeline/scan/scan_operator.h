@@ -128,7 +128,14 @@ private:
     std::atomic_int64_t _last_scan_rows_num = 0;
     std::atomic_int64_t _last_scan_bytes = 0;
 
+    RuntimeProfile::Counter* _default_buffer_capacity_counter = nullptr;
+    RuntimeProfile::Counter* _buffer_capacity_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_size_counter = nullptr;
+    // The total number of the original tablets in this fragment instance.
+    RuntimeProfile::Counter* _tablets_counter = nullptr;
+    // The number of morsels picked up by this scan operator.
+    // A tablet may be divided into multiple morsels.
+    RuntimeProfile::Counter* _morsels_counter = nullptr;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {
