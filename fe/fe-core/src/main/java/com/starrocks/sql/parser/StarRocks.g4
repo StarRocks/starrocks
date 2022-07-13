@@ -100,7 +100,9 @@ statement
     | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
+    | showUserPropertyStatement                                                             #showUserProperty
     | killStatement                                                                         #kill
+    | setUserPropertyStatement                                                              #setUserProperty
     | showStatusStatement                                                                   #showStatus
 
     // privilege
@@ -528,8 +530,16 @@ showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
     ;
 
+showUserPropertyStatement
+    : SHOW PROPERTY (FOR string)? (LIKE string)?
+    ;
+
 killStatement
     : KILL (CONNECTION? | QUERY) INTEGER_VALUE
+    ;
+
+setUserPropertyStatement
+    : SET PROPERTY (FOR string)? userPropertyList
     ;
 
 showStatusStatement
@@ -977,6 +987,10 @@ extProperties
 
 propertyList
     : '(' property (',' property)* ')'
+    ;
+
+userPropertyList
+    : property (',' property)*
     ;
 
 property

@@ -32,6 +32,8 @@ public class StatsConstants {
     public static final String PROP_UPDATE_INTERVAL_SEC_KEY = "update_interval_sec";
     public static final String PROP_SAMPLE_COLLECT_ROWS_KEY = "sample_collect_rows";
 
+    public static final String TABLE_PROPERTY_SEPARATOR = ",\n\"";
+
     /**
      * Deprecated stats properties
      */

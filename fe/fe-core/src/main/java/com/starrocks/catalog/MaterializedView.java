@@ -91,6 +91,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         // partition id which in BasePartitionInfo can be used to check partition is changed
         private Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap;
 
+        @SerializedName(value = "defineStartTime")
+        private boolean defineStartTime;
+
         @SerializedName(value = "starTime")
         private long startTime;
 
@@ -102,6 +105,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         public AsyncRefreshContext() {
             this.baseTableVisibleVersionMap = Maps.newHashMap();
+            this.defineStartTime = false;
             this.startTime = Utils.getLongFromDateTime(LocalDateTime.now());
             this.step = 0;
             this.timeUnit = null;
@@ -117,6 +121,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         Map<String, BasePartitionInfo> getPartitionVisibleVersionMapForTable(long tableId) {
             return baseTableVisibleVersionMap.get(tableId);
+        }
+
+        public boolean isDefineStartTime() {
+            return defineStartTime;
+        }
+
+        public void setDefineStartTime(boolean defineStartTime) {
+            this.defineStartTime = defineStartTime;
         }
 
         public long getStartTime() {

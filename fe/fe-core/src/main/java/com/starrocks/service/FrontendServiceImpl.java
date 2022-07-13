@@ -357,10 +357,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     continue;
                 }
                 MaterializedView mvTable = (MaterializedView) materializedView;
+                List<String> createTableStmt = Lists.newArrayList();
+                GlobalStateMgr.getDdlStmt(mvTable, createTableStmt, null, null, false, true);
+                String ddlSql = createTableStmt.get(0);
                 TTableStatus status = new TTableStatus();
                 status.setId(String.valueOf(mvTable.getId()));
                 status.setName(mvTable.getName());
-                status.setDdl_sql(mvTable.getViewDefineSql());
+                status.setDdl_sql(ddlSql);
                 status.setRows(String.valueOf(mvTable.getRowCount()));
                 status.setType(mvTable.getMysqlType());
                 status.setComment(mvTable.getComment());
