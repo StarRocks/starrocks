@@ -886,7 +886,7 @@ public class AnalyzeDecimalV3Test {
                     ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
             Assert.assertEquals(items.get(2).getType(), ScalarType.DOUBLE);
             Assert.assertEquals(items.get(3).getType(), ScalarType.createDecimalV3NarrowestType(3, 2));
-            Assert.assertEquals(items.get(4).getType(), ScalarType.createDecimalV3TypeForZero());
+            Assert.assertEquals(items.get(4).getType(), ScalarType.createDecimalV3TypeForZero(1));
         }
     }
 }
