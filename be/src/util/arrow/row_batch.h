@@ -42,7 +42,9 @@ namespace starrocks {
 class RowDescriptor;
 
 // Convert StarRocks RowDescriptor to Arrow Schema.
-Status convert_to_arrow_schema(const RowDescriptor& row_desc, std::shared_ptr<arrow::Schema>* result,
+Status convert_to_arrow_schema(const RowDescriptor& row_desc,
+                               const std::unordered_map<int64_t, std::string>& id_to_col_name,
+                               std::shared_ptr<arrow::Schema>* result,
                                const std::vector<ExprContext*>& output_expr_ctxs);
 
 Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::string* result);

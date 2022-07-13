@@ -46,13 +46,27 @@ MemoryScratchSink::MemoryScratchSink(const RowDescriptor& row_desc, const std::v
 
 MemoryScratchSink::~MemoryScratchSink() = default;
 
+void MemoryScratchSink::_prepare_id_to_col_name_map() {
+    for (auto* tuple_desc : _row_desc.tuple_descriptors()) {
+        auto& slots = tuple_desc->slots();
+        int64_t tuple_id = tuple_desc->id();
+        for (auto slot : slots) {
+            int64_t slot_id = slot->id();
+            int64_t id = tuple_id << 32 | slot_id;
+            _id_to_col_name.emplace(id, slot->col_name());
+        }
+    }
+}
+
 Status MemoryScratchSink::prepare_exprs(RuntimeState* state) {
     // From the thrift expressions create the real exprs.
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs));
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+    // Prepare id_to_col_name map
+    _prepare_id_to_col_name_map();
     // generate the arrow schema
-    RETURN_IF_ERROR(convert_to_arrow_schema(_row_desc, &_arrow_schema, _output_expr_ctxs));
+    RETURN_IF_ERROR(convert_to_arrow_schema(_row_desc, _id_to_col_name, &_arrow_schema, _output_expr_ctxs));
     return Status::OK();
 }
 

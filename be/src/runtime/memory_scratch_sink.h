@@ -75,10 +75,13 @@ public:
 private:
     Status prepare_exprs(RuntimeState* state);
 
+    void _prepare_id_to_col_name_map();
+
     ObjectPool* _obj_pool = nullptr;
     // Owned by the RuntimeState.
     const RowDescriptor& _row_desc;
     std::shared_ptr<arrow::Schema> _arrow_schema;
+    std::unordered_map<int64_t, std::string> _id_to_col_name;
 
     BlockQueueSharedPtr _queue;
 
