@@ -347,7 +347,7 @@ public class ShowStmtAnalyzer {
             }
             return null;
         }
-        
+
         private void analyzeShowPredicate(ShowStmt showStmt) {
             Predicate predicate = showStmt.getPredicate();
             if (predicate == null) {

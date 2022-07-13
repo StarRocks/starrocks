@@ -122,10 +122,11 @@ statement
 
     // proc
     | showProcStatement                                                                     #showProc
-    
+
     // Backup Store Satement
     | backupStatement                                                                       #backup
     ;
+
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
 alterDbQuotaStmt
@@ -762,7 +763,7 @@ showProcedureStatement
 showProcStatement
     : SHOW PROC path=string
     ;
-    
+
 // ---------------------------------------- Backup Store Statement -----------------------------------------------------
 backupStatement
     : BACKUP SNAPSHOT qualifiedName
