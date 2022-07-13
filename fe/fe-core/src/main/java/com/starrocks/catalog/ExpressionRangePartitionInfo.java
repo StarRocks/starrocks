@@ -7,6 +7,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 
@@ -31,7 +33,6 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
         this.partitionExprs = partitionExprs;
         this.isMultiColumnPartition = partitionExprs.size() > 0;
     }
-
 
     public List<Expr> getPartitionExprs() {
         return partitionExprs;
@@ -68,6 +69,22 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
         sb.append(Joiner.on(", ").join(partitionExprs.stream().map(Expr::toSql).collect(toList()))).append(")");
         // in the future maybe need range partition info
         return sb.toString();
+    }
+
+    public void renameTableName(String newTableName) {
+        AstVisitor renameVisitor = new AstVisitor<Void, Void>() {
+            @Override
+            public Void visitSlot(SlotRef node, Void context) {
+                TableName tableName = node.getTblNameWithoutAnalyzed();
+                if (tableName != null) {
+                    tableName.setTbl(newTableName);
+                }
+                return null;
+            }
+        };
+        for (Expr expr : partitionExprs) {
+            expr.accept(renameVisitor, null);
+        }
     }
 }
 
