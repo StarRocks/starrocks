@@ -50,7 +50,6 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
-import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.StringUtils;
 import org.junit.Assert;
 
@@ -108,7 +107,7 @@ public class StarRocksAssert {
 
     public StarRocksAssert withUser(String user, String roleName) throws Exception {
         CreateUserStmt createUserStmt =
-                (CreateUserStmt) UtFrameUtils.parseAndAnalyzeStmt(
+                (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                         "create user " + user + " default role '" + roleName + "';", ctx);
         GlobalStateMgr.getCurrentState().getAuth().createUser(createUserStmt);
         return this;

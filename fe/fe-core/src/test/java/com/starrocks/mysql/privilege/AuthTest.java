@@ -65,7 +65,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.UnsupportedEncodingException;
-import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -169,28 +168,23 @@ public class AuthTest {
     }
 
     @After
-    public void tearDown() throws Exception {
+    public void tearDown() {
         Config.enable_validate_password = false;  // skip password validation
     }
 
     @Test
-    public void test() throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+    public void test() throws IllegalArgumentException {
         // 1. create cmy@%
-        UserIdentity userIdentity = new UserIdentity("cmy", "%");
-        UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
-        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+        String createUserSql = "CREATE USER 'cmy' IDENTIFIED BY '12345'";
+        CreateUserStmt createUserStmt = null;
         try {
-            createUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
+            auth.createUser(createUserStmt);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
-
-        try {
-            auth.createUser(createUserStmt);
-        } catch (DdlException e) {
-            Assert.fail();
-        }
+        UserIdentity userIdentity = createUserStmt.getUserIdent();
 
         // 2. check if cmy from specified ip can access
         List<UserIdentity> currentUser = Lists.newArrayList();
@@ -202,21 +196,15 @@ public class AuthTest {
         Assert.assertTrue(currentUser.get(0).equals(userIdentity));
 
         // 3. create another user: zhangsan@"192.%"
-        userIdentity = new UserIdentity("zhangsan", "192.%");
-        userDesc = new UserDesc(userIdentity, "12345", true);
-        createUserStmt = new CreateUserStmt(false, userDesc, null);
+        createUserSql = "CREATE USER 'zhangsan'@'192.%' IDENTIFIED BY '12345'";
         try {
-            createUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
+            auth.createUser(createUserStmt);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
-
-        try {
-            auth.createUser(createUserStmt);
-        } catch (DdlException e) {
-            Assert.fail();
-        }
+        userIdentity = createUserStmt.getUserIdent();
 
         // 4. check if zhangsan from specified ip can access
         Assert.assertTrue(auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.0.1",
@@ -226,12 +214,10 @@ public class AuthTest {
         Assert.assertFalse(auth.checkPlainPassword("zhangsan", "192.168.0.1", "12345", null));
 
         // 4.1 check if we can create same user
-        userIdentity = new UserIdentity("zhangsan", "192.%");
-        userDesc = new UserDesc(userIdentity, "12345", true);
-        createUserStmt = new CreateUserStmt(false, userDesc, null);
+        Config.enable_password_reuse = true;
         try {
-            createUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -246,37 +232,25 @@ public class AuthTest {
         Assert.assertTrue(hasException);
 
         // 4.2 check if we can create same user name with different host
-        userIdentity = new UserIdentity("zhangsan", "172.18.1.1");
-        userDesc = new UserDesc(userIdentity, "12345", true);
-        createUserStmt = new CreateUserStmt(false, userDesc, null);
+        createUserSql = "CREATE USER 'zhangsan'@'172.18.1.1' IDENTIFIED BY '12345'";
         try {
-            createUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
+            auth.createUser(createUserStmt);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
 
-        try {
-            auth.createUser(createUserStmt);
-        } catch (DdlException e) {
-            Assert.fail();
-        }
         Assert.assertTrue(auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "172.18.1.1",
                 "12345", null));
 
         // 5. create a user with domain [starrocks.domain]
-        userIdentity = new UserIdentity("zhangsan", "starrocks.domain1", true);
-        userDesc = new UserDesc(userIdentity, "12345", true);
-        createUserStmt = new CreateUserStmt(false, userDesc, null);
+        createUserSql = "CREATE USER 'zhangsan'@['starrocks.domain1'] IDENTIFIED BY '12345'";
         try {
-            createUserStmt.analyze(analyzer);
-        } catch (UserException e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
-        try {
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
             auth.createUser(createUserStmt);
-        } catch (DdlException e) {
+        } catch (Exception e) {
+            e.printStackTrace();
             Assert.fail();
         }
 
@@ -292,12 +266,9 @@ public class AuthTest {
                 "12345", null));
 
         // 7. add duplicated user@['starrocks.domain1']
-        userIdentity = new UserIdentity("zhangsan", "starrocks.domain1", true);
-        userDesc = new UserDesc(userIdentity, "12345", true);
-        createUserStmt = new CreateUserStmt(false, userDesc, null);
         try {
-            createUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -312,19 +283,11 @@ public class AuthTest {
         Assert.assertTrue(hasException);
 
         // 8. add another user@['starrocks.domain2']
-        userIdentity = new UserIdentity("lisi", "starrocks.domain2", true);
-        userDesc = new UserDesc(userIdentity, "123456", true);
-        createUserStmt = new CreateUserStmt(false, userDesc, null);
+        createUserSql = "CREATE USER 'lisi'@['starrocks.domain2'] IDENTIFIED BY '123456'";
         try {
-            createUserStmt.analyze(analyzer);
-        } catch (UserException e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
-
-        try {
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
             auth.createUser(createUserStmt);
-        } catch (DdlException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -839,19 +802,11 @@ public class AuthTest {
         }
 
         // 27. create user and set it as role1
-        userIdentity = new UserIdentity("wangwu", "%");
-        userDesc = new UserDesc(userIdentity, "12345", true);
-        createUserStmt = new CreateUserStmt(false, userDesc, "role1");
+        createUserSql = "CREATE USER 'wangwu' IDENTIFIED BY '12345' DEFAULT ROLE 'role1'";
         try {
-            createUserStmt.analyze(analyzer);
-        } catch (UserException e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
-
-        try {
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
             auth.createUser(createUserStmt);
-        } catch (DdlException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -863,19 +818,11 @@ public class AuthTest {
                 PrivPredicate.DROP));
 
         // 28. create user@domain and set it as role1
-        userIdentity = new UserIdentity("chenliu", "starrocks.domain2", true);
-        userDesc = new UserDesc(userIdentity, "12345", true);
-        createUserStmt = new CreateUserStmt(false, userDesc, "role1");
+        createUserSql = "CREATE USER 'chenliu'@['starrocks.domain2'] IDENTIFIED BY '12345' DEFAULT ROLE 'role1'";
         try {
-            createUserStmt.analyze(analyzer);
-        } catch (UserException e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
-
-        try {
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
             auth.createUser(createUserStmt);
-        } catch (DdlException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -995,12 +942,10 @@ public class AuthTest {
                 auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "10.1.1.1", "12345", null));
 
         // 34. create user zhangsan@'10.1.1.1' to overwrite one of zhangsan@['starrocks.domain1']
-        userIdentity = new UserIdentity("zhangsan", "10.1.1.1");
-        userDesc = new UserDesc(userIdentity, "abcde", true);
-        createUserStmt = new CreateUserStmt(false, userDesc, null);
+        createUserSql = "CREATE USER 'zhangsan'@'10.1.1.1' IDENTIFIED BY 'abcde'";
         try {
-            createUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1106,23 +1051,17 @@ public class AuthTest {
 
         // 38.1 grant node_priv to user
         privileges = Lists.newArrayList(AccessPrivilege.NODE_PRIV);
-        userIdentity = new UserIdentity("zhaoliu", "%");
-        userDesc = new UserDesc(userIdentity, "12345", true);
         tablePattern = new TablePattern("*", "*");
 
-        createUserStmt = new CreateUserStmt(false, userDesc, null);
+        createUserSql = "CREATE USER 'zhaoliu' IDENTIFIED BY '12345'";
         try {
-            createUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
+            auth.createUser(createUserStmt);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
-
-        try {
-            auth.createUser(createUserStmt);
-        } catch (DdlException e) {
-            Assert.fail();
-        }
+        userIdentity = createUserStmt.getUserIdent();
 
         grantStmt = new GrantStmt(userIdentity, null, tablePattern, privileges);
         try {
@@ -1178,18 +1117,11 @@ public class AuthTest {
         }
 
         // 38.4 revoke node_priv from role
-        userDesc = new UserDesc(new UserIdentity("sunqi", "%"), "12345", true);
-        createUserStmt = new CreateUserStmt(false, userDesc, "role3");
+        createUserSql = "CREATE USER 'sunqi' IDENTIFIED BY '12345' DEFAULT ROLE 'role3'";
         try {
-            createUserStmt.analyze(analyzer);
-        } catch (UserException e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
-
-        try {
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
             auth.createUser(createUserStmt);
-        } catch (DdlException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1219,11 +1151,10 @@ public class AuthTest {
     @Test
     public void testGrantRevokeRole() throws Exception {
         // 1. create user with no role specified
-        UserIdentity userIdentity = new UserIdentity("test_user", "%");
-        UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
-        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
-        createUserStmt.analyze(analyzer);
+        String createUserSql = "CREATE USER 'test_user' IDENTIFIED BY '12345'";
+        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
         auth.createUser(createUserStmt);
+        UserIdentity userIdentity = createUserStmt.getUserIdent();
 
         // check if select & load & spark resource usage privilege all not granted
         String dbName = "default_cluster:db1";
@@ -1303,25 +1234,26 @@ public class AuthTest {
 
     @Test
     public void testResource() {
-        UserIdentity userIdentity = new UserIdentity("testUser", "%");
         String role = "role0";
         String resourceName = "spark0";
         ResourcePattern resourcePattern = new ResourcePattern(resourceName);
         String anyResource = "*";
         ResourcePattern anyResourcePattern = new ResourcePattern(anyResource);
         List<AccessPrivilege> usagePrivileges = Lists.newArrayList(AccessPrivilege.USAGE_PRIV);
-        UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
 
         // ------ grant|revoke resource to|from user ------
         // 1. create user with no role
-        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
+        String createUserSql = "CREATE USER 'testUser' IDENTIFIED BY '12345'";
+        CreateUserStmt createUserStmt = null;
         try {
-            createUserStmt.analyze(analyzer);
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
             auth.createUser(createUserStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
+        UserIdentity userIdentity = createUserStmt.getUserIdent();
+
 
         // 2. grant usage_priv on resource 'spark0' to 'testUser'@'%'
         GrantStmt grantStmt = new GrantStmt(userIdentity, null, resourcePattern, usagePrivileges);
@@ -1379,11 +1311,11 @@ public class AuthTest {
         }
 
         // 2. create user with role
-        createUserStmt = new CreateUserStmt(false, userDesc, role);
+        createUserSql = "CREATE USER 'testUser' IDENTIFIED BY '12345' DEFAULT ROLE 'role0'";
         try {
-            createUserStmt.analyze(analyzer);
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
             auth.createUser(createUserStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1423,11 +1355,11 @@ public class AuthTest {
 
         // ------ grant|revoke any resource to|from user ------
         // 1. create user with no role
-        createUserStmt = new CreateUserStmt(false, userDesc, null);
+        createUserSql = "CREATE USER 'testUser' IDENTIFIED BY '12345'";
         try {
-            createUserStmt.analyze(analyzer);
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
             auth.createUser(createUserStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1487,11 +1419,11 @@ public class AuthTest {
         }
 
         // 2. create user with role
-        createUserStmt = new CreateUserStmt(false, userDesc, role);
+        createUserSql = "CREATE USER 'testUser' IDENTIFIED BY '12345' DEFAULT ROLE 'role0'";
         try {
-            createUserStmt.analyze(analyzer);
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
             auth.createUser(createUserStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1531,11 +1463,11 @@ public class AuthTest {
 
         // ------ error case ------
         boolean hasException = false;
-        createUserStmt = new CreateUserStmt(false, userDesc, null);
+        createUserSql = "CREATE USER 'testUser' IDENTIFIED BY '12345'";
         try {
-            createUserStmt.analyze(analyzer);
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
             auth.createUser(createUserStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1587,11 +1519,11 @@ public class AuthTest {
             Assert.fail();
         }
 
-        createUserStmt = new CreateUserStmt(false, userDesc, role);
+        createUserSql = "CREATE USER 'testUser' IDENTIFIED BY '12345' DEFAULT ROLE 'role0'";
         try {
-            createUserStmt.analyze(analyzer);
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
             auth.createUser(createUserStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1645,20 +1577,14 @@ public class AuthTest {
             AUTHENTICATION_LDAP_SIMPLE
          */
         // create user zhangsan identified with authentication_ldap_simple as 'uid=zhangsan,ou=company,dc=example,dc=com'
-        UserIdentity userIdentity = new UserIdentity("zhangsan", "%");
-        UserDesc userDesc = new UserDesc(userIdentity, AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(),
-                "uid=zhangsan,ou=company,dc=example,dc=com", true);
-        CreateUserStmt createUserStmt = new CreateUserStmt(userDesc);
+        String createUserSql =
+                "create user zhangsan identified with authentication_ldap_simple as 'uid=zhangsan,ou=company,dc=example,dc=com'";
+        CreateUserStmt createUserStmt = null;
         try {
-            createUserStmt.analyze(analyzer);
-        } catch (UserException e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
-
-        try {
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
             auth.createUser(createUserStmt);
-        } catch (DdlException e) {
+        } catch (Exception e) {
+            e.printStackTrace();
             Assert.fail();
         }
 
@@ -1674,18 +1600,12 @@ public class AuthTest {
                 "456".getBytes("utf-8"), null, currentUser));
 
         // alter user zhangsan identified with authentication_ldap_simple
-        userDesc = new UserDesc(userIdentity, AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), null, true);
-        AlterUserStmt alterUserStmt = new AlterUserStmt(userDesc);
+        String alterUserSql = "alter user zhangsan identified with authentication_ldap_simple";
+        AlterUserStmt alterUserStmt = null;
         try {
-            alterUserStmt.analyze(analyzer);
-        } catch (UserException e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
-
-        try {
+            alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(alterUserSql, ctx);
             auth.alterUser(alterUserStmt);
-        } catch (DdlException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1705,19 +1625,11 @@ public class AuthTest {
             mysql_native_password
          */
         // create user lisi identified with mysql_native_password by '123456'
-        userIdentity = new UserIdentity("lisi", "%");
-        userDesc = new UserDesc(userIdentity, AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), "123456", true);
-        createUserStmt = new CreateUserStmt(userDesc);
+        createUserSql = "create user lisi identified with mysql_native_password by '123456'";
         try {
-            createUserStmt.analyze(analyzer);
-        } catch (UserException e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
-
-        try {
+            createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
             auth.createUser(createUserStmt);
-        } catch (DdlException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1735,6 +1647,7 @@ public class AuthTest {
         String sql = "alter user lisi identified with mysql_native_password by '654321'";
         try {
             alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+            auth.alterUser(alterUserStmt);
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
@@ -1759,6 +1672,7 @@ public class AuthTest {
         sql = "alter user lisi identified with mysql_native_password as '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'";
         try {
             alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+            auth.alterUser(alterUserStmt);
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
@@ -1807,13 +1721,13 @@ public class AuthTest {
     @Test
     public void testPasswordReuseNormal() throws Exception {
         String password = "123456AAbb";
-        UserIdentity user = new UserIdentity("test_user", "%");
-        user.analyze("default_cluster");
-        UserDesc userDesc = new UserDesc(user, password, true);
         // 1. create user with no role
-        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
-        createUserStmt.analyze(analyzer);
+        String createUserSql = String.format("CREATE USER 'testUser' IDENTIFIED BY '%s'", password);
+
+        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
+//        createUserStmt.analyze(analyzer);
         auth.createUser(createUserStmt);
+        UserIdentity user = createUserStmt.getUserIdent();
 
         // enable_password_reuse is false allow same password
         Config.enable_password_reuse = true;
@@ -1857,17 +1771,14 @@ public class AuthTest {
     @Test(expected = DdlException.class)
     public void testPasswordValidationPasswordReuse() throws Exception {
         String password = "123456AAbb";
-        UserIdentity user = new UserIdentity("test_user", "%");
-        user.analyze("default_cluster");
-        UserDesc userDesc = new UserDesc(user, password, true);
+        String createUserSql = String.format("CREATE USER 'test_user' IDENTIFIED BY '%s'", password);
         // 1. create user with no role
-        CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
-        createUserStmt.analyze(analyzer);
+        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
         auth.createUser(createUserStmt);
 
         // 2. check reuse
         Config.enable_password_reuse = false;
-        auth.checkPasswordReuse(user, password);
+        auth.checkPasswordReuse(createUserStmt.getUserIdent(), password);
     }
 
     private static final Logger LOG = LogManager.getLogger(AuthTest.class);
@@ -1884,12 +1795,8 @@ public class AuthTest {
         // 1. create N user with select privilege to N/2 table
         // 1.1 create user
         for (int i = 0; i != BIG_NUMBER; i++) {
-            String userName = String.format("user_%d_of_%d", i, BIG_NUMBER);
-            UserIdentity userIdentity = new UserIdentity(userName, "%");
-            userIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
-            UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
-            CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
-            createUserStmt.analyze(analyzer);
+            String createUserSql = String.format("CREATE USER 'user_%d_of_%d' IDENTIFIED BY '12345'", i, BIG_NUMBER);
+            CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
             auth.createUser(createUserStmt);
         }
         Assert.assertEquals(1 + BIG_NUMBER, auth.getAuthInfo(null).size());
@@ -1987,11 +1894,8 @@ public class AuthTest {
                 {"user_zzz", "10.1.1.1"},
         };
         for (String[] userHost: userHostPatterns) {
-            UserIdentity userIdentity = new UserIdentity(userHost[0], userHost[1]);
-            userIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
-            UserDesc userDesc = new UserDesc(userIdentity, PASSWORD_STR, true);
-            CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
-            createUserStmt.analyze(analyzer);
+            String createUserSql = String.format("CREATE USER '%s'@'%s' IDENTIFIED BY '%s'", userHost[0], userHost[1], PASSWORD_STR);
+            CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, ctx);
             auth.createUser(createUserStmt);
         }
         Assert.assertEquals(5, auth.getUserPrivTable().size());
@@ -2115,15 +2019,12 @@ public class AuthTest {
          UserIdentity gregory = new UserIdentity("Gregory", "%");
          gregory.analyze(SystemInfoService.DEFAULT_CLUSTER);
          UserIdentity albert = new UserIdentity("Albert", "%");
-         gregory.analyze(SystemInfoService.DEFAULT_CLUSTER);
-         List<UserIdentity> userToBeCreated = new ArrayList<>();
-         userToBeCreated.add(harry);
-         userToBeCreated.add(gregory);
-         userToBeCreated.add(albert);
-         for (UserIdentity userIdentity : userToBeCreated) {
-             UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
-             CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
-             createUserStmt.analyze(analyzer);
+         albert.analyze(SystemInfoService.DEFAULT_CLUSTER);
+         String createUserSql = "CREATE USER '%s' IDENTIFIED BY '12345'";
+         String[] userNames = {"Harry", "Gregory", "Albert"};
+         for (String userName : userNames) {
+             CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils
+                     .parseStmtWithNewParser(String.format(createUserSql, userName), ctx);
              auth.createUser(createUserStmt);
          }
 
