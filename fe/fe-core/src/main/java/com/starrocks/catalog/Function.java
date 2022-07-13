@@ -37,7 +37,6 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
-import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.common.io.IOUtils.writeOptionString;
 
 /**
