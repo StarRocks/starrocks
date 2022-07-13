@@ -237,7 +237,7 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
                 driver->set_morsel_queue(morsel_queue_factory->create(i));
                 if (auto* scan_operator = driver->source_scan_operator()) {
                     if (dynamic_cast<starrocks::pipeline::ConnectorScanOperator*>(scan_operator) != nullptr) {
-                        scan_operator->set_io_threads(_exec_env->pipeline_hdfs_scan_io_thread_pool());
+                        scan_operator->set_io_threads(_exec_env->pipeline_connector_scan_io_thread_pool());
                     } else {
                         scan_operator->set_io_threads(_exec_env->pipeline_scan_io_thread_pool());
                     }
