@@ -1,11 +1,9 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.SetUserPropertyStmt;
-import com.starrocks.analysis.SetUserPropertyVar;
-import com.starrocks.analysis.SetVar;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
 

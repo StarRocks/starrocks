@@ -1851,17 +1851,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String pattern;
         if (context.FOR() == null) {
             user = null;
-            pattern = context.LIKE() == null ? null : ((StringLiteral)visit(context.string(0))).getValue();
+            pattern = context.LIKE() == null ? null : ((StringLiteral) visit(context.string(0))).getValue();
         } else {
-            user = ((StringLiteral)visit(context.string(0))).getValue();
-            pattern = context.LIKE() == null ? null : ((StringLiteral)visit(context.string(1))).getValue();
+            user = ((StringLiteral) visit(context.string(0))).getValue();
+            pattern = context.LIKE() == null ? null : ((StringLiteral) visit(context.string(1))).getValue();
         }
         return new ShowUserPropertyStmt(user, pattern);
     }
 
     @Override
     public ParseNode visitSetUserPropertyStatement(StarRocksParser.SetUserPropertyStatementContext context) {
-        String user = context.FOR() == null ? null : ((StringLiteral)visit(context.string())).getValue();
+        String user = context.FOR() == null ? null : ((StringLiteral) visit(context.string())).getValue();
         List<SetVar> list = new ArrayList<>();
         if (context.userPropertyList() != null) {
             List<Property> propertyList = visit(context.userPropertyList().property(), Property.class);
