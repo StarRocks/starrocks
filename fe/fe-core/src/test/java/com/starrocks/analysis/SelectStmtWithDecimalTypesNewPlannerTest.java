@@ -659,5 +659,35 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
         ctx.getSessionVariable().setCboCteReuse(oldCboCteReUse);
     }
-}
 
+    @Test
+    public void testAvgDistinctNonDecimalTypeWithRewriteMultiDistinctRuleTakeEffect() throws Exception {
+        int oldStage = ctx.getSessionVariable().getNewPlannerAggStage();
+        boolean oldCboCteReUse = ctx.getSessionVariable().isCboCteReuse();
+        ctx.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select avg(distinct key0) from db1.decimal_table";
+        String[] snippets = new String[]{
+                "cast([multi_distinct_sum, BIGINT, true] as DOUBLE) / " +
+                        "cast([multi_distinct_count, BIGINT, false] as DOUBLE)",
+                "multi_distinct_count[([multi_distinct_count, VARCHAR, false]); " +
+                        "args: INT; result: BIGINT; args nullable: true; result nullable: false]",
+                "multi_distinct_sum[([multi_distinct_sum, VARCHAR, true]); " +
+                        "args: INT; result: BIGINT; args nullable: true; result nullable: true]",
+                "multi_distinct_count[([key0, INT, false]); args: INT; result: VARCHAR; " +
+                        "args nullable: false; result nullable: false]",
+                "multi_distinct_sum[([key0, INT, false]); " +
+                        "args: INT; result: VARCHAR; args nullable: false; result nullable: true]",
+        };
+
+        ctx.getSessionVariable().setCboCteReuse(false);
+        String disableCtePlan = removeSlotIds(UtFrameUtils.getVerboseFragmentPlan(ctx, sql));
+        Assert.assertTrue(Arrays.asList(snippets).stream().anyMatch(s -> disableCtePlan.contains(s)));
+
+        ctx.getSessionVariable().setCboCteReuse(true);
+        String enableCtePlan = removeSlotIds(UtFrameUtils.getVerboseFragmentPlan(ctx, sql));
+        Assert.assertTrue(Arrays.asList(snippets).stream().anyMatch(s -> enableCtePlan.contains(s)));
+
+        ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
+        ctx.getSessionVariable().setCboCteReuse(oldCboCteReUse);
+    }
+}
