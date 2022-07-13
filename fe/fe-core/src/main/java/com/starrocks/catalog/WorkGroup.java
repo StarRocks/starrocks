@@ -27,6 +27,8 @@ public class WorkGroup implements Writable {
     public static final String MEM_LIMIT = "mem_limit";
     public static final String CONCURRENCY_LIMIT = "concurrency_limit";
     public static final String WORKGROUP_TYPE = "type";
+    public static final String DEFAULT_WORKGROUP_NAME = "default_wg";
+
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("Name", ScalarType.createVarchar(100)))

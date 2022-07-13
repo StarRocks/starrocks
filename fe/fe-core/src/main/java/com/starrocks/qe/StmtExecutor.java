@@ -55,6 +55,7 @@ import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.WorkGroup;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -390,6 +391,13 @@ public class StmtExecutor {
                             StringBuilder explainStringBuilder = new StringBuilder();
                             // StarRocksManager depends on explainString to get sql plan
                             if (parsedStmt.isExplain() || context.getSessionVariable().isReportSucc()) {
+                                if (context.getSessionVariable().isEnableResourceGroup() &&
+                                        parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
+                                    WorkGroup workGroup = Coordinator.prepareWorkGroup(context);
+                                    explainStringBuilder.append("RESOURCE GROUP: ")
+                                            .append(workGroup == null ? WorkGroup.DEFAULT_WORKGROUP_NAME : workGroup.getName())
+                                            .append("\n\n");
+                                }
                                 TExplainLevel level = null;
                                 switch (parsedStmt.getExplainLevel()) {
                                     case NORMAL:

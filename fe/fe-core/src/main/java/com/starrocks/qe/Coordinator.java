@@ -102,7 +102,6 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
-import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -206,6 +205,9 @@ public class Coordinator {
     private final Set<Integer> replicateScanIds = new HashSet<>();
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
+
+    // Resource group
+    WorkGroup workGroup = null;
 
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
     // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
@@ -400,20 +402,26 @@ public class Coordinator {
     // be for a query like 'SELECT 1').
     // A call to Exec() must precede all other member function calls.
     public void exec() throws Exception {
-        if (LOG.isDebugEnabled() && !scanNodes.isEmpty()) {
-            LOG.debug("debug: in Coordinator::exec. query id: {}, planNode: {}",
-                    DebugUtil.printId(queryId), scanNodes.get(0).treeToThrift());
+        if (LOG.isDebugEnabled()) {
+            if (!scanNodes.isEmpty()) {
+                LOG.debug("debug: in Coordinator::exec. query id: {}, planNode: {}",
+                        DebugUtil.printId(queryId), scanNodes.get(0).treeToThrift());
+            }
+            if (!fragments.isEmpty()) {
+                LOG.debug("debug: in Coordinator::exec. query id: {}, fragment: {}",
+                        DebugUtil.printId(queryId), fragments.get(0).toThrift());
+            }
+            LOG.debug("debug: in Coordinator::exec. query id: {}, desc table: {}",
+                    DebugUtil.printId(queryId), descTable);
         }
 
-        if (LOG.isDebugEnabled() && !fragments.isEmpty()) {
-            LOG.debug("debug: in Coordinator::exec. query id: {}, fragment: {}",
-                    DebugUtil.printId(queryId), fragments.get(0).toThrift());
-        }
-        LOG.debug("debug: in Coordinator::exec. query id: {}, desc table: {}",
-                DebugUtil.printId(queryId), descTable);
 
         // prepare information
         prepare();
+
+        // prepare workgroup
+        this.workGroup = prepareWorkGroup(ConnectContext.get());
+
         // compute Fragment Instance
         computeScanRangeAssignment();
 
@@ -421,7 +429,37 @@ public class Coordinator {
 
         traceInstance();
 
-        // create result receiver
+        prepareResultSink();
+    }
+
+    public static WorkGroup prepareWorkGroup(ConnectContext connect) {
+        WorkGroup workgroup = null;
+        if (connect == null || !connect.getSessionVariable().isEnableResourceGroup()) {
+            return null;
+        }
+        SessionVariable sessionVariable = connect.getSessionVariable();
+
+        // 1. try to use the resource group specified by workgroup_id
+        long workgroupId = connect.getSessionVariable().getWorkGroupId();
+        if (workgroupId > 0) {
+            workgroup = new WorkGroup();
+            workgroup.setId(workgroupId);
+        }
+
+        // 2. if the specified resource group not exist try to use the default one
+        if (workgroup == null) {
+            workgroup = Catalog.getCurrentCatalog().getWorkGroupMgr().chooseWorkGroup(
+                    ConnectContext.get(), WorkGroupClassifier.QueryType.SELECT);
+        }
+
+        if (workgroup != null) {
+            connect.getAuditEventBuilder().setResourceGroup(workgroup.getName());
+        }
+
+        return workgroup;
+    }
+
+    private void prepareResultSink() throws Exception {
         PlanFragmentId topId = fragments.get(0).getFragmentId();
         FragmentExecParams topParams = fragmentExecParamsMap.get(topId);
         if (topParams.fragment.getSink() instanceof ResultSink) {
@@ -469,6 +507,7 @@ public class Coordinator {
         for (TUniqueId instanceId : instanceIds) {
             profileDoneSignal.addMark(instanceId, -1L /* value is meaningless */);
         }
+
         long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
         lock();
         try {
@@ -540,13 +579,10 @@ public class Coordinator {
                             params.toThrift(instanceId2Host.keySet(), descTable, isEnablePipelineEngine);
                     List<Pair<BackendExecState, Future<PExecPlanFragmentResult>>> futures = Lists.newArrayList();
 
-                    boolean needCheckBackendState = false;
-                    if (queryOptions.getQuery_type() == TQueryType.LOAD && profileFragmentId == 0) {
-                        // this is a load process, and it is the first fragment.
-                        // we should add all BackendExecState of this fragment to needCheckBackendExecStates,
-                        // so that we can check these backends' state when joining this Coordinator
-                        needCheckBackendState = true;
-                    }
+                    // This is a load process, and it is the first fragment.
+                    // we should add all BackendExecState of this fragment to needCheckBackendExecStates,
+                    // so that we can check these backends' state when joining this Coordinator
+                    boolean needCheckBackendState = queryOptions.getQuery_type() == TQueryType.LOAD && profileFragmentId == 0;
 
                     for (TExecPlanFragmentParams tParam : tParams) {
                         // TODO: pool of pre-formatted BackendExecStates?
@@ -2125,11 +2161,6 @@ public class Coordinator {
                 fileNamePrefix = exportSink.getFileNamePrefix();
             }
 
-            WorkGroup workgroup = null;
-            if (ConnectContext.get() != null) {
-                workgroup = Catalog.getCurrentCatalog().getWorkGroupMgr().chooseWorkGroup(
-                        ConnectContext.get(), WorkGroupClassifier.QueryType.SELECT);
-            }
             setBucketSeqToInstanceForRuntimeFilters();
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
             for (int i = 0; i < instanceExecParams.size(); ++i) {
@@ -2218,17 +2249,7 @@ public class Coordinator {
                         boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
                         params.setEnable_resource_group(enableResourceGroup);
                         if (enableResourceGroup) {
-                            // session variable workgroup_id is just for verification of resource isolation.
-                            long workgroupId = ConnectContext.get().getSessionVariable().getWorkGroupId();
-                            if (workgroupId > 0) {
-                                TWorkGroup wg = new TWorkGroup();
-                                wg.setName("");
-                                wg.setId(ConnectContext.get().getSessionVariable().getWorkGroupId());
-                                wg.setVersion(0);
-                                params.setWorkgroup(wg);
-                            } else if (workgroup != null) {
-                                params.setWorkgroup(workgroup.toThrift());
-                            }
+                            params.setWorkgroup(workGroup.toThrift());
                         }
                     }
 
