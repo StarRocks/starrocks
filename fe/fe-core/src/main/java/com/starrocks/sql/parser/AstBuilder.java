@@ -713,7 +713,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.qualifiedName() != null) {
             dbName = getQualifiedName(context.db);
         }
-    
+
         return new ShowDeleteStmt(dbName == null ? null : dbName.toString());
     }
 
@@ -3371,7 +3371,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         StringLiteral stringLiteral = (StringLiteral) visit(context.path);
         return new ShowProcStmt(stringLiteral.getValue());
     }
-    
+
     private LabelName qualifiedNameToLabelName(QualifiedName qualifiedName) {
         // Hierarchy: catalog.database.table
         List<String> parts = qualifiedName.getParts();
