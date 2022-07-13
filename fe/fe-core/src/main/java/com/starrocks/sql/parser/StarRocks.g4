@@ -101,6 +101,7 @@ statement
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
     | killStatement                                                                         #kill
+    | showStatusStatement                                                                   #showStatus
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -529,6 +530,10 @@ showVariablesStatement
 
 killStatement
     : KILL (CONNECTION? | QUERY) INTEGER_VALUE
+    ;
+
+showStatusStatement
+    : SHOW varType? STATUS ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showNodesStatement

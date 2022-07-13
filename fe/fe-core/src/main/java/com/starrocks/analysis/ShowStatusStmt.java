@@ -21,21 +21,81 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 
-// Show Status statement
-// TODO(zhaochun): Add status information.
+/**
+ * Show Status statement
+ * Acceptable syntax:
+ * SHOW [GLOBAL | LOCAL | SESSION] STATUS [LIKE 'pattern' | WHERE expr]
+ */
 public class ShowStatusStmt extends ShowStmt {
+
+    private static final String NAME_COL = "Variable_name";
+    private static final String VALUE_COL = "Value";
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Variable_name", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Value", ScalarType.createVarchar(20)))
+                    .addColumn(new Column(NAME_COL, ScalarType.createVarchar(20)))
+                    .addColumn(new Column(VALUE_COL, ScalarType.createVarchar(20)))
                     .build();
+
+    private SetType type;
+    private String pattern;
+    private Expr where;
+
+    public ShowStatusStmt() {}
+
+    public ShowStatusStmt(SetType type, String pattern, Expr where) {
+        this.type = type;
+        this.pattern = pattern;
+        this.where = where;
+    }
+
+    public SetType getType() {
+        return type;
+    }
+
+    public void setType(SetType type) {
+        this.type = type;
+    }
+
+    public String getPattern() {
+        return pattern;
+    }
+
+    public Expr getWhere() {
+        return where;
+    }
 
     @Override
     public void analyze(Analyzer analyzer) {
+        if (type == null) {
+            type = SetType.DEFAULT;
+        }
     }
 
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+
+    @Override
+    public String toSql() {
+        StringBuilder sb = new StringBuilder("SHOW ");
+        sb.append(type.toString()).append(" STATUS");
+        if (pattern != null) {
+            sb.append(" LIKE '").append(pattern).append("'");
+        }
+        if (where != null) {
+            sb.append(" WHERE ").append(where.toSql());
+        }
+        return sb.toString();
+    }
+
+    @Override
+    public String toString() {
+        return toSql();
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }
