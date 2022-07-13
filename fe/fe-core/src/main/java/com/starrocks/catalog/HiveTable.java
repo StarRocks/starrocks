@@ -65,7 +65,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.util.Util.validateMetastoreUris;
-import static com.starrocks.external.HiveMetaStoreTableUtils.convertHiveTableColumnType;
+import static com.starrocks.external.HiveMetaStoreTableUtils.convertColumnType;
 import static com.starrocks.external.HiveMetaStoreTableUtils.isInternalCatalog;
 
 /**
@@ -247,7 +247,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                     needRefreshColumn = true;
                     break;
                 }
-                Type type = convertHiveTableColumnType(fieldSchema.getType());
+                Type type = convertColumnType(fieldSchema.getType());
                 if (!type.equals(column.getType())) {
                     needRefreshColumn = true;
                     break;
@@ -262,7 +262,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         fullSchema.clear();
         nameToColumn.clear();
         for (FieldSchema fieldSchema : allHiveColumns) {
-            Type srType = convertHiveTableColumnType(fieldSchema.getType());
+            Type srType = convertColumnType(fieldSchema.getType());
             Column column = new Column(fieldSchema.getName(), srType, true);
             fullSchema.add(column);
             nameToColumn.put(column.getName(), column);
