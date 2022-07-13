@@ -2892,6 +2892,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (context.START() != null && context.interval() == null) {
                 throw new SemanticException("Please input interval clause");
             }
+            boolean defineStartTime = false;
             if (context.START() != null) {
                 StringLiteral stringLiteral = (StringLiteral) visit(context.string());
                 DateTimeFormatter dateTimeFormatter = null;
@@ -2903,6 +2904,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         throw new IllegalArgumentException("Refresh start must be after current time");
                     }
                     startTime = tempStartTime;
+                    defineStartTime = true;
                 } catch (AnalysisException e) {
                     throw new IllegalArgumentException(
                             "Refresh start " +
@@ -2917,7 +2919,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                             "Refresh every " + intervalLiteral.getValue() + " must be IntLiteral");
                 }
             }
-            return new AsyncRefreshSchemeDesc(startTime, intervalLiteral);
+            return new AsyncRefreshSchemeDesc(defineStartTime, startTime, intervalLiteral);
         } else if (context.SYNC() != null) {
             return new SyncRefreshSchemeDesc();
         } else if (context.MANUAL() != null) {
