@@ -193,6 +193,9 @@ bool NodeChannel::is_open_done() {
 }
 
 Status NodeChannel::open_wait() {
+    if (_open_closure == nullptr) {
+        return _err_st;
+    }
     _open_closure->join();
     if (_open_closure->cntl.Failed()) {
         _cancelled = true;
@@ -768,12 +771,15 @@ Status OlapTableSink::try_open(RuntimeState* state) {
 }
 
 bool OlapTableSink::is_open_done() {
-    bool open_done = true;
-    for (auto& index_channel : _channels) {
-        index_channel->for_each_node_channel([&open_done](NodeChannel* ch) { open_done &= ch->is_open_done(); });
+    if (!_open_done) {
+        bool open_done = true;
+        for (auto& index_channel : _channels) {
+            index_channel->for_each_node_channel([&open_done](NodeChannel* ch) { open_done &= ch->is_open_done(); });
+        }
+        _open_done = open_done;
     }
 
-    return open_done;
+    return _open_done;
 }
 
 Status OlapTableSink::open_wait() {
@@ -981,12 +987,15 @@ Status OlapTableSink::try_close(RuntimeState* state) {
 }
 
 bool OlapTableSink::is_close_done() {
-    bool close_done = true;
-    for (auto& index_channel : _channels) {
-        index_channel->for_each_node_channel([&close_done](NodeChannel* ch) { close_done &= ch->is_close_done(); });
+    if (!_close_done) {
+        bool close_done = true;
+        for (auto& index_channel : _channels) {
+            index_channel->for_each_node_channel([&close_done](NodeChannel* ch) { close_done &= ch->is_close_done(); });
+        }
+        _close_done = close_done;
     }
 
-    return close_done;
+    return _close_done;
 }
 
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
