@@ -377,6 +377,23 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
+    public void testShowUserProperty() throws Exception {
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        String sql = "SHOW PROPERTY FOR 'test' LIKE '%load_cluster%'";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+    }
+
+    @Test
+    public void testSetUserProperty() throws Exception {
+        starRocksAssert.getCtx().setQualifiedUser("default_cluster:test");
+        String sql = "SET PROPERTY FOR 'test' 'max_user_connections' = 'value', 'test' = '400'";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
+    @Test
     public void testInsertStatement() throws Exception {
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         starRocksAssert.getCtx().setQualifiedUser("test");
