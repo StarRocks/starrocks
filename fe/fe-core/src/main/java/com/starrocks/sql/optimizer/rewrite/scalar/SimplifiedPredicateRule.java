@@ -70,6 +70,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         if (operator.getChildren().stream().anyMatch(s -> s.getType().isDecimalV3())) {
             Function decimalFn = ScalarFunction.createVectorizedBuiltin(fn.getId(), fn.getFunctionName().getFunction(),
                     Arrays.stream(argTypes).collect(Collectors.toList()), fn.hasVarArgs(), operator.getType());
+            decimalFn.setCouldApplyDictOptimize(fn.isCouldApplyDictOptimize());
             return new CallOperator("if", operator.getType(), args, decimalFn);
         }
 
