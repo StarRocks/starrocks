@@ -40,7 +40,9 @@ public class ShowStatusStmt extends ShowStmt {
     private String pattern;
     private Expr where;
 
-    public ShowStatusStmt() {}
+    public ShowStatusStmt() {
+        this.type = SetType.DEFAULT;
+    }
 
     public ShowStatusStmt(SetType type, String pattern, Expr where) {
         this.type = type;
@@ -50,10 +52,6 @@ public class ShowStatusStmt extends ShowStmt {
 
     public SetType getType() {
         return type;
-    }
-
-    public void setType(SetType type) {
-        this.type = type;
     }
 
     public String getPattern() {
