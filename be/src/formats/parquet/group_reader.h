@@ -52,7 +52,7 @@ struct GroupReaderParam {
 
     SharedBufferedInputStream* shared_buffered_stream = nullptr;
 
-    int chunk_size;
+    int chunk_size = 0;
 
     RandomAccessFile* file = nullptr;
 
