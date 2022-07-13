@@ -289,16 +289,4 @@ TEST_F(LakeServiceTest, test_abort) {
     ASSERT_TRUE(tablet.get_txn_log(1001).status().is_not_found());
 }
 
-TEST_F(LakeServiceTest, test_drop_tablet) {
-    {
-        brpc::Controller cntl;
-        lake::DropTabletRequest request;
-        lake::DropTabletResponse response;
-        request.add_tablet_ids(_tablet_id);
-        _lake_service.drop_tablet(&cntl, &request, &response, nullptr);
-        ASSERT_FALSE(cntl.Failed());
-        ASSERT_FALSE(_tablet_mgr->get_tablet(_tablet_id).ok());
-    }
-}
-
 } // namespace starrocks

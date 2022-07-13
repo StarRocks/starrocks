@@ -749,7 +749,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                         GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((OlapTable) table, false);
                 GlobalStateMgr.getCurrentState().sendDropTabletTasks(batchTaskMap);
             } else if (table.isLakeTable()) {
-                GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((LakeTable) table, true);
+                GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((LakeTable) table, false);
             }
             LOG.info("erased table [{}-{}].", tableId, table.getName());
         }
