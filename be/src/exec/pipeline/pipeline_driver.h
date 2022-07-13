@@ -43,33 +43,6 @@ enum DriverState : uint32_t {
     PENDING_FINISH = 9,
 };
 
-static inline std::string ds_to_string(DriverState ds) {
-    switch (ds) {
-    case NOT_READY:
-        return "NOT_READY";
-    case READY:
-        return "READY";
-    case RUNNING:
-        return "RUNNING";
-    case INPUT_EMPTY:
-        return "INPUT_EMPTY";
-    case OUTPUT_FULL:
-        return "OUTPUT_FULL";
-    case PRECONDITION_BLOCK:
-        return "PRECONDITION_BLOCK";
-    case FINISH:
-        return "FINISH";
-    case CANCELED:
-        return "CANCELED";
-    case INTERNAL_ERROR:
-        return "INTERNAL_ERROR";
-    case PENDING_FINISH:
-        return "PENDING_FINISH";
-    }
-    DCHECK(false);
-    return "UNKNOWN_STATE";
-}
-
 // DriverAcct is used to keep statistics of drivers' runtime information, such as time spent
 // on core, number of chunks already processed, which are taken into consideration by DriverQueue
 // for schedule.

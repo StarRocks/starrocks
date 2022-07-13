@@ -17,6 +17,33 @@
 
 namespace starrocks::pipeline {
 
+static std::string ds_to_string(DriverState ds) {
+    switch (ds) {
+    case NOT_READY:
+        return "NOT_READY";
+    case READY:
+        return "READY";
+    case RUNNING:
+        return "RUNNING";
+    case INPUT_EMPTY:
+        return "INPUT_EMPTY";
+    case OUTPUT_FULL:
+        return "OUTPUT_FULL";
+    case PRECONDITION_BLOCK:
+        return "PRECONDITION_BLOCK";
+    case FINISH:
+        return "FINISH";
+    case CANCELED:
+        return "CANCELED";
+    case INTERNAL_ERROR:
+        return "INTERNAL_ERROR";
+    case PENDING_FINISH:
+        return "PENDING_FINISH";
+    }
+    DCHECK(false);
+    return "UNKNOWN_STATE";
+}
+
 PipelineDriver::~PipelineDriver() noexcept {
     if (_workgroup != nullptr) {
         _workgroup->decrease_num_drivers();
@@ -480,10 +507,14 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
 }
 
 void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent) {
+    int64_t source_operator_last_cpu_time_ns = source_operator()->get_last_growth_cpu_time_ns();
+    int64_t sink_operator_last_cpu_time_ns = sink_operator()->get_last_growth_cpu_time_ns();
+    int64_t accounted_cpu_cost = time_spent + source_operator_last_cpu_time_ns + sink_operator_last_cpu_time_ns;
+
     driver_acct().increment_schedule_times();
     driver_acct().update_last_chunks_moved(total_chunks_moved);
     driver_acct().update_accumulated_rows_moved(total_rows_moved);
-    driver_acct().update_last_time_spent(time_spent);
+    driver_acct().update_last_time_spent(accounted_cpu_cost);
 
     // Update statistics of scan operator
     if (ScanOperator* scan = source_scan_operator()) {
@@ -492,11 +523,11 @@ void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_
     }
 
     // Update cpu cost of this query
-    int64_t runtime_ns = driver_acct().get_last_time_spent();
-    int64_t source_operator_last_cpu_time_ns = source_operator()->get_last_growth_cpu_time_ns();
-    int64_t sink_operator_last_cpu_time_ns = sink_operator()->get_last_growth_cpu_time_ns();
-    int64_t accounted_cpu_cost = runtime_ns + source_operator_last_cpu_time_ns + sink_operator_last_cpu_time_ns;
     query_ctx()->incr_cpu_cost(accounted_cpu_cost);
+
+    // For big query check cpu
+    auto* wg = workgroup();
+    if (wg) wg->incr_total_cpu_cost(accounted_cpu_cost);
 }
 
 } // namespace starrocks::pipeline
