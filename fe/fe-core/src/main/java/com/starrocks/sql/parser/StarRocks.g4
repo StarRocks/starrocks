@@ -101,7 +101,9 @@ statement
     | showDatabasesStatement                                                                #showDatabases
     | showProcesslistStatement                                                              #showProcesslist
     | showVariablesStatement                                                                #showVariables
+    | showUserPropertyStatement                                                             #showUserProperty
     | killStatement                                                                         #kill
+    | setUserPropertyStatement                                                              #setUserProperty
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -531,8 +533,16 @@ showProcesslistStatement
     : SHOW FULL? PROCESSLIST
     ;
 
+showUserPropertyStatement
+    : SHOW PROPERTY (FOR string)? (LIKE string)?
+    ;
+
 killStatement
     : KILL (CONNECTION? | QUERY) INTEGER_VALUE
+    ;
+
+setUserPropertyStatement
+    : SET PROPERTY (FOR string)? userPropertyList
     ;
 
 showNodesStatement
@@ -976,6 +986,10 @@ extProperties
 
 propertyList
     : '(' property (',' property)* ')'
+    ;
+
+userPropertyList
+    : property (',' property)*
     ;
 
 property
