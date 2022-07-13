@@ -2,6 +2,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
@@ -18,6 +19,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public class ShowHistogramStatsMetaStmt extends ShowStmt {
+    public ShowHistogramStatsMetaStmt(Predicate predicate) {
+        setPredicate(predicate);
+    }
 
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -60,6 +64,16 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_NO_SYNC;
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowHistogramStatsMetaStatement(this, context);
     }
 }
 
