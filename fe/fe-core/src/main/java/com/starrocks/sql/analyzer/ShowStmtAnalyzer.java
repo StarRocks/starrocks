@@ -14,6 +14,7 @@ import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -317,6 +318,20 @@ public class ShowStmtAnalyzer {
                 }
             } finally {
                 db.readUnlock();
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowProcStmt(ShowProcStmt node, ConnectContext context) {
+            String path = node.getPath();
+            if (Strings.isNullOrEmpty(path)) {
+                throw new SemanticException("Path is null");
+            }
+            try {
+                node.setNode(ProcService.getInstance().open(path));
+            } catch (AnalysisException e) {
+                throw new SemanticException(String.format("Unknown proc node path: ", path));
             }
             return null;
         }

@@ -112,8 +112,10 @@ statement
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
-    ;
 
+    // proc
+    | showProcStatement                                                                      #showProc
+    ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
 alterDbQuotaStmt
@@ -703,6 +705,12 @@ tabletList
 showProcedureStatement
     : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
     ;
+
+// ------------------------------------------- Proc Statement ---------------------------------------------------------
+showProcStatement
+    : SHOW PROC path=string
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
