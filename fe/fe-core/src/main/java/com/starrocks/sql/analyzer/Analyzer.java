@@ -325,7 +325,7 @@ public class Analyzer {
         @Override
         public Void visitCreateFunction(CreateFunctionStmt statement, ConnectContext context) {
             try {
-                statement.analyze(context, false);
+                statement.analyze(context);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }

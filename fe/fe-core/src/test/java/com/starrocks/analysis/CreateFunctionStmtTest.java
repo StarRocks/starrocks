@@ -27,6 +27,7 @@ public class CreateFunctionStmtTest {
         ctx.setCluster("default_cluster");
         compareAfterParse("CREATE FUNCTION f(INT, INT) RETURNS INT");
         compareAfterParse("CREATE AGGREGATE FUNCTION f(INT, INT) RETURNS INT INTERMEDIATE INT");
+        compareAfterParse("CREATE TABLE FUNCTION f(INT, INT) RETURNS INT");
         compareAfterParse("CREATE FUNCTION f(INT, INT) RETURNS INT PROPERTIES (\"key\"=\"value\")");
     }
 

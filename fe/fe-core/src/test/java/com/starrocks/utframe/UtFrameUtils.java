@@ -162,7 +162,6 @@ public class UtFrameUtils {
             statementBase =
                     com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
         } catch (ParsingException e) {
-            System.err.println("parse failed: " + e.getMessage());
             if (e.getMessage() == null) {
                 throw e;
             } else {

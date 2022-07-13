@@ -34,13 +34,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TFunctionBinaryType;
 import org.apache.commons.codec.binary.Hex;
@@ -253,14 +248,8 @@ public class CreateFunctionStmt extends DdlStmt {
         return function;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-        analyze(analyzer.getContext(), true);
-    }
-
-    public void analyze(ConnectContext context, boolean needCheckPrivilege) throws AnalysisException {
-        analyzeCommon(context.getDatabase(), context.getDatabase(), needCheckPrivilege);
+    public void analyze(ConnectContext context) throws AnalysisException {
+        analyzeCommon(context.getDatabase(), context.getDatabase());
         Preconditions.checkArgument(isStarrocksJar);
         analyzeUdfClassInStarrocksJar();
         if (isAggregate) {
@@ -272,16 +261,9 @@ public class CreateFunctionStmt extends DdlStmt {
         }
     }
 
-    private void analyzeCommon(String defaultDb, String defaultCluster, boolean needCheck) throws AnalysisException {
+    private void analyzeCommon(String defaultDb, String defaultCluster) throws AnalysisException {
         // check function name
         functionName.analyze(defaultDb);
-
-        // check operation privilege
-        if (needCheck && !GlobalStateMgr.getCurrentState().getAuth()
-                .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
-
-        }
 
         // check argument
         argsDef.analyze();
@@ -510,7 +492,10 @@ public class CreateFunctionStmt extends DdlStmt {
         stringBuilder.append("CREATE ");
         if (isAggregate) {
             stringBuilder.append("AGGREGATE ");
+        } else if (isTable) {
+            stringBuilder.append("TABLE ");
         }
+
         stringBuilder.append("FUNCTION ");
         stringBuilder.append(functionName.toString());
         stringBuilder.append(argsDef.toSql());

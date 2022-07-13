@@ -22,12 +22,6 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 
 public class DropFunctionStmt extends DdlStmt {
@@ -59,24 +53,6 @@ public class DropFunctionStmt extends DdlStmt {
         this.function = function;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-
-        // analyze function name
-        functionName.analyze(analyzer.getDefaultDb());
-
-        // check operation privilege
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
-        }
-
-        // analyze arguments
-        argsDef.analyze();
-        function = new FunctionSearchDesc(functionName, argsDef.getArgTypes(), argsDef.isVariadic());
-    }
-
-    @Override
     public String toSql() {
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append("DROP FUNCTION ").append(functionName);
