@@ -582,7 +582,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.qualifiedName() != null) {
             dbName = getQualifiedName(context.db);
         }
-        dbName.toString();
         return new ShowDeleteStmt(dbName == null ? null : dbName.toString());
     }
 
