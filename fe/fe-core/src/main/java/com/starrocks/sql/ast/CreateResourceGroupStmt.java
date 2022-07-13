@@ -1,10 +1,13 @@
-package com.starrocks.analysis;
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+package com.starrocks.sql.ast;
+
+import com.starrocks.analysis.DdlStmt;
+import com.starrocks.analysis.Predicate;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.sql.analyzer.ResourceGroupAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TWorkGroupType;
 
 import java.util.ArrayList;
