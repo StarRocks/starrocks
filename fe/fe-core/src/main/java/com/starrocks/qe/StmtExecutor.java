@@ -789,7 +789,7 @@ public class StmtExecutor {
         }
     }
 
-    private void handleAnalyzeStmt() {
+    private void handleAnalyzeStmt() throws IOException {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
         Database db = MetaUtils.getDatabase(context, analyzeStmt.getTableName());
         OlapTable table = (OlapTable) MetaUtils.getTable(context, analyzeStmt.getTableName());
@@ -807,12 +807,14 @@ public class StmtExecutor {
                             analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL,
                             StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()));
         }
-
-        if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.FINISH)) {
-            context.getState().setOk();
-        } else {
-            context.getState().setError(analyzeStatus.getReason());
+        ShowResultSet resultSet = analyzeStatus.toShowResult();
+        if (isProxy) {
+            proxyResultSet = resultSet;
+            context.getState().setEof();
+            return;
         }
+
+        sendShowResult(resultSet);
     }
 
     private void handleDropHistogramStmt() {
