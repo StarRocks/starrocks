@@ -50,7 +50,7 @@ private:
     FragmentContext* const _fragment_ctx;
 
     bool _is_finished = false;
-    bool _is_open_done = false;
+    mutable bool _is_open_done = false;
 };
 
 class OlapTableSinkOperatorFactory final : public OperatorFactory {
