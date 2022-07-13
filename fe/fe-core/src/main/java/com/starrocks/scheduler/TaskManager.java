@@ -12,6 +12,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.QueryableReentrantLock;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -119,7 +120,8 @@ public class TaskManager {
 
             LocalDateTime startTime = Utils.getDatetimeFromLong(taskSchedule.getStartTime());
             Duration duration = Duration.between(LocalDateTime.now(), startTime);
-            long initialDelay = duration.getSeconds();
+            long initialDelay =
+                    TimeUtils.convertSecondToTimeUnitValue(duration.getSeconds(), taskSchedule.getTimeUnit());
             // if startTime < now, start scheduling now
             if (initialDelay < 0) {
                 initialDelay = 0;
@@ -345,7 +347,7 @@ public class TaskManager {
                 return;
             }
         }
-        if (task.getExpireTime() > 0  && System.currentTimeMillis() > task.getExpireTime()) {
+        if (task.getExpireTime() > 0 && System.currentTimeMillis() > task.getExpireTime()) {
             return;
         }
         try {
@@ -374,7 +376,7 @@ public class TaskManager {
             if (ex.getMessage().contains("Failed to get task lock")) {
                 submitResult = new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
             } else {
-                LOG.warn("Failed to create Task [{}]" +  taskName, ex);
+                LOG.warn("Failed to create Task [{}]" + taskName, ex);
                 throw ex;
             }
         }
@@ -502,7 +504,7 @@ public class TaskManager {
                     status.setState(Constants.TaskRunState.RUNNING);
                     taskRunManager.getRunningTaskRunMap().put(taskId, pendingTaskRun);
                 }
-            // for fe restart, should keep logic same as clearUnfinishedTaskRun
+                // for fe restart, should keep logic same as clearUnfinishedTaskRun
             } else if (toStatus == Constants.TaskRunState.FAILED) {
                 status.setErrorMessage(statusChange.getErrorMessage());
                 status.setErrorCode(statusChange.getErrorCode());
@@ -539,7 +541,8 @@ public class TaskManager {
         for (String queryId : queryIdList) {
             index.put(queryId, null);
         }
-        taskRunManager.getTaskRunHistory().getAllHistory().removeIf(runStatus -> index.containsKey(runStatus.getQueryId()));
+        taskRunManager.getTaskRunHistory().getAllHistory()
+                .removeIf(runStatus -> index.containsKey(runStatus.getQueryId()));
     }
 
     public void removeExpiredTasks() {
@@ -601,7 +604,6 @@ public class TaskManager {
         }
         LOG.info("remove run history:{}", historyToDelete);
     }
-
 
     private static class SerializeData {
         @SerializedName("tasks")

@@ -269,4 +269,25 @@ public class TimeUtils {
                         "Can not get TimeUnit from UnitIdentifier description: " + unitIdentifierDescription);
         }
     }
+
+    public static long convertSecondToTimeUnitValue(long second, TimeUnit unit) {
+        switch (unit) {
+            case DAYS:
+                return second / 60 / 60 / 24;
+            case HOURS:
+                return second / 60 / 60;
+            case MINUTES:
+                return second / 60;
+            case SECONDS:
+                return second;
+            case MILLISECONDS:
+                return second * 1000;
+            case MICROSECONDS:
+                return second * 1000 * 1000;
+            case NANOSECONDS:
+                return second * 1000 * 1000 * 1000;
+            default:
+                return 0;
+        }
+    }
 }
