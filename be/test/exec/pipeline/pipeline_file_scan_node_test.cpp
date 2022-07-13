@@ -230,6 +230,7 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
             ASSERT_TRUE(morsel_queues.count(source_id));
             auto& morsel_queue_factory = morsel_queues[source_id];
 
+            pipeline->source_operator_factory()->set_morsel_queue_factory(morsel_queue_factory.get());
             for (size_t i = 0; i < degree_of_parallelism; ++i) {
                 auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
                 DriverPtr driver =
