@@ -5,8 +5,9 @@
 #include <vector>
 
 #include "column/datum.h"
-#include "runtime/global_dict/dict_column.h"
+#include "runtime/global_dict/config.h"
 #include "storage/column_operator_predicate.h"
+#include "storage/olap_common.h"
 #include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
@@ -17,12 +18,12 @@ namespace starrocks::vectorized {
 // [0] "SR" -> true
 // [1] "RK" -> false
 //
-template <FieldType field_type>
+template <FieldType field_type, class ColumnType>
 class DictConjuctPredicateOperator {
 public:
     DictConjuctPredicateOperator(std::vector<uint8_t> code_mapping) : _code_mapping(std::move(code_mapping)) {}
 
-    uint8_t eval_at(const LowCardDictColumn* lowcard_column, int idx) const {
+    uint8_t eval_at(const ColumnType* lowcard_column, int idx) const {
         return _code_mapping[lowcard_column->get_data()[idx]];
     }
 
@@ -68,9 +69,12 @@ private:
 // used in low_card dict code
 ColumnPredicate* new_column_dict_conjuct_predicate(const TypeInfoPtr& type_info, ColumnId id,
                                                    std::vector<uint8_t> dict_mapping) {
-    DCHECK(type_info->type() == OLAP_FIELD_TYPE_INT);
-    if (type_info->type() == OLAP_FIELD_TYPE_INT) {
-        return new ColumnOperatorPredicate<OLAP_FIELD_TYPE_INT, LowCardDictColumn, DictConjuctPredicateOperator,
+    DCHECK(type_info->type() == OLAP_FIELD_TYPE_INT || type_info->type() == OLAP_FIELD_TYPE_SMALLINT);
+    if (type_info->type() == OLAP_FIELD_TYPE_SMALLINT) {
+        return new ColumnOperatorPredicate<OLAP_FIELD_TYPE_SMALLINT, Int16Column, DictConjuctPredicateOperator,
+                                           decltype(dict_mapping)>(type_info, id, std::move(dict_mapping));
+    } else if (type_info->type() == OLAP_FIELD_TYPE_INT) {
+        return new ColumnOperatorPredicate<OLAP_FIELD_TYPE_INT, Int32Column, DictConjuctPredicateOperator,
                                            decltype(dict_mapping)>(type_info, id, std::move(dict_mapping));
     }
 

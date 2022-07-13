@@ -7,8 +7,8 @@
 #include "column/column.h"
 #include "column/nullable_column.h"
 #include "runtime/global_dict/config.h"
-#include "runtime/global_dict/dict_column.h"
 #include "runtime/global_dict/types.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "simd/gather.h"
 #include "storage/range.h"
 #include "storage/rowset/column_iterator.h"
@@ -74,12 +74,13 @@ private:
 
 // GlobalDictCodeColumnIterator is similar to DictCodeColumnIterator
 // used in global dict optimize
+template <class DictTraits>
 class GlobalDictCodeColumnIterator final : public ColumnIterator {
 public:
     using Column = starrocks::vectorized::Column;
     using ColumnPredicate = starrocks::vectorized::ColumnPredicate;
     using GlobalDictMap = starrocks::vectorized::GlobalDictMap;
-    using LowCardDictColumn = starrocks::vectorized::LowCardDictColumn;
+    using LowCardDictColumn = typename DictTraits::LowCardDictColumn;
 
     GlobalDictCodeColumnIterator(ColumnId cid, ColumnIterator* iter, int16_t* code_convert_data, GlobalDictMap* gdict)
             : _cid(cid), _col_iter(iter), _local_to_global(code_convert_data), _global_dict(gdict) {}
@@ -129,7 +130,7 @@ public:
     }
 
     Status decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words) override {
-        LowCardDictColumn::Container* container = nullptr;
+        typename LowCardDictColumn::Container* container = nullptr;
         bool output_nullable = words->is_nullable();
 
         if (output_nullable) {
@@ -152,7 +153,7 @@ public:
         {
             using namespace vectorized;
             // res_data[i] = _local_to_global[codes[i]];
-            SIMDGather::gather(res_data.data(), _local_to_global, codes, DICT_DECODE_MAX_SIZE, size);
+            SIMDGather::gather(res_data.data(), _local_to_global, codes, vectorized::DICT_DECODE_MAX_SIZE, size);
         }
 
         if (output_nullable) {
@@ -169,13 +170,10 @@ public:
         return _col_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges);
     }
 
-    static Status build_code_convert_map(ScalarColumnIterator* file_column_iter, GlobalDictMap* global_dict,
-                                         std::vector<int16_t>* code_convert_map);
-
 private:
     void _init_local_dict_col();
     void _acquire_null_data(Column* global_dict_column, Column* local_dict_column);
-    const LowCardDictColumn::Container& _get_local_dict_col_container(Column* column);
+    const vectorized::Int32Column::Container& _get_local_dict_col_container(Column* column);
 
     ColumnId _cid;
     ColumnIterator* _col_iter;
@@ -187,5 +185,8 @@ private:
     GlobalDictMap* _global_dict;
     vectorized::ColumnPtr _local_dict_code_col;
 };
+
+Status build_code_convert_map(ScalarColumnIterator* file_column_iter, vectorized::GlobalDictMap* global_dict,
+                              std::vector<int16_t>* code_convert_map);
 
 } // namespace starrocks

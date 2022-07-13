@@ -91,7 +91,8 @@ Status DictDecodeNode::open(RuntimeState* state) {
             return Status::InternalError(fmt::format("Not found dict for cid:{}", need_encode_cid));
         }
         // TODO : avoid copy dict
-        GlobalDictDecoderPtr decoder = create_global_dict_decoder(dict_iter->second.second);
+        GlobalDictDecoderPtr decoder =
+                create_global_dict_decoder(runtime_state()->func_version(), dict_iter->second.second);
 
         _decoders.emplace_back(std::move(decoder));
     }

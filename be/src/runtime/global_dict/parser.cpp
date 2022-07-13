@@ -12,7 +12,6 @@
 #include "exprs/vectorized/dictmapping_expr.h"
 #include "runtime/descriptors.h"
 #include "runtime/global_dict/config.h"
-#include "runtime/global_dict/dict_column.h"
 #include "runtime/global_dict/miscs.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
@@ -27,8 +26,10 @@ namespace starrocks::vectorized {
 // Support Process any output type.
 // FunctionCallExpr(StringColumn) -> DictFuncExpr(LowcardColumn)
 // DictMappingExpr(LowcardColumn, FunctionCallExpr(PlaceHolder)) -> DictFuncExpr(LowcardColumn)
+template <class DictTraits>
 class DictFuncExpr final : public Expr {
 public:
+    using LowCardDictColumn = typename DictTraits::LowCardDictColumn;
     DictFuncExpr(Expr& expr, DictOptimizeContext* dict_ctxs)
             : Expr(expr), _origin_expr(expr), _dict_opt_ctx(dict_ctxs) {
         _always_null = _dict_opt_ctx->convert_column->only_null();
@@ -106,7 +107,8 @@ public:
 
 private:
     // res[i] = mapping[index[i]]
-    std::vector<uint32_t> _code_convert(const std::vector<int32_t>& index, const std::vector<int16_t>& mapping) {
+    template <class T>
+    std::vector<uint32_t> _code_convert(const std::vector<T>& index, const std::vector<int16_t>& mapping) {
         std::vector<uint32_t> res(index.size());
         SIMDGather::gather(res.data(), mapping.data(), index.data(), mapping.size(), index.size());
         return res;
@@ -139,6 +141,7 @@ Status DictOptimizeParser::_check_could_apply_dict_optimize(Expr* expr, DictOpti
     return Status::OK();
 }
 
+template <class DictTraits>
 Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictOptimizeContext* dict_opt_ctx,
                                              int32_t targetSlotId) {
     auto* dict_mapping = down_cast<DictMappingExpr*>(expr);
@@ -214,7 +217,7 @@ Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictO
             rresult_map[sorted_id++] = slice;
         }
 
-        ColumnBuilder<LowCardDictType> builder(codes.size());
+        ColumnBuilder<DictTraits::LowCardDictType> builder(codes.size());
         // build code convert map
         for (int i = 0; i < num_rows; ++i) {
             if (viewer.is_null(i)) {
@@ -235,42 +238,46 @@ Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictO
 
 Status DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx,
                                            SlotId targetSlotId) {
-    return _eval_and_rewrite(expr_ctx, expr_ctx->root(), dict_opt_ctx, targetSlotId);
+    return DISPATCH_DICT(_runtime_state->func_version(), _eval_and_rewrite, expr_ctx, expr_ctx->root(), dict_opt_ctx,
+                         targetSlotId);
 }
 
-Status DictOptimizeParser::rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slot_id) {
+template <class DictTraits>
+Status DictOptimizeParser::_rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slot_id) {
     // call rewrite for each DictMappingExpr
     if (auto f = dynamic_cast<DictMappingExpr*>(expr)) {
         auto* dict_ctx_handle = _free_pool.add(new DictOptimizeContext());
-        RETURN_IF_ERROR(_eval_and_rewrite(ctx, f, dict_ctx_handle, slot_id));
-        f->rewrite(_free_pool.add(new DictFuncExpr(*f, dict_ctx_handle)));
+        RETURN_IF_ERROR(_eval_and_rewrite<DictTraits>(ctx, f, dict_ctx_handle, slot_id));
+        f->rewrite(_free_pool.add(new DictFuncExpr<DictTraits>(*f, dict_ctx_handle)));
         return Status::OK();
     }
 
     for (auto child : expr->children()) {
-        RETURN_IF_ERROR(rewrite_expr(ctx, child, -1));
+        RETURN_IF_ERROR(_rewrite_expr<DictTraits>(ctx, child, -1));
     }
     return Status::OK();
 }
 
+template <class DictTraits>
 Status DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
                                               const std::vector<SlotId>& slot_ids) {
     auto& expr_ctxs = *pexpr_ctxs;
     for (int i = 0; i < expr_ctxs.size(); ++i) {
         auto& expr_ctx = expr_ctxs[i];
         auto expr = expr_ctx->root();
-        rewrite_expr(expr_ctx, expr, slot_ids[i]);
+        _rewrite_expr<DictTraits>(expr_ctx, expr, slot_ids[i]);
     }
     return Status::OK();
 }
 
 Status DictOptimizeParser::rewrite_conjuncts(std::vector<ExprContext*>* pconjuncts_ctxs, RuntimeState* state) {
-    return _rewrite_expr_ctxs(pconjuncts_ctxs, state, std::vector<SlotId>(pconjuncts_ctxs->size(), -1));
+    return DISPATCH_DICT(_runtime_state->func_version(), _rewrite_expr_ctxs, pconjuncts_ctxs, state,
+                         std::vector<SlotId>(pconjuncts_ctxs->size(), -1));
 }
 
 Status DictOptimizeParser::rewrite_exprs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
                                          const std::vector<SlotId>& target_slotids) {
-    return _rewrite_expr_ctxs(pexpr_ctxs, state, target_slotids);
+    return DISPATCH_DICT(_runtime_state->func_version(), _rewrite_expr_ctxs, pexpr_ctxs, state, target_slotids);
 }
 
 void DictOptimizeParser::close(RuntimeState* state) noexcept {
@@ -288,7 +295,9 @@ void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const s
     if (global_dict.empty()) return;
 
     for (size_t i = 0; i < slot_descs->size(); ++i) {
-        if (global_dict.count((*slot_descs)[i]->id()) && (*slot_descs)[i]->type().type == LowCardDictType) {
+        bool maybe_lowcard_type = (*slot_descs)[i]->type().type == GlobalDictTraits::LowCardDictType ||
+                                  (*slot_descs)[i]->type().type == CompatibleGlobalDictTraits::LowCardDictType;
+        if (global_dict.count((*slot_descs)[i]->id()) && maybe_lowcard_type) {
             SlotDescriptor* newSlot = runtime_state->global_obj_pool()->add(new SlotDescriptor(*(*slot_descs)[i]));
             newSlot->type().type = TYPE_VARCHAR;
             (*slot_descs)[i] = newSlot;

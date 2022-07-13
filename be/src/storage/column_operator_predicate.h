@@ -9,10 +9,10 @@ namespace starrocks::vectorized {
 // Implementing a complete ColumnPredicate is very difficult, most of the ColumnPredicate logic is similar,
 // we just need to implement similar apply operation can be more convenient to implement a new ColumnPredicate.
 
-template <FieldType field_type, class ColumnType, template <FieldType> class ColumnOperator, typename... Args>
+template <FieldType field_type, class ColumnType, template <FieldType, class> class ColumnOperator, typename... Args>
 class ColumnOperatorPredicate final : public ColumnPredicate {
 public:
-    using SpecColumnOperator = ColumnOperator<field_type>;
+    using SpecColumnOperator = ColumnOperator<field_type, ColumnType>;
     ColumnOperatorPredicate(const ColumnOperatorPredicate&) = delete;
     ColumnOperatorPredicate(const TypeInfoPtr& type_info, ColumnId id, Args... args)
             : ColumnPredicate(type_info, id), _predicate_operator(std::forward<Args>(args)...) {}

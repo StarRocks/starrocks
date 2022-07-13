@@ -2,6 +2,8 @@
 
 #include "runtime/global_dict/decoder.h"
 
+#include <memory>
+
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/type_traits.h"
@@ -82,12 +84,17 @@ Status GlobalDictDecoderBase<type, Dict, result_type>::decode(vectorized::Column
     return Status::OK();
 }
 
-template <typename DictType>
-GlobalDictDecoderPtr create_global_dict_decoder(const DictType& dict) {
-    return std::make_unique<GlobalDictDecoderBase<LowCardDictType, DictType, TYPE_VARCHAR>>(dict);
+template <typename DictTraits>
+GlobalDictDecoderPtr create_decoder(const RGlobalDictMap& dict) {
+    return std::make_unique<GlobalDictDecoderBase<DictTraits::LowCardDictType, RGlobalDictMap, TYPE_VARCHAR>>(dict);
+}
+
+template <class DictType>
+GlobalDictDecoderPtr create_global_dict_decoder(int version, const DictType& dict) {
+    return DISPATCH_DICT(version, create_decoder, dict);
 }
 
 // explicit instantiation
-template GlobalDictDecoderPtr create_global_dict_decoder<RGlobalDictMap>(const RGlobalDictMap& dict);
+template GlobalDictDecoderPtr create_global_dict_decoder<RGlobalDictMap>(int version, const RGlobalDictMap& dict);
 
 } // namespace starrocks::vectorized

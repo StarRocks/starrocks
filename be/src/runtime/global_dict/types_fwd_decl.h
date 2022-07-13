@@ -13,9 +13,9 @@ namespace starrocks {
 namespace vectorized {
 
 // slice -> global dict code
-using GlobalDictMap = phmap::flat_hash_map<Slice, DictId, SliceHashWithSeed<PhmapSeed1>, SliceEqual>;
+using GlobalDictMap = phmap::flat_hash_map<Slice, DictIdType, SliceHashWithSeed<PhmapSeed1>, SliceEqual>;
 // global dict code -> slice
-using RGlobalDictMap = phmap::flat_hash_map<DictId, Slice>;
+using RGlobalDictMap = phmap::flat_hash_map<DictIdType, Slice>;
 
 using GlobalDictMapEntity = std::pair<GlobalDictMap, RGlobalDictMap>;
 // column-id -> GlobalDictMap

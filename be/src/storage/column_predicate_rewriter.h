@@ -61,11 +61,15 @@ private:
 // TODO: refactor ConjunctivePredicatesRewriter and ColumnPredicateRewriter
 class ConjunctivePredicatesRewriter {
 public:
-    ConjunctivePredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps)
-            : ConjunctivePredicatesRewriter(predicates, dict_maps, nullptr) {}
-    ConjunctivePredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps,
-                                  std::vector<uint8_t>* disable_rewrite)
-            : _predicates(predicates), _dict_maps(dict_maps), _disable_dict_rewrite(disable_rewrite) {}
+    ConjunctivePredicatesRewriter(int func_version, ConjunctivePredicates& predicates,
+                                  const ColumnIdToGlobalDictMap& dict_maps)
+            : ConjunctivePredicatesRewriter(func_version, predicates, dict_maps, nullptr) {}
+    ConjunctivePredicatesRewriter(int func_version, ConjunctivePredicates& predicates,
+                                  const ColumnIdToGlobalDictMap& dict_maps, std::vector<uint8_t>* disable_rewrite)
+            : _func_version(func_version),
+              _predicates(predicates),
+              _dict_maps(dict_maps),
+              _disable_dict_rewrite(disable_rewrite) {}
 
     Status rewrite_predicate(ObjectPool* pool);
 
@@ -75,6 +79,7 @@ public:
     }
 
 private:
+    int _func_version;
     ConjunctivePredicates& _predicates;
     const ColumnIdToGlobalDictMap& _dict_maps;
     std::vector<uint8_t>* _disable_dict_rewrite;

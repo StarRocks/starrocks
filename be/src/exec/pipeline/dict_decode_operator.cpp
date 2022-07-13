@@ -101,7 +101,8 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
             return Status::InternalError(fmt::format("Not found dict for cid:{}", need_encode_cid));
         }
         // TODO : avoid copy dict
-        vectorized::GlobalDictDecoderPtr decoder = vectorized::create_global_dict_decoder(dict_iter->second.second);
+        vectorized::GlobalDictDecoderPtr decoder =
+                vectorized::create_global_dict_decoder(this->_state->func_version(), dict_iter->second.second);
 
         _decoders.emplace_back(std::move(decoder));
     }

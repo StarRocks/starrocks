@@ -21,12 +21,14 @@
 #include "runtime/global_dict/miscs.h"
 #include "simd/simd.h"
 #include "storage/column_expr_predicate.h"
+#include "storage/olap_common.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
 #include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
-constexpr static const FieldType kDictCodeType = OLAP_FIELD_TYPE_INT;
+constexpr static const FieldType kCompatibleDictCodeType = OLAP_FIELD_TYPE_INT;
+constexpr static const FieldType kDictCodeType = OLAP_FIELD_TYPE_SMALLINT;
 
 Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
     // because schema has reordered
@@ -374,9 +376,14 @@ Status ConjunctivePredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
                 for (int i = 0; i < codes.size(); ++i) {
                     code_mapping[codes[i]] = selection[i];
                 }
+                if (_func_version > CompatibleGlobalDictTraits::compatible_version) {
+                    pred = new_column_dict_conjuct_predicate(get_type_info(kDictCodeType), pred->column_id(),
+                                                             std::move(code_mapping));
+                } else {
+                    pred = new_column_dict_conjuct_predicate(get_type_info(kCompatibleDictCodeType), pred->column_id(),
+                                                             std::move(code_mapping));
+                }
 
-                pred = new_column_dict_conjuct_predicate(get_type_info(kDictCodeType), pred->column_id(),
-                                                         std::move(code_mapping));
                 pool->add(const_cast<ColumnPredicate*>(pred));
             }
         }

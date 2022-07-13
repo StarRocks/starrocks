@@ -6,7 +6,9 @@
 
 #include "column/binary_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/status.h"
 #include "runtime/global_dict/types.h"
+#include "runtime/mem_tracker.h"
 #include "storage/rowset/column_iterator.h"
 
 namespace starrocks {
@@ -17,6 +19,7 @@ public:
     ColumnDecoder() = default;
 
     void set_iterator(ColumnIterator* iter) { _iter = iter; }
+    void set_func_version(int version) { _version = version; }
 
     Status decode_dict_codes(const vectorized::Column& codes, vectorized::Column* words) {
         DCHECK(_iter != nullptr);
@@ -31,7 +34,7 @@ public:
     void set_all_page_dict_encoded(bool all_page_dict_encoded) { _all_page_dict_encoded = all_page_dict_encoded; }
     void set_global_dict(vectorized::GlobalDictMap* global_dict) { _global_dict = global_dict; }
     // check global dict is superset of local dict
-    void check_global_dict();
+    Status check_global_dict();
 
     Status encode_to_global_id(vectorized::Column* datas, vectorized::Column* codes);
     bool need_force_encode_to_global_id() const {
@@ -41,6 +44,10 @@ public:
     int16_t* code_convert_data() { return _code_convert_map.has_value() ? _code_convert_map->data() + 1 : nullptr; }
 
 private:
+    template <class DictTraits>
+    Status _encode_to_global_id(vectorized::Column* datas, vectorized::Column* codes);
+
+    int _version = vectorized::CompatibleGlobalDictTraits::compatible_version;
     std::optional<std::vector<int16_t>> _code_convert_map;
     ColumnIterator* _iter = nullptr;
     vectorized::GlobalDictMap* _global_dict = nullptr;

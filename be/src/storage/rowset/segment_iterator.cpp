@@ -19,6 +19,7 @@
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
 #include "runtime/external_scan_context_mgr.h"
+#include "runtime/primitive_type.h"
 #include "segment_options.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
@@ -410,10 +411,12 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
 
             if constexpr (check_global_dict) {
                 _column_decoders[cid].set_iterator(_column_iterators[cid]);
+                _column_decoders[cid].set_func_version(_opts.function_version);
+
                 _column_decoders[cid].set_all_page_dict_encoded(_column_iterators[cid]->all_page_dict_encoded());
                 if (_opts.global_dictmaps->count(cid)) {
                     _column_decoders[cid].set_global_dict(_opts.global_dictmaps->find(cid)->second);
-                    _column_decoders[cid].check_global_dict();
+                    RETURN_IF_ERROR(_column_decoders[cid].check_global_dict());
                 }
             }
 
@@ -733,7 +736,6 @@ Status SegmentIterator::_read_columns(const Schema& schema, Chunk* chunk, size_t
 inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size_t n) {
     size_t read_num = 0;
     SparseRange range;
-    size_t cur_rowid = _cur_rowid;
 
     if (_cur_rowid != _range_iter.begin() || _cur_rowid == 0) {
         _cur_rowid = _range_iter.begin();
@@ -762,7 +764,6 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
         }
     }
 
-    _cur_rowid = cur_rowid;
     _opts.stats->raw_rows_read += read_num;
     chunk->check_or_die();
     return Status::OK();
@@ -1170,9 +1171,16 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             auto f2 = std::make_shared<Field>(cid, f->name(), kDictCodeType, -1, -1, f->is_nullable());
             ColumnIterator* iter = nullptr;
             if (use_global_dict_code) {
-                iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid],
-                                                        _column_decoders[cid].code_convert_data(),
-                                                        _opts.global_dictmaps->at(cid));
+                if (_opts.function_version > vectorized::CompatibleGlobalDictTraits::compatible_version) {
+                    iter = new GlobalDictCodeColumnIterator<GlobalDictTraits>(cid, _column_iterators[cid],
+                                                                              _column_decoders[cid].code_convert_data(),
+                                                                              _opts.global_dictmaps->at(cid));
+                } else {
+                    iter = new GlobalDictCodeColumnIterator<CompatibleGlobalDictTraits>(
+                            cid, _column_iterators[cid], _column_decoders[cid].code_convert_data(),
+                            _opts.global_dictmaps->at(cid));
+                }
+
             } else {
                 iter = new DictCodeColumnIterator(cid, _column_iterators[cid]);
             }
@@ -1287,11 +1295,11 @@ Status SegmentIterator::_init_global_dict_decoder() {
         const FieldPtr& f = _schema.field(i);
         const ColumnId cid = f->id();
         if (_can_using_global_dict(f)) {
-            auto iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid],
-                                                         _column_decoders[cid].code_convert_data(),
-                                                         _opts.global_dictmaps->at(cid));
-            _obj_pool.add(iter);
+            auto* iter = DISPATCH_DICT(_opts.version, (ColumnIterator*)new GlobalDictCodeColumnIterator, cid,
+                                       _column_iterators[cid], _column_decoders[cid].code_convert_data(),
+                                       _opts.global_dictmaps->at(cid)) _obj_pool.add(iter);
             _column_decoders[cid].set_iterator(iter);
+            _column_decoders[cid].set_func_version(_opts.function_version);
         }
     }
     return Status::OK();
@@ -1315,7 +1323,8 @@ Status SegmentIterator::_rewrite_predicates() {
     }
 
     for (auto& conjunct_predicate : _opts.delete_predicates.predicate_list()) {
-        ConjunctivePredicatesRewriter crewriter(conjunct_predicate, *_opts.global_dictmaps, &disable_dict_rewrites);
+        ConjunctivePredicatesRewriter crewriter(_opts.function_version, conjunct_predicate, *_opts.global_dictmaps,
+                                                &disable_dict_rewrites);
         crewriter.rewrite_predicate(&_obj_pool);
     }
 

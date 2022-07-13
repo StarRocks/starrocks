@@ -18,7 +18,7 @@ public:
 using GlobalDictDecoderPtr = std::unique_ptr<GlobalDictDecoder>;
 
 template <typename DictType>
-GlobalDictDecoderPtr create_global_dict_decoder(const DictType& dict);
+GlobalDictDecoderPtr create_global_dict_decoder(int version, const DictType& dict);
 
 } // namespace vectorized
 } // namespace starrocks

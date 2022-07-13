@@ -33,6 +33,7 @@
 #include "rowset_options.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "segment_options.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
@@ -351,6 +352,7 @@ Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const Row
     seg_options.reader_type = options.reader_type;
     seg_options.chunk_size = options.chunk_size;
     seg_options.global_dictmaps = options.global_dictmaps;
+    seg_options.function_version = options.runtime_state->func_version();
     seg_options.unused_output_column_ids = options.unused_output_column_ids;
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
