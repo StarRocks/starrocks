@@ -27,8 +27,11 @@ public class WorkGroup implements Writable {
     public static final String MEM_LIMIT = "mem_limit";
     public static final String CONCURRENCY_LIMIT = "concurrency_limit";
     public static final String WORKGROUP_TYPE = "type";
+    public static final String DEFAULT_WORKGROUP_NAME = "default_wg";
+
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
+<<<<<<< HEAD
                     .addColumn(new Column("Name", ScalarType.createVarchar(100)))
                     .addColumn(new Column("Id", ScalarType.createVarchar(200)))
                     .addColumn(new Column("CPUCoreLimit", ScalarType.createVarchar(200)))
@@ -37,6 +40,20 @@ public class WorkGroup implements Writable {
                     .addColumn(new Column("Type", ScalarType.createVarchar(200)))
                     .addColumn(new Column("Classifiers", ScalarType.createVarchar(1024)))
                     .build();
+=======
+                    .addColumn(new Column("name", ScalarType.createVarchar(100)))
+                    .addColumn(new Column("id", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("cpu_core_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("mem_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("big_query_cpu_second_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("big_query_scan_rows_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("big_query_mem_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("concurrency_limit", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("type", ScalarType.createVarchar(200)))
+                    .addColumn(new Column("classifiers", ScalarType.createVarchar(1024)))
+                   .build();
+
+>>>>>>> 0273a98f1 ([Feature] display resource group info in explain verbose (#8481))
     @SerializedName(value = "classifiers")
     List<WorkGroupClassifier> classifiers;
     @SerializedName(value = "name")

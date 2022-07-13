@@ -104,7 +104,6 @@ import com.starrocks.statistic.Constants;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
-import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
@@ -386,6 +385,7 @@ public class StmtExecutor {
                                     new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()));
                         }
 
+<<<<<<< HEAD
                         if (execPlanBuildByNewPlanner) {
                             StringBuilder explainStringBuilder = new StringBuilder();
                             // StarRocksManager depends on explainString to get sql plan
@@ -410,6 +410,11 @@ public class StmtExecutor {
                         } else {
                             Preconditions.checkState(false, "shouldn't reach here");
                         }
+=======
+                        Preconditions.checkState(execPlanBuildByNewPlanner, "must use new planner");
+
+                        handleQueryStmt(execPlan);
+>>>>>>> 0273a98f1 ([Feature] display resource group info in explain verbose (#8481))
 
                         if (context.getSessionVariable().isReportSucc()) {
                             writeProfile(beginTimeInNanoSecond);
@@ -684,19 +689,24 @@ public class StmtExecutor {
     }
 
     // Process a select statement.
-    private void handleQueryStmt(List<PlanFragment> fragments, List<ScanNode> scanNodes, TDescriptorTable descTable,
-                                 List<String> colNames, List<Expr> outputExprs, String explainString) throws Exception {
+    private void handleQueryStmt(ExecPlan execPlan) throws Exception {
         // Every time set no send flag and clean all data in buffer
         context.getMysqlChannel().reset();
-        StatementBase queryStmt = parsedStmt;
 
-        if (queryStmt.isExplain()) {
-            handleExplainStmt(explainString);
+        if (parsedStmt.isExplain()) {
+            handleExplainStmt(buildExplainString(execPlan));
             return;
         }
         if (context.getQueryDetail() != null) {
-            context.getQueryDetail().setExplain(explainString);
+            context.getQueryDetail().setExplain(buildExplainString(execPlan));
         }
+
+        StatementBase queryStmt = parsedStmt;
+        List<PlanFragment> fragments = execPlan.getFragments();
+        List<ScanNode> scanNodes = execPlan.getScanNodes();
+        TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
+        List<String> colNames = execPlan.getColNames();
+        List<Expr> outputExprs = execPlan.getOutputExprs();
 
         coord = new Coordinator(context, fragments, scanNodes, descTable);
 
@@ -917,7 +927,11 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
-    private void handleExplainStmt(String result) throws IOException {
+    private void handleExplainStmt(String explainString) throws IOException {
+        if (context.getQueryDetail() != null) {
+            context.getQueryDetail().setExplain(explainString);
+        }
+
         ShowResultSetMetaData metaData =
                 ShowResultSetMetaData.builder()
                         .addColumn(new Column("Explain String", ScalarType.createVarchar(20)))
@@ -925,12 +939,25 @@ public class StmtExecutor {
         sendMetaData(metaData);
 
         // Send result set.
-        for (String item : result.split("\n")) {
+        for (String item : explainString.split("\n")) {
             serializer.reset();
             serializer.writeLenEncodedString(item);
             context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
         }
         context.getState().setEof();
+    }
+
+    private String buildExplainString(ExecPlan execPlan) {
+        String explainString = "";
+        if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
+            if (context.getSessionVariable().isEnableResourceGroup()) {
+                WorkGroup workGroup = Coordinator.prepareWorkGroup(context);
+                String workGroupStr = workGroup != null ? workGroup.getName() : WorkGroup.DEFAULT_WORKGROUP_NAME;
+                explainString += "RESOURCE GROUP: " + workGroupStr + "\n\n";
+            }
+        }
+        explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
+        return explainString;
     }
 
     private void handleDdlStmt() {
@@ -1027,13 +1054,39 @@ public class StmtExecutor {
                 || statement instanceof CreateAnalyzeJobStmt;
     }
 
+<<<<<<< HEAD
     public void handleInsertStmtWithNewPlanner(ExecPlan execPlan, InsertStmt stmt) throws Exception {
         if (stmt.getQueryStatement().isExplain()) {
             handleExplainStmt(execPlan.getExplainString(TExplainLevel.NORMAL));
+=======
+    public void handleInsertOverwrite(InsertStmt insertStmt) {
+        Database database = MetaUtils.getDatabase(context, insertStmt.getTableName());
+        Table table = insertStmt.getTargetTable();
+        if (!(table instanceof OlapTable)) {
+            LOG.warn("insert overwrite table:{} type:{} is not supported", table.getName(), table.getClass());
+            throw new RuntimeException("not supported table type for insert overwrite");
+        }
+        OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
+                insertStmt, database.getId(), olapTable.getId());
+        insertStmt.setOverwriteJobId(insertOverwriteJob.getJobId());
+        try {
+            InsertOverwriteJobManager manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager();
+            manager.executeJob(context, this, insertOverwriteJob);
+        } catch (Exception e) {
+            LOG.warn("execute insert overwrite job:{} failed", insertOverwriteJob.getJobId(), e);
+            throw new RuntimeException("insert overwrite failed", e);
+        }
+    }
+
+    public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+        if (stmt.isExplain()) {
+            handleExplainStmt(buildExplainString(execPlan));
+>>>>>>> 0273a98f1 ([Feature] display resource group info in explain verbose (#8481))
             return;
         }
         if (context.getQueryDetail() != null) {
-            context.getQueryDetail().setExplain(execPlan.getExplainString(TExplainLevel.NORMAL));
+            context.getQueryDetail().setExplain(buildExplainString(execPlan));
         }
 
         MetaUtils.normalizationTableName(context, stmt.getTableName());
