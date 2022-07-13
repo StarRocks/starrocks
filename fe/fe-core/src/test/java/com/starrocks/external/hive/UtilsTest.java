@@ -12,8 +12,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.HiveMetaStoreTableUtils;
-import mockit.Mocked;
-import org.apache.avro.Schema;
 import org.apache.hadoop.hive.common.StatsSetupConst;
 import org.junit.Assert;
 import org.junit.Test;
@@ -191,11 +189,11 @@ public class UtilsTest {
     public void testCharString() throws DdlException {
         Type charType = ScalarType.createCharType(100);
         String typeStr = "char(100)";
-        Type resType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
+        Type resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
         Assert.assertEquals(resType, charType);
 
         typeStr = "char(50)";
-        resType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
+        resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
         Assert.assertNotEquals(resType, charType);
     }
 
@@ -203,29 +201,21 @@ public class UtilsTest {
     public void testVarcharString() throws DdlException {
         Type varcharType = ScalarType.createVarcharType(100);
         String typeStr = "varchar(100)";
-        Type resType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
+        Type resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
         Assert.assertEquals(resType, varcharType);
 
         typeStr = "varchar(50)";
-        resType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
+        resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
         Assert.assertNotEquals(resType, varcharType);
 
         varcharType = ScalarType.createVarcharType();
         typeStr = "varchar(-1)";
-        resType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
+        resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
         Assert.assertEquals(resType, varcharType);
 
         Type stringType = ScalarType.createDefaultString();
         typeStr = "string";
-        resType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
+        resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
         Assert.assertEquals(resType, stringType);
-    }
-
-    @Test
-    public void testArraySchema() throws DdlException {
-        Schema unionSchema = Schema.createUnion(Schema.create(Schema.Type.INT));
-        Schema arraySchema = Schema.createArray(unionSchema);
-        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(arraySchema),
-                new ArrayType(ScalarType.createType(PrimitiveType.INT)));
     }
 }
