@@ -42,6 +42,7 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateResourceGroupStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
@@ -1377,7 +1378,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new DropHistogramStmt(tableName, columnNames);
     }
 
-    // ------------------------------------------- Work Group Statement -------------------------------------------------
+    // ------------------------------------------- Resource Group Statement -------------------------------------------------
 
     public ParseNode visitCreateResourceGroupStatement(StarRocksParser.CreateResourceGroupStatementContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());

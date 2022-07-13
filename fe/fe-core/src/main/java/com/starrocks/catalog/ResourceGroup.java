@@ -19,6 +19,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class ResourceGroup implements Writable {
+    public static final String GROUP_TYPE = "type";
     public static final String USER = "user";
     public static final String ROLE = "role";
     public static final String QUERY_TYPE = "query_type";
@@ -30,7 +31,7 @@ public class ResourceGroup implements Writable {
     public static final String BIG_QUERY_SCAN_ROWS_LIMIT = "big_query_scan_rows_limit";
     public static final String BIG_QUERY_CPU_SECOND_LIMIT = "big_query_cpu_second_limit";
     public static final String CONCURRENCY_LIMIT = "concurrency_limit";
-    public static final String DEFAULT_WORKGROUP_NAME = "default_wg";
+    public static final String DEFAULT_RESOURCE_GROUP_NAME = "default_wg";
 
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()

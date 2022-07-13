@@ -961,9 +961,10 @@ public class StmtExecutor {
         String explainString = "";
         if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
             if (context.getSessionVariable().isEnableResourceGroup()) {
-                WorkGroup workGroup = Coordinator.prepareWorkGroup(context);
-                String workGroupStr = workGroup != null ? workGroup.getName() : WorkGroup.DEFAULT_WORKGROUP_NAME;
-                explainString += "RESOURCE GROUP: " + workGroupStr + "\n\n";
+                ResourceGroup resourceGroup = Coordinator.prepareResourceGroup(context);
+                String resourceGroupStr =
+                        resourceGroup != null ? resourceGroup.getName() : ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME;
+                explainString += "RESOURCE GROUP: " + resourceGroupStr + "\n\n";
             }
         }
         explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());

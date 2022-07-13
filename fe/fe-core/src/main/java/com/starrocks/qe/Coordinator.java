@@ -469,7 +469,7 @@ public class Coordinator {
         prepare();
 
         // prepare workgroup
-        this.resourceGroup = prepareWorkGroup(connectContext);
+        this.resourceGroup = prepareResourceGroup(connectContext);
 
         // compute Fragment Instance
         computeScanRangeAssignment();
@@ -488,39 +488,40 @@ public class Coordinator {
         deliverExecFragments();
     }
 
-    public static ResourceGroup prepareWorkGroup(ConnectContext connect) {
-        ResourceGroup workgroup = null;
+
+    public static ResourceGroup prepareResourceGroup(ConnectContext connect) {
+        ResourceGroup resourceGroup = null;
         if (connect == null || !connect.getSessionVariable().isEnableResourceGroup()) {
-            return workgroup;
+            return resourceGroup;
         }
         SessionVariable sessionVariable = connect.getSessionVariable();
 
         // 1. try to use the resource group specified by the variable
         if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
             String rgName = sessionVariable.getResourceGroup();
-            workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(rgName);
+            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(rgName);
         }
 
         // 2. try to use the resource group specified by workgroup_id
-        long workgroupId = connect.getSessionVariable().getWorkGroupId();
-        if (workgroup == null && workgroupId > 0) {
-            workgroup = new WorkGroup();
-            workgroup.setId(workgroupId);
+        long workgroupId = connect.getSessionVariable().getResourceGroupId();
+        if (resourceGroup == null && workgroupId > 0) {
+            resourceGroup = new ResourceGroup();
+            resourceGroup.setId(workgroupId);
         }
 
         // 3. if the specified resource group not exist try to use the default one
-        if (workgroup == null) {
+        if (resourceGroup == null) {
             Set<Long> dbIds = connect.getCurrentSqlDbIds();
-            workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                     connect, ResourceGroupClassifier.QueryType.SELECT, dbIds);
         }
 
-        if (workgroup != null) {
-            connect.getAuditEventBuilder().setResourceGroup(workgroup.getName());
-            connect.setWorkGroup(workgroup);
+        if (resourceGroup != null) {
+            connect.getAuditEventBuilder().setResourceGroup(resourceGroup.getName());
+            connect.setResourceGroup(resourceGroup);
         }
 
-        return workgroup;
+        return resourceGroup;
     }
 
     private void prepareProfile() {
@@ -737,19 +738,19 @@ public class Coordinator {
      * - Each group should be delivered sequentially, and fragments in a group can be delivered concurrently.
      * <p>
      * For example, the following tree will produce four groups: [[1], [2, 3, 4], [5, 6], [7]]
-     *         1
-     *         │
-     *    ┌────┼────┐
-     *    │    │    │
-     *    2    3    4
-     *    │    │    │
+     * 1
+     * │
+     * ┌────┼────┐
+     * │    │    │
+     * 2    3    4
+     * │    │    │
      * ┌──┴─┐  │    │
      * │    │  │    │
      * 5    6  │    │
-     *      │  │    │
-     *      └──┼────┘
-     *         │
-     *         7
+     * │  │    │
+     * └──┼────┘
+     * │
+     * 7
      *
      * @return multiple fragment groups.
      */
