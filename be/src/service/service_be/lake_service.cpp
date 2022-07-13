@@ -13,6 +13,7 @@ DIAGNOSTIC_POP
 #include "common/status.h"
 #include "gutil/macros.h"
 #include "runtime/exec_env.h"
+#include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
@@ -146,7 +147,7 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
 
     // TODO: move the execution to TaskWorkerPool
     // This rpc never fail.
-    for (const auto& tablet_id : request->tablet_ids()) {
+    for (auto tablet_id : request->tablet_ids()) {
         auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
         if (!tablet.ok()) {
             LOG(WARNING) << "Fail to get tablet " << tablet_id << ": " << tablet.status();
@@ -156,6 +157,32 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
         for (const auto& txn_id : request->txn_ids()) {
             auto st = tablet->delete_txn_log(txn_id);
             LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_log_location(txn_id) << ": " << st;
+        }
+    }
+}
+
+void LakeServiceImpl::compact(::google::protobuf::RpcController* controller,
+                              const ::starrocks::lake::CompactRequest* request,
+                              ::starrocks::lake::CompactResponse* response, ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    (void)controller;
+
+    // TODO: move the execution to TaskWorkerPool
+    for (auto tablet_id : request->tablet_ids()) {
+        auto res = _env->lake_tablet_manager()->compact(tablet_id, request->version(), request->txn_id());
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to create compaction task for tablet " << tablet_id << ": " << res.status();
+            response->add_failed_tablets(tablet_id);
+            continue;
+        }
+
+        lake::CompactionTaskPtr task = std::move(res).value();
+        auto st = task->execute();
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to compact tablet " << tablet_id << ": " << st;
+            response->add_failed_tablets(tablet_id);
+        } else {
+            LOG(INFO) << "Compacted tablet " << tablet_id;
         }
     }
 }

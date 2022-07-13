@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.catalog.lake;
+package com.starrocks.lake;
 
 import com.google.gson.annotations.SerializedName;
 import com.staros.proto.ObjectStorageInfo;
@@ -58,9 +58,7 @@ public class LakeTable extends OlapTable implements GsonPreProcessable {
     }
 
     public void setShardStorageInfo(ShardStorageInfo shardStorageInfo) throws DdlException {
-        String storageGroup = null;
-
-        // s3://bucket/serviceId/tableId/
+        String storageGroup = null; // s3://bucket/serviceId/tableId/
         String path = String.format("%s/%d/", shardStorageInfo.getObjectStorageInfo().getObjectUri(), id);
         try {
             URI uri = new URI(path);
@@ -101,7 +99,6 @@ public class LakeTable extends OlapTable implements GsonPreProcessable {
     public static LakeTable read(DataInput in) throws IOException {
         // type is already read in Table
         String json = Text.readString(in);
-        LakeTable table = GsonUtils.GSON.fromJson(json, LakeTable.class);
-        return table;
+        return GsonUtils.GSON.fromJson(json, LakeTable.class);
     }
 }

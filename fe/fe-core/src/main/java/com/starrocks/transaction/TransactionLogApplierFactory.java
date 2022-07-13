@@ -2,14 +2,15 @@
 
 package com.starrocks.transaction;
 
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.lake.LakeTable;
+import com.starrocks.lake.LakeTable;
 
 public class TransactionLogApplierFactory {
-    public TransactionLogApplier create(Table table) {
+    public TransactionLogApplier create(Database db, Table table) {
         if (table.isLakeTable()) {
-            return new LakeTableTxnLogApplier((LakeTable) table);
+            return new LakeTableTxnLogApplier(db, (LakeTable) table);
         }
         if (table.isLocalTable()) {
             return new OlapTableTxnLogApplier((OlapTable) table);

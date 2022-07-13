@@ -4,6 +4,8 @@ package com.starrocks.rpc;
 
 import com.starrocks.lake.proto.AbortTxnRequest;
 import com.starrocks.lake.proto.AbortTxnResponse;
+import com.starrocks.lake.proto.CompactRequest;
+import com.starrocks.lake.proto.CompactResponse;
 import com.starrocks.lake.proto.PublishVersionRequest;
 import com.starrocks.lake.proto.PublishVersionResponse;
 import com.starrocks.thrift.TNetworkAddress;
@@ -49,6 +51,23 @@ public class LakeServiceClient {
             try {
                 LakeService service = BrpcProxy.getInstance().getLakeService(serverAddress);
                 return service.abortTxnAsync(request);
+            } catch (NoSuchElementException e) {
+                if (++count >= maxRetries) {
+                    throw new RpcException(serverAddress.hostname, e.getMessage());
+                }
+                sleep(retryIntervalMs);
+            } catch (Throwable e) {
+                throw new RpcException(serverAddress.hostname, e.getMessage());
+            }
+        }
+    }
+
+    public Future<CompactResponse> compact(CompactRequest request) throws RpcException {
+        int count = 0;
+        while (true) {
+            try {
+                LakeService service = BrpcProxy.getInstance().getLakeService(serverAddress);
+                return service.compactAsync(request);
             } catch (NoSuchElementException e) {
                 if (++count >= maxRetries) {
                     throw new RpcException(serverAddress.hostname, e.getMessage());

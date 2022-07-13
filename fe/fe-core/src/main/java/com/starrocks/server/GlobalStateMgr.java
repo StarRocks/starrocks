@@ -160,6 +160,8 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
+import com.starrocks.lake.CompactionDispatchDaemon;
+import com.starrocks.lake.CompactionManager;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
@@ -406,6 +408,9 @@ public class GlobalStateMgr {
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
 
+    private CompactionManager compactionManager; // For LakeTable
+    private CompactionDispatchDaemon compactionDispatchDaemon; // For LakeTable
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -424,6 +429,10 @@ public class GlobalStateMgr {
 
     public SystemInfoService getClusterInfo() {
         return nodeMgr.getClusterInfo();
+    }
+
+    public CompactionManager getCompactionManager() {
+        return compactionManager;
     }
 
     private HeartbeatMgr getHeartbeatMgr() {
@@ -565,6 +574,11 @@ public class GlobalStateMgr {
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
+
+        if (Config.use_staros) {
+            this.compactionManager = new CompactionManager();
+            this.compactionDispatchDaemon = new CompactionDispatchDaemon();
+        }
     }
 
     public static void destroyCheckpoint() {
@@ -813,7 +827,6 @@ public class GlobalStateMgr {
         initJournal();
         loadImage(this.imageDir); // load image file
 
-
         // 4. create load and export job label cleaner thread
         createLabelCleaner();
 
@@ -1020,6 +1033,10 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
+
+        if (Config.use_staros) {
+            compactionDispatchDaemon.start();
+        }
     }
 
     // start threads that should running on all FE

@@ -29,6 +29,9 @@ public:
     void abort_txn(::google::protobuf::RpcController* controller, const ::starrocks::lake::AbortTxnRequest* request,
                    ::starrocks::lake::AbortTxnResponse* response, ::google::protobuf::Closure* done) override;
 
+    void compact(::google::protobuf::RpcController* controller, const ::starrocks::lake::CompactRequest* rquest,
+                 ::starrocks::lake::CompactResponse* response, ::google::protobuf::Closure* done) override;
+
 private:
     ExecEnv* _env;
 };

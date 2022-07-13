@@ -1186,7 +1186,7 @@ public class DatabaseTransactionMgr {
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             long tableId = tableCommitInfo.getTableId();
             Table table = db.getTable(tableId);
-            TransactionLogApplier applier = txnLogApplierFactory.create(table);
+            TransactionLogApplier applier = txnLogApplierFactory.create(db, table);
             applier.applyCommitLog(transactionState, tableCommitInfo);
         }
 
@@ -1196,7 +1196,7 @@ public class DatabaseTransactionMgr {
     private boolean updateCatalogAfterVisible(TransactionState transactionState, Database db) {
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             Table table = db.getTable(tableCommitInfo.getTableId());
-            TransactionLogApplier applier = txnLogApplierFactory.create(table);
+            TransactionLogApplier applier = txnLogApplierFactory.create(db, table);
             applier.applyVisibleLog(transactionState, tableCommitInfo);
         }
         return true;

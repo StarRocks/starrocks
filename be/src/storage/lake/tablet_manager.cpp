@@ -408,6 +408,7 @@ Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata) {
     }
 
     if (log.has_op_compaction()) {
+        LOG(INFO) << "Applying compaction log";
         RETURN_IF_ERROR(apply_compaction_log(log.op_compaction(), metadata));
     }
 
@@ -453,6 +454,8 @@ Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const 
         if (!st.ok()) {
             LOG(WARNING) << "Fail to apply " << tablet->txn_log_location(txnid) << ": " << st;
             return st;
+        } else {
+            LOG(INFO) << "Published version. base_version=" << base_version << " new_version=" << new_version;
         }
     }
 
