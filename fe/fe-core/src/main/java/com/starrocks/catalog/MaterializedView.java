@@ -502,4 +502,16 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         MaterializedView mv = GsonUtils.GSON.fromJson(json, MaterializedView.class);
         return mv;
     }
+
+    /**
+     * Refresh the materialized view if the following conditions are met:
+     * 1. Refresh type of materialized view is ASYNC
+     * 2. timeunit and step not set for AsyncRefreshContext
+     * @return
+     */
+    public boolean isLoadTriggeredRefresh() {
+        AsyncRefreshContext asyncRefreshContext = this.refreshScheme.asyncRefreshContext;
+        return this.refreshScheme.getType() == MaterializedView.RefreshType.ASYNC &&
+                asyncRefreshContext.step == 0 &&  null == asyncRefreshContext.timeUnit;
+    }
 }
