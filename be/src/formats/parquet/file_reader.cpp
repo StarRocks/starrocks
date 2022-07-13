@@ -389,8 +389,9 @@ Status FileReader::_init_group_readers() {
     _row_group_size = _row_group_readers.size();
 
     // if coalesce read enabled, we have to
-    // 1. allocate shared bufferer input stream and
+    // 1. allocate shared buffered input stream and
     // 2. collect io ranges of every row group reader.
+    // 3. set io ranges to the stream.
     if (config::parquet_coalesce_read_enable) {
         _sb_stream = std::make_shared<SharedBufferedInputStream>(_file);
         std::vector<SharedBufferedInputStream::IORange> ranges;
