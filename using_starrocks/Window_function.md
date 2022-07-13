@@ -465,7 +465,7 @@ where property in ('prime','square');
 
 ## 使用 NTILE() 窗口函数
 
-`NTILE()` 函数将分区中已排序的数据**大小尽可能相等**地分配至指定数量（`num_buckets`）的桶中，并返回每一行所在的桶号。桶的编号从 `1` 开始直至 `num_buckets`。`NTILE()` 的返回类型为 BIGINT。
+`NTILE()` 函数将分区中已排序的数据**尽可能均匀**地分配至指定数量（`num_buckets`）的桶中，并返回每一行所在的桶号。桶的编号从 `1` 开始直至 `num_buckets`。`NTILE()` 的返回类型为 BIGINT。
 
 > 说明
 >
@@ -606,7 +606,7 @@ from int_t;
 
 ## 使用 SUM() 窗口函数
 
-`SUM()` 函数计算特定窗口内指定行数数据的和。
+`SUM()` 函数对特定窗口内指定行求和。
 
 语法：
 
