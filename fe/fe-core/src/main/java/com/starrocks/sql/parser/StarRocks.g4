@@ -122,10 +122,11 @@ statement
 
     // proc
     | showProcStatement                                                                     #showProc
-    
+
     // Backup Store Satement
     | showRestoreStatement                                                                  #showRestore
     ;
+
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
 alterDbQuotaStmt
@@ -767,7 +768,7 @@ showProcStatement
 showRestoreStatement
     : SHOW RESTORE (FROM identifier)?
     ;
-    
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
