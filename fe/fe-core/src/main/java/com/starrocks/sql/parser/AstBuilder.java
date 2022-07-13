@@ -116,6 +116,7 @@ import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowStatusStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
@@ -1914,6 +1915,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return new KillStmt(true, id);
         }
+    }
+
+    @Override
+    public ParseNode visitShowStatusStatement(StarRocksParser.ShowStatusStatementContext context) {
+        String pattern = null;
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            pattern = stringLiteral.getValue();
+        }
+
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        return new ShowStatusStmt(getVariableType(context.varType()), pattern, where);
     }
 
     @Override

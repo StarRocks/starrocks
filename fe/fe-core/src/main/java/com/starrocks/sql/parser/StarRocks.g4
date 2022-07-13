@@ -103,6 +103,7 @@ statement
     | showUserPropertyStatement                                                             #showUserProperty
     | killStatement                                                                         #kill
     | setUserPropertyStatement                                                              #setUserProperty
+    | showStatusStatement                                                                   #showStatus
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -539,6 +540,10 @@ killStatement
 
 setUserPropertyStatement
     : SET PROPERTY (FOR string)? userPropertyList
+    ;
+
+showStatusStatement
+    : SHOW varType? STATUS ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showNodesStatement
