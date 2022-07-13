@@ -381,7 +381,8 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setQualifiedUser("test");
         String sql = "SHOW PROPERTY FOR 'test' LIKE '%load_cluster%'";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
     }
 
     @Test
