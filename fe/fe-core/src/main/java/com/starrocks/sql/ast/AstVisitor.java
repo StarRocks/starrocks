@@ -64,6 +64,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
@@ -75,6 +76,7 @@ import com.starrocks.analysis.ShowSnapshotStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SlotRef;
@@ -312,6 +314,14 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitRecoverDbStmt(RecoverDbStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowUserPropertyStmt(ShowUserPropertyStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitSetUserPropertyStmt(SetUserPropertyStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
