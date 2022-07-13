@@ -105,6 +105,8 @@ import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.SetUserPropertyStmt;
+import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
@@ -116,6 +118,7 @@ import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
@@ -1858,6 +1861,34 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             throw new ParsingException("error catalog.database");
         }
+    }
+
+    @Override
+    public ParseNode visitShowUserPropertyStatement(StarRocksParser.ShowUserPropertyStatementContext context) {
+        String user;
+        String pattern;
+        if (context.FOR() == null) {
+            user = null;
+            pattern = context.LIKE() == null ? null : ((StringLiteral) visit(context.string(0))).getValue();
+        } else {
+            user = ((StringLiteral) visit(context.string(0))).getValue();
+            pattern = context.LIKE() == null ? null : ((StringLiteral) visit(context.string(1))).getValue();
+        }
+        return new ShowUserPropertyStmt(user, pattern);
+    }
+
+    @Override
+    public ParseNode visitSetUserPropertyStatement(StarRocksParser.SetUserPropertyStatementContext context) {
+        String user = context.FOR() == null ? null : ((StringLiteral) visit(context.string())).getValue();
+        List<SetVar> list = new ArrayList<>();
+        if (context.userPropertyList() != null) {
+            List<Property> propertyList = visit(context.userPropertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                SetVar setVar = new SetUserPropertyVar(property.getKey(), property.getValue());
+                list.add(setVar);
+            }
+        }
+        return new SetUserPropertyStmt(user, list);
     }
 
     @Override
