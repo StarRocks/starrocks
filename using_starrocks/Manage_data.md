@@ -6,6 +6,16 @@ Catalog（数据目录）用于管理数据。StarRocks 2.3 及以上版本提�
 
 - **External catalog**：外部数据目录，用于管理外部数据源中的数据。创建外部数据目录时需指定外部数据源访问信息。创建后，无需创建外部表即可查询外部数据。
 
+## 节点配置
+
+如果要访问的 Apache Hadoop® 集群开启了 Kerberos 认证，那么您需要在每一个 FE 的配置文件路径 **$FE_HOME/conf** 和每一个 BE 的配置文件路径 **$BE_HOME/conf** 下添加 Hadoop 集群的配置文件。具体操作步骤如下：
+
+1. 在 JDK 环境中为 BE 所在的机器配置 `JAVA_HOME` 环境变量。注意不能在 JRE 环境中配置该变量。
+2. 在所有 FE 和 BE 机器上执行 `kinit -kt keytab_path principal` 命令登录。注意使用该命令登录是有实效性的，所以需要将该命令放入 crontab 中定期执行。登录用户需要有访问 Hive 集群和 HDFS 集群的权限。
+3. 把 Hadoop 集群中的 **hive-site.xml**、**core-site.xml** 和 **hdfs-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 下，再把 **core-site.xml** 和 **hdfs-site.xml** 文件放到每个 BE 的 **$BE_HOME/conf** 下。
+4. 在每个 **$BE_HOME/conf/be.conf** 和每个 **$FE_HOME/conf/fe.conf** 文件中设置`JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`和`JAVA_OPTS_FOR_JDK_9="-Djava.security.krb5.conf=/etc/krb5.conf"`，其中 `/etc/krb5.conf` 是 **krb5.conf** 文件的路径。
+5. 将 Hive 节点域名和 IP 的映射关系，以及 HDFS 节点域名和 IP 的映射关系配置到 **/etc/hosts** 路径中。注意 Hive 资源的 Hive metastore URI 需使用如下格式：`thrift://<Hive元数据的IP地址>:<端口号>`，例如`"hive.metastore.uris" = "thrift://10.10.44.98:9083"`。
+
 ## 创建 external catalog
 
 ### 语法
