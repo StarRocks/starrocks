@@ -73,7 +73,7 @@ public class BeLoadRebalancer extends Rebalancer {
      */
     @Override
     protected List<TabletSchedCtx> selectAlternativeTabletsForCluster(
-            String clusterName, ClusterLoadStatistic clusterStat, TStorageMedium medium) {
+            ClusterLoadStatistic clusterStat, TStorageMedium medium) {
         List<TabletSchedCtx> alternativeTablets = Lists.newArrayList();
 
         // get classification of backends
@@ -83,7 +83,7 @@ public class BeLoadRebalancer extends Rebalancer {
         clusterStat.getBackendStatisticByClass(lowBEs, midBEs, highBEs, medium);
 
         if (lowBEs.isEmpty() && highBEs.isEmpty()) {
-            LOG.info("cluster is balance: {} with medium: {}. skip", clusterName, medium);
+            LOG.info("cluster is balance with medium: {}. skip", medium);
             return alternativeTablets;
         }
 
@@ -162,7 +162,7 @@ public class BeLoadRebalancer extends Rebalancer {
                         continue;
                     }
 
-                    TabletSchedCtx tabletCtx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, clusterName,
+                    TabletSchedCtx tabletCtx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE,
                             tabletMeta.getDbId(), tabletMeta.getTableId(), tabletMeta.getPartitionId(),
                             tabletMeta.getIndexId(), tabletId, System.currentTimeMillis());
                     // balance task's priority is always LOW
@@ -185,8 +185,8 @@ public class BeLoadRebalancer extends Rebalancer {
             }
         } // end for high backends
 
-        LOG.info("select alternative tablets for cluster: {}, medium: {}, num: {}, detail: {}",
-                clusterName, medium, alternativeTablets.size(),
+        LOG.info("select alternative tablets for cluster: medium: {}, num: {}, detail: {}",
+                medium, alternativeTablets.size(),
                 alternativeTablets.stream().mapToLong(TabletSchedCtx::getTabletId).toArray());
         return alternativeTablets;
     }
@@ -200,7 +200,7 @@ public class BeLoadRebalancer extends Rebalancer {
     @Override
     public void completeSchedCtx(TabletSchedCtx tabletCtx, Map<Long, PathSlot> backendsWorkingSlots)
             throws SchedException {
-        ClusterLoadStatistic clusterStat = statisticMap.get(tabletCtx.getCluster());
+        ClusterLoadStatistic clusterStat = loadStatistic;
         if (clusterStat == null) {
             throw new SchedException(Status.UNRECOVERABLE, "cluster does not exist");
         }

@@ -122,8 +122,7 @@ public class TabletScheduler extends MasterDaemon {
 
     // be id -> #working slots
     private Map<Long, PathSlot> backendsWorkingSlots = Maps.newConcurrentMap();
-    // cluster name -> load statistic
-    private Map<String, ClusterLoadStatistic> statisticMap = Maps.newConcurrentMap();
+    ClusterLoadStatistic loadStatistic;
     private long lastStatUpdateTime = 0;
 
     private long lastSlotAdjustTime = 0;
@@ -339,7 +338,7 @@ public class TabletScheduler extends MasterDaemon {
 
     private void updateClusterLoadStatisticsAndPriority() {
         updateClusterLoadStatistic();
-        rebalancer.updateLoadStatistic(statisticMap);
+        rebalancer.updateLoadStatistic(loadStatistic);
 
         adjustPriorities();
 
@@ -353,18 +352,14 @@ public class TabletScheduler extends MasterDaemon {
      * because we already limit the total number of running clone jobs in cluster by 'backend slots'
      */
     private void updateClusterLoadStatistic() {
-        Map<String, ClusterLoadStatistic> newStatisticMap = Maps.newConcurrentMap();
-        String clusterName = SystemInfoService.DEFAULT_CLUSTER;
         ClusterLoadStatistic clusterLoadStatistic = new ClusterLoadStatistic(infoService, invertedIndex);
         clusterLoadStatistic.init();
-        newStatisticMap.put(clusterName, clusterLoadStatistic);
-        LOG.info("update cluster {} load statistic:\n{}", clusterName, clusterLoadStatistic.getBrief());
-
-        this.statisticMap = newStatisticMap;
+        LOG.info("update cluster load statistic:\n{}", clusterLoadStatistic.getBrief());
+        this.loadStatistic = clusterLoadStatistic;
     }
 
-    public Map<String, ClusterLoadStatistic> getStatisticMap() {
-        return statisticMap;
+    public ClusterLoadStatistic getLoadStatistic() {
+        return loadStatistic;
     }
 
     /**
@@ -612,7 +607,7 @@ public class TabletScheduler extends MasterDaemon {
             } else {
                 List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
                 statusPair = tablet.getHealthStatusWithPriority(
-                        infoService, tabletCtx.getCluster(),
+                        infoService,
                         partition.getVisibleVersion(),
                         replicaNum,
                         aliveBeIdsInCluster);
@@ -747,7 +742,7 @@ public class TabletScheduler extends MasterDaemon {
     private void handleReplicaVersionIncomplete(TabletSchedCtx tabletCtx, AgentBatchTask batchTask)
             throws SchedException {
         stat.counterReplicaVersionMissingErr.incrementAndGet();
-        ClusterLoadStatistic statistic = statisticMap.get(tabletCtx.getCluster());
+        ClusterLoadStatistic statistic = loadStatistic;
         if (statistic == null) {
             throw new SchedException(Status.UNRECOVERABLE, "cluster does not exist");
         }
@@ -907,7 +902,7 @@ public class TabletScheduler extends MasterDaemon {
     }
 
     private boolean deleteReplicaOnSameHost(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
-        ClusterLoadStatistic statistic = statisticMap.get(tabletCtx.getCluster());
+        ClusterLoadStatistic statistic = loadStatistic;
         if (statistic == null) {
             return false;
         }
@@ -948,10 +943,6 @@ public class TabletScheduler extends MasterDaemon {
                 // this case should be handled in deleteBackendDropped()
                 return false;
             }
-            if (!be.getOwnerClusterName().equals(tabletCtx.getCluster())) {
-                deleteReplicaInternal(tabletCtx, replica, "not in cluster", force);
-                return true;
-            }
         }
         return false;
     }
@@ -970,7 +961,7 @@ public class TabletScheduler extends MasterDaemon {
     }
 
     private boolean deleteReplicaOnHighLoadBackend(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
-        ClusterLoadStatistic statistic = statisticMap.get(tabletCtx.getCluster());
+        ClusterLoadStatistic statistic = loadStatistic;
         if (statistic == null) {
             return false;
         }
@@ -1172,7 +1163,7 @@ public class TabletScheduler extends MasterDaemon {
     // choose a path on a backend which is fit for the tablet
     private RootPathLoadStatistic chooseAvailableDestPath(TabletSchedCtx tabletCtx, boolean forColocate)
             throws SchedException {
-        ClusterLoadStatistic statistic = statisticMap.get(tabletCtx.getCluster());
+        ClusterLoadStatistic statistic = loadStatistic;
         if (statistic == null) {
             throw new SchedException(Status.UNRECOVERABLE, "cluster does not exist");
         }
