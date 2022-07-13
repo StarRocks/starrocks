@@ -399,8 +399,8 @@ public class Database extends MetaObject implements Writable {
         dropTable(table.getName());
         if (!isForceDrop) {
             Table oldTable = GlobalStateMgr.getCurrentState().getRecycleBin().recycleTable(id, table);
-            if (oldTable != null && oldTable.getType() == Table.TableType.OLAP) {
-                batchTaskMap = GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) oldTable, false);
+            if (oldTable != null && oldTable.isOlapOrLakeTable()) {
+                batchTaskMap = GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) oldTable, isReplay);
             }
         } else { 
             if (table.isOlapOrLakeTable()) {
