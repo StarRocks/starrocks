@@ -205,6 +205,9 @@ public class Coordinator {
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
 
+    // Resource group
+    WorkGroup workGroup = null;
+
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
     // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
     private final Map<PlanFragmentId, BucketSeqToScanRange> fragmentIdBucketSeqToScanRangeMap = Maps.newHashMap();
@@ -397,20 +400,25 @@ public class Coordinator {
     // be for a query like 'SELECT 1').
     // A call to Exec() must precede all other member function calls.
     public void exec() throws Exception {
-        if (LOG.isDebugEnabled() && !scanNodes.isEmpty()) {
-            LOG.debug("debug: in Coordinator::exec. query id: {}, planNode: {}",
-                    DebugUtil.printId(queryId), scanNodes.get(0).treeToThrift());
+        if (LOG.isDebugEnabled()) {
+            if (!scanNodes.isEmpty()) {
+                LOG.debug("debug: in Coordinator::exec. query id: {}, planNode: {}",
+                        DebugUtil.printId(queryId), scanNodes.get(0).treeToThrift());
+            }
+            if (!fragments.isEmpty()) {
+                LOG.debug("debug: in Coordinator::exec. query id: {}, fragment: {}",
+                        DebugUtil.printId(queryId), fragments.get(0).toThrift());
+            }
+            LOG.debug("debug: in Coordinator::exec. query id: {}, desc table: {}",
+                    DebugUtil.printId(queryId), descTable);
         }
-
-        if (LOG.isDebugEnabled() && !fragments.isEmpty()) {
-            LOG.debug("debug: in Coordinator::exec. query id: {}, fragment: {}",
-                    DebugUtil.printId(queryId), fragments.get(0).toThrift());
-        }
-        LOG.debug("debug: in Coordinator::exec. query id: {}, desc table: {}",
-                DebugUtil.printId(queryId), descTable);
 
         // prepare information
         prepare();
+
+        // prepare workgroup
+        this.workGroup = prepareWorkGroup(connectContext);
+
         // compute Fragment Instance
         computeScanRangeAssignment();
 
@@ -418,7 +426,45 @@ public class Coordinator {
 
         traceInstance();
 
-        // create result receiver
+        prepareResultSink();
+    }
+
+    public static WorkGroup prepareWorkGroup(ConnectContext connect) {
+        WorkGroup workgroup = null;
+        if (connect == null || !connect.getSessionVariable().isEnableResourceGroup()) {
+            return workgroup;
+        }
+        SessionVariable sessionVariable = connect.getSessionVariable();
+
+        // 1. try to use the resource group specified by the variable
+        if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
+            String rgName = sessionVariable.getResourceGroup();
+            workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(rgName);
+        }
+
+        // 2. try to use the resource group specified by workgroup_id
+        long workgroupId = connect.getSessionVariable().getWorkGroupId();
+        if (workgroup == null && workgroupId > 0) {
+            workgroup = new WorkGroup();
+            workgroup.setId(workgroupId);
+        }
+
+        // 3. if the specified resource group not exist try to use the default one
+        if (workgroup == null) {
+            Set<Long> dbIds = connect.getCurrentSqlDbIds();
+            workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
+                    connect, WorkGroupClassifier.QueryType.SELECT, dbIds);
+        }
+
+        if (workgroup != null) {
+            connect.getAuditEventBuilder().setResourceGroup(workgroup.getName());
+            connect.setWorkGroup(workgroup);
+        }
+
+        return workgroup;
+    }
+
+    private void prepareResultSink() throws Exception {
         PlanFragmentId topId = fragments.get(0).getFragmentId();
         FragmentExecParams topParams = fragmentExecParamsMap.get(topId);
         if (topParams.fragment.getSink() instanceof ResultSink) {
@@ -538,13 +584,10 @@ public class Coordinator {
                             params.toThrift(instanceId2Host.keySet(), descTable, dbIds, isEnablePipelineEngine);
                     List<Pair<BackendExecState, Future<PExecPlanFragmentResult>>> futures = Lists.newArrayList();
 
-                    boolean needCheckBackendState = false;
-                    if (queryOptions.getQuery_type() == TQueryType.LOAD && profileFragmentId == 0) {
-                        // this is a load process, and it is the first fragment.
-                        // we should add all BackendExecState of this fragment to needCheckBackendExecStates,
-                        // so that we can check these backends' state when joining this Coordinator
-                        needCheckBackendState = true;
-                    }
+                    // This is a load process, and it is the first fragment.
+                    // we should add all BackendExecState of this fragment to needCheckBackendExecStates,
+                    // so that we can check these backends' state when joining this Coordinator
+                    boolean needCheckBackendState = queryOptions.getQuery_type() == TQueryType.LOAD && profileFragmentId == 0;
 
                     for (TExecPlanFragmentParams tParam : tParams) {
                         // TODO: pool of pre-formatted BackendExecStates?
