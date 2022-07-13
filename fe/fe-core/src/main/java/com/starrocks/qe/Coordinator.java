@@ -99,7 +99,6 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
-import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -2149,27 +2148,6 @@ public class Coordinator {
                 fileNamePrefix = exportSink.getFileNamePrefix();
             }
 
-            WorkGroup workgroup = null;
-            if (connectContext != null && connectContext.getSessionVariable().isEnableResourceGroup()) {
-                SessionVariable sessionVariable = connectContext.getSessionVariable();
-
-                // First try to use the resource group specified by the variable
-                if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
-                    String rgName = sessionVariable.getResourceGroup();
-                    workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(rgName);
-                }
-
-                // Second if the specified resource group not exist try to use the default one
-                if (workgroup == null) {
-                    workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
-                            connectContext, WorkGroupClassifier.QueryType.SELECT, dbIds);
-                }
-
-                if (workgroup != null) {
-                    connectContext.getAuditEventBuilder().setResourceGroup(workgroup.getName());
-                    connectContext.setWorkGroup(workgroup);
-                }
-            }
             setBucketSeqToInstanceForRuntimeFilters();
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
             for (int i = 0; i < instanceExecParams.size(); ++i) {
@@ -2248,17 +2226,7 @@ public class Coordinator {
                         boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
                         params.setEnable_resource_group(enableResourceGroup);
                         if (enableResourceGroup) {
-                            // session variable workgroup_id is just for verification of resource isolation.
-                            long workgroupId = connectContext.getSessionVariable().getWorkGroupId();
-                            if (workgroupId > 0) {
-                                TWorkGroup wg = new TWorkGroup();
-                                wg.setName("");
-                                wg.setId(connectContext.getSessionVariable().getWorkGroupId());
-                                wg.setVersion(0);
-                                params.setWorkgroup(wg);
-                            } else if (workgroup != null) {
-                                params.setWorkgroup(workgroup.toThrift());
-                            }
+                            params.setWorkgroup(workGroup.toThrift());
                         }
                     }
 
