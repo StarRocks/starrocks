@@ -300,7 +300,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
 
         if (auto* olap_scan = dynamic_cast<vectorized::OlapScanNode*>(scan_node)) {
-            olap_scan->enable_shared_scan(enable_shared_scan);
+            olap_scan->enable_shared_scan(enable_shared_scan && morsel_queue_factory->is_shared());
         }
     }
 
@@ -379,7 +379,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
             DCHECK(morsel_queue_factories.count(source_id));
             auto& morsel_queue_factory = morsel_queue_factories[source_id];
-            // DOP of OlapScanPrepareOperator is always 1.
+            // DOP of OlapScanPrepareOperator is 1 (shared scan)
+            // or equal to DOP of OlapScanOperator (morsel_queue_factory->size()).
             DCHECK(cur_pipeline_dop == 1 || cur_pipeline_dop == morsel_queue_factory->size());
 
             for (size_t i = 0; i < cur_pipeline_dop; ++i) {

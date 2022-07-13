@@ -44,17 +44,20 @@ private:
 
 class OlapScanPrepareOperatorFactory final : public SourceOperatorFactory {
 public:
-    OlapScanPrepareOperatorFactory(int32_t id, int32_t plan_node_id, OlapScanContextPtr ctx);
+    OlapScanPrepareOperatorFactory(int32_t id, int32_t plan_node_id, vectorized::OlapScanNode* const scan_node,
+                                   OlapScanContextFactoryPtr ctx_factory);
     ~OlapScanPrepareOperatorFactory() override = default;
 
     bool with_morsels() const { return true; }
 
     Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:
-    OlapScanContextPtr _ctx;
+    vectorized::OlapScanNode* const _scan_node;
+    OlapScanContextFactoryPtr _ctx_factory;
 };
 
 } // namespace pipeline

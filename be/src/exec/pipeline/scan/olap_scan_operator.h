@@ -15,10 +15,12 @@ namespace pipeline {
 
 class OlapScanContext;
 using OlapScanContextPtr = std::shared_ptr<OlapScanContext>;
+class OlapScanContextFactory;
+using OlapScanContextFactoryPtr = std::shared_ptr<OlapScanContextFactory>;
 
 class OlapScanOperatorFactory final : public ScanOperatorFactory {
 public:
-    OlapScanOperatorFactory(int32_t id, ScanNode* scan_node, OlapScanContextPtr ctx);
+    OlapScanOperatorFactory(int32_t id, ScanNode* scan_node, OlapScanContextFactoryPtr _ctx_factory);
 
     ~OlapScanOperatorFactory() override = default;
 
@@ -27,7 +29,7 @@ public:
     OperatorPtr do_create(int32_t dop, int32_t driver_sequence) override;
 
 private:
-    OlapScanContextPtr _ctx;
+    OlapScanContextFactoryPtr _ctx_factory;
 };
 
 class OlapScanOperator final : public ScanOperator {
