@@ -1,7 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.*;
+import com.starrocks.analysis.CreateRoleStmt;
+import com.starrocks.analysis.CreateUserStmt;
+import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.TablePattern;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.privilege.Auth;
