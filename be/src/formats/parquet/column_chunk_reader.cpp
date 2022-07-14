@@ -37,7 +37,7 @@ Status ColumnChunkReader::init(int chunk_size) {
     }
     size_t size = metadata().total_compressed_size;
     IBufferedInputStream* stream = _opts.sb_stream;
-    if (!_opts.use_sb_stream) {
+    if (stream == nullptr) {
         _default_stream = std::make_unique<DefaultBufferedInputStream>(_opts.file, start_offset, size);
         _default_stream->reserve(config::parquet_buffer_stream_reserve_size);
         stream = _default_stream.get();

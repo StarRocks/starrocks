@@ -16,14 +16,12 @@ namespace starrocks::parquet {
 constexpr static const PrimitiveType kDictCodePrimitiveType = TYPE_INT;
 constexpr static const FieldType kDictCodeFieldType = OLAP_FIELD_TYPE_INT;
 
-GroupReader::GroupReader(int chunk_size, RandomAccessFile* file, FileMetaData* file_metadata, int row_group_number)
-        : _chunk_size(chunk_size), _file(file), _file_metadata(file_metadata), _row_group_number(row_group_number) {
+GroupReader::GroupReader(const GroupReaderParam& param, int row_group_number) : _param(param) {
     _row_group_metadata =
-            std::make_shared<tparquet::RowGroup>(_file_metadata->t_metadata().row_groups[row_group_number]);
+            std::make_shared<tparquet::RowGroup>(param.file_metadata->t_metadata().row_groups[row_group_number]);
 }
 
-Status GroupReader::init(const GroupReaderParam& param) {
-    _param = param;
+Status GroupReader::init() {
     // the calling order matters, do not change unless you know why.
     RETURN_IF_ERROR(_init_column_readers());
     _process_columns_and_conjunct_ctxs();
@@ -79,26 +77,20 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
 }
 
 void GroupReader::close() {
-    // to release memory ASAP.
-    _sb_stream->release();
+    if (_param.shared_buffered_stream) {
+        _param.shared_buffered_stream->release_to_offset(_end_offset);
+    }
     _column_readers.clear();
 }
 
 Status GroupReader::_init_column_readers() {
-    _sb_stream = _obj_pool.add(new SharedBufferedInputStream(_file));
-
     ColumnReaderOptions& opts = _column_reader_opts;
     opts.timezone = _param.timezone;
-    opts.chunk_size = _chunk_size;
+    opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
-    opts.sb_stream = _sb_stream;
-    opts.file = _file;
+    opts.sb_stream = _param.shared_buffered_stream;
+    opts.file = _param.file;
     opts.row_group_meta = _row_group_metadata.get();
-    opts.use_sb_stream = config::parquet_coalesce_read_enable;
-
-    if (opts.use_sb_stream) {
-        RETURN_IF_ERROR(_set_io_ranges());
-    }
 
     for (const auto& column : _param.read_cols) {
         RETURN_IF_ERROR(_create_column_reader(column));
@@ -108,7 +100,7 @@ Status GroupReader::_init_column_readers() {
 
 Status GroupReader::_create_column_reader(const GroupReaderParam::Column& column) {
     std::unique_ptr<ColumnReader> column_reader = nullptr;
-    const auto* schema_node = _file_metadata->schema().get_stored_column_by_idx(column.col_idx_in_parquet);
+    const auto* schema_node = _param.file_metadata->schema().get_stored_column_by_idx(column.col_idx_in_parquet);
     {
         SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
         RETURN_IF_ERROR(
@@ -140,9 +132,8 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
     }
 }
 
-Status GroupReader::_set_io_ranges() {
-    std::vector<SharedBufferedInputStream::IORange> ranges;
-
+void GroupReader::collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset) {
+    int64_t end = 0;
     for (const auto& column : _param.read_cols) {
         auto& rg = _row_group_metadata->columns[column.col_idx_in_parquet].meta_data;
         int64_t offset = 0;
@@ -153,10 +144,10 @@ Status GroupReader::_set_io_ranges() {
         }
         int64_t size = rg.total_compressed_size;
         auto r = SharedBufferedInputStream::IORange{.offset = offset, .size = size};
-        ranges.emplace_back(r);
+        ranges->emplace_back(r);
+        end = std::max(end, offset + size);
     }
-
-    return _sb_stream->set_io_ranges(ranges);
+    *end_offset = end;
 }
 
 bool GroupReader::_can_using_dict_filter(const SlotDescriptor* slot, const SlotIdExprContextsMap& conjunct_ctxs_by_slot,
@@ -299,7 +290,7 @@ void GroupReader::_init_read_chunk() {
         read_slots.emplace_back(slots[chunk_index]);
     }
 
-    size_t chunk_size = _chunk_size;
+    size_t chunk_size = _param.chunk_size;
     _read_chunk = vectorized::ChunkHelper::new_chunk(read_slots, chunk_size);
     raw::stl_vector_resize_uninitialized(&_selection, chunk_size);
 

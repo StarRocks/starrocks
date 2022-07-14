@@ -149,4 +149,9 @@ void SharedBufferedInputStream::release() {
     _map.clear();
 }
 
+void SharedBufferedInputStream::release_to_offset(int64_t offset) {
+    auto it = _map.upper_bound(offset);
+    _map.erase(_map.begin(), it);
+}
+
 } // namespace starrocks
