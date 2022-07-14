@@ -298,4 +298,14 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  equal join conjunct: 6: v9 = 14: v4\n" +
                 "  |  equal join conjunct: 21: cast = 15: cast");
     }
+
+    @Test
+    public void testComplexInAndExistsPredicate() throws Exception {
+        String sql = "select * from t0 where t0.v1 in (select v4 from t1) or (1=0 and t0.v1 in (select v7 from t2));";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  16:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other predicates: CASE WHEN (18: countRows IS NULL) OR (18: countRows = 0) THEN FALSE WHEN 1: v1 IS NULL THEN NULL WHEN 16: v4 IS NOT NULL THEN TRUE WHEN 19: countNotNulls < 18: countRows THEN NULL ELSE FALSE END");
+    }
 }
