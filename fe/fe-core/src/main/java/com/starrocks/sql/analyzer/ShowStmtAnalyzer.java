@@ -8,6 +8,7 @@ import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.ShowAlterStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
@@ -120,6 +121,12 @@ public class ShowStmtAnalyzer {
             if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
+            return null;
+        }
+
+        @Override
+        public Void visitShowAlterStmt(ShowAlterStmt statement, ConnectContext context) {
+            ShowAlterStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
