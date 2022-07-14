@@ -156,7 +156,7 @@ public class SubqueryTransformer {
             OptExprBuilder builder = context.builder;
             if (builder.getExpressionMapping().hasExpression(node)) {
                 return builder;
-	    } 
+            }
 
             List<Expr> outerExprs = Collections.emptyList();
             if (node.getChildren().stream().filter(Subquery.class::isInstance).count() == 1) {

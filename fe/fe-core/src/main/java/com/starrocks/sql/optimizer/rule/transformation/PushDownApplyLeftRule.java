@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -24,6 +25,16 @@ import java.util.List;
  *
  */
 public class PushDownApplyLeftRule extends TransformationRule {
+
+    private static final List<OperatorType> FORBIDDEN_LIST =
+            ImmutableList.of(OperatorType.LOGICAL_PROJECT,
+                    OperatorType.LOGICAL_AGGR,
+                    OperatorType.LOGICAL_TOPN,
+                    OperatorType.LOGICAL_ASSERT_ONE_ROW,
+                    OperatorType.LOGICAL_WINDOW,
+                    OperatorType.LOGICAL_REPEAT,
+                    OperatorType.LOGICAL_TABLE_FUNCTION);
+
     public PushDownApplyLeftRule() {
         super(RuleType.TF_PUSH_DOWN_APPLY, Pattern.create(OperatorType.LOGICAL_APPLY)
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF))
@@ -34,11 +45,13 @@ public class PushDownApplyLeftRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalApplyOperator apply = (LogicalApplyOperator) input.getOp();
 
-        if (input.getInputs().get(0).getOp().getOpType() == OperatorType.LOGICAL_PROJECT) {
+        OperatorType childType = input.getInputs().get(0).getOp().getOpType();
+
+        if (FORBIDDEN_LIST.contains(childType)) {
             return false;
         }
 
-        if (input.getInputs().get(0).getOp().getOpType() == OperatorType.LOGICAL_APPLY) {
+        if (childType == OperatorType.LOGICAL_APPLY) {
             LogicalApplyOperator child = (LogicalApplyOperator) input.getInputs().get(0).getOp();
             if (SubqueryUtils.isUnCorrelationScalarSubquery(child)) {
                 return false;
