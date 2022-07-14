@@ -17,6 +17,7 @@ import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.external.hive.HiveMetaClient;
 import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
@@ -26,7 +27,11 @@ import org.apache.hadoop.hive.metastore.messaging.json.JSONMessageDeserializer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -39,6 +44,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.zip.GZIPInputStream;
 import javax.annotation.Nullable;
 
 /**
@@ -425,4 +431,19 @@ public class MetastoreEventsProcessor extends MasterDaemon {
     public ReadWriteLock getEventProcessorLock() {
         return eventProcessorLock;
     }
+
+    public static String gzipDeCompress(String messageBody) {
+        byte[] decodedBytes = Base64.getDecoder().decode(messageBody.getBytes(StandardCharsets.UTF_8));
+        try (
+                ByteArrayInputStream in = new ByteArrayInputStream(decodedBytes);
+                GZIPInputStream is = new GZIPInputStream(in)
+        ) {
+            byte[] bytes = IOUtils.toByteArray(is);
+            return new String(bytes, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            LOG.error("Decode message body error, message is " + messageBody, e);
+            throw new RuntimeException("cannot decode the stream ", e);
+        }
+    }
+
 }

@@ -37,9 +37,16 @@ public class DropPartitionEvent extends MetastoreTableEvent {
         super(event, metaCache);
         Preconditions.checkState(getEventType().equals(MetastoreEventType.DROP_PARTITION));
         Preconditions.checkNotNull(event.getMessage());
-        DropPartitionMessage dropPartitionMessage =
-                MetastoreEventsProcessor.getMessageDeserializer()
-                        .getDropPartitionMessage(event.getMessage());
+        DropPartitionMessage dropPartitionMessage = null;
+        if (event.getMessageFormat().contains("gzip")) {
+            dropPartitionMessage =
+                    MetastoreEventsProcessor.getMessageDeserializer()
+                            .getDropPartitionMessage(MetastoreEventsProcessor.gzipDeCompress(event.getMessage()));
+        } else {
+            dropPartitionMessage =
+                    MetastoreEventsProcessor.getMessageDeserializer()
+                            .getDropPartitionMessage(event.getMessage());
+        }
         try {
             hmsTbl = Preconditions.checkNotNull(dropPartitionMessage.getTableObj());
             Preconditions.checkNotNull(droppedPartition);
@@ -58,9 +65,16 @@ public class DropPartitionEvent extends MetastoreTableEvent {
     protected static List<MetastoreEvent> getEvents(NotificationEvent event,
                                                     HiveMetaCache metaCache,
                                                     List<Column> partCols) {
-        DropPartitionMessage dropPartitionMessage =
-                MetastoreEventsProcessor.getMessageDeserializer()
-                        .getDropPartitionMessage(event.getMessage());
+        DropPartitionMessage dropPartitionMessage = null;
+        if (event.getMessageFormat().contains("gzip")) {
+            dropPartitionMessage =
+                    MetastoreEventsProcessor.getMessageDeserializer()
+                            .getDropPartitionMessage(MetastoreEventsProcessor.gzipDeCompress(event.getMessage()));
+        } else {
+            dropPartitionMessage =
+                    MetastoreEventsProcessor.getMessageDeserializer()
+                            .getDropPartitionMessage(event.getMessage());
+        }
         List<MetastoreEvent> dropPartitionEvents = Lists.newArrayList();
         try {
             List<Map<String, String>> droppedPartitions = dropPartitionMessage.getPartitions();

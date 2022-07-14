@@ -25,8 +25,16 @@ public class CreateTableEvent extends MetastoreTableEvent {
         super(event, metaCache);
         Preconditions.checkArgument(MetastoreEventType.CREATE_TABLE.equals(getEventType()));
         Preconditions.checkNotNull(MetastoreEventType.CREATE_TABLE, debugString("Event message is null"));
-        CreateTableMessage createTableMessage =
-                MetastoreEventsProcessor.getMessageDeserializer().getCreateTableMessage(event.getMessage());
+        CreateTableMessage createTableMessage = null;
+        if (event.getMessageFormat().contains("gzip")) {
+            createTableMessage =
+                    MetastoreEventsProcessor.getMessageDeserializer()
+                            .getCreateTableMessage(MetastoreEventsProcessor.gzipDeCompress(event.getMessage()));
+        } else {
+            createTableMessage =
+                    MetastoreEventsProcessor.getMessageDeserializer()
+                            .getCreateTableMessage(event.getMessage());
+        }
 
         try {
             hmsTbl = createTableMessage.getTableObj();

@@ -44,9 +44,16 @@ public class AddPartitionEvent extends MetastoreTableEvent {
         }
 
         try {
-            AddPartitionMessage addPartitionMessage =
-                    MetastoreEventsProcessor.getMessageDeserializer()
-                            .getAddPartitionMessage(event.getMessage());
+            AddPartitionMessage addPartitionMessage = null;
+            if (event.getMessageFormat().contains("gzip")) {
+                addPartitionMessage =
+                        MetastoreEventsProcessor.getMessageDeserializer()
+                                .getAddPartitionMessage(MetastoreEventsProcessor.gzipDeCompress(event.getMessage()));
+            } else {
+                addPartitionMessage =
+                        MetastoreEventsProcessor.getMessageDeserializer()
+                                .getAddPartitionMessage(event.getMessage());
+            }
             this.addedPartition = addedPartition;
             this.partCols = partCols;
             hmsTbl = addPartitionMessage.getTableObj();
@@ -63,9 +70,16 @@ public class AddPartitionEvent extends MetastoreTableEvent {
                                                     List<Column> partCols) {
         List<MetastoreEvent> addPartitionEvents = Lists.newArrayList();
         try {
-            AddPartitionMessage addPartitionMessage =
-                    MetastoreEventsProcessor.getMessageDeserializer()
-                            .getAddPartitionMessage(event.getMessage());
+            AddPartitionMessage addPartitionMessage = null;
+            if (event.getMessageFormat().contains("gzip")) {
+                addPartitionMessage =
+                        MetastoreEventsProcessor.getMessageDeserializer()
+                                .getAddPartitionMessage(MetastoreEventsProcessor.gzipDeCompress(event.getMessage()));
+            } else {
+                addPartitionMessage =
+                        MetastoreEventsProcessor.getMessageDeserializer()
+                                .getAddPartitionMessage(event.getMessage());
+            }
             addPartitionMessage.getPartitionObjs().forEach(partition ->
                     addPartitionEvents.add(new AddPartitionEvent(event, metaCache, partition, partCols)));
         } catch (Exception ex) {
