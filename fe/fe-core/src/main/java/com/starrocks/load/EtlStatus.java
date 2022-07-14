@@ -36,6 +36,7 @@ import com.starrocks.load.loadv2.dpp.DppResult;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TEtlState;
 import com.starrocks.thrift.TUniqueId;
+import org.apache.commons.collections.map.HashedMap;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -59,7 +60,7 @@ public class EtlStatus implements Writable {
      *   the key is LOAD_STATISTIC; the value is json string of loadStatistic
      */
     @Deprecated
-    private Map<String, String> stats;
+    private Map<String, String> stats = new HashedMap();
     private LoadStatistic loadStatistic = new LoadStatistic();
     private static final String LOAD_STATISTIC = "STARROCKS_LOAD_STATISTIC";
 
@@ -77,7 +78,6 @@ public class EtlStatus implements Writable {
     public EtlStatus() {
         this.state = TEtlState.RUNNING;
         this.trackingUrl = DEFAULT_TRACKING_URL;
-        this.stats = Maps.newHashMap();
         this.counters = Maps.newHashMap();
         this.tableCounters = Maps.newHashMap();
         this.fileMap = Maps.newHashMap();
@@ -202,7 +202,7 @@ public class EtlStatus implements Writable {
 
         // persist load statics in stat counter
         stats.put(LOAD_STATISTIC, loadStatistic.toJson());
-        int statsCount = (stats == null) ? 0 : stats.size();
+        int statsCount = stats.size();
         out.writeInt(statsCount);
         for (Map.Entry<String, String> entry : stats.entrySet()) {
             Text.writeString(out, entry.getKey());
@@ -216,7 +216,7 @@ public class EtlStatus implements Writable {
             Text.writeString(out, entry.getValue());
         }
         // TODO: Persist `tableCounters`
-        // Text.writeString(out, GsonUtils.GSON.toShowInfoStr(tableCounters));
+        // Text.writeString(out, GsonUtils.GSON.toJson(tableCounters));
     }
 
     @SuppressWarnings("unchecked")
