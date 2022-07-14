@@ -1518,6 +1518,7 @@ public class GlobalStateMgr {
             private JournalCursor cursor = null;
 
             @Override
+            @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
             protected void runOneCycle() {
                 boolean err = false;
                 boolean hasLog = false;

@@ -459,6 +459,7 @@ public class BDBEnvironment {
 
     /**
      * open database and return a CloseSafeDatabase instance
+     * We should make sure no database conflict from upper level
      */
     public CloseSafeDatabase openDatabase(String dbName) {
         return new CloseSafeDatabase(replicatedEnvironment.openDatabase(null, dbName, dbConfig));

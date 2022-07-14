@@ -89,7 +89,10 @@ public class BDBJournalCursor implements JournalCursor {
      */
     public static BDBJournalCursor getJournalCursor(BDBEnvironment env, long fromKey, long toKey)
             throws JournalException, JournalInconsistentException, InterruptedException {
-        if (fromKey < 0 || toKey > 0 && toKey < fromKey || toKey <= 0 && toKey != JournalCursor.CUROSR_END_KEY) {
+        if (fromKey < 0  // fromKey must be a positive number
+                || (toKey > 0 && toKey < fromKey)  // if toKey is a positive number, it must be smaller than fromKey
+                || (toKey <= 0 && toKey != JournalCursor.CUROSR_END_KEY)  // if toKey is a negative number, it must be END
+            ) {
             throw new JournalException(String.format("Invalid key range! fromKey %s toKey %s", fromKey, toKey));
         }
         BDBJournalCursor cursor = new BDBJournalCursor(env, fromKey, toKey);
