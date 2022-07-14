@@ -263,4 +263,39 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  \n" +
                 "  |----29:EXCHANGE");
     }
+
+    @Test
+    public void testHavingSubquery() throws Exception {
+        String sql = "SELECT \n" +
+                "  LPAD('x', 1878790738, '') \n" +
+                "FROM \n" +
+                "  t1 AS t1_104, \n" +
+                "  t2 AS t2_105\n" +
+                "GROUP BY \n" +
+                "  t2_105.v7, \n" +
+                "  t2_105.v8 \n" +
+                "HAVING \n" +
+                "  (\n" +
+                "    (\n" +
+                "      MIN(\n" +
+                "        (t2_105.v9) IN (\n" +
+                "          (\n" +
+                "            SELECT \n" +
+                "              t1_104.v4 \n" +
+                "            FROM \n" +
+                "              t1 AS t1_104 \n" +
+                "            WHERE \n" +
+                "              (t2_105.v8) IN ('')\n" +
+                "          )\n" +
+                "        )\n" +
+                "      )\n" +
+                "    ) IS NULL\n" +
+                "  );";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "13:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 6: v9 = 14: v4\n" +
+                "  |  equal join conjunct: 21: cast = 15: cast");
+    }
 }
