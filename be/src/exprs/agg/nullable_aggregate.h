@@ -224,7 +224,7 @@ protected:
     AggregateFunctionPtr nested_function;
 };
 
-template <typename State, bool IsWindowFunc = false, bool IgnoreNull = true>
+template <typename State, bool IsWindowFunc, bool IgnoreNull = true>
 class NullableAggregateFunctionUnary final : public NullableAggregateFunctionBase<State, IsWindowFunc, IgnoreNull> {
 public:
     explicit NullableAggregateFunctionUnary(const AggregateFunctionPtr& nested_function)

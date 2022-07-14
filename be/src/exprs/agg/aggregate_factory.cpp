@@ -272,78 +272,84 @@ public:
         return pair->second.get();
     }
 
-    template <PrimitiveType arg_type, PrimitiveType return_type, bool AddWindowVersion = false>
+    template <PrimitiveType ArgPT, PrimitiveType ResultPT, bool AddWindowVersion = false>
     void add_aggregate_mapping(std::string&& name) {
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false, false),
-                               create_function<arg_type, return_type, false, false>(name));
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false, true),
-                               create_function<arg_type, return_type, false, true>(name));
+        _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, false),
+                               create_function<ArgPT, ResultPT, false, false>(name));
+        _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, true),
+                               create_function<ArgPT, ResultPT, false, true>(name));
         if constexpr (AddWindowVersion) {
-            _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, true, false),
-                                   create_function<arg_type, return_type, true, false>(name));
-            _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, true, true),
-                                   create_function<arg_type, return_type, true, true>(name));
+            _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, true, false),
+                                   create_function<ArgPT, ResultPT, true, false>(name));
+            _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, true, true),
+                                   create_function<ArgPT, ResultPT, true, true>(name));
         }
     }
 
-    template <PrimitiveType arg_type, PrimitiveType return_type>
+    template <PrimitiveType ArgPT, PrimitiveType ResultPT, bool AddWindowVersion = false>
     void add_object_mapping(std::string&& name) {
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false, false),
-                               create_object_function<arg_type, return_type, false>(name));
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false, true),
-                               create_object_function<arg_type, return_type, true>(name));
-    }
-
-    template <PrimitiveType arg_type, PrimitiveType return_type>
-    void add_array_mapping(std::string&& name) {
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false, false),
-                               create_array_function<arg_type, return_type, false>(name));
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false, true),
-                               create_array_function<arg_type, return_type, true>(name));
-    }
-
-    template <PrimitiveType arg_type, PrimitiveType return_type, bool AddWindowVersion = false>
-    void add_decimal_mapping(std::string&& name) {
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false, false),
-                               create_decimal_function<arg_type, return_type, false, false>(name));
-        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false, true),
-                               create_decimal_function<arg_type, return_type, false, true>(name));
+        _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, false),
+                               create_object_function<ArgPT, ResultPT, false, false>(name));
+        _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, true),
+                               create_object_function<ArgPT, ResultPT, false, true>(name));
         if constexpr (AddWindowVersion) {
-            _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, true, false),
-                                   create_decimal_function<arg_type, return_type, true, false>(name));
-            _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, true, true),
-                                   create_decimal_function<arg_type, return_type, true, true>(name));
+            _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, true, false),
+                                   create_object_function<ArgPT, ResultPT, true, false>(name));
+            _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, true, true),
+                                   create_object_function<ArgPT, ResultPT, true, true>(name));
         }
     }
 
-    template <PrimitiveType arg_type, PrimitiveType return_type, bool is_null>
+    template <PrimitiveType ArgPT, PrimitiveType ResultPT>
+    void add_array_mapping(std::string&& name) {
+        _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, false),
+                               create_array_function<ArgPT, ResultPT, false>(name));
+        _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, true),
+                               create_array_function<ArgPT, ResultPT, true>(name));
+    }
+
+    template <PrimitiveType ArgPT, PrimitiveType ResultPT, bool AddWindowVersion = false>
+    void add_decimal_mapping(std::string&& name) {
+        _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, false),
+                               create_decimal_function<ArgPT, ResultPT, false, false>(name));
+        _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, true),
+                               create_decimal_function<ArgPT, ResultPT, false, true>(name));
+        if constexpr (AddWindowVersion) {
+            _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, true, false),
+                                   create_decimal_function<ArgPT, ResultPT, true, false>(name));
+            _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, true, true),
+                                   create_decimal_function<ArgPT, ResultPT, true, true>(name));
+        }
+    }
+
+    template <PrimitiveType ArgPT, PrimitiveType ResultPT, bool IsWindowFunc, bool IsNull>
     AggregateFunctionPtr create_object_function(std::string& name) {
-        if constexpr (is_null) {
+        if constexpr (IsNull) {
             if (name == "hll_raw_agg" || name == "hll_union") {
                 auto hll_union = AggregateFactory::MakeHllUnionAggregateFunction();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<HyperLogLog>(hll_union);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<HyperLogLog, IsWindowFunc>(hll_union);
             } else if (name == "hll_union_agg") {
                 auto hll_union_count = AggregateFactory::MakeHllUnionCountAggregateFunction();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<HyperLogLog>(hll_union_count);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<HyperLogLog, IsWindowFunc>(hll_union_count);
             } else if (name == "bitmap_union") {
                 auto bitmap = AggregateFactory::MakeBitmapUnionAggregateFunction();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<BitmapValue>(bitmap);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<BitmapValue, IsWindowFunc>(bitmap);
             } else if (name == "bitmap_intersect") {
                 auto bitmap = AggregateFactory::MakeBitmapIntersectAggregateFunction();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<BitmapValuePacked>(bitmap);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<BitmapValuePacked, IsWindowFunc>(bitmap);
             } else if (name == "bitmap_union_count") {
                 auto bitmap = AggregateFactory::MakeBitmapUnionCountAggregateFunction();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<BitmapValue>(bitmap);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<BitmapValue, IsWindowFunc>(bitmap);
             } else if (name == "intersect_count") {
-                auto bitmap = AggregateFactory::MakeIntersectCountAggregateFunction<arg_type>();
+                auto bitmap = AggregateFactory::MakeIntersectCountAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionVariadic<
-                        BitmapIntersectAggregateState<BitmapRuntimeCppType<arg_type>>>(bitmap);
+                        BitmapIntersectAggregateState<BitmapRuntimeCppType<ArgPT>>>(bitmap);
             } else if (name == "ndv" || name == "approx_count_distinct") {
-                auto ndv = AggregateFactory::MakeHllNdvAggregateFunction<arg_type>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<HyperLogLog>(ndv);
+                auto ndv = AggregateFactory::MakeHllNdvAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<HyperLogLog, IsWindowFunc>(ndv);
             } else if (name == "percentile_union") {
                 auto percentile = AggregateFactory::MakePercentileUnionAggregateFunction();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<PercentileValue>(percentile);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<PercentileValue, IsWindowFunc>(percentile);
             }
         } else {
             if (name == "hll_raw_agg" || name == "hll_union") {
@@ -357,9 +363,9 @@ public:
             } else if (name == "bitmap_union_count") {
                 return AggregateFactory::MakeBitmapUnionCountAggregateFunction();
             } else if (name == "intersect_count") {
-                return AggregateFactory::MakeIntersectCountAggregateFunction<arg_type>();
+                return AggregateFactory::MakeIntersectCountAggregateFunction<ArgPT>();
             } else if (name == "ndv" || name == "approx_count_distinct") {
-                return AggregateFactory::MakeHllNdvAggregateFunction<arg_type>();
+                return AggregateFactory::MakeHllNdvAggregateFunction<ArgPT>();
             } else if (name == "percentile_union") {
                 return AggregateFactory::MakePercentileUnionAggregateFunction();
             }
@@ -379,10 +385,10 @@ public:
         if constexpr (IsNull) {
             if (name == "dict_merge") {
                 auto dict_merge = AggregateFactory::MakeDictMergeAggregateFunction();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<DictMergeState>(dict_merge);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<DictMergeState, false>(dict_merge);
             } else if (name == "retention") {
                 auto retentoin = AggregateFactory::MakeRetentionAggregateFunction();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<RetentionState>(retentoin);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<RetentionState, false>(retentoin);
             } else if (name == "window_funnel") {
                 if constexpr (ArgPT == TYPE_DATETIME || ArgPT == TYPE_DATE) {
                     auto windowfunnel = AggregateFactory::MakeWindowfunnelAggregateFunction<ArgPT>();
@@ -420,8 +426,8 @@ public:
                                                                             IsWindowFunc>(sum);
             } else if (name == "decimal_multi_distinct_sum") {
                 auto distinct_sum = AggregateFactory::MakeDecimalSumDistinctAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateState<ArgPT, ResultPT>>(
-                        distinct_sum);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateState<ArgPT, ResultPT>,
+                                                                            IsWindowFunc>(distinct_sum);
             }
         } else {
             if (name == "decimal_avg") {
@@ -450,32 +456,32 @@ public:
             } else if (name == "variance" || name == "variance_pop" || name == "var_pop") {
                 auto variance = AggregateFactory::MakeVarianceAggregateFunction<ArgPT, false>();
                 using ResultType = RunTimeCppType<DevFromAveResultPT<ArgPT>>;
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<DevFromAveAggregateState<ResultType>>(
-                        variance);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<DevFromAveAggregateState<ResultType>,
+                                                                            IsWindowFunc>(variance);
             } else if (name == "variance_samp" || name == "var_samp") {
                 auto variance = AggregateFactory::MakeVarianceAggregateFunction<ArgPT, true>();
                 using ResultType = RunTimeCppType<DevFromAveResultPT<ArgPT>>;
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<DevFromAveAggregateState<ResultType>>(
-                        variance);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<DevFromAveAggregateState<ResultType>,
+                                                                            IsWindowFunc>(variance);
             } else if (name == "std" || name == "stddev" || name == "stddev_pop") {
                 auto stddev = AggregateFactory::MakeStddevAggregateFunction<ArgPT, false>();
                 using ResultType = RunTimeCppType<DevFromAveResultPT<ArgPT>>;
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<DevFromAveAggregateState<ResultType>>(
-                        stddev);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<DevFromAveAggregateState<ResultType>,
+                                                                            IsWindowFunc>(stddev);
             } else if (name == "stddev_samp") {
                 auto stddev = AggregateFactory::MakeStddevAggregateFunction<ArgPT, true>();
                 using ResultType = RunTimeCppType<DevFromAveResultPT<ArgPT>>;
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<DevFromAveAggregateState<ResultType>>(
-                        stddev);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<DevFromAveAggregateState<ResultType>,
+                                                                            IsWindowFunc>(stddev);
             } else if (name == "bitmap_union_int") {
                 auto bitmap = AggregateFactory::MakeBitmapUnionIntAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<BitmapValue>(bitmap);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<BitmapValue, IsWindowFunc>(bitmap);
             } else if (name == "max") {
                 auto max = AggregateFactory::MakeMaxAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<MaxAggregateData<ArgPT>>(max);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<MaxAggregateData<ArgPT>, IsWindowFunc>(max);
             } else if (name == "min") {
                 auto min = AggregateFactory::MakeMinAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<MinAggregateData<ArgPT>>(min);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<MinAggregateData<ArgPT>, IsWindowFunc>(min);
             } else if (name == "avg") {
                 auto avg = AggregateFactory::MakeAvgAggregateFunction<ArgPT>();
                 using ResultType = RunTimeCppType<ImmediateAvgResultPT<ArgPT>>;
@@ -484,29 +490,30 @@ public:
             } else if (name == "multi_distinct_count") {
                 auto distinct = AggregateFactory::MakeCountDistinctAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<
-                        DistinctAggregateState<ArgPT, SumResultPT<ArgPT>>>(distinct);
+                        DistinctAggregateState<ArgPT, SumResultPT<ArgPT>>, IsWindowFunc>(distinct);
             } else if (name == "multi_distinct_count2") {
                 auto distinct = AggregateFactory::MakeCountDistinctAggregateFunctionV2<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<
-                        DistinctAggregateStateV2<ArgPT, SumResultPT<ArgPT>>>(distinct);
+                        DistinctAggregateStateV2<ArgPT, SumResultPT<ArgPT>>, IsWindowFunc>(distinct);
             } else if (name == "multi_distinct_sum") {
                 auto distinct = AggregateFactory::MakeSumDistinctAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<
-                        DistinctAggregateState<ArgPT, SumResultPT<ArgPT>>>(distinct);
+                        DistinctAggregateState<ArgPT, SumResultPT<ArgPT>>, IsWindowFunc>(distinct);
             } else if (name == "multi_distinct_sum2") {
                 auto distinct = AggregateFactory::MakeSumDistinctAggregateFunctionV2<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<
-                        DistinctAggregateStateV2<ArgPT, SumResultPT<ArgPT>>>(distinct);
+                        DistinctAggregateStateV2<ArgPT, SumResultPT<ArgPT>>, IsWindowFunc>(distinct);
             } else if (name == "group_concat") {
                 auto group_count = AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionVariadic<GroupConcatAggregateState>(group_count);
             } else if (name == "any_value") {
                 auto any_value = AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<AnyValueAggregateData<ArgPT>>(any_value);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<AnyValueAggregateData<ArgPT>, IsWindowFunc>(
+                        any_value);
             } else if (name == "array_agg") {
                 auto array_agg = AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<ArrayAggAggregateState<ArgPT>, false>(
-                        array_agg);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<ArrayAggAggregateState<ArgPT>, IsWindowFunc,
+                                                                            false>(array_agg);
             } else if (name == "percentile_cont") {
                 auto percentile_cont = AggregateFactory::MakePercentileContAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionVariadic<PercentileContState<ArgPT>>(
@@ -578,7 +585,8 @@ public:
         if constexpr (IsNull) {
             if (name == "any_value") {
                 auto any_value = AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<AnyValueAggregateData<ArgPT>>(any_value);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<AnyValueAggregateData<ArgPT>, IsWindowFunc>(
+                        any_value);
                 return AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
             }
         } else {
@@ -601,28 +609,29 @@ public:
                                                                             IsWindowFunc>(avg);
             } else if (name == "max") {
                 auto max = AggregateFactory::MakeMaxAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<MaxAggregateData<ArgPT>>(max);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<MaxAggregateData<ArgPT>, IsWindowFunc>(max);
             } else if (name == "min") {
                 auto min = AggregateFactory::MakeMinAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<MinAggregateData<ArgPT>>(min);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<MinAggregateData<ArgPT>, IsWindowFunc>(min);
             } else if (name == "multi_distinct_count") {
                 auto distinct = AggregateFactory::MakeCountDistinctAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<
-                        DistinctAggregateState<ArgPT, SumResultPT<ArgPT>>>(distinct);
+                        DistinctAggregateState<ArgPT, SumResultPT<ArgPT>>, IsWindowFunc>(distinct);
             } else if (name == "multi_distinct_count2") {
                 auto distinct = AggregateFactory::MakeCountDistinctAggregateFunctionV2<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<
-                        DistinctAggregateStateV2<ArgPT, SumResultPT<ArgPT>>>(distinct);
+                        DistinctAggregateStateV2<ArgPT, SumResultPT<ArgPT>>, IsWindowFunc>(distinct);
             } else if (name == "group_concat") {
                 auto group_count = AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionVariadic<GroupConcatAggregateState>(group_count);
             } else if (name == "any_value") {
                 auto any_value = AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<AnyValueAggregateData<ArgPT>>(any_value);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<AnyValueAggregateData<ArgPT>, IsWindowFunc>(
+                        any_value);
             } else if (name == "array_agg") {
                 auto array_agg_value = AggregateFactory::MakeArrayAggAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<ArrayAggAggregateState<ArgPT>, false>(
-                        array_agg_value);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<ArrayAggAggregateState<ArgPT>, IsWindowFunc,
+                                                                            false>(array_agg_value);
             } else if (name == "percentile_cont") {
                 auto percentile_cont = AggregateFactory::MakePercentileContAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionVariadic<PercentileContState<ArgPT>>(
@@ -935,7 +944,7 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_object_mapping<TYPE_HLL, TYPE_BIGINT>("hll_union_agg");
 
     add_object_mapping<TYPE_OBJECT, TYPE_OBJECT>("bitmap_union");
-    add_object_mapping<TYPE_OBJECT, TYPE_BIGINT>("bitmap_union_count");
+    add_object_mapping<TYPE_OBJECT, TYPE_BIGINT, true>("bitmap_union_count");
 
     // This first type is the second type input of intersect_count.
     // And the first type is Bitmap.
