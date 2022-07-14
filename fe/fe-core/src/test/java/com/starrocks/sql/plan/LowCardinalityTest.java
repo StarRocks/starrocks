@@ -276,7 +276,7 @@ public class LowCardinalityTest extends PlanTestBase {
 
         sql = "select S_ADDRESS, count(*) from supplier_nullable group by S_ADDRESS";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("group by: [10: S_ADDRESS, INT, true]"));
+        Assert.assertTrue(plan.contains("group by: [10: S_ADDRESS, SMALLINT, true]"));
     }
 
     @Test
@@ -313,15 +313,15 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select count(distinct S_ADDRESS) from supplier";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
-                "  |  aggregate: multi_distinct_count[([10: S_ADDRESS, INT, false]); args: INT; result: BIGINT; args nullable: false; result nullable: false]"));
+                "  |  aggregate: multi_distinct_count[([10: S_ADDRESS, SMALLINT, false]); args: SMALLINT; result: BIGINT; args nullable: false; result nullable: false]"));
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("  3:AGGREGATE (merge finalize)\n" +
-                "  |  aggregate: multi_distinct_count[([9: count, VARCHAR, false]); args: INT; result: BIGINT; args nullable: true; result nullable: false]"));
+                "  |  aggregate: multi_distinct_count[([9: count, VARCHAR, false]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false]"));
         connectContext.getSessionVariable().setNewPlanerAggStage(3);
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("  4:AGGREGATE (update serialize)\n" +
-                "  |  aggregate: count[([10: S_ADDRESS, INT, false]); args: INT; result: BIGINT; args nullable: false; result nullable: false]"));
+                "  |  aggregate: count[([10: S_ADDRESS, SMALLINT, false]); args: SMALLINT; result: BIGINT; args nullable: false; result nullable: false]"));
         connectContext.getSessionVariable().setNewPlanerAggStage(4);
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("  6:AGGREGATE (merge finalize)\n" +
@@ -344,8 +344,9 @@ public class LowCardinalityTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(distinct S_ADDRESS), count(distinct S_NATIONKEY) from supplier";
         String plan = getVerboseExplain(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)\n" +
-                "  |  aggregate: multi_distinct_count[([9: count, VARCHAR, false]); args: INT; result: BIGINT; args nullable: true; result nullable: false], " +
+                "  |  aggregate: multi_distinct_count[([9: count, VARCHAR, false]); args: SMALLINT; result: BIGINT; args nullable: true; result nullable: false], " +
                 "multi_distinct_count[([10: count, VARCHAR, false]); args: INT; result: BIGINT; args nullable: true; result nullable: false]"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -432,7 +433,7 @@ public class LowCardinalityTest extends PlanTestBase {
         String sql = "select lower(upper(S_ADDRESS)) as a, count(*) from supplier group by a";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("<function id 12> : DictExpr(11: S_ADDRESS,[lower(upper(<place-holder>))])"));
-        Assert.assertTrue(plan.contains("group by: [12: lower, INT, true]"));
+        Assert.assertTrue(plan.contains("group by: [12: lower, SMALLINT, true]"));
 
         sql = "select lower(substr(S_ADDRESS, 0, 1)) as a, count(*) from supplier group by a";
         plan = getFragmentPlan(sql);
@@ -913,12 +914,12 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select S_ADDRESS from supplier order by S_ADDRESS";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("  1:SORT\n" +
-                "  |  order by: [9, INT, false] ASC"));
+                "  |  order by: [9, SMALLINT, false] ASC"));
 
         sql = "select S_NAME from supplier_nullable order by upper(S_ADDRESS), S_NAME";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("  2:SORT\n" +
-                "  |  order by: [11, INT, true] ASC, [2, VARCHAR, false] ASC"));
+                "  |  order by: [11, SMALLINT, true] ASC, [2, VARCHAR, false] ASC"));
 
         sql = "select substr(S_ADDRESS, 0, 1) from supplier group by substr(S_ADDRESS, 0, 1) " +
                 "order by substr(S_ADDRESS, 0, 1)";
@@ -928,7 +929,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  string functions:\n" +
                 "  |  <function id 11> : DictExpr(10: S_ADDRESS,[substr(<place-holder>, 0, 1)])"));
         Assert.assertTrue(plan.contains("  5:SORT\n" +
-                "  |  order by: [11, INT, true] ASC"));
+                "  |  order by: [11, SMALLINT, true] ASC"));
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -968,7 +969,7 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select count(distinct S_ADDRESS), count(distinct S_NAME) as a from supplier_nullable";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("multi_distinct_count[([9: count, VARCHAR, false]);"));
-        Assert.assertTrue(plan.contains("multi_distinct_count[([11: S_ADDRESS, INT, true]);"));
+        Assert.assertTrue(plan.contains("multi_distinct_count[([11: S_ADDRESS, SMALLINT, true]);"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -989,7 +990,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  string functions:\n" +
                 "  |  <function id 12> : DictExpr(11: S_ADDRESS,[lower(<place-holder>)])"));
         Assert.assertTrue(plan.contains("  4:AGGREGATE (merge finalize)\n" +
-                "  |  group by: [12: lower, INT, true]"));
+                "  |  group by: [12: lower, SMALLINT, true]"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -1001,7 +1002,7 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select count(distinct S_ADDRESS), max(S_ADDRESS), count(distinct S_SUPPKEY) as a from supplier_nullable";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("1:AGGREGATE (update serialize)\n" +
-                "  |  aggregate: multi_distinct_count[([12: S_ADDRESS, INT, true]);"));
+                "  |  aggregate: multi_distinct_count[([12: S_ADDRESS, SMALLINT, true]);"));
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)\n" +
                 "  |  aggregate: multi_distinct_count[([9: count, VARCHAR, false]);"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
@@ -1054,7 +1055,7 @@ public class LowCardinalityTest extends PlanTestBase {
         String plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: count[(NULL); args: BOOLEAN; result: BIGINT; args nullable: true; result nullable: false]\n" +
-                "  |  group by: [10: S_ADDRESS, INT, false]\n" +
+                "  |  group by: [10: S_ADDRESS, SMALLINT, false]\n" +
                 "  |  having: cast([9: count, BIGINT, false] as VARCHAR(" + ScalarType.DEFAULT_STRING_LENGTH +
                 ")) = ''"));
         Assert.assertTrue(plan.contains("  3:Decode\n" +
