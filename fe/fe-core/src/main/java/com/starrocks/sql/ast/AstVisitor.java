@@ -62,6 +62,7 @@ import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RecoverDbStmt;
+import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
@@ -309,6 +310,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitKillStatement(KillStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitRestoreStmt(RestoreStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

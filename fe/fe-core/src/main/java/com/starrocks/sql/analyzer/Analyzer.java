@@ -24,6 +24,7 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.RecoverDbStmt;
+import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
@@ -316,5 +317,12 @@ public class Analyzer {
             AnalyzeStmtAnalyzer.analyze(statement, session);
             return null;
         }
+
+        @Override
+        public Void visitRestoreStmt(RestoreStmt statement, ConnectContext context) {
+            RestoreStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
     }
 }

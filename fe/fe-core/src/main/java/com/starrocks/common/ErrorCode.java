@@ -262,7 +262,9 @@ public enum ErrorCode {
     ERROR_NO_WG_ERROR(5079, new byte[] {'4', '2', '0', '0', '0'},
             "Unknown workgroup '%s' "),
     ERR_BAD_CATALOG_AND_DB_ERROR(5080, new byte[] {'4', '2', '0', '0', '0'},
-            "Unknown catalog.db '%s'");
+            "Unknown catalog.db '%s'"),
+    ERR_WRONG_LABEL_NAME(5081,  new byte[] {'4', '2', '0', '0', '0'},
+            "Incorrect label name '%s'");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

@@ -108,6 +108,10 @@ statement
 
     // procedure
     | showProcedureStatment                                                                 #showProcedure
+
+    //  Backup Store Satement
+    | restoreStatement                                                                      #restore
+
     ;
 
 
@@ -673,6 +677,15 @@ tabletList
 showProcedureStatment
     : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
     ;
+
+// ---------------------------------------- Backup Store Statement -----------------------------------------------------
+restoreStatement
+    : RESTORE SNAPSHOT qualifiedName
+    TO identifier
+    ON '(' restoreTableDesc restoreTableDesc * ')'
+    (PROPERTIES propertyList)?
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -873,6 +886,10 @@ frameBound
     ;
 
 // ------------------------------------------- COMMON AST --------------------------------------------------------------
+
+restoreTableDesc
+    : qualifiedName partitionNames? (AS identifier)?
+    ;
 
 explainDesc
     : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?
