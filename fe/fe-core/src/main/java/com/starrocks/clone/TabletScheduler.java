@@ -122,7 +122,7 @@ public class TabletScheduler extends MasterDaemon {
 
     // be id -> #working slots
     private Map<Long, PathSlot> backendsWorkingSlots = Maps.newConcurrentMap();
-    ClusterLoadStatistic loadStatistic;
+    private ClusterLoadStatistic loadStatistic;
     private long lastStatUpdateTime = 0;
 
     private long lastSlotAdjustTime = 0;
