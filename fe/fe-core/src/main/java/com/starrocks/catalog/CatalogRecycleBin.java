@@ -30,6 +30,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.lake.LakeTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -375,8 +376,8 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             if (tableInfo != null) {
                 Table table = tableInfo.getTable();
                 nameToTableInfo.remove(dbId, table.getName());
-                if (table.getType() == TableType.OLAP && !isCheckpointThread()) {
-                    GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) table, true);
+                if (table.isOlapOrLakeTable() && !isCheckpointThread()) {
+                    GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((OlapTable) table, true);
                 }
             }
         }
@@ -743,10 +744,12 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         for (RecycleTableInfo tableInfo : tableToRemove) {
             Table table = tableInfo.getTable();
             long tableId = table.getId();
-            if (table.getType() == TableType.OLAP) {
+            if (table.isOlapTable()) {
                 HashMap<Long, AgentBatchTask> batchTaskMap =
-                        GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) table, false);
+                        GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((OlapTable) table, false);
                 GlobalStateMgr.getCurrentState().sendDropTabletTasks(batchTaskMap);
+            } else if (table.isLakeTable()) {
+                GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((LakeTable) table, false);
             }
             LOG.info("erased table [{}-{}].", tableId, table.getName());
         }

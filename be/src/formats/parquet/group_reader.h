@@ -49,23 +49,32 @@ struct GroupReaderParam {
     std::string timezone;
 
     vectorized::HdfsScanStats* stats = nullptr;
+
+    SharedBufferedInputStream* shared_buffered_stream = nullptr;
+
+    int chunk_size = 0;
+
+    RandomAccessFile* file = nullptr;
+
+    FileMetaData* file_metadata = nullptr;
 };
 
 class GroupReader {
 public:
-    GroupReader(int chunk_size, RandomAccessFile* file, FileMetaData* file_metadata, int row_group_number);
+    GroupReader(const GroupReaderParam& param, int row_group_number);
     ~GroupReader() = default;
 
-    Status init(const GroupReaderParam& _param);
+    Status init();
     Status get_next(vectorized::ChunkPtr* chunk, size_t* row_count);
     void close();
+    void collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
+    void set_end_offset(int64_t value) { _end_offset = value; }
 
 private:
     using SlotIdExprContextsMap = std::unordered_map<int, std::vector<ExprContext*>>;
 
     Status _init_column_readers();
     Status _create_column_reader(const GroupReaderParam::Column& column);
-    Status _set_io_ranges();
     // Extract dict filter columns and conjuncts
     void _process_columns_and_conjunct_ctxs();
     bool _can_using_dict_filter(const SlotDescriptor* slot, const SlotIdExprContextsMap& slot_conjunct_ctxs,
@@ -78,17 +87,6 @@ private:
     Status _read(size_t* row_count);
     void _dict_filter();
     Status _dict_decode(vectorized::ChunkPtr* chunk);
-
-    int _chunk_size;
-
-    RandomAccessFile* _file;
-    SharedBufferedInputStream* _sb_stream;
-
-    // parquet file meta
-    FileMetaData* _file_metadata;
-
-    // row group number in parquet file
-    int _row_group_number;
 
     // row group meta
     std::shared_ptr<tparquet::RowGroup> _row_group_metadata;
@@ -114,11 +112,13 @@ private:
     vectorized::Buffer<uint8_t> _selection;
 
     // param for read row group
-    GroupReaderParam _param;
+    const GroupReaderParam& _param;
 
     ObjectPool _obj_pool;
 
     ColumnReaderOptions _column_reader_opts;
+
+    int64_t _end_offset = 0;
 };
 
 } // namespace starrocks::parquet

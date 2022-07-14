@@ -100,7 +100,7 @@ private:
     bool _has_partition_columns = false;
 
     std::vector<std::string> _hive_column_names;
-    const LakeTableDescriptor* _lake_table = nullptr;
+    const HiveTableDescriptor* _hive_table = nullptr;
 
     // ======================================
     // The following are profile metrics

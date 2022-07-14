@@ -52,6 +52,7 @@ public class TabletSchedulerTest {
         Partition badPartition = new Partition(5, "mal", null, null);
         Partition goodPartition = new Partition(6, "bueno", null, null);
 
+        long now = System.currentTimeMillis();
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
         recycleBin.recycleDatabase(badDb, new HashSet<>());
         recycleBin.recycleTable(goodDB.getId(), badTable);
@@ -68,7 +69,6 @@ public class TabletSchedulerTest {
         for (Triple<Database, Table, Partition> triple : arguments) {
             allCtxs.add(new TabletSchedCtx(
                     TabletSchedCtx.Type.REPAIR,
-                    SystemInfoService.DEFAULT_CLUSTER,
                     triple.getLeft().getId(),
                     triple.getMiddle().getId(),
                     triple.getRight().getId(),
@@ -80,12 +80,12 @@ public class TabletSchedulerTest {
 
         TabletScheduler tabletScheduler = new TabletScheduler(globalStateMgr, systemInfoService, tabletInvertedIndex, tabletSchedulerStat);
 
-        long almostExpireTime = System.currentTimeMillis() + (Config.catalog_trash_expire_second - 1) * 1000L;
+        long almostExpireTime = now + (Config.catalog_trash_expire_second - 1) * 1000L;
         for (int i = 0; i != allCtxs.size(); ++ i) {
             Assert.assertFalse(tabletScheduler.checkIfTabletExpired(allCtxs.get(i), recycleBin, almostExpireTime));
         }
 
-        long expireTime = System.currentTimeMillis() + (Config.catalog_trash_expire_second + 600) * 1000L;
+        long expireTime = now + (Config.catalog_trash_expire_second + 600) * 1000L;
         for (int i = 0; i != allCtxs.size() - 1; ++ i) {
             Assert.assertTrue(tabletScheduler.checkIfTabletExpired(allCtxs.get(i), recycleBin, expireTime));
         }

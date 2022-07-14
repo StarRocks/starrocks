@@ -41,16 +41,16 @@ public class JoinTest extends PlanTestBase {
     @Test
     public void testInnerJoinWithPredicate() throws Exception {
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";
-        String planFragment = getFragmentPlan(sql);
-        assertContains(planFragment, "PREDICATES: 1: v1 = 1");
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 1: v1 = 1");
     }
 
     @Test
     public void testInnerJoinWithConstPredicate() throws Exception {
         String sql = "SELECT * from t0 join test_all_type on NOT NULL >= NULL";
 
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  0:EMPTYSET\n"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  0:EMPTYSET\n");
     }
 
     @Test
@@ -62,23 +62,23 @@ public class JoinTest extends PlanTestBase {
     @Test
     public void testCorssJoinWithPredicate() throws Exception {
         String sql = "SELECT * from t0 join test_all_type where t0.v1 = 2;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 = 2"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 1: v1 = 2");
     }
 
     @Test
     public void testLeftOuterJoinWithPredicate() throws Exception {
         String sql = "SELECT * from t0 left join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 > 1;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 > 1"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 1: v1 > 1");
     }
 
     @Test
     public void testCrossJoinToInnerJoin() throws Exception {
         String sql = "SELECT t0.v1 from t0, test_all_type where t0.v1 = test_all_type.t1d";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("join op: INNER JOIN"));
-        Assert.assertTrue(planFragment.contains("equal join conjunct: 1: v1 = 7: t1d"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "join op: INNER JOIN");
+        assertContains(plan, "equal join conjunct: 1: v1 = 7: t1d");
     }
 
     @Test
@@ -87,25 +87,25 @@ public class JoinTest extends PlanTestBase {
         getFragmentPlan(sql);
 
         sql = " select a.v2 from t0 a join t0 b on a.v3 = b.v3;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("4:Project\n"
-                + "  |  <slot 2> : 2: v2"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:Project\n"
+                + "  |  <slot 2> : 2: v2");
     }
 
     @Test
     public void testCrossJoin() throws Exception {
         String sql = "SELECT * from t0 join test_all_type;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment, planFragment.contains("  3:NESTLOOP JOIN\n" +
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("  3:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n"));
 
         sql = "select * from t0 join test_all_type on NOT 69 IS NOT NULL where true";
-        planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment,
-                planFragment.contains("  3:NESTLOOP JOIN\n" +
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan,
+                plan.contains("  3:NESTLOOP JOIN\n" +
                         "  |  join op: CROSS JOIN\n" +
                         "  |  colocate: false, reason: \n" +
                         "  |  \n" +
@@ -117,28 +117,28 @@ public class JoinTest extends PlanTestBase {
     @Test
     public void testFullOuterJoin() throws Exception {
         String sql = "select * from t0 full outer join t1 on t0.v1 = t1.v4 where abs(1) > 2;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("     TABLE: t1\n"
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "     TABLE: t1\n"
                 + "     PREAGGREGATION: ON\n"
-                + "     PREDICATES: abs(1) > 2"));
-        Assert.assertTrue(planFragment.contains("     TABLE: t0\n"
+                + "     PREDICATES: abs(1) > 2");
+        assertContains(plan, "     TABLE: t0\n"
                 + "     PREAGGREGATION: ON\n"
-                + "     PREDICATES: abs(1) > 2"));
+                + "     PREDICATES: abs(1) > 2");
     }
 
     @Test
     public void testFullOuterJoinPredicatePushDown() throws Exception {
         String sql = "select * from t0 full outer join t1 on t0.v1 = t1.v4 " +
                 " where (NOT (t0.v2 IS NOT NULL))";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("other predicates: 2: v2 IS NULL"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "other predicates: 2: v2 IS NULL");
     }
 
     @Test
     public void testRightSemiJoinWithFilter() throws Exception {
         String sql = "select t1.v4 from t0 right semi join t1 on t0.v1 = t1.v4 and t0.v1 > 1 ";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 > 1"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 1: v1 > 1");
     }
 
     @Test
@@ -635,7 +635,7 @@ public class JoinTest extends PlanTestBase {
         String sql =
                 "select a.id_datetime from test_all_type as a join test_all_type as b where a.id_date in (b.id_date)";
         String plan = getFragmentPlan(sql);
-        Assert.assertFalse(plan.contains("CAST(9: id_date AS DATETIME)"));
+        assertNotContains(plan, "CAST(9: id_date AS DATETIME)");
         assertContains(plan, "equal join conjunct: 9: id_date = 19: id_date");
     }
 
@@ -702,7 +702,7 @@ public class JoinTest extends PlanTestBase {
 
         sql = "select * from t0,t1 where v1 = v4";
         plan = getVerboseExplain(sql);
-        Assert.assertFalse(plan.contains("output columns"));
+        assertNotContains(plan, "output columns");
     }
 
     @Test
@@ -1080,16 +1080,16 @@ public class JoinTest extends PlanTestBase {
         String sql = "select * from join1 join join2 on join1.id = join2.id;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "join op: INNER JOIN (REPLICATED)");
-        Assert.assertFalse(plan.contains("EXCHANGE"));
+        assertNotContains(plan, "EXCHANGE");
 
         sql = "select * from join2 right join join1 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
-        Assert.assertFalse(plan.contains("join op: INNER JOIN (REPLICATED)"));
+        assertNotContains(plan, "join op: INNER JOIN (REPLICATED)");
 
         sql = "select * from join1 as a join (select sum(id),id from join2 group by id) as b on a.id = b.id;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "join op: INNER JOIN (REPLICATED)");
-        Assert.assertFalse(plan.contains("EXCHANGE"));
+        assertNotContains(plan, "EXCHANGE");
 
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         sql = "select * from join1 as a join (select sum(id),dt from join2 group by dt) as b on a.id = b.dt;";
@@ -1100,11 +1100,11 @@ public class JoinTest extends PlanTestBase {
 
         sql = "select a.* from join1 as a join join1 as b ;";
         plan = getFragmentPlan(sql);
-        Assert.assertFalse(plan.contains("EXCHANGE"));
+        assertNotContains(plan, "EXCHANGE");
 
         sql = "select a.* from join1 as a join (select sum(id) from join1 group by dt) as b ;";
         plan = getFragmentPlan(sql);
-        Assert.assertFalse(plan.contains("EXCHANGE"));
+        assertNotContains(plan, "EXCHANGE");
 
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         sql = "select a.* from join1 as a join (select sum(id) from join1 group by dt) as b ;";
@@ -1171,8 +1171,8 @@ public class JoinTest extends PlanTestBase {
     public void testColocateCoverReplicate() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql = "select * from join1 join join1 as xx on join1.id = xx.id;";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  |  join op: INNER JOIN (COLOCATE)\n"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  join op: INNER JOIN (COLOCATE)\n");
         FeConstants.runningUnitTest = false;
     }
 
@@ -1183,56 +1183,56 @@ public class JoinTest extends PlanTestBase {
         Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2, 0) > 3"));
+                "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
 
         sql = "select * from test.join1 right semi join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2, 0) > 3"));
+                "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
 
         sql = "select * from test.join1 right anti join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2, 0) > 3"));
+                "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
 
         sql = "select * from test.join1 left join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2, 0) > 3"));
+                "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
 
         sql = "select * from test.join1 left semi join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2, 0) > 3"));
+                "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
 
         sql = "select * from test.join1 left anti join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2, 0) > 3"));
+                "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
 
         sql = "select * from test.join1 inner join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         assertContains(explainString, "  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2, 0) > 3");
+                "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0");
 
         sql = "select * from test.join1 where round(2.0, 0) > 3.0";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: round(2, 0) > 3"));
+                "     PREDICATES: CAST(round(2.0, 0) AS DOUBLE) > 3.0"));
     }
 
     @Test
@@ -2006,10 +2006,10 @@ public class JoinTest extends PlanTestBase {
     public void testWherePredicatesToOnPredicate() throws Exception {
         String sql =
                 "SELECT t0.v1 from t0 join test_all_type on t0.v2 = test_all_type.t1d where t0.v1 = test_all_type.t1d";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("join op: INNER JOIN"));
-        Assert.assertTrue(planFragment.contains("  |  equal join conjunct: 2: v2 = 7: t1d\n"
-                + "  |  equal join conjunct: 1: v1 = 7: t1d"));
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "join op: INNER JOIN");
+        assertContains(plan, "  |  equal join conjunct: 2: v2 = 7: t1d\n"
+                + "  |  equal join conjunct: 1: v1 = 7: t1d");
     }
 
     @Test

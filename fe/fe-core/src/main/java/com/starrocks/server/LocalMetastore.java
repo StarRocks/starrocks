@@ -1292,7 +1292,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (table.isLakeTable()) {
                 createLakeTablets((LakeTable) table, index, distributionInfo, replicationNum, tabletMeta, tabletIdSet);
             } else {
-                createOlapTablets(db.getClusterName(), index, Replica.ReplicaState.NORMAL, distributionInfo,
+                createOlapTablets(index, Replica.ReplicaState.NORMAL, distributionInfo,
                         partition.getVisibleVersion(), replicationNum, tabletMeta, tabletIdSet);
             }
             if (index.getId() != table.getBaseIndexId()) {
@@ -2268,7 +2268,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private void createOlapTablets(String clusterName, MaterializedIndex index, Replica.ReplicaState replicaState,
+    private void createOlapTablets(MaterializedIndex index, Replica.ReplicaState replicaState,
                                    DistributionInfo distributionInfo, long version, short replicationNum,
                                    TabletMeta tabletMeta, Set<Long> tabletIdSet) throws DdlException {
         Preconditions.checkArgument(replicationNum > 0);
@@ -2316,9 +2316,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 // randomly choose backends
                 if (Config.enable_strict_storage_medium_check) {
                     chosenBackendIds =
-                            chosenBackendIdBySeq(replicationNum, clusterName, tabletMeta.getStorageMedium());
+                            chosenBackendIdBySeq(replicationNum, tabletMeta.getStorageMedium());
                 } else {
-                    chosenBackendIds = chosenBackendIdBySeq(replicationNum, clusterName);
+                    chosenBackendIds = chosenBackendIdBySeq(replicationNum);
                 }
                 backendsPerBucketSeq.add(chosenBackendIds);
             } else {
@@ -2346,7 +2346,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     // create replicas for tablet with random chosen backends
-    private List<Long> chosenBackendIdBySeq(int replicationNum, String clusterName, TStorageMedium storageMedium)
+    private List<Long> chosenBackendIdBySeq(int replicationNum, TStorageMedium storageMedium)
             throws DdlException {
         List<Long> chosenBackendIds = systemInfoService.seqChooseBackendIdsByStorageMedium(replicationNum,
                 true, true, storageMedium);
@@ -2358,7 +2358,7 @@ public class LocalMetastore implements ConnectorMetadata {
         return chosenBackendIds;
     }
 
-    private List<Long> chosenBackendIdBySeq(int replicationNum, String clusterName) throws DdlException {
+    private List<Long> chosenBackendIdBySeq(int replicationNum) throws DdlException {
         List<Long> chosenBackendIds =
                 systemInfoService.seqChooseBackendIds(replicationNum, true, true);
         if (chosenBackendIds == null) {
@@ -2533,7 +2533,6 @@ public class LocalMetastore implements ConnectorMetadata {
             // and finally get information_schema db from the name map.
             String dbName = ClusterNamespace.getNameFromFullName(name);
             if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME)) {
-                String clusterName = ClusterNamespace.getClusterNameFromFullName(name);
                 return fullNameToDb.get(ClusterNamespace.getFullName(dbName.toLowerCase()));
             }
         }
@@ -2824,6 +2823,7 @@ public class LocalMetastore implements ConnectorMetadata {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             MaterializedView.AsyncRefreshContext asyncRefreshContext = mvRefreshScheme.getAsyncRefreshContext();
             asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
+            asyncRefreshContext.setDefineStartTime(asyncRefreshSchemeDesc.isDefineStartTime());
             if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
                 asyncRefreshContext.setStep(
                         ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue());
@@ -3028,6 +3028,32 @@ public class LocalMetastore implements ConnectorMetadata {
             taskManager.createTask(task, false);
         }
         taskManager.executeTask(mvTaskName, new ExecuteOption(priority));
+    }
+
+    @Override
+    public void cancelRefreshMaterializedView(String dbName, String mvName) throws DdlException, MetaNotFoundException {
+        Database db = this.getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        MaterializedView materializedView = null;
+        db.readLock();
+        try {
+            final Table table = db.getTable(mvName);
+            if (table instanceof MaterializedView) {
+                materializedView = (MaterializedView) table;
+            }
+        } finally {
+            db.readUnlock();
+        }
+        if (materializedView == null) {
+            throw new MetaNotFoundException(mvName + " is not a materialized view");
+        }
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+        if (refreshTask != null) {
+            taskManager.killTask(refreshTask.getName(), false);
+        }
     }
 
     /*
@@ -4124,7 +4150,7 @@ public class LocalMetastore implements ConnectorMetadata {
         stateMgr.getGlobalTransactionMgr().removeDatabaseTransactionMgr(dbId);
     }
 
-    public HashMap<Long, AgentBatchTask> onEraseOlapTable(OlapTable olapTable, boolean isReplay) {
+    public HashMap<Long, AgentBatchTask> onEraseOlapOrLakeTable(OlapTable olapTable, boolean isReplay) {
         // inverted index
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         Collection<Partition> allPartitions = olapTable.getAllPartitions();
@@ -4139,6 +4165,7 @@ public class LocalMetastore implements ConnectorMetadata {
         HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
         if (!isReplay) {
             // drop all replicas
+            Set<Long> tabletIds = new HashSet<>();
             for (Partition partition : olapTable.getAllPartitions()) {
                 List<MaterializedIndex> allIndices =
                         partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
@@ -4160,9 +4187,21 @@ public class LocalMetastore implements ConnectorMetadata {
                                 batchTask.addTask(dropTask);
                             } // end for replicas
                         }
+
+                        // drop shard and lake tablet
+                        if (olapTable.isLakeTable()) {
+                            tabletIds.add(tabletId);
+                        }
+                        
                     } // end for tablets
                 } // end for indices
             } // end for partitions
+
+            if (olapTable.isLakeTable()) {
+                GlobalStateMgr.getCurrentState().getShardManager()
+                        .getShardDeleter().addUnusedShardId(tabletIds);
+                GlobalStateMgr.getCurrentState().getEditLog().logAddUnusedShard(tabletIds);
+            }
         }
         // colocation
         colocateTableIndex.removeTable(olapTable.getId());

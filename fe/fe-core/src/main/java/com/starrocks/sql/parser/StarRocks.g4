@@ -36,6 +36,7 @@ statement
     | createIndexStatement                                                                  #createIndex
     | dropIndexStatement                                                                    #dropIndex
     | refreshTableStatement                                                                 #refreshTable
+    | showAlterStatement                                                                    #showAlter
     | showDeleteStatement                                                                   #showDelete
     | descTableStatement                                                                    #descTable
     | showIndexStatement                                                                    #showIndex
@@ -55,6 +56,7 @@ statement
     | dropMaterializedViewStatement                                                         #dropMaterializedView
     | alterMaterializedViewStatement                                                        #alterMaterializedView
     | refreshMaterializedViewStatement                                                      #refreshMaterializedView
+    | cancelRefreshMaterializedViewStatement                                                #cancelRefreshMaterializedView
 
     // Catalog Statement
     | createExternalCatalogStatement                                                        #createCatalog
@@ -99,7 +101,10 @@ statement
     | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
+    | showUserPropertyStatement                                                             #showUserProperty
     | killStatement                                                                         #kill
+    | setUserPropertyStatement                                                              #setUserProperty
+    | showStatusStatement                                                                   #showStatus
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -110,8 +115,10 @@ statement
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
-    ;
 
+    // proc
+    | showProcStatement                                                                      #showProc
+    ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
 alterDbQuotaStmt
@@ -126,7 +133,7 @@ createDbStatement
 dropDbStatement
     : DROP (DATABASE | SCHEMA) (IF EXISTS)? identifier FORCE?
     ;
-    
+
 showCreateDbStatement
     : SHOW CREATE (DATABASE | SCHEMA) identifier
     ;
@@ -271,6 +278,11 @@ refreshTableStatement
     : REFRESH EXTERNAL TABLE qualifiedName (PARTITION '(' string (',' string)* ')')?
     ;
 
+showAlterStatement
+    : SHOW ALTER TABLE (COLUMN | ROLLUP | MATERIALIZED VIEW) ((FROM | IN) db=qualifiedName)?
+        (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    ;
+
 showDeleteStatement
     : SHOW DELETE ((FROM | IN) db=qualifiedName)?
     ;
@@ -338,6 +350,10 @@ alterMaterializedViewStatement
 
 refreshMaterializedViewStatement
     : REFRESH MATERIALIZED VIEW mvName=qualifiedName
+    ;
+
+cancelRefreshMaterializedViewStatement
+    : CANCEL REFRESH MATERIALIZED VIEW mvName=qualifiedName
     ;
 
 // ------------------------------------------- Cluster Mangement Statement ---------------------------------------------
@@ -450,7 +466,7 @@ deleteStatement
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
-    : ANALYZE FULL? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    : ANALYZE (SAMPLE | FULL)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
     ;
 
 analyzeHistogramStatement
@@ -473,15 +489,15 @@ dropAnalyzeJobStatement
     ;
 
 showAnalyzeStatement
-    : SHOW ANALYZE (JOB | STATUS)?
+    : SHOW ANALYZE (JOB | STATUS)? (WHERE expression)?
     ;
 
 showStatsMetaStatement
-    : SHOW STATS META
+    : SHOW STATS META (WHERE expression)?
     ;
 
 showHistogramMetaStatement
-    : SHOW HISTOGRAM META
+    : SHOW HISTOGRAM META (WHERE expression)?
     ;
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
@@ -522,8 +538,20 @@ showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
     ;
 
+showUserPropertyStatement
+    : SHOW PROPERTY (FOR string)? (LIKE string)?
+    ;
+
 killStatement
     : KILL (CONNECTION? | QUERY) INTEGER_VALUE
+    ;
+
+setUserPropertyStatement
+    : SET PROPERTY (FOR string)? userPropertyList
+    ;
+
+showStatusStatement
+    : SHOW varType? STATUS ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showNodesStatement
@@ -692,6 +720,12 @@ tabletList
 showProcedureStatement
     : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
     ;
+
+// ------------------------------------------- Proc Statement ---------------------------------------------------------
+showProcStatement
+    : SHOW PROC path=string
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -969,6 +1003,10 @@ propertyList
     : '(' property (',' property)* ')'
     ;
 
+userPropertyList
+    : property (',' property)*
+    ;
+
 property
     : key=string '=' value=string
     ;
@@ -1113,7 +1151,7 @@ nonReserved
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
     | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE | STRING
-    | STATS | SUBMIT | SYNC
+    | SAMPLE | STATS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER

@@ -229,6 +229,10 @@ public class DecimalV3FunctionAnalyzer {
                 new Type[]{argType},
                 IS_NONSTRICT_SUPERTYPE_OF);
         Preconditions.checkArgument(fn != null);
+        // Only rectify decimal typed functions.
+        if (!argType.isDecimalV3()) {
+            return fn;
+        }
         ScalarType decimal128Type = ScalarType.createDecimalV3NarrowestType(38, ((ScalarType) argType).getScalarScale());
         AggregateFunction newFn = new AggregateFunction(
                 fn.getFunctionName(), Arrays.asList(sumFn.getArgs()), decimal128Type,

@@ -15,7 +15,6 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.thrift.TException;
-import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -107,14 +106,13 @@ public class MetadataMgrTest {
     }
 
     @Test
-    public void testGetTable(@NotNull @Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws TException {
+    public void testGetTable(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws TException {
         List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "BIGINT", ""));
         List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
         String hdfsPath = "hdfs://127.0.0.1:10000/hive";
         StorageDescriptor sd = new StorageDescriptor();
         sd.setCols(unPartKeys);
         sd.setLocation(hdfsPath);
-        sd.setInputFormat("org.apache.hadoop.hive.ql.io.HiveInputFormat");
         Table msTable1 = new Table();
         msTable1.setDbName("hive_db");
         msTable1.setTableName("hive_table");

@@ -107,6 +107,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.ResourceMgr;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.StarOSAgent;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
@@ -114,6 +115,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.WorkGroupMgr;
+import com.starrocks.catalog.lake.ShardManager;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
@@ -133,11 +135,13 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.Daemon;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.SmallFileMgr;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
@@ -210,11 +214,13 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
@@ -409,6 +415,9 @@ public class GlobalStateMgr {
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
 
+    private ShardManager shardManager;
+
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -568,6 +577,7 @@ public class GlobalStateMgr {
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
+        this.shardManager = new ShardManager();
     }
 
     public static void destroyCheckpoint() {
@@ -723,6 +733,10 @@ public class GlobalStateMgr {
 
     public ConnectorMetadata getMetadata() {
         return localMetastore;
+    }
+
+    public ShardManager getShardManager() {
+        return shardManager;
     }
 
     @VisibleForTesting
@@ -1023,6 +1037,7 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
+        shardManager.getShardDeleter().start();
     }
 
     // start threads that should running on all FE
@@ -1137,6 +1152,8 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = loadInsertOverwriteJobs(dis, checksum);
             checksum = nodeMgr.loadComputeNodes(dis, checksum);
+            remoteChecksum = dis.readLong();
+            checksum = loadShardManager(dis, checksum);
             remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
@@ -1326,6 +1343,12 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long loadShardManager(DataInputStream in, long checksum) throws IOException {
+        shardManager = ShardManager.read(in);
+        LOG.info("finished replay shardManager from image");
+        return checksum;
+    }
+
     // Only called by checkpoint thread
     public void saveImage() throws IOException {
         // Write image.ckpt
@@ -1387,6 +1410,8 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = saveInsertOverwriteJobs(dos, checksum);
             checksum = nodeMgr.saveComputeNodes(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = shardManager.saveShardManager(dos, checksum);
             dos.writeLong(checksum);
         }
 
@@ -1890,7 +1915,65 @@ public class GlobalStateMgr {
         // 1.1 materialized view
         if (table.getType() == TableType.MATERIALIZED_VIEW) {
             MaterializedView mv = (MaterializedView) table;
-            sb.append(mv.getViewDefineSql());
+            sb.append("CREATE MATERIALIZED VIEW `").append(table.getName()).append("`");
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+
+            // partition
+            PartitionInfo partitionInfo = mv.getPartitionInfo();
+            if (!(partitionInfo instanceof SinglePartitionInfo)) {
+                sb.append("\n").append(partitionInfo.toSql(mv, null));
+            }
+
+            // distribution
+            DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
+            sb.append("\n").append(distributionInfo.toSql());
+
+            // refresh schema
+            MaterializedView.MvRefreshScheme refreshScheme = mv.getRefreshScheme();
+            sb.append("\nREFRESH ").append(refreshScheme.getType());
+            if (refreshScheme.getType() == MaterializedView.RefreshType.ASYNC) {
+                MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
+                if (asyncRefreshContext.isDefineStartTime()) {
+                    sb.append(" START(\"").append(Utils.getDatetimeFromLong(asyncRefreshContext.getStartTime())
+                                    .format(DateUtils.DATE_TIME_FORMATTER))
+                            .append("\")");
+                }
+                if (asyncRefreshContext.getTimeUnit() != null) {
+                    sb.append(" EVERY(INTERVAL ").append(asyncRefreshContext.getStep()).append(" ")
+                            .append(asyncRefreshContext.getTimeUnit()).append(")");
+                }
+            }
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+
+            // replicationNum
+            Short replicationNum = mv.getDefaultReplicationNum();
+            sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
+            sb.append(replicationNum).append("\"");
+
+            // storageMedium
+            String storageMedium = mv.getStorageMedium();
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+                    .append("\" = \"");
+            sb.append(storageMedium).append("\"");
+
+            // storageCooldownTime
+            Map<String, String> properties = mv.getTableProperty().getProperties();
+            if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
+                sb.append("\n");
+            } else {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
+                        .append("\" = \"");
+                sb.append(TimeUtils.longToTimeString(
+                        Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)))).append("\"");
+                sb.append("\n");
+            }
+            sb.append(")");
+            sb.append("\nAS ").append(mv.getViewDefineSql());
+            sb.append(";");
             createTableStmt.add(sb.toString());
             return;
         }
@@ -2007,13 +2090,15 @@ public class GlobalStateMgr {
             // bloom filter
             Set<String> bfColumnNames = olapTable.getCopiedBfColumns();
             if (bfColumnNames != null) {
-                sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_BF_COLUMNS).append("\" = \"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
+                        .append("\" = \"");
                 sb.append(Joiner.on(", ").join(olapTable.getCopiedBfColumns())).append("\"");
             }
 
             if (separatePartition) {
                 // version info
-                sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_VERSION_INFO).append("\" = \"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_VERSION_INFO)
+                        .append("\" = \"");
                 Partition partition = null;
                 if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
                     partition = olapTable.getPartition(olapTable.getName());
@@ -2027,7 +2112,8 @@ public class GlobalStateMgr {
             // colocateTable
             String colocateTable = olapTable.getColocateGroup();
             if (colocateTable != null) {
-                sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH).append("\" = \"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)
+                        .append("\" = \"");
                 sb.append(colocateTable).append("\"");
             }
 
@@ -2037,15 +2123,18 @@ public class GlobalStateMgr {
             }
 
             // in memory
-            sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_INMEMORY).append("\" = \"");
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
+                    .append("\" = \"");
             sb.append(olapTable.isInMemory()).append("\"");
 
             // storage type
-            sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT).append("\" = \"");
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT)
+                    .append("\" = \"");
             sb.append(olapTable.getStorageFormat()).append("\"");
 
             // enable_persistent_index
-            sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX).append("\" = \"");
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
+                    .append("\" = \"");
             sb.append(olapTable.enablePersistentIndex()).append("\"");
 
             // storage media
@@ -2053,7 +2142,8 @@ public class GlobalStateMgr {
             if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
                 sb.append("\n");
             } else {
-                sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM).append("\" = \"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+                        .append("\" = \"");
                 sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
                 sb.append("\n");
             }
@@ -3092,8 +3182,8 @@ public class GlobalStateMgr {
         localMetastore.onEraseDatabase(dbId);
     }
 
-    public HashMap<Long, AgentBatchTask> onEraseOlapTable(OlapTable olapTable, boolean isReplay) {
-        return localMetastore.onEraseOlapTable(olapTable, isReplay);
+    public HashMap<Long, AgentBatchTask> onEraseOlapOrLakeTable(OlapTable olapTable, boolean isReplay) {
+        return localMetastore.onEraseOlapOrLakeTable(olapTable, isReplay);
     }
 
     public void onErasePartition(Partition partition) {

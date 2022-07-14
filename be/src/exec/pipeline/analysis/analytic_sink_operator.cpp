@@ -261,20 +261,33 @@ void AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_rows_fr
 }
 
 void AnalyticSinkOperator::_process_by_partition_for_sliding_frame(size_t chunk_size, bool is_new_partition) {
-    while (_analytor->current_row_position() < _analytor->partition_end() &&
-           !_analytor->is_current_chunk_finished_eval()) {
-        _analytor->reset_window_state();
-        FrameRange range = _analytor->get_sliding_frame_range();
-        _analytor->update_window_batch(_analytor->partition_start(), _analytor->partition_end(), range.start,
-                                       range.end);
+    if (_analytor->support_cumulative_algo()) {
+        while (_analytor->current_row_position() < _analytor->partition_end() &&
+               !_analytor->is_current_chunk_finished_eval()) {
+            _analytor->update_window_batch_removable_cumulatively();
 
-        _analytor->update_window_result_position(1);
-        int64_t frame_start = _analytor->get_total_position(_analytor->current_row_position()) -
-                              _analytor->first_total_position_of_current_chunk();
+            _analytor->update_window_result_position(1);
+            int64_t frame_start = _analytor->get_total_position(_analytor->current_row_position()) -
+                                  _analytor->first_total_position_of_current_chunk();
+            _analytor->get_window_function_result(frame_start, _analytor->window_result_position());
+            _analytor->update_current_row_position(1);
+        }
+    } else {
+        while (_analytor->current_row_position() < _analytor->partition_end() &&
+               !_analytor->is_current_chunk_finished_eval()) {
+            _analytor->reset_window_state();
+            FrameRange range = _analytor->get_sliding_frame_range();
+            _analytor->update_window_batch(_analytor->partition_start(), _analytor->partition_end(), range.start,
+                                           range.end);
 
-        DCHECK_GE(frame_start, 0);
-        _analytor->get_window_function_result(frame_start, _analytor->window_result_position());
-        _analytor->update_current_row_position(1);
+            _analytor->update_window_result_position(1);
+            int64_t frame_start = _analytor->get_total_position(_analytor->current_row_position()) -
+                                  _analytor->first_total_position_of_current_chunk();
+
+            DCHECK_GE(frame_start, 0);
+            _analytor->get_window_function_result(frame_start, _analytor->window_result_position());
+            _analytor->update_current_row_position(1);
+        }
     }
 }
 

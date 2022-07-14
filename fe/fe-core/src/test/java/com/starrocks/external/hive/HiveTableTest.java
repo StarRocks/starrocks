@@ -15,7 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.external.HiveMetaStoreTableUtils.convertHiveTableColumnType;
+import static com.starrocks.external.HiveMetaStoreTableUtils.convertColumnType;
 
 public class HiveTableTest {
 
@@ -24,7 +24,7 @@ public class HiveTableTest {
         HiveTable hiveTable = new HiveTable();
         FieldSchema col1Schema = new FieldSchema("col1", "BIGINT", "");
         List<Column> columns = Lists.newArrayList();
-        Type srType = convertHiveTableColumnType(col1Schema.getType());
+        Type srType = convertColumnType(col1Schema.getType());
         Column column = new Column(col1Schema.getName(), srType, true);
         columns.add(column);
         hiveTable.setNewFullSchema(columns);

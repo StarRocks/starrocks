@@ -29,9 +29,11 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.AdminShowConfigStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
+import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.HelpStmt;
 import com.starrocks.analysis.PartitionNames;
+import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.ShowAlterStmt;
 import com.starrocks.analysis.ShowAuthorStmt;
 import com.starrocks.analysis.ShowBackendsStmt;
@@ -75,6 +77,8 @@ import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowUserStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
@@ -285,7 +289,8 @@ public class ShowExecutor {
             handleEmtpy();
         }
 
-        return resultSet;
+        List<List<String>> rows = doPredicate(stmt, stmt.getMetaData(), resultSet.getResultRows());
+        return new ShowResultSet(resultSet.getMetaData(), rows);
     }
 
     private void handleShowComputeNodes() {
@@ -1552,6 +1557,7 @@ public class ShowExecutor {
                 // pass
             }
         }
+        rows = doPredicate(stmt, stmt.getMetaData(), rows);
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
@@ -1567,6 +1573,7 @@ public class ShowExecutor {
                 // pass
             }
         }
+        rows = doPredicate(stmt, stmt.getMetaData(), rows);
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
@@ -1581,6 +1588,7 @@ public class ShowExecutor {
                 // pass
             }
         }
+        rows = doPredicate(stmt, stmt.getMetaData(), rows);
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
@@ -1595,6 +1603,8 @@ public class ShowExecutor {
                 // pass
             }
         }
+
+        rows = doPredicate(stmt, stmt.getMetaData(), rows);
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
@@ -1617,4 +1627,28 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showCatalogsStmt.getMetaData(), rowSet);
     }
 
+    private List<List<String>> doPredicate(ShowStmt showStmt,
+                                           ShowResultSetMetaData showResultSetMetaData,
+                                           List<List<String>> rows) {
+        Predicate predicate = showStmt.getPredicate();
+        if (predicate == null) {
+            return rows;
+        }
+
+        SlotRef slotRef = (SlotRef) predicate.getChild(0);
+        StringLiteral stringLiteral = (StringLiteral) predicate.getChild(1);
+        List<List<String>> returnRows = new ArrayList<>();
+        BinaryPredicate binaryPredicate = (BinaryPredicate) predicate;
+
+        int idx = showResultSetMetaData.getColumnIdx(slotRef.getColumnName());
+        if (binaryPredicate.getOp().isEquivalence()) {
+            for (List<String> row : rows) {
+                if (row.get(idx).equals(stringLiteral.getStringValue())) {
+                    returnRows.add(row);
+                }
+            }
+        }
+
+        return returnRows;
+    }
 }
