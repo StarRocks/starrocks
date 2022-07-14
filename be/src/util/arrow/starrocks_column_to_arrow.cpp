@@ -5,6 +5,7 @@
 #include "column/type_traits.h"
 #include "common/statusor.h"
 #include "exec/vectorized/arrow_type_traits.h"
+#include "exprs/expr.h"
 #include "util/raw_container.h"
 
 namespace starrocks::vectorized {
@@ -282,6 +283,34 @@ private:
     std::shared_ptr<arrow::Array>& _array;
 };
 
+Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& _output_expr_ctxs,
+                                    const std::shared_ptr<arrow::Schema>& schema, arrow::MemoryPool* pool,
+                                    std::shared_ptr<arrow::RecordBatch>* result) {
+    if (chunk->num_columns() != schema->num_fields()) {
+        return Status::InvalidArgument("number fields not match");
+    }
+
+    int result_num_column = _output_expr_ctxs.size();
+    std::vector<std::shared_ptr<arrow::Array>> arrays(result_num_column);
+
+    for (auto i = 0; i < result_num_column; ++i) {
+        ASSIGN_OR_RETURN(ColumnPtr column, _output_expr_ctxs[i]->evaluate(chunk));
+        Expr* expr = _output_expr_ctxs[i]->root();
+        if (column->is_constant()) {
+            column = vectorized::ColumnHelper::unfold_const_column(expr->type(), chunk->num_rows(), column);
+        }
+        auto& array = arrays[i];
+        ColumnToArrowArrayConverter converter(column, pool, expr->type().type, array);
+        auto arrow_st = arrow::VisitTypeInline(*schema->field(i)->type(), &converter);
+        if (!arrow_st.ok()) {
+            return Status::InvalidArgument(arrow_st.ToString());
+        }
+    }
+    *result = arrow::RecordBatch::Make(schema, chunk->num_rows(), std::move(arrays));
+    return Status::OK();
+}
+
+// only used for UT test
 Status convert_chunk_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDescriptor*>& slot_types,
                                     const std::vector<SlotId>& slot_ids, const std::shared_ptr<arrow::Schema>& schema,
                                     arrow::MemoryPool* pool, std::shared_ptr<arrow::RecordBatch>* result) {
