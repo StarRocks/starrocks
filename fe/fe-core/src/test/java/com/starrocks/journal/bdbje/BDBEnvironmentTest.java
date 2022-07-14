@@ -452,7 +452,7 @@ public class BDBEnvironmentTest {
                 newFollowerName,
                 newFollowerHostPort,
                 newFollowerHostPort,
-                true);
+                false);
         LOG.warn("=========> start new follower for the first time");
         // should set up successfully as a standalone master
         newfollowerEnvironment.setup();
