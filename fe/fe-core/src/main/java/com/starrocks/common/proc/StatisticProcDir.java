@@ -146,8 +146,7 @@ public class StatisticProcDir implements ProcDirInterface {
                                 dbReplicaNum += localTablet.getReplicas().size();
 
                                 Pair<TabletStatus, Priority> res = localTablet.getHealthStatusWithPriority(
-                                        infoService, db.getClusterName(),
-                                        partition.getVisibleVersion(),
+                                        infoService, partition.getVisibleVersion(),
                                         replicationNum, aliveBeIdsInCluster);
 
                                 // here we treat REDUNDANT as HEALTHY, for user friendly.

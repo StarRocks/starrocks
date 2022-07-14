@@ -140,7 +140,7 @@ public class Alter {
                 throw new DdlException("Table[" + olapTable.getName() + "] is doing insert overwrite job, " +
                         "please start to create materialized view after insert overwrite");
             }
-            olapTable.checkStableAndNormal(db.getClusterName());
+            olapTable.checkStableAndNormal();
 
             ((MaterializedViewHandler) materializedViewHandler).processCreateMaterializedView(stmt, db,
                     olapTable);

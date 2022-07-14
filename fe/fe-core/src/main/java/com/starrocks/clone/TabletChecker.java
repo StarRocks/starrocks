@@ -293,7 +293,6 @@ public class TabletChecker extends MasterDaemon {
                                 Pair<TabletStatus, TabletSchedCtx.Priority> statusWithPrio =
                                         localTablet.getHealthStatusWithPriority(
                                                 infoService,
-                                                db.getClusterName(),
                                                 partition.getVisibleVersion(),
                                                 replicaNum,
                                                 aliveBeIdsInCluster);
@@ -316,7 +315,6 @@ public class TabletChecker extends MasterDaemon {
 
                                 TabletSchedCtx tabletCtx = new TabletSchedCtx(
                                         TabletSchedCtx.Type.REPAIR,
-                                        db.getClusterName(),
                                         db.getId(), olapTbl.getId(),
                                         partition.getId(), idx.getId(), tablet.getId(),
                                         System.currentTimeMillis());
