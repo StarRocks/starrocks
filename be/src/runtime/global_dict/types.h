@@ -12,6 +12,11 @@
 namespace starrocks {
 namespace vectorized {
 
+struct ColumnIdToGlobalDictMap : phmap::flat_hash_map<uint32_t, GlobalDictMap*> {
+    ColumnIdToGlobalDictMap(int version_) : version(version_){};
+
+    int32_t version;
+};
 extern ColumnIdToGlobalDictMap EMPTY_GLOBAL_DICTMAPS;
 
 std::ostream& operator<<(std::ostream& stream, const RGlobalDictMap& map);

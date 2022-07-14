@@ -228,7 +228,7 @@ Status TabletScanner::_init_unused_output_columns(const std::vector<std::string>
 // mapping a slot-column-id to schema-columnid
 Status TabletScanner::_init_global_dicts() {
     const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
-    auto global_dict = _parent->_obj_pool.add(new ColumnIdToGlobalDictMap());
+    auto global_dict = _parent->_obj_pool.add(new ColumnIdToGlobalDictMap(_runtime_state->func_version()));
     // mapping column id to storage column ids
     for (auto slot : _parent->_tuple_desc->slots()) {
         if (!slot->is_materialized()) {

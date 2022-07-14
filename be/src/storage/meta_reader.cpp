@@ -301,7 +301,7 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* col
         RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));
     }
 
-    if (words.size() > DICT_DECODE_MAX_SIZE) {
+    if (words.size() >= DICT_DECODE_MAX_SIZE) {
         return Status::GlobalDictError("global dict greater than DICT_DECODE_MAX_SIZE");
     }
 

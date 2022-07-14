@@ -5,9 +5,12 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+#include "runtime/global_dict/config.h"
+#include "runtime/primitive_type.h"
 #include "storage/olap_common.h"
 #include "storage/types.h"
 #include "util/c_string.h"
@@ -142,10 +145,15 @@ public:
 
     ColumnPtr create_column() const;
 
+    template <class DictTraits>
     static FieldPtr convert_to_dict_field(const Field& field) {
         DCHECK(field.type()->type() == OLAP_FIELD_TYPE_VARCHAR);
         FieldPtr res = std::make_shared<Field>(field);
-        res->_type = get_type_info(OLAP_FIELD_TYPE_INT);
+        if constexpr (DictTraits::LowCardDictType == TYPE_INT) {
+            res->_type = get_type_info(OLAP_FIELD_TYPE_INT);
+        } else {
+            res->_type = get_type_info(OLAP_FIELD_TYPE_SMALLINT);
+        }
         return res;
     }
 

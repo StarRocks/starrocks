@@ -262,7 +262,7 @@ Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
 Status LakeDataSource::init_global_dicts(vectorized::TabletReaderParams* params) {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
-    auto global_dict = _obj_pool.add(new ColumnIdToGlobalDictMap());
+    auto global_dict = _obj_pool.add(new ColumnIdToGlobalDictMap(_runtime_state->func_version()));
     // mapping column id to storage column ids
     const TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(thrift_lake_scan_node.tuple_id);
     for (auto slot : tuple_desc->slots()) {

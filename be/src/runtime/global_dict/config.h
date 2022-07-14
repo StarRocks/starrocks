@@ -29,4 +29,4 @@ static constexpr int DICT_DECODE_MAX_SIZE = 256;
         } else {                                                                               \
             return caller<starrocks::vectorized::CompatibleGlobalDictTraits>(__VA_ARGS__);     \
         }                                                                                      \
-    }();
+    }()

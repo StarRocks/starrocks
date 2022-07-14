@@ -287,7 +287,7 @@ Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
 Status OlapChunkSource::_init_global_dicts(vectorized::TabletReaderParams* params) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
-    auto global_dict = _obj_pool.add(new ColumnIdToGlobalDictMap());
+    auto global_dict = _obj_pool.add(new ColumnIdToGlobalDictMap(_runtime_state->func_version()));
     // mapping column id to storage column ids
     const TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
     for (auto slot : tuple_desc->slots()) {

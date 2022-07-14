@@ -19,6 +19,7 @@
 #include "gen_cpp/Data_types.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
+#include "runtime/global_dict/config.h"
 #include "runtime/mem_pool.h"
 #include "thrift/protocol/TJSONProtocol.h"
 #include "udf/udf.h"
@@ -461,7 +462,6 @@ struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR, SumResultPT<TYPE_
 class DictMergeAggregateFunction final
         : public AggregateFunctionBatchHelper<DictMergeState, DictMergeAggregateFunction> {
 public:
-    static constexpr int DICT_DECODE_MAX_SIZE = 256;
     static constexpr int FAKE_DICT_SIZE = DICT_DECODE_MAX_SIZE + 1;
 
     DictMergeState fake_dict_state(FunctionContext* ctx) const {
@@ -484,7 +484,7 @@ public:
         const auto* column = down_cast<const ArrayColumn*>(columns[0]);
         MemPool* mem_pool = ctx->impl()->mem_pool();
 
-        // if dict size greater than DICT_DECODE_MAX_SIZE. we return a FAKE dictionary
+        // if dict size GE DICT_DECODE_MAX_SIZE. we return a FAKE dictionary
         if (agg_state.over_limit) {
             return;
         }
@@ -500,13 +500,13 @@ public:
                     mem_usage += agg_state.update(mem_pool, binary_column.get_slice(i));
                 }
             }
-            agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
+            agg_state.over_limit = agg_state.set.size() >= DICT_DECODE_MAX_SIZE;
         } else {
             const auto& binary_column = down_cast<const BinaryColumn&>(elements_column);
             for (size_t i = 0; i < binary_column.size(); ++i) {
                 mem_usage += agg_state.update(mem_pool, binary_column.get_slice(i));
             }
-            agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
+            agg_state.over_limit = agg_state.set.size() >= DICT_DECODE_MAX_SIZE;
         }
     }
 
@@ -525,7 +525,7 @@ public:
                                                              slice.size);
         ctx->impl()->add_mem_usage(mem_usage);
 
-        agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
+        agg_state.over_limit = agg_state.set.size() >= DICT_DECODE_MAX_SIZE;
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {

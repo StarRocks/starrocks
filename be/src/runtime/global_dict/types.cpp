@@ -4,7 +4,7 @@
 
 namespace starrocks::vectorized {
 
-ColumnIdToGlobalDictMap EMPTY_GLOBAL_DICTMAPS;
+ColumnIdToGlobalDictMap EMPTY_GLOBAL_DICTMAPS(CompatibleGlobalDictTraits::compatible_version);
 
 std::ostream& operator<<(std::ostream& stream, const RGlobalDictMap& map) {
     stream << "[";

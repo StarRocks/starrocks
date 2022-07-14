@@ -26,7 +26,6 @@ using GlobalDictByNameMaps = phmap::flat_hash_map<std::string, GlobalDictMap>;
 
 using DictColumnsValidMap = phmap::flat_hash_map<std::string, bool, SliceHashWithSeed<PhmapSeed1>, SliceEqual>;
 
-using ColumnIdToGlobalDictMap = phmap::flat_hash_map<uint32_t, GlobalDictMap*>;
-
+struct ColumnIdToGlobalDictMap;
 } // namespace vectorized
 } // namespace starrocks

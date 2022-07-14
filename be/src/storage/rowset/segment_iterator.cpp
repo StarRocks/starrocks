@@ -998,7 +998,7 @@ void SegmentIterator::_switch_context(ScanContext* to) {
         _encoded_schema.clear();
         for (const auto& field : schema().fields()) {
             if (_can_using_global_dict(field)) {
-                _encoded_schema.append(Field::convert_to_dict_field(*field));
+                _encoded_schema.append(DISPATCH_DICT(_opts.function_version, Field::convert_to_dict_field, *field));
             } else {
                 _encoded_schema.append(field);
             }
@@ -1306,7 +1306,8 @@ Status SegmentIterator::_init_global_dict_decoder() {
         if (_can_using_global_dict(f)) {
             auto* iter = DISPATCH_DICT(_opts.function_version, (ColumnIterator*)new GlobalDictCodeColumnIterator, cid,
                                        _column_iterators[cid], _column_decoders[cid].code_convert_data(),
-                                       _opts.global_dictmaps->at(cid)) _obj_pool.add(iter);
+                                       _opts.global_dictmaps->at(cid));
+            _obj_pool.add(iter);
             _column_decoders[cid].set_iterator(iter);
             _column_decoders[cid].set_func_version(_opts.function_version);
         }
