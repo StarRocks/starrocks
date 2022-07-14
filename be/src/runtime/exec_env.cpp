@@ -253,9 +253,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 #else
         _lake_location_provider = new lake::StarletLocationProvider();
 #endif
-        // TODO: cache capacity configurable
-        _lake_tablet_manager =
-                new lake::TabletManager(_lake_location_provider, /*cache_capacity=1GB*/ 1024 * 1024 * 1024);
+        _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, config::lake_metadata_cache_limit);
     }
     _broker_mgr->init();
     _small_file_mgr->init();
