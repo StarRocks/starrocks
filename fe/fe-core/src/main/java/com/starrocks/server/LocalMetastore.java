@@ -1947,11 +1947,10 @@ public class LocalMetastore implements ConnectorMetadata {
                 for (Long tabletId : tabletIdSet) {
                     GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
                 }
-                // lakeTable need to delete shard
+                // lakeTable need to delete tablet and shard
                 if (olapTable.isLakeTable()) {
-                    GlobalStateMgr.getCurrentState().getShardManager()
-                            .getShardDeleter().addUnusedShardId(tabletIdSet);
-                    GlobalStateMgr.getCurrentState().getEditLog().logAddUnusedShard(tabletIdSet);
+                    stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+                    editLog.logAddUnusedShard(tabletIdSet);
                 }
             }
             // only remove from memory, because we have not persist it
@@ -2254,7 +2253,6 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    // TODO: clear tablet and shard when failed
     private void createLakeTablets(LakeTable table, MaterializedIndex index, DistributionInfo distributionInfo,
                                    short replicationNum, TabletMeta tabletMeta, Set<Long> tabletIdSet)
             throws DdlException {
