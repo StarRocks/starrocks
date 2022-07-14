@@ -165,4 +165,12 @@ public class HudiTableTest {
         new HudiTable(1000, "hudi_table", columns1, properties);
         Assert.fail("No exception throws.");
     }
+
+    @Test
+    public void testInputFormat() {
+        Assert.assertTrue(HudiTable.fromInputFormat("org.apache.hudi.hadoop.HoodieParquetInputFormat").equals(
+                HudiTable.HoodieTableType.COW));
+        Assert.assertTrue(HudiTable.fromInputFormat("org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat").
+                equals(HudiTable.HoodieTableType.MOR));
+    }
 }

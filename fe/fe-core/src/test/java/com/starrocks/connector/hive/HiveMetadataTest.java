@@ -78,6 +78,7 @@ public class HiveMetadataTest {
         StorageDescriptor sd = new StorageDescriptor();
         sd.setCols(unPartKeys);
         sd.setLocation(hdfsPath);
+        sd.setInputFormat("org.apache.hadoop.hive.ql.io.HiveInputFormat");
         Table msTable1 = new Table();
         msTable1.setDbName(db);
         msTable1.setTableName(tbl1);
