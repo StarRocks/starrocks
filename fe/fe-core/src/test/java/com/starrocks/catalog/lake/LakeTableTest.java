@@ -87,7 +87,7 @@ public class LakeTableTest {
                 ObjectStorageInfo.newBuilder().setObjectUri(serviceStorageUri).setEndpoint(endpoint).build();
         ShardStorageInfo shardStorageInfo =
                 ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
-        table.setShardStorageInfo(shardStorageInfo);
+        table.setStorageInfo(shardStorageInfo, false, 0);
 
         // Test serialize and deserialize
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
