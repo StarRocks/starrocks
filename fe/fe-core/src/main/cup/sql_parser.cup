@@ -2354,16 +2354,6 @@ show_param ::=
     {:
         RESULT = new ShowExportStmt(db, parser.where, orderByClause, limitClause);
     :}
-    /* Show alter table statement: used to show process of alter table statement */
-    | KW_ALTER KW_TABLE opt_alter_type:type opt_db:db opt_wild_where order_by_clause:orderByClause limit_clause:limitClause
-    {:
-        RESULT = new ShowAlterStmt(type, db, parser.where, orderByClause, limitClause);
-    :}
-    /* Show alter materialized view*/
-    | KW_ALTER KW_MATERIALIZED KW_VIEW opt_db:db opt_wild_where order_by_clause:orderByClause limit_clause:limitClause
-    {:
-        RESULT = new ShowAlterStmt(ShowAlterStmt.AlterType.MATERIALIZED_VIEW, db, parser.where, orderByClause, limitClause);
-    :}
     /* Show data statement: used to show data size of specified range */
     | KW_DATA
     {:
