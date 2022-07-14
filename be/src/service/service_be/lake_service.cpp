@@ -161,10 +161,8 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
 }
 
 void LakeServiceImpl::drop_tablet(::google::protobuf::RpcController* controller,
-                         const ::starrocks::lake::DropTabletRequest* request,
-                         ::starrocks::lake::DropTabletResponse* response,
-                         ::google::protobuf::Closure* done) {
-
+                                  const ::starrocks::lake::DropTabletRequest* request,
+                                  ::starrocks::lake::DropTabletResponse* response, ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
 
@@ -178,10 +176,8 @@ void LakeServiceImpl::drop_tablet(::google::protobuf::RpcController* controller,
         if (!res.ok()) {
             LOG(WARNING) << "Fail to drop tablet " << tablet_id << ": " << res.get_error_msg();
             response->add_failed_tablets(tablet_id);
-        } else {
-            LOG(INFO) << "Drop tablet " << tablet_id << " succ";
         }
     }
-} 
+}
 
 } // namespace starrocks
