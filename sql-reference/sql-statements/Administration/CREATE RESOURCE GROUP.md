@@ -7,7 +7,7 @@
 ## 语法
 
 ```sql
-CREAE RESOURCE GROUP < name > 
+CREAE RESOURCE GROUP <name> 
 TO CLASSIFIER[,...]
 WITH ("key" = "value", ...);
 ```
