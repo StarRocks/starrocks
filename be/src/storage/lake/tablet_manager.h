@@ -8,25 +8,21 @@
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
-#include "storage/tablet_schema.h"
-#include "util/lru_cache.h"
+#include "storage/lake/types_fwd.h"
 
 namespace starrocks {
 class Cache;
+class CacheKey;
+class Segment;
 class TCreateTabletReq;
 } // namespace starrocks
 
 namespace starrocks::lake {
 
-class CompactionTask;
-class LocationProvider;
-class Tablet;
 template <typename T>
 class MetadataIterator;
 using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 using TxnLogIter = MetadataIterator<TxnLogPtr>;
-using TabletSchemaPtr = std::shared_ptr<const starrocks::TabletSchema>;
-using CompactionTaskPtr = std::shared_ptr<CompactionTask>;
 
 class TabletManager {
     friend class Tablet;
@@ -83,7 +79,7 @@ public:
     }
 
 private:
-    using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr>;
+    using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr>;
 
     static std::string tablet_schema_cache_key(int64_t tablet_id);
 
@@ -99,12 +95,15 @@ private:
 
     StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id);
 
-    bool fill_metacache(const std::string& key, CacheValue* ptr, int size);
-    TabletMetadataPtr lookup_tablet_metadata(const std::string& key);
-    TxnLogPtr lookup_txn_log(const std::string& key);
-    void erase_metacache(const std::string& key);
+    /// Cache operations
+    bool fill_metacache(std::string_view key, CacheValue* ptr, int size);
+    void erase_metacache(std::string_view key);
 
-    TabletSchemaPtr lookup_tablet_schema(const std::string& key);
+    TabletMetadataPtr lookup_tablet_metadata(std::string_view key);
+    TxnLogPtr lookup_txn_log(std::string_view key);
+    TabletSchemaPtr lookup_tablet_schema(std::string_view key);
+    SegmentPtr lookup_segment(std::string_view key);
+    void cache_segment(std::string_view key, SegmentPtr segment);
 
     LocationProvider* _location_provider;
     std::unique_ptr<Cache> _metacache;
