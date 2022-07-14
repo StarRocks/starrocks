@@ -94,7 +94,7 @@ public class AlterJobV2Test {
         // 3. check show alter table column
         String showAlterStmtStr = "show alter table column from test;";
         ShowAlterStmt showAlterStmt =
-                (ShowAlterStmt) UtFrameUtils.parseAndAnalyzeStmt(showAlterStmtStr, connectContext);
+                (ShowAlterStmt) UtFrameUtils.parseStmtWithNewParser(showAlterStmtStr, connectContext);
         ShowExecutor showExecutor = new ShowExecutor(connectContext, showAlterStmt);
         ShowResultSet showResultSet = showExecutor.execute();
         System.out.println(showResultSet.getMetaData());
@@ -121,7 +121,7 @@ public class AlterJobV2Test {
         // 3. check show alter table column
         String showAlterStmtStr = "show alter table rollup from test;";
         ShowAlterStmt showAlterStmt =
-                (ShowAlterStmt) UtFrameUtils.parseAndAnalyzeStmt(showAlterStmtStr, connectContext);
+                (ShowAlterStmt) UtFrameUtils.parseStmtWithNewParser(showAlterStmtStr, connectContext);
         ShowExecutor showExecutor = new ShowExecutor(connectContext, showAlterStmt);
         ShowResultSet showResultSet = showExecutor.execute();
         System.out.println(showResultSet.getMetaData());
