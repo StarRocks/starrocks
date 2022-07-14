@@ -44,7 +44,7 @@ public:
     static StatusOr<std::unique_ptr<DeltaWriter>> open(const DeltaWriterOptions& opt, MemTracker* mem_tracker);
     ~DeltaWriter();
 
-    DISALLOW_COPY_AND_ASSIGN(DeltaWriter);
+    DISALLOW_COPY(DeltaWriter);
 
     // [NOT thread-safe]
     [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
