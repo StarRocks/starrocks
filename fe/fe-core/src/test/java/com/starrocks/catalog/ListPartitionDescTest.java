@@ -262,7 +262,7 @@ public class ListPartitionDescTest {
         DataProperty dataProperty = partitionInfo.getDataProperty(10001L);
         Assert.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
         DateFormat sf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        long time = sf.parse("2022-07-09 12:12:12").getTime();
+        long time = sf.parse("2022-07-30 12:12:12").getTime();
         Assert.assertEquals(time, dataProperty.getCooldownTimeMs());
 
         Assert.assertEquals(1, partitionInfo.getReplicationNum(10001L));
