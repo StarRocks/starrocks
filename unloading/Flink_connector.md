@@ -137,8 +137,8 @@ public class StarRocksSourceApp {
 | 参数 | 是否必填 | 数据类型 | 描述 |
 | --------------------------- | -------- | -------- | ------------------------------------------------------------ |
 | connector | 是 | String | 固定为 starrocks。 |
-| scan-url | 是 | String | FE 节点的连接地址，用于通过 Web 服务器访问 FE 节点。 具体格式为< FE 节点的 IP 地址>:< FE 的 http_port>，端口号默认为8030。多个地址之间用英文半角逗号分隔。例如192.168.xxx.xxx:8030,192.168.xxx.xxx:8030。 |
-| jdbc-url | 是 | String   | FE 节点的连接地址，用于访问 FE 节点上的 MySQL 客户端。具体格式为 jdbc:mysql://< FE 节点的 IP 地址>:< FE 的 query_port>，端口号默认为9030。 |
+| scan-url | 是 | String | FE 节点的连接地址，用于通过 Web 服务器访问 FE 节点。 具体格式为\<FE 节点的 IP 地址\>:\<FE 的 http_port\>，端口号默认为8030。多个地址之间用英文半角逗号分隔。例如192.168.xxx.xxx:8030,192.168.xxx.xxx:8030。 |
+| jdbc-url | 是 | String   | FE 节点的连接地址，用于访问 FE 节点上的 MySQL 客户端。具体格式为 jdbc:mysql://\<FE 节点的 IP 地址\>:\<FE 的 query_port\>，端口号默认为9030。 |
 | username | 是 | String   | StarRocks 中的用户名称。需具备目标数据库表的读权限。用户权限说明，请参见[用户权限](../administration/User_privilege.md)。 |
 | password | 是 | String   | StarRocks 的用户密码。 |
 | database-name | 是 | String   | StarRocks 数据库的名称。 |

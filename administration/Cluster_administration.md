@@ -54,13 +54,17 @@ BE 和 FE 启动完成之后，需要检查进程状态，以确定服务正常�
 
 * 运行 `http://be_host:be_http_port/api/health`  确认 BE 启动状态。
 
-  * 返回 {"status": "OK", "msg": "To Be Added"} 表示启动正常。
+```shell
+http://<be_host>:<be_http_port>/api/health
+```
 
 * 运行 `http://fe_host:fe_http_port/api/bootstrap` 确认 FE 启动状态。
 
   * 返回 {"status": "OK", "msg": "Success"} 表示启动正常。
 
-### 集群停止
+```shell
+http://<fe_host>:<fe_http_port>/api/bootstrap
+```
 
 * 进入 FE 目录 运行 `sh bin/stop_fe.sh`
 
