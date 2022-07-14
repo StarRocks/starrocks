@@ -9,6 +9,7 @@ import com.starrocks.analysis.AddBackendClause;
 import com.starrocks.analysis.AddComputeNodeClause;
 import com.starrocks.analysis.AddFollowerClause;
 import com.starrocks.analysis.AddObserverClause;
+import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AddRollupClause;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
@@ -533,6 +534,29 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowComputeNodes(StarRocksParser.ShowComputeNodesContext context) {
         return new ShowComputeNodesStmt();
+    }
+
+    @Override
+    public ParseNode visitAddPartitionClause(StarRocksParser.AddPartitionClauseContext context) {
+        boolean temporary = context.TEMPORARY() != null;
+        PartitionDesc partitionDesc = null;
+        if (context.singleRangePartition() != null) {
+            partitionDesc = (PartitionDesc) visitSingleRangePartition(context.singleRangePartition());
+        } else if (context.multiRangePartition() != null) {
+            partitionDesc = (PartitionDesc) visitMultiRangePartition(context.multiRangePartition());
+        }
+        DistributionDesc distributionDesc = null;
+        if (context.distributionDesc() != null) {
+            distributionDesc = (DistributionDesc) visitDistributionDesc(context.distributionDesc());
+        }
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new AddPartitionClause(partitionDesc, distributionDesc, properties, temporary);
     }
 
     @Override
