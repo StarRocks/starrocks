@@ -4150,7 +4150,7 @@ public class LocalMetastore implements ConnectorMetadata {
         stateMgr.getGlobalTransactionMgr().removeDatabaseTransactionMgr(dbId);
     }
 
-    public HashMap<Long, AgentBatchTask> onEraseOlapTable(OlapTable olapTable, boolean isReplay) {
+    public HashMap<Long, AgentBatchTask> onEraseOlapOrLakeTable(OlapTable olapTable, boolean isReplay) {
         // inverted index
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         Collection<Partition> allPartitions = olapTable.getAllPartitions();
@@ -4165,6 +4165,7 @@ public class LocalMetastore implements ConnectorMetadata {
         HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
         if (!isReplay) {
             // drop all replicas
+            Set<Long> tabletIds = new HashSet<>();
             for (Partition partition : olapTable.getAllPartitions()) {
                 List<MaterializedIndex> allIndices =
                         partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
@@ -4186,9 +4187,21 @@ public class LocalMetastore implements ConnectorMetadata {
                                 batchTask.addTask(dropTask);
                             } // end for replicas
                         }
+
+                        // drop shard and lake tablet
+                        if (olapTable.isLakeTable()) {
+                            tabletIds.add(tabletId);
+                        }
+                        
                     } // end for tablets
                 } // end for indices
             } // end for partitions
+
+            if (olapTable.isLakeTable()) {
+                GlobalStateMgr.getCurrentState().getShardManager()
+                        .getShardDeleter().addUnusedShardId(tabletIds);
+                GlobalStateMgr.getCurrentState().getEditLog().logAddUnusedShard(tabletIds);
+            }
         }
         // colocation
         colocateTableIndex.removeTable(olapTable.getId());

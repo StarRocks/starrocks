@@ -115,6 +115,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.WorkGroupMgr;
+import com.starrocks.catalog.lake.ShardManager;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
@@ -411,6 +412,9 @@ public class GlobalStateMgr {
     private LocalMetastore localMetastore;
     private NodeMgr nodeMgr;
 
+    private ShardManager shardManager;
+
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -570,6 +574,7 @@ public class GlobalStateMgr {
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
+        this.shardManager = new ShardManager();
     }
 
     public static void destroyCheckpoint() {
@@ -725,6 +730,10 @@ public class GlobalStateMgr {
 
     public ConnectorMetadata getMetadata() {
         return localMetastore;
+    }
+
+    public ShardManager getShardManager() {
+        return shardManager;
     }
 
     @VisibleForTesting
@@ -1025,6 +1034,7 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
+        shardManager.getShardDeleter().start();
     }
 
     // start threads that should running on all FE
@@ -1139,6 +1149,8 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = loadInsertOverwriteJobs(dis, checksum);
             checksum = nodeMgr.loadComputeNodes(dis, checksum);
+            remoteChecksum = dis.readLong();
+            checksum = loadShardManager(dis, checksum);
             remoteChecksum = dis.readLong();
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
@@ -1328,6 +1340,12 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long loadShardManager(DataInputStream in, long checksum) throws IOException {
+        shardManager = ShardManager.read(in);
+        LOG.info("finished replay shardManager from image");
+        return checksum;
+    }
+
     // Only called by checkpoint thread
     public void saveImage() throws IOException {
         // Write image.ckpt
@@ -1389,6 +1407,8 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = saveInsertOverwriteJobs(dos, checksum);
             checksum = nodeMgr.saveComputeNodes(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = shardManager.saveShardManager(dos, checksum);
             dos.writeLong(checksum);
         }
 
@@ -3121,8 +3141,8 @@ public class GlobalStateMgr {
         localMetastore.onEraseDatabase(dbId);
     }
 
-    public HashMap<Long, AgentBatchTask> onEraseOlapTable(OlapTable olapTable, boolean isReplay) {
-        return localMetastore.onEraseOlapTable(olapTable, isReplay);
+    public HashMap<Long, AgentBatchTask> onEraseOlapOrLakeTable(OlapTable olapTable, boolean isReplay) {
+        return localMetastore.onEraseOlapOrLakeTable(olapTable, isReplay);
     }
 
     public void onErasePartition(Partition partition) {

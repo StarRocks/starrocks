@@ -30,8 +30,10 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class StarOSAgentTest {
     private StarOSAgent starosAgent;
@@ -240,6 +242,25 @@ public class StarOSAgentTest {
 
         starosAgent.setServiceId(1L);
         Assert.assertEquals(Lists.newArrayList(10L, 11L), starosAgent.createShards(2, null));
+    }
+
+    @Test
+    public void testDeleteShards() throws StarClientException, DdlException {
+        Set<Long> shardIds = new HashSet<>();
+        shardIds.add(1L);
+        shardIds.add(2L);
+        new Expectations() {
+            {
+                client.deleteShard(1L, shardIds);
+                minTimes = 0;
+                result = new StarClientException(StatusCode.GRPC, "network error");
+            }
+        };
+
+        starosAgent.setServiceId(1L);
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to delete shards.",
+                () -> starosAgent.deleteShards(shardIds));
     }
 
     @Test
