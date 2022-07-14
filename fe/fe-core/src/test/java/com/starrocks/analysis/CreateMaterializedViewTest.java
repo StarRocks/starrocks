@@ -445,7 +445,7 @@ public class CreateMaterializedViewTest {
         Assert.assertEquals("p3",
                 materializedView.getMvTablePartitionNameRefMap("p20200301_20200401").iterator().next());
         Assert.assertNotNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p3"));
-        // delete tbl2 partition p3
+        // delete tbl1 partition p3
         String dropPartitionSql = "ALTER TABLE test.tbl1 DROP PARTITION p3\n";
         new StmtExecutor(connectContext, dropPartitionSql).execute();
         taskManager.executeTask(mvTaskName);
