@@ -15,7 +15,7 @@ Status build_code_convert_map(ScalarColumnIterator* file_column_iter, vectorized
 
     int dict_size = file_column_iter->dict_size();
     DCHECK_LT(dict_size, vectorized::DICT_DECODE_MAX_SIZE);
-    if (dict_size < vectorized::DICT_DECODE_MAX_SIZE) {
+    if (dict_size >= vectorized::DICT_DECODE_MAX_SIZE) {
         return Status::InternalError("dict size exceed DICT_DECODE_MAX_SIZE");
     }
 

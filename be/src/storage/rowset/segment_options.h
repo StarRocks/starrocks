@@ -58,7 +58,7 @@ public:
     int chunk_size = DEFAULT_CHUNK_SIZE;
 
     const ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
-    int function_version = 3;
+    int function_version = CompatibleGlobalDictTraits::compatible_version;
     const std::unordered_set<uint32_t>* unused_output_column_ids = nullptr;
 
     bool has_delete_pred = false;

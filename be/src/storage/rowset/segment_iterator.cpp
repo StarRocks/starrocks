@@ -28,6 +28,7 @@
 #include "storage/column_or_predicate.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
+#include "storage/olap_common.h"
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
 #include "storage/roaring2range.h"
@@ -49,7 +50,9 @@
 
 namespace starrocks::vectorized {
 
-constexpr static const FieldType kDictCodeType = OLAP_FIELD_TYPE_INT;
+constexpr static const FieldType kCompatibleDictCodeType = OLAP_FIELD_TYPE_INT;
+constexpr static const FieldType kGlobalDictCodeType = OLAP_FIELD_TYPE_SMALLINT;
+constexpr static const FieldType kLocalDictCodeType = OLAP_FIELD_TYPE_INT;
 
 // compare |tuple| with the first row of |chunk|.
 // NULL will be treated as a minimal value.
@@ -1167,18 +1170,23 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         }
 
         if (use_dict_code || use_global_dict_code) {
-            // create FixedLengthColumn<int64_t> for saving dict codewords.
-            auto f2 = std::make_shared<Field>(cid, f->name(), kDictCodeType, -1, -1, f->is_nullable());
+            // create FixedLengthColumn<dict_type> for saving dict codewords.
+            std::shared_ptr<Field> dict_field =
+                    std::make_shared<Field>(cid, f->name(), kLocalDictCodeType, -1, -1, f->is_nullable());
+            FieldType return_field_type = OLAP_FIELD_TYPE_VARCHAR;
             ColumnIterator* iter = nullptr;
             if (use_global_dict_code) {
                 if (_opts.function_version > vectorized::CompatibleGlobalDictTraits::compatible_version) {
                     iter = new GlobalDictCodeColumnIterator<GlobalDictTraits>(cid, _column_iterators[cid],
                                                                               _column_decoders[cid].code_convert_data(),
                                                                               _opts.global_dictmaps->at(cid));
+
+                    return_field_type = kGlobalDictCodeType;
                 } else {
                     iter = new GlobalDictCodeColumnIterator<CompatibleGlobalDictTraits>(
                             cid, _column_iterators[cid], _column_decoders[cid].code_convert_data(),
                             _opts.global_dictmaps->at(cid));
+                    return_field_type = kCompatibleDictCodeType;
                 }
 
             } else {
@@ -1186,20 +1194,21 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             }
 
             _obj_pool.add(iter);
-            ctx->_read_schema.append(f2);
+            ctx->_read_schema.append(dict_field);
             ctx->_column_iterators.emplace_back(iter);
             ctx->_is_dict_column.emplace_back(true);
             ctx->_has_dict_column = true;
 
             if (ctx->_skip_dict_decode_indexes[i]) {
-                ctx->_dict_decode_schema.append(f2);
+                ctx->_dict_decode_schema.append(dict_field);
                 continue;
             }
 
             // When we use the global dictionary,
             // iterator return type is also int type
             if (use_global_dict_code) {
-                ctx->_dict_decode_schema.append(f2);
+                ctx->_dict_decode_schema.append(
+                        std::make_shared<Field>(cid, f->name(), return_field_type, -1, -1, f->is_nullable()));
             } else {
                 ctx->_dict_decode_schema.append(f);
             }
@@ -1295,7 +1304,7 @@ Status SegmentIterator::_init_global_dict_decoder() {
         const FieldPtr& f = _schema.field(i);
         const ColumnId cid = f->id();
         if (_can_using_global_dict(f)) {
-            auto* iter = DISPATCH_DICT(_opts.version, (ColumnIterator*)new GlobalDictCodeColumnIterator, cid,
+            auto* iter = DISPATCH_DICT(_opts.function_version, (ColumnIterator*)new GlobalDictCodeColumnIterator, cid,
                                        _column_iterators[cid], _column_decoders[cid].code_convert_data(),
                                        _opts.global_dictmaps->at(cid)) _obj_pool.add(iter);
             _column_decoders[cid].set_iterator(iter);

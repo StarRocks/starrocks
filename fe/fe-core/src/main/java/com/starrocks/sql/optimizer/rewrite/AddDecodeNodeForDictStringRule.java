@@ -88,7 +88,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
     private final Map<Long, List<Integer>> tableIdToStringColumnIds = Maps.newHashMap();
 
-    public static final Type ID_TYPE = Type.INT;
+    public static final Type ID_TYPE = Type.SMALLINT;
 
     static class DecodeContext {
         // The parent operators whether need the child operators to encode
