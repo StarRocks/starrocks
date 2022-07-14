@@ -1350,15 +1350,14 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return replicaCount;
     }
 
-    public void checkStableAndNormal(String clusterName) throws DdlException {
+    public void checkStableAndNormal() throws DdlException {
         if (state != OlapTableState.NORMAL) {
             throw new DdlException("Table[" + name + "]'s state is " + state.toString() + " not NORMAL."
                     + "Do not allow create materialized view");
         }
         // check if all tablets are healthy, and no tablet is in tablet scheduler
         boolean isStable = isStable(GlobalStateMgr.getCurrentSystemInfo(),
-                GlobalStateMgr.getCurrentState().getTabletScheduler(),
-                clusterName);
+                GlobalStateMgr.getCurrentState().getTabletScheduler());
         if (!isStable) {
             throw new DdlException("table [" + name + "] is not stable."
                     + " Some tablets of this table may not be healthy or are being "
@@ -1368,7 +1367,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         }
     }
 
-    public boolean isStable(SystemInfoService infoService, TabletScheduler tabletScheduler, String clusterName) {
+    public boolean isStable(SystemInfoService infoService, TabletScheduler tabletScheduler) {
         List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
         for (Partition partition : idToPartition.values()) {
             long visibleVersion = partition.getVisibleVersion();
@@ -1381,7 +1380,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                     }
 
                     Pair<TabletStatus, TabletSchedCtx.Priority> statusPair = localTablet.getHealthStatusWithPriority(
-                            infoService, clusterName, visibleVersion, replicationNum,
+                            infoService, visibleVersion, replicationNum,
                             aliveBeIdsInCluster);
                     if (statusPair.first != TabletStatus.HEALTHY) {
                         LOG.info("table {} is not stable because tablet {} status is {}. replicas: {}",

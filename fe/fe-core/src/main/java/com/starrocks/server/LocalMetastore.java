@@ -1292,7 +1292,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (table.isLakeTable()) {
                 createLakeTablets((LakeTable) table, index, distributionInfo, replicationNum, tabletMeta, tabletIdSet);
             } else {
-                createOlapTablets(db.getClusterName(), index, Replica.ReplicaState.NORMAL, distributionInfo,
+                createOlapTablets(index, Replica.ReplicaState.NORMAL, distributionInfo,
                         partition.getVisibleVersion(), replicationNum, tabletMeta, tabletIdSet);
             }
             if (index.getId() != table.getBaseIndexId()) {
@@ -2268,7 +2268,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private void createOlapTablets(String clusterName, MaterializedIndex index, Replica.ReplicaState replicaState,
+    private void createOlapTablets(MaterializedIndex index, Replica.ReplicaState replicaState,
                                    DistributionInfo distributionInfo, long version, short replicationNum,
                                    TabletMeta tabletMeta, Set<Long> tabletIdSet) throws DdlException {
         Preconditions.checkArgument(replicationNum > 0);
@@ -2316,9 +2316,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 // randomly choose backends
                 if (Config.enable_strict_storage_medium_check) {
                     chosenBackendIds =
-                            chosenBackendIdBySeq(replicationNum, clusterName, tabletMeta.getStorageMedium());
+                            chosenBackendIdBySeq(replicationNum, tabletMeta.getStorageMedium());
                 } else {
-                    chosenBackendIds = chosenBackendIdBySeq(replicationNum, clusterName);
+                    chosenBackendIds = chosenBackendIdBySeq(replicationNum);
                 }
                 backendsPerBucketSeq.add(chosenBackendIds);
             } else {
@@ -2346,7 +2346,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     // create replicas for tablet with random chosen backends
-    private List<Long> chosenBackendIdBySeq(int replicationNum, String clusterName, TStorageMedium storageMedium)
+    private List<Long> chosenBackendIdBySeq(int replicationNum, TStorageMedium storageMedium)
             throws DdlException {
         List<Long> chosenBackendIds = systemInfoService.seqChooseBackendIdsByStorageMedium(replicationNum,
                 true, true, storageMedium);
@@ -2358,7 +2358,7 @@ public class LocalMetastore implements ConnectorMetadata {
         return chosenBackendIds;
     }
 
-    private List<Long> chosenBackendIdBySeq(int replicationNum, String clusterName) throws DdlException {
+    private List<Long> chosenBackendIdBySeq(int replicationNum) throws DdlException {
         List<Long> chosenBackendIds =
                 systemInfoService.seqChooseBackendIds(replicationNum, true, true);
         if (chosenBackendIds == null) {
@@ -2533,7 +2533,6 @@ public class LocalMetastore implements ConnectorMetadata {
             // and finally get information_schema db from the name map.
             String dbName = ClusterNamespace.getNameFromFullName(name);
             if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME)) {
-                String clusterName = ClusterNamespace.getClusterNameFromFullName(name);
                 return fullNameToDb.get(ClusterNamespace.getFullName(dbName.toLowerCase()));
             }
         }

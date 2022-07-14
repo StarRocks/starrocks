@@ -214,7 +214,6 @@ public class Coordinator {
     private final boolean preferComputeNode;
     //this query use compute node number
     private final int useComputeNodeNumber;
-    private final String clusterName;
     // force schedule local be for HybridBackendSelector
     // only for hive now
     private boolean forceScheduleLocal = false;
@@ -264,7 +263,6 @@ public class Coordinator {
         this.needReport = context.getSessionVariable().isReportSucc();
         this.preferComputeNode = context.getSessionVariable().isPreferComputeNode();
         this.useComputeNodeNumber = context.getSessionVariable().getUseComputeNodes();
-        this.clusterName = context.getClusterName();
         this.nextInstanceId = new TUniqueId();
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
@@ -273,7 +271,7 @@ public class Coordinator {
 
     // Used for broker load task/export task coordinator
     public Coordinator(Long jobId, TUniqueId queryId, DescriptorTable descTable, List<PlanFragment> fragments,
-                       List<ScanNode> scanNodes, String cluster, String timezone, long startTime) {
+                       List<ScanNode> scanNodes, String timezone, long startTime) {
         this.isBlockQuery = true;
         this.jobId = jobId;
         this.queryId = queryId;
@@ -289,7 +287,6 @@ public class Coordinator {
         this.needReport = true;
         this.preferComputeNode = false;
         this.useComputeNodeNumber = -1;
-        this.clusterName = cluster;
         this.nextInstanceId = new TUniqueId();
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
