@@ -28,6 +28,7 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArrowExpr;
+import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BoolLiteral;
@@ -78,6 +79,7 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.KillStmt;
+import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
@@ -564,8 +566,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.qualifiedName() != null) {
             dbName = getQualifiedName(context.db);
         }
-        dbName.toString();
-        return new ShowDeleteStmt(dbName == null ? null : dbName.toString());
+        if(dbName == null){
+            return new ShowDeleteStmt("");
+        }
+        return new ShowDeleteStmt(dbName.toString());
     }
 
     @Override
@@ -753,7 +757,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         //process refresh
-        RefreshSchemeDesc refreshSchemeDesc = null;
+        RefreshSchemeDesc refreshSchemeDesc;
         if (context.refreshSchemeDesc() == null) {
             refreshSchemeDesc = new SyncRefreshSchemeDesc();
         } else {
@@ -1031,7 +1035,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 targetColumnNames,
                 queryStatement,
                 Lists.newArrayList(),
-                context.OVERWRITE() != null ? true : false);
+                context.OVERWRITE() != null);
     }
 
     @Override
@@ -1934,6 +1938,37 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowVariablesStmt(getVariableType(context.varType()), pattern, where);
     }
 
+    // ------------------------------------------- Backup Store Statement ----------------------------------------------
+
+    @Override
+    public ParseNode visitBackupStatement(StarRocksParser.BackupStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        LabelName labelName = qualifiedNameToLabelName(qualifiedName);
+        StarRocksParser.IdentifierContext repo = context.identifier();
+
+        List<TableRef> tblRefs = new ArrayList<>();
+        for (StarRocksParser.TableDescContext tableDescContext : context.tableDesc()) {
+            StarRocksParser.QualifiedNameContext qualifiedNameContext = tableDescContext.qualifiedName();
+            qualifiedName = getQualifiedName(qualifiedNameContext);
+            TableName tableName = qualifiedNameToTableName(qualifiedName);
+            PartitionNames partitionNames = null;
+            if (tableDescContext.partitionNames() != null) {
+                partitionNames = (PartitionNames) visit(tableDescContext.partitionNames());
+            }
+            TableRef tableRef = new TableRef(tableName, null, partitionNames);
+            tblRefs.add(tableRef);
+        }
+        Map<String, String> properties = null;
+        if (context.propertyList() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new BackupStmt(labelName, repo.getText(), tblRefs, properties);
+    }
+
     // ------------------------------------------- Expression ----------------------------------------------------------
 
     @Override
@@ -2810,7 +2845,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             if (context.START() != null) {
                 StringLiteral stringLiteral = (StringLiteral) visit(context.string());
-                DateTimeFormatter dateTimeFormatter = null;
+                DateTimeFormatter dateTimeFormatter;
                 try {
                     dateTimeFormatter = DateUtils.probeFormat(stringLiteral.getStringValue());
                     LocalDateTime tempStartTime = DateUtils.
@@ -3079,5 +3114,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         return new DescribeStmt(targetTableName, context.ALL() != null);
+    }
+
+    private LabelName qualifiedNameToLabelName(QualifiedName qualifiedName) {
+        // Hierarchy: catalog.database.table
+        List<String> parts = qualifiedName.getParts();
+        if (parts.size() == 2) {
+            return new LabelName(parts.get(0), parts.get(1));
+        } else {
+            throw new ParsingException("error table name ");
+        }
     }
 }

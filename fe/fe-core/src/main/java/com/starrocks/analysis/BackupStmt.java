@@ -24,6 +24,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 import java.util.Map;
@@ -91,15 +92,18 @@ public class BackupStmt extends AbstractBackupStmt {
 
     @Override
     public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("BACKUP SNAPSHOT ").append(labelName.toSql());
-        sb.append("\n").append("TO ").append(repoName).append("\nON\n(");
 
-        sb.append(Joiner.on(",\n").join(tblRefs));
-
-        sb.append("\n)\nPROPERTIES\n(");
-        sb.append(new PrintableMap<String, String>(properties, " = ", true, true));
-        sb.append("\n)");
-        return sb.toString();
+        return "BACKUP SNAPSHOT " + labelName.toSql() +
+                "\n" + "TO " + repoName + "\nON\n(" +
+                Joiner.on(",\n").join(tblRefs) +
+                "\n)\nPROPERTIES\n(" +
+                new PrintableMap<>(properties, " = ", true, true) +
+                "\n)";
     }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitBackupStmt(this, context);
+    }
+
 }
