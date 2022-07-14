@@ -185,7 +185,7 @@ public class BeLoadRebalancer extends Rebalancer {
             }
         } // end for high backends
 
-        LOG.info("select alternative tablets for cluster: medium: {}, num: {}, detail: {}",
+        LOG.info("select alternative tablets, medium: {}, num: {}, detail: {}",
                 medium, alternativeTablets.size(),
                 alternativeTablets.stream().mapToLong(TabletSchedCtx::getTabletId).toArray());
         return alternativeTablets;
