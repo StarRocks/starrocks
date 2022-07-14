@@ -150,9 +150,11 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                 refreshAllPartitions = true;
             }
         }
+        if (materializedView.getPartitions().isEmpty()) {
+            return;
+        }
         // if all partition need refresh
-        if (materializedView.getPartitions().size() > 0 &&
-                needRefreshPartitionNames.size() == materializedView.getPartitions().size()) {
+        if (needRefreshPartitionNames.size() == materializedView.getPartitions().size()) {
             refreshAllPartitions = true;
         }
         // 4. refresh mv
