@@ -580,10 +580,6 @@ public class DatabaseTransactionMgr {
                         return false;
                     }
 
-                    if (partition.isUseStarOS()) {
-                        continue;
-                    }
-
                     List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableId, partition);
                     int quorumNum = partitionInfo.getQuorumNum(partitionId);
                     int replicaNum = partitionInfo.getReplicationNum(partitionId);

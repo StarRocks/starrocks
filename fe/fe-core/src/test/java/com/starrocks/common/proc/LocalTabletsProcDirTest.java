@@ -38,7 +38,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-public class TabletsProcDirTest {
+public class LocalTabletsProcDirTest {
 
     @Test
     public void testFetchResultWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
@@ -110,8 +110,7 @@ public class TabletsProcDirTest {
         db.createTable(table);
 
         // Check
-        Config.use_staros = false;
-        TabletsProcDir tabletsProcDir = new TabletsProcDir(db, partition, index);
+        LocalTabletsProcDir tabletsProcDir = new LocalTabletsProcDir(db, table, index);
         List<List<Comparable>> result = tabletsProcDir.fetchComparableResult(-1, -1, null);
         System.out.println(result);
         Assert.assertEquals(3, result.size());
