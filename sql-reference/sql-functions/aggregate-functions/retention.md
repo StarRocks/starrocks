@@ -7,7 +7,7 @@
 ## 语法
 
 ```Haskell
-retention([cond1, cond2, ..., cond31])
+retention(cond1 [,cond2, ..., cond31])
 ```
 
 ## 参数说明
@@ -28,7 +28,7 @@ retention([cond1, cond2, ..., cond31])
 
 1. 创建表`test`并插入数据。
 
-    ```Plain Text
+    ```SQL
     CREATE TABLE test(
         id TINYINT,
         action STRING,
@@ -76,8 +76,12 @@ retention([cond1, cond2, ..., cond31])
 
     示例一：计算2022年1月1日浏览过商品页（action='pv'），并且在2022年1月2日下单（action='buy'）的情况。
 
-    ```SQL
-    MySQL > select id, retention([action='pv' and to_date(time)='2022-01-01', action='buy' and to_date(time)='2022-01-02']) as retention from test group by id order by id;
+    ```Plain Text
+    MySQL > select id, retention([action='pv' and to_date(time)='2022-01-01',
+                                  action='buy' and to_date(time)='2022-01-02']) as retention 
+    from test 
+    group by id
+    order by id;
     +------+-----------+
     | id   | retention |
     +------+-----------+
@@ -102,8 +106,13 @@ retention([cond1, cond2, ..., cond31])
 
     示例二：计算2022年1月1日浏览过商品页（action='pv'），并且在2022年1月2日下单（action='buy'）的用户比例。
 
-    ```undefined
-    MySQL > select sum(r[1]),sum(r[2])/sum(r[1]) from (select id, retention([action='pv' and to_date(time)='2022-01-01', action='buy' and to_date(time)='2022-01-02']) as r from test group by id order by id) t;
+    ```Plain Text
+    MySQL > select sum(r[1]),sum(r[2])/sum(r[1])
+    from (select id, retention([action='pv' and to_date(time)='2022-01-01',
+                                action='buy' and to_date(time)='2022-01-02']) as r 
+    from test 
+    group by id 
+    order by id) t;
     +-----------+---------------------------+
     | sum(r[1]) | (sum(r[2])) / (sum(r[1])) |
     +-----------+---------------------------+
