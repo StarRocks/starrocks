@@ -16,6 +16,7 @@ namespace pipeline {
 
 class SourceOperator;
 using SourceOperatorPtr = std::shared_ptr<SourceOperator>;
+class MorselQueueFactory;
 
 class SourceOperatorFactory : public OperatorFactory {
 public:
@@ -31,8 +32,25 @@ public:
     }
     virtual size_t degree_of_parallelism() const { return _degree_of_parallelism; }
 
+<<<<<<< HEAD
+=======
+    void set_morsel_queue_factory(MorselQueueFactory* morsel_queue_factory) {
+        _morsel_queue_factory = morsel_queue_factory;
+    }
+    size_t num_total_original_morsels() const { return _morsel_queue_factory->num_original_morsels(); }
+
+    // When the pipeline of this source operator wants to insert a local shuffle for some complex operators,
+    // such as hash join and aggregate, use this method to decide whether really need to insert a local shuffle.
+    // There are two source operators returning false.
+    // - The scan operator, which has been assigned tablets with the specific bucket sequences.
+    // - The exchange source operator, partitioned by HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED.
+    virtual bool need_local_shuffle() const { return true; }
+    virtual TPartitionType::type partition_type() const { return TPartitionType::type::HASH_PARTITIONED; }
+
+>>>>>>> d88b8b295 ([Enhancment] Add MorselsCount and TabletCount to profile of scan operator (#8644))
 protected:
     size_t _degree_of_parallelism = 1;
+    MorselQueueFactory* _morsel_queue_factory = nullptr;
 };
 
 class SourceOperator : public Operator {
@@ -52,12 +70,11 @@ public:
 
     const MorselQueue* morsel_queue() const { return _morsel_queue; }
 
-    size_t degree_of_parallelism() const {
-        auto* source_op_factory = down_cast<SourceOperatorFactory*>(_factory);
-        return source_op_factory->degree_of_parallelism();
-    }
+    size_t degree_of_parallelism() const { return _source_factory()->degree_of_parallelism(); }
 
 protected:
+    const SourceOperatorFactory* _source_factory() const { return down_cast<const SourceOperatorFactory*>(_factory); }
+
     MorselQueue* _morsel_queue = nullptr;
 };
 

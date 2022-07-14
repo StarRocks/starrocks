@@ -54,6 +54,37 @@ Status ScanNode::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel_queue_factory(
+        const std::vector<TScanRangeParams>& global_scan_ranges,
+        const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
+        int pipeline_dop, bool enable_tablet_internal_parallel) {
+    if (scan_ranges_per_driver_seq.empty()) {
+        ASSIGN_OR_RETURN(auto morsel_queue, convert_scan_range_to_morsel_queue(
+                                                    global_scan_ranges, node_id, pipeline_dop,
+                                                    enable_tablet_internal_parallel, global_scan_ranges.size()));
+        int scan_dop = std::min<int>(std::max<int>(1, morsel_queue->max_degree_of_parallelism()), pipeline_dop);
+        return std::make_unique<pipeline::SharedMorselQueueFactory>(std::move(morsel_queue), scan_dop);
+    } else {
+        size_t num_total_scan_ranges = 0;
+        for (const auto& [_, scan_ranges] : scan_ranges_per_driver_seq) {
+            num_total_scan_ranges += scan_ranges.size();
+        }
+
+        std::map<int, pipeline::MorselQueuePtr> queue_per_driver_seq;
+        for (const auto& [dop, scan_ranges] : scan_ranges_per_driver_seq) {
+            ASSIGN_OR_RETURN(auto queue, convert_scan_range_to_morsel_queue(scan_ranges, node_id, pipeline_dop,
+                                                                            enable_tablet_internal_parallel,
+                                                                            num_total_scan_ranges));
+            queue_per_driver_seq.emplace(dop, std::move(queue));
+        }
+
+        return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(queue_per_driver_seq));
+    }
+}
+
+>>>>>>> d88b8b295 ([Enhancment] Add MorselsCount and TabletCount to profile of scan operator (#8644))
 StatusOr<pipeline::MorselQueuePtr> ScanNode::convert_scan_range_to_morsel_queue(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams&) {
     pipeline::Morsels morsels;

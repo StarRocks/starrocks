@@ -18,6 +18,45 @@ void PhysicalSplitScanMorsel::init_tablet_reader_params(vectorized::TabletReader
     params->rowid_range_option = _rowid_range_option;
 }
 
+<<<<<<< HEAD
+=======
+void LogicalSplitScanMorsel::init_tablet_reader_params(vectorized::TabletReaderParams* params) {
+    params->short_key_ranges = _short_key_ranges;
+}
+
+/// MorselQueueFactory
+
+size_t SharedMorselQueueFactory::num_original_morsels() const {
+    return _queue->num_original_morsels();
+}
+
+size_t IndividualMorselQueueFactory::num_original_morsels() const {
+    size_t total = 0;
+    for (const auto& queue : _queue_per_driver_seq) {
+        total += queue->num_original_morsels();
+    }
+    return total;
+}
+
+IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq) {
+    if (queue_per_driver_seq.empty()) {
+        _queue_per_driver_seq.emplace_back(pipeline::create_empty_morsel_queue());
+        return;
+    }
+
+    int max_dop = queue_per_driver_seq.rbegin()->first;
+    _queue_per_driver_seq.reserve(max_dop + 1);
+    for (int i = 0; i <= max_dop; ++i) {
+        auto it = queue_per_driver_seq.find(i);
+        if (it == queue_per_driver_seq.end()) {
+            _queue_per_driver_seq.emplace_back(create_empty_morsel_queue());
+        } else {
+            _queue_per_driver_seq.emplace_back(std::move(it->second));
+        }
+    }
+}
+
+>>>>>>> d88b8b295 ([Enhancment] Add MorselsCount and TabletCount to profile of scan operator (#8644))
 /// MorselQueue.
 std::vector<TInternalScanRange*> _convert_morsels_to_olap_scan_ranges(const Morsels& morsels) {
     std::vector<TInternalScanRange*> scan_ranges;
