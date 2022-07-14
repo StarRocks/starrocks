@@ -169,7 +169,7 @@ size_t PipelineBuilderContext::degree_of_parallelism_of_source_operator(int32_t 
 
     // The degree_of_parallelism of the SourceOperator with morsel is not more than the number of morsels
     // If table is empty, then morsel size is zero and we still set degree of parallelism to 1
-    return std::min<size_t>(std::max<size_t>(1, it->second->num_morsels()), _degree_of_parallelism);
+    return std::min<size_t>(std::max<size_t>(1, it->second->max_degree_of_parallelism()), _degree_of_parallelism);
 }
 
 size_t PipelineBuilderContext::degree_of_parallelism_of_source_operator(const SourceOperatorFactory* source_op) const {

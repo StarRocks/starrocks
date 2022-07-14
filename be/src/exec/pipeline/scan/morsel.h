@@ -90,7 +90,8 @@ public:
     virtual void set_tablets(const std::vector<TabletSharedPtr>& tablets) {}
     virtual void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) {}
 
-    virtual size_t num_morsels() const = 0;
+    virtual size_t num_original_morsels() const = 0;
+    virtual size_t max_degree_of_parallelism() const = 0;
     virtual bool empty() const = 0;
     virtual StatusOr<MorselPtr> try_get() = 0;
 
@@ -108,7 +109,8 @@ public:
 
     std::vector<TInternalScanRange*> olap_scan_ranges() const override;
 
-    size_t num_morsels() const override { return _num_morsels; }
+    size_t num_original_morsels() const override { return _num_morsels; }
+    size_t max_degree_of_parallelism() const override { return _num_morsels; }
     bool empty() const override { return _pop_index >= _num_morsels; }
     StatusOr<MorselPtr> try_get() override;
 
@@ -137,7 +139,8 @@ public:
         _tablet_rowsets = tablet_rowsets;
     }
 
-    size_t num_morsels() const override { return _degree_of_parallelism; }
+    size_t num_original_morsels() const override { return _morsels.size(); }
+    size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
     bool empty() const override { return _tablet_idx >= _tablets.size(); }
     StatusOr<MorselPtr> try_get() override;
 
