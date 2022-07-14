@@ -6,26 +6,21 @@ StarGo 是一个用于管理多个 StarRocks 集群的命令行工具。通过 S
 
 ## 部署 StarGo
 
-下载以下文件：
+在当前用户路径下下载并解压 StarGo 二进制安装包。
 
-- **sr-ctl**：StarGo 二进制文件，无需安装。
-- **sr-c1.yaml**：部署配置文件模板。
+```shell
+wget https://raw.githubusercontent.com/wangtianyi2004/starrocks-controller/main/stargo-pkg.tar.gz
+tar -xzvf stargo-pkg.tar.gz
+```
+
+安装包包含以下文件。
+
+- **stargo**：StarGo 二进制文件，无需安装。
+- **deploy-template.yaml**：部署配置文件模板。
 - **repo.yaml**：指定 StarRocks 安装包下载库的配置文件。
 
 > 说明
 > 您可以在 `http://cdn-thirdparty.starrocks.com` 地址下获取相应的版本的安装 index 文件以及安装包。
-
-```shell
-wget https://github.com/wangtianyi2004/starrocks-controller/raw/main/sr-ctl
-wget https://github.com/wangtianyi2004/starrocks-controller/blob/main/sr-c1.yaml
-wget https://github.com/wangtianyi2004/starrocks-controller/blob/main/repo.yaml
-```
-
-赋予 **sr-ctl** 运行权限。
-
-```shell
-chmod 751 sr-ctl
-```
 
 ## 部署集群
 
@@ -58,7 +53,7 @@ chmod 751 sr-ctl
 
 ```yaml
 global:
-    user: "starrocks"   ## 请修改为当前操作系统用户
+    user: "starrocks"   # 请修改为当前操作系统用户。
     ssh_port: 22
 
 fe_servers:
@@ -161,7 +156,7 @@ mkdir -p StarRocks/be/storage
 通过以下命令部署 StarRocks 集群。
 
 ```shell
-./sr-ctl cluster deploy <cluster_name> <version> <topology_file>
+./stargo cluster deploy <cluster_name> <version> <topology_file>
 ```
 
 |参数|描述|
@@ -175,7 +170,7 @@ mkdir -p StarRocks/be/storage
 示例：
 
 ```plain text
-[sr-dev@r0 ~]$ ./sr-ctl cluster deploy sr-c1 v2.0.1 sr-c1.yaml
+[sr-dev@r0 ~]$ ./stargo cluster deploy sr-c1 v2.0.1 sr-c1.yaml
 [20220301-234817  OUTPUT] Deploy cluster [clusterName = sr-c1, clusterVersion = v2.0.1, metaFile = sr-c1.yaml]
 [20220301-234836  OUTPUT] PRE CHECK DEPLOY ENV:
 PreCheck FE:
@@ -261,13 +256,13 @@ mysql -h 127.0.0.1 -P9030 -uroot
 通过以下命令查看其管理的所有集群信息。
 
 ```shell
-./sr-ctl cluster list
+./stargo cluster list
 ```
 
 示例：
 
 ```shell
-[sr-dev@r0 ~]$ ./sr-ctl cluster list
+[sr-dev@r0 ~]$ ./stargo cluster list
 [20220302-001640  OUTPUT] List all clusters
 ClusterName      User        CreateDate                 MetaPath                                                      PrivateKey
 ---------------  ----------  -------------------------  ------------------------------------------------------------  --------------------------------------------------
@@ -279,13 +274,13 @@ sr-c1            starrocks   2022-03-02 00:08:15        /home/sr-dev/.starrocks-
 通过以下命令查看指定集群的信息。
 
 ```shell
-./sr-ctl cluster display <cluster_name>
+./stargo cluster display <cluster_name>
 ```
 
 示例：
 
 ```plain text
-[sr-dev@r0 ~]$ ./sr-ctl cluster display sr-c1
+[sr-dev@r0 ~]$ ./stargo cluster display sr-c1
 [20220302-002310  OUTPUT] Display cluster [clusterName = sr-c1]
 clusterName = sr-c1
 ID                          ROLE    HOST                  PORT             STAT        DATADIR                                             DEPLOYDIR
@@ -307,13 +302,13 @@ ID                          ROLE    HOST                  PORT             STAT 
 通过以下命令启动特定集群所有节点。
 
 ```shell
-./sr-ctl cluster start <cluster-name>
+./stargo cluster start <cluster-name>
 ```
 
 示例：
 
 ```plain text
-[root@nd1 sr-controller]# ./sr-ctl cluster start sr-c1
+[root@nd1 sr-controller]# ./stargo cluster start sr-c1
 [20220303-190404  OUTPUT] Start cluster [clusterName = sr-c1]
 [20220303-190404    INFO] Starting FE node [FeHost = 192.168.xx.xx, EditLogPort = 9010]
 [20220303-190435    INFO] Starting FE node [FeHost = 192.168.xx.xx, EditLogPort = 9010]
@@ -328,26 +323,26 @@ ID                          ROLE    HOST                  PORT             STAT 
 - 通过以下命令启动特定集群中 FE 节点。
 
 ```shell
-./sr-ctl cluster start <cluster_name> --role FE
+./stargo cluster start <cluster_name> --role FE
 ```
 
 - 通过以下命令启动特定集群中 BE 节点。
 
 ```shell
-./sr-ctl cluster start <cluster_name> --role BE
+./stargo cluster start <cluster_name> --role BE
 ```
 
 示例：
 
 ```plain text
-[root@nd1 sr-controller]# ./sr-ctl cluster start sr-c1 --role FE
+[root@nd1 sr-controller]# ./stargo cluster start sr-c1 --role FE
 [20220303-191529  OUTPUT] Start cluster [clusterName = sr-c1]
 [20220303-191529    INFO] Starting FE cluster ....
 [20220303-191529    INFO] Starting FE node [FeHost = 192.168.xx.xx, EditLogPort = 9010]
 [20220303-191600    INFO] Starting FE node [FeHost = 192.168.xx.xx, EditLogPort = 9010]
 [20220303-191610    INFO] Starting FE node [FeHost = 192.168.xx.xx, EditLogPort = 9010]
 
-[root@nd1 sr-controller]# ./sr-ctl cluster start sr-c1 --role BE
+[root@nd1 sr-controller]# ./stargo cluster start sr-c1 --role BE
 [20220303-194215  OUTPUT] Start cluster [clusterName = sr-c1]
 [20220303-194215    INFO] Starting BE node [BeHost = 192.168.xx.xx, HeartbeatServicePort = 9050]
 [20220303-194216    INFO] Starting BE node [BeHost = 192.168.xx.xx, HeartbeatServicePort = 9050]
@@ -360,7 +355,7 @@ ID                          ROLE    HOST                  PORT             STAT 
 通过以下命令启动集群的某一个节点。目前只支持启动 BE 的节点。
 
 ```shell
-./sr-ctl cluster start <cluster_name> --node <node_ID>
+./stargo cluster start <cluster_name> --node <node_ID>
 ```
 
 您可以通过[查看指定集群信息](#查看指定集群信息) 查看集群中特定节点的 ID。
@@ -368,7 +363,7 @@ ID                          ROLE    HOST                  PORT             STAT 
 示例：
 
 ```plain text
-[root@nd1 sr-controller]# ./sr-ctl cluster start sr-c1 --node 192.168.xx.xx:9060
+[root@nd1 sr-controller]# ./stargo cluster start sr-c1 --node 192.168.xx.xx:9060
 [20220303-194714  OUTPUT] Start cluster [clusterName = sr-c1]
 [20220303-194714    INFO] Start BE node. [BeHost = 192.168.xx.xx, HeartbeatServicePort = 9050]
 ```
@@ -382,13 +377,13 @@ ID                          ROLE    HOST                  PORT             STAT 
 通过以下命令停止特定集群所有节点。
 
 ```shell
-./sr-ctl cluster stop <cluster_name>
+./stargo cluster stop <cluster_name>
 ```
 
 示例：
 
 ```plain text
-[sr-dev@nd1 sr-controller]$ ./sr-ctl cluster stop sr-c1
+[sr-dev@nd1 sr-controller]$ ./stargo cluster stop sr-c1
 [20220302-180140  OUTPUT] Stop cluster [clusterName = sr-c1]
 [20220302-180140  OUTPUT] Stop cluster sr-c1
 [20220302-180140    INFO] Waiting for stoping FE node [FeHost = 192.168.xx.xx]
@@ -411,19 +406,19 @@ ID                          ROLE    HOST                  PORT             STAT 
 - 通过以下命令停止特定集群中 FE 节点。
 
 ```shell
-./sr-ctl cluster stop <cluster_name> --role FE
+./stargo cluster stop <cluster_name> --role FE
 ```
 
 - 通过以下命令停止特定集群中 BE 节点。
 
 ```shell
-./sr-ctl cluster stop <cluster_name> --role BE
+./stargo cluster stop <cluster_name> --role BE
 ```
 
 示例：
 
 ```plain text
-[sr-dev@nd1 sr-controller]$ ./sr-ctl cluster stop sr-c1 --role BE
+[sr-dev@nd1 sr-controller]$ ./stargo cluster stop sr-c1 --role BE
 [20220302-180624  OUTPUT] Stop cluster [clusterName = sr-c1]
 [20220302-180624  OUTPUT] Stop cluster sr-c1
 [20220302-180624    INFO] Waiting for stoping BE node [BeHost = 192.168.xx.xx]
@@ -436,7 +431,7 @@ ID                          ROLE    HOST                  PORT             STAT 
 
 ###########################################################################
 
-[sr-dev@nd1 sr-controller]$ ./sr-ctl cluster stop sr-c1 --role FE
+[sr-dev@nd1 sr-controller]$ ./stargo cluster stop sr-c1 --role FE
 [20220302-180849  OUTPUT] Stop cluster [clusterName = sr-c1]
 [20220302-180849    INFO] Stopping FE cluster ....
 [20220302-180849  OUTPUT] Stop cluster sr-c1
@@ -453,7 +448,7 @@ ID                          ROLE    HOST                  PORT             STAT 
 通过以下命令停止集群的某一个节点。
 
 ```shell
-./sr-ctl cluster stop <cluster_name> --node <node_ID>
+./stargo cluster stop <cluster_name> --node <node_ID>
 ```
 
 您可以通过[查看指定集群信息](#查看指定集群信息) 查看集群中特定节点的 ID。
@@ -461,7 +456,7 @@ ID                          ROLE    HOST                  PORT             STAT 
 示例：
 
 ```plain text
-[root@nd1 sr-controller]# ./sr-ctl cluster display sr-c1
+[root@nd1 sr-controller]# ./stargo cluster display sr-c1
 [20220303-185400  OUTPUT] Display cluster [clusterName = sr-c1]
 clusterName = sr-c1
 [20220303-185400    WARN] All FE nodes are down, please start FE node and display the cluster status again.
@@ -474,7 +469,7 @@ ID                          ROLE    HOST                  PORT             STAT 
 192.168.xx.xx:9060          BE      192.168.xx.xx         9060/9050        DOWN        StarRocks/be                                   /dataStarRocks/be/storage
 192.168.xx.xx:9060          BE      192.168.xx.xx         9060/9050        DOWN        StarRocks/be                                   /dataStarRocks/be/storage
 
-[root@nd1 sr-controller]# ./sr-ctl cluster stop sr-c1 --node 192.168.xx.xx:9060
+[root@nd1 sr-controller]# ./stargo cluster stop sr-c1 --node 192.168.xx.xx:9060
 [20220303-185510  OUTPUT] Stop cluster [clusterName = sr-c1]
 [20220303-185510    INFO] Stopping BE node. [BeHost = 192.168.xx.xx]
 [20220303-185510    INFO] Waiting for stoping BE node [BeHost = 192.168.xx.xx]
@@ -548,14 +543,14 @@ mkdir -p StarRocks/be/storage
 通过以下命令扩容集群。
 
 ```shell
-./sr-ctl cluster scale-out <cluster_name> <topology_file>
+./stargo cluster scale-out <cluster_name> <topology_file>
 ```
 
 示例：
 
 ```plain text
 # 当前集群状态。
-[root@nd1 sr-controller]# ./sr-ctl cluster display sr-test       
+[root@nd1 sr-controller]# ./stargo cluster display sr-test       
 [20220503-210047  OUTPUT] Display cluster [clusterName = sr-test]
 clusterName = sr-test
 clusterVerison = v2.0.1
@@ -565,7 +560,7 @@ ID                          ROLE    HOST                  PORT             STAT 
 192.168.xx.xx:9060          BE      192.168.xx.xx         9060/9050        UP          /opt/starrocks-test/be                              /opt/starrocks-test/be/storage                    
 
 # 扩容集群。
-[sr-dev@nd1 sr-controller]$ ./sr-ctl cluster scale-out sr-test sr-out.yaml
+[sr-dev@nd1 sr-controller]$ ./stargo cluster scale-out sr-test sr-out.yaml
 [20220503-213725  OUTPUT] Scale out cluster. [ClusterName = sr-test]
 [20220503-213731  OUTPUT] PRE CHECK DEPLOY ENV:
 PreCheck FE:
@@ -610,7 +605,7 @@ IP                    ssh auth         storage dir                     deploy di
                                         beHost = 192.168.xx.xx       beHeartbeatServicePort = 9050      beStatus = true
 
 # 扩容后集群状态。
-[sr-dev@nd1 sr-controller]$ ./sr-ctl cluster display sr-test 
+[sr-dev@nd1 sr-controller]$ ./stargo cluster display sr-test 
 [20220503-214302  OUTPUT] Display cluster [clusterName = sr-test]
 clusterName = sr-test
 clusterVerison = v2.0.1
@@ -627,7 +622,7 @@ ID                          ROLE    HOST                  PORT             STAT 
 通过以下命令缩容集群中特定节点。
 
 ```shell
-./sr-ctl cluster scale-in <cluster_name> --node <node_id>
+./stargo cluster scale-in <cluster_name> --node <node_id>
 ```
 
 您可以通过[查看指定集群信息](#查看指定集群信息) 查看集群中特定节点的 ID。
@@ -635,7 +630,7 @@ ID                          ROLE    HOST                  PORT             STAT 
 示例：
 
 ```plain text
-[sr-dev@nd1 sr-controller]$ ./sr-ctl cluster display sr-c1
+[sr-dev@nd1 sr-controller]$ ./stargo cluster display sr-c1
 [20220505-145649  OUTPUT] Display cluster [clusterName = sr-c1]
 clusterName = sr-c1
 clusterVerison = v2.0.1
@@ -647,12 +642,12 @@ ID                          ROLE    HOST                  PORT             STAT 
 192.168.xx.xx:9060          BE      192.168.xx.xx         9060/9050        UP          StarRocks/be                                   /dataStarRocks/be/storage                        
 192.168.xx.xx:9060          BE      192.168.xx.xx         9060/9050        UP          StarRocks/be                                   /dataStarRocks/be/storage                        
 192.168.xx.xx:9060          BE      192.168.xx.xx         9060/9050        UP          StarRocks/be                                   /dataStarRocks/be/storage                        
-[sr-dev@nd1 sr-controller]$ ./sr-ctl cluster scale-in sr-c1 --node 192.168.88.83:9010
+[sr-dev@nd1 sr-controller]$ ./stargo cluster scale-in sr-c1 --node 192.168.88.83:9010
 [20220621-010553  OUTPUT] Scale in cluster [clusterName = sr-c1, nodeId = 192.168.88.83:9010]
 [20220621-010553    INFO] Waiting for stoping FE node [FeHost = 192.168.88.83]
 [20220621-010606  OUTPUT] Scale in FE node successfully. [clusterName = sr-c1, nodeId = 192.168.88.83:9010]
 
-[sr-dev@nd1 sr-controller]$ ./sr-ctl cluster display sr-c1
+[sr-dev@nd1 sr-controller]$ ./stargo cluster display sr-c1
 [20220621-010623  OUTPUT] Display cluster [clusterName = sr-c1]
 clusterName = sr-c1
 clusterVerison = 
@@ -672,31 +667,31 @@ ID                          ROLE    HOST                  PORT             STAT 
 - 通过以下命令升级集群。
 
 ```shell
-./sr-ctl cluster upgrade <cluster_name>  <target_version>
+./stargo cluster upgrade <cluster_name>  <target_version>
 ```
 
 - 通过以下命令降级集群。
 
 ```shell
-./sr-ctl cluster downgrade <cluster_name>  <target_version>
+./stargo cluster downgrade <cluster_name>  <target_version>
 ```
 
 示例：
 
 ```plain text
-[sr-dev@nd1 sr-controller]$ ./sr-ctl cluster list
+[sr-dev@nd1 sr-controller]$ ./stargo cluster list
 [20220515-195827  OUTPUT] List all clusters
 ClusterName      Version     User        CreateDate                 MetaPath                                                      PrivateKey                                        
 ---------------  ----------  ----------  -------------------------  ------------------------------------------------------------  --------------------------------------------------
 sr-test2         v2.0.1      test222     2022-05-15 19:35:36        /home/sr-dev/.starrocks-controller/cluster/sr-test2           /home/sr-dev/.ssh/id_rsa                          
-[sr-dev@nd1 sr-controller]$ ./sr-ctl cluster upgrade sr-test2 v2.1.3
+[sr-dev@nd1 sr-controller]$ ./stargo cluster upgrade sr-test2 v2.1.3
 [20220515-200358  OUTPUT] List all clusters
 ClusterName      Version     User        CreateDate                 MetaPath                                                      PrivateKey                                        
 ---------------  ----------  ----------  -------------------------  ------------------------------------------------------------  --------------------------------------------------
 sr-test2         v2.1.3      test222     2022-05-15 20:03:01        /home/sr-dev/.starrocks-controller/cluster/sr-test2           /home/sr-dev/.ssh/id_rsa                          
 
-[sr-dev@nd1 sr-controller]$ ./sr-ctl cluster downgrade sr-test2 v2.0.1 
-[sr-dev@nd1 sr-controller]$ ./sr-ctl cluster list
+[sr-dev@nd1 sr-controller]$ ./stargo cluster downgrade sr-test2 v2.0.1 
+[sr-dev@nd1 sr-controller]$ ./stargo cluster list
 [20220515-200915  OUTPUT] List all clusters
 ClusterName      Version     User        CreateDate                 MetaPath                                                      PrivateKey                                        
 ---------------  ----------  ----------  -------------------------  ------------------------------------------------------------  --------------------------------------------------
