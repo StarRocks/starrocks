@@ -382,6 +382,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
             // DOP of OlapScanPrepareOperator is always 1.
             DCHECK(cur_pipeline_dop == 1 || cur_pipeline_dop == morsel_queue_factory->size());
 
+            pipeline->source_operator_factory()->set_morsel_queue_factory(morsel_queue_factory.get());
             for (size_t i = 0; i < cur_pipeline_dop; ++i) {
                 auto&& operators = pipeline->create_operators(cur_pipeline_dop, i);
                 DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx,
