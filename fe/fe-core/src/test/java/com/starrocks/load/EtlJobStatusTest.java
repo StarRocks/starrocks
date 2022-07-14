@@ -41,20 +41,15 @@ public class EtlJobStatusTest {
 
         TEtlState state = TEtlState.FINISHED;
         String trackingUrl = "http://localhost:9999/xxx?job_id=zzz";
-        Map<String, String> stats = new TreeMap<String, String>();
         Map<String, String> counters = new TreeMap<String, String>();
         for (int count = 0; count < 5; ++count) {
-            String statsKey = "statsKey" + count;
-            String statsValue = "statsValue" + count;
             String countersKey = "countersKey" + count;
             String countersValue = "countersValue" + count;
-            stats.put(statsKey, statsValue);
             counters.put(countersKey, countersValue);
         }
 
         etlJobStatus.setState(state);
         etlJobStatus.setTrackingUrl(trackingUrl);
-        etlJobStatus.setStats(stats);
         etlJobStatus.setCounters(counters);
         etlJobStatus.write(dos);
         // stats.clear();
@@ -66,16 +61,12 @@ public class EtlJobStatusTest {
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
         EtlStatus etlJobStatus1 = new EtlStatus();
         etlJobStatus1.readFields(dis);
-        stats = etlJobStatus1.getStats();
         counters = etlJobStatus1.getCounters();
 
         Assert.assertEquals(etlJobStatus1.getState().name(), "FINISHED");
         for (int count = 0; count < 5; ++count) {
-            String statsKey = "statsKey" + count;
-            String statsValue = "statsValue" + count;
             String countersKey = "countersKey" + count;
             String countersValue = "countersValue" + count;
-            Assert.assertEquals(stats.get(statsKey), statsValue);
             Assert.assertEquals(counters.get(countersKey), countersValue);
         }
 
