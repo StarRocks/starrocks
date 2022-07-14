@@ -160,4 +160,24 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     }
 }
 
+void LakeServiceImpl::drop_tablet(::google::protobuf::RpcController* controller,
+                                  const ::starrocks::lake::DropTabletRequest* request,
+                                  ::starrocks::lake::DropTabletResponse* response, ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->tablet_ids_size() == 0) {
+        cntl->SetFailed("missing tablet_ids");
+        return;
+    }
+
+    for (const auto& tablet_id : request->tablet_ids()) {
+        auto res = _env->lake_tablet_manager()->drop_tablet(tablet_id);
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to drop tablet " << tablet_id << ": " << res.get_error_msg();
+            response->add_failed_tablets(tablet_id);
+        }
+    }
+}
+
 } // namespace starrocks
