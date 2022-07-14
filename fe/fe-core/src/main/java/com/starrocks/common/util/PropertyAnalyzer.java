@@ -150,7 +150,7 @@ public class PropertyAnalyzer {
 
         if (storageMedium == TStorageMedium.SSD && !hasCooldown) {
             // set default cooldown time
-            coolDownTimeStamp = Config.storage_cooldown_second == -1 ? DataProperty.MAX_COOLDOWN_TIME_MS :
+            coolDownTimeStamp = Config.storage_cooldown_second <= 0 ? DataProperty.MAX_COOLDOWN_TIME_MS :
                     currentTimeMs + Config.storage_cooldown_second * 1000L;
         }
 
