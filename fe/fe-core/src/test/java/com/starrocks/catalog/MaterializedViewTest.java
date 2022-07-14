@@ -20,6 +20,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -381,5 +382,66 @@ public class MaterializedViewTest {
         Assert.assertTrue(distributionInfo2 instanceof HashDistributionInfo);
         Assert.assertEquals(10, distributionInfo2.getBucketNum());
         Assert.assertEquals(1, ((HashDistributionInfo) distributionInfo2).getDistributionColumns().size());
+    }
+
+    @Test
+    public void testRenameMaterializedView() throws Exception {
+        FeConstants.runningUnitTest = true;
+        Config.enable_experimental_mv = true;
+        UtFrameUtils.createMinStarRocksCluster();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.tbl1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withNewMaterializedView("create materialized view mv_to_rename\n" +
+                        "PARTITION BY k1\n" +
+                        "distributed by hash(k2) buckets 3\n" +
+                        "refresh async\n" +
+                        "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;")
+                .withNewMaterializedView("create materialized view mv_to_rename2\n" +
+                        "PARTITION BY date_trunc('month', k1)\n" +
+                        "distributed by hash(k2) buckets 3\n" +
+                        "refresh async\n" +
+                        "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
+        String alterSql = "alter materialized view mv_to_rename rename mv_new_name;";
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, alterSql);
+        stmtExecutor.execute();
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        MaterializedView mv = ((MaterializedView) testDb.getTable("mv_new_name"));
+        Assert.assertNotNull(mv);
+        Assert.assertEquals("mv_new_name", mv.getName());
+        ExpressionRangePartitionInfo partitionInfo = (ExpressionRangePartitionInfo) mv.getPartitionInfo();
+        List<Expr> exprs = partitionInfo.getPartitionExprs();
+        Assert.assertEquals(1, exprs.size());
+        Assert.assertTrue(exprs.get(0) instanceof SlotRef);
+        SlotRef slotRef = (SlotRef) exprs.get(0);
+        Assert.assertEquals("mv_new_name", slotRef.getTblNameWithoutAnalyzed().getTbl());
+
+        String alterSql2 = "alter materialized view mv_to_rename2 rename mv_new_name2;";
+        StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, alterSql2);
+        stmtExecutor2.execute();
+        MaterializedView mv2 = ((MaterializedView) testDb.getTable("mv_new_name2"));
+        Assert.assertNotNull(mv2);
+        Assert.assertEquals("mv_new_name2", mv2.getName());
+        ExpressionRangePartitionInfo partitionInfo2 = (ExpressionRangePartitionInfo) mv2.getPartitionInfo();
+        List<Expr> exprs2 = partitionInfo2.getPartitionExprs();
+        Assert.assertEquals(1, exprs2.size());
+        Assert.assertTrue(exprs2.get(0) instanceof FunctionCallExpr);
+        Expr rightChild = exprs2.get(0).getChild(1);
+        Assert.assertTrue(rightChild instanceof SlotRef);
+        SlotRef slotRef2 = (SlotRef) rightChild;
+        Assert.assertEquals("mv_new_name2", slotRef2.getTblNameWithoutAnalyzed().getTbl());
     }
 }
