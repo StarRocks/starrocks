@@ -372,6 +372,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
         boolean valid = true;
         Type convertType = HiveMetaStoreTableUtils.convertHudiTableColumnType(avroSchema);
+        // if convertType is ArrayType, so srType must be srType too
         if (convertType.isArrayType()) {
             if (!srType.isArrayType()) {
                 valid = false;
@@ -379,6 +380,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
             Type convertSubType = null;
             Type srSubType = null;
+            // considering ArrayLevel has recursions, we can get recursion levels here
             int convertArrayLevel = 0;
             int srArrayLevel = 0;
             while (convertType instanceof ArrayType) {
@@ -391,16 +393,21 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                 srType = srSubType;
                 srArrayLevel++;
             }
+            // the recursion levels should be same between convertType and srType
             if (convertArrayLevel != srArrayLevel) {
                 valid = false;
             }
         }
 
+        // considering varchar info in hudi has no length, so we don't need to check length
+        // just check type here
         if (convertType.isVarchar()) {
             if (!srType.isVarchar()) {
                 valid = false;
             }
         } else {
+            // now, the complex types have been reduced to the simple primitive type
+            // we can compare two types by two types' toSql() here
             valid = srType.toSql().equals(convertType.toSql());
         }
 

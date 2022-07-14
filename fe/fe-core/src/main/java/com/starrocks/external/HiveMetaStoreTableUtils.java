@@ -222,6 +222,7 @@ public class HiveMetaStoreTableUtils {
         }
     }
 
+    // this func targets at convert hudi column type(avroSchema) to starrocks column type(primitiveType)
     public static Type convertHudiTableColumnType(Schema avroSchema) throws DdlException {
         Schema.Type columnType = avroSchema.getType();
         LogicalType logicalType = avroSchema.getLogicalType();
