@@ -296,7 +296,9 @@ TEST_F(LakeServiceTest, test_drop_tablet) {
     request.add_tablet_ids(_tablet_id);
     _lake_service.drop_tablet(&cntl, &request, &response, nullptr);
     ASSERT_FALSE(cntl.Failed());
-    ASSERT_FALSE(_tablet_mgr->get_tablet(_tablet_id).ok());
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+    ASSERT_TRUE(tablet.get_schema().status().is_not_found()) << tablet.get_schema().status();
+    ASSERT_TRUE(tablet.get_metadata(1).status().is_not_found()) << tablet.get_metadata(1).status();
 }
 
 } // namespace starrocks
