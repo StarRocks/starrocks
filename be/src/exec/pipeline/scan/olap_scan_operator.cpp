@@ -18,8 +18,8 @@ namespace starrocks::pipeline {
 
 // ==================== OlapScanOperatorFactory ====================
 
-OlapScanOperatorFactory::OlapScanOperatorFactory(int32_t id, ScanNode* scan_node, OlapScanContextPtr ctx)
-        : ScanOperatorFactory(id, scan_node), _ctx(std::move(ctx)) {}
+OlapScanOperatorFactory::OlapScanOperatorFactory(int32_t id, ScanNode* scan_node, OlapScanContextFactoryPtr ctx_factory)
+        : ScanOperatorFactory(id, scan_node), _ctx_factory(std::move(ctx_factory)) {}
 
 Status OlapScanOperatorFactory::do_prepare(RuntimeState* state) {
     return Status::OK();
@@ -28,7 +28,8 @@ Status OlapScanOperatorFactory::do_prepare(RuntimeState* state) {
 void OlapScanOperatorFactory::do_close(RuntimeState*) {}
 
 OperatorPtr OlapScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
-    return std::make_shared<OlapScanOperator>(this, _id, driver_sequence, _scan_node, _ctx);
+    return std::make_shared<OlapScanOperator>(this, _id, driver_sequence, _scan_node,
+                                              _ctx_factory->get_or_create(driver_sequence));
 }
 
 // ==================== OlapScanOperator ====================
