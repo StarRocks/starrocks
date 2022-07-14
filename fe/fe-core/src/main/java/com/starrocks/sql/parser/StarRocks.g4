@@ -39,6 +39,7 @@ statement
     | showAlterStatement                                                                    #showAlter
     | showDeleteStatement                                                                   #showDelete
     | descTableStatement                                                                    #descTable
+    | createTableLikeStatement                                                              #createTableLike
     | showIndexStatement                                                                    #showIndex
     | recoverTableStatement                                                                 #recoverTable
 
@@ -291,6 +292,10 @@ showDeleteStatement
 
 descTableStatement
     : (DESC | DESCRIBE) table=qualifiedName ALL?
+    ;
+
+createTableLikeStatement
+    : CREATE TABLE (IF NOT EXISTS)? qualifiedName LIKE qualifiedName
     ;
 
 showIndexStatement

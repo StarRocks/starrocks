@@ -31,6 +31,7 @@ import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
@@ -172,6 +173,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateTableStatement(CreateTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateTableLikeStatement(CreateTableLikeStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

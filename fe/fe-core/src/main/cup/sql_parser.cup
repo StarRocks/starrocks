@@ -1086,10 +1086,6 @@ create_stmt ::=
         RESULT = new CreateFunctionStmt(functionType, functionName, args, returnType, intermediateType, properties);
     :}
     /* Table */
-    | KW_CREATE externalable_table:isExternal opt_if_not_exists:ifNotExists table_name:name KW_LIKE table_name:existed_name
-    {:
-        RESULT = new CreateTableLikeStmt(ifNotExists, name, existed_name);
-    :}
     | KW_CREATE externalable_table:isExternal opt_if_not_exists:ifNotExists table_name:name
             LPAREN column_definition_list:columns RPAREN opt_engine:engineName opt_charset_name:charsetName
             opt_keys:keys
