@@ -2282,8 +2282,9 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private void createLakeTablets(LakeTable table, MaterializedIndex index, DistributionInfo distributionInfo,
-                                   short replicationNum, TabletMeta tabletMeta, Set<Long> tabletIdSet)
+    private void createLakeTablets(LakeTable table, long partitionId, MaterializedIndex index,
+                                   DistributionInfo distributionInfo, short replicationNum, TabletMeta tabletMeta,
+                                   Set<Long> tabletIdSet)
             throws DdlException {
         Preconditions.checkArgument(replicationNum > 0);
 
