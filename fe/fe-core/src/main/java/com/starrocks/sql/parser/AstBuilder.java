@@ -108,6 +108,7 @@ import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
+import com.starrocks.analysis.ShowAlterStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
@@ -566,6 +567,37 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return new ShowTableStmt(database, isVerbose, null);
         }
+    }
+
+    @Override
+    public ParseNode visitShowAlterStatement(StarRocksParser.ShowAlterStatementContext context) {
+        QualifiedName dbName = null;
+        if (context.db != null) {
+            dbName = getQualifiedName(context.db);
+        }
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+        ShowAlterStmt.AlterType alterType;
+        if (context.ROLLUP() != null) {
+            alterType = ShowAlterStmt.AlterType.ROLLUP;
+        } else if (context.MATERIALIZED() != null && context.VIEW() != null) {
+            alterType = ShowAlterStmt.AlterType.MATERIALIZED_VIEW;
+        } else {
+            alterType = ShowAlterStmt.AlterType.COLUMN;
+        }
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowAlterStmt(alterType, dbName == null ? null : dbName.toString(), where, orderByElements,
+                limitElement);
     }
 
     @Override
