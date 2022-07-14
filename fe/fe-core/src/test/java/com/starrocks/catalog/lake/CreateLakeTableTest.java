@@ -61,6 +61,14 @@ public class CreateLakeTableTest {
         Assert.assertTrue(table.isLakeTable());
     }
 
+    private LakeTable getLakeTable(String dbName, String tableName) {
+        String fullDbName = ClusterNamespace.getFullName(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
+        Table table = db.getTable(tableName);
+        Assert.assertTrue(table.isLakeTable());
+        return (LakeTable) table;
+    }
+
     @Test
     public void testCreateLakeTable(@Mocked StarOSAgent agent) throws UserException {
         ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build();
@@ -107,5 +115,95 @@ public class CreateLakeTableTest {
                         "distributed by hash(key2) buckets 1\n" +
                         "properties('replication_num' = '1');"));
         checkLakeTable("lake_test", "multi_partition_unique_key");
+    }
+
+    @Test
+    public void testCreateLakeTableWithStorageCache(@Mocked StarOSAgent agent) throws UserException {
+        ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build();
+        ShardStorageInfo shardStorageInfo =
+                ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
+
+        new Expectations() {
+            {
+                agent.getServiceShardStorageInfo();
+                result = shardStorageInfo;
+                agent.createShards(anyInt, (ShardStorageInfo) any);
+                returns(Lists.newArrayList(20001L, 20002L, 20003L),
+                        Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
+                        Lists.newArrayList(20008L), Lists.newArrayList(20009L));
+                agent.getPrimaryBackendIdByShard(anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+            }
+        };
+
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
+
+        // normal
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.single_partition_duplicate_key_cache (key1 int, key2 varchar(10))\n" +
+                        "engine = starrocks distributed by hash(key1) buckets 3\n" +
+                        "properties('enable_storage_cache' = 'true', 'storage_cache_ttl' = '3600');"));
+        {
+            LakeTable lakeTable = getLakeTable("lake_test", "single_partition_duplicate_key_cache");
+            // check table property
+            StorageInfo storageInfo = lakeTable.getTableProperty().getStorageInfo();
+            Assert.assertTrue(storageInfo.isEnableStorageCache());
+            Assert.assertEquals(3600, storageInfo.getStorageCacheTtlS());
+            // check partition property
+            long partitionId = lakeTable.getPartition("single_partition_duplicate_key_cache").getId();
+            StorageInfo partitionStorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partitionId);
+            Assert.assertTrue(partitionStorageInfo.isEnableStorageCache());
+            Assert.assertEquals(3600, partitionStorageInfo.getStorageCacheTtlS());
+        }
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.multi_partition_aggregate_key_cache \n" +
+                        "(key1 date, key2 varchar(10), v bigint sum)\n" +
+                        "engine = starrocks partition by range(key1)\n" +
+                        "(partition p1 values less than (\"2022-03-01\"),\n" +
+                        " partition p2 values less than (\"2022-04-01\"))\n" +
+                        "distributed by hash(key2) buckets 2\n" +
+                        "properties('enable_storage_cache' = 'true', 'storage_cache_ttl' = '7200');"));
+        {
+            LakeTable lakeTable = getLakeTable("lake_test", "multi_partition_aggregate_key_cache");
+            // check table property
+            StorageInfo storageInfo = lakeTable.getTableProperty().getStorageInfo();
+            Assert.assertTrue(storageInfo.isEnableStorageCache());
+            Assert.assertEquals(7200, storageInfo.getStorageCacheTtlS());
+            // check partition property
+            long partition1Id = lakeTable.getPartition("p1").getId();
+            StorageInfo partition1StorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partition1Id);
+            Assert.assertTrue(partition1StorageInfo.isEnableStorageCache());
+            Assert.assertEquals(7200, partition1StorageInfo.getStorageCacheTtlS());
+            long partition2Id = lakeTable.getPartition("p2").getId();
+            StorageInfo partition2StorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partition2Id);
+            Assert.assertTrue(partition2StorageInfo.isEnableStorageCache());
+            Assert.assertEquals(7200, partition2StorageInfo.getStorageCacheTtlS());
+        }
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.multi_partition_unique_key_cache (key1 int, key2 varchar(10), v bigint)\n" +
+                        "engine = starrocks unique key (key1, key2)\n" +
+                        "partition by range(key1)\n" +
+                        "(partition p1 values less than (\"10\"),\n" +
+                        " partition p2 values less than (\"20\") ('enable_storage_cache' = 'true'))\n" +
+                        "distributed by hash(key2) buckets 1\n" +
+                        "properties('replication_num' = '1');"));
+        {
+            LakeTable lakeTable = getLakeTable("lake_test", "multi_partition_unique_key_cache");
+            // check table property
+            StorageInfo storageInfo = lakeTable.getTableProperty().getStorageInfo();
+            Assert.assertFalse(storageInfo.isEnableStorageCache());
+            Assert.assertEquals(0, storageInfo.getStorageCacheTtlS());
+            // check partition property
+            long partition1Id = lakeTable.getPartition("p1").getId();
+            StorageInfo partition1StorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partition1Id);
+            Assert.assertFalse(partition1StorageInfo.isEnableStorageCache());
+            Assert.assertEquals(0, partition1StorageInfo.getStorageCacheTtlS());
+            long partition2Id = lakeTable.getPartition("p2").getId();
+            StorageInfo partition2StorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partition2Id);
+            Assert.assertTrue(partition2StorageInfo.isEnableStorageCache());
+            Assert.assertEquals(Config.storage_cooldown_second, partition2StorageInfo.getStorageCacheTtlS());
+        }
     }
 }
