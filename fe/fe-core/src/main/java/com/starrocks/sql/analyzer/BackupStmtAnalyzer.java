@@ -8,6 +8,7 @@ import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.backup.Repository;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -58,10 +59,18 @@ public class BackupStmtAnalyzer {
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
+
             String repoName = statement.getRepoName();
             if (Strings.isNullOrEmpty(repoName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Repository does not empty");
             }
+
+            Repository repo =
+                    GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().getRepo(repoName);
+            if (repo == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Repository does not exist");
+            }
+
             db.readLock();
             try {
                 for (TableRef tableRef : tableRefs) {
@@ -74,10 +83,10 @@ public class BackupStmtAnalyzer {
                     }
                     tableName.setDb(null);
                     if (partitionNames != null) {
-
                         if (tbl.getType() != Table.TableType.OLAP) {
                             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName.getTbl());
                         }
+
                         OlapTable olapTbl = (OlapTable) tbl;
                         for (String partName : tableRef.getPartitionNames().getPartitionNames()) {
                             Partition partition = olapTbl.getPartition(partName);
