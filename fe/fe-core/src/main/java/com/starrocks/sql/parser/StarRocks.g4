@@ -111,7 +111,6 @@ statement
 
     //  Backup Store Satement
     | restoreStatement                                                                      #restore
-
     ;
 
 
@@ -128,7 +127,7 @@ createDbStatement
 dropDbStatement
     : DROP (DATABASE | SCHEMA) (IF EXISTS)? identifier FORCE?
     ;
-    
+
 showCreateDbStatement
     : SHOW CREATE (DATABASE | SCHEMA) identifier
     ;
@@ -679,6 +678,7 @@ showProcedureStatment
     ;
 
 // ---------------------------------------- Backup Store Statement -----------------------------------------------------
+
 restoreStatement
     : RESTORE SNAPSHOT qualifiedName
     TO identifier
