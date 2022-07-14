@@ -765,6 +765,7 @@ showProcedureStatement
 showProcStatement
     : SHOW PROC path=string
     ;
+
 // ---------------------------------------- Backup Store Statement -----------------------------------------------------
 restoreStatement
     : RESTORE SNAPSHOT qualifiedName
