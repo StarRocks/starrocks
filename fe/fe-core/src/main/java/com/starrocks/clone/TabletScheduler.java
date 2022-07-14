@@ -557,7 +557,7 @@ public class TabletScheduler extends MasterDaemon {
                 throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
             }
             if (tbl.isLakeTable()) {
-                throw new SchedException(Status.UNRECOVERABLE, "tablet is managed by StarOS");
+                throw new SchedException(Status.UNRECOVERABLE, "tablet is managed externally");
             }
 
             boolean isColocateTable = colocateTableIndex.isColocateTable(tbl.getId());
