@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
@@ -26,7 +27,9 @@ import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverTableStmt;
-import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.SetUserPropertyStmt;
+import com.starrocks.analysis.SetUserPropertyVar;
+import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
@@ -35,6 +38,7 @@ import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
+import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UpdateStmt;
@@ -214,6 +218,36 @@ public class PrivilegeChecker {
         }
 
         @Override
+        public Void visitShowUserPropertyStmt(ShowUserPropertyStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+                try {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                } catch (AnalysisException e) {
+                    throw new SemanticException(e.getMessage());
+                }
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitSetUserPropertyStmt(SetUserPropertyStmt statement, ConnectContext session) {
+            if (statement.getPropertyList() == null || statement.getPropertyList().isEmpty()) {
+                throw new SemanticException("Empty properties");
+            }
+
+            boolean isSelf = statement.getUser().equals(ConnectContext.get().getQualifiedUser());
+            try {
+                for (SetVar var : statement.getPropertyList()) {
+                    ((SetUserPropertyVar) var).analyze(isSelf);
+                }
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+
+            return null;
+        }
+
+        @Override
         public Void visitCreateViewStatement(CreateViewStmt statement, ConnectContext session) {
             TableName tableName = statement.getTableName();
             if (!checkTblPriv(session, tableName, PrivPredicate.CREATE)) {
@@ -292,15 +326,6 @@ public class PrivilegeChecker {
         public Void visitShowTableStatusStmt(ShowTableStatusStmt statement, ConnectContext session) {
             String db = statement.getDb();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitShowAlterStmt(ShowAlterStmt statement, ConnectContext session) {
-            String db = statement.getDbName();
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), db, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
             }
             return null;

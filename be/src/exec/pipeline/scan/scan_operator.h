@@ -18,8 +18,6 @@ using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
 
 class ScanOperator : public SourceOperator {
 public:
-    static constexpr int MAX_IO_TASKS_PER_OP = 4;
-
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node);
 
     ~ScanOperator() override;
@@ -100,6 +98,7 @@ private:
 
 protected:
     ScanNode* _scan_node = nullptr;
+    int _io_tasks_per_scan_operator;
     // ScanOperator may do parallel scan, so each _chunk_sources[i] needs to hold
     // a profile indenpendently, to be more specificly, _chunk_sources[i] will go through
     // many ChunkSourcePtr in the entire life time, all these ChunkSources of _chunk_sources[i]

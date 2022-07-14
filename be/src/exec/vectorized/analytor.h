@@ -128,6 +128,7 @@ public:
     Status add_chunk(const vectorized::ChunkPtr& chunk);
 
     void update_window_batch(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start, int64_t frame_end);
+    void update_window_batch_removable_cumulatively();
     void reset_window_state();
     void get_window_function_result(size_t frame_start, size_t frame_end);
 
@@ -144,6 +145,10 @@ public:
     void remove_unused_buffer_values(RuntimeState* state);
 
     bool need_partition_materializing() const { return _need_partition_materializing; }
+
+    bool support_cumulative_algo() const { return _support_cumulative_algo; }
+
+    std::string debug_string() const;
 
 #ifdef NDEBUG
     static constexpr int32_t BUFFER_CHUNK_NUMBER = 1000;
@@ -179,7 +184,6 @@ private:
     int64_t _num_rows_returned = 0;
     int64_t _limit; // -1: no limit
     bool _has_lead_lag_function = false;
-    bool _is_range_with_start = false;
 
     vectorized::Columns _result_window_columns;
     std::vector<vectorized::ChunkPtr> _input_chunks;
@@ -222,6 +226,9 @@ private:
     int64_t _rows_start_offset = 0;
     int64_t _rows_end_offset = 0;
 
+    bool _is_unbounded_preceding = false;
+    bool _is_unbounded_following = false;
+
     // The offset of the n-th window function in a row of window functions.
     std::vector<size_t> _agg_states_offsets;
     // The total size of the row for the window function state.
@@ -251,6 +258,8 @@ private:
     // Some window functions, eg. NTILE, need the boundary of partition to calculate its value.
     // For these functions, we must wait util the partition finished.
     bool _need_partition_materializing = false;
+
+    bool _support_cumulative_algo = false;
 
 private:
     void _append_column(size_t chunk_size, vectorized::Column* dst_column, vectorized::ColumnPtr& src_column);

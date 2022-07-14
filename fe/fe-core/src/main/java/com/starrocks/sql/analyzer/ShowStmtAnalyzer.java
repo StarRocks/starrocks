@@ -3,9 +3,11 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.DescribeStmt;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SetType;
-import com.starrocks.analysis.ShowAlterStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
@@ -19,6 +21,7 @@ import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -47,11 +50,12 @@ import java.util.Set;
 public class ShowStmtAnalyzer {
 
     public static void analyze(ShowStmt stmt, ConnectContext session) {
-        new ShowStmtAnalyzerVisitor().visit(stmt, session);
+        new ShowStmtAnalyzerVisitor().analyze(stmt, session);
     }
 
     static class ShowStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         public void analyze(ShowStmt statement, ConnectContext session) {
+            analyzeShowPredicate(statement);
             visit(statement, session);
         }
 
@@ -116,12 +120,6 @@ public class ShowStmtAnalyzer {
             if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
-            return null;
-        }
-
-        @Override
-        public Void visitShowAlterStmt(ShowAlterStmt statement, ConnectContext context) {
-            ShowAlterStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -334,6 +332,22 @@ public class ShowStmtAnalyzer {
                 throw new SemanticException(String.format("Unknown proc node path: ", path));
             }
             return null;
+        }
+        
+        private void analyzeShowPredicate(ShowStmt showStmt) {
+            Predicate predicate = showStmt.getPredicate();
+            if (predicate == null) {
+                return;
+            }
+
+            if (!(predicate instanceof BinaryPredicate) || !((BinaryPredicate) predicate).getOp().isEquivalence()) {
+                throw new SemanticException("Only support equal predicate in show statement");
+            }
+
+            BinaryPredicate binaryPredicate = (BinaryPredicate) predicate;
+            if (!(binaryPredicate.getChild(0) instanceof SlotRef && binaryPredicate.getChild(1) instanceof LiteralExpr)) {
+                throw new SemanticException("Only support column = \"string literal\" format predicate");
+            }
         }
     }
 }

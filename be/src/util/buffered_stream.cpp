@@ -79,8 +79,17 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
     if (ranges.size() == 0) {
         return Status::OK();
     }
+
+    // specify compare function is important. suppose we have zero range like [351,351],[351,356].
+    // If we don't specify compare function, we may have [351,356],[351,351] which is bad order.
     std::vector<IORange> check(ranges);
-    std::sort(check.begin(), check.end());
+    std::sort(check.begin(), check.end(), [](const IORange& a, const IORange& b) {
+        if (a.offset != b.offset) {
+            return a.offset < b.offset;
+        }
+        return a.size < b.size;
+    });
+
     // check io range is not overlapped.
     for (size_t i = 1; i < ranges.size(); i++) {
         if (check[i].offset < (check[i - 1].offset + check[i - 1].size)) {

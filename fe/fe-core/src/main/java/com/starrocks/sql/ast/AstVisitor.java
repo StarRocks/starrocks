@@ -65,7 +65,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SetStmt;
-import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
@@ -78,6 +78,7 @@ import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SlotRef;
@@ -289,10 +290,6 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    public R visitShowAlterStmt(ShowAlterStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
     public R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -330,6 +327,14 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitShowUserPropertyStmt(ShowUserPropertyStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitSetUserPropertyStmt(SetUserPropertyStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitKillStatement(KillStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -346,6 +351,22 @@ public abstract class AstVisitor<R, C> {
 
     public R visitDropHistogramStatement(DropHistogramStmt statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    public R visitShowAnalyzeJobStatement(ShowAnalyzeJobStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowAnalyzeStatusStatement(ShowAnalyzeStatusStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowBasicStatsMetaStatement(ShowBasicStatsMetaStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
     // ----------------- Catalog Clause -------------
