@@ -15,7 +15,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Replica;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.proc.TabletsProcDir;
+import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -89,7 +89,7 @@ public class ShowTabletStmtAnalyzer {
                     SlotRef slotRef = (SlotRef) orderByElement.getExpr();
                     int index = 0;
                     try {
-                        index = TabletsProcDir.analyzeColumn(slotRef.getColumnName());
+                        index = LocalTabletsProcDir.analyzeColumn(slotRef.getColumnName());
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }
