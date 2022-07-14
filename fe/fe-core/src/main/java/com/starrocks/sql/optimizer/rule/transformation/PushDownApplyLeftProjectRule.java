@@ -59,8 +59,6 @@ public class PushDownApplyLeftProjectRule extends TransformationRule {
         newMaps.put(apply.getOutput(), apply.getOutput());
 
         OptExpression newApply = OptExpression.create(apply, projectOpt.getInputs().get(0), input.getInputs().get(1));
-        List<OptExpression> newChildren = Lists.newArrayList(projectOpt.getInputs());
-        newChildren.set(0, newApply);
-        return Lists.newArrayList(OptExpression.create(new LogicalProjectOperator(newMaps), newChildren));
+        return Lists.newArrayList(OptExpression.create(new LogicalProjectOperator(newMaps), newApply));
     }
 }

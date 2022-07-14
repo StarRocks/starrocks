@@ -26,14 +26,10 @@ import java.util.List;
  */
 public class PushDownApplyLeftRule extends TransformationRule {
 
-    private static final List<OperatorType> FORBIDDEN_LIST =
-            ImmutableList.of(OperatorType.LOGICAL_PROJECT,
-                    OperatorType.LOGICAL_AGGR,
-                    OperatorType.LOGICAL_TOPN,
-                    OperatorType.LOGICAL_ASSERT_ONE_ROW,
-                    OperatorType.LOGICAL_WINDOW,
-                    OperatorType.LOGICAL_REPEAT,
-                    OperatorType.LOGICAL_TABLE_FUNCTION);
+    private static final List<OperatorType> WHITE_LIST =
+            ImmutableList.of(OperatorType.LOGICAL_JOIN,
+                    OperatorType.LOGICAL_FILTER,
+                    OperatorType.LOGICAL_APPLY);
 
     public PushDownApplyLeftRule() {
         super(RuleType.TF_PUSH_DOWN_APPLY, Pattern.create(OperatorType.LOGICAL_APPLY)
@@ -47,7 +43,7 @@ public class PushDownApplyLeftRule extends TransformationRule {
 
         OperatorType childType = input.getInputs().get(0).getOp().getOpType();
 
-        if (FORBIDDEN_LIST.contains(childType)) {
+        if (!WHITE_LIST.contains(childType)) {
             return false;
         }
 
