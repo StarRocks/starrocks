@@ -282,6 +282,8 @@ public:
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
+    bool exceed_max_excution_time() const;
+
 private:
     Status create_error_log_file();
 
@@ -385,6 +387,9 @@ private:
     pipeline::QueryContext* _query_ctx = nullptr;
 
     bool _enable_pipeline_engine = false;
+
+    int _max_execution_time = -1;
+    double _expired_wall_time = 0;
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \

@@ -565,6 +565,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PRUNE_SHUFFLE_COLUMN_RATE, flag = VariableMgr.INVISIBLE)
     private double cboPruneShuffleColumnRate = 0.1;
 
+    @VarAttr(name = MAX_EXECUTION_TIME, flag = VariableMgr.INVISIBLE)
+    private int maxExecutionTime = -1;
+
     public double getCboPruneShuffleColumnRate() {
         return cboPruneShuffleColumnRate;
     }
@@ -1038,6 +1041,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setBatch_size(chunkSize);
         tResult.setDisable_stream_preaggregations(disableStreamPreaggregations);
         tResult.setLoad_mem_limit(loadMemLimit);
+        tResult.setMax_execution_time(maxExecutionTime);
 
         if (maxScanKeyNum > -1) {
             tResult.setMax_scan_key_num(maxScanKeyNum);
@@ -1054,9 +1058,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
 
         tResult.setRuntime_join_filter_pushdown_limit(runtimeJoinFilterPushDownLimit);
-        final int global_runtime_filter_wait_timeout = 20;
         final int global_runtime_filter_rpc_timeout = 400;
-        tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
+        tResult.setRuntime_filter_wait_timeout_ms((int) runtimeFilterScanWaitTime);
         tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
         tResult.setRuntime_filter_scan_wait_time_ms(runtimeFilterScanWaitTime);
         tResult.setPipeline_dop(pipelineDop);

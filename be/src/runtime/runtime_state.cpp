@@ -157,6 +157,11 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
     }
     _runtime_filter_port = _obj_pool->add(new RuntimeFilterPort(this));
 
+    if (_query_options.__isset.max_execution_time) {
+        _max_execution_time = _query_options.max_execution_time;
+        _expired_wall_time = WallTime_Now() + _max_execution_time;
+    }
+
     return Status::OK();
 }
 
@@ -278,6 +283,16 @@ Status RuntimeState::check_mem_limit(const std::string& msg) {
     RETURN_IF_LIMIT_EXCEEDED(this, msg);
 #pragma pop
     return Status::OK();
+}
+
+bool RuntimeState::exceed_max_excution_time() const {
+    if (_max_execution_time >= 0) {
+        double now = WallTime_Now();
+        if (now > _expired_wall_time) {
+            return true;
+        }
+    }
+    return false;
 }
 
 const int64_t MAX_ERROR_NUM = 50;
