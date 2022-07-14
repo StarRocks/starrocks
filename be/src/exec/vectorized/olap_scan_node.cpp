@@ -766,14 +766,15 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
             max_buffer_capacity, default_buffer_capacity, mem_limit, runtime_state()->chunk_size());
 
-    auto scan_ctx =
-            std::make_shared<pipeline::OlapScanContext>(this, dop, _enable_shared_scan, std::move(buffer_limiter));
+    auto scan_ctx_factory = std::make_shared<pipeline::OlapScanContextFactory>(this, dop, _enable_shared_scan,
+                                                                               std::move(buffer_limiter));
+
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
 
     // scan_prepare_op.
-    auto scan_prepare_op =
-            std::make_shared<pipeline::OlapScanPrepareOperatorFactory>(context->next_operator_id(), id(), scan_ctx);
-    scan_prepare_op->set_degree_of_parallelism(1);
+    auto scan_prepare_op = std::make_shared<pipeline::OlapScanPrepareOperatorFactory>(context->next_operator_id(), id(),
+                                                                                      this, scan_ctx_factory);
+    scan_prepare_op->set_degree_of_parallelism(_enable_shared_scan ? 1 : dop);
     this->init_runtime_filter_for_operator(scan_prepare_op.get(), context, rc_rf_probe_collector);
 
     auto scan_prepare_pipeline = pipeline::OpFactories{
@@ -783,8 +784,8 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
     context->add_pipeline(scan_prepare_pipeline);
 
     // scan_op.
-    auto scan_op =
-            std::make_shared<pipeline::OlapScanOperatorFactory>(context->next_operator_id(), this, std::move(scan_ctx));
+    auto scan_op = std::make_shared<pipeline::OlapScanOperatorFactory>(context->next_operator_id(), this,
+                                                                       std::move(scan_ctx_factory));
     this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
 
     return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
