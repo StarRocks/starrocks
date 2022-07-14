@@ -69,7 +69,7 @@ sh bin/start_be.sh --daemon
 * 确认 BE 集群启动状态。
 
 ```shell
-http://\<be_host\>:<\be_http_port\>/api/health
+http://<be_host>:<be_http_port>/api/health
 ```
 
 若返回 `{"status": "OK", "msg": "To Be Added"}`，则集群正常启动。
@@ -77,7 +77,7 @@ http://\<be_host\>:<\be_http_port\>/api/health
 * 确认 FE 集群启动状态。
 
 ```shell
-http://\<fe_host\>:\<fe_http_port\>/api/bootstrap
+http://<fe_host>:<fe_http_port>/api/bootstrap
 ```
 
 若返回 `{"status": "OK", "msg": "Success"}`，则集群正常启动。
