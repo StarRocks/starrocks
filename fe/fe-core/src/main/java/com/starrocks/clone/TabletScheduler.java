@@ -179,6 +179,10 @@ public class TabletScheduler extends MasterDaemon {
         return stat;
     }
 
+    public void setLoadStatistic(ClusterLoadStatistic loadStatistic) {
+        this.loadStatistic = loadStatistic;
+    }
+
     /*
      * update working slots at the beginning of each round
      */

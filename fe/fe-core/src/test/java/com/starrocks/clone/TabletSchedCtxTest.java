@@ -144,7 +144,7 @@ public class TabletSchedCtxTest {
 
         // mock tabletScheduler
         tabletScheduler = new TabletScheduler(globalStateMgr, systemInfoService, invertedIndex, stat);
-        tabletScheduler.loadStatistic = clusterLoadStatistic;
+        tabletScheduler.setLoadStatistic(clusterLoadStatistic);
         systemInfoService.getBackends().forEach(be -> {
             List<Long> pathHashes =
                     be.getDisks().values().stream().map(DiskInfo::getPathHash).collect(Collectors.toList());
