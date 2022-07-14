@@ -279,7 +279,7 @@ refreshTableStatement
     ;
 
 showAlterStatement
-    : SHOW ALTER TABLE (COLUMN | ROLLUP | MATERIALIZED VIEW) ((FROM | IN) db=qualifiedName)?
+    : SHOW ALTER TABLE (COLUMN | ROLLUP) ((FROM | IN) db=qualifiedName)?
         (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     | SHOW ALTER MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?
               (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
