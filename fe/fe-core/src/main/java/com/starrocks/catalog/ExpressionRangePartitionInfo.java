@@ -72,7 +72,15 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
     }
 
     public void renameTableName(String newTableName) {
-        AstVisitor renameVisitor = new AstVisitor<Void, Void>() {
+        AstVisitor<Void, Void> renameVisitor = new AstVisitor<Void, Void>() {
+            @Override
+            public Void visitExpression(Expr expr, Void context) {
+                for (Expr child : expr.getChildren()) {
+                    child.accept(this, context);
+                }
+                return null;
+            }
+
             @Override
             public Void visitSlot(SlotRef node, Void context) {
                 TableName tableName = node.getTblNameWithoutAnalyzed();
