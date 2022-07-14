@@ -308,7 +308,8 @@ recoverTableStatement
     ;
 
 cancelAlterTableStatement
-    : CANCEL ALTER TABLE (COLUMN | ROLLUP | MATERIALIZED VIEW)? FROM qualifiedName ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?
+    : CANCEL ALTER TABLE (COLUMN | ROLLUP)? FROM qualifiedName ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?
+    | CANCEL ALTER MATERIALIZED VIEW FROM qualifiedName
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------

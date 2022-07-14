@@ -44,4 +44,11 @@ public class AnalyzeCancelAlterTableStatementTest {
                 "CANCEL ALTER TABLE COLUMN FROM tbl");
         Assert.assertEquals("CANCEL ALTER COLUMN FROM `test`.`tbl`", stmt.toSql());
     }
+
+    @Test
+    public void testCancelMaterializedView() {
+        CancelAlterTableStmt stmt = (CancelAlterTableStmt) analyzeSuccess(
+                "cancel alter materialized view from materialized_view_test");
+        Assert.assertEquals("CANCEL ALTER MATERIALIZED_VIEW FROM `test`.`materialized_view_test`", stmt.toSql());
+    }
 }
