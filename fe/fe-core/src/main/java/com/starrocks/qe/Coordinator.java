@@ -2220,12 +2220,11 @@ public class Coordinator {
                     if (isEnablePipelineEngine) {
                         params.setIs_pipeline(true);
                         params.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
-
                         params.setPipeline_dop(fragment.getPipelineDop());
 
                         boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
                         params.setEnable_resource_group(enableResourceGroup);
-                        if (enableResourceGroup) {
+                        if (enableResourceGroup && workGroup != null) {
                             params.setWorkgroup(workGroup.toThrift());
                         }
                     }
