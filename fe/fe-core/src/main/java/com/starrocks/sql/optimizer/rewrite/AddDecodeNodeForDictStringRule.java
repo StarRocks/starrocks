@@ -356,7 +356,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     };
 
                     if (!checkColumnCouldApply.getAsBoolean()) {
-                        context.allStringColumnIds.remove(columnId);
                         continue;
                     }
 
@@ -396,8 +395,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     for (int i = 0; i < predicates.size(); i++) {
                         ScalarOperator predicate = predicates.get(i);
                         if (predicate.getUsedColumns().isIntersect(applyOptCols)) {
-                            Preconditions.checkState(
-                                    couldApplyDictOptimize(predicate, context.allStringColumnIds));
                             final DictMappingRewriter rewriter = new DictMappingRewriter(context);
                             final ScalarOperator newCallOperator = rewriter.rewrite(predicate.clone());
                             predicates.set(i, newCallOperator);
