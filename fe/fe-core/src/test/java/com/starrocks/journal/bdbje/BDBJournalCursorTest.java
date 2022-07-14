@@ -66,7 +66,7 @@ public class BDBJournalCursorTest {
                 times = 1;
                 result = database;
 
-                environment.getDatabaseNames();
+                environment.getDatabaseNames("");
                 minTimes = 0;
                 result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
             }
@@ -150,7 +150,7 @@ public class BDBJournalCursorTest {
                 times = 1;
                 result = database;
 
-                environment.getDatabaseNames();
+                environment.getDatabaseNames("");
                 minTimes = 0;
                 result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
             }
@@ -194,7 +194,7 @@ public class BDBJournalCursorTest {
                 times = 1;
                 result = database;
 
-                environment.getDatabaseNames();
+                environment.getDatabaseNames("");
                 minTimes = 0;
                 result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
             }
@@ -217,7 +217,7 @@ public class BDBJournalCursorTest {
         // from 12->13
         new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNames("");
                 minTimes = 0;
                 result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
 
@@ -238,7 +238,7 @@ public class BDBJournalCursorTest {
         // from 12->13
         new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNames("");
                 minTimes = 0;
                 result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
 
@@ -265,7 +265,7 @@ public class BDBJournalCursorTest {
         // from 12->13
         new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNames("");
                 minTimes = 0;
                 result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
 
@@ -293,7 +293,7 @@ public class BDBJournalCursorTest {
                 times = 1;
                 result = database;
 
-                environment.getDatabaseNames();
+                environment.getDatabaseNames("");
                 minTimes = 0;
                 result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
             }
@@ -323,7 +323,7 @@ public class BDBJournalCursorTest {
         // from 12->13
         new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNames("");
                 minTimes = 0;
                 result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
 
@@ -353,7 +353,7 @@ public class BDBJournalCursorTest {
     public void testDatabaseNamesFails() throws Exception {
         new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNames("");
                 minTimes = 0;
                 result = null;
             }
@@ -374,7 +374,7 @@ public class BDBJournalCursorTest {
         // from 9,9
         new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNames("");
                 minTimes = 0;
                 result = Arrays.asList(Long.valueOf(10), Long.valueOf(12));
             }

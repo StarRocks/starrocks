@@ -111,6 +111,11 @@ public class MockJournal implements Journal {
         staggingEntityMap.clear();
     }
 
+    @Override
+    public String getPrefix() {
+        return "";
+    }
+
     private static class MockJournalCursor implements JournalCursor {
         private final MockJournal instance;
         private long start;

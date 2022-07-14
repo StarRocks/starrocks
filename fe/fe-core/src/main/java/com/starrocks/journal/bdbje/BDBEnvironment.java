@@ -52,6 +52,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.journal.JournalException;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -562,10 +563,14 @@ public class BDBEnvironment {
         }
     }
 
+    public List<Long> getDatabaseNames() {
+        return getDatabaseNames("");
+    }
+
     // get journal db names and sort the names
     // let the caller retry from outside.
     // return null only if environment is closing
-    public List<Long> getDatabaseNames() {
+    public List<Long> getDatabaseNames(String prefix) {
         if (closing) {
             return null;
         }
@@ -578,8 +583,21 @@ public class BDBEnvironment {
                 continue;
             }
 
-            long db = Long.parseLong(name);
-            ret.add(db);
+            if (prefix.isEmpty()) { // default GlobalStateMgr db
+                if (StringUtils.isNumeric(name)) {
+                    long db = Long.parseLong(name);
+                    ret.add(db);
+                } else {
+                    // skip non default GlobalStateMgr db
+                }
+            } else {
+                if (name.startsWith(prefix)) {
+                    long db = Long.parseLong(name.substring(prefix.length()));
+                    ret.add(db);
+                } else {
+                    // ignore
+                }
+            }
         }
 
         Collections.sort(ret);
