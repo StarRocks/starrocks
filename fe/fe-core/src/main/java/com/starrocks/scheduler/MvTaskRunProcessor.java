@@ -146,12 +146,13 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             }
             // check with no partition expression related table
             OlapTable olapTable = olapTables.get(baseTableId);
-            if (checkNeedRefreshPartitions(materializedView, olapTable)) {
+            if (checkNoPartitionRefTablePartitions(materializedView, olapTable)) {
                 refreshAllPartitions = true;
             }
         }
         // if all partition need refresh
-        if (needRefreshPartitionNames.size() == materializedView.getPartitions().size()) {
+        if (materializedView.getPartitions().size() > 0 &&
+                needRefreshPartitionNames.size() == materializedView.getPartitions().size()) {
             refreshAllPartitions = true;
         }
         // 4. refresh mv
@@ -249,14 +250,25 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         }
     }
 
-    private boolean checkNeedRefreshPartitions(MaterializedView materializedView, OlapTable olapTable) {
+    private boolean checkNoPartitionRefTablePartitions(MaterializedView materializedView, OlapTable olapTable) {
         boolean refreshAllPartitions = false;
         long baseTableId = olapTable.getId();
         Collection<Partition> basePartitions = olapTable.getPartitions();
         for (Partition basePartition : basePartitions) {
-            if (materializedView.needRefreshPartition(baseTableId, basePartition)) {
+            if (materializedView.needAddBasePartition(baseTableId, basePartition)) {
                 refreshAllPartitions = true;
-                materializedView.updateBasePartition(baseTableId, basePartition);
+                materializedView.addBasePartition(baseTableId, basePartition);
+            }
+        }
+        Set<String> syncedPartitionNames = materializedView.getSyncedPartitionNames(baseTableId);
+        for (String syncedPartitionName : syncedPartitionNames) {
+            Partition baseTablePartition = olapTable.getPartition(syncedPartitionName);
+            if (baseTablePartition == null) {
+                refreshAllPartitions = true;
+                materializedView.removeBasePartition(baseTableId, syncedPartitionName);
+            } else if (materializedView.needRefreshPartition(baseTableId, baseTablePartition)) {
+                refreshAllPartitions = true;
+                materializedView.updateBasePartition(baseTableId, baseTablePartition);
             }
         }
         return refreshAllPartitions;
