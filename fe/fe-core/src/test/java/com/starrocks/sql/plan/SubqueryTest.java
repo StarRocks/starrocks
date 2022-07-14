@@ -245,7 +245,6 @@ public class SubqueryTest extends PlanTestBase {
         FeConstants.runningUnitTest = false;
     }
 
-
     @Test
     public void testCTEAnchorProperty() throws Exception {
         String sql = "explain SELECT\n" +
@@ -307,5 +306,12 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other predicates: CASE WHEN (18: countRows IS NULL) OR (18: countRows = 0) THEN FALSE WHEN 1: v1 IS NULL THEN NULL WHEN 16: v4 IS NOT NULL THEN TRUE WHEN 19: countNotNulls < 18: countRows THEN NULL ELSE FALSE END");
+
+        sql = "select * from t0 where exists (select v4 from t1) or (1=0 and exists (select v7 from t2));";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1)\n" +
+                "  |  group by: \n" +
+                "  |  having: 13: COUNT(1) > 0");
     }
 }
