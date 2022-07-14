@@ -59,14 +59,6 @@ private:
     // The output chunk stream is unordered
     StatusOr<vectorized::ChunkPtr> pull_one_chunk_from_sorters();
 
-    // TODO(hcf) set this value properly, maybe based on cache size
-    static const int32_t MAX_PARTITION_NUM;
-
-    bool _is_downgrade = false;
-    // We simply offer chunk to this buffer when number of partition reaches the threshould MAX_PARTITION_NUM
-    std::queue<vectorized::ChunkPtr> _downgrade_buffer;
-    std::mutex _buffer_lock;
-
     const std::vector<TExpr>& _t_partition_exprs;
     std::vector<ExprContext*> _partition_exprs;
     std::vector<vectorized::PartitionColumnType> _partition_types;

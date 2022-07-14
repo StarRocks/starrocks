@@ -60,6 +60,9 @@ using FixedSize16SlicePartitionHashMap =
 
 struct PartitionHashMapBase {
     const int32_t chunk_size;
+    bool is_downgrade = false;
+
+    int64_t total_num_rows = 0;
 
     PartitionHashMapBase(int32_t chunk_size) : chunk_size(chunk_size) {}
 
@@ -84,6 +87,17 @@ protected:
         }
     }
 
+    template <typename HashMap>
+    void check_downgrade(HashMap& hash_map) {
+        if (is_downgrade) {
+            return;
+        }
+        auto partition_num = hash_map.size();
+        if (partition_num > 512 && total_num_rows / partition_num < 10000) {
+            is_downgrade = true;
+        }
+    }
+
     // Append chunk to the hash_map for one non-nullable key
     // Each key mapped to a PartitionChunks which holds an array of chunks
     // chunk will be divided into multiply parts by partition key, and each parts will be append to the
@@ -92,11 +106,20 @@ protected:
     template <typename HashMap, typename KeyLoader, typename KeyAllocator>
     void append_chunk_for_one_key(HashMap& hash_map, ChunkPtr chunk, KeyLoader&& key_loader,
                                   KeyAllocator&& key_allocator, ObjectPool* obj_pool) {
+        if (is_downgrade) {
+            return;
+        }
         phmap::flat_hash_set<typename HashMap::key_type, typename HashMap::hasher, typename HashMap::key_equal,
                              typename HashMap::allocator_type>
                 visited_keys(chunk->num_rows());
         const auto size = chunk->num_rows();
-        for (uint32_t i = 0; i < size; i++) {
+        uint32_t i = 0;
+        for (; i < size; i++) {
+            check_downgrade(hash_map);
+            if (is_downgrade) {
+                break;
+            }
+
             const auto& key = key_loader(i);
             visited_keys.insert(key);
             auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
@@ -113,10 +136,18 @@ protected:
             }
             value.select_indexes.push_back(i);
             value.remain_size--;
+            total_num_rows++;
         }
 
         for (const auto& key : visited_keys) {
             flush(*(hash_map[key]), chunk);
+        }
+
+        // The first i rows has been pushed into hash_map
+        if (is_downgrade && i > 0) {
+            for (auto& column : chunk->columns()) {
+                column->remove_first_n_values(i);
+            }
         }
     }
 
@@ -130,6 +161,9 @@ protected:
     void append_chunk_for_one_nullable_key(HashMap& hash_map, PartitionChunks& null_key_value, ChunkPtr chunk,
                                            const NullableColumn* nullable_key_column, KeyLoader&& key_loader,
                                            KeyAllocator&& key_allocator, ObjectPool* obj_pool) {
+        if (is_downgrade) {
+            return;
+        }
         if (nullable_key_column->only_null()) {
             const auto size = chunk->num_rows();
             if (null_key_value.chunks.empty() || null_key_value.remain_size <= 0) {
@@ -151,6 +185,7 @@ protected:
             }
             null_key_value.chunks.back()->append(*chunk, offset, cur_remain_size);
             null_key_value.remain_size = chunk_size - null_key_value.chunks.back()->num_rows();
+            total_num_rows += size;
         } else {
             phmap::flat_hash_set<typename HashMap::key_type, typename HashMap::hasher, typename HashMap::key_equal,
                                  typename HashMap::allocator_type>
@@ -159,7 +194,12 @@ protected:
             const auto& null_flag_data = nullable_key_column->null_column()->get_data();
             const auto size = chunk->num_rows();
 
-            for (uint32_t i = 0; i < size; i++) {
+            uint32_t i = 0;
+            for (; i < size; i++) {
+                check_downgrade(hash_map);
+                if (is_downgrade) {
+                    break;
+                }
                 PartitionChunks* value_ptr = nullptr;
                 if (null_flag_data[i] == 1) {
                     value_ptr = &null_key_value;
@@ -183,12 +223,20 @@ protected:
                 }
                 value.select_indexes.push_back(i);
                 value.remain_size--;
+                total_num_rows++;
             }
 
             for (const auto& key : visited_keys) {
                 flush(*(hash_map[key]), chunk);
             }
             flush(null_key_value, chunk);
+
+            // The first i rows has been pushed into hash_map
+            if (is_downgrade && i > 0) {
+                for (auto& column : chunk->columns()) {
+                    column->remove_first_n_values(i);
+                }
+            }
         }
     }
 };
@@ -202,13 +250,14 @@ struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase {
 
     PartitionHashMapWithOneNumberKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
 
-    void append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
+    bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
         DCHECK(!key_columns[0]->is_nullable());
         const auto* key_column = down_cast<ColumnType*>(key_columns[0].get());
         const auto& key_column_data = key_column->get_data();
         append_chunk_for_one_key(
                 hash_map, chunk, [&](uint32_t offset) { return key_column_data[offset]; },
                 [](const FieldType& key) { return key; }, obj_pool);
+        return is_downgrade;
     }
 };
 
@@ -222,7 +271,7 @@ struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase {
 
     PartitionHashMapWithOneNullableNumberKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
 
-    void append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
+    bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
         DCHECK(key_columns[0]->is_nullable());
         const auto* nullable_key_column = ColumnHelper::as_raw_column<NullableColumn>(key_columns[0].get());
         const auto& key_column_data = down_cast<ColumnType*>(nullable_key_column->data_column().get())->get_data();
@@ -230,6 +279,7 @@ struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase {
                 hash_map, null_key_value, chunk, nullable_key_column,
                 [&](uint32_t offset) { return key_column_data[offset]; }, [](const FieldType& key) { return key; },
                 obj_pool);
+        return is_downgrade;
     }
 };
 
@@ -240,7 +290,7 @@ struct PartitionHashMapWithOneStringKey : public PartitionHashMapBase {
 
     PartitionHashMapWithOneStringKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
 
-    void append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
+    bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
         DCHECK(!key_columns[0]->is_nullable());
         const auto* key_column = down_cast<BinaryColumn*>(key_columns[0].get());
         append_chunk_for_one_key(
@@ -251,6 +301,7 @@ struct PartitionHashMapWithOneStringKey : public PartitionHashMapBase {
                     return Slice{pos, key.size};
                 },
                 obj_pool);
+        return is_downgrade;
     }
 };
 
@@ -262,7 +313,7 @@ struct PartitionHashMapWithOneNullableStringKey : public PartitionHashMapBase {
 
     PartitionHashMapWithOneNullableStringKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
 
-    void append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
+    bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
         DCHECK(key_columns[0]->is_nullable());
         const auto* nullable_key_column = ColumnHelper::as_raw_column<NullableColumn>(key_columns[0].get());
         const auto* key_column = down_cast<BinaryColumn*>(nullable_key_column->data_column().get());
@@ -275,6 +326,7 @@ struct PartitionHashMapWithOneNullableStringKey : public PartitionHashMapBase {
                     return Slice{pos, key.size};
                 },
                 obj_pool);
+        return is_downgrade;
     }
 };
 
@@ -285,7 +337,9 @@ struct PartitionHashMapWithSerializedKey {
     HashMap hash_map;
 
     PartitionHashMapWithSerializedKey(int32_t chunk_size) {}
-    void append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {}
+    bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
+        return false;
+    }
 };
 
 // TODO(hcf) to be implemented
@@ -297,7 +351,9 @@ struct PartitionHashMapWithSerializedKeyFixedSize {
     int fixed_byte_size = -1; // unset state
 
     PartitionHashMapWithSerializedKeyFixedSize(int32_t chunk_size) {}
-    void append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {}
+    bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
+        return false;
+    }
 };
 
 } // namespace starrocks::vectorized
