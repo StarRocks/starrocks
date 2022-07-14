@@ -2366,11 +2366,6 @@ show_param ::=
     {:
         RESULT = new ShowCharsetStmt(parser.wild);
     :}
-    /* Show proc */
-    | KW_PROC STRING_LITERAL:path
-    {:
-        RESULT = new ShowProcStmt(path);
-    :}
     /* Show Warnings */
     | KW_COUNT LPAREN STAR RPAREN KW_WARNINGS
     {:
