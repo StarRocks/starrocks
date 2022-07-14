@@ -10,33 +10,26 @@ import com.starrocks.persist.gson.GsonPreProcessable;
 import java.io.IOException;
 
 public class StorageInfo implements GsonPreProcessable, GsonPostProcessable {
-
     // "shardStorageInfoBytes" is used for serialization of "shardStorageInfo".
     @SerializedName(value = "shardStorageInfoBytes")
     private byte[] shardStorageInfoBytes;
     // Currently, storage group is table level, so "shardStorageInfo" is null in partition property.
     private ShardStorageInfo shardStorageInfo;
 
-    @SerializedName(value = "enableStorageCache")
-    private boolean enableStorageCache = false;
+    @SerializedName(value = "storageCacheInfo")
+    private StorageCacheInfo storageCacheInfo;
 
-    // -1 indicates "cache forever"
-    // 0 indicates "disable cache"
-    @SerializedName(value = "storageCacheTtlS")
-    private long storageCacheTtlS = 0;
-
-    public StorageInfo(ShardStorageInfo shardStorageInfo, boolean enableStorageCache, long storageCacheTtlS) {
+    public StorageInfo(ShardStorageInfo shardStorageInfo, StorageCacheInfo storageCacheInfo) {
         this.shardStorageInfo = shardStorageInfo;
-        this.enableStorageCache = enableStorageCache;
-        this.storageCacheTtlS = storageCacheTtlS;
+        this.storageCacheInfo = storageCacheInfo;
     }
 
     public boolean isEnableStorageCache() {
-        return enableStorageCache;
+        return storageCacheInfo.isEnableCache();
     }
 
     public long getStorageCacheTtlS() {
-        return storageCacheTtlS;
+        return storageCacheInfo.getCacheTtlS();
     }
 
     public ShardStorageInfo getShardStorageInfo() {

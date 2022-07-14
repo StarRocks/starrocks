@@ -27,6 +27,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.PartitionKeyDesc.PartitionRangeType;
 import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.lake.StorageCacheInfo;
 import com.starrocks.catalog.lake.StorageInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -167,7 +168,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         if (enableStorageCache && storageCacheTtlS == 0) {
             storageCacheTtlS = Config.storage_cooldown_second;
         }
-        storageInfo = new StorageInfo(null, enableStorageCache, storageCacheTtlS);
+        storageInfo = new StorageInfo(null, new StorageCacheInfo(enableStorageCache, storageCacheTtlS));
 
         if (otherProperties == null) {
             // check unknown properties
