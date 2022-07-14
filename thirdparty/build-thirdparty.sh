@@ -510,6 +510,21 @@ build_librdkafka() {
     make install
 }
 
+# pulsar
+build_pulsar() {
+    check_if_source_exist $PULSAR_SOURCE
+
+    cd $TP_SOURCE_DIR/$PULSAR_SOURCE/pulsar-client-cpp
+
+    $CMAKE_CMD -DCMAKE_LIBRARY_PATH=$TP_INSTALL_DIR/lib -DCMAKE_INCLUDE_PATH=$TP_INSTALL_DIR/include -DPROTOC_PATH=$TP_INSTALL_DIR/bin/protoc -DBUILD_TESTS=OFF -DBUILD_PYTHON_WRAPPER=OFF -DBUILD_DYNAMIC_LIB=OFF .
+
+    make -j$PARALLEL
+
+    cp lib/libpulsar.a $TP_INSTALL_DIR/lib/
+
+    cp -r include/pulsar $TP_INSTALL_DIR/include/
+}
+
 # flatbuffers
 build_flatbuffers() {
   check_if_source_exist $FLATBUFFERS_SOURCE
@@ -957,6 +972,7 @@ build_leveldb
 build_brpc
 build_rocksdb
 build_librdkafka
+build_pulsar
 build_flatbuffers
 build_arrow
 build_s2

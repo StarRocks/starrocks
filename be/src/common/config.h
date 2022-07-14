@@ -505,6 +505,9 @@ CONF_Int32(routine_load_thread_pool_size, "10");
 // kafka reqeust timeout
 CONF_Int32(routine_load_kafka_timeout_second, "10");
 
+// pulsar reqeust timeout
+CONF_Int32(routine_load_pulsar_timeout_second, "10");
+
 // Is set to true, index loading failure will not causing BE exit,
 // and the tablet will be marked as bad, so that FE will try to repair it.
 // CONF_Bool(auto_recover_index_loading_failure, "false");
