@@ -302,6 +302,13 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 nameToPartition.put(newName, partition);
             }
         }
+
+        // change ExpressionRangePartitionInfo
+        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
+            expressionRangePartitionInfo.renameTableName(newName);
+        }
     }
 
     public boolean hasMaterializedIndex(String indexName) {
