@@ -125,8 +125,10 @@ statement
 
     // Backup Store Satement
     | showRestoreStatement                                                                  #showRestore
-    ;
 
+    // proc
+    | showProcStatement                                                                      #showProc
+    ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
 alterDbQuotaStmt
