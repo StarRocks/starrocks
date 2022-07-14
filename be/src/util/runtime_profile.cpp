@@ -59,8 +59,8 @@ const std::string RuntimeProfile::ROOT_COUNTER = ""; // NOLINT
 RuntimeProfile::PeriodicCounterUpdateState RuntimeProfile::_s_periodic_counter_update_state;
 
 const std::unordered_set<std::string> RuntimeProfile::NON_MERGE_COUNTER_NAMES = {
-        "DegreeOfParallelism", "RuntimeBloomFilterNum", "RuntimeInFilterNum",         "PushdownPredicates",
-        "MemoryLimit",         "ChunkBufferCapacity",   "DefaultChunkBufferCapacity", "PeakChunkBufferSize"};
+        "DegreeOfParallelism", "RuntimeBloomFilterNum",      "RuntimeInFilterNum",  "PushdownPredicates", "MemoryLimit",
+        "ChunkBufferCapacity", "DefaultChunkBufferCapacity", "PeakChunkBufferSize", "TabletCount"};
 
 RuntimeProfile::RuntimeProfile(std::string name, bool is_averaged_profile)
         : _parent(nullptr),
