@@ -58,7 +58,7 @@ SUM(expr)
 
 3. 查询表数据。
 
-    ```SQL
+    ```Plain Text
     MySQL > select * from employees;
     +------------+--------+-------+--------+------------+
     | region_num | id     | hobby | income | sales      |
@@ -72,12 +72,14 @@ SUM(expr)
     5 rows in set (0.01 sec)
     ```
 
-4. 使用sum函数进行求和运算。
+4. 使用`sum`函数进行求和运算。
 
     示例1：计算各地区的销售额总和，即以`region_num`进行分组对`sales`求和。
 
-    ```SQL
-    MySQL > SELECT region_num, sum(sales) from employees group by region_num;
+    ```Plain Text
+    MySQL > SELECT region_num, sum(sales) from employees
+    group by region_num;
+
     +------------+------------+
     | region_num | sum(sales) |
     +------------+------------+
@@ -91,8 +93,10 @@ SUM(expr)
 
     示例2：计算各地区员工的收入总合，即以`region_num`进行分组对`income`进行求和。因为 `sum` 函数忽略 NULL 值，因此`id`为`777326`的员工收入没有参与计算。
 
-    ```SQL
-    MySQL > select region_num, sum(income) from employees group by region_num;
+    ```Plain Text
+    MySQL > select region_num, sum(income) from employees
+    group by region_num;
+
     +------------+-------------+
     | region_num | sum(income) |
     +------------+-------------+
@@ -106,8 +110,9 @@ SUM(expr)
 
     示例3：计算员工爱好数总和。其中`hobby`列为STRING类型的数字，在计算时会进行隐式转换为DOUBLE类型。
 
-    ```SQL
+    ```Plain Text
     MySQL > select sum(DISTINCT hobby) from employees;
+
     +---------------------+
     | sum(DISTINCT hobby) |
     +---------------------+
@@ -118,9 +123,10 @@ SUM(expr)
 
     示例4：结合 WHERE 条件子句，计算月收入大于30000的员工收入总和。
 
-    ```SQL
+    ```Plain Text
     MySQL > select sum(income) from employees
-        -> WHERE income > 30000;
+    WHERE income > 30000;
+
     +-------------+
     | sum(income) |
     +-------------+
