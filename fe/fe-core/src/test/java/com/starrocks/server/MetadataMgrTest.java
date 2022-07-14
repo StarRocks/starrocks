@@ -114,6 +114,7 @@ public class MetadataMgrTest {
         StorageDescriptor sd = new StorageDescriptor();
         sd.setCols(unPartKeys);
         sd.setLocation(hdfsPath);
+        sd.setInputFormat("org.apache.hadoop.hive.ql.io.HiveInputFormat");
         Table msTable1 = new Table();
         msTable1.setDbName("hive_db");
         msTable1.setTableName("hive_table");
