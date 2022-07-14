@@ -1975,6 +1975,11 @@ public class LocalMetastore implements ConnectorMetadata {
                 for (Long tabletId : tabletIdSet) {
                     GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
                 }
+                // lakeTable need to delete tablet and shard
+                if (olapTable.isLakeTable()) {
+                    stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+                    editLog.logAddUnusedShard(tabletIdSet);
+                }
             }
             // only remove from memory, because we have not persist it
             if (colocateTableIndex.isColocateTable(tableId) && !addToColocateGroupSuccess) {
@@ -2277,7 +2282,6 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    // TODO: clear tablet and shard when failed
     private void createLakeTablets(LakeTable table, long partitionId, MaterializedIndex index,
                                    DistributionInfo distributionInfo, short replicationNum, TabletMeta tabletMeta,
                                    Set<Long> tabletIdSet)
