@@ -607,7 +607,7 @@ createFunctionStatement
     ;
 
 typeList
-    : type?  ( ',' type)? (',' DOTDOTDOT) ?
+    : type?  ( ',' type)* (',' DOTDOTDOT) ?
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
