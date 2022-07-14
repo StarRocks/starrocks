@@ -199,10 +199,4 @@ public class Utils {
     public static ArrayType convertToArrayType(Schema typeSchema) throws DdlException {
         return new ArrayType(convertHudiTableColumnType(typeSchema.getElementType()));
     }
-
-    //Todo: hudi varchar length
-    // public static int
-    public static int getVarcharLength(Schema typeStr) throws DdlException {
-        return 0;
-    }
 }
