@@ -282,7 +282,7 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
     params->partition_values = part_values;
 }
 
-#define READ_ORC_ROWS(scanner, exp)                                                    \
+#define READ_SCANNER_ROWS(scanner, exp)                                                \
     do {                                                                               \
         auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);                           \
         uint64_t records = 0;                                                          \
@@ -297,7 +297,7 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
                 break;                                                                 \
             }                                                                          \
             if (chunk->num_rows() > 0) {                                               \
-                std::cout << "orc row#0: " << chunk->debug_row(0) << std::endl;        \
+                std::cout << "row#0: " << chunk->debug_row(0) << std::endl;            \
                 EXPECT_EQ(chunk->num_columns(), tuple_desc->slots().size());           \
             }                                                                          \
             records += chunk->num_rows();                                              \
@@ -356,7 +356,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNext) {
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 100);
+    READ_SCANNER_ROWS(scanner, 100);
     EXPECT_EQ(scanner->raw_rows_read(), 100);
     scanner->close(_runtime_state);
 }
@@ -435,7 +435,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 0);
+    READ_SCANNER_ROWS(scanner, 0);
     EXPECT_EQ(scanner->raw_rows_read(), 0);
     scanner->close(_runtime_state);
 }
@@ -468,7 +468,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 100);
+    READ_SCANNER_ROWS(scanner, 100);
     EXPECT_EQ(scanner->raw_rows_read(), 100);
     scanner->close(_runtime_state);
 }
@@ -501,7 +501,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 100);
+    READ_SCANNER_ROWS(scanner, 100);
     EXPECT_EQ(scanner->raw_rows_read(), 100);
     scanner->close(_runtime_state);
 }
@@ -584,7 +584,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
     scanner->disable_use_orc_sargs();
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 1000);
+    READ_SCANNER_ROWS(scanner, 1000);
     // since we use dict filter eval cache, we can do filter on orc cvb
     // so actually read rows is 1000.
     EXPECT_EQ(scanner->raw_rows_read(), 1000);
@@ -685,7 +685,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
     scanner->disable_use_orc_sargs();
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 4640);
+    READ_SCANNER_ROWS(scanner, 4640);
     EXPECT_EQ(scanner->raw_rows_read(), 4640);
     scanner->close(_runtime_state);
 }
@@ -795,7 +795,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
     scanner->disable_use_orc_sargs();
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 1000);
+    READ_SCANNER_ROWS(scanner, 1000);
     // since we use dict filter eval cache, we can do filter on orc cvb
     // so actually read rows is 1000.
     EXPECT_EQ(scanner->raw_rows_read(), 1000);
@@ -920,7 +920,7 @@ TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
         scanner->disable_use_orc_sargs();
         status = scanner->open(_runtime_state);
         EXPECT_TRUE(status.ok()) << status.to_string();
-        READ_ORC_ROWS(scanner, c.exp);
+        READ_SCANNER_ROWS(scanner, c.exp);
         scanner->close(_runtime_state);
     }
 }
@@ -1017,9 +1017,61 @@ TEST_F(HdfsScannerTest, TestZeroSizeStream) {
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 1);
+    READ_SCANNER_ROWS(scanner, 1);
     EXPECT_EQ(scanner->raw_rows_read(), 1);
     scanner->close(_runtime_state);
 }
 
+// =============================================================================
+
+/*
+file:         file:/Users/dirlt/repo/private/project/pyscript/starrocks/small_row_group_data.parquet 
+creator:      parquet-cpp-arrow version 7.0.0 
+extra:        ARROW:schema = /////9gAAAAQAAAAAAAKAAwABgAFAAgACgAAAAABBAAMAAAACAAIAAAABAAIAAAABAAAAAMAAABwAAAAMAAAAAQAAACs////AAABBRAAAAAYAAAABAAAAAAAAAACAAAAYzMAAAQABAAEAAAA1P///wAAAQIQAAAAFAAAAAQAAAAAAAAAAgAAAGMyAADE////AAAAAUAAAAAQABQACAAGAAcADAAAABAAEAAAAAAAAQIQAAAAHAAAAAQAAAAAAAAAAgAAAGMxAAAIAAwACAAHAAgAAAAAAAABQAAAAAAAAAA= 
+
+file schema:  schema 
+--------------------------------------------------------------------------------
+c1:           OPTIONAL INT64 R:0 D:1
+c2:           OPTIONAL INT64 R:0 D:1
+c3:           OPTIONAL BINARY O:UTF8 R:0 D:1
+
+row group 1:  RC:5120 TS:1197023 OFFSET:4 
+--------------------------------------------------------------------------------
+c1:            INT64 SNAPPY DO:4 FPO:20522 SZ:28928/49384/1.71 VC:5120 ENC:PLAIN,PLAIN_DICTIONARY,RLE
+c2:            INT64 SNAPPY DO:29030 FPO:53541 SZ:32921/49384/1.50 VC:5120 ENC:PLAIN,PLAIN_DICTIONARY,RLE
+c3:            BINARY SNAPPY DO:62051 FPO:134420 SZ:81159/1098255/13.53 VC:5120 ENC:PLAIN,PLAIN_DICTIONARY,RLE
+
+...
+
+row group 20: RC:2720 TS:638517 OFFSET:2732382 
+--------------------------------------------------------------------------------
+c1:            INT64 SNAPPY DO:2732382 FPO:2743296 SZ:15077/25937/1.72 VC:2720 ENC:PLAIN,PLAIN_DICTIONARY,RLE
+c2:            INT64 SNAPPY DO:2747562 FPO:2760616 SZ:17217/25937/1.51 VC:2720 ENC:PLAIN,PLAIN_DICTIONARY,RLE
+c3:            BINARY SNAPPY DO:2764882 FPO:2803392 SZ:43059/586643/13.62 VC:2720 ENC:PLAIN,PLAIN_DICTIONARY,RLE
+ */
+
+TEST_F(HdfsScannerTest, TestParquetCoalesceReadAcrossRowGroup) {
+    SlotDesc parquet_descs[] = {{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+                                {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+                                {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+                                {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/small_row_group_data.parquet";
+
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    Status status = scanner->init(_runtime_state, *param);
+    ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+    status = scanner->open(_runtime_state);
+    ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+    READ_SCANNER_ROWS(scanner, 100000);
+
+    scanner->close(_runtime_state);
+}
 } // namespace starrocks::vectorized
