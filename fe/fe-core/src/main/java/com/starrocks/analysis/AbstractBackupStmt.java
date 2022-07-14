@@ -103,7 +103,7 @@ public class AbstractBackupStmt extends DdlStmt {
                 throw new AnalysisException("Duplicated restore table: " + tblName);
             }
 
-            CatalogUtils.checkOlapTableHasStarOSPartition(labelName.getDbName(), tblName);
+            CatalogUtils.checkIsLakeTable(labelName.getDbName(), tblName);
         }
 
         // update table ref
