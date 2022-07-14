@@ -83,6 +83,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -880,6 +881,16 @@ public class EditLog {
                     globalStateMgr.getInsertOverwriteJobManager().replayInsertOverwriteStateChange(stateChangeInfo);
                     break;
                 }
+                case OperationType.OP_ADD_UNUSED_SHARD: {
+                    ShardInfo shardInfo = (ShardInfo) journal.getData();
+                    globalStateMgr.getShardManager().getShardDeleter().replayAddUnusedShard(shardInfo);
+                    break;
+                }
+                case OperationType.OP_DELETE_UNUSED_SHARD: {
+                    ShardInfo shardInfo = (ShardInfo) journal.getData();
+                    globalStateMgr.getShardManager().getShardDeleter().replayDeleteUnusedShard(shardInfo);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1487,4 +1498,13 @@ public class EditLog {
     public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
         logEdit(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log);
     }
+
+    public void logAddUnusedShard(Set<Long> shardIds) {
+        logEdit(OperationType.OP_ADD_UNUSED_SHARD, new ShardInfo(shardIds));
+    }
+
+    public void logDeleteUnusedShard(Set<Long> shardIds) {
+        logEdit(OperationType.OP_DELETE_UNUSED_SHARD, new ShardInfo(shardIds));
+    }
+
 }
