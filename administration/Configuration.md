@@ -472,4 +472,4 @@ ulimit -u 40960
 |参数名称|建议值|修改方式|
 |---|---|---|
 |tcp abort on overflow|1|echo 1 \| sudo tee /proc/sys/net/ipv4/tcp_abort_on_overflow|
-|somaxconn|1024|echo 1024 | sudo tee /proc/sys/net/core/somaxconn|
+|somaxconn|1024|echo 1024 \| sudo tee /proc/sys/net/core/somaxconn|
