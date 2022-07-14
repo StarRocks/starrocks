@@ -22,6 +22,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <fstream>
 #include <memory>
 #include <sstream>
@@ -282,7 +283,7 @@ public:
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
-    bool exceed_max_excution_time() const;
+    bool exceed_max_execution_time() const;
 
 private:
     Status create_error_log_file();
@@ -388,8 +389,8 @@ private:
 
     bool _enable_pipeline_engine = false;
 
-    int _max_execution_time = -1;
-    double _expired_wall_time = 0;
+    int64_t _max_execution_time = 0;
+    int64_t _expired_wall_time = 0;
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \

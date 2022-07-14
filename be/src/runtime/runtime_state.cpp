@@ -159,7 +159,7 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
 
     if (_query_options.__isset.max_execution_time) {
         _max_execution_time = _query_options.max_execution_time;
-        _expired_wall_time = WallTime_Now() + _max_execution_time;
+        _expired_wall_time = GetCurrentTimeNanos() + _max_execution_time * 1000000000;
     }
 
     return Status::OK();
@@ -285,9 +285,9 @@ Status RuntimeState::check_mem_limit(const std::string& msg) {
     return Status::OK();
 }
 
-bool RuntimeState::exceed_max_excution_time() const {
-    if (_max_execution_time >= 0) {
-        double now = WallTime_Now();
+bool RuntimeState::exceed_max_execution_time() const {
+    if (_max_execution_time > 0) {
+        int64_t now = GetCurrentTimeNanos();
         if (now > _expired_wall_time) {
             return true;
         }

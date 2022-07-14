@@ -132,7 +132,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 auto& next_op = _operators[i + 1];
 
                 // Check curr_op finished firstly
-                if (curr_op->is_finished() || runtime_state->exceed_max_excution_time()) {
+                if (curr_op->is_finished() || runtime_state->exceed_max_execution_time()) {
                     if (i == 0) {
                         // For source operators
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));

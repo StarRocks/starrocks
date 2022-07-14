@@ -198,6 +198,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
     _init_chunk(&chunk, state);
 
     for (;;) {
+        if (state->exceed_max_execution_time()) break;
         // need row_count to fill in chunk.
         size_t row_count = state->chunk_size() - chunk->num_rows();
 

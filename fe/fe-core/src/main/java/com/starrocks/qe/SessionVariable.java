@@ -566,7 +566,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private double cboPruneShuffleColumnRate = 0.1;
 
     @VarAttr(name = MAX_EXECUTION_TIME, flag = VariableMgr.INVISIBLE)
-    private int maxExecutionTime = -1;
+    private int maxExecutionTime = 0;
 
     public double getCboPruneShuffleColumnRate() {
         return cboPruneShuffleColumnRate;

@@ -300,6 +300,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
     }
 
     for (;;) {
+        if (state->exceed_max_execution_time()) break;
         // need to get probe_chunk
         if (_probe_chunk == nullptr || _probe_chunk->num_rows() == 0) {
             probe_timer.stop();
