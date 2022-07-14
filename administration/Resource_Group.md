@@ -225,7 +225,7 @@ ALTER RESOURCE GROUP <group_name> DROP ALL;
 
 ## 监控资源组
 
-您可以为资源组设置[监控与报警](Monitor_and_alert.md)。
+您可以为资源组设置[监控与报警](Monitor_and_Alert.md)。
 
 可监控的资源组相关 Metric 包括：
 
