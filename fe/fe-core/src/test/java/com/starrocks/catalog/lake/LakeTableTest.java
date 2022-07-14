@@ -68,7 +68,7 @@ public class LakeTableTest {
 
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD, true);
         index.addTablet(tablet1, tabletMeta);
         index.addTablet(tablet2, tabletMeta);
 
@@ -87,7 +87,7 @@ public class LakeTableTest {
                 ObjectStorageInfo.newBuilder().setObjectUri(serviceStorageUri).setEndpoint(endpoint).build();
         ShardStorageInfo shardStorageInfo =
                 ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
-        table.setShardStorageInfo(shardStorageInfo);
+        table.setStorageInfo(shardStorageInfo, false, 0);
 
         // Test serialize and deserialize
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();

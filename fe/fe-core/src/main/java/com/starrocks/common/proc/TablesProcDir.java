@@ -33,6 +33,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.lake.LakeTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ListComparator;
@@ -51,7 +52,7 @@ public class TablesProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("TableId").add("TableName").add("IndexNum").add("PartitionColumnName")
             .add("PartitionNum").add("State").add("Type").add("LastConsistencyCheckTime")
-            .add("ReplicaCount").add("PartitionType")
+            .add("ReplicaCount").add("PartitionType").add("StorageGroup")
             .build();
     private static final int PARTITION_NUM_DEFAULT = 1;
     private static final int PARTITION_REPLICA_COUNT_DEFAULT = 0;
@@ -109,14 +110,15 @@ public class TablesProcDir implements ProcDirInterface {
                 TableType tableType = table.getType();
                 tableInfo.add(table.getId());
                 tableInfo.add(table.getName());
-                tableInfo.add(this.findIndexNum(tableType, table));
-                tableInfo.add(this.findPartitionKey(tableType, table));
-                tableInfo.add(this.findPartitionNum(tableType, table));
-                tableInfo.add(this.findState(tableType, table));
+                tableInfo.add(findIndexNum(table));
+                tableInfo.add(findPartitionKey(table));
+                tableInfo.add(findPartitionNum(table));
+                tableInfo.add(findState(table));
                 tableInfo.add(tableType);
                 tableInfo.add(TimeUtils.longToTimeString(table.getLastCheckTime()));
-                tableInfo.add(this.findReplicaCount(tableType, table));
-                tableInfo.add(this.findPartitionType(tableType, table));
+                tableInfo.add(findReplicaCount(table));
+                tableInfo.add(findPartitionType(table));
+                tableInfo.add(findStorageGroup(table));
                 tableInfos.add(tableInfo);
             }
         } finally {
@@ -142,24 +144,24 @@ public class TablesProcDir implements ProcDirInterface {
         return result;
     }
 
-    private long findReplicaCount(TableType tableType, Table table) {
-        if (tableType == TableType.OLAP) {
+    private long findReplicaCount(Table table) {
+        if (table.isNativeTable()) {
             OlapTable olapTable = (OlapTable) table;
             return olapTable.getReplicaCount();
         }
         return PARTITION_REPLICA_COUNT_DEFAULT;
     }
 
-    private String findState(TableType tableType, Table table) {
-        if (tableType == TableType.OLAP) {
+    private String findState(Table table) {
+        if (table.isNativeTable()) {
             OlapTable olapTable = (OlapTable) table;
             return olapTable.getState().toString();
         }
         return NULL_STRING_DEFAULT;
     }
 
-    private int findPartitionNum(TableType tableType, Table table) {
-        if (tableType == TableType.OLAP) {
+    private int findPartitionNum(Table table) {
+        if (table.isNativeTable()) {
             OlapTable olapTable = (OlapTable) table;
             PartitionType partitionType = olapTable.getPartitionInfo().getType();
             if (partitionType == PartitionType.RANGE
@@ -170,8 +172,8 @@ public class TablesProcDir implements ProcDirInterface {
         return PARTITION_NUM_DEFAULT;
     }
 
-    private String findPartitionKey(TableType tableType, Table table) {
-        if (tableType == TableType.OLAP) {
+    private String findPartitionKey(Table table) {
+        if (table.isNativeTable()) {
             OlapTable olapTable = (OlapTable) table;
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             if (partitionInfo.getType() == PartitionType.RANGE) {
@@ -190,23 +192,30 @@ public class TablesProcDir implements ProcDirInterface {
         return NULL_STRING_DEFAULT;
     }
 
-    private String findPartitionType(TableType tableType, Table table) {
-        if (tableType == TableType.OLAP) {
+    private String findPartitionType(Table table) {
+        if (table.isNativeTable()) {
             OlapTable olapTable = (OlapTable) table;
             return olapTable.getPartitionInfo().getType().typeString;
-        } else if (tableType == TableType.ELASTICSEARCH) {
+        } else if (table.getType() == TableType.ELASTICSEARCH) {
             EsTable esTable = (EsTable) table;
             return esTable.getPartitionInfo().getType().typeString;
         }
         return PartitionType.UNPARTITIONED.typeString;
     }
 
-    private String findIndexNum(TableType tableType, Table table) {
-        if (tableType == TableType.OLAP) {
+    private String findIndexNum(Table table) {
+        if (table.isNativeTable()) {
             OlapTable olapTable = (OlapTable) table;
             return String.valueOf(olapTable.getIndexNameToId().size());
         }
         return NULL_STRING_DEFAULT;
     }
 
+    private String findStorageGroup(Table table) {
+        String storageGroup = null;
+        if (table.isLakeTable()) {
+            storageGroup = ((LakeTable) table).getStorageGroup();
+        }
+        return storageGroup != null ? storageGroup : NULL_STRING_DEFAULT;
+    }
 }

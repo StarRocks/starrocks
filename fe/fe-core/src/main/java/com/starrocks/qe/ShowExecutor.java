@@ -103,6 +103,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.lake.LakeTable;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -117,10 +118,11 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.proc.BackendsProcDir;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.FrontendsProcNode;
+import com.starrocks.common.proc.LakeTabletsProcNode;
+import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.SchemaChangeProcDir;
-import com.starrocks.common.proc.TabletsProcDir;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.DeleteHandler;
@@ -1141,7 +1143,7 @@ public class ShowExecutor {
                     }
                     indexName = olapTable.getIndexNameById(indexId);
 
-                    if (partition.isUseStarOS()) {
+                    if (table.isLakeTable()) {
                         break;
                     }
 
@@ -1232,9 +1234,14 @@ public class ShowExecutor {
                         if (indexId > -1 && index.getId() != indexId) {
                             continue;
                         }
-                        TabletsProcDir procDir = new TabletsProcDir(db, partition, index);
-                        tabletInfos.addAll(procDir.fetchComparableResult(
-                                showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState()));
+                        if (olapTable.isLakeTable()) {
+                            LakeTabletsProcNode procNode = new LakeTabletsProcNode(db, (LakeTable) olapTable, index);
+                            tabletInfos.addAll(procNode.fetchComparableResult());
+                        } else {
+                            LocalTabletsProcDir procDir = new LocalTabletsProcDir(db, olapTable, index);
+                            tabletInfos.addAll(procDir.fetchComparableResult(
+                                    showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState()));
+                        }
                         if (sizeLimit > -1 && tabletInfos.size() >= sizeLimit) {
                             stop = true;
                             break;

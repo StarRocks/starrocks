@@ -1167,7 +1167,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        return new AnalyzeStmt(tableName, columnNames, properties, context.FULL() == null, new AnalyzeBasicDesc());
+        return new AnalyzeStmt(tableName, columnNames, properties, context.SAMPLE() != null, new AnalyzeBasicDesc());
     }
 
     @Override
@@ -1193,7 +1193,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 columnNames = columns.stream().map(Identifier::getValue).collect(toList());
             }
 
-            return new CreateAnalyzeJobStmt(tableName, columnNames, context.FULL() == null, properties);
+            return new CreateAnalyzeJobStmt(tableName, columnNames, context.SAMPLE() != null, properties);
         } else {
             return new CreateAnalyzeJobStmt(context.FULL() == null, properties);
         }

@@ -279,8 +279,10 @@ refreshTableStatement
     ;
 
 showAlterStatement
-    : SHOW ALTER TABLE (COLUMN | ROLLUP | MATERIALIZED VIEW) ((FROM | IN) db=qualifiedName)?
+    : SHOW ALTER TABLE (COLUMN | ROLLUP) ((FROM | IN) db=qualifiedName)?
         (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    | SHOW ALTER MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?
+              (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showDeleteStatement
@@ -466,7 +468,7 @@ deleteStatement
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
-    : ANALYZE (SAMPLE | FULL)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
     ;
 
 analyzeHistogramStatement
@@ -479,9 +481,9 @@ dropHistogramStatement
     ;
 
 createAnalyzeStatement
-    : CREATE ANALYZE FULL? ALL properties?
-    | CREATE ANALYZE FULL? DATABASE db=identifier properties?
-    | CREATE ANALYZE FULL? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    : CREATE ANALYZE (FULL | SAMPLE)? ALL properties?
+    | CREATE ANALYZE (FULL | SAMPLE)? DATABASE db=identifier properties?
+    | CREATE ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
     ;
 
 dropAnalyzeJobStatement
@@ -1150,8 +1152,8 @@ nonReserved
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
-    | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE | STRING
-    | SAMPLE | STATS | SUBMIT | SYNC
+    | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE
+    | STRING | STATS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER
