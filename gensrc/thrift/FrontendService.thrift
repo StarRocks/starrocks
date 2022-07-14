@@ -602,6 +602,10 @@ struct TKafkaRLTaskProgress {
     1: required map<i32,i64> partitionCmtOffset
 }
 
+struct TPulsarRLTaskProgress {
+    1: required map<string,i64> partitionBacklogNum
+}
+
 struct TRLTaskTxnCommitAttachment {
     1: required Types.TLoadSourceType loadSourceType
     2: required Types.TUniqueId id
@@ -614,6 +618,7 @@ struct TRLTaskTxnCommitAttachment {
     9: optional i64 loadCostMs
     10: optional TKafkaRLTaskProgress kafkaRLTaskProgress
     11: optional string errorLogUrl
+    12: optional TPulsarRLTaskProgress pulsarRLTaskProgress
 }
 
 struct TMiniLoadTxnCommitAttachment {

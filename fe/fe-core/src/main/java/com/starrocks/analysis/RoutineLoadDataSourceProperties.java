@@ -27,26 +27,44 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.UserException;
 import com.starrocks.load.routineload.LoadDataSourceType;
+import com.starrocks.load.routineload.PulsarRoutineLoadJob;
+import com.starrocks.load.routineload.RoutineLoadJob;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 public class RoutineLoadDataSourceProperties {
-    private static final ImmutableSet<String> CONFIGURABLE_PROPERTIES_SET = new ImmutableSet.Builder<String>()
+    private static final Logger LOG = LogManager.getLogger(RoutineLoadDataSourceProperties.class);
+
+    private static final ImmutableSet<String> CONFIGURABLE_KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
             .add(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY)
             .add(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY)
+            .build();
+
+    private static final ImmutableSet<String> CONFIGURABLE_PULSAR_PROPERTIES_SET = new ImmutableSet.Builder<String>()
+            .add(CreateRoutineLoadStmt.PULSAR_PARTITIONS_PROPERTY)
+            .add(CreateRoutineLoadStmt.PULSAR_INITIAL_POSITIONS_PROPERTY)
             .build();
 
     @SerializedName(value = "type")
     private String type = "KAFKA";
     // origin properties, no need to persist
     private Map<String, String> properties = Maps.newHashMap();
+
     @SerializedName(value = "kafkaPartitionOffsets")
     private List<Pair<Integer, Long>> kafkaPartitionOffsets = Lists.newArrayList();
     @SerializedName(value = "customKafkaProperties")
     private Map<String, String> customKafkaProperties = Maps.newHashMap();
+
+    @SerializedName(value = "pulsarPartitionInitialPositions")
+    private List<Pair<String, Long>> pulsarPartitionInitialPositions = Lists.newArrayList();
+    @SerializedName(value = "customPulsarProperties")
+    private Map<String, String> customPulsarProperties = Maps.newHashMap();
 
     public RoutineLoadDataSourceProperties() {
         // empty
@@ -62,7 +80,13 @@ public class RoutineLoadDataSourceProperties {
     }
 
     public boolean hasAnalyzedProperties() {
-        return !kafkaPartitionOffsets.isEmpty() || !customKafkaProperties.isEmpty();
+        if (type == "KAFKA") {
+            return !kafkaPartitionOffsets.isEmpty() || !customKafkaProperties.isEmpty();
+        } else if (type.equals("PULSAR")) {
+            return !pulsarPartitionInitialPositions.isEmpty() || !customPulsarProperties.isEmpty();
+        } else {
+            return false;
+        }
     }
 
     public String getType() {
@@ -77,6 +101,14 @@ public class RoutineLoadDataSourceProperties {
         return customKafkaProperties;
     }
 
+    public List<Pair<String, Long>> getPulsarPartitionInitialPositions() {
+        return pulsarPartitionInitialPositions;
+    }
+
+    public Map<String, String> getCustomPulsarProperties() {
+        return customPulsarProperties;
+    }
+
     private void checkDataSourceProperties() throws AnalysisException {
         LoadDataSourceType sourceType;
         try {
@@ -88,6 +120,9 @@ public class RoutineLoadDataSourceProperties {
             case KAFKA:
                 checkKafkaProperties();
                 break;
+            case PULSAR:
+                checkPulsarProperties();
+                break;
             default:
                 break;
         }
@@ -95,7 +130,7 @@ public class RoutineLoadDataSourceProperties {
 
     private void checkKafkaProperties() throws AnalysisException {
         Optional<String> optional = properties.keySet().stream().filter(
-                entity -> !CONFIGURABLE_PROPERTIES_SET.contains(entity)).filter(
+                entity -> !CONFIGURABLE_KAFKA_PROPERTIES_SET.contains(entity)).filter(
                 entity -> !entity.startsWith("property.")).findFirst();
         if (optional.isPresent()) {
             throw new AnalysisException(optional.get() + " is invalid kafka custom property");
@@ -123,7 +158,42 @@ public class RoutineLoadDataSourceProperties {
         }
 
         // check custom properties
-        CreateRoutineLoadStmt.analyzeCustomProperties(properties, customKafkaProperties);
+        CreateRoutineLoadStmt.analyzeKafkaCustomProperties(properties, customKafkaProperties);
+    }
+
+    private void checkPulsarProperties() throws AnalysisException {
+        Optional<String> optional = properties.keySet().stream().filter(
+                entity -> !CONFIGURABLE_PULSAR_PROPERTIES_SET.contains(entity)).filter(
+                entity -> !entity.startsWith("property.")).findFirst();
+        if (optional.isPresent()) {
+            throw new AnalysisException(optional.get() + " is invalid pulsar custom property");
+        }
+
+        // check custom properties
+        CreateRoutineLoadStmt.analyzePulsarCustomProperties(properties, customPulsarProperties);
+
+        // check partitions
+        List<String> pulsarPartitions = Lists.newArrayList();
+        final String pulsarPartitionsString = properties.get(CreateRoutineLoadStmt.PULSAR_PARTITIONS_PROPERTY);
+        if (pulsarPartitionsString != null) {
+            if (!properties.containsKey(CreateRoutineLoadStmt.PULSAR_INITIAL_POSITIONS_PROPERTY) &&
+                    !customPulsarProperties.containsKey(CreateRoutineLoadStmt.PULSAR_DEFAULT_INITIAL_POSITION)) {
+                throw new AnalysisException("Partition and [default]position must be specified at the same time");
+            }
+            CreateRoutineLoadStmt.analyzePulsarPartitionProperty(pulsarPartitionsString,
+                    customPulsarProperties, pulsarPartitions, pulsarPartitionInitialPositions);
+        } else {
+            if (properties.containsKey(CreateRoutineLoadStmt.PULSAR_INITIAL_POSITIONS_PROPERTY)) {
+                throw new AnalysisException("Missing pulsar partition info");
+            }
+        }
+
+        // check position
+        String pulsarPositionsString = properties.get(CreateRoutineLoadStmt.PULSAR_INITIAL_POSITIONS_PROPERTY);
+        if (pulsarPositionsString != null) {
+            CreateRoutineLoadStmt.analyzePulsarPositionProperty(pulsarPositionsString,
+                    pulsarPartitions, pulsarPartitionInitialPositions);
+        }
     }
 
     @Override
@@ -134,8 +204,15 @@ public class RoutineLoadDataSourceProperties {
 
         StringBuilder sb = new StringBuilder();
         sb.append("type: ").append(type);
-        sb.append(", kafka partition offsets: ").append(kafkaPartitionOffsets);
-        sb.append(", custom properties: ").append(customKafkaProperties);
+        if (type == "KAFKA") {
+            sb.append(", kafka partition offsets: ").append(kafkaPartitionOffsets);
+            sb.append(", custom properties: ").append(customKafkaProperties);
+        } else if (type.equals("PULSAR")) {
+            if (!pulsarPartitionInitialPositions.isEmpty()) {
+                sb.append(", pulsar partition initial positions: ").append(pulsarPartitionInitialPositions);
+            }
+            sb.append(", custom properties: ").append(customPulsarProperties);
+        }
         return sb.toString();
     }
 }

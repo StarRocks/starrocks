@@ -35,6 +35,8 @@ import com.starrocks.common.util.Util;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.LoadDataSourceType;
+import com.starrocks.load.routineload.PulsarProgress;
+import com.starrocks.load.routineload.PulsarRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
@@ -46,6 +48,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.io.StringReader;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -89,7 +93,8 @@ import java.util.regex.Pattern;
           WHERE c1 > 1
 
       type of routine load:
-          KAFKA
+          KAFKA,
+          PULSAR
 */
 public class CreateRoutineLoadStmt extends DdlStmt {
     private static final Logger LOG = LogManager.getLogger(CreateRoutineLoadStmt.class);
@@ -116,6 +121,15 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String KAFKA_OFFSETS_PROPERTY = "kafka_offsets";
     public static final String KAFKA_DEFAULT_OFFSETS = "kafka_default_offsets";
 
+    // pulsar type properties
+    public static final String PULSAR_SERVICE_URL_PROPERTY = "pulsar_service_url";
+    public static final String PULSAR_TOPIC_PROPERTY = "pulsar_topic";
+    public static final String PULSAR_SUBSCRIPTION_PROPERTY = "pulsar_subscription";
+    // optional
+    public static final String PULSAR_PARTITIONS_PROPERTY = "pulsar_partitions";
+    public static final String PULSAR_INITIAL_POSITIONS_PROPERTY = "pulsar_initial_positions";
+    public static final String PULSAR_DEFAULT_INITIAL_POSITION = "pulsar_default_initial_position";
+
     private static final String NAME_TYPE = "ROUTINE LOAD NAME";
     private static final String ENDPOINT_REGEX = "[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]";
 
@@ -139,6 +153,14 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(KAFKA_TOPIC_PROPERTY)
             .add(KAFKA_PARTITIONS_PROPERTY)
             .add(KAFKA_OFFSETS_PROPERTY)
+            .build();
+
+    private static final ImmutableSet<String> PULSAR_PROPERTIES_SET = new ImmutableSet.Builder<String>()
+            .add(PULSAR_SERVICE_URL_PROPERTY)
+            .add(PULSAR_TOPIC_PROPERTY)
+            .add(PULSAR_SUBSCRIPTION_PROPERTY)
+            .add(PULSAR_PARTITIONS_PROPERTY)
+            .add(PULSAR_INITIAL_POSITIONS_PROPERTY)
             .build();
 
     private LabelName labelName;
@@ -179,6 +201,17 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     // custom kafka property map<key, value>
     private Map<String, String> customKafkaProperties = Maps.newHashMap();
+
+    // pulsar related properties
+    private String pulsarServiceUrl;
+    private String pulsarTopic;
+    private String pulsarSubscription;
+    private List<String> pulsarPartitions = Lists.newArrayList();
+    // pair<partition, position>, might be empty
+    private List<Pair<String, Long>> pulsarPartitionInitialPositions = Lists.newArrayList();
+
+    // custom pulsar property map<key, value>
+    private Map<String, String> customPulsarProperties = Maps.newHashMap();
 
     public static final Predicate<Long> DESIRED_CONCURRENT_NUMBER_PRED = (v) -> v > 0L;
     public static final Predicate<Long> MAX_ERROR_NUMBER_PRED = (v) -> v >= 0L;
@@ -294,6 +327,30 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public Map<String, String> getCustomKafkaProperties() {
         return customKafkaProperties;
+    }
+
+    public String getPulsarServiceUrl() {
+        return pulsarServiceUrl;
+    }
+
+    public String getPulsarTopic() {
+        return pulsarTopic;
+    }
+
+    public String getPulsarSubscription() {
+        return pulsarSubscription;
+    }
+
+    public List<String> getPulsarPartitions() {
+        return pulsarPartitions;
+    }
+
+    public List<Pair<String, Long>> getPulsarPartitionInitialPositions() {
+        return pulsarPartitionInitialPositions;
+    }
+
+    public Map<String, String> getCustomPulsarProperties() {
+        return customPulsarProperties;
     }
 
     public List<ParseNode> getLoadPropertyList() {
@@ -469,6 +526,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             case KAFKA:
                 checkKafkaProperties();
                 break;
+            case PULSAR:
+                checkPulsarProperties();
+                break;
             default:
                 break;
         }
@@ -503,7 +563,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
         // check custom kafka property before check partitions,
         // because partitions can use kafka_default_offsets property
-        analyzeCustomProperties(dataSourceProperties, customKafkaProperties);
+        analyzeKafkaCustomProperties(dataSourceProperties, customKafkaProperties);
 
         // check partitions
         String kafkaPartitionsString = dataSourceProperties.get(KAFKA_PARTITIONS_PROPERTY);
@@ -586,7 +646,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         return offset;
     }
 
-    public static void analyzeCustomProperties(Map<String, String> dataSourceProperties,
+    public static void analyzeKafkaCustomProperties(Map<String, String> dataSourceProperties,
                                                Map<String, String> customKafkaProperties) throws AnalysisException {
         for (Map.Entry<String, String> dataSourceProperty : dataSourceProperties.entrySet()) {
             if (dataSourceProperty.getKey().startsWith("property.")) {
@@ -606,6 +666,135 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             getKafkaOffset(customKafkaProperties.get(KAFKA_DEFAULT_OFFSETS));
         }
     }
+
+    private void checkPulsarProperties() throws AnalysisException {
+        Optional<String> optional = dataSourceProperties.keySet().stream()
+                .filter(entity -> !PULSAR_PROPERTIES_SET.contains(entity))
+                .filter(entity -> !entity.startsWith("property.")).findFirst();
+        if (optional.isPresent()) {
+            throw new AnalysisException(optional.get() + " is invalid pulsar custom property");
+        }
+
+        // check service url
+        pulsarServiceUrl = Strings.nullToEmpty(dataSourceProperties.get(PULSAR_SERVICE_URL_PROPERTY)).replaceAll(" ", "");
+        if (Strings.isNullOrEmpty(pulsarServiceUrl)) {
+            throw new AnalysisException(PULSAR_SERVICE_URL_PROPERTY + " is a required property");
+        }
+
+        if (!Pattern.matches(ENDPOINT_REGEX, pulsarServiceUrl)) {
+            throw new AnalysisException(PULSAR_SERVICE_URL_PROPERTY + ":" + pulsarServiceUrl
+                    + " not match pattern " + ENDPOINT_REGEX);
+        }
+
+        // check topic
+        pulsarTopic = Strings.nullToEmpty(dataSourceProperties.get(PULSAR_TOPIC_PROPERTY)).replaceAll(" ", "");
+        if (Strings.isNullOrEmpty(pulsarTopic)) {
+            throw new AnalysisException(PULSAR_TOPIC_PROPERTY + " is a required property");
+        }
+
+        // check subscription
+        pulsarSubscription = Strings.nullToEmpty(dataSourceProperties.get(PULSAR_SUBSCRIPTION_PROPERTY)).replaceAll(" ", "");
+        if (Strings.isNullOrEmpty(pulsarSubscription)) {
+            throw new AnalysisException(PULSAR_SUBSCRIPTION_PROPERTY + " is a required property");
+        }
+
+        // check custom pulsar property before check partitions,
+        // because partitions can use pulsar_default_position property
+        analyzePulsarCustomProperties(dataSourceProperties, customPulsarProperties);
+
+        // check partitions
+        String pulsarPartitionsString = dataSourceProperties.get(PULSAR_PARTITIONS_PROPERTY);
+        if (pulsarPartitionsString != null) {
+            analyzePulsarPartitionProperty(pulsarPartitionsString, customPulsarProperties, pulsarPartitions,
+                    pulsarPartitionInitialPositions);
+        }
+
+        // check positions
+        String pulsarPositionString = dataSourceProperties.get(PULSAR_INITIAL_POSITIONS_PROPERTY);
+        if (pulsarPositionString != null) {
+            analyzePulsarPositionProperty(pulsarPositionString, pulsarPartitions, pulsarPartitionInitialPositions);
+        }
+    }
+
+    public static void analyzePulsarPartitionProperty(String pulsarPartitionsString,
+                                                      Map<String, String> customPulsarProperties,
+                                                      List<String> pulsarPartitions,
+                                                      List<Pair<String, Long>> pulsarPartitionInitialPositions)
+            throws AnalysisException {
+        pulsarPartitionsString = pulsarPartitionsString.replaceAll(" ", "");
+        if (pulsarPartitionsString.isEmpty()) {
+            throw new AnalysisException(PULSAR_PARTITIONS_PROPERTY + " could not be a empty string");
+        }
+
+        String[] pulsarPartitionsStringList = pulsarPartitionsString.split(",");
+        for (String s : pulsarPartitionsStringList) {
+            pulsarPartitions.add(s);
+        }
+
+        // get default initial positions if set
+        if (customPulsarProperties.containsKey(PULSAR_DEFAULT_INITIAL_POSITION)) {
+            Long pulsarDefaultInitialPosition = getPulsarPosition(customPulsarProperties.get(PULSAR_DEFAULT_INITIAL_POSITION));
+            pulsarPartitions.stream().forEach(
+                    entry -> pulsarPartitionInitialPositions.add(Pair.create(entry, pulsarDefaultInitialPosition)));
+        }
+    }
+
+    public static void analyzePulsarPositionProperty(String pulsarPositionsString,
+                                                     List<String> pulsarPartitions,
+                                                     List<Pair<String, Long>> pulsarPartitionInitialPositions)
+            throws AnalysisException {
+        pulsarPositionsString = pulsarPositionsString.replaceAll(" ", "");
+        if (pulsarPositionsString.isEmpty()) {
+            throw new AnalysisException(PULSAR_INITIAL_POSITIONS_PROPERTY + " could not be a empty string");
+        }
+        String[] pulsarPositionsStringList = pulsarPositionsString.split(",");
+        if (pulsarPositionsStringList.length != pulsarPartitions.size()) {
+            throw new AnalysisException("Partitions number should be equals to positions number");
+        }
+
+        if (!pulsarPartitionInitialPositions.isEmpty()) {
+            for (int i = 0; i < pulsarPositionsStringList.length; i++) {
+                pulsarPartitionInitialPositions.get(i).second = getPulsarPosition(pulsarPositionsStringList[i]);
+            }
+        } else {
+            for (int i = 0; i < pulsarPositionsStringList.length; i++) {
+                pulsarPartitionInitialPositions.add(Pair.create(pulsarPartitions.get(i),
+                        getPulsarPosition(pulsarPositionsStringList[i])));
+            }
+        }
+    }
+
+    // Get pulsar position from string
+    // defined in pulsar-client-cpp/InitialPosition.h
+    // InitialPositionLatest: 0
+    // InitialPositionEarliest: 1
+    public static long getPulsarPosition(String positionStr) throws AnalysisException {
+        long position;
+        if (positionStr.equalsIgnoreCase(PulsarRoutineLoadJob.POSITION_EARLIEST)) {
+            position = PulsarRoutineLoadJob.POSITION_EARLIEST_VAL;
+        } else if (positionStr.equalsIgnoreCase(PulsarRoutineLoadJob.POSITION_LATEST)) {
+            position = PulsarRoutineLoadJob.POSITION_LATEST_VAL;
+        } else {
+            throw new AnalysisException("Only POSITION_EARLIEST or POSITION_LATEST can be specified");
+        }
+        return position;
+    }
+
+    public static void analyzePulsarCustomProperties(Map<String, String> dataSourceProperties,
+                                                    Map<String, String> customPulsarProperties) throws AnalysisException {
+        for (Map.Entry<String, String> dataSourceProperty : dataSourceProperties.entrySet()) {
+            if (dataSourceProperty.getKey().startsWith("property.")) {
+                String propertyKey = dataSourceProperty.getKey();
+                String propertyValue = dataSourceProperty.getValue();
+                String propertyValueArr[] = propertyKey.split("\\.");
+                if (propertyValueArr.length < 2) {
+                    throw new AnalysisException("pulsar property value could not be a empty string");
+                }
+                customPulsarProperties.put(propertyKey.substring(propertyKey.indexOf(".") + 1), propertyValue);
+            }
+            // can be extended in the future which other prefix
+        }
+   }
 
     private static int getIntegerValueFromString(String valueString, String propertyName) throws AnalysisException {
         if (valueString.isEmpty()) {
