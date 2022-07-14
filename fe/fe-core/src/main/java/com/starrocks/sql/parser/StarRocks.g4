@@ -101,6 +101,7 @@ statement
     | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
+    | showProcesslistStatement                                                              #showProcesslist
     | showUserPropertyStatement                                                             #showUserProperty
     | killStatement                                                                         #kill
     | setUserPropertyStatement                                                              #setUserProperty
@@ -537,6 +538,11 @@ showDatabasesStatement
 showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
     ;
+
+showProcesslistStatement
+    : SHOW FULL? PROCESSLIST
+    ;
+
 
 showUserPropertyStatement
     : SHOW PROPERTY (FOR string)? (LIKE string)?
