@@ -28,9 +28,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 
-import java.util.List;
-import java.util.Map;
-
 // show proc "/cluster_balance/cluster_load_stat";
 public class ClusterLoadStatisticProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
@@ -39,7 +36,6 @@ public class ClusterLoadStatisticProcDir implements ProcDirInterface {
             .add("Class")
             .build();
 
-    private Map<String, ClusterLoadStatistic> statMap;
     private TStorageMedium medium;
 
     public ClusterLoadStatisticProcDir(TStorageMedium medium) {
@@ -51,12 +47,8 @@ public class ClusterLoadStatisticProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        statMap = GlobalStateMgr.getCurrentState().getTabletScheduler().getStatisticMap();
-
-        statMap.values().forEach(t -> {
-            List<List<String>> statistics = t.getClusterStatistic(medium);
-            statistics.forEach(result::addRow);
-        });
+        ClusterLoadStatistic statistic = GlobalStateMgr.getCurrentState().getTabletScheduler().getLoadStatistic();
+        statistic.getClusterStatistic(medium).forEach(result::addRow);
 
         return result;
     }
