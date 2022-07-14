@@ -73,16 +73,6 @@ public class StarOSAgent {
         }
     }
 
-    // for ut only
-    public long getServiceIdForTest() {
-        return serviceId;
-    }
-
-    // for ut only
-    public void setServiceId(long id) {
-        serviceId = id;
-    }
-
     public void getServiceId() {
         try {
             ServiceInfo serviceInfo = client.getServiceInfo(SERVICE_NAME);
