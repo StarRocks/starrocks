@@ -1949,8 +1949,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
                 // lakeTable need to delete shard
                 if (olapTable.isLakeTable()) {
-                    // for debug
-                    LOG.info("create lake table failed, need to delete shards, tabletIdSet is {}", tabletIdSet);
                     GlobalStateMgr.getCurrentState().getShardManager()
                             .getShardDeleter().addUnusedShardId(tabletIdSet);
                     GlobalStateMgr.getCurrentState().getEditLog().logAddUnusedShard(tabletIdSet);
