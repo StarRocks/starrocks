@@ -79,9 +79,6 @@ public class SelectStmt extends QueryStmt {
 
     private ValueList valueList;
 
-    // if we have grouping extensions like cube or rollup or grouping sets
-    private GroupingInfo groupingInfo;
-
     // having clause which has been analyzed
     // For example: select k1, sum(k2) a from t group by k1 having a>1;
     // this parameter: sum(t.k2) > 1
@@ -128,7 +125,6 @@ public class SelectStmt extends QueryStmt {
         this.havingPred = null;
         this.aggInfo = null;
         this.sortInfo = null;
-        this.groupingInfo = null;
     }
 
     protected SelectStmt(SelectStmt other) {
@@ -145,7 +141,6 @@ public class SelectStmt extends QueryStmt {
         analyticInfo = (other.analyticInfo != null) ? other.analyticInfo.clone() : null;
         sqlString_ = (other.sqlString_ != null) ? other.sqlString_ : null;
         baseTblSmap = other.baseTblSmap.clone();
-        groupingInfo = null;
     }
 
     @Override
@@ -168,7 +163,6 @@ public class SelectStmt extends QueryStmt {
         aggInfo = null;
         analyticInfo = null;
         baseTblSmap.clear();
-        groupingInfo = null;
     }
 
     @Override
