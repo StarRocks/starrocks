@@ -235,7 +235,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return visit(context.statement());
     }
 
-
     // ---------------------------------------- Database Statement -----------------------------------------------------
     @Override
     public ParseNode visitAlterDbQuotaStmt(StarRocksParser.AlterDbQuotaStmtContext context) {
@@ -252,7 +251,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     quotaValue);
         }
     }
-
 
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
@@ -276,7 +274,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
         return new ShowCreateDbStmt(dbName);
     }
-
 
     @Override
     public ParseNode visitAlterDatabaseRename(StarRocksParser.AlterDatabaseRenameContext context) {
@@ -566,9 +563,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.qualifiedName() != null) {
             dbName = getQualifiedName(context.db);
         }
-        if(dbName == null){
+
+        if (dbName == null) {
             return new ShowDeleteStmt("");
         }
+
         return new ShowDeleteStmt(dbName.toString());
     }
 
