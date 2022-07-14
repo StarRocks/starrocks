@@ -132,18 +132,25 @@ Flink 可以通过 flink-connector-starrocks 的 source 功能读取 StarRocks �
 
 | 参数                        | 是否必填 | 数据类型 | 描述                                                         |
 | --------------------------- | -------- | -------- | ------------------------------------------------------------ |
-| connector                   | 是       | String   | 固定为 starrocks。                                          |
-| scan-url                    | 是       | String   | FE 节点的连接地址，用于通过 Web 服务器访问 FE 节点。 具体格式为< FE 节点的 IP 地址>:< FE 的 http_port>，端口号默认为8030。多个地址之间用英文半角逗号分隔。例如192.168.xxx.xxx:8030,192.168.xxx.xxx:8030。 |
-| jdbc-url                    | 是       | String   | FE 节点的连接地址，用于访问 FE 节点上的 MySQL 客户端。具体格式为 jdbc:mysql://< FE 节点的 IP 地址>:< FE 的 query_port>，端口号默认为9030。 |
-| username                    | 是       | String   | StarRocks 中的用户名称。需具备目标数据库表的读权限。用户权限说明，请参见[用户权限](../administration/User_privilege.md)。 |
-| password                    | 是       | String   | StarRocks 的用户密码。                                       |
-| database-name               | 是       | String   | StarRocks 数据库的名称。                                     |
-| table-name                  | 是       | String   | StarRocks 数据表的名称。                                     |
-| scan.connect.timeout-ms     | 否       | String   | flink-connector-starrocks 连接 StarRocks 的时间上限，单位为毫秒，默认值为1000。超过该时间上限，则将报错。 |
-| scan.params.keep-alive-min  | 否       | String   | 查询任务的保活时间，单位为分钟。默认值为10，建议取值大于等于5。      |
-| scan.params.query-timeout-s | 否       | String   | 查询任务的超时时间，单位为秒，默认值为600。如果超过该时间，仍未返回查询结果，则停止查询任务。  |
-| scan.params.mem-limit-byte  | 否       | String   | BE 节点中单个查询的内存上限，单位为字节，默认值为1073741824（1G）。 |
-| scan.max-retries            | 否       | String   | 查询失败时的最大重试次数，默认值为1。超过该数量上限，则将报错。 |
+| connector | 是 | String | 固定为 starrocks。 |
+| scan-url | 是 | String | FE 节点的连接地址，用于通过 Web 服务器访问 FE 节点。 具体格式为\<FE 节点的 IP 地址\>:\<FE 的 http_port\>，端口号默认为8030。多个地址之间用英文半角逗号分隔。例如192.168.xxx.xxx:8030,192.168.xxx.xxx:8030。 |
+| jdbc-url | 是 | String   | FE 节点的连接地址，用于访问 FE 节点上的 MySQL 客户端。具体格式为 jdbc:mysql://\<FE 节点的 IP 地址\>:\<FE 的 query_port\>，端口号默认为9030。 |
+| username | 是 | String   | StarRocks 中的用户名称。需具备目标数据库表的读权限。用户权限说明，请参见[用户权限](../administration/User_privilege.md)。 |
+| password | 是 | String   | StarRocks 的用户密码。 |
+| database-name | 是 | String   | StarRocks 数据库的名称。 |
+| table-name | 是 | String | StarRocks 数据表的名称。 |
+| scan.connect.timeout-ms | 否 | String | flink-connector-starrocks 连接 StarRocks 的时间上限，单位为毫秒，默认值为1000。超过该时间上限，则将报错。 |
+| scan.params.keep-alive-min | 否 | String | 查询任务的保活时间，单位为分钟。默认值为10，建议取值大于等于5。 |
+| scan.params.query-timeout-s | 否 | String | 查询任务的超时时间，单位为秒，默认值为600。如果超过该时间，仍未返回查询结果，则停止查询任务。 |
+| scan.params.mem-limit-byte | 否 | String | BE 节点中单个查询的内存上限，单位为字节，默认值为1073741824（1G）。 |
+| scan.max-retries | 否 | String | 查询失败时的最大重试次数，默认值为1。超过该数量上限，则将报错。 |
+
+### Streaming中特有参数
+
+| 参数 | 是否必填 | 数据类型 | 描述 |
+| --- |-------- | ------- | ---- |
+| scan.columns | 否 | String | 选择特定的columns。不同columns之间以逗号分隔。|
+| scan.filter | 否 | String | 在SQL中设置过滤方式。ps:"tinyint_1 = 100" |
 
 ## Flink 与 StarRocks 的数据类型映射关系
 
