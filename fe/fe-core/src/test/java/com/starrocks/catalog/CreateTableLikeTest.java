@@ -61,7 +61,7 @@ public class CreateTableLikeTest {
 
     private static void createTableLike(String sql) throws Exception {
         CreateTableLikeStmt createTableLikeStmt =
-                (CreateTableLikeStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
+                (CreateTableLikeStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createTableLike(createTableLikeStmt);
     }
 

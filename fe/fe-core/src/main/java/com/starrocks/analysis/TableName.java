@@ -132,6 +132,11 @@ public class TableName implements Writable {
         this.catalog = catalog;
     }
 
+    // for rename table
+    public void setTbl(String tbl) {
+        this.tbl = tbl;
+    }
+
     public boolean isEmpty() {
         return tbl.isEmpty();
     }

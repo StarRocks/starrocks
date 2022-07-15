@@ -28,12 +28,7 @@ import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
 
@@ -96,7 +91,7 @@ public class DeleteStmt extends DmlStmt {
 
         tblName.analyze(analyzer);
 
-        CatalogUtils.checkOlapTableHasStarOSPartition(tblName.getDb(), tblName.getTbl());
+        CatalogUtils.checkIsLakeTable(tblName.getDb(), tblName.getTbl());
 
         if (partitionNames != null) {
             partitionNames.analyze(analyzer);

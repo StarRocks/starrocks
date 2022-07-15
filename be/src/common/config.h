@@ -757,6 +757,8 @@ CONF_Int32(starlet_port, "9070");
 CONF_String(starlet_cache_dir, "");
 #endif
 
+CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
+
 } // namespace config
 
 } // namespace starrocks

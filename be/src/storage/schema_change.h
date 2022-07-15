@@ -71,7 +71,7 @@ private:
 
     std::vector<ColumnId> _selected_column_indexs;
 
-    DISALLOW_COPY_AND_ASSIGN(ChunkChanger);
+    DISALLOW_COPY(ChunkChanger);
 };
 
 class ChunkAllocator {
@@ -116,7 +116,7 @@ public:
 
 private:
     ChunkChanger* _chunk_changer = nullptr;
-    DISALLOW_COPY_AND_ASSIGN(LinkedSchemaChange);
+    DISALLOW_COPY(LinkedSchemaChange);
 };
 
 // @brief schema change without sorting.
@@ -133,7 +133,7 @@ public:
 
 private:
     ChunkChanger* _chunk_changer = nullptr;
-    DISALLOW_COPY_AND_ASSIGN(SchemaChangeDirectly);
+    DISALLOW_COPY(SchemaChangeDirectly);
 };
 
 // @breif schema change with sorting
@@ -155,7 +155,7 @@ private:
     ChunkChanger* _chunk_changer = nullptr;
     size_t _memory_limitation;
     ChunkAllocator* _chunk_allocator = nullptr;
-    DISALLOW_COPY_AND_ASSIGN(SchemaChangeWithSorting);
+    DISALLOW_COPY(SchemaChangeWithSorting);
 };
 
 class SchemaChangeHandler {
@@ -208,7 +208,7 @@ private:
                                        const std::string& value);
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(SchemaChangeHandler);
+    DISALLOW_COPY(SchemaChangeHandler);
 };
 
 } // namespace vectorized

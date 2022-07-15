@@ -24,6 +24,7 @@
 #include <thread>
 #include <vector>
 
+#include "gutil/macros.h"
 #include "storage/options.h"
 
 namespace starrocks {
@@ -41,7 +42,7 @@ private:
     std::atomic<bool> _stopped{false};
 
     std::vector<std::thread> _daemon_threads;
-    DISALLOW_COPY_AND_ASSIGN(Daemon);
+    DISALLOW_COPY(Daemon);
 };
 
 } // namespace starrocks

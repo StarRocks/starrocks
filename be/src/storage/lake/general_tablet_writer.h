@@ -22,7 +22,7 @@ public:
 
     ~GeneralTabletWriter() override;
 
-    DISALLOW_COPY_AND_ASSIGN(GeneralTabletWriter);
+    DISALLOW_COPY(GeneralTabletWriter);
 
     int64_t tablet_id() const override { return _tablet.id(); }
 

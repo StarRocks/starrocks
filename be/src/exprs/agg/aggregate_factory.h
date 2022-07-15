@@ -55,7 +55,7 @@ public:
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeAnyValueAggregateFunction();
 
-    template <typename NestedState, bool IsWindowFunc = false, bool IgnoreNull = true>
+    template <typename NestedState, bool IsWindowFunc, bool IgnoreNull = true>
     static AggregateFunctionPtr MakeNullableAggregateFunctionUnary(AggregateFunctionPtr nested_function);
 
     template <typename NestedState>

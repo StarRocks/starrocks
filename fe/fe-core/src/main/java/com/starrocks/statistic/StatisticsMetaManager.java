@@ -20,7 +20,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -352,9 +351,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         }
 
         refreshStatisticsTable(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
-        if (Config.enable_collect_full_statistics) {
-            refreshStatisticsTable(StatsConstants.FULL_STATISTICS_TABLE_NAME);
-            refreshStatisticsTable(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
-        }
+        refreshStatisticsTable(StatsConstants.FULL_STATISTICS_TABLE_NAME);
+        refreshStatisticsTable(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
     }
 }

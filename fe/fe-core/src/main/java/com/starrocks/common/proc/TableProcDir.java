@@ -97,7 +97,7 @@ public class TableProcDir implements ProcDirInterface {
                         "Table[" + table.getName() + "] is not a OLAP/MATERIALIZED_VIEW/ELASTICSEARCH/HIVE/HUDI table");
             }
         } else if (entryName.equals(TEMP_PARTITIONS)) {
-            if (table.getType() == TableType.OLAP) {
+            if (table.isNativeTable()) {
                 return new PartitionsProcDir(db, (OlapTable) table, true);
             } else {
                 throw new AnalysisException("Table[" + table.getName() + "] does not have temp partitions");

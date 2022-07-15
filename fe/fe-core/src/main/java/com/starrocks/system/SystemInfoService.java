@@ -39,7 +39,6 @@ import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
@@ -336,7 +335,7 @@ public class SystemInfoService {
             db.readLock();
             try {
                 db.getTables().stream()
-                        .filter(table -> table.getType() == Table.TableType.OLAP)
+                        .filter(table -> table.isLocalTable())
                         .map(table -> (OlapTable) table)
                         .filter(table -> table.getTableProperty().getReplicationNum() == 1)
                         .forEach(table -> {

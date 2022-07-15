@@ -10,6 +10,7 @@
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "util/slice.h"
@@ -32,8 +33,11 @@ public:
     // Create a slice that refers to the contents of "s"
     CacheKey(const std::string& s) : _data(s.data()), _size(s.size()) {}
 
-    // Create a slice that refers to s[0,strlen(s)-1]
+    // Create a slice that refers to the contents of s[0,strlen(s)-1]
     CacheKey(const char* s) : _data(s), _size(strlen(s)) {}
+
+    // Create a slice that refers to the contents of "s"
+    CacheKey(std::string_view s) : _data(s.data()), _size(s.size()) {}
 
     ~CacheKey() = default;
 

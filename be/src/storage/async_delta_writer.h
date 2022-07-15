@@ -64,7 +64,7 @@ private:
         // If chunk == nullptr, this is a commit task
         vectorized::Chunk* chunk = nullptr;
         const uint32_t* indexes = nullptr;
-        AsyncDeltaWriterCallback* write_cb;
+        AsyncDeltaWriterCallback* write_cb = nullptr;
         uint32_t indexes_size = 0;
         bool commit_after_write = false;
     };

@@ -803,7 +803,7 @@ public class ReportHandler extends Daemon {
                 continue;
             }
 
-            if (tabletMeta != null && tabletMeta.isUseStarOS()) {
+            if (tabletMeta != null && tabletMeta.isLakeTablet()) {
                 continue;
             }
 

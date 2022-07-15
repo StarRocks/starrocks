@@ -92,7 +92,7 @@ public class AdminStmtAnalyzer {
             adminShowReplicaDistributionStmt.setDbName(dbName);
 
             try {
-                CatalogUtils.checkOlapTableHasStarOSPartition(dbName, tblName);
+                CatalogUtils.checkIsLakeTable(dbName, tblName);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
@@ -116,7 +116,7 @@ public class AdminStmtAnalyzer {
             adminShowReplicaStatusStmt.setDbName(dbName);
 
             try {
-                CatalogUtils.checkOlapTableHasStarOSPartition(dbName, tblName);
+                CatalogUtils.checkIsLakeTable(dbName, tblName);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }

@@ -57,8 +57,8 @@ public class CatalogUtils {
         return existPartitionNameSet;
     }
 
-    // Used to temporarily disable some command on StarOS table and remove later.
-    public static void checkOlapTableHasStarOSPartition(String dbName, String tableName) throws AnalysisException {
+    // Used to temporarily disable some command on lake table and remove later.
+    public static void checkIsLakeTable(String dbName, String tableName) throws AnalysisException {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             return;
@@ -67,15 +67,11 @@ public class CatalogUtils {
         db.readLock();
         try {
             Table table = db.getTable(tableName);
-            if (!(table instanceof OlapTable)) {
+            if (table == null) {
                 return;
             }
-            OlapTable olapTable = (OlapTable) table;
-            for (Partition partition : olapTable.getPartitions()) {
-                if (partition.isUseStarOS()) {
-                    throw new AnalysisException("Unsupported operation because table [" + dbName + "." + tableName +
-                            "] has StarOS partitions");
-                }
+            if (table.isLakeTable()) {
+                throw new AnalysisException("Unsupported operation on lake table [" + dbName + "." + tableName + "]");
             }
         } finally {
             db.readUnlock();

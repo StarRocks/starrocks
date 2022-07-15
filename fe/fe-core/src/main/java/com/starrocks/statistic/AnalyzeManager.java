@@ -8,7 +8,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
@@ -140,10 +139,8 @@ public class AnalyzeManager implements Writable {
     }
 
     public void addAnalyzeStatus(AnalyzeStatus status) {
-        if (Config.enable_collect_full_statistics) {
-            analyzeStatusMap.put(status.getId(), status);
-            GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeStatus(status);
-        }
+        analyzeStatusMap.put(status.getId(), status);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeStatus(status);
     }
 
     public void replayAddAnalyzeStatus(AnalyzeStatus status) {
@@ -158,10 +155,8 @@ public class AnalyzeManager implements Writable {
     }
 
     public void addBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
-        if (Config.enable_collect_full_statistics) {
-            basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
-            GlobalStateMgr.getCurrentState().getEditLog().logAddBasicStatsMeta(basicStatsMeta);
-        }
+        basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddBasicStatsMeta(basicStatsMeta);
     }
 
     public void replayAddBasicStatsMeta(BasicStatsMeta basicStatsMeta) {

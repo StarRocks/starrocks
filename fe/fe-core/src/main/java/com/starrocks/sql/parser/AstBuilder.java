@@ -9,6 +9,7 @@ import com.starrocks.analysis.AddBackendClause;
 import com.starrocks.analysis.AddComputeNodeClause;
 import com.starrocks.analysis.AddFollowerClause;
 import com.starrocks.analysis.AddObserverClause;
+import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AddRollupClause;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
@@ -41,6 +42,7 @@ import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
@@ -351,6 +353,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.rollupDesc() == null ? null : getRollupDesc(context.rollupDesc()));
     }
 
+    @Override
+    public ParseNode visitCreateTableLikeStatement(StarRocksParser.CreateTableLikeStatementContext context) {
+        return new CreateTableLikeStmt(context.IF() != null,
+                qualifiedNameToTableName(getQualifiedName(context.qualifiedName(0))),
+                qualifiedNameToTableName(getQualifiedName(context.qualifiedName(1))));
+    }
+
     private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context) {
         final List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
         final List<String> columnList = identifierList.stream().map(Identifier::getValue).collect(toList());
@@ -525,6 +534,29 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowComputeNodes(StarRocksParser.ShowComputeNodesContext context) {
         return new ShowComputeNodesStmt();
+    }
+
+    @Override
+    public ParseNode visitAddPartitionClause(StarRocksParser.AddPartitionClauseContext context) {
+        boolean temporary = context.TEMPORARY() != null;
+        PartitionDesc partitionDesc = null;
+        if (context.singleRangePartition() != null) {
+            partitionDesc = (PartitionDesc) visitSingleRangePartition(context.singleRangePartition());
+        } else if (context.multiRangePartition() != null) {
+            partitionDesc = (PartitionDesc) visitMultiRangePartition(context.multiRangePartition());
+        }
+        DistributionDesc distributionDesc = null;
+        if (context.distributionDesc() != null) {
+            distributionDesc = (DistributionDesc) visitDistributionDesc(context.distributionDesc());
+        }
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new AddPartitionClause(partitionDesc, distributionDesc, properties, temporary);
     }
 
     @Override
@@ -1167,7 +1199,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        return new AnalyzeStmt(tableName, columnNames, properties, context.FULL() == null, new AnalyzeBasicDesc());
+        return new AnalyzeStmt(tableName, columnNames, properties, context.SAMPLE() != null, new AnalyzeBasicDesc());
     }
 
     @Override
@@ -1193,7 +1225,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 columnNames = columns.stream().map(Identifier::getValue).collect(toList());
             }
 
-            return new CreateAnalyzeJobStmt(tableName, columnNames, context.FULL() == null, properties);
+            return new CreateAnalyzeJobStmt(tableName, columnNames, context.SAMPLE() != null, properties);
         } else {
             return new CreateAnalyzeJobStmt(context.FULL() == null, properties);
         }

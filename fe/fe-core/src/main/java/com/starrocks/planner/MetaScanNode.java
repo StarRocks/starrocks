@@ -55,7 +55,6 @@ public class MetaScanNode extends ScanNode {
 
             long visibleVersion = partition.getVisibleVersion();
             String visibleVersionStr = String.valueOf(visibleVersion);
-            boolean useStarOS = partition.isUseStarOS();
 
             for (Tablet tablet : tablets) {
                 long tabletId = tablet.getId();
@@ -76,7 +75,7 @@ public class MetaScanNode extends ScanNode {
                     LOG.error("no queryable replica found in tablet {}. visible version {}",
                             tabletId, visibleVersion);
                     if (LOG.isDebugEnabled()) {
-                        if (useStarOS) {
+                        if (olapTable.isLakeTable()) {
                             LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId,
                                     ((LakeTablet) tablet).getShardId(),
                                     tablet.getBackendIds());

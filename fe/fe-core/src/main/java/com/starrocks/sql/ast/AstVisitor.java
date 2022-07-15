@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
@@ -31,6 +32,7 @@ import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
@@ -172,6 +174,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateTableStatement(CreateTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateTableLikeStatement(CreateTableLikeStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -427,6 +433,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitDropPartitionClause(DropPartitionClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitAddPartitionClause(AddPartitionClause clause, C context) {
         return visitNode(clause, context);
     }
 

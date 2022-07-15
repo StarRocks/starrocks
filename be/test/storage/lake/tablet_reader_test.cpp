@@ -21,6 +21,7 @@
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "util/lru_cache.h"
 
 namespace starrocks::lake {
 

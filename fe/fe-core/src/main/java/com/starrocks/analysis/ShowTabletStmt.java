@@ -22,15 +22,19 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
-import com.starrocks.common.proc.TabletsProcDir;
+import com.starrocks.common.proc.LakeTabletsProcNode;
+import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
@@ -41,6 +45,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ShowTabletStmt extends ShowStmt {
+    private static final ImmutableList<String> SINGLE_TABLET_TITLE_NAMES = new ImmutableList.Builder<String>()
+            .add("DbName").add("TableName").add("PartitionName").add("IndexName")
+            .add("DbId").add("TableId").add("PartitionId").add("IndexId")
+            .add("IsSync").add("DetailCmd")
+            .build();
+
     private String dbName;
     private String tableName;
     private long tabletId;
@@ -187,6 +197,7 @@ public class ShowTabletStmt extends ShowStmt {
             }
         }
 
+        // TODO: support lake tablets order by
         // order by
         if (orderByElements != null && !orderByElements.isEmpty()) {
             orderByPairs = new ArrayList<OrderByPair>();
@@ -195,7 +206,7 @@ public class ShowTabletStmt extends ShowStmt {
                     throw new AnalysisException("Should order by column");
                 }
                 SlotRef slotRef = (SlotRef) orderByElement.getExpr();
-                int index = TabletsProcDir.analyzeColumn(slotRef.getColumnName());
+                int index = LocalTabletsProcDir.analyzeColumn(slotRef.getColumnName());
                 OrderByPair orderByPair = new OrderByPair(index, !orderByElement.getIsAsc());
                 orderByPairs.add(orderByPair);
             }
@@ -296,24 +307,38 @@ public class ShowTabletStmt extends ShowStmt {
         return sb.toString();
     }
 
+    private ImmutableList<String> getTitleNames() {
+        if (isShowSingleTablet) {
+            return SINGLE_TABLET_TITLE_NAMES;
+        }
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        if (db == null) {
+            return ImmutableList.of();
+        }
+
+        db.readLock();
+        try {
+            Table table = db.getTable(tableName);
+            if (table == null || !table.isNativeTable()) {
+                return ImmutableList.of();
+            }
+
+            if (table.isLakeTable()) {
+                return LakeTabletsProcNode.TITLE_NAMES;
+            } else {
+                return LocalTabletsProcDir.TITLE_NAMES;
+            }
+        } finally {
+            db.readUnlock();
+        }
+    }
+
     @Override
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        if (isShowSingleTablet) {
-            builder.addColumn(new Column("DbName", ScalarType.createVarchar(30)));
-            builder.addColumn(new Column("TableName", ScalarType.createVarchar(30)));
-            builder.addColumn(new Column("PartitionName", ScalarType.createVarchar(30)));
-            builder.addColumn(new Column("IndexName", ScalarType.createVarchar(30)));
-            builder.addColumn(new Column("DbId", ScalarType.createVarchar(30)));
-            builder.addColumn(new Column("TableId", ScalarType.createVarchar(30)));
-            builder.addColumn(new Column("PartitionId", ScalarType.createVarchar(30)));
-            builder.addColumn(new Column("IndexId", ScalarType.createVarchar(30)));
-            builder.addColumn(new Column("IsSync", ScalarType.createVarchar(30)));
-            builder.addColumn(new Column("DetailCmd", ScalarType.createVarchar(30)));
-        } else {
-            for (String title : TabletsProcDir.TITLE_NAMES) {
-                builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-            }
+        for (String title : getTitleNames()) {
+            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
         }
         return builder.build();
     }

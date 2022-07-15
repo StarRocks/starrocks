@@ -205,7 +205,7 @@ public class CatalogRecycleBinTest {
         // Check
         TabletMeta tabletMeta1 = invertedIndex.getTabletMeta(tabletId);
         Assert.assertTrue(tabletMeta1 != null);
-        Assert.assertFalse(tabletMeta1.isUseStarOS());
+        Assert.assertFalse(tabletMeta1.isLakeTablet());
         Assert.assertEquals(TStorageMedium.SSD, tabletMeta1.getStorageMedium());
         Assert.assertEquals(replica1, invertedIndex.getReplica(tabletId, backendId));
         Assert.assertEquals(replica2, invertedIndex.getReplica(tabletId, backendId + 1));

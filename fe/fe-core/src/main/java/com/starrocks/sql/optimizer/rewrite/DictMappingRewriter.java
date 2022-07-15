@@ -33,9 +33,7 @@ public class DictMappingRewriter {
 
     public DictMappingRewriter(AddDecodeNodeForDictStringRule.DecodeContext decodeContext) {
         this.decodeContext = decodeContext;
-        for (Integer allStringColumnId : decodeContext.allStringColumnIds) {
-            rewriterContext.stringColumnSet.union(allStringColumnId);
-        }
+        decodeContext.stringColumnIdToDictColumnIds.keySet().forEach(rewriterContext.stringColumnSet::union);
     }
 
     public ScalarOperator rewrite(ScalarOperator scalarOperator) {
@@ -194,7 +192,7 @@ public class DictMappingRewriter {
 
         @Override
         public ScalarOperator visitVariableReference(ColumnRefOperator operator, RewriterContext context) {
-            context.hasAppliedOperator = decodeContext.allStringColumnIds.contains(operator.getId());
+            context.hasAppliedOperator = rewriterContext.stringColumnSet.contains(operator.getId());
             context.hasUnsupportedOperator = false;
             return operator;
         }

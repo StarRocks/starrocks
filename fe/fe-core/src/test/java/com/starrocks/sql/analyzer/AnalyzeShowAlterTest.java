@@ -71,5 +71,8 @@ public class AnalyzeShowAlterTest {
         analyzeFail("SHOW ALTER TABLE COLUMN FROM db WHERE `CreateTime` > '2019-12-04 00:00:00' " +
                         "OR `FinishTime` < '2022-12-04 00:00:00'",
                 "Only allow compound predicate with operator AND");
+        analyzeSuccess("SHOW ALTER MATERIALIZED VIEW");
+        analyzeSuccess("SHOW ALTER MATERIALIZED VIEW FROM db WHERE `TableName` = \'abc\' LIMIT 1, 2");
+        analyzeSuccess("SHOW ALTER MATERIALIZED VIEW FROM db ORDER BY CreateTime");        
     }
 }

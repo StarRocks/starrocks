@@ -246,6 +246,10 @@ public class TabletChecker extends MasterDaemon {
                     if (!table.needSchedule(false)) {
                         continue;
                     }
+                    if (table.isLakeTable()) {
+                        // replicas are managed by StarOS and cloud storage.
+                        continue;
+                    }
 
                     if ((checkInPrios && !isTableInPrios(dbId, table.getId())) ||
                             (!checkInPrios && isTableInPrios(dbId, table.getId()))) {
@@ -254,11 +258,6 @@ public class TabletChecker extends MasterDaemon {
 
                     OlapTable olapTbl = (OlapTable) table;
                     for (Partition partition : globalStateMgr.getAllPartitionsIncludeRecycleBin(olapTbl)) {
-                        if (partition.isUseStarOS()) {
-                            // replicas are managed by StarOS and cloud storage.
-                            continue;
-                        }
-
                         if (partition.getState() != PartitionState.NORMAL) {
                             // when alter job is in FINISHING state, partition state will be set to NORMAL,
                             // and we can schedule the tablets in it.

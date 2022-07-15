@@ -69,7 +69,7 @@ public class AdminShowReplicaDistributionStmt extends ShowStmt {
 
         tblRef.getName().setDb(dbName);
 
-        CatalogUtils.checkOlapTableHasStarOSPartition(dbName, tblRef.getName().getTbl());
+        CatalogUtils.checkIsLakeTable(dbName, tblRef.getName().getTbl());
     }
 
     public String getDbName() {

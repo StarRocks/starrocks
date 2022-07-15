@@ -23,7 +23,7 @@ public:
 
     ~FdCache();
 
-    DISALLOW_COPY_AND_ASSIGN(FdCache);
+    DISALLOW_COPY(FdCache);
 
     // Insert a mapping from path->fd into the cache.
     //

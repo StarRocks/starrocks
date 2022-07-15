@@ -71,6 +71,9 @@ public:
 
     StatusOr<std::vector<RowsetPtr>> get_rowsets(int64_t version);
 
+    StatusOr<SegmentPtr> load_segment(std::string_view segment_name, int seg_id, size_t* footer_size_hint,
+                                      bool fill_cache);
+
     [[nodiscard]] std::string metadata_location(int64_t version) const;
 
     [[nodiscard]] std::string txn_log_location(int64_t txn_id) const;

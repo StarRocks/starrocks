@@ -21,13 +21,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -64,22 +58,25 @@ public class CreateTableLikeStmt extends DdlStmt {
         return existedTableName.getTbl();
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-        existedTableName.analyze(analyzer);
-        ConnectContext ctx = ConnectContext.get();
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ctx, existedTableName.getDb(),
-                existedTableName.getTbl(), PrivPredicate.SELECT)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "SELECT");
-        }
+    public TableName getDbTbl() {
+        return tableName;
+    }
 
-        tableName.analyze(analyzer);
-        FeNameFormat.checkTableName(getTableName());
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ctx, tableName.getDb(),
-                tableName.getTbl(), PrivPredicate.CREATE)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
-        }
+    public TableName getExistedDbTbl() {
+        return existedTableName;
+    }
+
+    @Override
+    public void analyze(Analyzer analyzer) {}
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCreateTableLikeStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
     @Override

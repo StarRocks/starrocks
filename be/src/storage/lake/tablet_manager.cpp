@@ -16,6 +16,8 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/metadata_util.h"
+#include "storage/rowset/segment.h"
+#include "storage/tablet_schema.h"
 #include "storage/tablet_schema_map.h"
 #include "util/lru_cache.h"
 #include "util/raw_container.h"
@@ -48,7 +50,7 @@ std::string TabletManager::tablet_schema_cache_key(int64_t tablet_id) {
     return fmt::format("schema_{}", tablet_id);
 }
 
-bool TabletManager::fill_metacache(const std::string& key, CacheValue* ptr, int size) {
+bool TabletManager::fill_metacache(std::string_view key, CacheValue* ptr, int size) {
     Cache::Handle* handle = _metacache->insert(CacheKey(key), ptr, size, cache_value_deleter);
     if (handle == nullptr) {
         delete ptr;
@@ -59,7 +61,7 @@ bool TabletManager::fill_metacache(const std::string& key, CacheValue* ptr, int 
     }
 }
 
-TabletMetadataPtr TabletManager::lookup_tablet_metadata(const std::string& key) {
+TabletMetadataPtr TabletManager::lookup_tablet_metadata(std::string_view key) {
     auto handle = _metacache->lookup(CacheKey(key));
     if (handle == nullptr) {
         return nullptr;
@@ -70,7 +72,7 @@ TabletMetadataPtr TabletManager::lookup_tablet_metadata(const std::string& key) 
     return metadata;
 }
 
-TabletSchemaPtr TabletManager::lookup_tablet_schema(const std::string& key) {
+TabletSchemaPtr TabletManager::lookup_tablet_schema(std::string_view key) {
     auto handle = _metacache->lookup(CacheKey(key));
     if (handle == nullptr) {
         return nullptr;
@@ -81,7 +83,7 @@ TabletSchemaPtr TabletManager::lookup_tablet_schema(const std::string& key) {
     return schema;
 }
 
-TxnLogPtr TabletManager::lookup_txn_log(const std::string& key) {
+TxnLogPtr TabletManager::lookup_txn_log(std::string_view key) {
     auto handle = _metacache->lookup(CacheKey(key));
     if (handle == nullptr) {
         return nullptr;
@@ -92,7 +94,24 @@ TxnLogPtr TabletManager::lookup_txn_log(const std::string& key) {
     return log;
 }
 
-void TabletManager::erase_metacache(const std::string& key) {
+SegmentPtr TabletManager::lookup_segment(std::string_view key) {
+    auto handle = _metacache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        return nullptr;
+    }
+    auto value = static_cast<CacheValue*>(_metacache->value(handle));
+    auto segment = std::get<SegmentPtr>(*value);
+    _metacache->release(handle);
+    return segment;
+}
+
+void TabletManager::cache_segment(std::string_view key, SegmentPtr segment) {
+    auto mem_cost = segment->mem_usage();
+    auto value = std::make_unique<CacheValue>(std::move(segment));
+    (void)fill_metacache(key, value.release(), (int)mem_cost);
+}
+
+void TabletManager::erase_metacache(std::string_view key) {
     _metacache->erase(CacheKey(key));
 }
 

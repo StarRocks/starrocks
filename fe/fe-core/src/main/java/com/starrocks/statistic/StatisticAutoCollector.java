@@ -61,6 +61,7 @@ public class StatisticAutoCollector extends MasterDaemon {
             }
         } else {
             List<AnalyzeJob> allAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList();
+            allAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
             for (AnalyzeJob analyzeJob : allAnalyzeJobs) {
                 analyzeJob.run(statisticExecutor);
             }

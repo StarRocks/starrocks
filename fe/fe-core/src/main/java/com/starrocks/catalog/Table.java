@@ -403,7 +403,7 @@ public class Table extends MetaObject implements Writable {
      * 5. PRIMARY_KEYS table does not support local balance.
      */
     public boolean needSchedule(boolean isLocalBalance) {
-        if (type != TableType.OLAP) {
+        if (!isLocalTable()) {
             return false;
         }
 

@@ -297,11 +297,12 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         ASSIGN_OR_RETURN(auto morsel_queue_factory, scan_node->convert_scan_range_to_morsel_queue_factory(
                                                             scan_ranges, scan_ranges_per_driver_seq, scan_node->id(),
                                                             dop, enable_tablet_internal_parallel));
-        morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
 
         if (auto* olap_scan = dynamic_cast<vectorized::OlapScanNode*>(scan_node)) {
             olap_scan->enable_shared_scan(enable_shared_scan && morsel_queue_factory->is_shared());
         }
+
+        morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
     }
 
     int64_t logical_scan_limit = 0;

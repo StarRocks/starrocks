@@ -94,17 +94,20 @@ struct CompileAssert {};
 // Note, that most uses of DISALLOW_ASSIGN and DISALLOW_COPY are broken
 // semantically, one should either use disallow both or neither. Try to
 // avoid these in new code.
-#undef DISALLOW_COPY_AND_ASSIGN
-#define DISALLOW_COPY_AND_ASSIGN(TypeName) \
-    TypeName(const TypeName&) = delete;    \
+#undef DISALLOW_COPY
+#define DISALLOW_COPY(TypeName)         \
+    TypeName(const TypeName&) = delete; \
     void operator=(const TypeName&) = delete
 
-#undef DISALLOW_COPY_AND_MOVE
-#define DISALLOW_COPY_AND_MOVE(TypeName)      \
-    TypeName(const TypeName&) = delete;       \
-    void operator=(const TypeName&) = delete; \
-    TypeName(TypeName&&) = delete;            \
+#undef DISALLOW_MOVE
+#define DISALLOW_MOVE(TypeName)    \
+    TypeName(TypeName&&) = delete; \
     void operator=(TypeName&&) = delete
+
+#undef DISALLOW_COPY_AND_MOVE
+#define DISALLOW_COPY_AND_MOVE(TypeName) \
+    DISALLOW_COPY(TypeName);             \
+    DISALLOW_MOVE(TypeName)
 
 // A macro to disallow all the implicit constructors, namely the
 // default constructor, copy constructor and operator= functions.
@@ -115,7 +118,7 @@ struct CompileAssert {};
 #ifndef DISALLOW_IMPLICIT_CONSTRUCTORS
 #define DISALLOW_IMPLICIT_CONSTRUCTORS(TypeName) \
     TypeName() = delete;                         \
-    DISALLOW_COPY_AND_ASSIGN(TypeName)
+    DISALLOW_COPY_AND_MOVE(TypeName)
 #endif
 
 // The arraysize(arr) macro returns the # of elements in an array arr.

@@ -138,7 +138,7 @@ public class TabletInvertedIndex {
                     Preconditions.checkState(tabletMetaMap.containsKey(tabletId));
                     TabletMeta tabletMeta = tabletMetaMap.get(tabletId);
 
-                    if (tabletMeta.isUseStarOS()) {
+                    if (tabletMeta.isLakeTablet()) {
                         continue;
                     }
 

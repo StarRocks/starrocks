@@ -523,7 +523,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_LARGEINT> : public ScalarTypeInfoImplB
                 current += snprintf(current, end - current, "%.19" PRIu64, middle);
                 current += snprintf(current, end - current, "%.19" PRIu64, suffix);
                 (void)current; // avoid unused value warning.
-            } else if (OLAP_LIKELY(middle > 0)) {
+            } else if (middle > 0) {
                 current += snprintf(current, end - current, "%" PRIu64, middle);
                 current += snprintf(current, end - current, "%.19" PRIu64, suffix);
                 (void)current; // avoid unused value warning.

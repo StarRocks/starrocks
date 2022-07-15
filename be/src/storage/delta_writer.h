@@ -24,16 +24,12 @@ namespace vectorized {
 class MemTable;
 class MemTableSink;
 
-enum WriteType { LOAD = 1, LOAD_DELETE = 2, DELETE = 3 };
-
 struct DeltaWriterOptions {
     int64_t tablet_id;
     int32_t schema_hash;
-    WriteType write_type;
     int64_t txn_id;
     int64_t partition_id;
     PUniqueId load_id;
-    TupleDescriptor* tuple_desc;
     // slots are in order of tablet's schema
     const std::vector<SlotDescriptor*>* slots;
     vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
@@ -48,7 +44,7 @@ public:
     static StatusOr<std::unique_ptr<DeltaWriter>> open(const DeltaWriterOptions& opt, MemTracker* mem_tracker);
     ~DeltaWriter();
 
-    DISALLOW_COPY_AND_ASSIGN(DeltaWriter);
+    DISALLOW_COPY(DeltaWriter);
 
     // [NOT thread-safe]
     [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
@@ -106,7 +102,6 @@ private:
     DeltaWriter(const DeltaWriterOptions& opt, MemTracker* parent, StorageEngine* storage_engine);
 
     Status _init();
-    Status _prepare();
     Status _flush_memtable_async();
     Status _flush_memtable();
     const char* _state_name(State state) const;
