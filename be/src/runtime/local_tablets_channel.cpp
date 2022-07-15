@@ -13,7 +13,6 @@ DIAGNOSTIC_POP
 
 #include <chrono>
 #include <cstdint>
-#include <shared_mutex>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -30,6 +29,7 @@ DIAGNOSTIC_POP
 #include "runtime/mem_tracker.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
+#include "service/backend_options.h"
 #include "storage/async_delta_writer.h"
 #include "storage/delta_writer.h"
 #include "storage/memtable.h"
@@ -97,9 +97,11 @@ private:
             if (status.ok() || _response == nullptr) {
                 return;
             }
+            std::string msg = fmt::format("{}: {}", BackendOptions::get_localhost(), status.message());
             std::lock_guard l(_response_lock);
             if (_response->status().status_code() == TStatusCode::OK) {
-                status.to_protobuf(_response->mutable_status());
+                _response->mutable_status()->set_status_code(status.code());
+                _response->mutable_status()->add_error_msgs(msg);
             }
         }
 
