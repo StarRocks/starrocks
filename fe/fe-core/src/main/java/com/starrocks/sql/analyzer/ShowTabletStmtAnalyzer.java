@@ -53,8 +53,8 @@ public class ShowTabletStmtAnalyzer {
                 if (CatalogMgr.isInternalCatalog(catalog)) {
                     dbName = ClusterNamespace.getFullName(dbName);
                 }
-                statement.setDbName(dbName);
             }
+            statement.setDbName(dbName);
 
             // partitionNames.
             PartitionNames partitionNames = statement.getPartitionNames();
