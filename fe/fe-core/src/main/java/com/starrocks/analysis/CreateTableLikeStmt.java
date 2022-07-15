@@ -26,7 +26,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public class CreateTableLikeStmt extends DdlStmt {
-    private static final Logger LOG = LogManager.getLogger(CreateTableLikeStmt.class);
 
     private final boolean ifNotExists;
     private final TableName tableName;
