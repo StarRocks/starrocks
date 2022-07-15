@@ -162,7 +162,6 @@ void RuntimeFilterPort::receive_shared_runtime_filter(int32_t filter_id,
     VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(shared). filter_id = " << filter_id
               << ", filter_size = " << rf->size() << ", wait_list_size = " << wait_list.size();
     for (auto* rf_desc : wait_list) {
-        VLOG_FILE << "set shared runtime filter. filter_id = " << rf_desc->filter_id() << ", addr = " << (void*)rf_desc;
         rf_desc->set_shared_runtime_filter(rf);
     }
 }
@@ -208,9 +207,9 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
         if (it == _statuses.end()) return;
         status = &(it->second);
         if (status->arrives.find(be_number) != status->arrives.end()) {
-            VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. duplicated item. filter_id = " << filter_id
-                      << ", be_number = " << be_number;
             // duplicated one, just skip it.
+            VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. duplicated filter_id = " << filter_id
+                      << ", be_number = " << be_number;
             return;
         }
         if (status->stop) {
@@ -245,7 +244,7 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
         return;
     }
 
-    VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. receiver item. filter_id = " << filter_id
+    VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. assembled filter_id = " << filter_id
               << ", be_number = " << be_number;
     status->arrives.insert(be_number);
     status->filters.insert(std::make_pair(be_number, rf));
