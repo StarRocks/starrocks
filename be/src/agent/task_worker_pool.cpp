@@ -683,9 +683,10 @@ Status TaskWorkerPool::_publish_version_in_parallel(void* arg_this, std::unique_
                     EnginePublishVersionTask engine_task(transaction_id, partition_id, version, tablet_info, rowset);
 
                     *status = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
-                    if (status->ok())
+                    if (!status->ok()) {
                         LOG(WARNING) << "failed to publish version for tablet, tablet_id " << tablet_info.tablet_id
                                      << ", txn_id " << transaction_id << ", err: " << *status;
+                    }
                 });
 
                 if (st.ok()) {
