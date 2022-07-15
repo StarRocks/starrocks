@@ -126,6 +126,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     // Enable shared_scan for this fragment: OlapScanOperator could share the output data to avoid data skew
     protected boolean enableSharedScan = true;
 
+    protected boolean assignScanRangesPerDriverSeq = false;
+
     protected final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
     protected final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
 
@@ -247,6 +249,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public boolean isEnableSharedScan() {
         return enableSharedScan;
+    }
+
+    public boolean isAssignScanRangesPerDriverSeq() {
+        return assignScanRangesPerDriverSeq;
+    }
+
+    public void setAssignScanRangesPerDriverSeq(boolean assignScanRangesPerDriverSeq) {
+        this.assignScanRangesPerDriverSeq = assignScanRangesPerDriverSeq;
     }
 
     public void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {
