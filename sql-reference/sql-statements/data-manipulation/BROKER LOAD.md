@@ -20,7 +20,7 @@ Broker Load 通过随 StarRocks 集群一同部署的 broker 进行，访问对�
 ```sql
 LOAD LABEL load_label
 (
-data_desc1[, data_desc2, ...]
+    data_desc1[, data_desc2, ...]
 )
 WITH BROKER broker_name
 [broker_properties]
@@ -215,8 +215,8 @@ WITH BROKER broker_name
 ```sql
 LOAD LABEL example_db.label1
 (
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
-INTO TABLE `my_table`
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
+    INTO TABLE `my_table`
 )
 WITH BROKER my_hdfs_broker
 (
@@ -241,9 +241,9 @@ PROPERTIES
 ```sql
 LOAD LABEL example_db.label3
 (
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/*")
-INTO TABLE `my_table`
-COLUMNS TERMINATED BY "\\x01"
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/*")
+    INTO TABLE `my_table`
+    COLUMNS TERMINATED BY "\\x01"
 )
 WITH BROKER my_hdfs_broker
 (
@@ -264,10 +264,10 @@ WITH BROKER my_hdfs_broker
 ```sql
 LOAD LABEL example_db.label4
 (
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/old_file)
-NEGATIVE
-INTO TABLE `my_table`
-COLUMNS TERMINATED BY "\t"
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/old_file)
+    NEGATIVE
+    INTO TABLE `my_table`
+    COLUMNS TERMINATED BY "\t"
 )
 WITH BROKER my_hdfs_broker
 (
@@ -284,11 +284,11 @@ WITH BROKER my_hdfs_broker
 ```sql
 LOAD LABEL example_db.label5
 (
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
-INTO TABLE `my_table`
-PARTITION (p1, p2)
-COLUMNS TERMINATED BY ","
-(k1, k3, k2, v1, v2)
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
+    INTO TABLE `my_table`
+    PARTITION (p1, p2)
+    COLUMNS TERMINATED BY ","
+    (k1, k3, k2, v1, v2)
 )
 WITH BROKER my_hdfs_broker
 (
@@ -309,30 +309,30 @@ WITH BROKER my_hdfs_broker
 ```SQL
 LOAD LABEL example_db.label7
 (
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
-INTO TABLE `my_table`
-PARTITION (p1, p2)
-COLUMNS TERMINATED BY ","
-(id, k1, k2)
-SET (
-v1 = hll_hash(k1),
-v2 = hll_hash(k2),
-v3 = empty_hll()
-)
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
+    INTO TABLE `my_table`
+    PARTITION (p1, p2)
+    COLUMNS TERMINATED BY ","
+    (id, k1, k2)
+    SET (
+        v1 = hll_hash(k1),
+        v2 = hll_hash(k2),
+        v3 = empty_hll()
+    )
 )
 WITH BROKER hdfs ("username"="hdfs_user", "password"="hdfs_password");
 
 LOAD LABEL example_db.label8
 (
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
-INTO TABLE `my_table`
-PARTITION (p1, p2)
-COLUMNS TERMINATED BY ","
-(k1, k2, tmp_k3, tmp_k4, v1, v2)
-SET (
-v1 = hll_hash(tmp_k3),
-v2 = hll_hash(tmp_k4)
-)
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
+    INTO TABLE `my_table`
+    PARTITION (p1, p2)
+    COLUMNS TERMINATED BY ","
+    (k1, k2, tmp_k3, tmp_k4, v1, v2)
+    SET (
+        v1 = hll_hash(tmp_k3),
+        v2 = hll_hash(tmp_k4)
+    )
 )
 WITH BROKER hdfs ("username"="hdfs_user", "password"="hdfs_password");
 ```
@@ -344,10 +344,10 @@ WITH BROKER hdfs ("username"="hdfs_user", "password"="hdfs_password");
 ```SQL
 LOAD LABEL example_db.label9
 (
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
-INTO TABLE `my_table`
-FORMAT AS "parquet"
-(k1, k2, k3)
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
+    INTO TABLE `my_table`
+    FORMAT AS "parquet"
+    (k1, k2, k3)
 )
 WITH BROKER hdfs ("username"="hdfs_user", "password"="hdfs_password");
 ```
@@ -359,12 +359,12 @@ WITH BROKER hdfs ("username"="hdfs_user", "password"="hdfs_password");
 ```SQL
 LOAD LABEL example_db.label10
 (
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/*/*")
-INTO TABLE `my_table`
-FORMAT AS "csv"
-(k1, k2, k3)
-COLUMNS FROM PATH AS (city, utc_date)
-SET (uniq_id = md5sum(k1, city))
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/*/*")
+    INTO TABLE `my_table`
+    FORMAT AS "csv"
+    (k1, k2, k3)
+    COLUMNS FROM PATH AS (city, utc_date)
+    SET (uniq_id = md5sum(k1, city))
 )
 WITH BROKER hdfs ("username"="hdfs_user", "password"="hdfs_password");
 ```
@@ -382,9 +382,9 @@ hdfs://hdfs_host: hdfs_port/user/starRocks/data/input/dir/city = beijing 目录�
 ```sql
 LOAD LABEL example_db.label10
 (
-DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
-INTO TABLE `my_table`
-where k1 > k2
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
+    INTO TABLE `my_table`
+    where k1 > k2
 )
 ```
 
@@ -394,12 +394,12 @@ where k1 > k2
 
 假设有如下文件：
 
-/user/data/data_time = 2020-02-17 00%3A00%3A00/test.txt
+- `/user/data/data_time = 2020-02-17 00%3A00%3A00/test.txt`
+- `/user/data/data_time = 2020-02-18 00%3A00%3A00/test.txt`
 
-/user/data/data_time = 2020-02-18 00%3A00%3A00/test.txt
+表结构为：
 
 ```PLAIN TEXT
-表结构为：
 data_time DATETIME,
 k2        INT,
 k3        INT
@@ -408,12 +408,12 @@ k3        INT
 ```SQL
 LOAD LABEL example_db.label11
 (
-DATA INFILE("hdfs://host:port/user/data/*/test.txt")
-INTO TABLE `tbl12`
-COLUMNS TERMINATED BY ","
-(k2,k3)
-COLUMNS FROM PATH AS (data_time)
-SET (data_time=str_to_date(data_time, '%Y-%m-%d %H%%3A%i%%3A%s'))
+    DATA INFILE("hdfs://host:port/user/data/*/test.txt")
+    INTO TABLE `tbl12`
+    COLUMNS TERMINATED BY ","
+    (k2,k3)
+    COLUMNS FROM PATH AS (data_time)
+    SET (data_time=str_to_date(data_time, '%Y-%m-%d %H%%3A%i%%3A%s'))
 )
 WITH BROKER "hdfs" ("username"="user", "password"="pass");
 ```
@@ -423,9 +423,9 @@ WITH BROKER "hdfs" ("username"="user", "password"="pass");
 ```SQL
 LOAD LABEL example_db.label12
 (
-DATA INFILE("oss://my_bucket/input/file.csv")
-INTO TABLE `my_table`
-(k1, k2, k3)
+    DATA INFILE("oss://my_bucket/input/file.csv")
+    INTO TABLE `my_table`
+    (k1, k2, k3)
 )
 WITH BROKER my_broker
 (
@@ -440,9 +440,9 @@ WITH BROKER my_broker
 ```SQL
 LOAD LABEL example_db.label13
 (
-DATA INFILE("cosn://my_bucket/input/file.csv")
-INTO TABLE `my_table`
-(k1, k2, k3)
+    DATA INFILE("cosn://my_bucket/input/file.csv")
+    INTO TABLE `my_table`
+    (k1, k2, k3)
 )
 WITH BROKER my_broker
 (
@@ -457,9 +457,9 @@ WITH BROKER my_broker
 ```SQL
 LOAD LABEL example_db.label14
 (
-DATA INFILE("s3a://my_bucket/input/file.csv")
-INTO TABLE `my_table`
-(k1, k2, k3)
+    DATA INFILE("s3a://my_bucket/input/file.csv")
+    INTO TABLE `my_table`
+    (k1, k2, k3)
 )
 WITH BROKER my_broker
 (
