@@ -769,8 +769,8 @@ showProcStatement
 // ---------------------------------------- Backup Store Statement -----------------------------------------------------
 restoreStatement
     : RESTORE SNAPSHOT qualifiedName
-    TO identifier
-    ON '(' restoreTableDesc restoreTableDesc * ')'
+    FROM identifier
+    ON '(' restoreTableDesc (',' restoreTableDesc) * ')'
     (PROPERTIES propertyList)?
     ;
 
