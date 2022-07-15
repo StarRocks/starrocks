@@ -14,7 +14,7 @@ json_exists(json_object_expr, json_path)
 
 - `json_object_expr`: the expression that represents the JSON object. The object can be a JSON column, or a JSON object that is produced by a JSON constructor function such as PARSE_JSON.
 
-- `json_path`: the expression that represents the path to an element in the JSON object. The value of this parameter is a string. For information about the JSON path syntax that is supported by StarRocks, see [Overview of JSON functions and operators](/sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators.md).
+- `json_path`: the expression that represents the path to an element in the JSON object. The value of this parameter is a string. For information about the JSON path syntax that is supported by StarRocks, see [Overview of JSON functions and operators](../overview-of-json-functions-and-operators.md).
 
 ## Return value
 
