@@ -109,9 +109,6 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
-import com.starrocks.catalog.lake.LakeTable;
-import com.starrocks.catalog.lake.LakeTablet;
-import com.starrocks.catalog.lake.StorageInfo;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
@@ -133,6 +130,9 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
@@ -4230,7 +4230,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         if (olapTable.isLakeTable()) {
                             tabletIds.add(tabletId);
                         }
-                        
+
                     } // end for tablets
                 } // end for indices
             } // end for partitions

@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.catalog;
+package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -138,17 +138,17 @@ public class StarOSAgentTest {
 
     @Test
     public void testAddAndRemoveWorker() throws Exception {
-         new Expectations() {
-             {
-                 client.addWorker(1L, "127.0.0.1:8090");
-                 minTimes = 0;
-                 result = 10;
+        new Expectations() {
+            {
+                client.addWorker(1L, "127.0.0.1:8090");
+                minTimes = 0;
+                result = 10;
 
-                 client.removeWorker(1L, 10);
-                 minTimes = 0;
-                 result = null;
-             }
-         };
+                client.removeWorker(1L, 10);
+                minTimes = 0;
+                result = null;
+            }
+        };
 
         String workerHost = "127.0.0.1:8090";
         Deencapsulation.setField(starosAgent, "serviceId", 1L);
@@ -160,7 +160,7 @@ public class StarOSAgentTest {
     }
 
     @Test
-    public void testAddWorkerException() throws Exception  {
+    public void testAddWorkerException() throws Exception {
         new Expectations() {
             {
                 client.addWorker(1L, "127.0.0.1:8090");
@@ -178,7 +178,6 @@ public class StarOSAgentTest {
         starosAgent.addWorker(5, workerHost);
         Assert.assertEquals(6, starosAgent.getWorkerId(workerHost));
         Assert.assertEquals(6, starosAgent.getWorkerIdByBackendId(5));
-
 
         new Expectations() {
             {
@@ -320,7 +319,6 @@ public class StarOSAgentTest {
                 () -> starosAgent.getPrimaryBackendIdByShard(10L));
 
         Assert.assertEquals(Sets.newHashSet(), starosAgent.getBackendIdsByShard(10L));
-
 
         workerToBackend.put(1L, 10001L);
         workerToBackend.put(2L, 10002L);

@@ -9,9 +9,9 @@ import com.google.gson.Gson;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.lake.LakeTable;
-import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.util.ListComparator;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.monitor.unit.ByteSizeValue;
 
 import java.util.Collections;

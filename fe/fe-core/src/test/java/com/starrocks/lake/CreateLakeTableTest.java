@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.catalog.lake;
+package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
 import com.staros.proto.ObjectStorageInfo;
@@ -8,7 +8,6 @@ import com.staros.proto.ShardStorageInfo;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.StarOSAgent;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
@@ -24,8 +23,6 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.util.Map;
 
 public class CreateLakeTableTest {
     private static ConnectContext connectContext;
