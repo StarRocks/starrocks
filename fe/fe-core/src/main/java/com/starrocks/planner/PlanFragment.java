@@ -126,6 +126,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     // Enable shared_scan for this fragment: OlapScanOperator could share the output data to avoid data skew
     protected boolean enableSharedScan = true;
 
+    // Whether to assign scan ranges to each driver sequence of pipeline,
+    // for the normal backend assignment (not colocate, bucket, and replicated join).
     protected boolean assignScanRangesPerDriverSeq = false;
 
     protected final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
