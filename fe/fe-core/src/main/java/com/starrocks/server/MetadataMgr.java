@@ -9,10 +9,14 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.util.ListComparator;
 import com.starrocks.connector.ConnectorMetadata;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -112,6 +116,21 @@ public class MetadataMgr {
     public Table getTable(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         return connectorMetadata.map(metadata -> metadata.getTable(dbName, tblName)).orElse(null);
+    }
+
+    public static void convertToMetaResult(BaseProcResult result, List<List<Comparable>> infos) {
+        // order by asc
+        ListComparator<List<Comparable>> comparator = new ListComparator<List<Comparable>>(0);
+        Collections.sort(infos, comparator);
+
+        // set result
+        for (List<Comparable> info : infos) {
+            List<String> row = new ArrayList<String>(info.size());
+            for (Comparable comparable : info) {
+                row.add(String.valueOf(comparable));
+            }
+            result.addRow(row);
+        }
     }
 
     private void readLock() {
