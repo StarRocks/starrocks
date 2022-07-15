@@ -805,6 +805,12 @@ PROPERTIES ( "type" = "iceberg", "starrocks.catalog-type"="HIVE", "iceberg.catal
 | starrocks.catalog-type              | 资源的 catalog。目前支持 Hive catalog 和 custom catalog。 如要使用 Hive catalog， 设置该参数为 `HIVE`。 如要使用 custom catalog，设置该参数为 `CUSTOM`。 |
 | iceberg.catalog.hive.metastore.uris | Hive Metastore 的 URI。格式为 `thrift://<Iceberg 元数据的IP地址>:<端口号>`，端口号默认为 9083。Apache Iceberg 通过 Hive catalog 连接 Hive metastore，以查询 Iceberg 表的元数据。 |
 
+* Iceberg 外表是只读的，只能用于查询操作。
+* 支持 Iceberg 的表格式为 V1（Copy on write 表），暂不支持为 V2（Merge on read 表）。V1 和 V2 之间的更多区别，请参见 [Apache Iceberg 官网](https://iceberg.apache.org/#spec/#format-versioning)。
+* 支持 Iceberg 文件的压缩格式为 GZIP（默认值），ZSTD，LZ4 和 SNAPPY。
+* 支持 Iceberg 的 Catalog 类型为 Hive Catalog 和 Custom Catalog，数据存储格式为 Parquet 和 ORC。
+* StarRocks 暂不⽀持同步 Iceberg 中的 [schema evolution](https://iceberg.apache.org/#evolution#schema-evolution)，如果 Iceberg 表 schema evolution 发生变更，您需要在 StarRocks 中删除对应 Iceberg 外表并重新建立。
+
 **创建 catalog 类型为 `CUSTOM` 的资源**
 
 Custom catalog 需要继承抽象类 BaseMetastoreCatalog，并实现 IcebergCatalog 接口。更多有关开发 custom catalog 的信息，参考 [IcebergHiveCatalog](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/main/java/com/starrocks/external/iceberg/IcebergHiveCatalog.java)。此外，custom catalog 类名不能与 StarRocks 中已存在的类名重复。开发完成后，您需要将 custom catalog 及其相关文件打包并放到所有 FE 节点的 **fe/lib** 路径下，然后重启所有 FE 节点，以便 FE 识别这个类。以上操作完成后即可创建资源。
@@ -814,10 +820,37 @@ Custom catalog 需要继承抽象类 BaseMetastoreCatalog，并实现 IcebergCat
 ~~~SQL
 CREATE EXTERNAL RESOURCE "iceberg1" 
 
+执行如下命令，创建一个名为 `iceberg0` 的 Iceberg Hive Catalog 资源。
+
 PROPERTIES ( "type" = "iceberg", "starrocks.catalog-type"="CUSTOM", "iceberg.catalog-impl"="com.starrocks.IcebergCustomCatalog" 
 
 );
 ~~~
+
+|  参数   | 说明  |
+|  ----  | ----  |
+| type  | 资源类型，固定取值为 **iceberg**。 |
+| starrocks.catalog-type  | Iceberg 的 Catalog 类型。目前仅支持为 Hive Catalog 或 Custom Catalog，Hive Catalog 取值为 HIVE。 |
+| iceberg.catalog.hive.metastore.uris | Hive Metastore 的 thrift URI。<br> Iceberg 通过创建 Hive Catalog，连接 Hive Metastore，以创建并管理表。您需要传入该 Hive Metastore 的 thrift URI。格式为 **thrift://<Hive Metadata的IP地址>:<端口号>**，端口号默认为 9083。 |
+
+如果 Hive Catalog 无法满足您的使用需求，您可以按下述规则开发一个自定义的 Iceberg Catalog 类。这个类需要继承抽象类 BaseMetastoreCatalog，并实现 IcebergCatalog 接口，要编写的具体内容可参考 IcebergHiveCatalog。类名请不要与 StarRocks 中已存在的类冲突。开发完成后，您还需将这个类及其相关文件打包并放到**全部** FE 节点的 `fe/lib` 路径下，然后重启 FE 节点，此时这个类即可被 FE 识别。
+
+执行如下命令，创建一个名为 `iceberg1` 的 Iceberg Custom Catalog 资源。
+
+~~~sql
+CREATE EXTERNAL RESOURCE "iceberg1" 
+PROPERTIES ( 
+"type" = "iceberg", 
+"starrocks.catalog-type"="CUSTOM", 
+"iceberg.catalog-impl"="com.starrocks.IcebergCustomCatalog" 
+);
+~~~
+
+|  参数   | 说明  |
+|  ----  | ----  |
+| type  | 资源类型，固定取值为 **iceberg**。 |
+| starrocks.catalog-type  | Iceberg 的 Catalog 类型。目前仅支持为 Hive Catalog 或Custom Catalog，Custom Catalog 取值为 CUSTOM。 |
+| iceberg.catalog-impl | 您编写的 Custom Catalog 的**全限定类名**，FE 会根据类名寻找您编写的 Custom Catalog。如您编写的类中包含自定义的配置项，请在步骤三创建 Iceberg 外表时添加到 SQL 语句的 **PROPERTIES** 中。 |
 
 参数说明：
 
@@ -891,6 +924,25 @@ PROPERTIES (
 | resource | 外部表引用的 Iceberg 资源的名称。 |
 | database | Iceberg 表所属的数据库的名称。    |
 | table    | Iceberg 表名称。                  |
+
+* 表名无需与 Iceberg 的实际表名保持一致。
+* 列名需要与 Iceberg 的实际列名保持一致，列的顺序无需保持一致。
+* 如果 RESOURCE 类型为 **CUSTOM**，且您编写的 Custom Catalog 中定义了其他配置项，可以将其以键值对形式填入 SQL 语句的 **PROPERTIES** 中。StarRocks 在建表及执行 Iceberg 外表查询时能够识别并加载这些配置项。假设 Custom Catalog 定义了一个配置项 `custom-catalog.properties`，则建表命令为
+
+~~~sql
+CREATE EXTERNAL TABLE `iceberg_tbl` ( 
+    `id` bigint NULL, 
+    `data` varchar(200) NULL 
+) ENGINE=ICEBERG 
+PROPERTIES ( 
+    "resource" = "iceberg0", 
+    "database" = "iceberg", 
+    "table" = "iceberg_table",
+    "custom-catalog.properties" = "my_property"
+); 
+~~~
+
+* 您可以按照业务需求选择 Iceberg 表中的全部或部分列。支持的数据类型以及与 StarRocks 对应关系，请参见下表。
 
 > 说明：
    >
