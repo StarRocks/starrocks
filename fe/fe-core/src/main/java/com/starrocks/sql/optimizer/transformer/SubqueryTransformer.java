@@ -82,13 +82,19 @@ public class SubqueryTransformer {
             if (!(e.getChild(1) instanceof Subquery)) {
                 continue;
             }
-            ColumnRefOperator columnRefOperator = subOpt.getExpressionMapping().get(e);
-            s.remove(columnRefOperator);
+
+            if (((Subquery) e.getChild(1)).isUseSemiAnti()) {
+                ColumnRefOperator columnRefOperator = subOpt.getExpressionMapping().get(e);
+                s.remove(columnRefOperator);
+            }
         }
 
         for (ExistsPredicate e : existsSubquerys) {
-            ColumnRefOperator columnRefOperator = subOpt.getExpressionMapping().get(e);
-            s.remove(columnRefOperator);
+            Preconditions.checkState(e.getChild(0) instanceof Subquery);
+            if (((Subquery) e.getChild(0)).isUseSemiAnti()) {
+                ColumnRefOperator columnRefOperator = subOpt.getExpressionMapping().get(e);
+                s.remove(columnRefOperator);
+            }
         }
 
         scalarPredicate = Utils.compoundAnd(s);
@@ -180,6 +186,7 @@ public class SubqueryTransformer {
                     new OptExprBuilder(applyOperator, Arrays.asList(context.builder, subqueryPlan.getRootBuilder()),
                             context.builder.getExpressionMapping());
 
+            ((Subquery) inPredicate.getChild(1)).setUseSemiAnti(context.useSemiAnti);
             return context.builder;
         }
 
@@ -207,6 +214,7 @@ public class SubqueryTransformer {
                     new OptExprBuilder(applyOperator, Arrays.asList(context.builder, subqueryPlan.getRootBuilder()),
                             context.builder.getExpressionMapping());
 
+            ((Subquery) existsPredicate.getChild(0)).setUseSemiAnti(context.useSemiAnti);
             return context.builder;
         }
 

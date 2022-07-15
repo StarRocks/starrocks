@@ -953,25 +953,4 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setEnablePipelineEngine(false);
     }
-
-    @Test
-    public void testLimitSemiJoin() throws Exception {
-        String sql = "select * from t0 " +
-                "        left semi join t2 on t0.v1 = t2.v7 " +
-                "        left semi join t1 on t0.v1 = t1.v4 " +
-                "limit 25;";
-        String plan = getFragmentPlan(sql);
-
-        assertContains(plan, "  7:HASH JOIN\n" +
-                "  |  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: v1 = 7: v4\n" +
-                "  |  limit: 25");
-        assertContains(plan, "  3:HASH JOIN\n" +
-                "  |  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: v1 = 4: v7\n" +
-                "  |  \n" +
-                "  |----2:EXCHANGE");
-    }
 }
