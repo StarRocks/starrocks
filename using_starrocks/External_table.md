@@ -80,7 +80,24 @@ PROPERTIES (
 * **type**：指定index的type，默认是**doc**
 * **transport**：内部保留，默认为**http**
 
-<br/>
+创建外部表时，需根据 Elasticsearch 的字段类型指定 StarRocks 中外部表的列类型，具体映射关系如下：
+
+| **Elasticsearch**          | **StarRocks**                     |
+| -------------------------- | --------------------------------- |
+| BOOLEAN                    | BOOLEAN                           |
+| BYTE                       | TINYINT/SMALLINT/INT/BIGINT       |
+| SHORT                      | SMALLINT/INT/BIGINT               |
+| INTEGER                    | INT/BIGINT                        |
+| LONG                       | BIGINT                            |
+| FLOAT                      | FLOAT                             |
+| DOUBLE                     | DOUBLE                            |
+| KEYWORD                    | CHAR/VARCHAR                      |
+| TEXT                       | CHAR/VARCHAR                      |
+| DATE                       | DATE/DATETIME                     |
+| NESTED                     | CHAR/VARCHAR                      |
+| OBJECT                     | CHAR/VARCHAR                      |
+
+> 说明：StarRocks 会通过 JSON 相关函数读取嵌套字段。
 
 ### 谓词下推
 
@@ -255,27 +272,26 @@ PROPERTIES (
   * **hive.resource**：指定使用的Hive资源。
   * **database**：指定Hive中的数据库。
   * **table**：指定Hive中的表，**不支持view**。
-* 支持的列类型对应关系如下表：
+* 创建外部表时，需根据 Hive 表列类型指定 StarRocks 中外部表列类型，具体映射关系如下：
 
-    |  Hive列类型   | StarRocks列类型    | 描述 |
-    | --- | --- | ---|
-    | INT/INTEGER | INT    |
-    | BIGINT  | BIGINT    |
-    | TIMESTAMP  | DATETIME    |TIMESTAMP转成DATETIME，会损失精度和时区信息，<br/>根据sessionVariable中的时区转成无时区DATETIME|
-    | STRING  | VARCHAR   |
-    | VARCHAR  | VARCHAR   |
-    | CHAR  | CHAR   |
-    | DOUBLE | DOUBLE |
-    | FLOATE | FLOAT|
-    | DECIMAL | DECIMAL |
-    | BOOLEAN | BOOLEAN |
+| **Hive**      | **StarRocks**                                                |
+| ------------- | ------------------------------------------------------------ |
+| INT/INTEGER | INT                                                          |
+| BIGINT        | BIGINT                                                       |
+| TIMESTAMP     | DATETIME <br />注意 TIMESTAMP 转成 DATETIME会损失精度和时区信息，并根据 sessionVariable 中的时区转成无时区 DATETIME。 |
+| STRING        | VARCHAR                                                      |
+| VARCHAR       | VARCHAR                                                      |
+| CHAR          | CHAR                                                         |
+| DOUBLE        | DOUBLE                                                       |
+| FLOAT         | FLOAT                                                        |
+| DECIMAL       | DECIMAL                                                      |
+| ARRAY         | ARRAY                                                        |
 
-    说明：
+说明：
 
-  * Hive表Schema变更**不会自动同步**，需要在StarRocks中重建Hive外表。
-  * 支持Hive的存储格式为Parquet，ORC和CSV格式。
-    > 如果为CSV格式，则暂不支持引号为转义字符。
-  * 压缩格式支持snappy，lz4。
+* Hive 表 Schema 变更 **不会自动同步**，需要在 StarRocks 中重建 Hive 外表。
+* 支持 Hive 的存储格式为 Parquet，ORC 和 CSV 格式。如果为 CSV 格式，则暂不支持使用引号作为转义字符。
+* 压缩格式支持 Snappy 和 LZ4。
 
 <br/>
 
@@ -555,25 +571,25 @@ PROPERTIES (
 
 * 表名无需与Iceberg的实际表名保持一致。
 * 列名需要与Iceberg的实际列名保持一致，列的顺序无需保持一致。
-* 您可以按照业务需求选择Iceberg表中的全部或部分列。支持的数据类型以及与StarRocks对应关系，请参见下表。
+* 您可以按照业务需求选择Iceberg表中的全部或部分列。创建外部表时，需根据 Iceberg 表的列类型指定 StarRocks 中外部表的列类型，具体映射关系如下：
 
-| Apache Iceberg中列的数据类型 | StarRocks中列的数据类型 |
-| ---------------------------- | ----------------------- |
-| BOOLEAN                      | BOOLEAN                 |
-| INT                          | TINYINT/SMALLINT/INT    |
-| LONG                         | BIGINT                  |
-| FLOAT                        | FLOAT                   |
-| DOUBLE                       | DOUBLE                  |
-| DECIMAL(P,S)                 | DECIMAL                 |
-| DATE                         | DATE/DATETIME           |
-| TIME                         | BIGINT                  |
-| TIMESTAMP                    | DATETIME                |
-| STRING                       | STRING/VARCHAR          |
-| UUID                         | STRING/VARCHAR          |
-| FIXED(L)                     | CHAR                    |
-| BINARY                       | VARCHAR                 |
+| **Iceberg**    | **StarRocks**            |
+| -------------- | ------------------------ |
+| BOOLEAN        | BOOLEAN                  |
+| INT            | TINYINT/SMALLINT/INT     |
+| LONG           | BIGINT                   |
+| FLOAT          | FLOAT                    |
+| DOUBLE         | DOUBLE                   |
+| DECIMAL(P, S)  | DECIMAL                  |
+| DATE           | DATE/DATETIME            |
+| TIME           | BIGINT                   |
+| TIMESTAMP      | DATETIME                 |
+| STRING         | STRING/VARCHAR           |
+| UUID           | STRING/VARCHAR           |
+| FIXED(L)       | CHAR                     |
+| BINARY         | VARCHAR                  |
 
-> 如果Apache Iceberg部分列的数据类型为TIMESTAMPTZ、STRUCT、LIST、MAP，则StarRocks暂不支持通过Iceberg关联外表的方式访问此数据类型。
+StarRocks 不支持查询以下类型的数据： TIMESTAMPTZ、STRUCT、LIST 和 MAP。
 
 #### 步骤四：查询Iceberg外表
 
