@@ -55,12 +55,23 @@ public class Subquery extends Expr {
     // A subquery has its own analysis context
     protected Analyzer analyzer;
 
+    // mark work way
+    protected boolean useSemiAnti;
+
     public Analyzer getAnalyzer() {
         return analyzer;
     }
 
     public QueryStmt getStatement() {
         return stmt;
+    }
+
+    public boolean isUseSemiAnti() {
+        return useSemiAnti;
+    }
+
+    public void setUseSemiAnti(boolean useSemiAnti) {
+        this.useSemiAnti = useSemiAnti;
     }
 
     @Override
