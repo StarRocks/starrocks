@@ -111,6 +111,7 @@ import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowSnapshotStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
@@ -203,6 +204,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.SetQualifier;
 import com.starrocks.system.SystemInfoService;
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
@@ -217,6 +219,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
@@ -232,7 +235,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitSingleStatement(StarRocksParser.SingleStatementContext context) {
         return visit(context.statement());
     }
-
 
     // ---------------------------------------- Database Statement -----------------------------------------------------
     @Override
@@ -250,7 +252,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     quotaValue);
         }
     }
-
 
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
@@ -274,7 +275,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
         return new ShowCreateDbStmt(dbName);
     }
-
 
     @Override
     public ParseNode visitAlterDatabaseRename(StarRocksParser.AlterDatabaseRenameContext context) {
@@ -1932,6 +1932,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new ShowVariablesStmt(getVariableType(context.varType()), pattern, where);
+    }
+
+    // ------------------------------------------- Backup Store Statement ----------------------------------------------
+    @Override
+    public ParseNode visitShowSnapshotStatement(StarRocksParser.ShowSnapshotStatementContext context) {
+        StarRocksParser.ExpressionContext expression = context.expression();
+        Expr where = null;
+        if (expression != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        String repoName = context.identifier().getText();
+        if (repoName != null && repoName.startsWith("`") && repoName.endsWith("`")) {
+            repoName = repoName.substring(1, repoName.length() - 1);
+        }
+
+        return new ShowSnapshotStmt(repoName, where);
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------

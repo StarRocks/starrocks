@@ -25,6 +25,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class ShowSnapshotStmt extends ShowStmt {
     public static final ImmutableList<String> SNAPSHOT_ALL = new ImmutableList.Builder<String>()
@@ -147,6 +148,11 @@ public class ShowSnapshotStmt extends ShowStmt {
             }
         }
         return builder.build();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowSnapshotStmt(this, context);
     }
 
 }

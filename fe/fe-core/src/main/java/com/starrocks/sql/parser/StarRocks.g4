@@ -108,6 +108,9 @@ statement
 
     // procedure
     | showProcedureStatment                                                                 #showProcedure
+
+    //  Backup Store Satement
+    | showSnapshotStatement                                                                 #showSnapshot
     ;
 
 
@@ -672,6 +675,12 @@ tabletList
 // ------------------------------------------- Procedure Statement ---------------------------------------------------------
 showProcedureStatment
     : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
+    ;
+
+// ---------------------------------------- Backup Store Statement -----------------------------------------------------
+showSnapshotStatement
+    : SHOW SNAPSHOT ON identifier
+    (WHERE expression)?
     ;
 // ------------------------------------------- Expression --------------------------------------------------------------
 
