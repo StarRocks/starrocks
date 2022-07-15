@@ -23,6 +23,7 @@ import com.starrocks.analysis.BackendClause;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
@@ -122,6 +123,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitAlterTableStatement(AlterTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitCancelAlterTableStatement(CancelAlterTableStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 

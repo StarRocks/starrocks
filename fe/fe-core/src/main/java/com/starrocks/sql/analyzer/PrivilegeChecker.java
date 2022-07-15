@@ -12,6 +12,7 @@ import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
@@ -168,6 +169,20 @@ public class PrivilegeChecker {
             if (!checkTblPriv(session, statement.getTableName(), PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, session.getQualifiedUser(),
                         statement.getTableName().toString());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCancelAlterTableStatement(CancelAlterTableStmt statement, ConnectContext session) {
+            TableName dbTableName = statement.getDbTableName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbTableName.getDb(),
+                    dbTableName.getTbl(),
+                    PrivPredicate.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "CANCEL ALTER TABLE",
+                        ConnectContext.get().getQualifiedUser(),
+                        ConnectContext.get().getRemoteIP(),
+                        dbTableName.getTbl());
             }
             return null;
         }
