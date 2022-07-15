@@ -91,7 +91,6 @@ public class Database extends MetaObject implements Writable {
 
     private long id;
     private String fullQualifiedName;
-    private String clusterName = SystemInfoService.DEFAULT_CLUSTER;
     private QueryableReentrantReadWriteLock rwLock;
 
     // table family group map
@@ -565,7 +564,7 @@ public class Database extends MetaObject implements Writable {
         }
 
         out.writeLong(dataQuotaBytes);
-        Text.writeString(out, clusterName);
+        Text.writeString(out, SystemInfoService.DEFAULT_CLUSTER);
         // compatible for dbState
         Text.writeString(out, "NORMAL");
         // NOTE: compatible attachDbName
