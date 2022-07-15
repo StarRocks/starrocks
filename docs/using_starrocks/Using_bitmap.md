@@ -35,7 +35,7 @@ Count `uv` grouping by `page`
 
 For the SQL of PV calculation, StarRocks will do the calculation according to the following figure. First, group by the page column and user_id column, and then count.
 
-![alter](/assets/6.1.2-2.png)
+![alter](../assets/6.1.2-2.png)
 
 * Note: The figure shows a schematic of 6 rows of data computed on 2 BE nodes
 
