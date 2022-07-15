@@ -110,6 +110,8 @@ public class OlapScanNode extends ScanNode {
     private long selectedIndexId = -1;
     private int selectedPartitionNum = 0;
     private Collection<Long> selectedPartitionIds = Lists.newArrayList();
+    private Collection<String> selectedPartitionNames = Lists.newArrayList();
+    private Collection<Long> selectedPartitionVersions = Lists.newArrayList();
     private long actualRows = 0;
 
     // List of tablets will be scanned by current olap_scan_node
@@ -146,6 +148,14 @@ public class OlapScanNode extends ScanNode {
 
     public Collection<Long> getSelectedPartitionIds() {
         return selectedPartitionIds;
+    }
+
+    public Collection<String> getSelectedPartitionNames() {
+        return selectedPartitionNames;
+    }
+
+    public Collection<Long> getSelectedPartitionVersions() {
+        return selectedPartitionVersions;
     }
 
     // The dict id int column ids to dict string column ids
@@ -283,7 +293,8 @@ public class OlapScanNode extends ScanNode {
         String schemaHashStr = String.valueOf(schemaHash);
         long visibleVersion = partition.getVisibleVersion();
         String visibleVersionStr = String.valueOf(visibleVersion);
-
+        selectedPartitionNames.add(partition.getName());
+        selectedPartitionVersions.add(visibleVersion);
         for (Tablet tablet : tablets) {
             long tabletId = tablet.getId();
             LOG.debug("{} tabletId={}", (logNum++), tabletId);

@@ -75,8 +75,8 @@ public class CreateMaterializedViewTest {
                         ")\n" +
                         "PARTITION BY RANGE(k1)\n" +
                         "(\n" +
-                        "    PARTITION p1 values less than('2020-02-01'),\n" +
-                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        "    PARTITION p1 values [('2020-01-01'),('2020-02-01')),\n" +
+                        "    PARTITION p2 values [('2020-02-01'),('2020-03-01'))\n" +
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
@@ -413,11 +413,11 @@ public class CreateMaterializedViewTest {
         Assert.assertEquals(2, mvPartitions.size());
         Assert.assertEquals(baseTablePartitions.size(), mvPartitions.size());
         Assert.assertEquals(1, materializedView.getTableMvPartitionNameRefMap("p1").size());
-        Assert.assertEquals("p00000101_20200201",
+        Assert.assertEquals("p20200101_20200201",
                 materializedView.getTableMvPartitionNameRefMap("p1").iterator().next());
-        Assert.assertEquals(1, materializedView.getMvTablePartitionNameRefMap("p00000101_20200201").size());
+        Assert.assertEquals(1, materializedView.getMvTablePartitionNameRefMap("p20200101_20200201").size());
         Assert.assertEquals("p1",
-                materializedView.getMvTablePartitionNameRefMap("p00000101_20200201").iterator().next());
+                materializedView.getMvTablePartitionNameRefMap("p20200101_20200201").iterator().next());
         Assert.assertEquals(1, materializedView.getTableMvPartitionNameRefMap("p2").size());
         Assert.assertEquals("p20200201_20200301",
                 materializedView.getTableMvPartitionNameRefMap("p2").iterator().next());
@@ -459,12 +459,14 @@ public class CreateMaterializedViewTest {
         new StmtExecutor(connectContext, addPartitionSql).execute();
         taskManager.executeTask(mvTaskName);
         waitingTaskFinish();
+        Assert.assertEquals(2, mvPartitions.size());
         Assert.assertNotNull(baseTableVisibleVersionMap.get(tbl2.getId()).get("p3"));
         // drop tbl2 partition p3
         dropPartitionSql = "ALTER TABLE test.tbl2 DROP PARTITION p3\n";
         new StmtExecutor(connectContext, dropPartitionSql).execute();
         taskManager.executeTask(mvTaskName);
         waitingTaskFinish();
+        Assert.assertEquals(2, mvPartitions.size());
         Assert.assertNull(baseTableVisibleVersionMap.get(tbl2.getId()).get("p3"));
     }
 
