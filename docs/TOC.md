@@ -347,7 +347,7 @@
   + [Build in Docker](./administration/Build_in_docker.md)
   + [Manage a cluster](./administration/Cluster_administration.md)
   + [Configuration](./administration/Configuration.md)
-  + [Scale in and uut](./administration/Scale_up_down.md)
+  + [Scale in and out](./administration/Scale_up_down.md)
   + [Backup and restore](./administration/Backup_and_restore.md)
   + [Deploy StarRocks with StarGo](./administration/stargo.md)
   + Data Recovery
