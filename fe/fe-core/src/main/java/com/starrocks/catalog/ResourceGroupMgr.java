@@ -388,16 +388,10 @@ public class ResourceGroupMgr implements Writable {
                 if (twg.getVersion() < minVersion) {
                     continue;
                 }
-<<<<<<< HEAD
-                boolean active = activeWorkGroup.containsKey(twg.getId());
-                if ((!active && id2WorkGroupMap.containsKey(twg.getId())) ||
-                        (active && twg.getVersion() > activeWorkGroup.get(twg.getId()).getVersion())) {
-                    currentWorkGroupOps.add(op);
-=======
-                if ((!activeResourceGroup.containsKey(twg.getId()) && id2ResourceGroupMap.containsKey(twg.getId())) ||
-                        twg.getVersion() > activeResourceGroup.get(twg.getId()).getVersion()) {
+                boolean active = activeResourceGroup.containsKey(twg.getId());
+                if ((!active && id2ResourceGroupMap.containsKey(twg.getId())) ||
+                        (active && twg.getVersion() > activeResourceGroup.get(twg.getId()).getVersion())) {
                     currentResourceGroupOps.add(op);
->>>>>>> 6d0746b15 (rename workgroup to resourcegroup 2)
                 }
             }
             return currentResourceGroupOps;
