@@ -77,6 +77,21 @@ public class AnalyzeAlterTableStatementTest {
     }
 
     @Test
+    public void testModifyTableProperties() {
+        analyzeSuccess("ALTER TABLE test.t0 SET (\"default.replication_num\" = \"2\");");
+        analyzeFail("ALTER TABLE test.t0 SET (\"default.replication_num\" = \"2\", \"dynamic_partition.enable\" = \"true\");",
+                "Can only set one table property at a time");
+        analyzeFail("ALTER TABLE test.t0 SET (\"abc\" = \"2\");",
+                "Unknown table property: [abc]");
+        analyzeFail("ALTER TABLE test.t0 SET (\"send_clear_alter_tasks\" = \"FALSE\");",
+                "Property send_clear_alter_tasks should be set to true");
+        analyzeFail("ALTER TABLE test.t0 SET (\"storage_format\" = \"V1\");",
+                "Property storage_format should be v2");
+        analyzeFail("ALTER TABLE test.t0 SET (\"tablet_type\" = \"V1\");",
+                "Alter tablet type not supported");
+    }
+
+    @Test
     public void testRenameMaterializedViewPartition() throws Exception {
         AnalyzeTestUtil.getStarRocksAssert().withTable("CREATE TABLE test.table_to_create_mv\n" +
                 "(\n" +

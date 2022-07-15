@@ -61,6 +61,11 @@ public class CreateTableTest {
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
     }
 
+    private static void alterTableWithNewParser(String sql) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+    }
+
     @Test
     public void testNormal() throws DdlException {
 
@@ -253,7 +258,7 @@ public class CreateTableTest {
         ));
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Invalid bloom filter column 'k3': unsupported type JSON",
-                () -> alterTable("ALTER TABLE test.t_json_bloomfilter set (\"bloom_filter_columns\"= \"k3\");"));
+                () -> alterTableWithNewParser("ALTER TABLE test.t_json_bloomfilter set (\"bloom_filter_columns\"= \"k3\");"));
 
         // Modify column in unique key
         ExceptionChecker.expectThrowsNoException(() -> createTable(
