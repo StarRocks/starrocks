@@ -56,9 +56,9 @@ mysql> SHOW PROC '/frontends'\G
 
 ***1\. row***
 
-Name: 172.26.108.172_9010_1584965098874
+Name: 172.26.x.x_9010_1584965098874
 
-IP: 172.26.108.172
+IP: 172.26.x.x
 
 HostName: starrocks-sandbox01
 
@@ -76,9 +76,9 @@ Alive: true
 
 ***2\. row***
 
-Name: 172.26.108.174_9010_1584965098874
+Name: 172.26.x.x_9010_1584965098874
 
-IP: 172.26.108.174
+IP: 172.26.x.x
 
 HostName: starrocks-sandbox02
 
@@ -96,11 +96,11 @@ Alive: true
 
 ***3\. row***
 
-Name: 172.26.108.175_9010_1584965098874
+Name: 172.26.x.x_9010_1584965098874
 
-IP: 172.26.108.175
+IP: 172.26.x.x
 
-HostName: starrocks-sandbox03
+HostName: sr-test
 
 ......
 
@@ -117,4 +117,4 @@ Alive: true
 3 rows in set (0.05 sec)
 ```
 
-Alive is true, indicating the node is successfully added. In the above example, 172.26.108.172_9010_1584965098874 is the main FE node.
+Alive is true, indicating the node is successfully added. In the above example, 172.26.x.x_9010_1584965098874 is the main FE node.
