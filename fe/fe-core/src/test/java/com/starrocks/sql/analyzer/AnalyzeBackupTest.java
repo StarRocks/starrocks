@@ -9,12 +9,14 @@ import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Collection;
 
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeBackupTest {
@@ -50,8 +52,16 @@ public class AnalyzeBackupTest {
                 "(\n" +
                 "t0,\n" +
                 "t1\n" +
-                ");";
+                ")\n" +
+                "PROPERTIES (\"type\" = \"full\"," +
+                "\"timeout\" = \"3600\");";
         analyzeSuccess(sql);
+        analyzeFail("BACKUP SNAPSHOT `` TO `repo` ON ( t0, t1 );");
+        analyzeFail("BACKUP SNAPSHOT snapshot_label2 TO `` ON( t0, t1 );");
+        analyzeFail("BACKUP SNAPSHOT test.snapshot_label2 TO `repo1` ON(t0);");
+        analyzeFail("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON(t999);");
+        analyzeFail("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON(t0 PARTITION (p1));");
+        analyzeFail("BACKUP SNAPSHOT test1.snapshot_label2 TO `repo` ON(t0 PARTITION (p1), t1) PROPERTIES(\"type\"=\"1\");");
     }
 
 }
