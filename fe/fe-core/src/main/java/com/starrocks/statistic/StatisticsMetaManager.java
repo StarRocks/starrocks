@@ -36,7 +36,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.common.Config.statistics_manager_sleep_time_sec;
+import static com.starrocks.common.Config.statistic_manager_sleep_time_sec;
 
 public class StatisticsMetaManager extends MasterDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
@@ -342,7 +342,7 @@ public class StatisticsMetaManager extends MasterDaemon {
     @Override
     protected void runAfterCatalogReady() {
         // To make UT pass, some UT will create database and table
-        trySleep(statistics_manager_sleep_time_sec * 1000);
+        trySleep(statistic_manager_sleep_time_sec * 1000);
         while (!checkDatabaseExist()) {
             if (createDatabase()) {
                 break;

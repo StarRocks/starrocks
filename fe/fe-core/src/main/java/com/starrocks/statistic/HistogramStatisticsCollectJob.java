@@ -19,7 +19,7 @@ import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_
 
 public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private static final String COLLECT_HISTOGRAM_STATISTIC_TEMPLATE =
-            "SELECT $tableId, '$columnName', '$dbName.$tableName', histogram($columnName, $totalRows, $sampleRows, $bucketNum)"
+            "SELECT $tableId, '$columnName', '$dbName.$tableName', histogram($columnName, $bucketNum, $sampleRatio, $topN )"
                     + " FROM (SELECT * FROM $dbName.$tableName $sampleTabletHint ORDER BY $columnName LIMIT $totalRows) t";
 
     public HistogramStatisticsCollectJob(Database db, OlapTable table, List<String> columns,
@@ -34,11 +34,12 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         context.getSessionVariable().setNewPlanerAggStage(1);
 
         long totalRows = table.getRowCount();
-        long sampleRows = Long.parseLong(properties.get(StatsConstants.PROP_SAMPLE_COLLECT_ROWS_KEY));
-        long bucketNum = Long.parseLong(properties.get(StatsConstants.PRO_BUCKET_NUM));
+        long sampleRows = Long.parseLong(properties.get(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS));
+        long bucketNum = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_BUCKET_NUM));
+        long topN = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_TOPN_SIZE));
 
         for (String column : columns) {
-            String sql = buildCollectHistogram(db, table, totalRows, sampleRows, bucketNum, column);
+            String sql = buildCollectHistogram(db, table, totalRows, sampleRows, bucketNum, topN, column);
 
             StatementBase parsedStmt = parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
@@ -51,7 +52,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     public String buildCollectHistogram(Database database, OlapTable table, Long totalRows, Long sampleRows,
-                                        Long bucketNum, String columnName) {
+                                        Long bucketNum, Long topN, String columnName) {
         StringBuilder builder = new StringBuilder("INSERT INTO ").append(HISTOGRAM_STATISTICS_TABLE_NAME).append(" ");
 
         VelocityContext context = new VelocityContext();
@@ -60,9 +61,10 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         context.put("dbName", ClusterNamespace.getNameFromFullName(database.getFullName()));
         context.put("tableName", table.getName());
 
-        context.put("totalRows", totalRows);
-        context.put("sampleRows", sampleRows);
         context.put("bucketNum", bucketNum);
+        context.put("sampleRatio", sampleRows / totalRows);
+        context.put("totalRows", totalRows);
+        context.put("topN", topN);
 
         if (sampleRows >= totalRows) {
             context.put("sampleTabletHint", "");

@@ -36,7 +36,8 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
 
                 if (!statisticData.isEmpty()) {
                     List<Bucket> buckets = convert(statisticData.get(0).histogram);
-                    Histogram histogram = new Histogram(buckets);
+                    Map<Double, Long> mcv = convertMCV(statisticData.get(0).histogram);
+                    Histogram histogram = new Histogram(buckets, mcv);
                     return Optional.of(histogram);
                 } else {
                     return Optional.empty();
@@ -64,7 +65,8 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
                 List<TStatisticData> histogramStatsDataList = queryHistogramStatistics(tableId, columns);
                 for (TStatisticData histogramStatsData : histogramStatsDataList) {
                     List<Bucket> buckets = convert(histogramStatsData.histogram);
-                    Histogram histogram = new Histogram(buckets);
+                    Map<Double, Long> mcv = convertMCV(histogramStatsData.histogram);
+                    Histogram histogram = new Histogram(buckets, mcv);
                     result.put(new ColumnStatsCacheKey(histogramStatsData.tableId, histogramStatsData.columnName),
                             Optional.of(histogram));
                 }
@@ -89,7 +91,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         return statisticExecutor.queryHistogram(tableId, column);
     }
 
-    List<Bucket> convert(String histogramString) {
+    private List<Bucket> convert(String histogramString) {
         JsonObject jsonObject = JsonParser.parseString(histogramString).getAsJsonObject();
         JsonArray histogramObj = jsonObject.getAsJsonArray("buckets");
 
@@ -104,5 +106,18 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
             buckets.add(bucket);
         }
         return buckets;
+    }
+
+    private Map<Double, Long> convertMCV(String histogramString) {
+        JsonObject jsonObject = JsonParser.parseString(histogramString).getAsJsonObject();
+        JsonArray histogramObj = jsonObject.getAsJsonArray("top-n");
+
+        Map<Double, Long> mcv = new HashMap<>();
+        for (int i = 0; i < histogramObj.size(); ++i) {
+            JsonArray bucketJsonArray = histogramObj.get(i).getAsJsonArray();
+            mcv.put(Double.parseDouble(bucketJsonArray.get(0).getAsString()),
+                    Long.parseLong(bucketJsonArray.get(1).getAsString()));
+        }
+        return mcv;
     }
 }

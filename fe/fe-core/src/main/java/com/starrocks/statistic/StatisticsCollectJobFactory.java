@@ -100,7 +100,11 @@ public class StatisticsCollectJobFactory {
         }
 
         BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
-        if (basicStatsMeta != null && basicStatsMeta.getHealthy() > Config.statistics_auto_collect_ratio) {
+
+        double statisticAutoCollectRatio = job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_RATIO) != null ?
+                Double.parseDouble(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_RATIO)) :
+                Config.statistic_auto_collect_ratio;
+        if (basicStatsMeta != null && basicStatsMeta.getHealthy() > statisticAutoCollectRatio) {
             return;
         }
 
@@ -119,7 +123,7 @@ public class StatisticsCollectJobFactory {
                                            Database db, Table table, List<String> columns) {
         StatsConstants.AnalyzeType analyzeType;
         if (((OlapTable) table).getPartitions().stream().anyMatch(
-                p -> p.getDataSize() > Config.statistics_max_full_collect_data_size)) {
+                p -> p.getDataSize() > Config.statistic_max_full_collect_data_size)) {
             analyzeType = StatsConstants.AnalyzeType.SAMPLE;
         } else {
             analyzeType = StatsConstants.AnalyzeType.FULL;

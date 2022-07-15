@@ -12,6 +12,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.qe.ConnectContext;
@@ -61,7 +62,7 @@ public class StatisticExecutor {
     public List<TStatisticData> queryStatisticSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
         String sql;
         BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
-        if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
+        if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL) && Config.enable_collect_full_statistic) {
             sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNames);
         } else {
             sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);

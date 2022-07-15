@@ -1284,7 +1284,7 @@ public class Config extends ConfigBase {
      * a period of create statistics table automatically by the StatisticsMetaManager
      */
     @ConfField(mutable = true)
-    public static long statistics_manager_sleep_time_sec = 60 * 10;
+    public static long statistic_manager_sleep_time_sec = 60 * 10;
 
     // The statistic
     @ConfField
@@ -1318,25 +1318,25 @@ public class Config extends ConfigBase {
      * Enable full statistics collection
      */
     @ConfField(mutable = true)
-    public static boolean enable_collect_full_statistics = false;
+    public static boolean enable_collect_full_statistic = false;
 
     /**
      * Statistics collection threshold
      */
     @ConfField(mutable = true)
-    public static double statistics_auto_collect_ratio = 0.8;
+    public static double statistic_auto_collect_ratio = 0.8;
 
     /**
      * Full statistics collection max data size
      */
     @ConfField(mutable = true)
-    public static long statistics_max_full_collect_data_size = 100L * 1024 * 1024 * 1024; // 100G
+    public static long statistic_max_full_collect_data_size = 100L * 1024 * 1024 * 1024; // 100G
 
     /**
      * Max row count in statistics collect per query
      */
     @ConfField(mutable = true)
-    public static long statistics_collect_max_row_count_per_query = 5000000;
+    public static long statistic_collect_max_row_count_per_query = 5000000;
 
     /**
      * default bucket size of histogram statistics
@@ -1345,10 +1345,22 @@ public class Config extends ConfigBase {
     public static long histogram_buckets_size = 64;
 
     /**
+     * default top-n size of histogram statistics
+     */
+    @ConfField(mutable = true)
+    public static long histogram_topn_size = 100;
+
+    /**
      * default sample ratio of histogram statistics
      */
     @ConfField(mutable = true)
     public static double histogram_sample_ratio = 0.1;
+
+    /**
+     * Max row count of histogram statistics
+     */
+    @ConfField(mutable = true)
+    public static long histogram_max_sample_row_count = 10000000;
 
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
