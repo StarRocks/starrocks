@@ -54,12 +54,11 @@ public class EtlStatus implements Writable {
     private String trackingUrl;
 
     /**
-     * This field is useless in runtime
+     * This field is useless in RUNTIME
      * It only used for persisting LoadStatistic in consideration of compatibility
      * It has only one k-v pair:
      *   the key is LOAD_STATISTIC; the value is json string of loadStatistic
      */
-    @Deprecated
     private Map<String, String> stats = new HashedMap();
     private LoadStatistic loadStatistic = new LoadStatistic();
     private static final String LOAD_STATISTIC = "STARROCKS_LOAD_STATISTIC";
@@ -376,7 +375,7 @@ public class EtlStatus implements Writable {
             return GsonUtils.GSON.toJson(this);
         }
 
-        public static LoadStatistic fromJson(String json) throws IOException {
+        public static LoadStatistic fromJson(String json) {
             return GsonUtils.GSON.fromJson(json, LoadStatistic.class);
         }
 
