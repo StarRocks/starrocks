@@ -9,11 +9,11 @@ This test compares the performance of StarRocks, Apache Druid, and ClickHouse ag
 - Among the 13 queries performed on SSB standard datasets, ClickHouse has a response time 1.7x that of StarRocks, and Apache Druid 2.2x that of StarRocks.
 - StarRocks performs even better when the bitmap indexing and cache features are enabled, especially on Q2.2, Q2.3, and Q3.3. The overall performance is 2.2x that of ClickHouse and 2.9x that of Apache Druid.
 
-![overall comparison](/assets/7.1-1.png)
+![overall comparison](../assets/7.1-1.png)
 
 - We also conduct tests on low-cardinality aggregation against standard datasets. ClickHouse has a query response time 2.26x that of StarRocks.
 
-![comparison on low-cardinality field](/assets/7.1-2.png)
+![comparison on low-cardinality field](../assets/7.1-2.png)
 
 In the SSB single-table test and low-cardinality aggregation test, three cloud hosts with a configuration of 16-core CPU and 64 GB of memory are used to test data at a scale of 600 million rows of data.
 
@@ -183,11 +183,11 @@ select count(*) from (select count(*) from lineorder_flat group by substr(lo_shi
 
 SSB flat-table tests
 
-![comparison](/assets/7.1-3.png)
+![comparison](../assets/7.1-3.png)
 
 Low-cardinality aggregation tests
 
-![comparison](/assets/7.1-4.png)
+![comparison](../assets/7.1-4.png)
 
 ## 4. Test Procedure
 
