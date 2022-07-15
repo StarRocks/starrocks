@@ -276,7 +276,7 @@ PROPERTIES (
 
 | **Hive**      | **StarRocks**                                                |
 | ------------- | ------------------------------------------------------------ |
-| INT/INTEGER | INT                                                          |
+| INT/INTEGER   | INT                                                          |                                                         |
 | BIGINT        | BIGINT                                                       |
 | TIMESTAMP     | DATETIME <br />注意 TIMESTAMP 转成 DATETIME会损失精度和时区信息，并根据 sessionVariable 中的时区转成无时区 DATETIME。 |
 | STRING        | VARCHAR                                                      |
@@ -286,6 +286,7 @@ PROPERTIES (
 | FLOAT         | FLOAT                                                        |
 | DECIMAL       | DECIMAL                                                      |
 | ARRAY         | ARRAY                                                        |
+| BOOLEAN       | BOOLEAN                                                      |
 
 说明：
 
