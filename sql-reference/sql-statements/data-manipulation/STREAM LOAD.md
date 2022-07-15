@@ -20,33 +20,31 @@ http://fe_host:http_port/api/{db}/{table}/_stream_load
 
 用户可以通过 HTTP 的 Header 部分来传入导入参数。
 
-### 参数解析
+### 参数说明
 
 **user 和 passwd**
 
 用于登录的用户名和密码。Stream Load 创建导入作业使用的是 HTTP 协议，可通过基本认证 (Basic Access Authentication) 进行签名。StarRocks 系统会根据签名来验证登录用户的身份和导入权限。
 
-**label:**
+**label**
 
 一次导入的标签，相同标签的数据无法多次导入。用户可以通过指定 Label 的方式来避免一份数据重复导入的问题。
 当前 StarRocks 内部保留 30 分钟内最近成功的 label。
 
-**column_separator：**
+**column_separator**
 
 用于指定导入文件中的列分隔符，默认为\t。如果是不可见字符，则需要加\x 作为前缀，使用十六进制来表示分隔符。
 如 hive 文件的分隔符\x01，需要指定为 `-H "column_separator:\x01"`
 
 StarRocks 2.1 及以上版本支持多字符分隔符，避免因字段值含有分隔符引起的导入解析错误。可见字符可直接指定，如 -H "column_separator:abc" 。不可见字符支持如 -H "column_separator:\x01\x02" 的格式。
 
-**columns：**
+**columns**
 
 用于指定导入文件中的列和 table 中的列的对应关系。如果源文件中的列正好对应表中的内容，那么是不需要指定这个字段的内容的。
 如果源文件与表 schema 不对应，那么需要这个字段进行一些数据转换。这里有两种形式 column:
 
-```plain text
-1.直接对应导入文件中的字段，直接使用字段名表示；
-2.衍生列，语法为 `column_name = expression`。
-```
+- 直接对应导入文件中的字段，直接使用字段名表示。
+- 衍生列，语法为 `column_name = expression`。
 
 例如：
 
@@ -57,12 +55,12 @@ StarRocks 2.1 及以上版本支持多字符分隔符，避免因字段值含有
 例 3: 表中有 3 个列“year, month, day " 三个列，源文件中只有一个时间列，为”2018-06-01 01: 02: 03“格式；
 那么可以指定 `-H "columns: col, year = year(col), month=month(col), day=day(col)"` 完成导入。
 
-**where:**
+**where**
 
 用于抽取部分数据。用户如果有需要将不需要的数据过滤掉，那么可以通过设定这个选项来达到。
 例如: 只导入大于 k1 列等于 20180601 的数据，那么可以在导入时候指定 `-H "where: k1 = 20180601"`。
 
-**max_filter_ratio：**
+**max_filter_ratio**
 
 最大容忍可过滤（数据不规范等原因）的数据比例。默认零容忍。数据不规范不包括通过 where 条件过滤掉的行。
 
@@ -75,15 +73,15 @@ StarRocks 2.1 及以上版本支持多字符分隔符，避免因字段值含有
 
 指定导入的超时时间。单位秒。默认是 600 秒。可设置范围为 1 秒 ~ 259200 秒。
 
-**strict_mode:**
+**strict_mode**
 
 用户指定此次导入是否开启严格模式，默认为关闭。开启方式为 `-H "strict_mode: true"`。
 
-**timezone:**
+**timezone**
 
 指定本次导入所使用的时区。默认为东八区。该参数会影响所有导入涉及的和时区有关的函数结果。
 
-**exec_mem_limit:**
+**exec_mem_limit**
 
 导入内存限制。默认为 2GB。单位为字节。
 
@@ -91,7 +89,7 @@ StarRocks 2.1 及以上版本支持多字符分隔符，避免因字段值含有
 
 指定导入数据格式，默认是 csv，支持 json 格式。
 
-**jsonpaths:**
+**jsonpaths**
 
 导入 json 方式分为：简单模式和精准模式。
 简单模式：没有设置 jsonpaths 参数即为简单模式，这种模式下要求 json 数据是对象类型，例如：
@@ -99,7 +97,7 @@ StarRocks 2.1 及以上版本支持多字符分隔符，避免因字段值含有
 
 匹配模式：用于 json 数据相对复杂，需要通过 jsonpaths 参数匹配对应的 value。
 
-**strip_outer_array:**
+**strip_outer_array**
 
 布尔类型，为 true 表示 json 数据以数组对象开始且将数组对象中进行展平，默认值是 false。例如：
 [
@@ -108,31 +106,45 @@ StarRocks 2.1 及以上版本支持多字符分隔符，避免因字段值含有
 ]
 当 strip_outer_array 为 true，最后导入到 starrocks 中会生成两行数据。
 
-**json_root:**
+**json_root**
 
 json_root 为合法的 jsonpath 字符串，用于指定 json document 的根节点，默认值为 ""。
 
+**fe_host**
+指 FE 的 IP 地址。
+
+**http_port**
+指 FE 的 HTTP 端口。
+
 ### 返回值
 
-导入完成后，会以 Json 格式返回这次导入的相关内容。当前包括一下字段
-**Status:** 导入最后的状态。
+导入完成后，会以 Json 格式返回这次导入的相关内容，包括：
 
-**Success：** 表示导入成功，数据已经可见；
+- **Status**：导入最后的状态。
 
-**Publish Timeout：** 表述导入作业已经成功 Commit，但是由于某种原因并不能立即可见。用户可以视作已经成功不必重试导入。
-**Label Already Exists:** 表明该 Label 已经被其他作业占用，可能是导入成功，也可能是正在导入。
-用户需要通过 `get label state` 命令来确定后续的操作。
+- **Success**：表示导入成功，数据已经可见；
 
-**其他：** 此次导入失败，用户可以指定 Label 重试此次作业
-Message: 导入状态详细的说明。失败时会返回具体的失败原因。
+- **Publish Timeout**：表述导入作业已经成功 Commit，但是由于某种原因并不能立即可见。用户可以视作已经成功不必重试导入。
 
-**NumberTotalRows:** 从数据流中读取到的总行数
-**NumberLoadedRows:** 此次导入的数据行数，只有在 Success 时有效。
-**NumberFilteredRows:** 此次导入过滤掉的行数，即数据质量不合格的行数。
-**NumberUnselectedRows:** 此次导入，通过 where 条件被过滤掉的行数。
-**LoadBytes:** 此次导入的源文件数据量大小。
-**LoadTimeMs:** 此次导入所用的时间。
-**ErrorURL:** 被过滤数据的具体内容，仅保留前 1000 条。
+- **Label Already Exists**：表明该 Label 已经被其他作业占用，可能是导入成功，也可能是正在导入。用户需要通过 `get label state` 命令来确定后续的操作。
+
+- **其他**：此次导入失败，用户可以指定 Label 重试此次作业
+
+- **Message**：导入状态详细的说明。失败时会返回具体的失败原因。
+
+- **NumberTotalRows**：从数据流中读取到的总行数。
+
+- **NumberLoadedRows**：此次导入的数据行数，只有在 Success 时有效。
+
+- **NumberFilteredRows**：此次导入过滤掉的行数，即数据质量不合格的行数。
+
+- **NumberUnselectedRows**：此次导入，通过 where 条件被过滤掉的行数。
+
+- **LoadBytes**：此次导入的源文件数据量大小。
+
+- **LoadTimeMs**：此次导入所用的时间。
+
+- **ErrorURL**：被过滤数据的具体内容，仅保留前 1000 条。
 
 ### 错误信息
 
