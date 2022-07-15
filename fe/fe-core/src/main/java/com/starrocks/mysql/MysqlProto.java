@@ -60,29 +60,9 @@ public class MysqlProto {
         // check cluster, user name may contains cluster name or cluster id.
         // eg:
         // user_name@cluster_name
-        String clusterName = "";
-        String[] strList = tmpUser.split("@", 2);
-        if (strList.length > 1) {
-            tmpUser = strList[0];
-            clusterName = strList[1];
-            try {
-                // if cluster does not exist and it is not a valid cluster id, authenticate failed
-                if (GlobalStateMgr.getCurrentState().getCluster(clusterName) == null
-                        && Integer.parseInt(strList[1]) != context.getGlobalStateMgr().getClusterId()) {
-                    ErrorReport.report(ErrorCode.ERR_UNKNOWN_CLUSTER_ID, strList[1]);
-                    return false;
-                }
-            } catch (Throwable e) {
-                ErrorReport.report(ErrorCode.ERR_UNKNOWN_CLUSTER_ID, strList[1]);
-                return false;
-            }
-        }
-        if (Strings.isNullOrEmpty(clusterName)) {
-            clusterName = SystemInfoService.DEFAULT_CLUSTER;
-        }
+        String clusterName = SystemInfoService.DEFAULT_CLUSTER;
         context.setCluster(clusterName);
 
-        LOG.debug("parse cluster: {}", clusterName);
         String qualifiedUser = ClusterNamespace.getFullName(tmpUser);
         String remoteIp = context.getMysqlChannel().getRemoteIp();
 

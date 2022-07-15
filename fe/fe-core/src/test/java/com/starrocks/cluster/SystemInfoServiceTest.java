@@ -101,7 +101,7 @@ public class SystemInfoServiceTest {
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getCluster(anyString);
+                globalStateMgr.getCluster();
                 minTimes = 0;
                 result = new Cluster("cluster", 1);
 

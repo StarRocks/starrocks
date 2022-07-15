@@ -212,8 +212,7 @@ public class LocalMetastore implements ConnectorMetadata {
     private final ConcurrentHashMap<Long, Database> idToDb = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Database> fullNameToDb = new ConcurrentHashMap<>();
 
-    private final ConcurrentHashMap<Long, Cluster> idToCluster = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, Cluster> nameToCluster = new ConcurrentHashMap<>();
+    private Cluster defaultCluster;
 
     private final GlobalStateMgr stateMgr;
     private EditLog editLog;
@@ -308,7 +307,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public long saveDb(DataOutputStream dos, long checksum) throws IOException {
-        int dbCount = idToDb.size() - nameToCluster.keySet().size();
+        int dbCount = idToDb.size() - 1;
         checksum ^= dbCount;
         dos.writeInt(dbCount);
         for (Map.Entry<Long, Database> entry : idToDb.entrySet()) {
@@ -340,7 +339,6 @@ public class LocalMetastore implements ConnectorMetadata {
             } else {
                 id = getNextId();
                 Database db = new Database(id, dbName);
-                db.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
                 unprotectCreateDb(db);
                 editLog.logCreateDb(db);
             }
@@ -354,7 +352,7 @@ public class LocalMetastore implements ConnectorMetadata {
     public void unprotectCreateDb(Database db) {
         idToDb.put(db.getId(), db);
         fullNameToDb.put(db.getFullName(), db);
-        final Cluster cluster = nameToCluster.get(db.getClusterName());
+        final Cluster cluster = defaultCluster;
         cluster.addDb(db.getFullName(), db.getId());
         stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
     }
@@ -416,7 +414,7 @@ public class LocalMetastore implements ConnectorMetadata {
             // 3. remove db from globalStateMgr
             idToDb.remove(db.getId());
             fullNameToDb.remove(db.getFullName());
-            final Cluster cluster = nameToCluster.get(db.getClusterName());
+            final Cluster cluster = defaultCluster;
             cluster.removeDb(dbName, db.getId());
             DropDbInfo info = new DropDbInfo(dbName, isForceDrop);
             editLog.logDropDb(info);
@@ -464,7 +462,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             fullNameToDb.remove(dbName);
             idToDb.remove(db.getId());
-            final Cluster cluster = nameToCluster.get(db.getClusterName());
+            final Cluster cluster = defaultCluster;
             cluster.removeDb(dbName, db.getId());
 
             LOG.info("finish replay drop db, name: {}, id: {}", dbName, db.getId());
@@ -494,7 +492,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             fullNameToDb.put(db.getFullName(), db);
             idToDb.put(db.getId(), db);
-            final Cluster cluster = nameToCluster.get(db.getClusterName());
+            final Cluster cluster = defaultCluster;
             cluster.addDb(db.getFullName(), db.getId());
 
             // log
@@ -619,7 +617,7 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            cluster = nameToCluster.get(SystemInfoService.DEFAULT_CLUSTER);
+            cluster = defaultCluster;
             if (cluster == null) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_CLUSTER_NO_EXISTS, SystemInfoService.DEFAULT_CLUSTER);
             }
@@ -656,7 +654,7 @@ public class LocalMetastore implements ConnectorMetadata {
         tryLock(true);
         try {
             Database db = fullNameToDb.get(dbName);
-            Cluster cluster = nameToCluster.get(db.getClusterName());
+            Cluster cluster = defaultCluster;
             cluster.removeDb(db.getFullName(), db.getId());
             db.setName(newDbName);
             cluster.addDb(newDbName, db.getId());
@@ -3636,20 +3634,18 @@ public class LocalMetastore implements ConnectorMetadata {
         Preconditions.checkState(cluster.isDefaultCluster(), "Cluster must be default cluster");
         Preconditions.checkState(cluster.isEmpty(), "Cluster backendIdList must be 0");
 
-        idToCluster.put(cluster.getId(), cluster);
-        nameToCluster.put(SystemInfoService.DEFAULT_CLUSTER, cluster);
+        defaultCluster = cluster;
 
         // create info schema db
         final InfoSchemaDb infoDb = new InfoSchemaDb(SystemInfoService.DEFAULT_CLUSTER);
-        infoDb.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         unprotectCreateDb(infoDb);
 
         // only need to create default cluster once.
         stateMgr.setIsDefaultClusterCreated(true);
     }
 
-    public Cluster getCluster(String clusterName) {
-        return nameToCluster.get(clusterName);
+    public Cluster getCluster() {
+        return defaultCluster;
     }
 
     public long loadCluster(DataInputStream dis, long checksum) throws IOException {
@@ -3668,7 +3664,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 // for adding BE to some Cluster, but loadCluster is after loadBackend.
                 cluster.setBackendIdList(latestBackendIds);
 
-                String dbName = InfoSchemaDb.getFullInfoSchemaDbName(SystemInfoService.DEFAULT_CLUSTER);
+                String dbName = InfoSchemaDb.getFullInfoSchemaDbName();
                 InfoSchemaDb db;
                 // Use real GlobalStateMgr instance to avoid InfoSchemaDb id continuously increment
                 // when checkpoint thread load image.
@@ -3676,7 +3672,6 @@ public class LocalMetastore implements ConnectorMetadata {
                     db = (InfoSchemaDb) GlobalStateMgr.getCurrentState().getFullNameToDb().get(dbName);
                 } else {
                     db = new InfoSchemaDb(SystemInfoService.DEFAULT_CLUSTER);
-                    db.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
                 }
                 String errMsg = "InfoSchemaDb id shouldn't larger than 10000, please restart your FE server";
                 // Every time we construct the InfoSchemaDb, which id will increment.
@@ -3687,8 +3682,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 idToDb.put(db.getId(), db);
                 fullNameToDb.put(db.getFullName(), db);
                 cluster.addDb(dbName, db.getId());
-                idToCluster.put(cluster.getId(), cluster);
-                nameToCluster.put(SystemInfoService.DEFAULT_CLUSTER, cluster);
+                defaultCluster = cluster;
             }
         }
         LOG.info("finished replay cluster from image");
@@ -3722,7 +3716,6 @@ public class LocalMetastore implements ConnectorMetadata {
         cluster.setBackendIdList(backendList);
         unprotectCreateCluster(cluster);
         for (Database db : idToDb.values()) {
-            db.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
             cluster.addDb(db.getFullName(), db.getId());
         }
 
@@ -3733,16 +3726,14 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public long saveCluster(DataOutputStream dos, long checksum) throws IOException {
-        final int clusterCount = idToCluster.size();
+        final int clusterCount = 1;
         checksum ^= clusterCount;
         dos.writeInt(clusterCount);
-        for (Map.Entry<Long, Cluster> entry : idToCluster.entrySet()) {
-            long clusterId = entry.getKey();
-            if (clusterId >= NEXT_ID_INIT_VALUE) {
-                checksum ^= clusterId;
-                final Cluster cluster = entry.getValue();
-                cluster.write(dos);
-            }
+        Cluster cluster = defaultCluster;
+        long clusterId = defaultCluster.getId();
+        if (clusterId >= NEXT_ID_INIT_VALUE) {
+            checksum ^= clusterId;
+            cluster.write(dos);
         }
         return checksum;
     }
@@ -3750,7 +3741,7 @@ public class LocalMetastore implements ConnectorMetadata {
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
         for (long id : info.getBackendList()) {
             final Backend backend = stateMgr.getClusterInfo().getBackend(id);
-            final Cluster cluster = nameToCluster.get(backend.getOwnerClusterName());
+            final Cluster cluster = defaultCluster;
             cluster.removeBackend(id);
             backend.setDecommissioned(false);
             backend.clearClusterName();
