@@ -9,8 +9,8 @@
 ```sql
 CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...]
-[, index_definition1[, ndex_definition12,]])
-[ENGINE = [olap|mysql|elasticsearch|hive]]
+[, index_definition1[, index_definition2, ...]])
+[ENGINE = [olap|mysql|elasticsearch|hive|iceberg|hudi]]
 [key_desc]
 [COMMENT "table comment"];
 [partition_desc]
@@ -109,7 +109,7 @@ bitmap列类型，不需要指定长度和默认值。表示整型的集合，�
 2. 如果用在建表时 REPLACE_IF_NOT_NULL 列指定了 NOT NULL，那么 StarRocks 仍然会将其转化 NULL，不会向用户报错。用户可以借助这个类型完成「部分列导入」的功能。
 该类型只对聚合模型(key_desc 的 type 为 AGGREGATE KEY)有用，其它模型不能指这个。
 
-**NULL | NOT NULL**：是否允许为 NULL: 默认不允许为 NULL。NULL 值在导入数据中用 \N 来表示。
+**NULL | NOT NULL**：是否允许为 NULL: 默认为 NULL, PRIMARY KEY的key列默认为NOT NULL, NULL 值在导入数据中用 \N 来表示。
 
 #### **index_definition**
 
