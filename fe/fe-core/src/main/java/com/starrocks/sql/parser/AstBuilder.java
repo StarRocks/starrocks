@@ -104,6 +104,7 @@ import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
+import com.starrocks.analysis.ShowBackupStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
@@ -203,6 +204,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.SetQualifier;
 import com.starrocks.system.SystemInfoService;
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
@@ -217,6 +219,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
@@ -232,7 +235,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitSingleStatement(StarRocksParser.SingleStatementContext context) {
         return visit(context.statement());
     }
-
 
     // ---------------------------------------- Database Statement -----------------------------------------------------
     @Override
@@ -250,7 +252,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     quotaValue);
         }
     }
-
 
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
@@ -274,7 +275,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
         return new ShowCreateDbStmt(dbName);
     }
-
 
     @Override
     public ParseNode visitAlterDatabaseRename(StarRocksParser.AlterDatabaseRenameContext context) {
@@ -1932,6 +1932,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new ShowVariablesStmt(getVariableType(context.varType()), pattern, where);
+    }
+
+    // ------------------------------------------- Backup Store Statement ----------------------------------------------
+
+    @Override
+    public ParseNode visitShowBackupStatement(StarRocksParser.ShowBackupStatementContext context) {
+        return new ShowBackupStmt(Optional.ofNullable(context.identifier()).map(RuleContext::getText).orElse(null));
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------

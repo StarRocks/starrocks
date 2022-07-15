@@ -33,6 +33,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class ShowBackupStmt extends ShowStmt {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
@@ -98,5 +99,10 @@ public class ShowBackupStmt extends ShowStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_NO_SYNC;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowBackupStmt(this, context);
     }
 }
