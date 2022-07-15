@@ -2909,8 +2909,8 @@ public class GlobalStateMgr {
         this.isDefaultClusterCreated = isDefaultClusterCreated;
     }
 
-    public Cluster getCluster(String clusterName) {
-        return localMetastore.getCluster(clusterName);
+    public Cluster getCluster() {
+        return localMetastore.getCluster();
     }
 
     public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {
