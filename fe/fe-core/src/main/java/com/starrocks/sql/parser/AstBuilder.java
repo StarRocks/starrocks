@@ -237,7 +237,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return visit(context.statement());
     }
 
-
     // ---------------------------------------- Database Statement -----------------------------------------------------
     @Override
     public ParseNode visitAlterDbQuotaStmt(StarRocksParser.AlterDbQuotaStmtContext context) {
@@ -254,7 +253,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     quotaValue);
         }
     }
-
 
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
@@ -278,7 +276,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
         return new ShowCreateDbStmt(dbName);
     }
-
 
     @Override
     public ParseNode visitAlterDatabaseRename(StarRocksParser.AlterDatabaseRenameContext context) {
@@ -1967,7 +1964,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        return new RestoreStmt(labelName, repo.getText(), tblRefs, properties);
+
+        String repoName = repo.getText();
+        if (repoName != null && repoName.startsWith("`") && repoName.endsWith("`")) {
+            repoName = repoName.substring(1, repoName.length() - 1);
+        }
+        return new RestoreStmt(labelName, repoName, tblRefs, properties);
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------
