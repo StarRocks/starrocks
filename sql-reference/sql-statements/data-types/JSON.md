@@ -16,7 +16,7 @@ StarRocks 支持存储和高效查询分析 JSON 数据。StarRocks 采用二进
 
 建表时，通过关键字 `JSON`，指定列 `j` 为 JSON 类型。
 
-```Plain Text
+```SQL
 CREATE TABLE `tj` (
     `id` INT(11) NOT NULL COMMENT "",
     `j`  JSON NULL COMMENT ""
@@ -39,7 +39,7 @@ StarRocks 支持如下三种方式导入数据并存储为 JSON 类型。
 
 - 方式一：通过 `INSERT INTO` 将数据写入至 JSON 类型的列（例如列 `j`）。
 
-```Plain Text
+```SQL
 INSERT INTO tj (id, j) VALUES (1, parse_json('{"a": 1, "b": true}'));
 INSERT INTO tj (id, j) VALUES (2, parse_json('{"a": 2, "b": false}'));
 INSERT INTO tj (id, j) VALUES (3, parse_json('{"a": 3, "b": true}'));
