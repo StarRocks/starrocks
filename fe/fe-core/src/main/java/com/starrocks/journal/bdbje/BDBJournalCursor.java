@@ -75,7 +75,7 @@ public class BDBJournalCursor implements JournalCursor {
         this.toKey = toKey;
         this.currentKey = fromKey;
         this.prefix = prefix;
-        this.dbNames = env.getDatabaseNames(prefix);
+        this.dbNames = env.getDatabaseNamesWithPrefix(prefix);
         if (dbNames == null) {
             throw new JournalException("failed to get db names!");
         }

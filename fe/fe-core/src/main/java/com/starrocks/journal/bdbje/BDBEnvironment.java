@@ -564,13 +564,13 @@ public class BDBEnvironment {
     }
 
     public List<Long> getDatabaseNames() {
-        return getDatabaseNames("");
+        return getDatabaseNamesWithPrefix("");
     }
 
     // get journal db names and sort the names
     // let the caller retry from outside.
     // return null only if environment is closing
-    public List<Long> getDatabaseNames(String prefix) {
+    public List<Long> getDatabaseNamesWithPrefix(String prefix) {
         if (closing) {
             return null;
         }
@@ -592,10 +592,15 @@ public class BDBEnvironment {
                 }
             } else {
                 if (name.startsWith(prefix)) {
-                    long db = Long.parseLong(name.substring(prefix.length()));
-                    ret.add(db);
+                    String dbStr = name.substring(prefix.length());
+                    if (StringUtils.isNumeric(dbStr)) {
+                        long db = Long.parseLong(dbStr);
+                        ret.add(db);
+                    } else {
+                        // prefix does not fully match, ignore
+                    }
                 } else {
-                    // ignore
+                    // prefix does not match, ignore
                 }
             }
         }

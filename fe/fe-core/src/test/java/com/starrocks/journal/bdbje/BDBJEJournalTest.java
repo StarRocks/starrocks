@@ -488,7 +488,7 @@ public class BDBJEJournalTest {
 
         new Expectations(environment) {
             {
-                environment.getDatabaseNames("");
+                environment.getDatabaseNamesWithPrefix("");
                 times = 1;
                 result = new ArrayList();
 
@@ -509,7 +509,7 @@ public class BDBJEJournalTest {
 
         new Expectations(environment) {
             {
-                environment.getDatabaseNames("");
+                environment.getDatabaseNamesWithPrefix("");
                 times = 1;
                 result = Arrays.asList(3L, 23L, 45L);
 
@@ -527,7 +527,7 @@ public class BDBJEJournalTest {
     public void testOpenGetNamesFails(@Mocked BDBEnvironment environment) throws Exception {
         new Expectations(environment) {
             {
-                environment.getDatabaseNames("");
+                environment.getDatabaseNamesWithPrefix("");
                 times = 1;
                 result = null;
             }
@@ -548,7 +548,7 @@ public class BDBJEJournalTest {
         };
         new Expectations(environment) {
             {
-                environment.getDatabaseNames("");
+                environment.getDatabaseNamesWithPrefix("");
                 times = BDBJEJournal.RETRY_TIME;
                 result = new DatabaseNotFoundException("mock mock");
             }
@@ -570,7 +570,7 @@ public class BDBJEJournalTest {
         };
         new Expectations(environment) {
             {
-                environment.getDatabaseNames("");
+                environment.getDatabaseNamesWithPrefix("");
                 times = 3;
                 result = Arrays.asList(3L, 23L, 45L);
 
@@ -592,7 +592,7 @@ public class BDBJEJournalTest {
         // failed to get database names; do nothing
         new Expectations(environment) {
             {
-                environment.getDatabaseNames("");
+                environment.getDatabaseNamesWithPrefix("");
                 times = 1;
                 result = null;
             }
@@ -603,7 +603,7 @@ public class BDBJEJournalTest {
         // current db (3, 23, 45) checkpoint is made on 44, should remove 3, 23
         new Expectations(environment) {
             {
-                environment.getDatabaseNames("");
+                environment.getDatabaseNamesWithPrefix("");
                 times = 1;
                 result = Arrays.asList(3L, 23L, 45L);
 
@@ -625,7 +625,7 @@ public class BDBJEJournalTest {
         // failed to get database names; return -1
         new Expectations(environment) {
             {
-                environment.getDatabaseNames("");
+                environment.getDatabaseNamesWithPrefix("");
                 times = 1;
                 result = null;
             }
@@ -635,7 +635,7 @@ public class BDBJEJournalTest {
         // no databases; return -1
         new Expectations(environment) {
             {
-                environment.getDatabaseNames("");
+                environment.getDatabaseNamesWithPrefix("");
                 times = 1;
                 result = new ArrayList<>();
             }
@@ -645,7 +645,7 @@ public class BDBJEJournalTest {
         // db 3, 23, 45; open 45 get its size 10
         new Expectations(environment) {
             {
-                environment.getDatabaseNames("");
+                environment.getDatabaseNamesWithPrefix("");
                 times = 1;
                 result = Arrays.asList(3L, 23L, 45L);
 
@@ -762,14 +762,13 @@ public class BDBJEJournalTest {
     public void testJournalWithPrefix(@Mocked BDBEnvironment environment) throws Exception {
         new Expectations(environment) {
             {
-                environment.getDatabaseNames("aaa_");
+                environment.getDatabaseNamesWithPrefix("aaa_");
                 times = 1;
                 result = Arrays.asList(3L, 13L);
             }
         };
 
-        BDBJEJournal journal = new BDBJEJournal(environment);
-        journal.setPrefix("aaa_");
+        BDBJEJournal journal = new BDBJEJournal(environment, "aaa_" /* prefix */);
         Assert.assertEquals("aaa_", journal.getPrefix());
         List<Long> l = journal.getDatabaseNames();
         Assert.assertEquals(2, l.size());

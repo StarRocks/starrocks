@@ -504,22 +504,28 @@ public class BDBEnvironmentTest {
                 list.add("2001");
                 list.add("aaa_3001");
                 list.add("aaa_4001");
+                list.add("aaa_bbb_");
                 return list;
             }
         };
 
-        List<Long> l1 = environment.getDatabaseNames("");
+        List<Long> l1 = environment.getDatabaseNamesWithPrefix("");
         Assert.assertEquals(2, l1.size());
         Assert.assertEquals((Long) 1001L, l1.get(0));
         Assert.assertEquals((Long) 2001L, l1.get(1));
 
-        List<Long> l2 = environment.getDatabaseNames("aaa_");
+        List<Long> l2 = environment.getDatabaseNamesWithPrefix("aaa_");
         Assert.assertEquals(2, l2.size());
         Assert.assertEquals((Long) 3001L, l2.get(0));
         Assert.assertEquals((Long) 4001L, l2.get(1));
 
-        List<Long> l3 = environment.getDatabaseNames("bbb_");
+        // prefix not fully match
+        List<Long> l3 = environment.getDatabaseNamesWithPrefix("aaa");
         Assert.assertEquals(0, l3.size());
+
+        // prefix not match
+        List<Long> l4 = environment.getDatabaseNamesWithPrefix("bbb_");
+        Assert.assertEquals(0, l4.size());
 
         environment.close();
     }

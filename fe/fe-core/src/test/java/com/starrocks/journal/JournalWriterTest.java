@@ -20,7 +20,7 @@ import java.util.concurrent.BlockingQueue;
 
 public class JournalWriterTest {
     @Mocked
-    private Journal journal = new BDBJEJournal(null, null);
+    private Journal journal = new BDBJEJournal(null);
     private BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<>(100);
     private JournalWriter writer = new JournalWriter(journal, journalQueue);
     /**
