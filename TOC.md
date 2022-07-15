@@ -401,6 +401,7 @@
       + [array_sort](/sql-reference/sql-functions/array-functions/array_sort.md)
       + [array_sum](/sql-reference/sql-functions/array-functions/array_sum.md)
       + [array_remove](/sql-reference/sql-functions/array-functions/array_remove.md)
+      + [array_cum_sum](/sql-reference/sql-functions/array-functions/array_cum_sum.md)
       + [array_to_bitmap](/sql-reference/sql-functions/array-functions/array_to_bitmap.md)
       + [reverse](/sql-reference/sql-functions/string-functions/reverse.md)
     + bit函数
