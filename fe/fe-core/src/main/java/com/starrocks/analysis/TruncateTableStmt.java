@@ -49,9 +49,6 @@ public class TruncateTableStmt extends DdlStmt {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) {}
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitTruncateTableStatement(this, context);
     }

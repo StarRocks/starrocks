@@ -8,6 +8,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeTruncateTableTest {
@@ -24,5 +25,12 @@ public class AnalyzeTruncateTableTest {
        Assert.assertEquals("TRUNCATE TABLE `example_db`.`tbl`", stmt.toSql());
        stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE tbl PARTITION(p1, p2);");
        Assert.assertEquals("TRUNCATE TABLE `test`.`tbl`PARTITIONS (p1, p2)", stmt.toSql());
+       Assert.assertEquals("tbl", stmt.getTblName());
+       Assert.assertEquals("default_cluster:test", stmt.getDbName());
+    }
+
+    @Test
+    public void failureTest() {
+        analyzeFail("TRUNCATE TABLE tbl PARTITION();");
     }
 }
