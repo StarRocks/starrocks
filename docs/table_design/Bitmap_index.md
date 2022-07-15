@@ -14,7 +14,7 @@ Bitmap is an array of one-bit elements with 0 and 1 value. Those elements can be
 
 ### What is  Bitmap index
 
-![Bitmap Index](/assets/3.6.1-1.png)
+![Bitmap Index](../assets/3.6.1-1.png)
 
 Bitmap can only represent an array of columns with two values. When the values of the columns are of multiple enumeration types, such as quarters (Q1, Q2, Q3, Q4) and system platforms (Linux, Windows, FreeBSD, MacOS), it is not possible to encode them in a single Bitmap. In this case, you can create a Bitmap for each value and a dictionary of the actual enumerated values.
 
@@ -26,7 +26,7 @@ If there is a SQL query against the table containing the `platform` column, e.g.
 
 ### Non-prefix filtering
 
-Referring to [shortkey index](/table_design/Sort_key.md), StarRocks can quickly filter the first few columns by shortkey indexing. However, for the columns that are in the middle or the end, shortkey indexing doesn’t work. Instead, users can create a bitmap index for filtering.
+Referring to [shortkey index](./Sort_key.md), StarRocks can quickly filter the first few columns by shortkey indexing. However, for the columns that are in the middle or the end, shortkey indexing doesn’t work. Instead, users can create a bitmap index for filtering.
 
 ### Multi-Column Filtering
 

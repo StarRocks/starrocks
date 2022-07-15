@@ -197,13 +197,13 @@ Applicable scenarios:
 
 * The system has hot and cold data. Hot data generated in recent days is frequently modified and cold data generated long ago is rarely modified. A typical example is real-time synchronization of MySQL order tables to StarRocks. In this example, data is partitioned by day, orders created in recent days are frequently modified, and old orders are no longer updated after they are completed. In this case, only primary key indexes of new orders are loaded to the memory during data loading. Primary key indexes of old orders are not loaded and will not occupy memory space.
 
-![fig1](/assets/3.2.4-1.png)
+![fig1](../assets/3.2.4-1.png)
 
 > In the preceding figure, data is partitioned by day and data in the latest partitions are frequently modified.
 
 * The system has wide tables that contain hundreds to thousands of columns. Primary keys account for only a small portion of the entire data and the memory overhead is low. User status and user portrait tables are examples of such tables. Wide tables have a large number of columns but the total number of users is not large (tens of millions to hundreds of millions). The memory usage of primary key indexes is controllable.
 
-![fig1](/assets/3.2.4-2.png)
+![fig1](../assets/3.2.4-2.png)
 
 > In the preceding figure, the wide table has a moderate number of data rows and primary key indexes account for only a small portion of data in this table.
 

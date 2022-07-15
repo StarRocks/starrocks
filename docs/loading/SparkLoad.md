@@ -25,7 +25,7 @@ The execution of the spark load task is divided into the following main phases.
 
 The following diagram illustrates the main flow of spark load.
 
-![Spark load](/assets/4.3.2-1.png)
+![Spark load](../assets/4.3.2-1.png)
 
 ---
 
