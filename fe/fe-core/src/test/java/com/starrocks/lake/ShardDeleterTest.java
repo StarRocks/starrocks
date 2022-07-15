@@ -1,8 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.catalog.lake;
+package com.starrocks.lake;
 
-import com.starrocks.catalog.StarOSAgent;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.proto.DropTabletRequest;
 import com.starrocks.lake.proto.DropTabletResponse;
@@ -32,7 +31,7 @@ public class ShardDeleterTest {
     private GlobalStateMgr globalStateMgr;
 
     @Mocked
-    private SystemInfoService  systemInfoService;
+    private SystemInfoService systemInfoService;
 
     @Mocked
     private StarOSAgent starOSAgent;
@@ -92,7 +91,7 @@ public class ShardDeleterTest {
 
         new Expectations() {
             {
-                lakeService.dropTablet((DropTabletRequest)any).get();
+                lakeService.dropTablet((DropTabletRequest) any).get();
                 minTimes = 0;
                 result = response;
 

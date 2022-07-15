@@ -44,13 +44,13 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Type;
-import com.starrocks.catalog.lake.StorageInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.monitor.unit.ByteSizeValue;
 
 import java.util.ArrayList;
