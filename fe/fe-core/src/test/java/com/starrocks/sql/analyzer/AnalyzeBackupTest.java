@@ -45,7 +45,7 @@ public class AnalyzeBackupTest {
     @Test
     public void testBackup() {
         String sql = "BACKUP SNAPSHOT test.snapshot_label2\n" +
-                "TO repo\n" +
+                "TO `repo`\n" +
                 "ON\n" +
                 "(\n" +
                 "t0,\n" +

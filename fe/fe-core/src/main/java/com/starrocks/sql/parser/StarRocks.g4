@@ -681,7 +681,7 @@ showProcedureStatment
 backupStatement
     : BACKUP SNAPSHOT qualifiedName
     TO identifier
-    ON '(' tableDesc tableDesc * ')'
+    ON '(' tableDesc (',' tableDesc) * ')'
     (PROPERTIES propertyList)?
     ;
 
