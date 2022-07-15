@@ -16,7 +16,7 @@ INT WEEK(DATETIME/DATE date, INT mode)
 
 - `mode`: 可选，支持的数据类型为 INT。用于确定周数计算逻辑，即一周起始于周日还是周一，以及返回值的范围是0~53还是1~53。该参数取值范围0~7，默认值为`0`。如果未指定该参数，默认按照模式`0`对应的规则计算。具体的语义如下：
 
-```Plaintext
+```Plain Text
 Mode    First day of week    Range    Week 1 is the first week …
 0       Sunday               0-53     with a Sunday in this year
 1       Monday               0-53     with 4 or more days this year
@@ -38,7 +38,7 @@ Mode    First day of week    Range    Week 1 is the first week …
 
 - `mode`设置为`0`，返回结果为0。此时周日作为一周的第一天，`2007-01-01`不能作为第一周，因此返回`0`。
 
-```Plaintext
+```Plain Text
 mysql> SELECT WEEK('2007-01-01', 0);
 +-----------------------+
 | week('2007-01-01', 0) |
@@ -50,7 +50,7 @@ mysql> SELECT WEEK('2007-01-01', 0);
 
 - `mode`设置为`1`，返回结果为`1`。此时周一作为一周的第一天。
 
-```Plaintext
+```Plain Text
 mysql> SELECT WEEK('2007-01-01', 1);
 +-----------------------+
 | week('2007-01-01', 1) |
@@ -62,7 +62,7 @@ mysql> SELECT WEEK('2007-01-01', 1);
 
 - `mode`设置为`2`, 返回结果`53`。此时周日作为一周的第一天，但是取值范围是1~53，所以返回53，表示这是上一年的最后一周。
 
-```Plaintext
+```Plain Text
 mysql> SELECT WEEK('2007-01-01', 2);
 +-----------------------+
 | week('2007-01-01', 2) |
