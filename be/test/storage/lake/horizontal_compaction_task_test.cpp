@@ -48,6 +48,7 @@ public:
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
+        _tablet_metadata->set_cumulative_point(0);
         //
         //  | column | type | KEY | NULL |
         //  +--------+------+-----+------+
@@ -181,6 +182,10 @@ TEST_F(DuplicateKeyHorizontalCompactionTest, test1) {
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1));
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
+
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+    ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
 }
 
 class UniqueKeyHorizontalCompactionTest : public testing::Test {
@@ -196,6 +201,7 @@ public:
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
+        _tablet_metadata->set_cumulative_point(0);
         //
         //  | column | type | KEY | NULL |
         //  +--------+------+-----+------+
@@ -330,5 +336,9 @@ TEST_F(UniqueKeyHorizontalCompactionTest, test1) {
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1));
     version++;
     ASSERT_EQ(kChunkSize, read(version));
+
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(1, new_tablet_metadata->cumulative_point());
+    ASSERT_EQ(1, new_tablet_metadata->rowsets_size());
 }
 } // namespace starrocks::lake
