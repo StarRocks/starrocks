@@ -90,7 +90,7 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     // duplicate invocations of rpc exec_plan_fragment.
     const auto& params = request.common().params;
     const auto& query_id = params.query_id;
-    const auto& fragment_instance_id = params.fragment_instance_id;
+    const auto& fragment_instance_id = request.fragment_instance_id();
     const auto& query_options = request.common().query_options;
 
     auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
@@ -427,7 +427,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     // The pipeline created later should be placed in the front
     runtime_state->runtime_profile()->reverse_childs();
     _fragment_ctx->set_drivers(std::move(drivers));
-    runtime_state->query_ctx()->query_trace()->register_drivers(fragment_instance_id, _fragment_ctx->drivers());
+    _query_ctx->query_trace()->register_drivers(fragment_instance_id, _fragment_ctx->drivers());
 
     // Acquire driver token to avoid overload
     auto maybe_driver_token = exec_env->driver_limiter()->try_acquire(_fragment_ctx->drivers().size());

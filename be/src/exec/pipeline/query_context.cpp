@@ -97,11 +97,7 @@ Status QueryContext::init_query(workgroup::WorkGroup* wg) {
 }
 
 void QueryContext::set_query_trace(std::shared_ptr<starrocks::debug::QueryTrace> query_trace) {
-    bool expected = false;
-    // make sure _query_trace is initilized only once
-    if (_is_query_trace_inited.compare_exchange_strong(expected, true)) {
-        _query_trace = std::move(query_trace);
-    }
+    std::call_once(_query_trace_init_flag, [this, &query_trace]() { _query_trace = std::move(query_trace); });
 }
 
 QueryContextManager::QueryContextManager(size_t log2_num_slots)

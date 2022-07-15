@@ -142,7 +142,7 @@ private:
     std::shared_ptr<MemTracker> _mem_tracker;
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
-    std::atomic<bool> _is_query_trace_inited{false};
+    std::once_flag _query_trace_init_flag;
     std::shared_ptr<starrocks::debug::QueryTrace> _query_trace;
 
     std::once_flag _init_query_once;

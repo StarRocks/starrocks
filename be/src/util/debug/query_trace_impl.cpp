@@ -176,9 +176,11 @@ ScopedTracer::ScopedTracer(const std::string& name, const std::string& category)
 }
 
 ScopedTracer::~ScopedTracer() {
-    _duration = MonotonicMicros() - _start_ts;
-    tls_trace_ctx.event_buffer->add(QueryTraceEvent::create_with_ctx(
-            _name, _category, -1, 'X', _start_ts - tls_trace_ctx.start_ts, _duration, tls_trace_ctx));
+    if (tls_trace_ctx.event_buffer != nullptr) {
+        _duration = MonotonicMicros() - _start_ts;
+        tls_trace_ctx.event_buffer->add(QueryTraceEvent::create_with_ctx(
+                _name, _category, -1, 'X', _start_ts - tls_trace_ctx.start_ts, _duration, tls_trace_ctx));
+    }
 }
 
 } // namespace debug
