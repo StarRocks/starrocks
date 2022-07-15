@@ -8,7 +8,6 @@ import com.staros.proto.ShardStorageInfo;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.StarOSAgent;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
