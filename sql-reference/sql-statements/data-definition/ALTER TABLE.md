@@ -43,7 +43,7 @@ partition_desc ["key"="value"]
 
 注意：
 
-1. partition_desc 支持一下两种写法：
+1. partition_desc 支持以下两种写法：
     * VALUES LESS THAN [MAXVALUE|("value1", ...)]
     * VALUES [("value1", ...), ("value1", ...))
 2. 分区为左闭右开区间，如果用户仅指定右边界，系统会自动确定左边界。
@@ -69,6 +69,51 @@ DROP PARTITION [IF EXISTS] partition_name [FORCE];
 1. 使用分区方式的表至少要保留一个分区。
 2. 执行 `DROP PARTITION` 一段时间内，可以通过 RECOVER 语句恢复被删除的分区。详见 RECOVER 语句
 3. 如果执行 `DROP PARTITION FORCE`，则系统不会检查该分区是否存在未完成的事务，分区将直接被删除并且不能被恢复，一般不建议执行此操作
+
+#### 增加临时分区
+
+语法：
+
+```SQL
+ALTER TABLE [database.]table 
+ADD TEMPORARY PARTITION [IF NOT EXISTS] partition_name
+partition_desc ["key"="value"]
+[DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]];
+```
+
+注意：
+
+1. 详细使用信息请查阅[临时分区](../../../using_starrocks/Temporary_partition.md)
+
+#### 使用临时分区替换原分区
+
+语法：
+
+```SQL
+ALTER TABLE [database.]table 
+REPLACE PARTITION partition_name 
+partition_desc ["key"="value"]
+WITH TEMPORARY PARTITION
+partition_desc ["key"="value"]
+[PROPERTIES ("key"="value", ...)]
+```
+
+注意：
+
+1. 详细使用信息请查阅[临时分区](../../../using_starrocks/Temporary_partition.md)
+
+#### 删除临时分区
+
+语法：
+
+```sql
+ALTER TABLE [database.]table
+DROP TEMPORARY PARTITION partition_name;
+```
+
+注意：
+
+1. 详细使用信息请查阅[临时分区](../../../using_starrocks/Temporary_partition.md)
 
 #### 修改分区属性
 
