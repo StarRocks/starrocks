@@ -295,7 +295,7 @@ descTableStatement
     ;
 
 createTableLikeStatement
-    : CREATE TABLE (IF NOT EXISTS)? qualifiedName LIKE qualifiedName
+    : CREATE (EXTERNAL)? TABLE (IF NOT EXISTS)? qualifiedName LIKE qualifiedName
     ;
 
 showIndexStatement
