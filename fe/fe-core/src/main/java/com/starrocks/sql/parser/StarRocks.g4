@@ -42,6 +42,7 @@ statement
     | createTableLikeStatement                                                              #createTableLike
     | showIndexStatement                                                                    #showIndex
     | recoverTableStatement                                                                 #recoverTable
+    | showOpenTableStatement                                                                #showOpenTable
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -304,6 +305,10 @@ showIndexStatement
 
 recoverTableStatement
     : RECOVER TABLE qualifiedName
+    ;
+
+showOpenTableStatement
+    : SHOW OPEN TABLES
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------

@@ -2264,11 +2264,6 @@ show_param ::=
     {:
         RESULT = new ShowVariablesStmt(type, parser.wild, parser.where);
     :}
-    /* show open tables */
-    | KW_OPEN KW_TABLES opt_db:db opt_wild_where
-    {:
-        RESULT = new ShowOpenTableStmt();
-    :}
     /* show table status */
     | KW_TABLE KW_STATUS opt_db:db opt_wild_where
     {:

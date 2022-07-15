@@ -119,6 +119,7 @@ import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowOpenTableStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowStatusStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -764,6 +765,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean force = context.FORCE() != null;
         boolean exists = context.EXISTS() != null;
         return new DropPartitionClause(exists, partitionName, temp, force);
+    }
+
+    @Override
+    public ParseNode visitShowOpenTableStatement(StarRocksParser.ShowOpenTableStatementContext  context) {
+        return new ShowOpenTableStmt();
     }
 
     // ------------------------------------------- View Statement ------------------------------------------------------
