@@ -318,7 +318,8 @@ public class HiveMetaCache {
         }
     }
 
-
+    // load table according to hiveTableName, however the table could be hiveTable or hudiTable
+    // we should check table type by input format from hms
     private Table loadTable(HiveTableName hiveTableName) throws TException, DdlException {
         org.apache.hadoop.hive.metastore.api.Table hiveTable = client.getTable(hiveTableName);
         Table table = null;
