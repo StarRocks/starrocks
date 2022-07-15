@@ -871,7 +871,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
         if (!st.ok() && !st.is_not_found()) {
             std::string msg = Substitute("get persistent index meta failed: $0", st.to_string());
-            LOG(ERROR) << msg;
+            LOG(ERROR) << msg << " " << _debug_string(false, true);
             _set_error(msg);
             return;
         }
@@ -880,7 +880,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     st = index.commit(&index_meta);
     if (!st.ok()) {
         std::string msg = Substitute("primary index commit failed: $0", st.to_string());
-        LOG(ERROR) << msg;
+        LOG(ERROR) << msg << " " << _debug_string(false, true);
         _set_error(msg);
         return;
     }
@@ -1345,7 +1345,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
         if (!st.ok() && !st.is_not_found()) {
             std::string msg = Substitute("get persistent index meta failed: $0", st.to_string());
-            LOG(ERROR) << msg;
+            LOG(ERROR) << msg << " " << _debug_string(false, true);
             _set_error(msg);
             return;
         }
@@ -1353,7 +1353,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     st = index.commit(&index_meta);
     if (!st.ok()) {
         std::string msg = Substitute("primary index commit failed: $0", st.to_string());
-        LOG(ERROR) << msg;
+        LOG(ERROR) << msg << " " << _debug_string(false, true);
         _set_error(msg);
         return;
     }

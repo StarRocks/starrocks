@@ -56,6 +56,10 @@ T pad(T v, P p) {
     return npad(v, p) * p;
 }
 
+static std::string get_l0_index_file_name(std::string& dir, const EditVersion& version) {
+    return strings::Substitute("$0/index.l0.$1.$2", dir, version.major(), version.minor());
+}
+
 struct IndexHash {
     IndexHash() {}
     IndexHash(uint64_t hash) : hash(hash) {}
@@ -525,9 +529,19 @@ class FixedMutableIndex : public MutableIndex {
 private:
     phmap::flat_hash_map<FixedKey<KeySize>, IndexValue, FixedKeyHash<KeySize>> _map;
 
+    uint64_t _offset = 0;
+    uint64_t _page_size = 0;
+    std::string _path;
+    std::unique_ptr<WritableFile> _index_file;
+
 public:
     FixedMutableIndex() {}
-    ~FixedMutableIndex() override {}
+    FixedMutableIndex(const std::string& path) : _path(path) {}
+    ~FixedMutableIndex() override {
+        if (_index_file) {
+            _index_file->close();
+        }
+    }
 
     size_t size() const override { return _map.size(); }
 
@@ -597,6 +611,8 @@ public:
         return Status::OK();
     }
 
+    bool load_snapshot(phmap::BinaryInputArchive& ar_in) { return _map.load(ar_in); }
+
     Status load_wals(size_t n, const void* keys, const IndexValue* values) {
         const FixedKey<KeySize>* fkeys = reinterpret_cast<const FixedKey<KeySize>*>(keys);
         for (size_t i = 0; i < n; i++) {
@@ -609,6 +625,68 @@ public:
                 p.first->second = v;
             }
         }
+        return Status::OK();
+    }
+
+    Status load(const MutableIndexMetaPB& meta) {
+        IndexSnapshotMetaPB snapshot_meta = meta.snapshot();
+        EditVersion start_version = snapshot_meta.version();
+        PagePointerPB page_pb = snapshot_meta.data();
+        size_t snapshot_off = page_pb.offset();
+        size_t snapshot_size = page_pb.size();
+
+        std::string index_file_name = get_l0_index_file_name(_path, start_version);
+        std::shared_ptr<FileSystem> fs;
+        ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_path));
+
+        // Assuming that the snapshot is always at the beginning of index file,
+        // if not, we can't call phmap.load() directly because phmap.load() alaways
+        // reads the contents of the file from the beginning
+        phmap::BinaryInputArchive ar_in(index_file_name.data());
+        if (snapshot_size > 0 && !_map.load(ar_in)) {
+            std::string err_msg = strings::Substitute("failed load snapshot from file $0", index_file_name);
+            LOG(WARNING) << err_msg;
+            return Status::InternalError(err_msg);
+        }
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(index_file_name));
+        // if mutable index is empty, set _offset as 0, otherwise set _offset as snapshot size
+        _offset = snapshot_off + snapshot_size;
+        int n = meta.wals_size();
+        // read wals and build hash map
+        for (int i = 0; i < n; i++) {
+            const auto& wal_pb = meta.wals(i);
+            const auto& page_pb = wal_pb.data();
+            size_t offset = page_pb.offset();
+            size_t size = page_pb.size();
+            _offset = offset + size;
+            size_t kv_size = KeySize + sizeof(IndexValue);
+            size_t nums = size / kv_size;
+            std::string buff;
+            while (nums > 0) {
+                size_t batch_num = (nums > 4096) ? 4096 : nums;
+                raw::stl_string_resize_uninitialized(&buff, batch_num * kv_size);
+                RETURN_IF_ERROR(read_file->read_at_fully(offset, buff.data(), buff.size()));
+                uint8_t keys[KeySize * batch_num];
+                std::vector<IndexValue> values;
+                values.reserve(batch_num);
+                size_t buf_offset = 0;
+                for (size_t j = 0; j < batch_num; ++j) {
+                    strings::memcpy_inlined(keys + j * KeySize, buff.data() + buf_offset, KeySize);
+                    uint64_t val = UNALIGNED_LOAD64(buff.data() + buf_offset + KeySize);
+                    values.emplace_back(val);
+                    buf_offset += kv_size;
+                }
+                RETURN_IF_ERROR(load_wals(batch_num, keys, values.data()));
+                offset += batch_num * kv_size;
+                nums -= batch_num;
+            }
+        }
+        // the data in the end maybe invalid
+        // so we need to truncate file first
+        RETURN_IF_ERROR(FileSystemUtil::resize_file(index_file_name, _offset));
+        WritableFileOptions wblock_opts;
+        wblock_opts.mode = FileSystem::MUST_EXIST;
+        ASSIGN_OR_RETURN(_index_file, fs->new_writable_file(wblock_opts, index_file_name));
         return Status::OK();
     }
 
@@ -675,8 +753,6 @@ public:
 
     bool dump(phmap::BinaryOutputArchive& ar_out) { return _map.dump(ar_out); }
 
-    bool load_snapshot(phmap::BinaryInputArchive& ar_in) { return _map.load(ar_in); }
-
     size_t capacity() { return _map.capacity(); }
 
     void reserve(size_t size) { _map.reserve(size); }
@@ -715,16 +791,116 @@ public:
         }
         return writer.finish();
     }
+
+    Status commit(MutableIndexMetaPB* meta, const EditVersion& version, const CommitType& type) {
+        std::shared_ptr<FileSystem> fs;
+        ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_path));
+        switch (type) {
+        case kFlush: {
+            // create a new empty _l0 file because all data in _l0 has write into _l1 files
+            std::string file_name = get_l0_index_file_name(_path, version);
+            WritableFileOptions wblock_opts;
+            wblock_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+            ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wblock_opts, file_name));
+            DeferOp close_block([&wfile] {
+                if (wfile) {
+                    wfile->close();
+                }
+            });
+            meta->clear_wals();
+            IndexSnapshotMetaPB* snapshot = meta->mutable_snapshot();
+            version.to_pb(snapshot->mutable_version());
+            PagePointerPB* data = snapshot->mutable_data();
+            // create a new empty _l0 file, set _offset to 0
+            data->set_offset(0);
+            data->set_size(0);
+            meta->set_format_version(PERSISTENT_INDEX_VERSION_1);
+            _offset = 0;
+            _page_size = 0;
+            break;
+        }
+        case kSnapshot: {
+            std::string file_name = get_l0_index_file_name(_path, version);
+            // be maybe crash after create index file during last commit
+            // so we delete expired index file first to make sure no garbage left
+            FileSystem::Default()->delete_file(file_name);
+            size_t snapshot_size = dump_bound();
+            phmap::BinaryOutputArchive ar_out(file_name.data());
+            if (!dump(ar_out)) {
+                std::string err_msg = strings::Substitute("faile to dump snapshot to file $0", file_name);
+                LOG(WARNING) << err_msg;
+                return Status::InternalError(err_msg);
+            }
+            // dump snapshot success, set _index_file to new snapshot file
+            WritableFileOptions wblock_opts;
+            wblock_opts.mode = FileSystem::MUST_EXIST;
+            ASSIGN_OR_RETURN(_index_file, fs->new_writable_file(wblock_opts, file_name));
+            meta->clear_wals();
+            IndexSnapshotMetaPB* snapshot = meta->mutable_snapshot();
+            version.to_pb(snapshot->mutable_version());
+            PagePointerPB* data = snapshot->mutable_data();
+            data->set_offset(0);
+            data->set_size(snapshot_size);
+            meta->set_format_version(PERSISTENT_INDEX_VERSION_1);
+            _offset = snapshot_size;
+            _page_size = 0;
+            break;
+        }
+        case kAppendWAL: {
+            IndexWalMetaPB* wal_pb = meta->add_wals();
+            version.to_pb(wal_pb->mutable_version());
+            PagePointerPB* data = wal_pb->mutable_data();
+            data->set_offset(_offset);
+            data->set_size(_page_size);
+            meta->set_format_version(PERSISTENT_INDEX_VERSION_1);
+            _offset += _page_size;
+            _page_size = 0;
+            break;
+        }
+        default: {
+            return Status::InternalError("Unknown commit type");
+        }
+        }
+        return Status::OK();
+    }
+
+    Status append_wal(size_t n, const void* keys, const IndexValue* values) {
+        const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(keys);
+        faststring fixed_buf;
+        fixed_buf.reserve(n * (KeySize + sizeof(IndexValue)));
+        for (size_t i = 0; i < n; i++) {
+            const auto v = (values != nullptr) ? values[i] : IndexValue(NullIndexValue);
+            fixed_buf.append(fkeys + i * KeySize, KeySize);
+            put_fixed64_le(&fixed_buf, v.get_value());
+        }
+        RETURN_IF_ERROR(_index_file->append(fixed_buf));
+        _page_size += fixed_buf.size();
+        return Status::OK();
+    }
+
+    Status append_wal(size_t n, const void* keys, const IndexValue* values, const std::vector<size_t>& idxes) {
+        DCHECK(n <= idxes.size());
+        const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(keys);
+        faststring fixed_buf;
+        fixed_buf.reserve(n * (KeySize + sizeof(IndexValue)));
+        for (size_t i = 0; i < n; i++) {
+            fixed_buf.append(fkeys + idxes[i] * KeySize, KeySize);
+            put_fixed64_le(&fixed_buf, values[idxes[i]].get_value());
+        }
+        RETURN_IF_ERROR(_index_file->append(fixed_buf));
+        _page_size += fixed_buf.size();
+        return Status::OK();
+    }
 };
 
-StatusOr<std::unique_ptr<MutableIndex>> MutableIndex::create(size_t key_size) {
+StatusOr<std::unique_ptr<MutableIndex>> MutableIndex::create(size_t key_size, const std::string& path) {
     if (key_size == 0) {
         return Status::NotSupported("varlen key size IndexL0 not supported");
     }
 
 #define CASE_SIZE(s) \
     case s:          \
-        return std::make_unique<FixedMutableIndex<s>>();
+        return std::make_unique<FixedMutableIndex<s>>(path);
 
 #define CASE_SIZE_8(s) \
     CASE_SIZE(s)       \
@@ -984,16 +1160,9 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
 PersistentIndex::PersistentIndex(const std::string& path) : _path(path) {}
 
 PersistentIndex::~PersistentIndex() {
-    if (_index_file) {
-        _index_file->close();
-    }
     if (_l1) {
         _l1->clear();
     }
-}
-
-std::string PersistentIndex::_get_l0_index_file_name(std::string& dir, const EditVersion& version) {
-    return strings::Substitute("$0/index.l0.$1.$2", dir, version.major(), version.minor());
 }
 
 // Create a new empty PersistentIndex
@@ -1006,18 +1175,12 @@ Status PersistentIndex::create(size_t key_size, const EditVersion& version) {
     _kv_pair_size = _key_size + kIndexValueSize;
     _size = 0;
     _version = version;
-    _offset = 0;
-    _page_size = 0;
-    auto st = MutableIndex::create(key_size);
+    auto st = MutableIndex::create(key_size, _path);
     if (!st.ok()) {
         return st.status();
     }
     _l0 = std::move(st).value();
     ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
-    std::string file_name = _get_l0_index_file_name(_path, version);
-    WritableFileOptions wblock_opts;
-    wblock_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-    ASSIGN_OR_RETURN(_index_file, _fs->new_writable_file(wblock_opts, file_name));
     return Status::OK();
 }
 
@@ -1026,7 +1189,7 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     _kv_pair_size = _key_size + kIndexValueSize;
     _size = 0;
     _version = index_meta.version();
-    auto st = MutableIndex::create(_key_size);
+    auto st = MutableIndex::create(_key_size, _path);
     if (!st.ok()) {
         return st.status();
     }
@@ -1050,63 +1213,10 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
         return Status::InternalError("invalid PersistentIndexMetaPB");
     }
     MutableIndexMetaPB l0_meta = index_meta.l0_meta();
-    IndexSnapshotMetaPB snapshot_meta = l0_meta.snapshot();
-    EditVersion start_version = snapshot_meta.version();
-    PagePointerPB page_pb = snapshot_meta.data();
-    size_t snapshot_off = page_pb.offset();
-    size_t snapshot_size = page_pb.size();
+    DCHECK(_l0 != nullptr);
+    RETURN_IF_ERROR(_l0->load(l0_meta));
+
     std::unique_ptr<RandomAccessFile> l1_rfile;
-
-    std::string l0_index_file_name = _get_l0_index_file_name(_path, start_version);
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(l0_index_file_name));
-    // Assuming that the snapshot is always at the beginning of index file,
-    // if not, we can't call phmap.load() directly because phmap.load() alaways
-    // reads the contents of the file from the beginning
-    phmap::BinaryInputArchive ar_in(l0_index_file_name.data());
-    if (snapshot_size > 0 && !_load_snapshot(ar_in)) {
-        std::string err_msg = strings::Substitute("failed load snapshot from file $0", l0_index_file_name);
-        LOG(WARNING) << err_msg;
-        return Status::InternalError(err_msg);
-    }
-    // if mutable index is empty, set _offset as 0, otherwise set _offset as snapshot size
-    _offset = snapshot_off + snapshot_size;
-    int n = l0_meta.wals_size();
-    // read wals and build l0
-    for (int i = 0; i < n; i++) {
-        const auto& wal_pb = l0_meta.wals(i);
-        const auto& page_pb = wal_pb.data();
-        size_t offset = page_pb.offset();
-        size_t size = page_pb.size();
-        _offset = offset + size;
-        size_t kv_size = kv_pair_size();
-        size_t nums = size / kv_size;
-        std::string buff;
-        while (nums > 0) {
-            size_t batch_num = (nums > 4096) ? 4096 : nums;
-            raw::stl_string_resize_uninitialized(&buff, batch_num * kv_size);
-            RETURN_IF_ERROR(read_file->read_at_fully(offset, buff.data(), buff.size()));
-            uint8_t keys[_key_size * batch_num];
-            std::vector<IndexValue> values;
-            values.reserve(batch_num);
-            size_t buf_offset = 0;
-            for (size_t j = 0; j < batch_num; ++j) {
-                memcpy(keys + j * _key_size, buff.data() + buf_offset, _key_size);
-                uint64_t val = UNALIGNED_LOAD64(buff.data() + buf_offset + _key_size);
-                values.emplace_back(val);
-                buf_offset += kv_size;
-            }
-            RETURN_IF_ERROR(_l0->load_wals(batch_num, keys, values.data()));
-            offset += batch_num * kv_size;
-            nums -= batch_num;
-        }
-    }
-    // the data in the end maybe invalid
-    // so we need to truncate file first
-    RETURN_IF_ERROR(FileSystemUtil::resize_file(l0_index_file_name, _offset));
-    WritableFileOptions wblock_opts;
-    wblock_opts.mode = FileSystem::MUST_EXIST;
-    ASSIGN_OR_RETURN(_index_file, _fs->new_writable_file(wblock_opts, l0_index_file_name));
-
     if (index_meta.has_l1_version()) {
         _l1_version = index_meta.l1_version();
         auto l1_block_path = strings::Substitute("$0/index.l1.$1.$2", _path, _l1_version.major(), _l1_version.minor());
@@ -1134,18 +1244,6 @@ Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& ind
         LOG(WARNING) << "build persistent index failed because write persistent index meta failed: "
                      << status.to_string();
         return status;
-    }
-
-    // There are two conditions:
-    // First is _flushed is true, we have flushed all _l0 data into _l1 and reload, we don't need
-    // to do additional process
-    // Second is _flused is false, we have write all _l0 data into new snapshot file, we need to
-    // create new _index_file from the new snapshot file
-    if (!_flushed) {
-        std::string l0_index_file_path = _get_l0_index_file_name(_path, _version);
-        WritableFileOptions wblock_opts;
-        wblock_opts.mode = FileSystem::MUST_EXIST;
-        ASSIGN_OR_RETURN(_index_file, _fs->new_writable_file(wblock_opts, l0_index_file_path));
     }
 
     RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version));
@@ -1278,7 +1376,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     _kv_pair_size = _key_size + kIndexValueSize;
     _size = 0;
     _version = lastest_applied_version;
-    auto st = MutableIndex::create(_key_size);
+    auto st = MutableIndex::create(_key_size, _path);
     if (!st.ok()) {
         LOG(WARNING) << "Build persistent index failed because initialization failed: " << st.status().to_string();
         return st.status();
@@ -1378,104 +1476,32 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     RETURN_IF_ERROR(_check_and_flush_l0());
     // for case1 and case2
     if (_flushed) {
-        // create a new empty _l0 file because all data in _l0 has write into _l1 files
-        std::string file_name = _get_l0_index_file_name(_path, _version);
-        WritableFileOptions wblock_opts;
-        wblock_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(wblock_opts, file_name));
-        DeferOp close_block([&wfile] {
-            if (wfile) {
-                wfile->close();
-            }
-        });
         // update PersistentIndexMetaPB
-        VLOG(1) << "new l0 file path(flush) is " << file_name;
         index_meta->set_size(_size);
         _version.to_pb(index_meta->mutable_version());
         _version.to_pb(index_meta->mutable_l1_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
-        l0_meta->clear_wals();
-        IndexSnapshotMetaPB* snapshot = l0_meta->mutable_snapshot();
-        _version.to_pb(snapshot->mutable_version());
-        PagePointerPB* data = snapshot->mutable_data();
-        data->set_offset(0);
-        data->set_size(0);
-        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_1);
-        // if _flushed is true, we will create a new empty _l0 file, set _offset to 0
-        _offset = 0;
-        _page_size = 0;
+        RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kFlush));
         // clear _l0 and reload _l1
         RETURN_IF_ERROR(_reload(*index_meta));
     } else if (_dump_snapshot) {
-        std::string file_name = _get_l0_index_file_name(_path, _version);
-        // be maybe crash after create index file during last commit
-        // so we delete expired index file first to make sure no garbage left
-        FileSystem::Default()->delete_file(file_name);
-        size_t snapshot_size = _dump_bound();
-        phmap::BinaryOutputArchive ar_out(file_name.data());
-        if (!_dump(ar_out)) {
-            std::string err_msg = strings::Substitute("faile to dump snapshot to file $0", file_name);
-            LOG(WARNING) << err_msg;
-            return Status::InternalError(err_msg);
-        }
-        // update PersistentIndexMetaPB
         index_meta->set_size(_size);
         _version.to_pb(index_meta->mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
-        l0_meta->clear_wals();
-        IndexSnapshotMetaPB* snapshot = l0_meta->mutable_snapshot();
-        _version.to_pb(snapshot->mutable_version());
-        PagePointerPB* data = snapshot->mutable_data();
-        data->set_offset(0);
-        data->set_size(snapshot_size);
-        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_1);
-        // if _dump_snapshot is true, we will dump a snapshot to new _l0 file, set _offset to snapshot_size
-        _offset = snapshot_size;
-        _page_size = 0;
+        RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kSnapshot));
     } else {
-        MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
-        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_1);
-        IndexWalMetaPB* wal_pb = l0_meta->add_wals();
-        _version.to_pb(wal_pb->mutable_version());
-
-        PagePointerPB* data = wal_pb->mutable_data();
-        data->set_offset(_offset);
-        data->set_size(_page_size);
-
-        _version.to_pb(index_meta->mutable_version());
         index_meta->set_size(_size);
-
-        _offset += _page_size;
-        _page_size = 0;
+        _version.to_pb(index_meta->mutable_version());
+        MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
+        RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kAppendWAL));
     }
     return Status::OK();
 }
 
 Status PersistentIndex::on_commited() {
-    if (_flushed) {
+    if (_flushed || _dump_snapshot) {
         RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version));
-    } else if (_dump_snapshot) {
-        std::string expired_l0_file_path = _index_file->filename();
-        std::string index_file_path = _get_l0_index_file_name(_path, _version);
-        if (_fs == nullptr) {
-            ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(index_file_path));
-        }
-        std::unique_ptr<WritableFile> wfile;
-        DeferOp close_block([&wfile] {
-            if (wfile) {
-                wfile->close();
-            }
-        });
-
-        WritableFileOptions wblock_opts;
-        // new index file should be created in commit() phase
-        wblock_opts.mode = FileSystem::MUST_EXIST;
-        ASSIGN_OR_RETURN(wfile, _fs->new_writable_file(wblock_opts, index_file_path));
-        _index_file = std::move(wfile);
-        VLOG(1) << "delete expired l0 index file: " << expired_l0_file_path;
-        FileSystem::Default()->delete_file(expired_l0_file_path);
     }
-
     _dump_snapshot = false;
     _flushed = false;
     return Status::OK();
@@ -1553,16 +1579,7 @@ Status PersistentIndex::erase(size_t n, const void* keys, IndexValue* old_values
     RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
     _dump_snapshot |= _can_dump_directly();
     if (!_dump_snapshot) {
-        // write wal
-        const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(keys);
-        faststring fixed_buf;
-        fixed_buf.reserve(replace_idxes.size() * kv_pair_size());
-        for (size_t i = 0; i < replace_idxes.size(); ++i) {
-            fixed_buf.append(fkeys + replace_idxes[i] * _key_size, _key_size);
-            put_fixed64_le(&fixed_buf, values[replace_idxes[i]].get_value());
-        }
-        RETURN_IF_ERROR(_index_file->append(fixed_buf));
-        _page_size += fixed_buf.size();
+        RETURN_IF_ERROR(_l0->append_wal(replace_idxes.size(), keys, values, replace_idxes));
     }
     return Status::OK();
 }
@@ -1584,32 +1601,13 @@ Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue
     RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
     _dump_snapshot |= _can_dump_directly();
     if (!_dump_snapshot) {
-        // write wal
-        const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(keys);
-        faststring fixed_buf;
-        fixed_buf.reserve(replace_idxes.size() * kv_pair_size());
-        for (size_t i = 0; i < replace_idxes.size(); ++i) {
-            fixed_buf.append(fkeys + replace_idxes[i] * _key_size, _key_size);
-            put_fixed64_le(&fixed_buf, values[replace_idxes[i]].get_value());
-        }
-        RETURN_IF_ERROR(_index_file->append(fixed_buf));
-        _page_size += fixed_buf.size();
+        RETURN_IF_ERROR(_l0->append_wal(replace_idxes.size(), keys, values, replace_idxes));
     }
     return Status::OK();
 }
 
 Status PersistentIndex::_append_wal(size_t n, const void* keys, const IndexValue* values) {
-    const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(keys);
-    faststring fixed_buf;
-    fixed_buf.reserve(n * kv_pair_size());
-    for (size_t i = 0; i < n; i++) {
-        const auto v = (values != nullptr) ? values[i] : IndexValue(NullIndexValue);
-        fixed_buf.append(fkeys + i * _key_size, _key_size);
-        put_fixed64_le(&fixed_buf, v.get_value());
-    }
-    RETURN_IF_ERROR(_index_file->append(fixed_buf));
-    _page_size += fixed_buf.size();
-    return Status::OK();
+    return _l0->append_wal(n, keys, values);
 }
 
 Status PersistentIndex::_flush_l0() {
@@ -1624,9 +1622,7 @@ Status PersistentIndex::_flush_l0() {
 }
 
 Status PersistentIndex::_reload(const PersistentIndexMetaPB& index_meta) {
-    _offset = 0;
-    _page_size = 0;
-    auto l0_st = MutableIndex::create(_key_size);
+    auto l0_st = MutableIndex::create(_key_size, _path);
     if (!l0_st.ok()) {
         return l0_st.status();
     }
@@ -1670,18 +1666,10 @@ size_t PersistentIndex::_dump_bound() {
     return (_l0 == nullptr) ? 0 : _l0->dump_bound();
 }
 
-bool PersistentIndex::_dump(phmap::BinaryOutputArchive& ar_out) {
-    return (_l0 == nullptr) ? false : _l0->dump(ar_out);
-}
-
 // TODO: maybe build snapshot is better than append wals when almost
 // operations are upsert or erase
 bool PersistentIndex::_can_dump_directly() {
     return _dump_bound() <= kL0SnapshotSizeMax;
-}
-
-bool PersistentIndex::_load_snapshot(phmap::BinaryInputArchive& ar) {
-    return (_l0 == nullptr) ? false : _l0->load_snapshot(ar);
 }
 
 Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version) {
