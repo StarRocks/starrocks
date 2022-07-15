@@ -1938,7 +1938,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     // ------------------------------------------- Backup Store Statement ----------------------------------------------
-
     @Override
     public ParseNode visitBackupStatement(StarRocksParser.BackupStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
