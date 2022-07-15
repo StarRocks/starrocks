@@ -110,7 +110,7 @@ IsMaster: false
 
 ......
 
-Alive: truex
+Alive: true
 
 ......
 
