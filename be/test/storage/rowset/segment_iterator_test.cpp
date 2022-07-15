@@ -144,7 +144,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     con->add(pool.add(vectorized::new_column_ge_predicate(type_varchar, 1, Slice(values[8]))));
     seg_opts.delete_predicates.add(*con);
 
-    vectorized::ColumnIdToGlobalDictMap dict_map;
+    vectorized::ColumnIdToGlobalDictMap dict_map(0);
     vectorized::GlobalDictMap g_dict;
     for (int i = 0; i < 8; ++i) {
         g_dict[Slice(values[i])] = i;
@@ -271,7 +271,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     seg_opts.fs = _fs;
     seg_opts.stats = &stats;
 
-    vectorized::ColumnIdToGlobalDictMap dict_map;
+    vectorized::ColumnIdToGlobalDictMap dict_map(0);
     vectorized::GlobalDictMap g_dict;
     for (int i = 0; i < slice_num; ++i) {
         g_dict[Slice(values[i])] = i;
