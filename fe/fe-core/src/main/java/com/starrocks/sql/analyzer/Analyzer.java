@@ -25,6 +25,7 @@ import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UpdateStmt;
@@ -314,6 +315,12 @@ public class Analyzer {
         @Override
         public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext session) {
             AnalyzeStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitShowRestoreStmt(ShowRestoreStmt statement, ConnectContext context) {
+            ShowRestoreAnalyzer.analyze(statement, context);
             return null;
         }
     }

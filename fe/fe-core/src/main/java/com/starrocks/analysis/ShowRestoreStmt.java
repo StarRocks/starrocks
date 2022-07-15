@@ -33,6 +33,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class ShowRestoreStmt extends ShowStmt {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
@@ -96,7 +97,10 @@ public class ShowRestoreStmt extends ShowStmt {
             builder.append(" FROM `").append(dbName).append("` ");
         }
 
-        builder.append(where.toSql());
+        if (where != null) {
+            builder.append(where.toSql());
+        }
+
         return builder.toString();
     }
 
@@ -108,6 +112,11 @@ public class ShowRestoreStmt extends ShowStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.NO_FORWARD;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowRestoreStmt(this, context);
     }
 }
 

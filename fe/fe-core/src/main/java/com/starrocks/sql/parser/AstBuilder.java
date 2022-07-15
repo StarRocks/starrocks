@@ -111,6 +111,7 @@ import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
@@ -203,6 +204,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.SetQualifier;
 import com.starrocks.system.SystemInfoService;
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
@@ -217,6 +219,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
@@ -1932,6 +1935,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new ShowVariablesStmt(getVariableType(context.varType()), pattern, where);
+    }
+
+    // ------------------------------------------- Backup Store Statement ----------------------------------------------
+
+    @Override
+    public ParseNode visitShowRestoreStatement(StarRocksParser.ShowRestoreStatementContext context) {
+        return new ShowRestoreStmt(Optional.ofNullable(context.identifier()).map(RuleContext::getText).orElse(null),
+                null);
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------
