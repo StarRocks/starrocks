@@ -186,6 +186,9 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return HiveMetaStoreTableUtils.getTableLevelColumnStats(hmsTableInfo, columnNames);
     }
 
+    // same as hive table, refresh table meta
+    // if table is internal table, refresh table cache
+    // if table is connector table, refresh table meta in hiveMetaCache
     @Override
     public void refreshTableCache(String dbName, String tableName) throws DdlException {
         HiveRepository hiveRepository = GlobalStateMgr.getCurrentState().getHiveRepository();
@@ -202,6 +205,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
     }
 
+    // same as hive table, refresh partition meta
     @Override
     public void refreshPartCache(List<String> partNames) throws DdlException {
         GlobalStateMgr.getCurrentState().getHiveRepository().refreshPartitionCache(hmsTableInfo, partNames);
@@ -323,6 +327,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
     }
 
+    // validate hudi table column type
     public static org.apache.hadoop.hive.metastore.api.Table validate(String resourceName, String db, String table,
                                                                       List<Column> fullSchema) throws DdlException {
         org.apache.hadoop.hive.metastore.api.Table metastoreTable =
@@ -339,6 +344,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             if (hudiColumn == null) {
                 throw new DdlException("Column [" + column.getName() + "] not exists in hudi.");
             }
+            // for each column in hudi schema, we should transfer hudi column type to starrocks type
+            // after that, we should check column type whether is same
             if (!validColumnType(hudiColumn.schema(), column.getType())) {
                 throw new DdlException("Can not convert hudi column type [" + hudiColumn.schema().toString() + "] " +
                         "to starrocks type [" + column.getPrimitiveType() + "], column name: " + column.getName()
@@ -349,6 +356,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return metastoreTable;
     }
 
+    // load hudi table schema
     public static Schema loadHudiSchema(org.apache.hadoop.hive.metastore.api.Table hiveTable) throws DdlException {
         String hudiBasePath = hiveTable.getSd().getLocation();
         Configuration conf = new Configuration();
@@ -364,6 +372,10 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return hudiTable;
     }
 
+    // check whether avroSchema after conversion is same as srType
+    // rules of validate types
+    // If one of convertType or srType is ArrayType, the another one must be ArrayType too.
+    // Considering ArrayType have recursions, so ArrayType levels should be same between [convertType, srType]
     public static boolean validColumnType(Schema avroSchema, Type srType) throws DdlException {
         Schema.Type columnType = avroSchema.getType();
         if (columnType == null) {
@@ -381,6 +393,9 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             Type convertSubType = null;
             Type srSubType = null;
             // considering ArrayLevel has recursions, we can get recursion levels here
+            // It is obvious that, if an avroSchema is ArrayType, so the srType must be srType too.
+            // So, we can calculate the level of arrays in srType.
+            // eg: level num of Array<Array<Array>> is 3, and the primitive type of srType is int.
             int convertArrayLevel = 0;
             int srArrayLevel = 0;
             while (convertType instanceof ArrayType) {
