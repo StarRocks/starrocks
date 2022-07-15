@@ -60,7 +60,7 @@ INSERT INTO tj (id, j) VALUES (3, parse_json('{"a": 3, "b": true}'));
 INSERT INTO tj (id, j) VALUES (4, json_object('a', 4, 'b', false)); 
 ```
 
-> The parse_json function can interpret STRING data as JSON data. The json_object function can construct a JSON object or convert an existing table to a JSON document. For more information, see [parse_json](/sql-reference/sql-functions/json-functions/json-constructor-functions/parse_json.md) and [json_object](/sql-reference/sql-functions/json-functions/json-constructor-functions/json_object.md).
+> The parse_json function can interpret STRING data as JSON data. The json_object function can construct a JSON object or convert an existing table to a JSON document. For more information, see [parse_json](../../sql-functions/json-functions/json-constructor-functions/parse_json.md) and [json_object](../../sql-functions/json-functions/json-constructor-functions/json_object.md).
 
 - Method 2: Use Stream Load to import a JSON document and store the document as JSON data. For more information, see the "Load JSON data by using a stream load" section of this topic.
 
@@ -68,7 +68,7 @@ INSERT INTO tj (id, j) VALUES (4, json_object('a', 4, 'b', false));
 
   - If you want to import a JSON object of a JSON document and stores the JSON object as JSON data, set `jsonpaths` to `$`.
 
-- Method 3: Use Broker Load to import a Parquet file and store the file as JSON data. For more information, see [Broker Load](/loading/BrokerLoad.md).
+- Method 3: Use Broker Load to import a Parquet file and store the file as JSON data. For more information, see [Broker Load](../../../loading/BrokerLoad.md).
 
 StarRocks supports the following data type conversions at Parquet file import.
 
@@ -233,7 +233,7 @@ mysql> select * from tj
 
 ## JSON functions and operators
 
-You can use JSON functions and operators to construct and process JSON data. For more information, see [Overview of JSON functions and operators](/sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators.md).
+You can use JSON functions and operators to construct and process JSON data. For more information, see [Overview of JSON functions and operators](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md).
 
 ## Limits and usage notes
 
