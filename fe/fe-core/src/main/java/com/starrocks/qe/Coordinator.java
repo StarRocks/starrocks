@@ -1074,11 +1074,7 @@ public class Coordinator {
                 if (usePipeline && kv.getValue().isBroadcastJoin() && kv.getValue().isHasRemoteTargets()) {
                     broadcastGRFProbersMap.put(kv.getKey(), probeParamList);
                 } else {
-                    if (idToProbePrams.containsKey(kv.getKey())) {
-                        idToProbePrams.get(kv.getKey()).addAll(probeParamList);
-                    } else {
-                        idToProbePrams.put(kv.getKey(), probeParamList);
-                    }
+                    idToProbePrams.computeIfAbsent(kv.getKey(), k -> new ArrayList<>()).addAll(probeParamList);
                 }
             }
 

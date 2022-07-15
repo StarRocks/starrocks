@@ -232,6 +232,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
+    public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
 
@@ -277,6 +278,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
+
+    @VariableMgr.VarAttr(name = RUNTIME_FILTER_ON_EXCHANGE_NODE)
+    private boolean runtimeFilterOnExchangeNode = false;
 
     @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP)
     private boolean enableResourceGroup = false;
@@ -1015,6 +1019,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableOptimizerTraceLog() {
         return enableOptimizerTraceLog;
+    }
+
+    public boolean isRuntimeFilterOnExchangeNode() {
+        return runtimeFilterOnExchangeNode;
     }
 
     // Serialize to thrift object
