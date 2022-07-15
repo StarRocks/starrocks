@@ -22,71 +22,26 @@
 package com.starrocks.analysis;
 
 import com.starrocks.analysis.ShowAlterStmt.AlterType;
-import com.starrocks.catalog.FakeGlobalStateMgr;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
-import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
+import com.starrocks.sql.analyzer.DDLTestBase;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
-public class CancelAlterStmtTest {
-
-    private Analyzer analyzer;
-    private GlobalStateMgr globalStateMgr;
-
-    private ConnectContext ctx;
-
-    private static FakeGlobalStateMgr fakeGlobalStateMgr;
-
-    @Before
-    public void setUp() {
-        globalStateMgr = AccessTestUtil.fetchAdminCatalog();
-        ctx = new ConnectContext(null);
-        ctx.setQualifiedUser("root");
-        ctx.setRemoteIP("192.168.1.1");
-
-        analyzer = new Analyzer(globalStateMgr, ctx);
-        new Expectations(analyzer) {
-            {
-                analyzer.getDefaultDb();
-                minTimes = 0;
-                result = "testDb";
-
-                analyzer.getQualifiedUser();
-                minTimes = 0;
-                result = "testUser";
-            }
-        };
-
-        new MockUp<ConnectContext>() {
-            @Mock
-            public ConnectContext get() {
-                return ctx;
-            }
-        };
-    }
+public class CancelAlterStmtTest extends DDLTestBase {
 
     @Test
-    public void testNormal() throws UserException, AnalysisException {
-        fakeGlobalStateMgr = new FakeGlobalStateMgr();
-        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
-        // cancel alter column
+    public void testNormal() throws UserException {
         CancelAlterTableStmt stmt = new CancelAlterTableStmt(AlterType.COLUMN, new TableName(null, "testTbl"));
         stmt.analyze(analyzer);
-        Assert.assertEquals("CANCEL ALTER COLUMN FROM `testDb`.`testTbl`", stmt.toString());
-        Assert.assertEquals("testDb", stmt.getDbName());
+        Assert.assertEquals("CANCEL ALTER COLUMN FROM `testDb1`.`testTbl`", stmt.toString());
+        Assert.assertEquals("default_cluster:testDb1", stmt.getDbName());
         Assert.assertEquals(AlterType.COLUMN, stmt.getAlterType());
         Assert.assertEquals("testTbl", stmt.getTableName());
 
         stmt = new CancelAlterTableStmt(AlterType.ROLLUP, new TableName(null, "testTbl"));
         stmt.analyze(analyzer);
-        Assert.assertEquals("CANCEL ALTER ROLLUP FROM `testDb`.`testTbl`", stmt.toString());
-        Assert.assertEquals("testDb", stmt.getDbName());
+        Assert.assertEquals("CANCEL ALTER ROLLUP FROM `testDb1`.`testTbl`", stmt.toString());
+        Assert.assertEquals("default_cluster:testDb1", stmt.getDbName());
         Assert.assertEquals(AlterType.ROLLUP, stmt.getAlterType());
     }
 }

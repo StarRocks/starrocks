@@ -32,10 +32,10 @@ import org.junit.Test;
 import java.util.Arrays;
 
 public class ShowPartitionsStmtTest {
-
     private ConnectContext ctx;
     private static StarRocksAssert starRocksAssert;
 
+    private Analyzer analyzer;
     @Before
     public void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
