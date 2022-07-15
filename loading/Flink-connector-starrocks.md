@@ -39,7 +39,7 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 stream load
 </dependency>
 ```
 
-### 步骤二：调用 flink-connector-starrocks，将 MySQL 数据实时同步至 StarRocks
+### 步骤二：调用 flink-connector-starrocks
 
 * 如您使用 Flink DataStream API，则需要参考如下命令。
 
