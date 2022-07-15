@@ -21,7 +21,3 @@ ErrorReason{errCode = 4, msg='Job failed to fetch all current partition with err
 **问题原因：**
 
 当前librdkafka不支持sasl认证
-
-**解决方案：**
-
-重新编译librdkafka，可参考[编译librdkafka](https://www.codeleading.com/article/8708676746/)。
