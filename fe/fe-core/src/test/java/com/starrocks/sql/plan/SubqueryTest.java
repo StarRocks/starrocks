@@ -302,6 +302,7 @@ public class SubqueryTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 6: v9 = 14: v4\n" +
                 "  |  equal join conjunct: 21: cast = 15: cast");
