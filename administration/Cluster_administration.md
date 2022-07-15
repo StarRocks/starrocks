@@ -288,7 +288,10 @@ mysql> set global batch_size = 4096;
 进入 FE 路径，并替换相关文件。以下示例以大版本回滚为例。
 
 > 注意
-> FE 节点小版本回滚中（例如从 2.0.y 回滚到 2.0.x），您只需回滚 **/lib/starrocks-fe.jar**。而大版本回滚中（例如从 2.x.x 升级到 2.0.x），您需要替换 FE 节点路径下的 **bin** 和 **lib** 文件夹。
+>
+> * FE 节点小版本回滚中（例如从 2.0.y 回滚到 2.0.x），您只需回滚 **/lib/starrocks-fe.jar**。
+> * FE 节点大版本回滚中（例如从 2.x.x 升级到 2.0.x），您需要替换 FE 节点路径下的 **bin** 和 **lib** 文件夹。
+> * 从 2.1.x 回滚至 2.0.x及以前版本需要通过一下命令关闭 pipeline：`set global enable_pipeline_engine = false`。
 
 ```shell
 cd StarRocks-x.x.x/fe
