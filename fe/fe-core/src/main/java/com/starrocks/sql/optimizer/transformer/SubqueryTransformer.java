@@ -141,6 +141,9 @@ public class SubqueryTransformer {
         @Override
         public OptExprBuilder visitExpression(Expr node, SubqueryContext context) {
             OptExprBuilder builder = context.builder;
+            if (builder.getExpressionMapping().hasExpression(node)) {
+                return builder;
+            }
             for (Expr child : node.getChildren()) {
                 builder = visit(child, new SubqueryContext(builder, false, context.cteContext));
             }
