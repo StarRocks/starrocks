@@ -957,6 +957,10 @@ alter_table_clause ::=
     {:
         RESULT = new AddPartitionClause(desc, distribution, properties, isTempPartition);
     :}
+    | KW_ADD opt_tmp:isTempPartition list_partition_desc:desc opt_distribution:distribution opt_properties:properties
+    {:
+        RESULT = new AddPartitionClause(desc, distribution, properties, isTempPartition);
+    :}
     | KW_DROP opt_tmp:isTempPartition KW_PARTITION opt_if_exists:ifExists ident:partitionName opt_force:force
     {:
         RESULT = new DropPartitionClause(ifExists, partitionName, isTempPartition, force ? force : isTempPartition);

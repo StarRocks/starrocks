@@ -131,4 +131,53 @@ public class CatalogUtils {
             throw new DdlException(e.getMessage());
         }
     }
+
+    public static void checkPartitionValuesExistForAddListPartition(OlapTable olapTable, PartitionDesc partitionDesc)
+            throws DdlException {
+        try {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) olapTable.getPartitionInfo();
+            if (partitionDesc instanceof SingleItemListPartitionDesc) {
+                listPartitionInfo.setBatchLiteralExprValues(listPartitionInfo.getIdToValues());
+                List<LiteralExpr> allLiteralExprValues = Lists.newArrayList();
+                listPartitionInfo.getLiteralExprValues().forEach((k, v) -> allLiteralExprValues.addAll(v));
+
+                SingleItemListPartitionDesc singleItemListPartitionDesc = (SingleItemListPartitionDesc) partitionDesc;
+                for (LiteralExpr item : singleItemListPartitionDesc.getLiteralExprValues()) {
+                    for (LiteralExpr value : allLiteralExprValues) {
+                        if (item.getStringValue().equals(value.getStringValue())) {
+                            throw new DdlException("Duplicate partition value %s");
+                        }
+                    }
+                }
+            } else if (partitionDesc instanceof MultiItemListPartitionDesc) {
+                listPartitionInfo.setBatchMultiLiteralExprValues(listPartitionInfo.getIdToMultiValues());
+                List<List<LiteralExpr>> allMultiLiteralExprValues = Lists.newArrayList();
+                listPartitionInfo.getMultiLiteralExprValues().forEach((k, v) -> allMultiLiteralExprValues.addAll(v));
+
+                int partitionColSize = listPartitionInfo.getPartitionColumns().size();
+                MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
+                for (List<LiteralExpr> itemExpr : multiItemListPartitionDesc.getMultiLiteralExprValues()) {
+                    for (List<LiteralExpr> valueExpr : allMultiLiteralExprValues) {
+                        int duplicatedSize = 0;
+                        for (int i = 0; i < itemExpr.size(); i++) {
+                            String itemValue = itemExpr.get(i).getStringValue();
+                            String value = valueExpr.get(i).getStringValue();
+                            if (value.equals(itemValue)) {
+                                duplicatedSize++;
+                            }
+                        }
+                        if (duplicatedSize == partitionColSize) {
+                            List<String> msg = itemExpr.stream()
+                                    .map(value -> ("\"" + value.getStringValue() + "\""))
+                                    .collect(Collectors.toList());
+                            throw new DdlException("Duplicate values " +
+                                    "(" + String.join(",", msg) + ") ");
+                        }
+                    }
+                }
+            }
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
+    }
 }

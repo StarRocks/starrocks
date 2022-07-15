@@ -2591,7 +2591,7 @@ public class LocalMetastore implements ConnectorMetadata {
     private List<Long> chosenBackendIdBySeq(int replicationNum, TStorageMedium storageMedium)
             throws DdlException {
         List<Long> chosenBackendIds = systemInfoService.seqChooseBackendIdsByStorageMedium(replicationNum,
-                true, true, storageMedium);
+                true, true, clusterName, storageMedium);
         if (chosenBackendIds == null) {
             throw new DdlException(
                     "Failed to find enough host with storage medium is " + storageMedium + " in all backends. need: " +
@@ -3897,7 +3897,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void initDefaultCluster() {
         final List<Long> backendList = Lists.newArrayList();
-        final List<Backend> defaultClusterBackends = systemInfoService.getBackends();
+        final List<Backend> defaultClusterBackends =
+                systemInfoService.getClusterBackends(SystemInfoService.DEFAULT_CLUSTER);
         for (Backend backend : defaultClusterBackends) {
             backendList.add(backend.getId());
         }
