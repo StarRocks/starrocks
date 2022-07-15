@@ -15,6 +15,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.Collection;
 
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class AnalyzeRestoreTest {
@@ -58,6 +59,14 @@ public class AnalyzeRestoreTest {
                 "    \"backup_timestamp\"=\"2018-05-04-17-11-01\"\n" +
                 ");";
         analyzeSuccess(sql);
+        analyzeFail("RESTORE SNAPSHOT test.`snapshot_2` FROM `repo1` ON ( `t0`)");
+        analyzeFail("RESTORE SNAPSHOT test1.`snapshot_2` FROM `repo1` ON ( `t0`)");
+        analyzeFail("RESTORE SNAPSHOT `snapshot_2` FROM `repo` ON ( )");
+        analyzeFail("RESTORE SNAPSHOT `snapshot_2` FROM `` ON (`t0`)");
+        analyzeFail("RESTORE SNAPSHOT `` FROM `repo` ON (`t0`)");
+        analyzeFail("RESTORE SNAPSHOT `snapshot_2` FROM `repo` ON (t99)");
+        analyzeFail("RESTORE SNAPSHOT `snapshot_2` FROM `repo` ON (`t0` AS `t1`)");
+        analyzeFail("RESTORE SNAPSHOT `snapshot_2` FROM `repo` ON (`t0`PARTITION (p1,p1))");
     }
 
 
