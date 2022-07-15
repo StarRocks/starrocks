@@ -23,8 +23,7 @@
 
 #include "configbase.h"
 
-namespace starrocks {
-namespace config {
+namespace starrocks::config {
 // The cluster id.
 CONF_Int32(cluster_id, "-1");
 // The port on which ImpalaInternalService is exported.
@@ -761,6 +760,10 @@ CONF_String(starlet_cache_dir, "");
 
 CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 
-} // namespace config
+CONF_mBool(enable_librdkafka_debug_mode, "false");
 
-} // namespace starrocks
+// generic, broker, topic, metadata, feature, queue, msg, protocol, cgrp, security
+// fetch, interceptor, plugin, consumer, admin, eos, mock, assigner, conf, all
+CONF_String(librdkafka_debug_module, "all");
+
+} // namespace starrocks::config
