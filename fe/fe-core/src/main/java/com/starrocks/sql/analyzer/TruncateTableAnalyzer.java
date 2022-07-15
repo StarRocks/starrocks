@@ -5,34 +5,13 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.TruncateTableStmt;
-import com.starrocks.catalog.CatalogUtils;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.common.MetaUtils;
 
 public class TruncateTableAnalyzer {
 
     public static void analyze(TruncateTableStmt statement, ConnectContext context) {
-        String dbName = statement.getDbName();
-        String tblName = statement.getTblName();
-        if (Strings.isNullOrEmpty(dbName)) {
-            if (Strings.isNullOrEmpty(context.getDatabase())) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
-            } else {
-                dbName = ClusterNamespace.getFullName(context.getDatabase());
-            }
-        } else {
-            dbName = ClusterNamespace.getFullName(dbName);
-        }
-        statement.setDbName(dbName);
-        try {
-            CatalogUtils.checkOlapTableHasStarOSPartition(dbName, tblName);
-        } catch (AnalysisException e) {
-            throw new SemanticException(e.getMessage());
-        }
-
+        MetaUtils.normalizationTableName(context, statement.getTblRef().getName());
         if (statement.getTblRef().hasExplicitAlias()) {
             throw new SemanticException("Not support truncate table with alias");
         }
