@@ -46,7 +46,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
 
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Name").add("IP").add("EditLogPort").add("HttpPort").add("QueryPort").add("RpcPort")
-            .add("Role").add("IsMaster").add("ClusterId").add("Join").add("Alive").add("ReplayedJournalId")
+            .add("Role").add("ClusterId").add("Join").add("Alive").add("ReplayedJournalId")
             .add("LastHeartbeat").add("IsHelper").add("ErrMsg").add("StartTime").add("Version")
             .build();
 
@@ -73,7 +73,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
     }
 
     public static void getFrontendsInfo(GlobalStateMgr globalStateMgr, List<List<String>> infos) {
-        String masterIp = GlobalStateMgr.getCurrentState().getMasterIp();
+        String masterIp = GlobalStateMgr.getCurrentState().getLeaderIp();
         if (masterIp == null) {
             masterIp = "";
         }
@@ -100,13 +100,10 @@ public class FrontendsProcNode implements ProcNodeInterface {
                 info.add(Integer.toString(fe.getRpcPort()));
             }
 
-            // set Role and isMaster field
             if (fe.getHost().equals(masterIp)) {
-                info.add(FrontendNodeType.MASTER.name());
-                info.add("true");
+                info.add(FrontendNodeType.LEADER.name());
             } else {
                 info.add(fe.getRole().name());
-                info.add("false");
             }
 
             info.add(Integer.toString(globalStateMgr.getClusterId()));

@@ -28,14 +28,14 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-public class RoutineLoadScheduler extends MasterDaemon {
+public class RoutineLoadScheduler extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(RoutineLoadScheduler.class);
 

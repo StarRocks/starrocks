@@ -29,7 +29,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.load.FailMsg;
 import com.starrocks.transaction.BeginTransactionException;
 import org.apache.logging.log4j.LogManager;
@@ -44,7 +44,7 @@ import java.util.concurrent.RejectedExecutionException;
  * The function of execute will be called in LoadScheduler.
  * The status of LoadJob will be changed to loading after LoadScheduler.
  */
-public class LoadJobScheduler extends MasterDaemon {
+public class LoadJobScheduler extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(LoadJobScheduler.class);
 
