@@ -28,7 +28,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.UserException;
 import com.starrocks.common.proc.LakeTabletsProcNode;
 import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.util.OrderByPair;
@@ -188,9 +187,6 @@ public class ShowTabletStmt extends ShowStmt {
     public LimitElement getLimitElement() {
         return limitElement;
     }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {}
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

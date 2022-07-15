@@ -35,6 +35,8 @@ public class ShowTabletTest {
     public void failureTest() {
         analyzeFail("SHOW TABLET FROM example_db.table_name where backendid=10000 or ts > 10",
                 "Only allow compound predicate with operator AND");
+        analyzeFail("SHOW TABLET FROM example_db.table_name where abc=\"t1_rollup\";");
+        analyzeFail("SHOW TABLET FROM example_db.table_name where backendid=10000 order by abc;");
     }
 
 }
