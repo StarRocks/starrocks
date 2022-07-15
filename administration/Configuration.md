@@ -40,7 +40,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |metadata_checkopoint_memory_threshold|60|如果 JVM 内存使用率超过该阈值，停止生成元数据的 Checkpoint，防止 OOM|
 |force_do_metadata_checkpoint|FALSE|无论 JVM 内存使用率多少，都会产生元数据的 Checkpoint|
 |ignore_meta_check|FALSE|忽略元数据落后的情形|
-|max_backend_down_time_second|3600|BE 和 FE 失联之后，FE 容忍 BE 重新加回来的最长时间|
 |drop_backend_after_decommission|TRUE|BE 被下线后，是否删除该 BE|
 |catalog_try_lock_timeout_ms|5000|Catalog Lock 获取的超时时长|
 |enable_collect_query_detail_info|false| 是否支持通过 StarRocks Manager 查看 Profile|
