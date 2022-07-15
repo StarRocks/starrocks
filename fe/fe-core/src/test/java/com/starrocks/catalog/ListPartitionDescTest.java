@@ -14,12 +14,16 @@ import org.junit.Test;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class ListPartitionDescTest {
 
+    private final static String COOL_DOWN_TIME = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+            .format(new Date(System.currentTimeMillis() + 86400000L));
+    
     private List<ColumnDef> findColumnDefList() {
         ColumnDef id = new ColumnDef("id", TypeDef.create(PrimitiveType.BIGINT));
         id.setAggregateType(AggregateType.NONE);
@@ -78,7 +82,7 @@ public class ListPartitionDescTest {
         supportedProperties.put("replication_num", "1");
         supportedProperties.put("in_memory", "true");
         supportedProperties.put("tablet_type", "memory");
-        supportedProperties.put("storage_cooldown_time", "2022-07-09 12:12:12");
+        supportedProperties.put("storage_cooldown_time", COOL_DOWN_TIME);
         if (properties != null) {
             properties.forEach((k, v) -> supportedProperties.put(k, v));
         }
@@ -246,7 +250,7 @@ public class ListPartitionDescTest {
         DataProperty dataProperty = partitionInfo.getDataProperty(10001L);
         Assert.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
         DateFormat sf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        long time = sf.parse("2022-07-09 12:12:12").getTime();
+        long time = sf.parse(COOL_DOWN_TIME).getTime();
         Assert.assertEquals(time, dataProperty.getCooldownTimeMs());
 
         Assert.assertEquals(1, partitionInfo.getReplicationNum(10001L));
@@ -263,7 +267,7 @@ public class ListPartitionDescTest {
         DataProperty dataProperty = partitionInfo.getDataProperty(10001L);
         Assert.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
         DateFormat sf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        long time = sf.parse("2022-07-09 12:12:12").getTime();
+        long time = sf.parse(COOL_DOWN_TIME).getTime();
         Assert.assertEquals(time, dataProperty.getCooldownTimeMs());
 
         Assert.assertEquals(1, partitionInfo.getReplicationNum(10001L));

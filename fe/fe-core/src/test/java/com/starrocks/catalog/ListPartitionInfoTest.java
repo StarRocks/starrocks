@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +33,9 @@ public class ListPartitionInfoTest {
 
     private ListPartitionInfo listPartitionInfo;
     private ListPartitionInfo listPartitionInfoForMulti;
-
+    private final static String COOL_DOWN_TIME = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+            .format(new Date(System.currentTimeMillis() + 86400000L));
+    
     @Before
     public void setUp() throws DdlException, AnalysisException {
         this.listPartitionInfo = new ListPartitionDescTest().findSingleListPartitionInfo();
@@ -76,7 +79,7 @@ public class ListPartitionInfoTest {
         DataProperty dataProperty = partitionInfo.getDataProperty(partitionId);
         Assert.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
         DateFormat sf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        long time = sf.parse("2022-07-09 12:12:12").getTime();
+        long time = sf.parse(COOL_DOWN_TIME).getTime();
         Assert.assertEquals(time, dataProperty.getCooldownTimeMs());
 
         Assert.assertEquals(1, partitionInfo.getReplicationNum(partitionId));
