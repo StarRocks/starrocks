@@ -28,16 +28,13 @@ public class ShowRestoreAnalyzer {
         @Override
         public Void visitShowRestoreStmt(ShowRestoreStmt showRestoreStmt, ConnectContext context) {
             String dbName = showRestoreStmt.getDbName();
-            if (Strings.isNullOrEmpty(dbName)) {
-                dbName = context.getDatabase();
-            } else {
+            if (!Strings.isNullOrEmpty(dbName)) {
                 dbName = context.getClusterName() + ":" + dbName;
-            }
-
-            String currentCatalog = context.getCurrentCatalog();
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(currentCatalog, dbName);
-            if (db == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+                String currentCatalog = context.getCurrentCatalog();
+                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(currentCatalog, dbName);
+                if (db == null) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+                }
             }
 
             try {
