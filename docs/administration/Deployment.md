@@ -60,7 +60,7 @@ Name: 172.26.x.x_9010_1584965098874
 
 IP: 172.26.x.x
 
-HostName: starrocks-sandbox01
+HostName: sr-test1
 
 ......
 
@@ -80,7 +80,7 @@ Name: 172.26.x.x_9010_1584965098874
 
 IP: 172.26.x.x
 
-HostName: starrocks-sandbox02
+HostName: sr-test2
 
 ......
 
@@ -100,7 +100,7 @@ Name: 172.26.x.x_9010_1584965098874
 
 IP: 172.26.x.x
 
-HostName: sr-test
+HostName: sr-test3
 
 ......
 
