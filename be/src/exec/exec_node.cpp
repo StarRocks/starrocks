@@ -147,6 +147,8 @@ void ExecNode::push_down_join_runtime_filter_to_children(RuntimeState* state,
 
 void ExecNode::register_runtime_filter_descriptor(RuntimeState* state,
                                                   vectorized::RuntimeFilterProbeDescriptor* rf_desc) {
+    VLOG_FILE << "register runtime filter. plan_node_id = " << _id << ", filter_id = " << rf_desc->filter_id()
+              << ", addr = " << (void*)rf_desc;
     _runtime_filter_collector.add_descriptor(rf_desc);
     state->runtime_filter_port()->add_listener(rf_desc);
 }

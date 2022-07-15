@@ -1056,6 +1056,7 @@ public class Coordinator {
 
         Map<Integer, List<TRuntimeFilterProberParams>> broadcastGRFProbersMap = Maps.newHashMap();
         List<RuntimeFilterDescription> broadcastGRFList = Lists.newArrayList();
+        Map<Integer, List<TRuntimeFilterProberParams>> idToProbePrams = new HashMap<>();
 
         for (PlanFragment fragment : fragments) {
             fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
@@ -1073,7 +1074,11 @@ public class Coordinator {
                 if (usePipeline && kv.getValue().isBroadcastJoin() && kv.getValue().isHasRemoteTargets()) {
                     broadcastGRFProbersMap.put(kv.getKey(), probeParamList);
                 } else {
-                    topParams.runtimeFilterParams.putToId_to_prober_params(kv.getKey(), probeParamList);
+                    if (idToProbePrams.containsKey(kv.getKey())) {
+                        idToProbePrams.get(kv.getKey()).addAll(probeParamList);
+                    } else {
+                        idToProbePrams.put(kv.getKey(), probeParamList);
+                    }
                 }
             }
 
@@ -1101,6 +1106,7 @@ public class Coordinator {
             }
             fragment.setRuntimeFilterMergeNodeAddresses(fragment.getPlanRoot(), mergeHost);
         }
+        topParams.runtimeFilterParams.setId_to_prober_params(idToProbePrams);
 
         broadcastGRFList.forEach(rf -> rf.setBroadcastGRFDestinations(
                 mergeGRFProbers(broadcastGRFProbersMap.get(rf.getFilterId()))));

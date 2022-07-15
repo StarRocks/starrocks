@@ -158,10 +158,11 @@ void RuntimeFilterPort::receive_shared_runtime_filter(int32_t filter_id,
                                                       const std::shared_ptr<const vectorized::JoinRuntimeFilter>& rf) {
     auto it = _listeners.find(filter_id);
     if (it == _listeners.end()) return;
-    VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(shared). filter_id = " << filter_id
-              << ", filter_size = " << rf->size();
     auto& wait_list = it->second;
+    VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(shared). filter_id = " << filter_id
+              << ", filter_size = " << rf->size() << ", wait_list_size = " << wait_list.size();
     for (auto* rf_desc : wait_list) {
+        VLOG_FILE << "set shared runtime filter. filter_id = " << rf_desc->filter_id() << ", addr = " << (void*)rf_desc;
         rf_desc->set_shared_runtime_filter(rf);
     }
 }
@@ -207,6 +208,8 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
         if (it == _statuses.end()) return;
         status = &(it->second);
         if (status->arrives.find(be_number) != status->arrives.end()) {
+            VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. duplicated item. filter_id = " << filter_id
+                      << ", be_number = " << be_number;
             // duplicated one, just skip it.
             return;
         }
@@ -236,12 +239,14 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
     if (status->current_size > status->max_size) {
         // alreay exceeds max size, no need to build it.
         VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. stop building since size too "
-                     "large. size = "
-                  << status->current_size;
+                     "large. filter_id = "
+                  << filter_id << ", size = " << status->current_size;
         status->stop = true;
         return;
     }
 
+    VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. receiver item. filter_id = " << filter_id
+              << ", be_number = " << be_number;
     status->arrives.insert(be_number);
     status->filters.insert(std::make_pair(be_number, rf));
 
@@ -295,7 +300,8 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeF
     status->broadcast_filter_ts = now;
 
     VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. target_nodes[0] = " << target_nodes->at(0)
-              << ", filter_id = " << request.filter_id() << ", filter_size = " << out->size()
+              << ", target_nodes_size = " << target_nodes->size() << ", filter_id = " << request.filter_id()
+              << ", filter_size = " << out->size()
               << ", latency(last-first = " << status->recv_last_filter_ts - status->recv_first_filter_ts
               << ", send-first = " << status->broadcast_filter_ts - status->recv_first_filter_ts << ")";
     request.set_broadcast_timestamp(now);
@@ -470,7 +476,8 @@ void RuntimeFilterWorker::send_broadcast_runtime_filter(PTransmitRuntimeFilterPa
 void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterParams& params) {
     VLOG_FILE << "RuntimeFilterWorker::receive_runtime_filter: partial = " << params.is_partial()
               << ", query_id = " << params.query_id() << ", finst_id = " << params.finst_id()
-              << ", # probe insts = " << params.probe_finst_ids_size() << ", is_pipeline=" << params.is_pipeline();
+              << ", filter_id = " << params.filter_id() << ", # probe insts = " << params.probe_finst_ids_size()
+              << ", is_pipeline = " << params.is_pipeline();
 
     RuntimeFilterWorkerEvent ev;
     if (params.is_partial()) {
