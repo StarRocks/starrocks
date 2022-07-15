@@ -11,7 +11,7 @@ The Routine load method supports continuous import of data from Kafka. Routine l
 
 ## Fundamentals
 
-![routine load](/assets/4.5.2-1.png)
+![routine load](../assets/4.5.2-1.png)
 
 The import process is illustrated above.
 

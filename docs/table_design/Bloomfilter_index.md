@@ -6,7 +6,7 @@
 
 Bloom Filter is a data structure used to determine whether an element is in a collection. The advantage is that it is more space and time efficient, and the disadvantage is that it has a certain rate of misclassification.
 
-![bloomfilter](/assets/3.7.1.png)
+![bloomfilter](../assets/3.7.1.png)
 
 Bloom Filter is composed of a bit array and a number of hash functions. The bit array is initially set to 0. When an element is inserted, the hash functions (number of n) compute on the element and obtain the slots (number of n)The corresponding number of slots in the bit array is set to 1.
 
