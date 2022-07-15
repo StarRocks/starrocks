@@ -332,7 +332,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
             DCHECK(morsel_queues.count(source_id));
             auto& morsel_queue = morsel_queues[source_id];
-            DCHECK(morsel_queue->num_morsels() == 0 || cur_pipeline_dop <= morsel_queue->num_morsels());
+            DCHECK(morsel_queue->max_degree_of_parallelism() == 0 ||
+                   cur_pipeline_dop <= morsel_queue->max_degree_of_parallelism());
 
             for (size_t i = 0; i < cur_pipeline_dop; ++i) {
                 auto&& operators = pipeline->create_operators(cur_pipeline_dop, i);
