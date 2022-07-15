@@ -47,6 +47,21 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
             _curr_ready = true;
             return Status::OK();
         }
+
+        /*
+            https://github.com/simdjson/simdjson/blob/master/doc/iterate_many.md
+
+            Importantly, you should only call truncated_bytes() after iterating through all of the documents since the stream cannot tell whether there are truncated 
+            documents at the very end when it may not have accessed that part of the data yet.
+        */
+
+        auto sz = _doc_stream.truncated_bytes();
+        if (sz > 0) {
+            auto err_msg = strings::Substitute(
+                    "Failed to parse json as document stream, [$0] bytes at the end of the message are abandoned", sz);
+            return Status::DataQualityError(err_msg);
+        }
+
         return Status::EndOfFile("all documents of the stream are iterated");
     } catch (simdjson::simdjson_error& e) {
         std::string err_msg;
@@ -68,6 +83,19 @@ Status JsonDocumentStreamParser::advance() noexcept {
     _curr_ready = false;
     if (++_doc_stream_itr != _doc_stream.end()) {
         return Status::OK();
+    }
+
+    /*
+        https://github.com/simdjson/simdjson/blob/master/doc/iterate_many.md
+
+        Importantly, you should only call truncated_bytes() after iterating through all of the documents since the stream cannot tell whether there are truncated 
+        documents at the very end when it may not have accessed that part of the data yet.
+    */
+
+    auto sz = _doc_stream.truncated_bytes();
+    if (sz > 0) {
+        auto err_msg = strings::Substitute("Failed to parse json as document stream, {} bytes are abandoned", sz);
+        return Status::DataQualityError(err_msg);
     }
     return Status::EndOfFile("all documents of the stream are iterated");
 }

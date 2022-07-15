@@ -108,7 +108,7 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
                 _cur_file_eof = true;
             } else {
                 // To read all readers, we just log and ignore the error returned by read_chunk.
-                // Set _cur_file_eof to open a new reader, since the error is not recerverable by retrying.
+                // Set _cur_file_eof to open a new reader, since the error is not recoverable by retrying.
                 _cur_file_eof = true;
                 LOG(WARNING) << "read chunk failed: : " << status;
             }
@@ -343,7 +343,12 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::vectorized::Sc
 }
 
 Status JsonReader::open() {
-    RETURN_IF_ERROR(_read_and_parse_json());
+    auto st = _read_and_parse_json();
+    if (!st.ok()) {
+        _counter->num_rows_filtered++;
+        return st;
+    }
+
     _empty_parser = false;
 
     if (_scanner->_json_paths.empty() && _scanner->_root_paths.empty()) {
@@ -446,7 +451,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
             // the parser is exhausted.
             _empty_parser = true;
         } else if (!st.ok()) {
-            return st;
+            _empty_parser = true;
         }
     }
 
