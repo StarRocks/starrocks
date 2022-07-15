@@ -550,7 +550,7 @@ public class ResourceGroupStmtTest {
         };
 
         for (String[] c : cases) {
-            Assert.assertThrows(c[1], SemanticException.class, () -> starRocksAssert.executeWorkGroupDdlSql(c[0]));
+            Assert.assertThrows(c[1], SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(c[0]));
         }
     }
 }
