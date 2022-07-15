@@ -12,6 +12,7 @@ import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.BaseViewStmt;
+import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -83,6 +84,12 @@ public class Analyzer {
         @Override
         public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
             AlterTableStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCancelAlterTableStatement(CancelAlterTableStmt statement, ConnectContext context) {
+            CancelAlterTableStatementAnalyzer.analyze(statement, context);
             return null;
         }
 
