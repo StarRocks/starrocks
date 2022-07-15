@@ -14,6 +14,7 @@ import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
@@ -314,6 +315,12 @@ public class Analyzer {
         @Override
         public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext session) {
             AnalyzeStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRepositoryStmt(CreateRepositoryStmt statement, ConnectContext context) {
+            CreateRepositoryAnalyzer.analyze(statement, context);
             return null;
         }
     }

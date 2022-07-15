@@ -30,6 +30,7 @@ import com.starrocks.analysis.ComputeNodeClause;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
@@ -323,6 +324,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitDropHistogramStatement(DropHistogramStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateRepositoryStmt(CreateRepositoryStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

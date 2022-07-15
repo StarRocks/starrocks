@@ -40,6 +40,7 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
@@ -233,7 +234,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return visit(context.statement());
     }
 
-
     // ---------------------------------------- Database Statement -----------------------------------------------------
     @Override
     public ParseNode visitAlterDbQuotaStmt(StarRocksParser.AlterDbQuotaStmtContext context) {
@@ -250,7 +250,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     quotaValue);
         }
     }
-
 
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
@@ -274,7 +273,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
         return new ShowCreateDbStmt(dbName);
     }
-
 
     @Override
     public ParseNode visitAlterDatabaseRename(StarRocksParser.AlterDatabaseRenameContext context) {
@@ -1932,6 +1930,37 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new ShowVariablesStmt(getVariableType(context.varType()), pattern, where);
+    }
+
+    @Override
+    public ParseNode visitCreateRepositoryStatement(StarRocksParser.CreateRepositoryStatementContext context) {
+        boolean isReadOnly = false;
+        if (context.READ() != null && context.ONLY() != null) {
+            isReadOnly = true;
+        }
+
+        Map<String, String> properties = new HashMap<>();
+        List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+        for (Property property : propertyList) {
+            properties.put(property.getKey(), property.getValue());
+        }
+        String repoName = context.identifier(0).getText();
+        if (repoName != null && repoName.startsWith("`") && repoName.endsWith("`")) {
+            repoName = repoName.substring(1, repoName.length() - 1);
+        }
+
+        String brokerName = context.identifier(1).getText();
+        if (brokerName != null && brokerName.length() > 1 && brokerName.startsWith("`") && brokerName.endsWith("`")) {
+            brokerName = brokerName.substring(1, brokerName.length() - 1);
+        }
+
+        String location = context.string().getText();
+        if (location != null && location.length() > 1 && location.startsWith("\"") && location.endsWith("\"")) {
+            location = location.substring(1, location.length() - 1);
+        }
+
+        return new CreateRepositoryStmt(isReadOnly, repoName, brokerName,
+                location, properties);
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------

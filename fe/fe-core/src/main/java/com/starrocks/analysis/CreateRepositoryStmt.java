@@ -31,6 +31,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
@@ -100,5 +101,10 @@ public class CreateRepositoryStmt extends DdlStmt {
         sb.append("REPOSITORY `").append(name).append("` ").append("WITH BROKER `").append(brokerName).append("` ");
         sb.append("PROPERTIES(").append(new PrintableMap<>(properties, " = ", true, false)).append(")");
         return sb.toString();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCreateRepositoryStmt(this, context);
     }
 }

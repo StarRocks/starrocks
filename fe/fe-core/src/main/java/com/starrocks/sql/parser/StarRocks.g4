@@ -108,6 +108,9 @@ statement
 
     // procedure
     | showProcedureStatment                                                                 #showProcedure
+
+    //  Backup Store Satement
+    | createRepositoryStatement                                                             #createRepository
     ;
 
 
@@ -672,6 +675,14 @@ tabletList
 // ------------------------------------------- Procedure Statement ---------------------------------------------------------
 showProcedureStatment
     : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
+    ;
+
+// ---------------------------------------- Backup Store Statement -----------------------------------------------------
+createRepositoryStatement
+    : CREATE (READ ONLY)? REPOSITORY identifier
+    WITH BROKER identifier
+    ON 'LOCATION' string
+    PROPERTIES propertyList
     ;
 // ------------------------------------------- Expression --------------------------------------------------------------
 

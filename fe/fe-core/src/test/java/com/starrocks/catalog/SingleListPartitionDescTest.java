@@ -31,13 +31,13 @@ public class SingleListPartitionDescTest {
         partitionProperties.put("replication_num", "1");
         partitionProperties.put("in_memory", "true");
         partitionProperties.put("tablet_type", "memory");
-        partitionProperties.put("storage_cooldown_time", "2022-07-09 12:12:12");
+        partitionProperties.put("storage_cooldown_time", "2022-07-30 12:12:12");
 
         SingleItemListPartitionDesc partitionDesc =
                 new SingleItemListPartitionDesc(ifNotExists, partitionName, values, partitionProperties);
         String sql =
                 "PARTITION p1 VALUES IN " +
-                        "('tianjin','guangdong') (\"storage_cooldown_time\" = \"2022-07-09 12:12:12\", " +
+                        "('tianjin','guangdong') (\"storage_cooldown_time\" = \"2022-07-30 12:12:12\", " +
                         "\"storage_medium\" = \"SSD\", \"replication_num\" = \"1\", " +
                         "\"tablet_type\" = \"memory\", \"in_memory\" = \"true\")";
         Assert.assertEquals(sql, partitionDesc.toSql());
@@ -57,7 +57,7 @@ public class SingleListPartitionDescTest {
         partitionProperties.put("replication_num", "1");
         partitionProperties.put("in_memory", "true");
         partitionProperties.put("tablet_type", "memory");
-        partitionProperties.put("storage_cooldown_time", "2022-07-09 12:12:12");
+        partitionProperties.put("storage_cooldown_time", "2022-07-30 12:12:12");
 
         SingleItemListPartitionDesc partitionDesc = new SingleItemListPartitionDesc(ifNotExists, partitionName,
                 values, partitionProperties);
@@ -72,7 +72,7 @@ public class SingleListPartitionDescTest {
         DataProperty dataProperty = partitionDesc.getPartitionDataProperty();
         Assert.assertEquals(TStorageMedium.SSD, dataProperty.getStorageMedium());
         DateFormat sf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        long time = sf.parse("2022-07-09 12:12:12").getTime();
+        long time = sf.parse("2022-07-30 12:12:12").getTime();
         Assert.assertEquals(time, dataProperty.getCooldownTimeMs());
 
         List<String> valuesFromGet = partitionDesc.getValues();
