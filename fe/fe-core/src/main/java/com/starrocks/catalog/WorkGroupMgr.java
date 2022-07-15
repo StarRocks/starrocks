@@ -350,8 +350,9 @@ public class WorkGroupMgr implements Writable {
                 if (twg.getVersion() < minVersion) {
                     continue;
                 }
-                if ((!activeWorkGroup.containsKey(twg.getId()) && id2WorkGroupMap.containsKey(twg.getId())) ||
-                        twg.getVersion() > activeWorkGroup.get(twg.getId()).getVersion()) {
+                boolean active = activeWorkGroup.containsKey(twg.getId());
+                if ((!active && id2WorkGroupMap.containsKey(twg.getId())) ||
+                        (active && twg.getVersion() > activeWorkGroup.get(twg.getId()).getVersion())) {
                     currentWorkGroupOps.add(op);
                 }
             }
