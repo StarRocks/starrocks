@@ -77,6 +77,7 @@ import com.starrocks.analysis.ShowSnapshotStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.ShowWorkGroupStmt;
@@ -238,6 +239,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowTableStmt(ShowTableStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowTabletStmt(ShowTabletStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
