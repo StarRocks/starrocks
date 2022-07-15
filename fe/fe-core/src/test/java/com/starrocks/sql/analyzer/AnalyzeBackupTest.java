@@ -1,6 +1,11 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.alter.AlterTest;
+import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.qe.ConnectContext;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -22,6 +27,13 @@ public class AnalyzeBackupTest {
         analyzeSuccess(sql);
         analyzeSuccess("SHOW BACKUP;");
         analyzeFail("SHOW BACKUP FROM test1;");
+        new MockUp<Auth>(){
+            @Mock
+            public boolean checkDbPriv(ConnectContext ctx, String qualifiedDb, PrivPredicate wanted) {
+                return false;
+            }
+        };
+        analyzeFail("SHOW BACKUP FROM test;");
     }
 
 }
