@@ -1065,3 +1065,18 @@ PROPERTIES (
 ~~~sql
 SELECT COUNT(*) FROM hudi_tbl;
 ~~~
+
+## 常见问题
+
+### StarRocks 外部表同步出错，应该如何解决？
+
+**提示问题**：
+
+SQL 错误 [1064] [42000]: data cannot be inserted into table with empty partition.Use `SHOW PARTITIONS FROM external_t` to see the currently partitions of this table.
+
+查看Partitions时提示另一错误：SHOW PARTITIONS FROM external_t
+SQL 错误 [1064] [42000]: Table[external_t] is not a OLAP/ELASTICSEARCH/HIVE table
+
+**解决方法**：
+
+原来是建外部表时端口不对，正确的端口是"port"="9020"，不是9931.
