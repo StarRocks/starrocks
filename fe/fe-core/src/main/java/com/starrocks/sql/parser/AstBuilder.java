@@ -31,6 +31,7 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateResourceStmt;
+import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DataDescription;
 import com.starrocks.analysis.DateLiteral;
@@ -2626,6 +2627,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     authOption.isPasswordPlain());
         }
         return new AlterUserStmt(userDesc);
+    }
+
+    @Override
+    public ParseNode visitCreateRole(StarRocksParser.CreateRoleContext context) {
+        Identifier role = (Identifier) visit(context.identifierOrString());
+        return new CreateRoleStmt(role.getValue());
     }
 
     @Override
