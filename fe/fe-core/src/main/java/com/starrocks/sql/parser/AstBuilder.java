@@ -64,6 +64,7 @@ import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
@@ -855,7 +856,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean exists = context.EXISTS() != null;
         return new DropPartitionClause(exists, partitionName, temp, force);
     }
-    
+
     @Override
     public ParseNode visitModifyPartitionClause(StarRocksParser.ModifyPartitionClauseContext context) {
         Map<String, String> properties = null;
@@ -901,7 +902,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new ShowPartitionsStmt(tableName, where, orderByElements, limitElement, temp);
     }
-    
+
     @Override
     public ParseNode visitShowOpenTableStatement(StarRocksParser.ShowOpenTableStatementContext  context) {
         return new ShowOpenTableStmt();
@@ -2143,6 +2144,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     // ------------------------------------------- Privilege Statement -------------------------------------------------
+
+    @Override
+    public ParseNode visitDropUser(StarRocksParser.DropUserContext context) {
+        UserIdentifier user = (UserIdentifier) visit(context.user());
+        return new DropUserStmt(user.getUserIdentity());
+    }
 
     @Override
     public ParseNode visitCreateUser(StarRocksParser.CreateUserContext context) {
@@ -3583,7 +3590,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String partitionName = ((Identifier) visit(context.identifier())).getValue();
         return new RecoverPartitionStmt(tableName, partitionName);
     }
-    
+
     @Override
     public ParseNode visitShowCharsetStatement(StarRocksParser.ShowCharsetStatementContext context) {
         String pattern = null;
