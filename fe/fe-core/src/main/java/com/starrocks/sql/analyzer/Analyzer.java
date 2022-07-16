@@ -10,7 +10,6 @@ import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
