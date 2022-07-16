@@ -310,6 +310,10 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    public R visitShowAlterStmt(ShowAlterStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     public R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -391,22 +395,6 @@ public abstract class AstVisitor<R, C> {
     
     public R visitShowBackupStmt(ShowBackupStmt statement, C context) {
         return visitStatement(statement, context);
-    }
-
-    public R visitShowAnalyzeJobStatement(ShowAnalyzeJobStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    public R visitShowAnalyzeStatusStatement(ShowAnalyzeStatusStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    public R visitShowBasicStatsMetaStatement(ShowBasicStatsMetaStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    public R visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, C context) {
-        return visitShowStatement(statement, context);
     }
 
     // ----------------- Catalog Clause -------------
