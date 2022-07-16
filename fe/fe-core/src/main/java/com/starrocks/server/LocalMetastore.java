@@ -3002,6 +3002,66 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         LOG.info("Successfully create materialized view[{};{}]", mvName, mvId);
 
+
+        // colocate mv index
+        // check colocation properties
+        if (createMvSuccess) {
+            try {
+                String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+                if (!Strings.isNullOrEmpty(colocateGroup)) {
+                    String fullGroupName = db.getId() + "_" + colocateGroup;
+                    ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
+                    if (groupSchema != null) {
+                        // group already exist, check if this mv and base tables can be added to this group
+                        groupSchema.checkColocateSchema(materializedView);
+                        Set<Long> baseTableids = stmt.getBaseTableIds();
+                        for (Long baseTableid : baseTableids) {
+                            Table baseTable = db.getTable(baseTableid);
+                            if (baseTable.isOlapTable()) {
+                                groupSchema.checkColocateSchema((OlapTable) baseTable);
+                            } else {
+                                ErrorReport
+                                        .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, materializedView,
+                                                "the type of base table " + baseTable.getName() + " is " +
+                                                        baseTable.getType() + "which is must be OLAP");
+                            }
+
+                        }
+
+                    }
+                    // add mv to this group, if group does not exist, create a new one
+                    colocateTableIndex.addTableToGroup(db.getId(), materializedView, colocateGroup,
+                            null /* generate group id inside */);
+                    materializedView.setColocateGroup(colocateGroup);
+
+                    // add base tables to this group and persist
+                    Set<Long> baseTableids = stmt.getBaseTableIds();
+                    ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(mvId);
+                    List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+
+                    ColocatePersistInfo info =
+                            ColocatePersistInfo.createForAddTable(groupId, mvId, backendsPerBucketSeq);
+                    editLog.logColocateAddTable(info);
+
+                    for (Long baseTableid : baseTableids) {
+                        OlapTable baseTable = (OlapTable) db.getTable(baseTableid);
+                        if (!colocateTableIndex.isSameGroup(materializedView.getBaseIndexId(), baseTableid)) {
+                            colocateTableIndex.addTableToGroup(db.getId(), baseTable, colocateGroup,
+                                    null /* generate group id inside */);
+                            baseTable.setColocateGroup(colocateGroup);
+                            info = ColocatePersistInfo.createForAddTable(groupId, baseTableid, backendsPerBucketSeq);
+                            editLog.logColocateAddTable(info);
+                        }
+
+                    }
+
+                }
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+            LOG.info("add the MaterializedView to colocateTableIndex");
+        }
+
         // NOTE: The materialized view  has been added to the database, and the following procedure cannot throw exception.
         if (createMvSuccess) {
             if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.SYNC) {
@@ -3061,6 +3121,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (refreshTask != null) {
                 taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
             }
+            colocateTableIndex.removeTable(table.getId());
         } else {
             stateMgr.getAlterInstance().processDropMaterializedView(stmt);
         }
