@@ -35,6 +35,9 @@ public class TaskRunStatus implements Writable {
     @SerializedName("definition")
     private String definition;
 
+    @SerializedName("user")
+    private String user;
+
     @SerializedName("errorCode")
     private int errorCode;
 
@@ -97,6 +100,14 @@ public class TaskRunStatus implements Writable {
 
     public void setDbName(String dbName) {
         this.dbName = dbName;
+    }
+
+    public String getUser() {
+        return user;
+    }
+
+    public void setUser(String user) {
+        this.user = user;
     }
 
     public String getDefinition() {
@@ -168,6 +179,7 @@ public class TaskRunStatus implements Writable {
                 ", state=" + state +
                 ", dbName='" + dbName + '\'' +
                 ", definition='" + definition + '\'' +
+                ", user='" + user + '\'' +
                 ", errorCode=" + errorCode +
                 ", errorMessage='" + errorMessage + '\'' +
                 ", expireTime=" + expireTime +

@@ -119,10 +119,6 @@ std::string Rowset::segment_del_file_path(const std::string& dir, const RowsetId
     return strings::Substitute("$0/$1_$2.del", dir, rowset_id.to_string(), segment_id);
 }
 
-std::string Rowset::segment_srcrssid_file_path(const std::string& dir, const RowsetId& rowset_id, int segment_id) {
-    return strings::Substitute("$0/$1_$2.rssid", dir, rowset_id.to_string(), segment_id);
-}
-
 Status Rowset::init() {
     return Status::OK();
 }
@@ -234,12 +230,6 @@ Status Rowset::remove() {
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
     }
-    for (int i = 0, sz = num_segments(); i < sz; ++i) {
-        std::string path = segment_srcrssid_file_path(_rowset_path, rowset_id(), i);
-        auto st = fs->delete_file(path);
-        LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << path << ": " << st;
-        merge_status(st);
-    }
     return result;
 }
 
@@ -332,7 +322,7 @@ private:
 };
 
 StatusOr<vectorized::ChunkIteratorPtr> Rowset::new_iterator(const vectorized::Schema& schema,
-                                                            const vectorized::RowsetReadOptions& options) {
+                                                            const RowsetReadOptions& options) {
     std::vector<vectorized::ChunkIteratorPtr> seg_iters;
     RETURN_IF_ERROR(get_segment_iterators(schema, options, &seg_iters));
     if (seg_iters.empty()) {
@@ -344,7 +334,7 @@ StatusOr<vectorized::ChunkIteratorPtr> Rowset::new_iterator(const vectorized::Sc
     }
 }
 
-Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const vectorized::RowsetReadOptions& options,
+Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const RowsetReadOptions& options,
                                      std::vector<vectorized::ChunkIteratorPtr>* segment_iterators) {
     RowsetReleaseGuard guard(shared_from_this());
 
@@ -382,7 +372,7 @@ Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const vec
     for (ColumnId cid : delete_columns) {
         const TabletColumn& col = options.tablet_schema->column(cid);
         if (segment_schema.get_field_by_name(std::string(col.name())) == nullptr) {
-            auto f = vectorized::ChunkHelper::convert_field_to_format_v2(cid, col);
+            auto f = ChunkHelper::convert_field_to_format_v2(cid, col);
             segment_schema.append(std::make_shared<vectorized::Field>(std::move(f)));
         }
     }

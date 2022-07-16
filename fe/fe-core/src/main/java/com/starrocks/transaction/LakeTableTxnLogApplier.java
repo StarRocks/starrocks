@@ -3,7 +3,7 @@
 package com.starrocks.transaction;
 
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.lake.LakeTable;
+import com.starrocks.lake.LakeTable;
 
 public class LakeTableTxnLogApplier implements TransactionLogApplier {
     private final LakeTable table;

@@ -3,19 +3,27 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.DescribeStmt;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.ShowAlterStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
+import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -44,11 +52,12 @@ import java.util.Set;
 public class ShowStmtAnalyzer {
 
     public static void analyze(ShowStmt stmt, ConnectContext session) {
-        new ShowStmtAnalyzerVisitor().visit(stmt, session);
+        new ShowStmtAnalyzerVisitor().analyze(stmt, session);
     }
 
     static class ShowStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         public void analyze(ShowStmt statement, ConnectContext session) {
+            analyzeShowPredicate(statement);
             visit(statement, session);
         }
 
@@ -57,6 +66,12 @@ public class ShowStmtAnalyzer {
             String db = node.getDb();
             db = getFullDatabaseName(db, context);
             node.setDb(db);
+            return null;
+        }
+
+        @Override
+        public Void visitShowTabletStmt(ShowTabletStmt node, ConnectContext context) {
+            ShowTabletStmtAnalyzer.analyze(node, context);
             return null;
         }
 
@@ -117,10 +132,28 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
+        public Void visitShowAlterStmt(ShowAlterStmt statement, ConnectContext context) {
+            ShowAlterStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
         public Void visitShowDeleteStmt(ShowDeleteStmt node, ConnectContext context) {
             String dbName = node.getDbName();
             dbName = getFullDatabaseName(dbName, context);
             node.setDbName(dbName);
+            return null;
+        }
+
+        @Override
+        public Void visitShowIndexStmt(ShowIndexStmt node, ConnectContext context) {
+            node.init();
+            String db = node.getTableName().getDb();
+            db = getFullDatabaseName(db, context);
+            node.getTableName().setDb(db);
+            if (Strings.isNullOrEmpty(node.getTableName().getCatalog())) {
+                node.getTableName().setCatalog(context.getCurrentCatalog());
+            }
             return null;
         }
 
@@ -299,6 +332,36 @@ public class ShowStmtAnalyzer {
                 db.readUnlock();
             }
             return null;
+        }
+
+        @Override
+        public Void visitShowProcStmt(ShowProcStmt node, ConnectContext context) {
+            String path = node.getPath();
+            if (Strings.isNullOrEmpty(path)) {
+                throw new SemanticException("Path is null");
+            }
+            try {
+                node.setNode(ProcService.getInstance().open(path));
+            } catch (AnalysisException e) {
+                throw new SemanticException(String.format("Unknown proc node path: ", path));
+            }
+            return null;
+        }
+        
+        private void analyzeShowPredicate(ShowStmt showStmt) {
+            Predicate predicate = showStmt.getPredicate();
+            if (predicate == null) {
+                return;
+            }
+
+            if (!(predicate instanceof BinaryPredicate) || !((BinaryPredicate) predicate).getOp().isEquivalence()) {
+                throw new SemanticException("Only support equal predicate in show statement");
+            }
+
+            BinaryPredicate binaryPredicate = (BinaryPredicate) predicate;
+            if (!(binaryPredicate.getChild(0) instanceof SlotRef && binaryPredicate.getChild(1) instanceof LiteralExpr)) {
+                throw new SemanticException("Only support column = \"string literal\" format predicate");
+            }
         }
     }
 }

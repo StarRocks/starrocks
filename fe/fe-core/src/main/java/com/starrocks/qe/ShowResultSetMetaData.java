@@ -23,6 +23,8 @@ package com.starrocks.qe;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 
 import java.util.List;
 
@@ -39,6 +41,15 @@ public class ShowResultSetMetaData {
 
     public Column getColumn(int idx) {
         return columns.get(idx);
+    }
+
+    public int getColumnIdx(String colName) {
+        for (int idx = 0; idx < columns.size(); ++idx) {
+            if (columns.get(idx).getName().equalsIgnoreCase(colName)) {
+                return idx;
+            }
+        }
+        throw new StarRocksPlannerException("Can't get column " + colName, ErrorType.INTERNAL_ERROR);
     }
 
     public void removeColumn(int idx) {

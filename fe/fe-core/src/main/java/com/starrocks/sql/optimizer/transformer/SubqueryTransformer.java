@@ -82,13 +82,19 @@ public class SubqueryTransformer {
             if (!(e.getChild(1) instanceof Subquery)) {
                 continue;
             }
-            ColumnRefOperator columnRefOperator = subOpt.getExpressionMapping().get(e);
-            s.remove(columnRefOperator);
+
+            if (((Subquery) e.getChild(1)).isUseSemiAnti()) {
+                ColumnRefOperator columnRefOperator = subOpt.getExpressionMapping().get(e);
+                s.remove(columnRefOperator);
+            }
         }
 
         for (ExistsPredicate e : existsSubquerys) {
-            ColumnRefOperator columnRefOperator = subOpt.getExpressionMapping().get(e);
-            s.remove(columnRefOperator);
+            Preconditions.checkState(e.getChild(0) instanceof Subquery);
+            if (((Subquery) e.getChild(0)).isUseSemiAnti()) {
+                ColumnRefOperator columnRefOperator = subOpt.getExpressionMapping().get(e);
+                s.remove(columnRefOperator);
+            }
         }
 
         scalarPredicate = Utils.compoundAnd(s);
@@ -135,6 +141,9 @@ public class SubqueryTransformer {
         @Override
         public OptExprBuilder visitExpression(Expr node, SubqueryContext context) {
             OptExprBuilder builder = context.builder;
+            if (builder.getExpressionMapping().hasExpression(node)) {
+                return builder;
+            }
             for (Expr child : node.getChildren()) {
                 builder = visit(child, new SubqueryContext(builder, false, context.cteContext));
             }
@@ -173,13 +182,15 @@ public class SubqueryTransformer {
                     columnRefFactory.create(inPredicate, inPredicate.getType(), inPredicate.isNullable());
             context.builder.getExpressionMapping().put(inPredicate, outputPredicateRef);
 
-            LogicalApplyOperator applyOperator =
-                    new LogicalApplyOperator(outputPredicateRef, inPredicateOperator, subqueryPlan.getCorrelation(),
-                            context.useSemiAnti);
+            LogicalApplyOperator applyOperator = LogicalApplyOperator.builder().setOutput(outputPredicateRef)
+                    .setSubqueryOperator(inPredicateOperator)
+                    .setCorrelationColumnRefs(subqueryPlan.getCorrelation())
+                    .setUseSemiAnti(context.useSemiAnti).build();
             context.builder =
                     new OptExprBuilder(applyOperator, Arrays.asList(context.builder, subqueryPlan.getRootBuilder()),
                             context.builder.getExpressionMapping());
 
+            ((Subquery) inPredicate.getChild(1)).setUseSemiAnti(context.useSemiAnti);
             return context.builder;
         }
 
@@ -200,13 +211,15 @@ public class SubqueryTransformer {
             ExistsPredicateOperator existsPredicateOperator =
                     new ExistsPredicateOperator(existsPredicate.isNotExists(), rightColRef.get(0));
 
-            LogicalApplyOperator applyOperator =
-                    new LogicalApplyOperator(outputPredicateRef, existsPredicateOperator, subqueryPlan.getCorrelation(),
-                            context.useSemiAnti);
+            LogicalApplyOperator applyOperator = LogicalApplyOperator.builder().setOutput(outputPredicateRef)
+                    .setSubqueryOperator(existsPredicateOperator)
+                    .setCorrelationColumnRefs(subqueryPlan.getCorrelation())
+                    .setUseSemiAnti(context.useSemiAnti).build();
             context.builder =
                     new OptExprBuilder(applyOperator, Arrays.asList(context.builder, subqueryPlan.getRootBuilder()),
                             context.builder.getExpressionMapping());
 
+            ((Subquery) existsPredicate.getChild(0)).setUseSemiAnti(context.useSemiAnti);
             return context.builder;
         }
 
@@ -288,9 +301,11 @@ public class SubqueryTransformer {
             context.builder.getExpressionMapping().put(subquery, outputPredicateRef);
 
             // The Apply's output column is the subquery's result
-            LogicalApplyOperator applyOperator =
-                    new LogicalApplyOperator(outputPredicateRef, subqueryOutput, subqueryPlan.getCorrelation(),
-                            context.useSemiAnti);
+            LogicalApplyOperator applyOperator = LogicalApplyOperator.builder().setOutput(outputPredicateRef)
+                    .setSubqueryOperator(subqueryOutput)
+                    .setCorrelationColumnRefs(subqueryPlan.getCorrelation())
+                    .setUseSemiAnti(context.useSemiAnti)
+                    .setNeedCheckMaxRows(true).build();
             context.builder =
                     new OptExprBuilder(applyOperator, Arrays.asList(context.builder, subqueryPlan.getRootBuilder()),
                             context.builder.getExpressionMapping());

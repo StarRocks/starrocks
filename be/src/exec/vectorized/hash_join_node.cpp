@@ -9,6 +9,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
@@ -505,6 +506,15 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     context->add_pipeline(rhs_operators);
 
     lhs_operators.emplace_back(std::move(probe_op));
+
+    // Use ChunkAccumulateOperator, when any following condition occurs:
+    // - not left outer join,
+    // - left outer join, with conjuncts or runtime filters.
+    bool need_accumulate_chunk = _join_type != TJoinOp::LEFT_OUTER_JOIN || !_conjunct_ctxs.empty() ||
+                                 !_other_join_conjunct_ctxs.empty() || lhs_operators.back()->has_runtime_filters();
+    if (need_accumulate_chunk) {
+        lhs_operators.emplace_back(std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), id()));
+    }
 
     if (limit() != -1) {
         lhs_operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));

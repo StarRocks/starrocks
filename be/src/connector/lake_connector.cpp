@@ -186,7 +186,7 @@ Status LakeDataSource::open(RuntimeState* state) {
     if (query_options.__isset.max_scan_key_num && query_options.max_scan_key_num > 0) {
         max_scan_key_num = query_options.max_scan_key_num;
     } else {
-        max_scan_key_num = config::doris_max_scan_key_num;
+        max_scan_key_num = config::max_scan_key_num;
     }
     bool enable_column_expr_predicate = false;
     if (thrift_lake_scan_node.__isset.enable_column_expr_predicate) {
@@ -436,9 +436,6 @@ Status LakeDataSource::build_scan_range(RuntimeState* state) {
     // Get key_ranges and not_push_down_conjuncts from _conjuncts_manager.
     RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
     _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
-
-    _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
-    _dict_optimize_parser.rewrite_conjuncts<false>(&_not_push_down_conjuncts, state);
 
     int scanners_per_tablet = 64;
     int num_ranges = _key_ranges.size();

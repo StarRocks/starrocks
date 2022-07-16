@@ -240,7 +240,8 @@ Status TransactionMgr::_begin_transaction(const HttpRequest* req, StreamLoadCont
     ctx->load_type = TLoadType::MANUAL_LOAD;
     ctx->load_src_type = TLoadSourceType::RAW;
 
-    ctx->db = req->param(HTTP_DB_KEY);
+    ctx->db = req->header(HTTP_DB_KEY);
+    ctx->table = req->header(HTTP_TABLE_KEY);
     ctx->label = req->header(HTTP_LABEL_KEY);
 
     if (!req->header(HTTP_TIMEOUT).empty()) {

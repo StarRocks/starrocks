@@ -50,13 +50,14 @@ public:
 
     void close() override;
 
-    Status do_get_next(Chunk* chunk) override;
-    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
-
     const OlapReaderStatistics& stats() const { return _stats; }
     OlapReaderStatistics* mutable_stats() { return &_stats; }
 
     size_t merged_rows() const override { return _collect_iter->merged_rows(); }
+
+protected:
+    Status do_get_next(Chunk* chunk) override;
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
 
 private:
     using PredicateList = std::vector<const ColumnPredicate*>;

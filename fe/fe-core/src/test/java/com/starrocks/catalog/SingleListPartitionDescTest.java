@@ -31,13 +31,13 @@ public class SingleListPartitionDescTest {
         partitionProperties.put("replication_num", "1");
         partitionProperties.put("in_memory", "true");
         partitionProperties.put("tablet_type", "memory");
-        partitionProperties.put("storage_cooldown_time", "2022-07-09 12:12:12");
+        partitionProperties.put("storage_cooldown_time", "2122-07-09 12:12:12");
 
         SingleItemListPartitionDesc partitionDesc =
                 new SingleItemListPartitionDesc(ifNotExists, partitionName, values, partitionProperties);
         String sql =
                 "PARTITION p1 VALUES IN " +
-                        "('tianjin','guangdong') (\"storage_cooldown_time\" = \"2022-07-09 12:12:12\", " +
+                        "('tianjin','guangdong') (\"storage_cooldown_time\" = \"2122-07-09 12:12:12\", " +
                         "\"storage_medium\" = \"SSD\", \"replication_num\" = \"1\", " +
                         "\"tablet_type\" = \"memory\", \"in_memory\" = \"true\")";
         Assert.assertEquals(sql, partitionDesc.toSql());

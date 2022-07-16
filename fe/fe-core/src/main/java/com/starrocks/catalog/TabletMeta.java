@@ -41,10 +41,12 @@ public class TabletMeta {
 
     private TStorageMedium storageMedium;
 
-    private ReentrantReadWriteLock lock;
+    private boolean isLakeTablet = false;
+
+    private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public TabletMeta(long dbId, long tableId, long partitionId, long indexId, int schemaHash,
-                      TStorageMedium storageMedium) {
+                      TStorageMedium storageMedium, boolean isLakeTablet) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.partitionId = partitionId;
@@ -55,7 +57,12 @@ public class TabletMeta {
 
         this.storageMedium = storageMedium;
 
-        lock = new ReentrantReadWriteLock();
+        this.isLakeTablet = isLakeTablet;
+    }
+
+    public TabletMeta(long dbId, long tableId, long partitionId, long indexId, int schemaHash,
+                      TStorageMedium storageMedium) {
+        this(dbId, tableId, partitionId, indexId, schemaHash, storageMedium, false);
     }
 
     public long getDbId() {
@@ -80,11 +87,6 @@ public class TabletMeta {
 
     public void setStorageMedium(TStorageMedium storageMedium) {
         this.storageMedium = storageMedium;
-    }
-
-    // TODO: Remove this after LakeTable is merged.
-    public boolean isUseStarOS() {
-        return false;
     }
 
     public int getNewSchemaHash() {
@@ -146,6 +148,10 @@ public class TabletMeta {
         } finally {
             lock.readLock().unlock();
         }
+    }
+
+    public boolean isLakeTablet() {
+        return isLakeTablet;
     }
 
     @Override

@@ -151,17 +151,6 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     return rowset;
 }
 
-Status BetaRowsetWriter::flush_src_rssids(uint32_t segment_id) {
-    auto path = Rowset::segment_srcrssid_file_path(_context.rowset_path_prefix, _context.rowset_id,
-                                                   static_cast<int>(segment_id));
-    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
-    RETURN_IF_ERROR(wfile->append(Slice((const char*)(_src_rssids->data()), _src_rssids->size() * sizeof(uint32_t))));
-    RETURN_IF_ERROR(wfile->close());
-    _src_rssids->clear();
-    _src_rssids.reset();
-    return Status::OK();
-}
-
 HorizontalBetaRowsetWriter::HorizontalBetaRowsetWriter(const RowsetWriterContext& context)
         : BetaRowsetWriter(context), _segment_writer(nullptr) {}
 
@@ -257,25 +246,6 @@ Status HorizontalBetaRowsetWriter::add_chunk(const vectorized::Chunk& chunk) {
     }
 
     RETURN_IF_ERROR(_segment_writer->append_chunk(chunk));
-    _num_rows_written += static_cast<int64_t>(chunk.num_rows());
-    _total_row_size += static_cast<int64_t>(chunk.bytes_usage());
-    return Status::OK();
-}
-
-Status HorizontalBetaRowsetWriter::add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) {
-    if (_segment_writer == nullptr) {
-        ASSIGN_OR_RETURN(_segment_writer, _create_segment_writer());
-    } else if (_segment_writer->estimate_segment_size() >= config::max_segment_file_size ||
-               _segment_writer->num_rows_written() + chunk.num_rows() >= _context.max_rows_per_segment) {
-        RETURN_IF_ERROR(_flush_segment_writer(&_segment_writer));
-        ASSIGN_OR_RETURN(_segment_writer, _create_segment_writer());
-    }
-
-    RETURN_IF_ERROR(_segment_writer->append_chunk(chunk));
-    if (!_src_rssids) {
-        _src_rssids = std::make_unique<vector<uint32_t>>();
-    }
-    _src_rssids->insert(_src_rssids->end(), rssid.begin(), rssid.end());
     _num_rows_written += static_cast<int64_t>(chunk.num_rows());
     _total_row_size += static_cast<int64_t>(chunk.bytes_usage());
     return Status::OK();
@@ -464,7 +434,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                                                   _context.tablet_schema->num_key_columns(),
                                                   config::vertical_compaction_max_columns_per_group, &column_groups);
 
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[0]);
+        auto schema = ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[0]);
 
         for (const auto& segment : segments) {
             auto res = segment->new_iterator(schema, seg_options);
@@ -501,7 +471,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         _context.max_rows_per_segment = CompactionUtils::get_segment_max_rows(config::max_segment_file_size,
                                                                               _num_rows_written, _total_data_size);
 
-        auto chunk_shared_ptr = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
 
         _num_segment = 0;
@@ -530,7 +500,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
             return Status::InternalError(ss.str());
         }
 
-        auto char_field_indexes = vectorized::ChunkHelper::get_char_field_indexes(schema);
+        auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
         size_t total_rows = 0;
         size_t total_chunk = 0;
@@ -540,8 +510,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
             if (st.is_end_of_file()) {
                 break;
             } else if (st.ok()) {
-                vectorized::ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema,
-                                                              chunk);
+                ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema, chunk);
                 total_rows += chunk->num_rows();
                 total_chunk++;
                 if (auto st = _vertical_beta_rowset_writer->add_columns(*chunk, column_groups[0], true); !st.ok()) {
@@ -568,8 +537,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
 
             seg_iterators.clear();
 
-            auto schema =
-                    vectorized::ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[i]);
+            auto schema = ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[i]);
 
             for (const auto& segment : segments) {
                 auto res = segment->new_iterator(schema, seg_options);
@@ -597,10 +565,10 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
             }
             itr->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
 
-            auto chunk_shared_ptr = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+            auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
             auto chunk = chunk_shared_ptr.get();
 
-            auto char_field_indexes = vectorized::ChunkHelper::get_char_field_indexes(schema);
+            auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
             while (true) {
                 chunk->reset();
@@ -608,8 +576,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                 if (st.is_end_of_file()) {
                     break;
                 } else if (st.ok()) {
-                    vectorized::ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema,
-                                                                  chunk);
+                    ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema, chunk);
                     if (auto st = _vertical_beta_rowset_writer->add_columns(*chunk, column_groups[i], false);
                         !st.ok()) {
                         LOG(WARNING) << "writer add_columns error. tablet=" << _context.tablet_id << ", err=" << st;
@@ -641,7 +608,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                   << " chunk=" << total_chunk << " bytes=" << PrettyPrinter::print(total_data_size(), TUnit::UNIT)
                   << ") duration: " << timer.elapsed_time() / 1000000 << "ms";
     } else {
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema);
+        auto schema = ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema);
 
         for (const auto& segment : segments) {
             auto res = segment->new_iterator(schema, seg_options);
@@ -670,7 +637,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         }
         itr->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
 
-        auto chunk_shared_ptr = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
 
         _num_segment = 0;
@@ -691,7 +658,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         // method to create segment data files, rather than temporary segment files.
         _context.segments_overlap = NONOVERLAPPING;
 
-        auto char_field_indexes = vectorized::ChunkHelper::get_char_field_indexes(schema);
+        auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
         size_t total_rows = 0;
         size_t total_chunk = 0;
@@ -701,8 +668,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
             if (st.is_end_of_file()) {
                 break;
             } else if (st.ok()) {
-                vectorized::ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema,
-                                                              chunk);
+                ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema, chunk);
                 total_rows += chunk->num_rows();
                 total_chunk++;
                 if (auto st = add_chunk(*chunk); !st.ok()) {
@@ -757,9 +723,6 @@ Status HorizontalBetaRowsetWriter::_flush_segment_writer(std::unique_ptr<Segment
         std::lock_guard<std::mutex> l(_lock);
         _total_data_size += static_cast<int64_t>(segment_size);
         _total_index_size += static_cast<int64_t>(index_size);
-    }
-    if (_src_rssids) {
-        RETURN_IF_ERROR(flush_src_rssids(_segment_writer->segment_id()));
     }
 
     // check global_dict efficacy
@@ -868,17 +831,6 @@ Status VerticalBetaRowsetWriter::add_columns(const vectorized::Chunk& chunk,
     return Status::OK();
 }
 
-Status VerticalBetaRowsetWriter::add_columns_with_rssid(const vectorized::Chunk& chunk,
-                                                        const std::vector<uint32_t>& column_indexes,
-                                                        const std::vector<uint32_t>& rssid) {
-    RETURN_IF_ERROR(add_columns(chunk, column_indexes, true));
-    if (!_src_rssids) {
-        _src_rssids = std::make_unique<std::vector<uint32_t>>();
-    }
-    _src_rssids->insert(_src_rssids->end(), rssid.begin(), rssid.end());
-    return Status::OK();
-}
-
 Status VerticalBetaRowsetWriter::flush_columns() {
     if (_segment_writers.empty()) {
         return Status::OK();
@@ -938,9 +890,6 @@ Status VerticalBetaRowsetWriter::_flush_columns(std::unique_ptr<SegmentWriter>* 
     {
         std::lock_guard<std::mutex> l(_lock);
         _total_index_size += static_cast<int64_t>(index_size);
-    }
-    if (_src_rssids) {
-        return flush_src_rssids((*segment_writer)->segment_id());
     }
     return Status::OK();
 }

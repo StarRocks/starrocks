@@ -21,23 +21,33 @@
 
 #include "runtime/memory_scratch_sink.h"
 
+#include <arrow/array.h>
+#include <arrow/array/builder_primitive.h>
+#include <arrow/buffer.h>
+#include <arrow/io/memory.h>
+#include <arrow/ipc/writer.h>
+#include <arrow/memory_pool.h>
+#include <arrow/record_batch.h>
+#include <arrow/status.h>
+#include <arrow/type.h>
+#include <arrow/visitor.h>
+#include <arrow/visitor_inline.h>
 #include <gtest/gtest.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include <iostream>
 
+#include "column/chunk.h"
 #include "common/config.h"
 #include "common/logging.h"
-#include "exec/csv_scan_node.h"
+#include "exec/vectorized/csv_scanner.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "gen_cpp/StarRocksExternalService_types.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/bufferpool/reservation_tracker.h"
+#include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/primitive_type.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_state.h"
@@ -55,23 +65,32 @@ public:
         {
             TExpr expr;
             {
+                // first int_column
                 TExprNode node;
-                node.node_type = TExprNodeType::INT_LITERAL;
-                node.type = gen_type_desc(TPrimitiveType::INT, "int_column");
+                node.node_type = TExprNodeType::SLOT_REF;
                 node.num_children = 0;
-                TIntLiteral data;
-                data.value = 1;
-                node.__set_int_literal(data);
+                TSlotRef slot_ref;
+                slot_ref.__set_slot_id(0);
+                slot_ref.__set_tuple_id(0);
+
+                ::starrocks::TTypeDesc desc;
+                TTypeNode type_node;
+                type_node.__set_type(TTypeNodeType::type::SCALAR);
+                TScalarType scalar_type;
+                scalar_type.__set_type(TPrimitiveType::type::INT);
+                type_node.__set_scalar_type(scalar_type);
+                desc.__set_types({type_node});
+
+                node.__set_slot_ref(slot_ref);
+                node.__set_type(desc);
+
                 expr.nodes.push_back(node);
             }
             _exprs.push_back(expr);
         }
     }
 
-    ~MemoryScratchSinkTest() {
-        delete _state;
-        delete _mem_tracker;
-    }
+    ~MemoryScratchSinkTest() { delete _state; }
 
     virtual void SetUp() {
         config::periodic_counter_update_period_ms = 500;
@@ -89,6 +108,62 @@ public:
         system("rm -rf ./test_run");
     }
 
+    std::unique_ptr<vectorized::CSVScanner> create_csv_scanner(const std::vector<TypeDescriptor>& types,
+                                                               const std::vector<TBrokerRangeDesc>& ranges,
+                                                               const string& multi_row_delimiter = "\n",
+                                                               const string& multi_column_separator = "|") {
+        /// Init DescriptorTable
+        TDescriptorTableBuilder desc_tbl_builder;
+        TTupleDescriptorBuilder tuple_desc_builder;
+        for (auto& t : types) {
+            TSlotDescriptorBuilder slot_desc_builder;
+            slot_desc_builder.type(t).length(t.len).precision(t.precision).scale(t.scale).nullable(true);
+            tuple_desc_builder.add_slot(slot_desc_builder.build());
+        }
+        tuple_desc_builder.build(&desc_tbl_builder);
+
+        DescriptorTbl* desc_tbl = nullptr;
+        Status st =
+                DescriptorTbl::create(&_obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl, config::vector_chunk_size);
+        CHECK(st.ok()) << st.to_string();
+
+        /// Init RuntimeState
+        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
+        state->set_desc_tbl(desc_tbl);
+        state->init_instance_mem_tracker();
+
+        /// TBrokerScanRangeParams
+        TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+        params->__set_multi_row_delimiter(multi_row_delimiter);
+        params->__set_multi_column_separator(multi_column_separator);
+        params->strict_mode = true;
+        params->dest_tuple_id = 0;
+        params->src_tuple_id = 0;
+        for (int i = 0; i < types.size(); i++) {
+            params->expr_of_dest_slot[i] = TExpr();
+            params->expr_of_dest_slot[i].nodes.emplace_back(TExprNode());
+            params->expr_of_dest_slot[i].nodes[0].__set_type(types[i].to_thrift());
+            params->expr_of_dest_slot[i].nodes[0].__set_node_type(TExprNodeType::SLOT_REF);
+            params->expr_of_dest_slot[i].nodes[0].__set_is_nullable(true);
+            params->expr_of_dest_slot[i].nodes[0].__set_slot_ref(TSlotRef());
+            params->expr_of_dest_slot[i].nodes[0].slot_ref.__set_slot_id(i);
+            params->expr_of_dest_slot[i].nodes[0].__set_type(types[i].to_thrift());
+        }
+
+        for (int i = 0; i < types.size(); i++) {
+            params->src_slot_ids.emplace_back(i);
+        }
+
+        RuntimeProfile* profile = _obj_pool.add(new RuntimeProfile("test_prof", true));
+
+        vectorized::ScannerCounter* counter = _obj_pool.add(new vectorized::ScannerCounter());
+
+        TBrokerScanRange* broker_scan_range = _obj_pool.add(new TBrokerScanRange());
+        broker_scan_range->params = *params;
+        broker_scan_range->ranges = ranges;
+        return std::make_unique<vectorized::CSVScanner>(state, profile, *broker_scan_range, counter);
+    }
+
     void init();
     void init_desc_tbl();
     void init_runtime_state();
@@ -102,15 +177,14 @@ private:
     TPlanNode _tnode;
     RowDescriptor* _row_desc = nullptr;
     TMemoryScratchSink _tsink;
-    MemTracker* _mem_tracker = nullptr;
     DescriptorTbl* _desc_tbl = nullptr;
     std::vector<TExpr> _exprs;
 };
 
 void MemoryScratchSinkTest::init() {
     _exec_env = ExecEnv::GetInstance();
-    init_desc_tbl();
     init_runtime_state();
+    init_desc_tbl();
 }
 
 void MemoryScratchSinkTest::init_runtime_state() {
@@ -121,9 +195,7 @@ void MemoryScratchSinkTest::init_runtime_state() {
     query_id.hi = 100;
     _state = new RuntimeState(query_id, query_options, TQueryGlobals(), _exec_env);
     _state->init_instance_mem_tracker();
-    _mem_tracker = new MemTracker(-1, "MemoryScratchSinkTest", _state->instance_mem_tracker());
     _state->set_desc_tbl(_desc_tbl);
-    _state->_load_dir = "./test_run/output/";
     _state->init_mem_trackers(TUniqueId());
 }
 
@@ -157,7 +229,8 @@ void MemoryScratchSinkTest::init_desc_tbl() {
         t_slot_desc.__set_nullIndicatorBit(-1);
         t_slot_desc.__set_slotIdx(i);
         t_slot_desc.__set_isMaterialized(true);
-        t_slot_desc.__set_colName("int_column");
+        t_slot_desc.__set_colName("second_column");
+        t_slot_desc.__set_parent(0);
 
         slot_descs.push_back(t_slot_desc);
         offset += sizeof(int32_t);
@@ -189,64 +262,39 @@ void MemoryScratchSinkTest::init_desc_tbl() {
     _tnode.limit = -1;
     _tnode.row_tuples.push_back(0);
     _tnode.nullable_tuples.push_back(false);
-    _tnode.csv_scan_node.tuple_id = 0;
-
-    _tnode.csv_scan_node.__set_column_separator(",");
-    _tnode.csv_scan_node.__set_row_delimiter("\n");
-
-    // column_type_mapping
-    std::map<std::string, TColumnType> column_type_map;
-    {
-        TColumnType column_type;
-        column_type.__set_type(TPrimitiveType::INT);
-        column_type_map["int_column"] = column_type;
-    }
-
-    _tnode.csv_scan_node.__set_column_type_mapping(column_type_map);
-
-    std::vector<std::string> columns;
-    columns.push_back("int_column");
-    _tnode.csv_scan_node.__set_columns(columns);
-
-    _tnode.csv_scan_node.__isset.unspecified_columns = true;
-    _tnode.csv_scan_node.__isset.default_values = true;
-    _tnode.csv_scan_node.max_filter_ratio = 0.5;
-    _tnode.__isset.csv_scan_node = true;
 }
 
 TEST_F(MemoryScratchSinkTest, work_flow_normal) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range_one;
+    range_one.__set_path("./be/test/runtime/test_data/csv_data");
+    range_one.__set_start_offset(0);
+    range_one.__set_num_of_columns_from_file(types.size());
+    ranges.push_back(range_one);
+
+    auto scanner = create_csv_scanner(types, ranges);
+    EXPECT_NE(scanner, nullptr);
+
+    auto st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
     MemoryScratchSink sink(*_row_desc, _exprs, _tsink);
     TDataSink data_sink;
     data_sink.memory_scratch_sink = _tsink;
     ASSERT_TRUE(sink.init(data_sink).ok());
     ASSERT_TRUE(sink.prepare(_state).ok());
-    std::vector<std::string> file_paths;
-    file_paths.push_back("./test_run/test_data/csv_data");
-    _tnode.csv_scan_node.__set_file_paths(file_paths);
 
-    CsvScanNode scan_node(&_obj_pool, _tnode, *_desc_tbl);
-    Status status = scan_node.prepare(_state);
-    ASSERT_TRUE(status.ok());
+    auto maybe_chunk = scanner->get_next();
+    ASSERT_TRUE(maybe_chunk.ok());
+    auto chunk = maybe_chunk.value();
+    int num = chunk->num_rows();
 
-    status = scan_node.open(_state);
-    ASSERT_TRUE(status.ok());
-
-    std::unique_ptr<MemTracker> mem_tracker(new MemTracker(-1));
-    RowBatch row_batch(scan_node._row_descriptor, _state->chunk_size(), mem_tracker.get());
-    bool eos = false;
-
-    while (!eos) {
-        status = scan_node.get_next(_state, &row_batch, &eos);
-        ASSERT_TRUE(status.ok());
-        // int num = std::min(row_batch.num_rows(), 10);
-        int num = row_batch.num_rows();
-
-        ASSERT_EQ(6, num);
-        ASSERT_TRUE(sink.send(_state, &row_batch).ok());
-        ASSERT_TRUE(sink.close(_state, Status::OK()).ok());
-    }
-
-    ASSERT_TRUE(scan_node.close(_state).ok());
+    ASSERT_EQ(6, num);
+    ASSERT_TRUE(sink.send_chunk(_state, chunk.get()).ok());
+    ASSERT_TRUE(sink.close(_state, Status::OK()).ok());
 }
 
 } // namespace starrocks

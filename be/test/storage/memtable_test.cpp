@@ -242,13 +242,13 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
     RowsetSharedPtr rowset = *_writer->build();
     unique_ptr<Schema> read_schema = create_schema("pk int", 1);
     OlapReaderStatistics stats;
-    vectorized::RowsetReadOptions rs_opts;
+    RowsetReadOptions rs_opts;
     rs_opts.sorted = false;
     rs_opts.use_page_cache = false;
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(*read_schema, rs_opts);
     ASSERT_TRUE(itr.ok()) << itr.status().to_string();
-    std::shared_ptr<vectorized::Chunk> chunk = vectorized::ChunkHelper::new_chunk(*read_schema, 4096);
+    std::shared_ptr<vectorized::Chunk> chunk = ChunkHelper::new_chunk(*read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(chunk.get());
@@ -289,12 +289,12 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
     RowsetSharedPtr rowset = *_writer->build();
     unique_ptr<Schema> read_schema = create_schema("pk int", 1);
     OlapReaderStatistics stats;
-    vectorized::RowsetReadOptions rs_opts;
+    RowsetReadOptions rs_opts;
     rs_opts.sorted = false;
     rs_opts.use_page_cache = false;
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(*read_schema, rs_opts);
-    std::shared_ptr<vectorized::Chunk> chunk = vectorized::ChunkHelper::new_chunk(*read_schema, 4096);
+    std::shared_ptr<vectorized::Chunk> chunk = ChunkHelper::new_chunk(*read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(chunk.get());

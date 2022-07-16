@@ -32,12 +32,12 @@ public class MultiListPartitionDescTest {
         partitionProperties.put("replication_num", "1");
         partitionProperties.put("in_memory", "true");
         partitionProperties.put("tablet_type", "memory");
-        partitionProperties.put("storage_cooldown_time", "2022-07-09 12:12:12");
+        partitionProperties.put("storage_cooldown_time", "2122-07-09 12:12:12");
 
         MultiItemListPartitionDesc partitionDesc =
                 new MultiItemListPartitionDesc(ifNotExists, partitionName, multiValues, partitionProperties);
         String sql = "PARTITION p1 VALUES IN (('2022-04-15','guangdong'),('2022-04-15','tianjin'))" +
-                " (\"storage_cooldown_time\" = \"2022-07-09 12:12:12\", \"storage_medium\" = \"SSD\", " +
+                " (\"storage_cooldown_time\" = \"2122-07-09 12:12:12\", \"storage_medium\" = \"SSD\", " +
                 "\"replication_num\" = \"1\", \"tablet_type\" = \"memory\", \"in_memory\" = \"true\")";
         Assert.assertEquals(sql, partitionDesc.toSql());
     }

@@ -12,10 +12,6 @@
 
 namespace starrocks {
 
-static const char* kFileSysPrefixHdfs = "hdfs://";
-static const char* kFileSysPrefixS3 = "s3a://";
-static const char* KFileSysPrefixOSS = "oss://";
-
 std::string get_hdfs_err_msg() {
     std::string error_msg = get_str_err_msg();
     std::stringstream ss;
@@ -74,27 +70,6 @@ std::string get_endpoint_from_oss_bucket(const std::string& default_bucket, std:
     std::string endpoint = bucket->substr(endpoint_start_index, endpoint_end_index - endpoint_start_index + 1);
     *bucket = bucket->substr(0, endpoint_start_index - 1);
     return endpoint;
-}
-
-static bool is_specific_path(const char* path, const char* specific_prefix) {
-    size_t prefix_len = strlen(specific_prefix);
-    return strncmp(path, specific_prefix, prefix_len) == 0;
-}
-
-bool is_hdfs_path(const char* path) {
-    return is_specific_path(path, kFileSysPrefixHdfs);
-}
-
-bool is_s3a_path(const char* path) {
-    return is_specific_path(path, kFileSysPrefixS3);
-}
-
-bool is_oss_path(const char* path) {
-    return is_specific_path(path, KFileSysPrefixOSS);
-}
-
-bool is_object_storage_path(const char* path) {
-    return (is_oss_path(path) || is_s3a_path(path));
 }
 
 } // namespace starrocks
