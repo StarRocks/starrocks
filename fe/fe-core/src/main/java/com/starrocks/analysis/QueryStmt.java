@@ -47,7 +47,6 @@ import java.util.Map;
  * analysis of the ORDER BY and LIMIT clauses.
  */
 public abstract class QueryStmt extends StatementBase {
-    private static final Logger LOG = LogManager.getLogger(QueryStmt.class);
 
     /////////////////////////////////////////
     // BEGIN: Members that need to be reset()

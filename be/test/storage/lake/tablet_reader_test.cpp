@@ -13,14 +13,15 @@
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/lake/test_location_provider.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "util/lru_cache.h"
 
 namespace starrocks::lake {
 
@@ -33,7 +34,7 @@ class DuplicateTabletReaderTest : public testing::Test {
 public:
     DuplicateTabletReaderTest() {
         _mem_tracker = std::make_unique<MemTracker>(-1);
-        _location_provider = std::make_unique<TestGroupAssigner>(kTestGroupPath);
+        _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
         _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), 0);
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
@@ -73,7 +74,7 @@ public:
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(kTestGroupPath));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(kTestGroupPath, *_tablet_metadata));
+        CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
     }
 
     void TearDown() override { (void)fs::remove_all(kTestGroupPath); }
@@ -82,7 +83,7 @@ protected:
     constexpr static const char* const kTestGroupPath = "test_duplicate_lake_tablet_reader";
 
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<TestGroupAssigner> _location_provider;
+    std::unique_ptr<FixedLocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
@@ -145,7 +146,7 @@ TEST_F(DuplicateTabletReaderTest, test_read_success) {
 
     // write tablet metadata
     _tablet_metadata->set_version(2);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(kTestGroupPath, *_tablet_metadata));
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
 
     // test reader
     ASSIGN_OR_ABORT(auto reader, tablet.new_reader(2, *_schema));
@@ -178,7 +179,7 @@ class AggregateTabletReaderTest : public testing::Test {
 public:
     AggregateTabletReaderTest() {
         _mem_tracker = std::make_unique<MemTracker>(-1);
-        _location_provider = std::make_unique<TestGroupAssigner>(kTestGroupPath);
+        _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
         _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), 0);
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
@@ -219,7 +220,7 @@ public:
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(kTestGroupPath));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(kTestGroupPath, *_tablet_metadata));
+        CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
     }
 
     void TearDown() override { (void)fs::remove_all(kTestGroupPath); }
@@ -228,7 +229,7 @@ protected:
     constexpr static const char* const kTestGroupPath = "test_aggregate_lake_tablet_reader";
 
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<TestGroupAssigner> _location_provider;
+    std::unique_ptr<FixedLocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
@@ -317,7 +318,7 @@ TEST_F(AggregateTabletReaderTest, test_read_success) {
 
     // write tablet metadata
     _tablet_metadata->set_version(3);
-    CHECK_OK(_tablet_manager->put_tablet_metadata(kTestGroupPath, *_tablet_metadata));
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
 
     // test reader
     ASSIGN_OR_ABORT(auto reader, tablet.new_reader(3, *_schema));

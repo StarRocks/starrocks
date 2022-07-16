@@ -17,7 +17,6 @@ import java.util.List;
 // use for delete sql's blacklist by ids.
 // indexs is the ids of regular expression's sql
 public class DelSqlBlackListStmt extends StatementBase {
-    private static final Logger LOG = LogManager.getLogger(DelSqlBlackListStmt.class);
 
     private List<Long> indexs;
 

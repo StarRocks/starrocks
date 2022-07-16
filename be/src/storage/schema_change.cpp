@@ -198,7 +198,7 @@ private:
     typedef std::pair<FieldType, FieldType> convert_type_pair;
     std::unordered_set<convert_type_pair, ConvertTypeMapHash> _convert_type_set;
 
-    DISALLOW_COPY_AND_ASSIGN(ConvertTypeResolver);
+    DISALLOW_COPY(ConvertTypeResolver);
 };
 
 ConvertTypeResolver::ConvertTypeResolver() {
@@ -849,11 +849,11 @@ bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowse
             LOG(WARNING) << err_msg;
             return false;
         }
-        if (auto tmp_st = new_rowset_writer->add_chunk(*new_chunk); !tmp_st.ok()) {
+        if (auto st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
             std::string err_msg = Substitute(
                     "failed to execute schema change. base tablet:$0, new_tablet:$1. err msg: failed to add chunk to "
-                    "rowset writer",
-                    base_tablet->tablet_id(), new_tablet->tablet_id());
+                    "rowset writer: $2",
+                    base_tablet->tablet_id(), new_tablet->tablet_id(), st.get_error_msg());
             LOG(WARNING) << err_msg;
             return false;
         }
@@ -927,11 +927,11 @@ Status SchemaChangeDirectly::processV2(TabletReader* reader, RowsetWriter* new_r
 
         ChunkHelper::padding_char_columns(char_field_indexes, new_schema, new_tablet->tablet_schema(), new_chunk.get());
 
-        if (auto tmp_st = new_rowset_writer->add_chunk(*new_chunk); !tmp_st.ok()) {
+        if (auto st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
             std::string err_msg = Substitute(
                     "failed to execute schema change. base tablet:$0, new_tablet:$1. err msg: failed to add chunk to "
-                    "rowset writer",
-                    base_tablet->tablet_id(), new_tablet->tablet_id());
+                    "rowset writer: $2",
+                    base_tablet->tablet_id(), new_tablet->tablet_id(), st.get_error_msg());
             LOG(WARNING) << err_msg;
             return Status::InternalError(err_msg);
         }

@@ -27,6 +27,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -75,6 +76,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private boolean hasDelete = false;
 
     private boolean hasForbitGlobalDict = false;
+
+    @SerializedName(value = "storageInfo")
+    private StorageInfo storageInfo;
 
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
@@ -189,6 +193,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public void setHasForbitGlobalDict(boolean hasForbitGlobalDict) {
         this.hasForbitGlobalDict = hasForbitGlobalDict;
+    }
+
+    public void setStorageInfo(StorageInfo storageInfo) {
+        this.storageInfo = storageInfo;
+    }
+
+    public StorageInfo getStorageInfo() {
+        return storageInfo;
     }
 
     @Override

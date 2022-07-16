@@ -1512,7 +1512,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expr);
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
         // Add cast and constant fold
-        scalarOperator = scalarRewriter.rewrite(scalarOperator, ScalarOperatorRewriter.CAST_AND_FOLD_RULES);
+        scalarOperator = scalarRewriter.rewrite(scalarOperator, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
         return ScalarOperatorToExpr.buildExprIgnoreSlot(scalarOperator,
                 new ScalarOperatorToExpr.FormatterContext(Maps.newHashMap()));
     }

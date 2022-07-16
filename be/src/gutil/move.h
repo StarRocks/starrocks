@@ -8,8 +8,8 @@
 //
 // USAGE
 //
-// This macro should be used instead of DISALLOW_COPY_AND_ASSIGN to create
-// a "move-only" type.  Unlike DISALLOW_COPY_AND_ASSIGN, this macro should be
+// This macro should be used instead of DISALLOW_COPY to create
+// a "move-only" type.  Unlike DISALLOW_COPY, this macro should be
 // the first line in a class declaration.
 //
 // A class using this macro must call .Pass() (or somehow be an r-value already)
@@ -58,7 +58,7 @@
 // by declaring private version of them with a non-const reference parameter.
 //
 // For l-values, direct initialization still fails like in
-// DISALLOW_COPY_AND_ASSIGN because the copy constructor and assignment
+// DISALLOW_COPY because the copy constructor and assignment
 // operators are private.
 //
 // For r-values, the situation is different. The copy constructor and

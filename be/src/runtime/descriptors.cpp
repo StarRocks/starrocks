@@ -123,7 +123,7 @@ Status HdfsPartitionDescriptor::create_part_key_exprs(ObjectPool* pool, int32_t 
 }
 
 HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
-        : LakeTableDescriptor(tdesc, pool) {
+        : HiveTableDescriptor(tdesc, pool) {
     _hdfs_base_path = tdesc.hdfsTable.hdfs_base_dir;
     _columns = tdesc.hdfsTable.columns;
     _partition_columns = tdesc.hdfsTable.partition_columns;
@@ -134,13 +134,13 @@ HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
 }
 
 IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
-        : LakeTableDescriptor(tdesc, pool) {
+        : HiveTableDescriptor(tdesc, pool) {
     _table_location = tdesc.icebergTable.location;
     _columns = tdesc.icebergTable.columns;
 }
 
 HudiTableDescriptor::HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
-        : LakeTableDescriptor(tdesc, pool) {
+        : HiveTableDescriptor(tdesc, pool) {
     _table_location = tdesc.hudiTable.location;
     _columns = tdesc.hudiTable.columns;
     _partition_columns = tdesc.hudiTable.partition_columns;
@@ -150,13 +150,13 @@ HudiTableDescriptor::HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
     }
 }
 
-LakeTableDescriptor::LakeTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool) : TableDescriptor(tdesc) {}
+HiveTableDescriptor::HiveTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool) : TableDescriptor(tdesc) {}
 
-bool LakeTableDescriptor::is_partition_col(const SlotDescriptor* slot) const {
+bool HiveTableDescriptor::is_partition_col(const SlotDescriptor* slot) const {
     return get_partition_col_index(slot) >= 0;
 }
 
-HdfsPartitionDescriptor* LakeTableDescriptor::get_partition(int64_t partition_id) const {
+HdfsPartitionDescriptor* HiveTableDescriptor::get_partition(int64_t partition_id) const {
     auto it = _partition_id_to_desc_map.find(partition_id);
     if (it == _partition_id_to_desc_map.end()) {
         return nullptr;
@@ -164,7 +164,7 @@ HdfsPartitionDescriptor* LakeTableDescriptor::get_partition(int64_t partition_id
     return it->second;
 }
 
-int LakeTableDescriptor::get_partition_col_index(const SlotDescriptor* slot) const {
+int HiveTableDescriptor::get_partition_col_index(const SlotDescriptor* slot) const {
     int idx = 0;
     for (const auto& partition_column : _partition_columns) {
         if (partition_column.column_name == slot->col_name()) {

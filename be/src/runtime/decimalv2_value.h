@@ -129,6 +129,7 @@ public:
     operator double() const { return static_cast<double>(_value) / ONE_BILLION; }
 
     DecimalV2Value& operator+=(const DecimalV2Value& other);
+    DecimalV2Value& operator-=(const DecimalV2Value& other);
 
     // To be Compatible with OLAP
     // ATTN: NO-OVERFLOW should be guaranteed.

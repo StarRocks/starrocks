@@ -28,6 +28,7 @@ import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.HelpStmt;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowAuthorStmt;
+import com.starrocks.analysis.ShowBackendsStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
@@ -40,7 +41,6 @@ import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowUserStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.ShowBackendsStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -51,7 +51,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.StarOSAgent;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Type;
@@ -61,6 +60,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.server.GlobalStateMgr;
@@ -82,7 +82,6 @@ import org.junit.rules.ExpectedException;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.LinkedList;
 import java.util.List;
 
 public class ShowExecutorTest {
@@ -690,6 +689,7 @@ public class ShowExecutorTest {
 
         Assert.assertFalse(resultSet.next());
     }
+
     @Test
     public void testHelp() throws AnalysisException, IOException, UserException {
         HelpModule module = new HelpModule();
