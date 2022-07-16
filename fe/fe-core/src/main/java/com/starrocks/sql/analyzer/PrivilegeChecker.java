@@ -15,6 +15,7 @@ import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.CreateViewStmt;
@@ -369,6 +370,15 @@ public class PrivilegeChecker {
             // only user with GLOBAL level's GRANT_PRIV can drop user.
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(context, PrivPredicate.GRANT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP USER");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRoleStatement(CreateRoleStmt statement, ConnectContext context) {
+            // check if current user has GRANT priv on GLOBAL level.
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(context, PrivPredicate.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE USER");
             }
             return null;
         }

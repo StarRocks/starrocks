@@ -31,6 +31,7 @@ import com.starrocks.analysis.ComputeNodeClause;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateUserStmt;
@@ -330,6 +331,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitDropUserStatement(DropUserStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateRoleStatement(CreateRoleStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

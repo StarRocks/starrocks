@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.AlterUserStmt;
+import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.StatementBase;
@@ -65,22 +66,29 @@ public class PrivilegeStmtAnalyzer {
         }
 
         /**
+         * check if role name valid and get full role name + check if role exists
+         */
+        private String analyseRoleName(String roleName, ConnectContext session, boolean canBeAdmin, String errMsg) {
+            String qualifiedRole = validRoleName(roleName, canBeAdmin, errMsg);
+            if (!session.getGlobalStateMgr().getAuth().doesRoleExist(qualifiedRole)) {
+                throw new SemanticException("role " + qualifiedRole + " not exist!");
+            }
+            return qualifiedRole;
+        }
+
+        /**
          * check if role name valid and get full role name
          */
-        private String analyseRoleName(String roleName, ConnectContext session) {
+        private String validRoleName(String roleName, boolean canBeAdmin, String errMsg) {
             try {
-                FeNameFormat.checkRoleName(roleName, true /* can be admin */, "Can not granted/revoke role to user");
+                FeNameFormat.checkRoleName(roleName, canBeAdmin, errMsg);
             } catch (AnalysisException e) {
                 // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
                 // that is permitted to throw during analyzing phrase under the new framework for compatibility.
                 // Remove it after all old methods migrate to the new framework
                 throw new SemanticException(e.getMessage());
             }
-            String qualifiedRole = ClusterNamespace.getFullName(roleName);
-            if (!session.getGlobalStateMgr().getAuth().doesRoleExist(qualifiedRole)) {
-                throw new SemanticException("role " + qualifiedRole + " not exist!");
-            }
-            return qualifiedRole;
+            return ClusterNamespace.getFullName(roleName);
         }
 
         /**
@@ -90,7 +98,7 @@ public class PrivilegeStmtAnalyzer {
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
             analyseUserAndCheckExist(stmt.getUserIdent(), session);
-            stmt.setQualifiedRole(analyseRoleName(stmt.getRole(), session));
+            stmt.setQualifiedRole(analyseRoleName(stmt.getRole(), session, true, "Can not granted/revoke role to user"));
             return null;
         }
 
@@ -219,7 +227,7 @@ public class PrivilegeStmtAnalyzer {
                     // for forward compatibility
                     stmt.setRole(Role.ADMIN_ROLE);
                 }
-                stmt.setRole(analyseRoleName(stmt.getQualifiedRole(), session));
+                stmt.setRole(analyseRoleName(stmt.getQualifiedRole(), session, true, "Can not granted/revoke role to user"));
             }
             return null;
         }
@@ -227,6 +235,12 @@ public class PrivilegeStmtAnalyzer {
         @Override
         public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
             analyseUser(stmt.getUserIdent(), session);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
+            stmt.setQualifiedRole(validRoleName(stmt.getQualifiedRole(), false, "Can not create role"));
             return null;
         }
     }

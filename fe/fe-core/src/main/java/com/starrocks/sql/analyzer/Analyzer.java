@@ -15,6 +15,7 @@ import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateUserStmt;
@@ -208,6 +209,12 @@ public class Analyzer {
         public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
             return  null;
+        }
+
+        @Override
+        public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
+            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            return null;
         }
 
         @Override
