@@ -44,7 +44,6 @@ import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropRepositoryStmt;
-import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
