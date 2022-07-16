@@ -1232,7 +1232,7 @@ public class LocalMetastore implements ConnectorMetadata {
             } else {
                 olapTable.dropPartition(info.getDbId(), info.getPartitionName(), info.isForceDrop());
                 if (olapTable.getType() == Table.TableType.MATERIALIZED_VIEW) {
-                    ((MaterializedView) olapTable).dropPartitionNameRef(info.getPartitionName());
+                    ((MaterializedView) olapTable).removePartitionNameRefByMv(info.getPartitionName());
                 }
             }
         } finally {
