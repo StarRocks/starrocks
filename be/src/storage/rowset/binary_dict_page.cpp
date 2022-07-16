@@ -266,7 +266,7 @@ Status BinaryDictPageDecoder<Type>::next_batch(const vectorized::SparseRange& ra
     DCHECK(_parsed);
     DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
     if (_vec_code_buf == nullptr) {
-        _vec_code_buf = vectorized::ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_INT, false);
+        _vec_code_buf = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_INT, false);
     }
     _vec_code_buf->resize(0);
     _vec_code_buf->reserve(range.span_size());

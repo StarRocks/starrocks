@@ -80,21 +80,11 @@ public:
 
     virtual Status add_chunk(const vectorized::Chunk& chunk) { return Status::NotSupported("RowsetWriter::add_chunk"); }
 
-    // Used for updatable tablet compaction (BetaRowsetWriter), need to write src rssid with segment
-    virtual Status add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) {
-        return Status::NotSupported("RowsetWriter::add_chunk_with_rssid");
-    }
-
     // Used for vertical compaction
     // |Chunk| contains partial columns data corresponding to |column_indexes|.
     virtual Status add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
                                bool is_key) {
         return Status::NotSupported("RowsetWriter::add_columns");
-    }
-
-    virtual Status add_columns_with_rssid(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
-                                          const std::vector<uint32_t>& rssid) {
-        return Status::NotSupported("RowsetWriter::add_columns_with_rssid");
     }
 
     virtual Status flush_chunk(const vectorized::Chunk& chunk) {

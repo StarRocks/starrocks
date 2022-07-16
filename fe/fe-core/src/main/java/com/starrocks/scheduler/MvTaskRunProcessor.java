@@ -30,6 +30,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
@@ -85,9 +86,21 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                 OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
                 Collection<Partition> partitions = olapTable.getPartitions();
                 for (Partition partition : partitions) {
-                    if (materializedView.needRefreshPartition(baseTableId, partition)) {
+                    if (materializedView.needAddBasePartition(baseTableId, partition)) {
+                        materializedView.addBasePartition(baseTableId, partition);
+                    }
+                }
+                Set<String> syncedPartitionNames = materializedView.getSyncedPartitionNames(baseTableId);
+                for (String syncedPartitionName : syncedPartitionNames) {
+                    Partition baseTablePartition = olapTable.getPartition(syncedPartitionName);
+                    if (baseTablePartition == null) {
                         needRefresh = true;
-                        materializedView.updateBasePartition(baseTableId, partition);
+                        materializedView.removeBasePartition(baseTableId, syncedPartitionName);
+                    } else {
+                        if (materializedView.needRefreshPartition(baseTableId, baseTablePartition)) {
+                            needRefresh = true;
+                            materializedView.updateBasePartition(baseTableId, baseTablePartition);
+                        }
                     }
                 }
             }
@@ -133,9 +146,12 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             }
             // check with no partition expression related table
             OlapTable olapTable = olapTables.get(baseTableId);
-            if (checkNeedRefreshPartitions(materializedView, olapTable)) {
+            if (checkNoPartitionRefTablePartitions(materializedView, olapTable)) {
                 refreshAllPartitions = true;
             }
+        }
+        if (materializedView.getPartitions().isEmpty()) {
+            return;
         }
         // if all partition need refresh
         if (needRefreshPartitionNames.size() == materializedView.getPartitions().size()) {
@@ -193,6 +209,15 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             if (mvPartitionKeyRange != null) {
                 addPartition(database, materializedView, basePartitionName,
                         mvPartitionKeyRange, partitionProperties, distributionDesc);
+            } else {
+                Map<Long, Range<PartitionKey>> idToRange = expressionRangePartitionInfo.getIdToRange(false);
+                for (Map.Entry<Long, Range<PartitionKey>> idRangeEntry : idToRange.entrySet()) {
+                    if (RangeUtils.isRangeIntersect(basePartitionRange, idRangeEntry.getValue())) {
+                        materializedView.addPartitionNameRef(basePartitionName,
+                                materializedView.getPartition(idRangeEntry.getKey()).getName());
+                        break;
+                    }
+                }
             }
         }
         Set<String> deletedPartitionNames = materializedView.getNoExistBasePartitionNames(baseTableId, partitionNames);
@@ -227,14 +252,25 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         }
     }
 
-    private boolean checkNeedRefreshPartitions(MaterializedView materializedView, OlapTable olapTable) {
+    private boolean checkNoPartitionRefTablePartitions(MaterializedView materializedView, OlapTable olapTable) {
         boolean refreshAllPartitions = false;
         long baseTableId = olapTable.getId();
         Collection<Partition> basePartitions = olapTable.getPartitions();
         for (Partition basePartition : basePartitions) {
-            if (materializedView.needRefreshPartition(baseTableId, basePartition)) {
+            if (materializedView.needAddBasePartition(baseTableId, basePartition)) {
                 refreshAllPartitions = true;
-                materializedView.updateBasePartition(baseTableId, basePartition);
+                materializedView.addBasePartition(baseTableId, basePartition);
+            }
+        }
+        Set<String> syncedPartitionNames = materializedView.getSyncedPartitionNames(baseTableId);
+        for (String syncedPartitionName : syncedPartitionNames) {
+            Partition baseTablePartition = olapTable.getPartition(syncedPartitionName);
+            if (baseTablePartition == null) {
+                refreshAllPartitions = true;
+                materializedView.removeBasePartition(baseTableId, syncedPartitionName);
+            } else if (materializedView.needRefreshPartition(baseTableId, baseTablePartition)) {
+                refreshAllPartitions = true;
+                materializedView.updateBasePartition(baseTableId, baseTablePartition);
             }
         }
         return refreshAllPartitions;

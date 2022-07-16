@@ -46,7 +46,7 @@ Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics
     RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(
             _tablet.get(), max_rows_per_segment, _task_info.algorithm, _task_info.output_version, &output_rs_writer));
 
-    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     vectorized::TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()),
                                     output_rs_writer->version(), schema);
     vectorized::TabletReaderParams reader_params;
@@ -108,8 +108,8 @@ StatusOr<size_t> HorizontalCompactionTask::_compact_data(int32_t chunk_size, vec
     TRACE("[Compaction] start to compact data");
     auto status = Status::OK();
     size_t output_rows = 0;
-    auto char_field_indexes = vectorized::ChunkHelper::get_char_field_indexes(schema);
-    auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
+    auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
     while (LIKELY(!should_stop())) {
 #ifndef BE_TEST
         status = tls_thread_status.mem_tracker()->check_mem_limit("Compaction");
@@ -131,8 +131,7 @@ StatusOr<size_t> HorizontalCompactionTask::_compact_data(int32_t chunk_size, vec
             }
         }
 
-        vectorized::ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(),
-                                                      chunk.get());
+        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(), chunk.get());
 
         RETURN_IF_ERROR(output_rs_writer->add_chunk(*chunk));
         output_rows += chunk->num_rows();

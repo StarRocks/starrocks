@@ -10,19 +10,13 @@
 namespace starrocks {
 
 static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* handle) {
-    const char* nn = namenode.c_str();
-    if (is_hdfs_path(nn)) {
-        handle->type = HdfsFsHandle::Type::HDFS;
-        auto hdfs_builder = hdfsNewBuilder();
-        hdfsBuilderSetNameNode(hdfs_builder, namenode.c_str());
-        handle->hdfs_fs = hdfsBuilderConnect(hdfs_builder);
-        if (handle->hdfs_fs == nullptr) {
-            return Status::InternalError(strings::Substitute("fail to connect hdfs namenode, namenode=$0, err=$1",
-                                                             namenode, get_hdfs_err_msg()));
-        }
-
-    } else {
-        return Status::InternalError(strings::Substitute("failed to make client, namenode=$0", namenode));
+    handle->type = HdfsFsHandle::Type::HDFS;
+    auto hdfs_builder = hdfsNewBuilder();
+    hdfsBuilderSetNameNode(hdfs_builder, namenode.c_str());
+    handle->hdfs_fs = hdfsBuilderConnect(hdfs_builder);
+    if (handle->hdfs_fs == nullptr) {
+        return Status::InternalError(strings::Substitute("fail to connect hdfs namenode, namenode=$0, err=$1", namenode,
+                                                         get_hdfs_err_msg()));
     }
     return Status::OK();
 }

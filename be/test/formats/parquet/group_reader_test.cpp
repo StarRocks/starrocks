@@ -350,10 +350,13 @@ TEST_F(GroupReaderTest, TestInit) {
     ASSERT_TRUE(status.ok());
 
     // create row group reader
-    auto* group_reader = _pool.add(new GroupReader(config::vector_chunk_size, file, file_meta, 0));
+    param->chunk_size = config::vector_chunk_size;
+    param->file = file;
+    param->file_metadata = file_meta;
+    auto* group_reader = _pool.add(new GroupReader(*param, 0));
 
     // init row group reader
-    status = group_reader->init(*param);
+    status = group_reader->init();
     ASSERT_TRUE(status.is_end_of_file());
 }
 
@@ -377,10 +380,13 @@ TEST_F(GroupReaderTest, TestGetNext) {
     ASSERT_TRUE(status.ok());
 
     // create row group reader
-    auto* group_reader = _pool.add(new GroupReader(config::vector_chunk_size, file, file_meta, 0));
+    param->chunk_size = config::vector_chunk_size;
+    param->file = file;
+    param->file_metadata = file_meta;
+    auto* group_reader = _pool.add(new GroupReader(*param, 0));
 
     // init row group reader
-    status = group_reader->init(*param);
+    status = group_reader->init();
     ASSERT_TRUE(status.is_end_of_file());
 
     // replace column readers

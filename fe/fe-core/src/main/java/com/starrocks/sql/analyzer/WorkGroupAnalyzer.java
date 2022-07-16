@@ -13,7 +13,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.WorkGroup;
 import com.starrocks.catalog.WorkGroupClassifier;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TWorkGroupType;
@@ -70,7 +69,6 @@ public class WorkGroupAnalyzer {
                         throw new SemanticException(
                                 String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.DATABASES, eqPred));
                     }
-                    String clusterName = ConnectContext.get() != null ? ConnectContext.get().getClusterName() : "";
 
                     List<Long> databaseIds = new ArrayList<>();
                     for (String name : databases) {
@@ -83,8 +81,7 @@ public class WorkGroupAnalyzer {
                     }
                     classifier.setDatabases(databaseIds);
                 } else {
-                    throw new SemanticException(
-                            String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.SOURCE_IP, eqPred));
+                    throw new SemanticException(String.format("Unsupported classifier specifier: '%s'", key));
                 }
             } else if (pred instanceof InPredicate && !((InPredicate) pred).isNotIn()) {
                 InPredicate inPred = (InPredicate) pred;
@@ -95,17 +92,15 @@ public class WorkGroupAnalyzer {
                             String.format("Illegal classifier specifier: '%s'", inPred.toSql()));
                 }
                 String key = ((SlotRef) lhs).getColumnName();
-                Set<String> values = rhs.stream().map(e -> ((StringLiteral) e).getValue()).collect(Collectors.toSet());
-                boolean allMatch =
-                        values.stream().allMatch(v -> WorkGroupClassifier.QUERY_TYPES.contains(v.toUpperCase()));
-                if (!key.equalsIgnoreCase(WorkGroup.QUERY_TYPE) || !allMatch) {
-                    throw new SemanticException(
-                            String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.QUERY_TYPE,
-                                    inPred.toSql()));
+                if (!key.equalsIgnoreCase(WorkGroup.QUERY_TYPE)) {
+                    throw new SemanticException(String.format("Unsupported classifier specifier: '%s'", key));
                 }
+
+                Set<String> values = rhs.stream().map(e -> ((StringLiteral) e).getValue()).collect(Collectors.toSet());
                 for (String queryType : values) {
                     if (!WorkGroupClassifier.SUPPORTED_QUERY_TYPES.contains(queryType.toUpperCase())) {
-                        throw new SemanticException(String.format("Unsupported query_type: '%s'", queryType));
+                        throw new SemanticException(
+                                String.format("Unsupported %s: '%s'", WorkGroup.QUERY_TYPE, queryType));
                     }
                 }
                 classifier.setQueryTypes(values.stream()

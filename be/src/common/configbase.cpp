@@ -22,6 +22,7 @@
 #include <iostream>
 #include <list>
 #include <map>
+#include <regex>
 #include <sstream>
 
 #define __IN_CONFIGBASE_CPP__
@@ -184,6 +185,7 @@ bool Properties::load(const char* filename) {
     std::string line;
     std::string key;
     std::string value;
+    std::regex doris_start("^doris_");
     line.reserve(512);
     while (input) {
         // Read one line at a time.
@@ -201,6 +203,9 @@ bool Properties::load(const char* filename) {
         splitkv(line, key, value);
         trim(key);
         trim(value);
+
+        // compatible with doris_config
+        key = std::regex_replace(key, doris_start, "");
 
         // Insert into 'file_conf_map'.
         file_conf_map[key] = value;

@@ -52,7 +52,6 @@ public class DiskAndTabletLoadReBalancerTest {
      */
     @Test
     public void testBalance(@Mocked GlobalStateMgr globalStateMgr) {
-        String cluster = "cluster1";
         // system info
         long dbId = 10001L;
         long tableId = 10002L;
@@ -113,7 +112,6 @@ public class DiskAndTabletLoadReBalancerTest {
         table.addPartition(partition);
         Database database = new Database(dbId, "database");
         database.createTable(table);
-        database.setClusterName(cluster);
 
         new Expectations() {
             {
@@ -156,9 +154,7 @@ public class DiskAndTabletLoadReBalancerTest {
         };
 
         Rebalancer rebalancer = new DiskAndTabletLoadReBalancer(infoService, invertedIndex);
-        Map<String, ClusterLoadStatistic> clusterLoadStatisticMap = Maps.newHashMap();
-        clusterLoadStatisticMap.put(cluster, clusterLoadStatistic);
-        rebalancer.updateLoadStatistic(clusterLoadStatisticMap);
+        rebalancer.updateLoadStatistic(clusterLoadStatistic);
 
         List<TabletSchedCtx> tablets = rebalancer.selectAlternativeTablets();
         Assert.assertEquals(2, tablets.size());
@@ -190,7 +186,6 @@ public class DiskAndTabletLoadReBalancerTest {
      */
     @Test
     public void testBalanceWithSameHost(@Mocked GlobalStateMgr globalStateMgr) {
-        String cluster = "cluster1";
         // system info
         long dbId = 10001L;
         long tableId = 10002L;
@@ -265,7 +260,6 @@ public class DiskAndTabletLoadReBalancerTest {
         table.addPartition(partition);
         Database database = new Database(dbId, "database");
         database.createTable(table);
-        database.setClusterName(cluster);
 
         new Expectations() {
             {
@@ -308,9 +302,7 @@ public class DiskAndTabletLoadReBalancerTest {
         };
 
         Rebalancer rebalancer = new DiskAndTabletLoadReBalancer(infoService, invertedIndex);
-        Map<String, ClusterLoadStatistic> clusterLoadStatisticMap = Maps.newHashMap();
-        clusterLoadStatisticMap.put(cluster, clusterLoadStatistic);
-        rebalancer.updateLoadStatistic(clusterLoadStatisticMap);
+        rebalancer.updateLoadStatistic(clusterLoadStatistic);
 
         List<TabletSchedCtx> tablets = rebalancer.selectAlternativeTablets();
         Assert.assertEquals(0, tablets.size());
@@ -346,7 +338,6 @@ public class DiskAndTabletLoadReBalancerTest {
      */
     @Test
     public void testBalanceBackendTablet(@Mocked GlobalStateMgr globalStateMgr) {
-        String cluster = "cluster1";
         // system info
         long dbId = 10001L;
         long tableId = 10002L;
@@ -441,7 +432,6 @@ public class DiskAndTabletLoadReBalancerTest {
         table.addPartition(partition2);
         Database database = new Database(dbId, "database");
         database.createTable(table);
-        database.setClusterName(cluster);
 
         new Expectations() {
             {
@@ -492,9 +482,7 @@ public class DiskAndTabletLoadReBalancerTest {
         };
 
         Rebalancer rebalancer = new DiskAndTabletLoadReBalancer(infoService, invertedIndex);
-        Map<String, ClusterLoadStatistic> clusterLoadStatisticMap = Maps.newHashMap();
-        clusterLoadStatisticMap.put(cluster, clusterLoadStatistic);
-        rebalancer.updateLoadStatistic(clusterLoadStatisticMap);
+        rebalancer.updateLoadStatistic(clusterLoadStatistic);
 
         // set Config.balance_load_disk_safe_threshold to 0.4 to trigger backend disk balance
         Config.balance_load_disk_safe_threshold = 0.4;

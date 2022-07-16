@@ -1,7 +1,7 @@
 
  <p align="center">
  <a href="https://www.starrocks.com/en-US/index">
-    <img  width="526" src="https://github.com/kateshaowanjou/starrocks/blob/main/logo%2Bslogan.png">
+    <img  width="526" src="images/logo.png">
    </a>
 </p>
 <p align="center">
@@ -38,7 +38,7 @@ It delivers query speeds 5 to 10 times faster than other popular solutions. Star
 
 <br>
  <p align="center">
-    <img src="new_banner.png">
+    <img src="images/banner.png">
    </a>
 </p>
 </br>
@@ -61,7 +61,7 @@ It delivers query speeds 5 to 10 times faster than other popular solutions. Star
 ## Architecture Overview
 
  <p align="center">
-    <img src="https://github.com/StarRocks/starrocks/blob/main/Arch.png">
+    <img src="images/arch.png">
    </a>
 </p>
 
@@ -101,7 +101,7 @@ We welcome all kinds of contributions from the community, individuals and partne
 
 **📝 License:** Please note StaRocks is licensed under [Elastic License 2.0](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt), with small portions of code under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). See [FAQ](https://www.starrocks.com/en-US/product/license-FAQ) to learn more.  
 
-**👥 Community Membership:** Learn more about different [contributor roles](https://github.com/StarRocks/community/blob/main/Community-Membership.md) in StarRocks community.
+**👥 Community Membership:** Learn more about different [contributor roles](community/membership.md) in StarRocks community.
   
 <br>
   
