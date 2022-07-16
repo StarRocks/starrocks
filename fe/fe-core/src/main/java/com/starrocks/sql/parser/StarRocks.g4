@@ -42,6 +42,7 @@ statement
     | createTableLikeStatement                                                              #createTableLike
     | showIndexStatement                                                                    #showIndex
     | recoverTableStatement                                                                 #recoverTable
+    | truncateTableStatement                                                                #truncateTable
     | showTabletStatement                                                                   #showTablet
     | cancelAlterTableStatement                                                             #cancelAlterTable
 
@@ -311,6 +312,10 @@ showIndexStatement
 
 recoverTableStatement
     : RECOVER TABLE qualifiedName
+    ;
+
+truncateTableStatement
+    : TRUNCATE TABLE qualifiedName partitionNames?
     ;
 
 cancelAlterTableStatement

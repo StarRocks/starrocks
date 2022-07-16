@@ -94,6 +94,7 @@ import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UpdateStmt;
 
 public abstract class AstVisitor<R, C> {
@@ -277,6 +278,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitRecoverTableStatement(RecoverTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitTruncateTableStatement(TruncateTableStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
