@@ -28,7 +28,7 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
     <property name="fileExtensions" value="java"/>
 
     <module name="RegexpHeader">
-        <property name="headerFile" value="checkstyle-header.txt"/>
+        <property name="headerFile" value="/Users/melt/data/java_code/bk2/starrocks/fe/checkstyle-header.txt"/>
         <property name="fileExtensions" value="java"/>
     </module>
 

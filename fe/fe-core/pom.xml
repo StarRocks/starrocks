@@ -720,6 +720,16 @@ under the License.
                 <groupId>org.antlr</groupId>
                 <artifactId>antlr4-maven-plugin</artifactId>
                 <version>4.9.2</version>
+                <configuration>
+                    <sourceDirectory>src/main/java/com/starrocks/sql/parser</sourceDirectory>
+                    <outputDirectory>target/generated-sources/antlr4/com/starrocks/sql/parser</outputDirectory>
+                    <libDirectory>target/generated-sources/antlr4/com/starrocks/sql/parser</libDirectory>
+                    <visitor>true</visitor>
+                    <arguments>
+                        <argument>-package</argument>
+                        <argument>com.starrocks.sql.parser</argument>
+                    </arguments>
+                </configuration>
                 <executions>
                     <execution>
                         <id>antlr</id>
@@ -727,16 +737,7 @@ under the License.
                         <goals>
                             <goal>antlr4</goal>
                         </goals>
-                        <configuration>
-                            <sourceDirectory>src/main/java/com/starrocks/sql/parser</sourceDirectory>
-                            <outputDirectory>target/generated-sources/antlr4/com/starrocks/sql/parser</outputDirectory>
-                            <libDirectory>target/generated-sources/antlr4/com/starrocks/sql/parser</libDirectory>
-                            <visitor>true</visitor>
-                            <arguments>
-                                <argument>-package</argument>
-                                <argument>com.starrocks.sql.parser</argument>
-                            </arguments>
-                        </configuration>
+
                     </execution>
                 </executions>
             </plugin>
