@@ -26,6 +26,7 @@ import org.junit.Test;
 
 public class PrivilegeCheckerTest {
     private static StarRocksAssert starRocksAssert;
+    private static UserIdentity rootUser;
     private static UserIdentity testUser;
     private static UserIdentity testUser2;
     private static Auth auth;
@@ -40,23 +41,47 @@ public class PrivilegeCheckerTest {
         starRocksAssert.withDatabase("db2");
         starRocksAssert.withTable(createTblStmtStr);
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        rootUser = starRocksAssert.getCtx().getCurrentUserIdentity();
 
         String createUserSql = "CREATE USER 'test' IDENTIFIED BY ''";
         CreateUserStmt createUserStmt =
-                (CreateUserStmt) UtFrameUtils.parseAndAnalyzeStmt(createUserSql, starRocksAssert.getCtx());
+                (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
         auth.createUser(createUserStmt);
 
-        testUser = new UserIdentity("test", "%");
-        testUser.analyze("default_cluster");
+        testUser = createUserStmt.getUserIdent();
 
         createUserSql = "CREATE USER 'test2' IDENTIFIED BY ''";
-        createUserStmt = (CreateUserStmt) UtFrameUtils.parseAndAnalyzeStmt(createUserSql, starRocksAssert.getCtx());
+        createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
         auth.createUser(createUserStmt);
 
-        testUser2 = new UserIdentity("test2", "%");
-        testUser2.analyze("default_cluster");
+        testUser2 = createUserStmt.getUserIdent();
     }
 
+    @Test
+    public void testCreateUser() throws Exception {
+        starRocksAssert.getCtx().setQualifiedUser("root");
+        starRocksAssert.getCtx().setCurrentUserIdentity(rootUser);
+        String sql = "CREATE USER 'test2'";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertTrue(statementBase.isSupportNewPlanner());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        StatementBase statementBase2 = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx()));
+    }
+
+    @Test
+    public void testAlterUser() throws Exception {
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        String sql = "ALTER USER 'root' IDENTIFIED BY ''";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
 
     @Test
     public void testShowCreateDb() throws Exception {
