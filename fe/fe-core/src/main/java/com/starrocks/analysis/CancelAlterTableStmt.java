@@ -28,6 +28,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
@@ -48,6 +49,14 @@ public class CancelAlterTableStmt extends CancelStmt {
 
     public String getDbName() {
         return dbTableName.getDb();
+    }
+
+    public void setDbName(String dbName) {
+        this.dbTableName.setDb(dbName);
+    }
+
+    public TableName getDbTableName() {
+        return this.dbTableName;
     }
 
     public String getTableName() {
@@ -83,6 +92,16 @@ public class CancelAlterTableStmt extends CancelStmt {
                     ConnectContext.get().getRemoteIP(),
                     dbTableName.getTbl());
         }
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCancelAlterTableStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
     @Override

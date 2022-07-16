@@ -129,7 +129,7 @@ public:
 
         page_decoder.seek_to_position_in_page(0);
         ASSERT_EQ(0, page_decoder.current_index());
-        auto column = vectorized::ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, false);
+        auto column = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, false);
         vectorized::SparseRange read_range;
         read_range.add(vectorized::Range(0, 2));
         read_range.add(vectorized::Range(4, 7));
@@ -237,7 +237,7 @@ public:
             status = page_decoder.seek_to_position_in_page(0);
             ASSERT_TRUE(status.ok());
             size_t slice_num = page_start_ids[slice_index + 1] - page_start_ids[slice_index];
-            auto dst = vectorized::ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, false);
+            auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, false);
             vectorized::SparseRange read_range;
             read_range.add(vectorized::Range(0, slice_num / 3));
             read_range.add(vectorized::Range(slice_num / 2, (slice_num * 2 / 3)));

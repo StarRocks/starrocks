@@ -33,7 +33,6 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.AnalysisException;
@@ -121,7 +120,7 @@ public class StatisticProcDir implements ProcDirInterface {
                 int dbReplicaNum = 0;
 
                 for (Table table : db.getTables()) {
-                    if (table.getType() != TableType.OLAP) {
+                    if (!table.isNativeTable()) {
                         continue;
                     }
 
@@ -129,7 +128,6 @@ public class StatisticProcDir implements ProcDirInterface {
                     OlapTable olapTable = (OlapTable) table;
 
                     for (Partition partition : olapTable.getAllPartitions()) {
-                        boolean useStarOS = partition.isUseStarOS();
                         short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
                         ++dbPartitionNum;
                         for (MaterializedIndex materializedIndex : partition
@@ -138,7 +136,7 @@ public class StatisticProcDir implements ProcDirInterface {
                             for (Tablet tablet : materializedIndex.getTablets()) {
                                 ++dbTabletNum;
 
-                                if (useStarOS) {
+                                if (table.isLakeTable()) {
                                     continue;
                                 }
 
@@ -146,8 +144,7 @@ public class StatisticProcDir implements ProcDirInterface {
                                 dbReplicaNum += localTablet.getReplicas().size();
 
                                 Pair<TabletStatus, Priority> res = localTablet.getHealthStatusWithPriority(
-                                        infoService, db.getClusterName(),
-                                        partition.getVisibleVersion(),
+                                        infoService, partition.getVisibleVersion(),
                                         replicationNum, aliveBeIdsInCluster);
 
                                 // here we treat REDUNDANT as HEALTHY, for user friendly.

@@ -230,6 +230,7 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
             ASSERT_TRUE(morsel_queues.count(source_id));
             auto& morsel_queue_factory = morsel_queues[source_id];
 
+            pipeline->source_operator_factory()->set_morsel_queue_factory(morsel_queue_factory.get());
             for (size_t i = 0; i < degree_of_parallelism; ++i) {
                 auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
                 DriverPtr driver =
@@ -237,7 +238,7 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
                 driver->set_morsel_queue(morsel_queue_factory->create(i));
                 if (auto* scan_operator = driver->source_scan_operator()) {
                     if (dynamic_cast<starrocks::pipeline::ConnectorScanOperator*>(scan_operator) != nullptr) {
-                        scan_operator->set_io_threads(_exec_env->pipeline_hdfs_scan_io_thread_pool());
+                        scan_operator->set_io_threads(_exec_env->pipeline_connector_scan_io_thread_pool());
                     } else {
                         scan_operator->set_io_threads(_exec_env->pipeline_scan_io_thread_pool());
                     }
@@ -270,7 +271,6 @@ void PipeLineFileScanNodeTest::execute_pipeline() {
 
 void PipeLineFileScanNodeTest::generate_morse_queue(std::vector<starrocks::vectorized::ConnectorScanNode*> scan_nodes,
                                                     std::vector<TScanRangeParams> scan_ranges) {
-    TExecPlanFragmentParams request;
     std::vector<TScanRangeParams> no_scan_ranges;
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
 
@@ -278,7 +278,7 @@ void PipeLineFileScanNodeTest::generate_morse_queue(std::vector<starrocks::vecto
     for (auto& i : scan_nodes) {
         ScanNode* scan_node = (ScanNode*)(i);
         auto morsel_queue_factory = scan_node->convert_scan_range_to_morsel_queue_factory(
-                scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), request, degree_of_parallelism);
+                scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), degree_of_parallelism, true);
         DCHECK(morsel_queue_factory.ok());
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory).value());
     }

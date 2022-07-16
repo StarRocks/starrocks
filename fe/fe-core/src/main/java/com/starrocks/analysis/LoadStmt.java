@@ -307,7 +307,7 @@ public class LoadStmt extends DdlStmt {
 
         if (etlJobType == EtlJobType.SPARK) {
             for (DataDescription dataDescription : dataDescriptions) {
-                CatalogUtils.checkOlapTableHasStarOSPartition(label.getDbName(), dataDescription.getTableName());
+                CatalogUtils.checkIsLakeTable(label.getDbName(), dataDescription.getTableName());
             }
         }
 

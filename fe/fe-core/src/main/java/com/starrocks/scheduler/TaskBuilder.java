@@ -16,12 +16,11 @@ import java.util.Map;
 public class TaskBuilder {
 
     public static Task buildTask(SubmitTaskStmt submitTaskStmt, ConnectContext context) {
-        Task task = new Task();
         String taskName = submitTaskStmt.getTaskName();
         if (taskName == null) {
             taskName = "ctas-" + DebugUtil.printId(context.getExecutionId());
         }
-        task.setName(taskName);
+        Task task = new Task(taskName);
         task.setSource(Constants.TaskSource.CTAS);
         task.setCreateTime(System.currentTimeMillis());
         task.setDbName(submitTaskStmt.getDbName());
@@ -32,10 +31,8 @@ public class TaskBuilder {
     }
 
     public static Task buildMvTask(MaterializedView materializedView, String dbName) {
-        Task task = new Task();
-        task.setName(getMvTaskName(materializedView.getId()));
+        Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
-        task.setCreateTime(System.currentTimeMillis());
         task.setDbName(dbName);
         Map<String, String> taskProperties = Maps.newHashMap();
         taskProperties.put(MvTaskRunProcessor.MV_ID, String.valueOf(materializedView.getId()));

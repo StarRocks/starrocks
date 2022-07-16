@@ -21,16 +21,17 @@
 #include "runtime/mem_tracker.h"
 #include "serde/protobuf_serde.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
-#include "storage/lake/test_group_assigner.h"
 #include "storage/lake/txn_log.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
+#include "testutil/id_generator.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -45,17 +46,19 @@ using Int32Column = starrocks::vectorized::Int32Column;
 class LakeTabletsChannelTest : public testing::Test {
 public:
     LakeTabletsChannelTest() {
+        _schema_id = next_id();
         _mem_tracker = std::make_unique<MemTracker>(-1);
         _load_channel_mgr = std::make_unique<LoadChannelMgr>();
 
         _tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+        _tablet_manager->prune_metacache();
 
-        _group_assigner = std::make_unique<lake::TestGroupAssigner>(kTestGroupPath);
-        _backup_group_assigner = _tablet_manager->TEST_set_group_assigner(_group_assigner.get());
+        _location_provider = std::make_unique<lake::FixedLocationProvider>(kTestGroupPath);
+        _backup_location_provider = _tablet_manager->TEST_set_location_provider(_location_provider.get());
 
         auto metadata = new_tablet_metadata(10086);
         _tablet_schema = TabletSchema::create(_mem_tracker.get(), metadata->schema());
-        _schema = std::make_shared<VSchema>(vectorized::ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
 
         // init _open_request
         _open_request.mutable_id()->set_hi(456789);
@@ -117,7 +120,7 @@ public:
         //  |   c0   |  INT | YES |  NO  |
         //  |   c1   |  INT | NO  |  NO  |
         auto schema = metadata->mutable_schema();
-        schema->set_id(10);
+        schema->set_id(_schema_id);
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(DUP_KEYS);
         schema->set_num_rows_per_row_block(65535);
@@ -170,13 +173,13 @@ public:
 
 protected:
     void SetUp() override {
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_group_assigner(_group_assigner.get());
+        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(kTestGroupPath));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(kTestGroupPath, *new_tablet_metadata(10086)));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(kTestGroupPath, *new_tablet_metadata(10087)));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(kTestGroupPath, *new_tablet_metadata(10088)));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(kTestGroupPath, *new_tablet_metadata(10089)));
+        CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10086)));
+        CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10087)));
+        CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10088)));
+        CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10089)));
 
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
         _load_channel = scoped_refptr<LoadChannel>(new LoadChannel(_load_channel_mgr.get(), UniqueId::gen_uid(),
@@ -196,14 +199,16 @@ protected:
         tablet.delete_txn_log(kTxnId);
         ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10089));
         tablet.delete_txn_log(kTxnId);
-        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_group_assigner(_backup_group_assigner);
+        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_backup_location_provider);
         (void)fs::remove_all(kTestGroupPath);
+        _tablet_manager->prune_metacache();
     }
 
     std::shared_ptr<VChunk> read_segment(int64_t tablet_id, const std::string& filename) {
         // Check segment file
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
         auto path = fmt::format("{}/{}", kTestGroupPath, filename);
+        std::cerr << path << '\n';
 
         ASSIGN_OR_ABORT(auto seg, Segment::open(_mem_tracker.get(), fs, path, 0, _tablet_schema.get()));
 
@@ -215,8 +220,16 @@ protected:
         opts.chunk_size = 1024;
 
         ASSIGN_OR_ABORT(auto seg_iter, seg->new_iterator(*_schema, opts));
-        auto read_chunk_ptr = vectorized::ChunkHelper::new_chunk(*_schema, 1024);
-        CHECK_OK(seg_iter->get_next(read_chunk_ptr.get()));
+        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        while (true) {
+            auto tmp_chunk = ChunkHelper::new_chunk(*_schema, 1024);
+            auto st = seg_iter->get_next(tmp_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            read_chunk_ptr->append(*tmp_chunk);
+        }
         seg_iter->close();
         return read_chunk_ptr;
     }
@@ -225,11 +238,12 @@ protected:
     static constexpr int64_t kTxnId = 12345;
     static constexpr const char* const kTestGroupPath = "test_lake_tablets_channel";
 
+    int64_t _schema_id;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
     lake::TabletManager* _tablet_manager;
-    std::unique_ptr<lake::TestGroupAssigner> _group_assigner;
-    lake::GroupAssigner* _backup_group_assigner;
+    std::unique_ptr<lake::FixedLocationProvider> _location_provider;
+    lake::LocationProvider* _backup_location_provider;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<VSchema> _schema;
     PTabletWriterOpenRequest _open_request;

@@ -93,6 +93,9 @@ public class PropertyAnalyzer {
     public static final String ABLE_LOW_CARD_DICT = "1";
     public static final String DISABLE_LOW_CARD_DICT = "0";
 
+    public static final String PROPERTIES_ENABLE_STORAGE_CACHE = "enable_storage_cache";
+    public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
+
     public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
             throws AnalysisException {
         if (properties == null) {
@@ -147,7 +150,10 @@ public class PropertyAnalyzer {
 
         if (storageMedium == TStorageMedium.SSD && !hasCooldown) {
             // set default cooldown time
-            coolDownTimeStamp = currentTimeMs + Config.storage_cooldown_second * 1000L;
+            coolDownTimeStamp = ((Config.storage_cooldown_second <= 0) ||
+                    ((DataProperty.MAX_COOLDOWN_TIME_MS - currentTimeMs) / 1000L < Config.storage_cooldown_second)) ?
+                    DataProperty.MAX_COOLDOWN_TIME_MS :
+                    currentTimeMs + Config.storage_cooldown_second * 1000L;
         }
 
         Preconditions.checkNotNull(storageMedium);
@@ -430,5 +436,20 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_TYPE);
         }
         return type;
+    }
+
+    public static long analyzeLongProp(Map<String, String> properties, String propKey, long defaultVal)
+            throws AnalysisException {
+        long val = defaultVal;
+        if (properties != null && properties.containsKey(propKey)) {
+            String valStr = properties.get(propKey);
+            try {
+                val = Long.parseLong(valStr);
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Invalid " + propKey + " format: " + valStr);
+            }
+            properties.remove(propKey);
+        }
+        return val;
     }
 }

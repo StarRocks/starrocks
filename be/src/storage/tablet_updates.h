@@ -24,6 +24,7 @@ using RowsetSharedPtr = std::shared_ptr<Rowset>;
 class DelVector;
 using DelVectorPtr = std::shared_ptr<DelVector>;
 class MemTracker;
+class RowsetReadOptions;
 class SnapshotMeta;
 class Tablet;
 class TTabletInfo;
@@ -31,7 +32,6 @@ class TTabletInfo;
 namespace vectorized {
 class ChunkIterator;
 class CompactionState;
-class RowsetReadOptions;
 class Schema;
 class TabletReader;
 class ChunkChanger;
@@ -65,6 +65,9 @@ public:
 
     // get total size of latest version's rowset files
     size_t data_size() const;
+
+    // get number of rows and total size of latest version's rowset files together
+    std::pair<int64_t, int64_t> num_rows_and_data_size() const;
 
     // get latest version's number of rowsets
     size_t num_rowsets() const;
@@ -282,7 +285,7 @@ private:
 
     // wait a version to be applied, so reader can read this version
     // assuming _lock already hold
-    Status _wait_for_version(const EditVersion& version, int64_t timeout_ms);
+    Status _wait_for_version(const EditVersion& version, int64_t timeout_ms, std::unique_lock<std::mutex>& lock);
 
     Status _commit_compaction(std::unique_ptr<CompactionInfo>* info, const RowsetSharedPtr& rowset,
                               EditVersion* commit_version);
@@ -296,7 +299,7 @@ private:
 
     void _stop_and_wait_apply_done();
 
-    Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo, bool wait_apply);
+    Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo);
 
     void _calc_compaction_score(RowsetStats* stats);
 

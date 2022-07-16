@@ -22,13 +22,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
@@ -60,23 +53,6 @@ public class AdminSetConfigStmt extends DdlStmt {
 
     public Map<String, String> getConfigs() {
         return configs;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-
-        if (configs.size() != 1) {
-            throw new AnalysisException("config parameter size is not equal to 1");
-        }
-        // check auth
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
-        }
-
-        if (type != ConfigType.FRONTEND) {
-            throw new AnalysisException("Only support setting Frontend configs now");
-        }
     }
 
     @Override

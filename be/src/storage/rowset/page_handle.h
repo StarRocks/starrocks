@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include "gutil/macros.h" // for DISALLOW_COPY_AND_ASSIGN
+#include "gutil/macros.h" // for DISALLOW_COPY
 #include "storage/page_cache.h"
 #include "util/slice.h"
 

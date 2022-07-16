@@ -8,7 +8,9 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -27,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
@@ -269,10 +272,18 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
                             cteProduce, factory));
                 }
 
-                CallOperator distinctAvgCallOperator = (CallOperator) scalarRewriter.rewrite(
-                        new CallOperator("divide", avgCallOperator.getType(),
-                                Lists.newArrayList(sumColumnRef, countColumnRef)),
-                        Lists.newArrayList(new ImplicitCastRule()));
+                CallOperator distinctAvgCallOperator = new CallOperator(FunctionSet.DIVIDE, avgCallOperator.getType(),
+                        Lists.newArrayList(sumColumnRef, countColumnRef));
+                if (avgCallOperator.getType().isDecimalV3()) {
+                    // There is not need to apply ImplicitCastRule to divide operator of decimal types.
+                    // but we should cast BIGINT-typed countColRef into DECIMAL(38,0).
+                    ScalarType decimal128p38s0 = ScalarType.createDecimalV3NarrowestType(38, 0);
+                    distinctAvgCallOperator.getChildren().set(
+                            1, new CastOperator(decimal128p38s0, distinctAvgCallOperator.getChild(1), true));
+                } else {
+                    distinctAvgCallOperator = (CallOperator) scalarRewriter.rewrite(distinctAvgCallOperator,
+                            Lists.newArrayList(new ImplicitCastRule()));
+                }
                 projectionMap.put(aggregation.getKey(), distinctAvgCallOperator);
             }
         }
@@ -284,6 +295,9 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
                 avgCallOperator.getFunction().getArgs(), avgCallOperator.getType(), false);
         Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
 
+        if (fn.getFunctionName().getFunction().equals(FunctionSet.SUM)) {
+            fn = DecimalV3FunctionAnalyzer.rectifySumDistinct(fn, avgCallOperator.getChild(0).getType());
+        }
         return new CallOperator(functionName, fn.getReturnType(), avgCallOperator.getChildren(), fn,
                 avgCallOperator.isDistinct());
     }

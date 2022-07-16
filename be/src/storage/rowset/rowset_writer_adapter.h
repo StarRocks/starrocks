@@ -25,10 +25,6 @@ public:
 
     Status add_chunk(const vectorized::Chunk& chunk) override;
 
-    Status add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) override {
-        return _writer->add_chunk_with_rssid(chunk, rssid);
-    }
-
     Status flush_chunk(const vectorized::Chunk& chunk) override;
 
     Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override;

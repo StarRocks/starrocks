@@ -62,9 +62,9 @@ public class PushDownApplyFilterRule extends TransformationRule {
             unCorrelationPredicate = Utils.compoundAnd(unCorrelationPredicates);
         }
 
-        LogicalApplyOperator newApply = new LogicalApplyOperator(apply.getOutput(), apply.getSubqueryOperator(),
-                apply.getCorrelationColumnRefs(), correlationPredicate, unCorrelationPredicate,
-                apply.isNeedCheckMaxRows(), apply.isUseSemiAnti());
+        LogicalApplyOperator newApply = LogicalApplyOperator.builder().withOperator(apply)
+                .setCorrelationConjuncts(correlationPredicate)
+                .setPredicate(unCorrelationPredicate).build();
 
         OptExpression newApplyOptExpression = new OptExpression(newApply);
         newApplyOptExpression.getInputs().add(input.getInputs().get(0));

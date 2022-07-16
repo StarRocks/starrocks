@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
@@ -91,7 +92,7 @@ public class AdminStmtAnalyzer {
             adminShowReplicaDistributionStmt.setDbName(dbName);
 
             try {
-                CatalogUtils.checkOlapTableHasStarOSPartition(dbName, tblName);
+                CatalogUtils.checkIsLakeTable(dbName, tblName);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
@@ -115,7 +116,7 @@ public class AdminStmtAnalyzer {
             adminShowReplicaStatusStmt.setDbName(dbName);
 
             try {
-                CatalogUtils.checkOlapTableHasStarOSPartition(dbName, tblName);
+                CatalogUtils.checkIsLakeTable(dbName, tblName);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
@@ -133,6 +134,17 @@ public class AdminStmtAnalyzer {
             if (!analyzeWhere(adminShowReplicaStatusStmt)) {
                 throw new SemanticException(
                         "Where clause should looks like: status =/!= 'OK/DEAD/VERSION_ERROR/SCHEMA_ERROR/MISSING'");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAdminSetConfigStatement(AdminSetConfigStmt stmt, ConnectContext session) {
+            if (stmt.getConfigs().size() != 1) {
+                throw new SemanticException("config parameter size is not equal to 1");
+            }
+            if (stmt.getType() != AdminSetConfigStmt.ConfigType.FRONTEND) {
+                throw new SemanticException("Only support setting Frontend configs now");
             }
             return null;
         }
