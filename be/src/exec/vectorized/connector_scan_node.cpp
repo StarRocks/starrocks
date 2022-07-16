@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "common/config.h"
+#include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -59,9 +60,9 @@ public:
         return Status::OK();
     }
     Status open(RuntimeState* state) {
-        if (_is_open) return Status::OK();
+        if (_opened) return Status::OK();
         RETURN_IF_ERROR(_data_source->open(state));
-        _is_open = true;
+        _opened = true;
         return Status::OK();
     }
     void close(RuntimeState* state) { _data_source->close(state); }
@@ -74,7 +75,7 @@ public:
     int64_t num_rows_read() const { return _data_source->num_rows_read(); }
     void set_keep_priority(bool v) { _keep_priority = v; }
     bool keep_priority() const { return _keep_priority; }
-    bool is_open() { return _is_open; }
+    bool is_open() { return _opened; }
 
     RuntimeState* runtime_state() { return _runtime_state; }
 
@@ -102,7 +103,7 @@ public:
 private:
     connector::DataSourcePtr _data_source = nullptr;
     RuntimeState* _runtime_state = nullptr;
-    bool _is_open = false;
+    bool _opened = false;
     bool _keep_priority = false;
     std::atomic_bool _pending_token = false;
     MonotonicStopWatch _pending_queue_sw;
@@ -131,7 +132,8 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
 pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     size_t dop = context->dop_of_source_operator(id());
-    auto scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this, dop);
+    auto scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(
+            context->next_operator_id(), this, dop, std::make_unique<pipeline::UnlimitedChunkBufferLimiter>());
 
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
@@ -170,8 +172,8 @@ Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
     // init chunk pool
     _pending_scanners.reverse();
     _num_scanners = _pending_scanners.size();
-    _chunks_per_scanner = config::doris_scanner_row_num / state->chunk_size();
-    _chunks_per_scanner += static_cast<int>(config::doris_scanner_row_num % state->chunk_size() != 0);
+    _chunks_per_scanner = config::scanner_row_num / state->chunk_size();
+    _chunks_per_scanner += static_cast<int>(config::scanner_row_num % state->chunk_size() != 0);
     int concurrency = std::min<int>(config::max_hdfs_scanner_num, _num_scanners);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
@@ -371,7 +373,7 @@ void ConnectorScanNode::_scanner_thread(ConnectorScanner* scanner) {
     scanner->set_keep_priority(false);
 
     bool resubmit = false;
-    int64_t raw_rows_threshold = scanner->raw_rows_read() + config::doris_scanner_row_num;
+    int64_t raw_rows_threshold = scanner->raw_rows_read() + config::scanner_row_num;
 
     ChunkPtr chunk = nullptr;
 
@@ -521,7 +523,6 @@ Status ConnectorScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& s
         // to create at least one data source
         _scan_ranges.emplace_back(TScanRangeParams());
     }
-    COUNTER_UPDATE(_profile.scan_ranges_counter, scan_ranges.size());
     return Status::OK();
 }
 
@@ -532,7 +533,10 @@ bool ConnectorScanNode::accept_empty_scan_ranges() const {
 void ConnectorScanNode::_init_counter() {
     _profile.scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
     _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
-    _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
+}
+
+int ConnectorScanNode::io_tasks_per_scan_operator() const {
+    return config::connector_io_tasks_per_scan_operator;
 }
 
 } // namespace starrocks::vectorized

@@ -56,6 +56,8 @@ class TScanRange;
 //
 class ScanNode : public ExecNode {
 public:
+    static constexpr int MAX_IO_TASKS_PER_OP = 4;
+
     ScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs) : ExecNode(pool, tnode, descs) {}
     ~ScanNode() override = default;
 
@@ -99,8 +101,7 @@ public:
 
     const std::string& name() const { return _name; }
 
-    // Used by pipeline, 0 means there is no limitation.
-    virtual int max_scan_concurrency() const { return 0; }
+    virtual int io_tasks_per_scan_operator() const { return MAX_IO_TASKS_PER_OP; }
 
 protected:
     RuntimeProfile::Counter* _bytes_read_counter; // # bytes read from the scanner

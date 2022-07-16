@@ -20,21 +20,30 @@ import org.apache.velocity.app.VelocityEngine;
 
 import java.io.StringWriter;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public abstract class StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
-    protected final AnalyzeJob analyzeJob;
     protected final Database db;
     protected final OlapTable table;
     protected final List<String> columns;
 
-    public StatisticsCollectJob(AnalyzeJob analyzeJob, Database db, OlapTable table, List<String> columns) {
-        this.analyzeJob = analyzeJob;
+    protected final StatsConstants.AnalyzeType type;
+    protected final StatsConstants.ScheduleType scheduleType;
+    protected final Map<String, String> properties;
+
+    protected StatisticsCollectJob(Database db, OlapTable table, List<String> columns,
+                                StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
+                                Map<String, String> properties) {
         this.db = db;
         this.table = table;
         this.columns = columns;
+
+        this.type = type;
+        this.scheduleType = scheduleType;
+        this.properties = properties;
     }
 
     protected static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
@@ -48,13 +57,9 @@ public abstract class StatisticsCollectJob {
         DEFAULT_VELOCITY_ENGINE.setProperty("runtime.log.logsystem.log4j.logger", "velocity");
     }
 
-    protected static final String INSERT_STATISTIC_TEMPLATE = "INSERT INTO " + Constants.SampleStatisticsTableName;
+    protected static final String INSERT_STATISTIC_TEMPLATE = "INSERT INTO " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 
     public abstract void collect() throws Exception;
-
-    public AnalyzeJob getAnalyzeJob() {
-        return analyzeJob;
-    }
 
     public Database getDb() {
         return db;
@@ -62,6 +67,22 @@ public abstract class StatisticsCollectJob {
 
     public Table getTable() {
         return table;
+    }
+
+    public List<String> getColumns() {
+        return columns;
+    }
+
+    public StatsConstants.AnalyzeType getType() {
+        return type;
+    }
+
+    public StatsConstants.ScheduleType getScheduleType() {
+        return scheduleType;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
     }
 
     public void collectStatisticSync(String sql) throws Exception {

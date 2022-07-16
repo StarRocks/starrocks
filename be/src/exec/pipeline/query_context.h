@@ -113,6 +113,9 @@ public:
     int64_t query_begin_time() const { return _query_begin_time; }
     void init_query_begin_time() { _query_begin_time = MonotonicNanos(); }
 
+    void set_scan_limit(int64_t scan_limit) { _scan_limit = scan_limit; }
+    int64_t get_scan_limit() const { return _scan_limit; }
+
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -140,6 +143,7 @@ private:
     std::atomic<int64_t> _cur_scan_rows_num = 0;
     std::atomic<int64_t> _cur_scan_bytes = 0;
 
+    int64_t _scan_limit = 0;
     int64_t _init_wg_cpu_cost = 0;
 };
 

@@ -22,12 +22,10 @@
 
 namespace starrocks::lake {
 
-using ChunkHelper = starrocks::vectorized::ChunkHelper;
 using ConjunctivePredicates = starrocks::vectorized::ConjunctivePredicates;
 using Datum = starrocks::vectorized::Datum;
 using Field = starrocks::vectorized::Field;
 using PredicateParser = starrocks::vectorized::PredicateParser;
-using RowsetReadOptions = starrocks::vectorized::RowsetReadOptions;
 using ZonemapPredicatesRewriter = starrocks::vectorized::ZonemapPredicatesRewriter;
 
 TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema)
@@ -49,18 +47,9 @@ TabletReader::~TabletReader() {
 
 Status TabletReader::prepare() {
     ASSIGN_OR_RETURN(_tablet_schema, _tablet.get_schema());
-
-    auto rowsets_st = _tablet.get_rowsets(_version);
-    Status st = rowsets_st.status();
-    if (!st.ok()) {
-        std::stringstream ss;
-        ss << "fail to init reader. tablet=" << _tablet.id() << ", res=" << st;
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str().c_str());
-    }
-    _rowsets.swap(rowsets_st.value());
+    ASSIGN_OR_RETURN(_rowsets, _tablet.get_rowsets(_version));
     _stats.rowsets_read_count += _rowsets.size();
-    return st;
+    return Status::OK();
 }
 
 Status TabletReader::open(const TabletReaderParams& read_params) {
@@ -119,8 +108,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
-        ASSIGN_OR_RETURN(auto segment_iterators, rowset->get_segment_iterators(schema(), rs_opts));
-        iters->insert(iters->end(), segment_iterators.begin(), segment_iterators.end());
+        ASSIGN_OR_RETURN(auto iter, rowset->read(schema(), rs_opts));
+        iters->emplace_back(std::move(iter));
     }
     return Status::OK();
 }

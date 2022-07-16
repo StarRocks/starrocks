@@ -230,7 +230,11 @@ public:
     bool try_get(T* out) {
         std::unique_lock<Lock> l(_lock);
         if (!_items.empty()) {
-            *out = _items.front();
+            if constexpr (std::is_move_assignable<T>::value) {
+                *out = std::move(_items.front());
+            } else {
+                *out = _items.front();
+            }
             _items.pop_front();
             return true;
         }

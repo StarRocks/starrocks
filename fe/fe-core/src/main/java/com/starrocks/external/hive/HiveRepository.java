@@ -22,6 +22,8 @@ import org.apache.thrift.TException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -42,6 +44,8 @@ public class HiveRepository {
     // hiveResourceName => HiveMetaCache
     Map<String, HiveMetaCache> metaCaches = Maps.newHashMap();
     ReadWriteLock metaCachesLock = new ReentrantReadWriteLock();
+
+    HiveExternalTableCounter counter = new HiveExternalTableCounter();
 
     Executor executor = new ThreadPoolExecutor(Config.hive_meta_cache_refresh_min_threads,
             Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, new SynchronousQueue<Runnable>());
@@ -236,4 +240,66 @@ public class HiveRepository {
             metaClientsLock.writeLock().unlock();
         }
     }
+
+    public HiveExternalTableCounter getCounter() {
+        return counter;
+    }
+
+    public static class HiveExternalTableCounter {
+        // Each hive table corresponds to the number counter of the StarRocks hive external table
+        private final ConcurrentHashMap<HiveExternalTableIdentifier, Integer> hiveTblCounter = new ConcurrentHashMap<>();
+
+        public int add(String resource, String database, String table) {
+            HiveExternalTableIdentifier identifier = HiveExternalTableIdentifier.of(resource, database, table);
+            return hiveTblCounter.compute(identifier, (k, v) -> v == null ? 1 : v + 1);
+        }
+
+        public int reduce(String resource, String database, String table) {
+            HiveExternalTableIdentifier identifier = HiveExternalTableIdentifier.of(resource, database, table);
+            return hiveTblCounter.compute(identifier, (k, v) -> v == null || v == 0 ? 0 : v - 1);
+        }
+
+        public int get(String resource, String database, String table) {
+            HiveExternalTableIdentifier identifier = HiveExternalTableIdentifier.of(resource, database, table);
+            return hiveTblCounter.getOrDefault(identifier, 0);
+        }
+
+        private static class HiveExternalTableIdentifier {
+            String resourceName;
+            String databaseName;
+            String tableName;
+
+            private HiveExternalTableIdentifier(String resourceName, String databaseName, String tableName) {
+                this.resourceName = resourceName;
+                this.databaseName = databaseName;
+                this.tableName = tableName;
+            }
+
+            public static HiveExternalTableIdentifier of(String resourceName, String databaseName, String tableName) {
+                return new HiveExternalTableIdentifier(resourceName, databaseName, tableName);
+            }
+
+            @Override
+            public boolean equals(Object o) {
+                if (this == o) {
+                    return true;
+                }
+                if (o == null || getClass() != o.getClass()) {
+                    return false;
+                }
+
+                HiveExternalTableIdentifier that = (HiveExternalTableIdentifier) o;
+
+                return Objects.equals(resourceName, that.resourceName) &&
+                        Objects.equals(databaseName, that.databaseName) &&
+                        Objects.equals(tableName, that.tableName);
+            }
+
+            @Override
+            public int hashCode() {
+                return Objects.hash(resourceName, databaseName, tableName);
+            }
+        }
+    }
+
 }

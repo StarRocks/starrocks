@@ -88,8 +88,8 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
 
     int32_t chunk_size = config::vector_chunk_size;
     size_t num_rows = 10000;
-    auto partial_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*partial_tablet_schema);
-    auto partial_chunk = vectorized::ChunkHelper::new_chunk(partial_schema, chunk_size);
+    auto partial_schema = ChunkHelper::convert_schema_to_format_v2(*partial_tablet_schema);
+    auto partial_chunk = ChunkHelper::new_chunk(partial_schema, chunk_size);
 
     for (auto i = 0; i < num_rows % chunk_size; ++i) {
         partial_chunk->reset();
@@ -123,8 +123,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     for (auto i = 0; i < read_column_ids.size(); ++i) {
         const auto read_column_id = read_column_ids[i];
         auto tablet_column = tablet_schema->column(read_column_id);
-        auto column =
-                vectorized::ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        auto column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         write_columns[i] = column->clone_empty();
         for (auto j = 0; j < num_rows; ++j) {
             write_columns[i]->append_datum(vectorized::Datum(static_cast<int32_t>(j + read_column_ids[i])));
@@ -141,13 +140,13 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
-    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
     auto res = segment->new_iterator(schema, seg_options);
     ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
     auto seg_iterator = res.value();
 
     size_t count = 0;
-    auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
+    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
     while (true) {
         chunk->reset();
         auto st = seg_iterator->get_next(chunk.get());
@@ -177,8 +176,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     for (auto i = 0; i < read_column_ids.size(); ++i) {
         const auto read_column_id = read_column_ids[i];
         auto tablet_column = tablet_schema->column(read_column_id);
-        auto column =
-                vectorized::ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        auto column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         new_write_columns[i] = column->clone_empty();
         for (auto j = 0; j < num_rows; ++j) {
             new_write_columns[i]->append_datum(vectorized::Datum(static_cast<int32_t>(j + read_column_ids[i])));
@@ -194,7 +192,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     auto rewrite_seg_iterator = res.value();
 
     count = 0;
-    chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
+    chunk = ChunkHelper::new_chunk(schema, chunk_size);
     while (true) {
         chunk->reset();
         auto st = rewrite_seg_iterator->get_next(chunk.get());

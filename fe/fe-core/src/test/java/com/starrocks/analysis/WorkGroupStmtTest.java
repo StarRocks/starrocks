@@ -7,6 +7,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -112,7 +113,6 @@ public class WorkGroupStmtTest {
             "    'type' = 'normal'\n" +
             ");";
 
-
     @BeforeClass
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
@@ -164,7 +164,6 @@ public class WorkGroupStmtTest {
         Assert.assertThrows(ERROR_NO_WG_ERROR.formatErrorMsg(wg), AnalysisException.class,
                 () -> starRocksAssert.executeWorkGroupShowSql("show resource group " + wg));
     }
-
 
     @Test
     public void testCreateResourceGroup() throws Exception {
@@ -229,6 +228,7 @@ public class WorkGroupStmtTest {
 
         starRocksAssert.executeWorkGroupDdlSql("DROP RESOURCE GROUP rg1");
     }
+
     @Test
     public void testCreateDuplicateResourceGroupFail() throws Exception {
         starRocksAssert.executeWorkGroupDdlSql(createRg1Sql);
@@ -504,5 +504,53 @@ public class WorkGroupStmtTest {
                 "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='default_cluster:db1')";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
+    }
+
+    @Test
+    public void testIllegalClassifier() {
+        // case[0] is the DDL SQL.
+        // case[1] is the expected error message.
+        String[][] cases = {
+                {
+                        "create resource group rg1\n" +
+                                "to\n" +
+                                "     (`unsupported-key`='value')\n" +
+                                "with (\n" +
+                                "    'cpu_core_limit' = '25',\n" +
+                                "    'mem_limit' = '80%',\n" +
+                                "    'concurrency_limit' = '10',\n" +
+                                "    'type' = 'normal'\n" +
+                                ");",
+                        "Unsupported classifier specifier"
+                },
+                {
+                        "create resource group rg1\n" +
+                                "to\n" +
+                                "     (`unsupported-key` in ('select'))\n" +
+                                "with (\n" +
+                                "    'cpu_core_limit' = '25',\n" +
+                                "    'mem_limit' = '80%',\n" +
+                                "    'concurrency_limit' = '10',\n" +
+                                "    'type' = 'normal'\n" +
+                                ");",
+                        "Unsupported classifier specifier"
+                },
+                {
+                        "create resource group rg1\n" +
+                                "to\n" +
+                                "     (`query_type` in ('unsupported-query-type'))\n" +
+                                "with (\n" +
+                                "    'cpu_core_limit' = '25',\n" +
+                                "    'mem_limit' = '80%',\n" +
+                                "    'concurrency_limit' = '10',\n" +
+                                "    'type' = 'normal'\n" +
+                                ");",
+                        "Unsupported query_type"
+                },
+        };
+
+        for (String[] c : cases) {
+            Assert.assertThrows(c[1], SemanticException.class, () -> starRocksAssert.executeWorkGroupDdlSql(c[0]));
+        }
     }
 }

@@ -105,8 +105,7 @@ Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_gro
                                                      vectorized::RowSourceMaskBuffer* mask_buffer,
                                                      std::vector<vectorized::RowSourceMask>* source_masks,
                                                      Statistics* statistics) {
-    vectorized::Schema schema =
-            vectorized::ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema(), column_group);
+    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema(), column_group);
     vectorized::TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()),
                                     output_rs_writer->version(), schema, is_key, mask_buffer);
     RETURN_IF_ERROR(reader.prepare());
@@ -176,8 +175,8 @@ StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chun
                                                        std::vector<vectorized::RowSourceMask>* source_masks) {
     DCHECK(reader);
     size_t output_rows = 0;
-    auto chunk = vectorized::ChunkHelper::new_chunk(schema, chunk_size);
-    auto char_field_indexes = vectorized::ChunkHelper::get_char_field_indexes(schema);
+    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+    auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
     Status status = Status::OK();
     size_t column_group_del_filtered_rows = 0;
@@ -203,8 +202,7 @@ StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chun
             }
         }
 
-        vectorized::ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(),
-                                                      chunk.get());
+        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(), chunk.get());
 
         RETURN_IF_ERROR(output_rs_writer->add_columns(*chunk, column_group, is_key));
 

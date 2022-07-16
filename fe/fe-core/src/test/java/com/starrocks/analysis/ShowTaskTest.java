@@ -69,13 +69,12 @@ public class ShowTaskTest {
         Task manualTask = TaskBuilder.buildTask(submitTaskStmt, connectContext);
         taskManager.createTask(manualTask, true);
 
-        Task periodTask = new Task();
-        periodTask.setName("test_periodical");
+        Task periodTask = new Task("test_periodical");
         periodTask.setCreateTime(System.currentTimeMillis());
         periodTask.setDbName("test");
         periodTask.setDefinition("select 1");
         periodTask.setExpireTime(0L);
-        long startTime = Utils.getLongFromDateTime(LocalDateTime.of(2020, 04, 21, 0, 0, 0));
+        long startTime = Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 21, 0, 0, 0));
         TaskSchedule taskSchedule = new TaskSchedule(startTime, 5, TimeUnit.SECONDS);
         periodTask.setSchedule(taskSchedule);
         periodTask.setType(Constants.TaskType.PERIODICAL);

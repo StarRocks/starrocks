@@ -756,6 +756,15 @@ public class Config extends ConfigBase {
     public static int alter_max_worker_queue_size = 4096;
 
     /**
+     * If set to true, FE will check backend available capacity by storage medium when create table
+     *
+     * The default value is true because if user has a deployment with only SSD or HDD medium storage paths,
+     * create an incompatible table with cause balance problem(SSD tablet cannot move to HDD path, vice versa).
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_strict_storage_medium_check = true;
+
+    /**
      * When create a table(or partition), you can specify its storage medium(HDD or SSD).
      * If not set, this specifies the default medium when creat.
      */
@@ -767,8 +776,8 @@ public class Config extends ConfigBase {
      * After that, tablets will be moved to HDD automatically.
      * You can set storage cooldown time in CREATE TABLE stmt.
      */
-    @ConfField
-    public static long storage_cooldown_second = 30 * 24 * 3600L; // 30 days
+    @ConfField(mutable = true)
+    public static long storage_cooldown_second = -1L; // won't cool down by default
     /**
      * After dropping database(table/partition), you can recover it by using RECOVER stmt.
      * And this specifies the maximal data retention time. After time, the data will be deleted permanently.
@@ -1166,12 +1175,6 @@ public class Config extends ConfigBase {
     public static int max_running_rollup_job_num_per_table = 1;
 
     /**
-     * If set to true, FE will check backend available capacity by storage medium when create table
-     */
-    @ConfField(mutable = true)
-    public static boolean enable_strict_storage_medium_check = false;
-
-    /**
      * if set to false, auth check will be disable, in case some goes wrong with the new privilege system.
      */
     @ConfField
@@ -1331,6 +1334,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistics_max_full_collect_data_size = 100L * 1024 * 1024 * 1024; // 100G
+
+    /**
+     * Max row count in statistics collect per query
+     */
+    @ConfField(mutable = true)
+    public static long statistics_collect_max_row_count_per_query = 5000000;
 
     /**
      * default bucket size of histogram statistics

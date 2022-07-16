@@ -58,7 +58,7 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* rows_read_counter = nullptr;
     RuntimeProfile::Counter* bytes_read_counter = nullptr;
     RuntimeProfile::Counter* scan_timer = nullptr;
-    RuntimeProfile::Counter* scan_files_counter = nullptr;
+    RuntimeProfile::Counter* scan_ranges_counter = nullptr;
     RuntimeProfile::Counter* reader_init_timer = nullptr;
     RuntimeProfile::Counter* open_file_timer = nullptr;
     RuntimeProfile::Counter* expr_filter_timer = nullptr;
@@ -202,7 +202,7 @@ public:
 
     int32_t open_limit() { return _scanner_params.open_limit->load(std::memory_order_relaxed); }
 
-    bool is_open() { return _is_open; }
+    bool is_open() { return _opened; }
 
     bool acquire_pending_token(std::atomic_bool* token) {
         // acquire resource
@@ -231,8 +231,8 @@ public:
     uint64_t exit_pending_queue();
 
 private:
-    bool _is_open = false;
-    std::atomic<bool> _is_closed = false;
+    bool _opened = false;
+    std::atomic<bool> _closed = false;
     bool _keep_priority = false;
     Status _build_scanner_context();
     MonotonicStopWatch _pending_queue_sw;

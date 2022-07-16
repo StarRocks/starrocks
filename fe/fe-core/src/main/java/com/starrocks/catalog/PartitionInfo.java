@@ -27,6 +27,7 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.server.GlobalStateMgr;
@@ -68,11 +69,16 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
     // so we defer adding meta serialization until memory engine feature is more complete.
     protected Map<Long, TTabletType> idToTabletType;
 
+    // for lake table storage cache and ttl
+    @SerializedName(value = "idToStorageInfo")
+    protected Map<Long, StorageInfo> idToStorageInfo;
+
     public PartitionInfo() {
         this.idToDataProperty = new HashMap<>();
         this.idToReplicationNum = new HashMap<>();
         this.idToInMemory = new HashMap<>();
         this.idToTabletType = new HashMap<>();
+        this.idToStorageInfo = new HashMap<>();
     }
 
     public PartitionInfo(PartitionType type) {
@@ -81,6 +87,7 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
         this.idToReplicationNum = new HashMap<>();
         this.idToInMemory = new HashMap<>();
         this.idToTabletType = new HashMap<>();
+        this.idToStorageInfo = new HashMap<>();
     }
 
     public PartitionType getType() {
@@ -131,6 +138,14 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
             idToTabletType = new HashMap<>();
         }
         idToTabletType.put(partitionId, tabletType);
+    }
+
+    public StorageInfo getStorageInfo(long partitionId) {
+        return idToStorageInfo.get(partitionId);
+    }
+
+    public void setStorageInfo(long partitionId, StorageInfo storageInfo) {
+        idToStorageInfo.put(partitionId, storageInfo);
     }
 
     public void dropPartition(long partitionId) {

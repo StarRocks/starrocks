@@ -155,11 +155,14 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         }
 
         if (distrMode.equals(DistributionMode.PARTITIONED) || distrMode.equals(DistributionMode.LOCAL_HASH_BUCKET)) {
-            // if it's partitioned join, and we can not get correct ndv
+            // If it's partitioned join, and we can not get correct ndv
             // then it's hard to estimate right bloom filter size, or it's too big.
             // so we'd better to skip this global runtime filter.
+            // If buildMaxSize == 0, the filter must be used
+            // Otherwise would decide based on cardinality
             long card = inner.getCardinality();
-            if (card <= 0 || card > sessionVariable.getGlobalRuntimeFilterBuildMaxSize()) {
+            long buildMaxSize = sessionVariable.getGlobalRuntimeFilterBuildMaxSize();
+            if (buildMaxSize > 0 && (card <= 0 || card > buildMaxSize)) {
                 return;
             }
         }
