@@ -88,6 +88,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.ListPartitionDesc;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ModifyBackendAddressClause;
+import com.starrocks.analysis.ModifyBrokerClause;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.ModifyTablePropertiesClause;
 import com.starrocks.analysis.MultiItemListPartitionDesc;
@@ -543,6 +544,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             properties.put(property.getKey(), property.getValue());
         }
         return new ModifyTablePropertiesClause(properties);
+    }
+
+    @Override
+    public ParseNode visitModifyBrokerClause(StarRocksParser.ModifyBrokerClauseContext context) {
+        String brokerName = ((Identifier) visit(context.identifierOrString())).getValue();
+        if (context.ALL() != null) {
+            return ModifyBrokerClause.createDropAllBrokerClause(brokerName);
+        }
+        List<String> hostPorts =
+                        context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
+        if (context.ADD() != null) {
+            return ModifyBrokerClause.createAddBrokerClause(brokerName, hostPorts);
+        }
+        return ModifyBrokerClause.createDropBrokerClause(brokerName, hostPorts);
     }
 
     @Override
