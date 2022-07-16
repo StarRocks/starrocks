@@ -8,6 +8,7 @@
 #include "fs/fs.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "storage/chunk_helper.h"
+#include "util/buffered_stream.h"
 #include "util/runtime_profile.h"
 #include "util/timezone_utils.h"
 
@@ -16,14 +17,14 @@ class ORCHdfsFileStream : public orc::InputStream {
 public:
     // |file| must outlive ORCHdfsFileStream
     ORCHdfsFileStream(RandomAccessFile* file, uint64_t length)
-            : _file(std::move(file)), _length(length), _cache_buffer(0), _cache_offset(0) {}
+            : _file(std::move(file)), _length(length), _cache_buffer(0), _cache_offset(0), _buffer_stream(_file) {}
 
     ~ORCHdfsFileStream() override = default;
 
     uint64_t getLength() const override { return _length; }
 
     // refers to paper `Delta Lake: High-Performance ACID Table Storage over Cloud Object Stores`
-    uint64_t getNaturalReadSize() const override { return 1 * 1024 * 1024; }
+    uint64_t getNaturalReadSize() const override { return config::orc_natural_read_size; }
 
     // It's for read size after doing seek.
     // When doing read after seek, we make assumption that we are doing random read because of seeking row group.
@@ -39,7 +40,7 @@ public:
     // And this value can not be too small because if we can not read a row group in a single shot,
     // we will fallback to read in normal size, and we pay cost of a extra read.
 
-    uint64_t getNaturalReadSizeAfterSeek() const override { return 256 * 1024; }
+    uint64_t getNaturalReadSizeAfterSeek() const override { return config::orc_natural_read_size / 4; }
 
     void prepareCache(orc::InputStream::PrepareCacheScope scope, uint64_t offset, uint64_t length) override {
         const size_t cache_max_size = config::orc_file_cache_max_size;
@@ -54,7 +55,7 @@ public:
 
         _cache_buffer.resize(length);
         _cache_offset = offset;
-        doRead(_cache_buffer.data(), length, offset);
+        doRead(_cache_buffer.data(), length, offset, true);
     }
 
     bool canUseCacheBuffer(uint64_t offset, uint64_t length) {
@@ -70,16 +71,26 @@ public:
             size_t idx = offset - _cache_offset;
             memcpy(buf, _cache_buffer.data() + idx, length);
         } else {
-            doRead(buf, length, offset);
+            doRead(buf, length, offset, false);
         }
     }
 
-    void doRead(void* buf, uint64_t length, uint64_t offset) {
+    void doRead(void* buf, uint64_t length, uint64_t offset, bool direct) {
         if (buf == nullptr) {
             throw orc::ParseError("Buffer is null");
         }
-
-        Status status = _file->read_at_fully(offset, buf, length);
+        Status status;
+        if (direct || !_buffer_stream_enabled) {
+            status = _file->read_at_fully(offset, buf, length);
+        } else {
+            const uint8_t* ptr = nullptr;
+            size_t nbytes = length;
+            status = _buffer_stream.get_bytes(&ptr, offset, &nbytes);
+            DCHECK_EQ(nbytes, length);
+            if (status.ok()) {
+                ::memcpy(buf, ptr, length);
+            }
+        }
         if (!status.ok()) {
             auto msg = strings::Substitute("Failed to read $0: $1", _file->filename(), status.to_string());
             throw orc::ParseError(msg);
@@ -88,11 +99,34 @@ public:
 
     const std::string& getName() const override { return _file->filename(); }
 
+    bool isIORangesEnabled() const override { return config::orc_coalesce_read_enable; }
+
+    void clearIORanges() override {
+        _buffer_stream_enabled = false;
+        _buffer_stream.release();
+    }
+
+    void setIORanges(std::vector<orc::InputStream::IORange>& io_ranges) override {
+        _buffer_stream_enabled = true;
+        std::vector<SharedBufferedInputStream::IORange> bs_io_ranges;
+        for (const auto& r : io_ranges) {
+            bs_io_ranges.emplace_back(SharedBufferedInputStream::IORange{.offset = static_cast<int64_t>(r.offset),
+                                                                         .size = static_cast<int64_t>(r.size)});
+        }
+        Status st = _buffer_stream.set_io_ranges(bs_io_ranges);
+        if (!st.ok()) {
+            auto msg = strings::Substitute("Failed to setIORanges $0: $1", _file->filename(), st.to_string());
+            throw orc::ParseError(msg);
+        }
+    }
+
 private:
     RandomAccessFile* _file;
     uint64_t _length;
     std::vector<char> _cache_buffer;
     uint64_t _cache_offset;
+    SharedBufferedInputStream _buffer_stream;
+    bool _buffer_stream_enabled = false;
 };
 
 class OrcRowReaderFilter : public orc::RowReaderFilter {

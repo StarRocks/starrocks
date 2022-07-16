@@ -72,7 +72,7 @@ public class StatisticsCollectJobFactory {
                                                                  StatsConstants.ScheduleType scheduleType,
                                                                  Map<String, String> properties) {
         if (columns == null) {
-            columns = table.getFullSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
+            columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                     .collect(Collectors.toList());
         }
 
@@ -80,16 +80,11 @@ public class StatisticsCollectJobFactory {
             return new SampleStatisticsCollectJob(db, table, columns,
                     StatsConstants.AnalyzeType.SAMPLE, scheduleType, properties);
         } else {
-            if (Config.enable_collect_full_statistics) {
-                if (partitionIdList == null) {
-                    partitionIdList = table.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
-                }
-                return new FullStatisticsCollectJob(db, table, partitionIdList, columns,
-                        StatsConstants.AnalyzeType.FULL, scheduleType, properties);
-            } else {
-                return new TableCollectJob(db, table, columns,
-                        StatsConstants.AnalyzeType.FULL, scheduleType, properties);
+            if (partitionIdList == null) {
+                partitionIdList = table.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
             }
+            return new FullStatisticsCollectJob(db, table, partitionIdList, columns,
+                    StatsConstants.AnalyzeType.FULL, scheduleType, properties);
         }
     }
 
@@ -113,12 +108,7 @@ public class StatisticsCollectJobFactory {
             allTableJobMap.add(buildStatisticsCollectJob(db, (OlapTable) table, null, columns,
                     job.getAnalyzeType(), job.getScheduleType(), job.getProperties()));
         } else if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)) {
-            if (!Config.enable_collect_full_statistics) {
-                allTableJobMap.add(buildStatisticsCollectJob(db, (OlapTable) table, null, columns,
-                        job.getAnalyzeType(), job.getScheduleType(), job.getProperties()));
-            } else {
-                createFullStatsJob(allTableJobMap, job, basicStatsMeta, db, table, columns);
-            }
+            createFullStatsJob(allTableJobMap, job, basicStatsMeta, db, table, columns);
         } else {
             throw new StarRocksPlannerException("Unknown analyze type " + job.getAnalyzeType(), ErrorType.INTERNAL_ERROR);
         }

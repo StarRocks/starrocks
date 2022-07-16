@@ -4,29 +4,9 @@
 
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/lake/types_fwd.h"
 
-namespace starrocks {
-class RowsetReadOptions;
-class Segment;
-class TabletSchema;
-
-namespace vectorized {
-class ChunkIterator;
-class Schema;
-} // namespace vectorized
-
-namespace lake {
-
-class Rowset;
-class Tablet;
-
-using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
-using RowsetMetadata = RowsetMetadataPB;
-using RowsetMetadataPtr = std::shared_ptr<const RowsetMetadata>;
-using RowsetPtr = std::shared_ptr<Rowset>;
-using SegmentPtr = std::shared_ptr<Segment>;
-using TabletSchemaPtr = std::shared_ptr<const TabletSchema>;
-
+namespace starrocks::lake {
 class Rowset {
 public:
     explicit Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata);
@@ -52,9 +32,7 @@ private:
 
     // _tablet is owned by TabletReader
     Tablet* _tablet;
-    TabletSchemaPtr _tablet_schema;
     RowsetMetadataPtr _rowset_metadata;
 };
 
-} // namespace lake
-} // namespace starrocks
+} // namespace starrocks::lake

@@ -75,7 +75,6 @@ public class OlapTableTest {
 
             Assert.assertTrue(copiedTbl instanceof OlapTable);
             Partition partition = ((OlapTable) copiedTbl).getPartition(3L);
-            Assert.assertFalse(partition.isUseStarOS());
             MaterializedIndex newIndex = partition.getIndex(4L);
             for (Tablet tablet : newIndex.getTablets()) {
                 Assert.assertTrue(tablet instanceof LocalTablet);

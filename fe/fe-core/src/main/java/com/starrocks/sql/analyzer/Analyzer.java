@@ -12,9 +12,11 @@ import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.BaseViewStmt;
+import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
@@ -26,8 +28,11 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
@@ -37,6 +42,7 @@ import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
+import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -47,7 +53,11 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
+import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
+import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 
 public class Analyzer {
@@ -67,8 +77,20 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitCreateTableLikeStatement(CreateTableLikeStmt statement, ConnectContext context) {
+            CreateTableLikeAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
         public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext context) {
             AlterTableStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCancelAlterTableStatement(CancelAlterTableStmt statement, ConnectContext context) {
+            CancelAlterTableStatementAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -94,6 +116,18 @@ public class Analyzer {
         public Void visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement,
                                                                ConnectContext session) {
             AdminStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitShowUserPropertyStmt(ShowUserPropertyStmt statement, ConnectContext session) {
+            ShowUserPropertyAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitSetUserPropertyStmt(SetUserPropertyStmt statement, ConnectContext session) {
+            SetUserPropertyAnalyzer.analyze(statement, session);
             return null;
         }
 
@@ -239,6 +273,13 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStatement statement,
+                                                                ConnectContext context) {
+            MaterializedViewAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
         public Void visitAlterSystemStmt(AlterSystemStmt statement, ConnectContext context) {
             AlterSystemStmtAnalyzer.analyze(statement, context);
             return null;
@@ -303,6 +344,11 @@ public class Analyzer {
             return null;
         }
 
+        public Void visitTruncateTableStatement(TruncateTableStmt statement, ConnectContext context) {
+            TruncateTableAnalyzer.analyze(statement, context);
+            return null;
+        }
+
         // ------------------------------------------- Analyze Statement ---------------------------------------------------
 
         @Override
@@ -320,6 +366,30 @@ public class Analyzer {
         @Override
         public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext session) {
             AnalyzeStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAnalyzeJobStatement(ShowAnalyzeJobStmt statement, ConnectContext session) {
+            ShowStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAnalyzeStatusStatement(ShowAnalyzeStatusStmt statement, ConnectContext session) {
+            ShowStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitShowBasicStatsMetaStatement(ShowBasicStatsMetaStmt statement, ConnectContext session) {
+            ShowStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, ConnectContext session) {
+            ShowStmtAnalyzer.analyze(statement, session);
             return null;
         }
     }

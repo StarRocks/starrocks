@@ -12,8 +12,10 @@ import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.CreateWorkGroupStmt;
@@ -26,15 +28,24 @@ import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverTableStmt;
+import com.starrocks.analysis.SetUserPropertyStmt;
+import com.starrocks.analysis.SetUserPropertyVar;
+import com.starrocks.analysis.SetVar;
+import com.starrocks.analysis.ShowAlterStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
+import com.starrocks.analysis.ShowTabletStmt;
+import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
+import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -59,6 +70,7 @@ import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
+import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropHistogramStmt;
@@ -134,6 +146,20 @@ public class PrivilegeChecker {
         }
 
         @Override
+        public Void visitCreateTableLikeStatement(CreateTableLikeStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session,  statement.getExistedDbName(),
+                    statement.getExistedTableName(), PrivPredicate.SELECT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "SELECT");
+            }
+
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session, statement.getDbName(),
+                    statement.getTableName(), PrivPredicate.CREATE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
+            }
+            return null;
+        }
+
+        @Override
         public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext session) {
             if (!checkTblPriv(session, statement.getTbl(), PrivPredicate.ALTER)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "Alter");
@@ -146,6 +172,20 @@ public class PrivilegeChecker {
             if (!checkTblPriv(session, statement.getTableName(), PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, session.getQualifiedUser(),
                         statement.getTableName().toString());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCancelAlterTableStatement(CancelAlterTableStmt statement, ConnectContext session) {
+            TableName dbTableName = statement.getDbTableName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbTableName.getDb(),
+                    dbTableName.getTbl(),
+                    PrivPredicate.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "CANCEL ALTER TABLE",
+                        ConnectContext.get().getQualifiedUser(),
+                        ConnectContext.get().getRemoteIP(),
+                        dbTableName.getTbl());
             }
             return null;
         }
@@ -211,6 +251,36 @@ public class PrivilegeChecker {
         }
 
         @Override
+        public Void visitShowUserPropertyStmt(ShowUserPropertyStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+                try {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                } catch (AnalysisException e) {
+                    throw new SemanticException(e.getMessage());
+                }
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitSetUserPropertyStmt(SetUserPropertyStmt statement, ConnectContext session) {
+            if (statement.getPropertyList() == null || statement.getPropertyList().isEmpty()) {
+                throw new SemanticException("Empty properties");
+            }
+
+            boolean isSelf = statement.getUser().equals(ConnectContext.get().getQualifiedUser());
+            try {
+                for (SetVar var : statement.getPropertyList()) {
+                    ((SetUserPropertyVar) var).analyze(isSelf);
+                }
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+
+            return null;
+        }
+
+        @Override
         public Void visitCreateViewStatement(CreateViewStmt statement, ConnectContext session) {
             TableName tableName = statement.getTableName();
             if (!checkTblPriv(session, tableName, PrivPredicate.CREATE)) {
@@ -253,6 +323,15 @@ public class PrivilegeChecker {
             return null;
         }
 
+        public Void visitTruncateTableStatement(TruncateTableStmt statement, ConnectContext session) {
+            TableRef tblRef = statement.getTblRef();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), tblRef.getName().getDb(),
+                    tblRef.getName().getTbl(), PrivPredicate.LOAD)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "LOAD");
+            }
+            return null;
+        }
+
         @Override
         public Void visitDropWorkGroupStatement(DropWorkGroupStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
@@ -289,6 +368,24 @@ public class PrivilegeChecker {
         public Void visitShowTableStatusStmt(ShowTableStatusStmt statement, ConnectContext session) {
             String db = statement.getDb();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowTabletStmt(ShowTabletStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "SHOW TABLET");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowAlterStmt(ShowAlterStmt statement, ConnectContext session) {
+            String db = statement.getDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), db, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
             }
             return null;
@@ -338,6 +435,15 @@ public class PrivilegeChecker {
             }
             return null;
 
+        }
+
+        @Override
+        public Void visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStatement statement,
+                                                                ConnectContext context) {
+            if (!checkTblPriv(ConnectContext.get(), statement.getMvName(), PrivPredicate.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
+            }
+            return null;
         }
 
         @Override
@@ -760,6 +866,15 @@ public class PrivilegeChecker {
             if (!checkTblPriv(session, tableName, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "DESCRIBE",
                         session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowProcStmt(ShowProcStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
+                        "ADMIN");
             }
             return null;
         }

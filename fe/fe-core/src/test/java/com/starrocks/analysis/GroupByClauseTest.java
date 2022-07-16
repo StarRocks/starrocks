@@ -26,11 +26,6 @@ import org.junit.Test;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.BitSet;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 
 public class GroupByClauseTest {
 
@@ -52,134 +47,6 @@ public class GroupByClauseTest {
             e.printStackTrace();
         } catch (IllegalAccessException e) {
             e.printStackTrace();
-        }
-    }
-
-    @Test
-    public void testGroupingSets() {
-        List<ArrayList<Expr>> groupingExprsList = new ArrayList<>();
-        ArrayList<Expr> groupByExprs = new ArrayList<>();
-        String[][] colsLists = {
-                {"k3", "k1"},
-                {"k2", "k3", "k2"},
-                {"k1", "k3"},
-                {"k4"},
-                {"k1", "k2", "k3", "k4"}
-        };
-        for (String[] colsList : colsLists) {
-            ArrayList<Expr> exprList = new ArrayList<>();
-            for (String col : colsList) {
-                exprList.add(new SlotRef(new TableName("testdb", "t"), col));
-            }
-            groupingExprsList.add(exprList);
-        }
-        String[] groupByCols = {"k1", "k2", "k3", "k4"};
-        for (String col : groupByCols) {
-            groupByExprs.add(new SlotRef(new TableName("testdb", "t"), col));
-        }
-        GroupByClause groupByClause = new GroupByClause(groupingExprsList,
-                GroupByClause.GroupingType.GROUPING_SETS);
-        GroupingInfo groupingInfo = null;
-        try {
-            groupingInfo = new GroupingInfo(analyzer, GroupByClause.GroupingType.GROUPING_SETS);
-            groupByClause.genGroupingExprs();
-            groupingInfo.buildRepeat(groupByClause.getGroupingExprs(), groupByClause.getGroupingSetList());
-            groupByClause.analyze(analyzer);
-        } catch (AnalysisException execption) {
-            execption.printStackTrace();
-            Assert.assertTrue(false);
-        }
-        Assert.assertEquals(5, groupByClause.getGroupingExprs().size());
-
-        Assert.assertEquals("GROUPING SETS ((`testdb`.`t`.`k3`, `testdb`.`t`.`k1`), (`testdb`.`t`.`k2`, `testdb`.`t`"
-                + ".`k3`, `testdb`.`t`.`k2`), (`testdb`.`t`.`k1`, `testdb`.`t`.`k3`), (`testdb`.`t`.`k4`), (`testdb`"
-                + ".`t`.`k1`, `testdb`.`t`.`k2`, `testdb`.`t`.`k3`, `testdb`.`t`.`k4`))", groupByClause.toSql());
-        List<BitSet> bitSetList = groupingInfo.getGroupingIdList();
-        {
-            String[] answer = {"{0, 1, 2, 3}", "{0, 1}", "{0, 2}", "{3}"};
-            Set<String> answerSet = new HashSet<String>(Arrays.asList(answer));
-            Set<String> resultSet = new HashSet<>();
-            for (BitSet aBitSetList : bitSetList) {
-                String s = aBitSetList.toString();
-                resultSet.add(s);
-            }
-            Assert.assertEquals(answerSet, resultSet);
-        }
-    }
-
-    @Test
-    public void testRollUp() {
-        ArrayList<Expr> groupingExprs = new ArrayList<>();
-        String[] cols = {"k2", "k3", "k4", "k3"};
-        for (String col : cols) {
-            Expr expr = new SlotRef(new TableName("testdb", "t"), col);
-            groupingExprs.add(expr);
-        }
-
-        GroupByClause groupByClause =
-                new GroupByClause(
-                        Expr.cloneList(groupingExprs),
-                        GroupByClause.GroupingType.ROLLUP);
-        GroupingInfo groupingInfo = null;
-        try {
-            groupingInfo = new GroupingInfo(analyzer, GroupByClause.GroupingType.ROLLUP);
-            groupByClause.genGroupingExprs();
-            groupingInfo.buildRepeat(groupByClause.getGroupingExprs(), groupByClause.getGroupingSetList());
-            groupByClause.analyze(analyzer);
-        } catch (AnalysisException execption) {
-            Assert.assertTrue(false);
-        }
-        Assert.assertEquals(4, groupByClause.getGroupingExprs().size());
-        Assert.assertEquals("ROLLUP (`testdb`.`t`.`k2`, `testdb`.`t`.`k3`, "
-                + "`testdb`.`t`.`k4`, `testdb`.`t`.`k3`)", groupByClause.toSql());
-        List<BitSet> bitSetList = groupingInfo.getGroupingIdList();
-        {
-            String[] answer = {"{}", "{0}", "{0, 1}", "{0, 1, 2}"};
-            Set<String> answerSet = new HashSet<String>(Arrays.asList(answer));
-            Set<String> resultSet = new HashSet<>();
-            for (BitSet aBitSetList : bitSetList) {
-                String s = aBitSetList.toString();
-                resultSet.add(s);
-            }
-            Assert.assertEquals(answerSet, resultSet);
-        }
-    }
-
-    @Test
-    public void testCube() {
-        ArrayList<Expr> groupingExprs = new ArrayList<>();
-        String[] cols = {"k1", "k2", "k3", "k1"};
-        for (String col : cols) {
-            Expr expr = new SlotRef(new TableName("testdb", "t"), col);
-            groupingExprs.add(expr);
-        }
-
-        GroupByClause groupByClause = new GroupByClause(Expr.cloneList(groupingExprs),
-                GroupByClause.GroupingType.CUBE);
-        GroupingInfo groupingInfo = null;
-        try {
-            groupingInfo = new GroupingInfo(analyzer, GroupByClause.GroupingType.CUBE);
-            groupByClause.genGroupingExprs();
-            groupingInfo.buildRepeat(groupByClause.getGroupingExprs(), groupByClause.getGroupingSetList());
-            groupByClause.analyze(analyzer);
-        } catch (AnalysisException exception) {
-            Assert.assertTrue(false);
-        }
-        Assert.assertEquals("CUBE (`testdb`.`t`.`k1`, `testdb`.`t`.`k2`, "
-                + "`testdb`.`t`.`k3`, `testdb`.`t`.`k1`)", groupByClause.toSql());
-        Assert.assertEquals(4, groupByClause.getGroupingExprs().size());
-
-        List<BitSet> bitSetList = groupingInfo.getGroupingIdList();
-        {
-            String[] answer = {"{}", "{1}", "{0}", "{0, 1}", "{2}", "{1, 2}", "{0, 1, 2}", "{0, 2}"};
-            Set<String> answerSet = new HashSet<String>(Arrays.asList(answer));
-            Set<String> resultSet = new HashSet<>();
-            for (BitSet aBitSetList : bitSetList) {
-                String s = aBitSetList.toString();
-                resultSet.add(s);
-            }
-
-            Assert.assertEquals(answerSet, resultSet);
         }
     }
 
@@ -244,36 +111,5 @@ public class GroupByClauseTest {
         } catch (AnalysisException exception) {
             Assert.assertTrue(false);
         }
-    }
-
-    @Test
-    public void testGenGroupingList() throws AnalysisException {
-        ArrayList<Expr> groupingExprs = new ArrayList<>();
-        String[] cols = {"k1", "k2", "k3"};
-        for (String col : cols) {
-            Expr expr = new SlotRef(new TableName("testdb", "t"), col);
-            groupingExprs.add(expr);
-        }
-
-        GroupByClause groupByClause = new GroupByClause(Expr.cloneList(groupingExprs),
-                GroupByClause.GroupingType.CUBE);
-        List<Expr> slots = new ArrayList<>();
-        for (String col : cols) {
-            SlotRef expr = new SlotRef(new TableName("testdb", "t"), col);
-            slots.add(expr);
-        }
-        GroupingInfo groupingInfo = null;
-        try {
-            groupingInfo = new GroupingInfo(analyzer, GroupByClause.GroupingType.CUBE);
-            groupingInfo.addGroupingSlots(slots, analyzer);
-            groupByClause.genGroupingExprs();
-            groupingInfo.buildRepeat(groupByClause.getGroupingExprs(), groupByClause.getGroupingSetList());
-            groupByClause.analyze(analyzer);
-        } catch (AnalysisException exception) {
-            Assert.assertTrue(false);
-        }
-        List<List<Long>> list = groupingInfo.genGroupingList(groupByClause.getGroupingExprs());
-        Assert.assertEquals(2, list.size());
-        Assert.assertEquals(list.get(0), list.get(1));
     }
 }

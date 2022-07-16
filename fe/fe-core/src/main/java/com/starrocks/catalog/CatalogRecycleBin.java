@@ -29,7 +29,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -39,6 +38,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
@@ -375,8 +375,8 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             if (tableInfo != null) {
                 Table table = tableInfo.getTable();
                 nameToTableInfo.remove(dbId, table.getName());
-                if (table.getType() == TableType.OLAP && !isCheckpointThread()) {
-                    GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) table, true);
+                if (table.isOlapOrLakeTable() && !isCheckpointThread()) {
+                    GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((OlapTable) table, true);
                 }
             }
         }
@@ -636,7 +636,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         // idToTable
         for (RecycleTableInfo tableInfo : idToTableInfo.values()) {
             Table table = tableInfo.getTable();
-            if (table.getType() != TableType.OLAP) {
+            if (!table.isNativeTable()) {
                 continue;
             }
 
@@ -646,15 +646,15 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             for (Partition partition : olapTable.getAllPartitions()) {
                 long partitionId = partition.getId();
                 TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
-                boolean useStarOS = partition.isUseStarOS();
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                     long indexId = index.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                    TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, schemaHash, medium);
+                    TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, schemaHash, medium,
+                            table.isLakeTable());
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
-                        if (!useStarOS) {
+                        if (table.isLocalTable()) {
                             for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                                 invertedIndex.addReplica(tabletId, replica);
                             }
@@ -670,7 +670,6 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             long tableId = partitionInfo.getTableId();
             Partition partition = partitionInfo.getPartition();
             long partitionId = partition.getId();
-            boolean useStarOS = partition.isUseStarOS();
 
             // we need to get olap table to get schema hash info
             // first find it in globalStateMgr. if not found, it should be in recycle bin
@@ -705,11 +704,12 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                 long indexId = index.getId();
                 int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, schemaHash, medium);
+                TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, schemaHash, medium,
+                        olapTable.isLakeTable());
                 for (Tablet tablet : index.getTablets()) {
                     long tabletId = tablet.getId();
                     invertedIndex.addTablet(tabletId, tabletMeta);
-                    if (!useStarOS) {
+                    if (olapTable.isLocalTable()) {
                         for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                             invertedIndex.addReplica(tabletId, replica);
                         }
@@ -743,10 +743,12 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         for (RecycleTableInfo tableInfo : tableToRemove) {
             Table table = tableInfo.getTable();
             long tableId = table.getId();
-            if (table.getType() == TableType.OLAP) {
+            if (table.isOlapTable()) {
                 HashMap<Long, AgentBatchTask> batchTaskMap =
-                        GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) table, false);
+                        GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((OlapTable) table, false);
                 GlobalStateMgr.getCurrentState().sendDropTabletTasks(batchTaskMap);
+            } else if (table.isLakeTable()) {
+                GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((LakeTable) table, false);
             }
             LOG.info("erased table [{}-{}].", tableId, table.getName());
         }

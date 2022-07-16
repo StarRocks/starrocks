@@ -1,5 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#ifdef USE_STAROS
+
 #include "fs/fs_starlet.h"
 
 #include <fmt/core.h>
@@ -7,8 +9,10 @@
 #include <fslib/file.h>
 #include <fslib/file_system.h>
 #include <fslib/fslib_all_initializer.h>
+#include <fslib/stat.h>
 #include <fslib/stream.h>
 #include <starlet.h>
+#include <sys/stat.h>
 #include <worker.h>
 
 #include "common/config.h"
@@ -34,38 +38,23 @@ using staros::starlet::fslib::kS3AccessKeySecret;
 using staros::starlet::fslib::kS3OverrideEndpoint;
 using staros::starlet::fslib::kSysRoot;
 
-static Status to_status(absl::Status absl_status) {
-    switch (absl_status.code()) {
-    case absl::StatusCode::kOk:
-        return Status::OK();
-    case absl::StatusCode::kAlreadyExists:
-        return Status::AlreadyExist(fmt::format("starlet err {}", absl_status.message()));
-    case absl::StatusCode::kOutOfRange:
-        return Status::InvalidArgument(fmt::format("starlet err {}", absl_status.message()));
-    case absl::StatusCode::kInvalidArgument:
-        return Status::InvalidArgument(fmt::format("starlet err {}", absl_status.message()));
-    case absl::StatusCode::kNotFound:
-        return Status::NotFound(fmt::format("starlet err {}", absl_status.message()));
-    default:
-        return Status::InternalError(fmt::format("starlet err {}", absl_status.message()));
-    }
-}
-
 StatusOr<std::pair<std::string, int64_t>> parse_starlet_path(const std::string& path) {
-    // remove "staros://" prefix
+    static size_t prefix_len = std::strlen(kStarletPrefix);
+    const static std::string shard_qs("?ShardId=");
+
+    // check starlet filesystem prefix
     if (!HasPrefixString(path, kStarletPrefix)) {
         return Status::InvalidArgument(fmt::format("Starlet Fs need {} prefix, {}", kStarletPrefix, path));
     }
-    auto new_path = path.substr(strlen(kStarletPrefix));
 
-    // get shard id
-    int pos = new_path.find("?ShardId=");
+    // check ?ShardId= info
+    auto pos = path.find(shard_qs);
     if (pos == std::string::npos) {
         return Status::InvalidArgument(fmt::format("Starlet Fs need a ShardId, {}", path));
     }
-    int64_t shardid = std::stol(new_path.substr(pos + std::strlen("?ShardId=")));
 
-    return std::make_pair(new_path.substr(0, pos), shardid);
+    int64_t shardid = std::stol(path.substr(pos + shard_qs.size()));
+    return std::make_pair(path.substr(prefix_len, pos - prefix_len), shardid);
 };
 
 class StarletInputStream : public starrocks::io::SeekableInputStream {
@@ -188,9 +177,7 @@ public:
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& path) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_path(path));
-        ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
-
-        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
+        auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -206,9 +193,8 @@ public:
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_path(path));
-        ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
 
-        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
+        auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -232,12 +218,11 @@ public:
             return Status::NotSupported(fmt::format("Starlet: cannot create file with name ended with '/': {}", path));
         }
 
-        ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
-
-        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
+        auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
+        // TODO: translate WritableFileOptions to fslib::WriteOptions
         auto file_st = (*fs_st)->create(pair.first, WriteOptions());
 
         if (!file_st.ok()) {
@@ -250,8 +235,7 @@ public:
 
     Status delete_file(const std::string& path) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_path(path));
-        ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
-        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
+        auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -264,9 +248,7 @@ public:
         if (!pair.first.empty() && pair.first.back() != '/') {
             pair.first.push_back('/');
         }
-
-        ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
-        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
+        auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -284,9 +266,7 @@ public:
             pair.first.push_back('/');
         }
 
-        ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
-
-        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
+        auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -310,13 +290,10 @@ public:
 
     Status delete_dir(const std::string& dirname) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_path(dirname));
-        if (pair.first.back() != '/') {
+        if (!pair.first.empty() && pair.first.back() != '/') {
             pair.first.push_back('/');
         }
-
-        ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
-
-        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
+        auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -324,7 +301,8 @@ public:
         bool dir_empty = true;
         auto cb = [&dir_empty](std::string_view file) {
             dir_empty = false;
-            return true;
+            // break the iteration
+            return false;
         };
         auto st = (*fs_st)->list_dir(pair.first, false, cb);
         if (!st.ok()) {
@@ -339,9 +317,7 @@ public:
 
     Status delete_dir_recursive(const std::string& dirname) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_path(dirname));
-        ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
-
-        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
+        auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -349,17 +325,19 @@ public:
         if (pair.first.back() != '/') {
             pair.first.push_back('/');
         }
-        auto st = (*fs_st)->delete_dir(pair.first);
+        auto st = (*fs_st)->delete_dir(pair.first, true);
         return to_status(st);
     }
 
-    // in starlet filesystem dir is an object with suffix '/' ;
+    // determine given path is a directory or not
+    // returns
+    //  * true - exists and is a directory
+    //  * false - exists but is not a directory
+    //  * error status: not exist or other errors
     StatusOr<bool> is_directory(const std::string& path) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_path(path));
-        ASSIGN_OR_RETURN(auto conf, get_shard_config(pair.second))
-        bool dir_empty = true;
+        auto fs_st = get_shard_filesystem(pair.second);
 
-        auto fs_st = FileSystemFactory::new_filesystem(conf["scheme"], conf);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
@@ -369,29 +347,23 @@ public:
             return to_status(st.status());
         }
 
-        if (*st) {
-            return false;
+        if (*st) { // exists, determine is a directory or a file
+            auto fst = (*fs_st)->stat(pair.first);
+            if (!fst.ok()) {
+                return to_status(fst.status());
+            }
+            return S_ISDIR((*fst).mode);
         }
-
-        pair.first.push_back('/');
-        st = (*fs_st)->exists(pair.first);
-        if (!st.ok()) {
-            return to_status(st.status());
-        }
-        if (*st) {
-            return true;
-        }
-
-        auto cb = [&dir_empty](std::string_view file) {
-            dir_empty = false;
-            return true;
-        };
-        auto res = (*fs_st)->list_dir(pair.first, false, cb);
-        if (!res.ok()) {
-            return to_status(res);
-        }
-        if (!dir_empty) {
-            return true;
+        if (!pair.first.empty() && pair.first.back() != '/') {
+            // force a directory naming convention
+            pair.first.push_back('/');
+            auto st2 = (*fs_st)->exists(pair.first);
+            if (!st2.ok()) {
+                return to_status(st2.status());
+            }
+            if (*st2) {
+                return true;
+            }
         }
         return Status::NotFound(path);
     }
@@ -441,29 +413,17 @@ public:
     }
 
 private:
-    void get_s3_store_conf(const staros::starlet::ShardInfo& shard_info, Configuration* conf) {
-        auto&& s3_store_info = shard_info.get_s3_store_info();
-        conf->emplace(std::make_pair("scheme", "s3://"));
-        conf->emplace(std::make_pair(kSysRoot, s3_store_info.uri));
-        conf->emplace(std::make_pair(kS3AccessKeyId, s3_store_info.access_key));
-        conf->emplace(std::make_pair(kS3AccessKeySecret, s3_store_info.access_key_secret));
-        conf->emplace(std::make_pair(kS3OverrideEndpoint, s3_store_info.endpoint));
+    absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem(int64_t shard_id) {
+        return g_worker->get_shard_filesystem(shard_id, _conf);
     }
 
-    StatusOr<Configuration> get_shard_config(int64_t shard_id) {
-        Configuration conf;
-        ASSIGN_OR_RETURN(auto shard_info, g_worker->get_shard_info(shard_id));
-        auto&& scheme = shard_info.get_object_store_scheme();
-        if (scheme == staros::starlet::ObjectStoreType::S3) {
-            get_s3_store_conf(shard_info, &conf);
-        } else {
-            return Status::NotSupported(fmt::format("Invalid scheme: {}", scheme));
-        }
-        return conf;
-    }
+private:
+    staros::starlet::fslib::Configuration _conf;
 };
 
 std::unique_ptr<FileSystem> new_fs_starlet() {
     return std::make_unique<StarletFileSystem>();
 }
 } // namespace starrocks
+
+#endif // USE_STAROS

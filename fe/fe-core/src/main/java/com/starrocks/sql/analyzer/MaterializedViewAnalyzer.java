@@ -35,6 +35,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
+import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
@@ -409,6 +410,13 @@ public class MaterializedViewAnalyzer {
         @Override
         public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement,
                                                           ConnectContext context) {
+            statement.getMvName().normalization(context);
+            return null;
+        }
+
+        @Override
+        public Void visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStatement statement,
+                                                                ConnectContext context) {
             statement.getMvName().normalization(context);
             return null;
         }

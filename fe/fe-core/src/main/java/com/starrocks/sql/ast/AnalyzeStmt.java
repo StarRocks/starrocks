@@ -14,7 +14,7 @@ public class AnalyzeStmt extends StatementBase {
     private List<String> columnNames;
     private final boolean isSample;
     private Map<String, String> properties;
-    private AnalyzeTypeDesc analyzeTypeDesc;
+    private final AnalyzeTypeDesc analyzeTypeDesc;
 
     public AnalyzeStmt(TableName tbl, List<String> columns, Map<String, String> properties, boolean isSample,
                        AnalyzeTypeDesc analyzeTypeDesc) {

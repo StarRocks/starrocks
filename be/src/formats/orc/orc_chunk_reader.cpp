@@ -1022,7 +1022,8 @@ Status OrcChunkReader::init(std::unique_ptr<orc::InputStream> input_stream) {
         auto reader = orc::createReader(std::move(input_stream), _reader_options);
         return init(std::move(reader));
     } catch (std::exception& e) {
-        auto s = strings::Substitute("OrcChunkReader::init failed. reason = $0", e.what());
+        auto s = strings::Substitute("OrcChunkReader::init failed. reason = $0, file = $1", e.what(),
+                                     _current_file_name);
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }
@@ -1078,12 +1079,14 @@ Status OrcChunkReader::_slot_to_orc_column_name(const SlotDescriptor* desc,
                                                 std::string* orc_column_name) {
     auto it = _name_to_column_id.find(desc->col_name());
     if (it == _name_to_column_id.end()) {
-        auto s = strings::Substitute("OrcChunkReader::init_include_columns. col name = $0 not found", desc->col_name());
+        auto s = strings::Substitute("OrcChunkReader::init_include_columns. col name = $0 not found, file = $1",
+                                     desc->col_name(), _current_file_name);
         return Status::NotFound(s);
     }
     auto it2 = column_id_to_orc_name.find(it->second);
     if (it2 == column_id_to_orc_name.end()) {
-        auto s = strings::Substitute("OrcChunkReader::init_include_columns. col name = $0 not found", desc->col_name());
+        auto s = strings::Substitute("OrcChunkReader::init_include_columns. col name = $0 not found, file = $1",
+                                     desc->col_name(), _current_file_name);
         return Status::NotFound(s);
     }
     *orc_column_name = it2->second;
@@ -1144,7 +1147,8 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader) {
     try {
         _row_reader = _reader->createRowReader(_row_reader_options);
     } catch (std::exception& e) {
-        auto s = strings::Substitute("OrcChunkReader::init failed. reason = $0", e.what());
+        auto s = strings::Substitute("OrcChunkReader::init failed. reason = $0, file = $1", e.what(),
+                                     _current_file_name);
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }
@@ -1179,8 +1183,9 @@ Status OrcChunkReader::_init_position_in_orc() {
         int col_id = it->second;
         auto it2 = column_id_to_pos.find(col_id);
         if (it2 == column_id_to_pos.end()) {
-            auto s = strings::Substitute("OrcChunkReader::init_position_in_orc. failed to find position. col_id = $0",
-                                         std::to_string(col_id));
+            auto s = strings::Substitute(
+                    "OrcChunkReader::init_position_in_orc. failed to find position. col_id = $0, file = $1",
+                    std::to_string(col_id), _current_file_name);
             return Status::NotFound(s);
         }
         int pos = it2->second;
@@ -1299,13 +1304,15 @@ Status OrcChunkReader::_init_cast_exprs() {
         // then min/max of A is almost unusable. Think that there are values ["10", "10000", "100001", "11"]
         // min/max will be "10" and "11", and we expect min/max is 10/100001
         if (!_broker_load_mode && !starrocks_type.is_implicit_castable(orc_type)) {
-            return Status::NotSupported(strings::Substitute("Type mismatch: orc $0 to native $1",
-                                                            orc_type.debug_string(), starrocks_type.debug_string()));
+            return Status::NotSupported(strings::Substitute("Type mismatch: orc $0 to native $1. file = $2",
+                                                            orc_type.debug_string(), starrocks_type.debug_string(),
+                                                            _current_file_name));
         }
         Expr* cast = VectorizedCastExprFactory::from_type(orc_type, starrocks_type, slot, &_pool);
         if (cast == nullptr) {
-            return Status::InternalError(strings::Substitute("Not support cast $0 to $1.", orc_type.debug_string(),
-                                                             starrocks_type.debug_string()));
+            return Status::InternalError(strings::Substitute("Not support cast $0 to $1. file = $2",
+                                                             orc_type.debug_string(), starrocks_type.debug_string(),
+                                                             _current_file_name));
         }
         _cast_exprs[column_pos] = cast;
     }
@@ -1349,7 +1356,8 @@ Status OrcChunkReader::read_next(orc::RowReader::ReadPosition* pos) {
             return Status::EndOfFile("");
         }
     } catch (std::exception& e) {
-        auto s = strings::Substitute("OrcChunkReader::read_next failed. reason = $0", e.what());
+        auto s = strings::Substitute("OrcChunkReader::read_next failed. reason = $0, file = $1", e.what(),
+                                     _current_file_name);
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }

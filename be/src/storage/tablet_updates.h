@@ -285,7 +285,7 @@ private:
 
     // wait a version to be applied, so reader can read this version
     // assuming _lock already hold
-    Status _wait_for_version(const EditVersion& version, int64_t timeout_ms);
+    Status _wait_for_version(const EditVersion& version, int64_t timeout_ms, std::unique_lock<std::mutex>& lock);
 
     Status _commit_compaction(std::unique_ptr<CompactionInfo>* info, const RowsetSharedPtr& rowset,
                               EditVersion* commit_version);
@@ -299,7 +299,7 @@ private:
 
     void _stop_and_wait_apply_done();
 
-    Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo, bool wait_apply);
+    Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo);
 
     void _calc_compaction_score(RowsetStats* stats);
 
