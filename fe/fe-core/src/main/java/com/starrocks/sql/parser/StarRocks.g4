@@ -109,6 +109,7 @@ statement
     | killStatement                                                                         #kill
     | setUserPropertyStatement                                                              #setUserProperty
     | showStatusStatement                                                                   #showStatus
+    | showBrokerStatement                                                                   #showBroker
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -590,6 +591,10 @@ showStatusStatement
 
 showNodesStatement
     : SHOW COMPUTE NODES                                                       #showComputeNodes
+    ;
+
+showBrokerStatement
+    : SHOW BROKER
     ;
 
 varType

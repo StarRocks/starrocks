@@ -31,18 +31,30 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class ShowBrokerStmt extends ShowStmt {
     public ShowBrokerStmt() {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)
-                && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
-                PrivPredicate.OPERATOR)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN/OPERATOR");
-        }
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowBrokerStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+
+    @Override
+    public String toSql() {
+        return "SHOW BROKER";
+    }
+
+    @Override
+    public String toString() {
+        return toSql();
     }
 
     @Override
