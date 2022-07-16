@@ -108,6 +108,9 @@ statement
 
     // procedure
     | showProcedureStatment                                                                 #showProcedure
+
+    //  Backup Store Satement
+    | dropRepositoryStatement                                                               #dropRepository
     ;
 
 
@@ -673,6 +676,12 @@ tabletList
 showProcedureStatment
     : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
     ;
+
+// ---------------------------------------- Backup Store Statement -----------------------------------------------------
+dropRepositoryStatement
+    : DROP REPOSITORY identifier
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**

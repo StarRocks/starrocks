@@ -57,6 +57,7 @@ import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropObserverClause;
+import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
@@ -1934,6 +1935,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowVariablesStmt(getVariableType(context.varType()), pattern, where);
     }
 
+    // ------------------------------------------- Backup Store Statement ----------------------------------------------
+    @Override
+    public ParseNode visitDropRepositoryStatement(StarRocksParser.DropRepositoryStatementContext context) {
+        String repoName = context.identifier().getText();
+        if (repoName != null && repoName.startsWith("`") && repoName.endsWith("`")) {
+            repoName = repoName.substring(1, repoName.length() - 1);
+        }
+        return new DropRepositoryStmt(repoName);
+    }
+
     // ------------------------------------------- Expression ----------------------------------------------------------
 
     @Override
@@ -3080,4 +3091,5 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         return new DescribeStmt(targetTableName, context.ALL() != null);
     }
+
 }

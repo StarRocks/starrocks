@@ -28,6 +28,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class DropRepositoryStmt extends DdlStmt {
 
@@ -59,5 +60,10 @@ public class DropRepositoryStmt extends DdlStmt {
         sb.append("DROP ");
         sb.append("REPOSITORY `").append(repoName).append("`");
         return sb.toString();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropRepositoryStmt(this, context);
     }
 }
