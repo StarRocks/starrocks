@@ -1,5 +1,18 @@
 # StarRocks version 2.0
 
+## 2.0.8
+
+发布日期：2022年7月15日
+
+### Bug 修复
+
+修复了如下 Bug：
+
+- 反复切换 Leader FE 节点可能会导致所有导入作业挂起，无法进行导入。[#7350](https://github.com/StarRocks/starrocks/issues/7350)
+- 导入的数据有倾斜时，某些列占用内存比较大，可能会导致 MemTable 的内存估算超过 4GB，从而导致 BE 停止工作。[#7161](https://github.com/StarRocks/starrocks/issues/7161)
+- 物化视图处理大小写时有问题，导致重启 FE 后其 schema 发生变化。[#7362](https://github.com/StarRocks/starrocks/issues/7362)
+- 使用 Routine Load 导入 Kafka 的 JSON 数据时，如果 JSON 数据中存在空行，那么空行后的数据会丢失。[#8534](https://github.com/StarRocks/starrocks/issues/8534)
+
 ## 2.0.7
 
 发布日期：2022年6月13日
