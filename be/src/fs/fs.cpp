@@ -56,11 +56,11 @@ inline bool starts_with(std::string_view s, std::string_view prefix) {
 
 inline bool is_s3_uri(std::string_view uri) {
     return starts_with(uri, "oss://") || starts_with(uri, "s3n://") || starts_with(uri, "s3a://") ||
-           starts_with(uri, "s3://");
+           starts_with(uri, "s3://") || starts_with(uri, "cos://");
 }
 
 inline bool is_hdfs_uri(std::string_view uri) {
-    return starts_with(uri, "hdfs://");
+    return starts_with(uri, "hdfs://") || starts_with(uri, "viewfs://");
 }
 
 inline bool is_posix_uri(std::string_view uri) {

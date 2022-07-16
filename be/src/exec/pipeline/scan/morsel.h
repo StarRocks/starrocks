@@ -103,13 +103,14 @@ private:
     std::vector<vectorized::ShortKeyRangeOptionPtr> _short_key_ranges;
 };
 
-/// MorselQueue
+/// MorselQueueFactory.
 class MorselQueueFactory {
 public:
     virtual ~MorselQueueFactory() = default;
 
     virtual MorselQueue* create(int driver_sequence) = 0;
     virtual size_t size() const = 0;
+    virtual size_t num_original_morsels() const = 0;
     virtual bool is_shared() const = 0;
 };
 
@@ -120,6 +121,7 @@ public:
 
     MorselQueue* create(int driver_sequence) override { return _queue.get(); }
     size_t size() const override { return _size; }
+    size_t num_original_morsels() const override;
     bool is_shared() const override { return true; }
 
 private:
@@ -139,6 +141,8 @@ public:
 
     size_t size() const override { return _queue_per_driver_seq.size(); }
 
+    size_t num_original_morsels() const override;
+
     bool is_shared() const override { return false; }
 
 private:
@@ -157,13 +161,12 @@ public:
     virtual void set_tablets(const std::vector<TabletSharedPtr>& tablets) {}
     virtual void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) {}
 
-    virtual size_t num_morsels() const = 0;
+    virtual size_t num_original_morsels() const = 0;
+    virtual size_t max_degree_of_parallelism() const = 0;
     virtual bool empty() const = 0;
     virtual StatusOr<MorselPtr> try_get() = 0;
 
     virtual std::string name() const = 0;
-
-    virtual bool need_rebalance() const { return false; }
 };
 
 // The morsel queue with a fixed number of morsels, which is determined in the constructor.
@@ -175,7 +178,8 @@ public:
 
     std::vector<TInternalScanRange*> olap_scan_ranges() const override;
 
-    size_t num_morsels() const override { return _num_morsels; }
+    size_t num_original_morsels() const override { return _num_morsels; }
+    size_t max_degree_of_parallelism() const override { return _num_morsels; }
     bool empty() const override { return _pop_index >= _num_morsels; }
     StatusOr<MorselPtr> try_get() override;
 
@@ -204,17 +208,12 @@ public:
         _tablet_rowsets = tablet_rowsets;
     }
 
-    size_t num_morsels() const override { return _degree_of_parallelism; }
+    size_t num_original_morsels() const override { return _morsels.size(); }
+    size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
     bool empty() const override { return _tablet_idx >= _tablets.size(); }
     StatusOr<MorselPtr> try_get() override;
 
     std::string name() const override { return "physical_split_morsel_queue"; }
-
-    // Whether DOP after splitting tablets is greater than the number of tablets.
-    // Only used by broadcast HashJoinProbeOperator. It will insert local exchange
-    // to balance the chunk from scan node and increase parallelism of the probe operators,
-    // if the number of tablets is less than DOP.
-    bool need_rebalance() const override { return _num_original_morsels < _degree_of_parallelism; }
 
 private:
     rowid_t _lower_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key, bool lower) const;
@@ -283,7 +282,8 @@ public:
         _tablet_rowsets = tablet_rowsets;
     }
 
-    size_t num_morsels() const override { return _degree_of_parallelism; }
+    size_t num_original_morsels() const override { return _morsels.size(); }
+    size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
     bool empty() const override { return _tablet_idx >= _tablets.size(); }
     StatusOr<MorselPtr> try_get() override;
 

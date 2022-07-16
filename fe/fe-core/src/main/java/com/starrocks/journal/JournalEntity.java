@@ -89,6 +89,7 @@ import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
+import com.starrocks.persist.ShardInfo;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
@@ -657,6 +658,16 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE: {
                 data = InsertOverwriteStateChangeInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_UNUSED_SHARD: {
+                data = ShardInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DELETE_UNUSED_SHARD: {
+                data = ShardInfo.read(in);
                 isRead = true;
                 break;
             }

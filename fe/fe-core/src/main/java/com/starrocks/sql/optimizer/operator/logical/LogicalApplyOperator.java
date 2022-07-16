@@ -50,36 +50,15 @@ public class LogicalApplyOperator extends LogicalOperator {
 
     private final boolean needOutputRightChildColumns;
 
-    public LogicalApplyOperator(ColumnRefOperator output, ScalarOperator subqueryOperator,
-                                List<ColumnRefOperator> correlationColumnRefs, boolean useSemiAnti) {
-        this(output, subqueryOperator, correlationColumnRefs, useSemiAnti, false);
-    }
-
-    public LogicalApplyOperator(ColumnRefOperator output, ScalarOperator subqueryOperator,
-                                List<ColumnRefOperator> correlationColumnRefs, boolean useSemiAnti,
-                                boolean needOutputRightChildColumns) {
-        super(OperatorType.LOGICAL_APPLY);
-        this.output = output;
-        this.subqueryOperator = subqueryOperator;
-        this.correlationColumnRefs = correlationColumnRefs;
-        this.correlationConjuncts = null;
-        this.needCheckMaxRows = isScalar();
-        this.useSemiAnti = useSemiAnti;
-        this.needOutputRightChildColumns = needOutputRightChildColumns;
-    }
-
-    public LogicalApplyOperator(ColumnRefOperator output, ScalarOperator subqueryOperator,
-                                List<ColumnRefOperator> correlationColumnRefs, ScalarOperator correlationConjuncts,
-                                ScalarOperator predicate, boolean needCheckMaxRows, boolean useSemiAnti) {
-        super(OperatorType.LOGICAL_APPLY);
-        this.output = output;
-        this.subqueryOperator = subqueryOperator;
-        this.correlationColumnRefs = correlationColumnRefs;
-        this.correlationConjuncts = correlationConjuncts;
-        this.predicate = predicate;
-        this.needCheckMaxRows = needCheckMaxRows;
-        this.useSemiAnti = useSemiAnti;
-        this.needOutputRightChildColumns = false;
+    private LogicalApplyOperator(Builder builder) {
+        super(OperatorType.LOGICAL_APPLY, builder.getLimit(), builder.getPredicate(), builder.getProjection());
+        subqueryOperator = builder.subqueryOperator;
+        output = builder.output;
+        correlationColumnRefs = builder.correlationColumnRefs;
+        correlationConjuncts = builder.correlationConjuncts;
+        needCheckMaxRows = builder.needCheckMaxRows;
+        useSemiAnti = builder.useSemiAnti;
+        needOutputRightChildColumns = builder.needOutputRightChildColumns;
     }
 
     public ColumnRefOperator getOutput() {
@@ -102,7 +81,6 @@ public class LogicalApplyOperator extends LogicalOperator {
         return subqueryOperator;
     }
 
-
     public List<ColumnRefOperator> getCorrelationColumnRefs() {
         return correlationColumnRefs;
     }
@@ -121,8 +99,7 @@ public class LogicalApplyOperator extends LogicalOperator {
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        ColumnRefSet outputColumns =
-                (ColumnRefSet) expressionContext.getChildLogicalProperty(0).getOutputColumns().clone();
+        ColumnRefSet outputColumns = expressionContext.getChildLogicalProperty(0).getOutputColumns().clone();
         if (needOutputRightChildColumns) {
             outputColumns.union(expressionContext.getChildLogicalProperty(1).getOutputColumns());
         } else if (output != null) {
@@ -134,5 +111,72 @@ public class LogicalApplyOperator extends LogicalOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitLogicalApply(optExpression, context);
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder extends LogicalOperator.Builder<LogicalApplyOperator, LogicalApplyOperator.Builder> {
+        private ScalarOperator subqueryOperator = null;
+        private ColumnRefOperator output = null;
+        private List<ColumnRefOperator> correlationColumnRefs = null;
+        private ScalarOperator correlationConjuncts = null;
+        private boolean useSemiAnti = true;
+        private boolean needCheckMaxRows = false;
+        private boolean needOutputRightChildColumns = false;
+
+        public Builder setSubqueryOperator(ScalarOperator subqueryOperator) {
+            this.subqueryOperator = subqueryOperator;
+            return this;
+        }
+
+        public Builder setOutput(ColumnRefOperator output) {
+            this.output = output;
+            return this;
+        }
+
+        public Builder setCorrelationColumnRefs(List<ColumnRefOperator> correlationColumnRefs) {
+            this.correlationColumnRefs = correlationColumnRefs;
+            return this;
+        }
+
+        public Builder setCorrelationConjuncts(ScalarOperator correlationConjuncts) {
+            this.correlationConjuncts = correlationConjuncts;
+            return this;
+        }
+
+        public Builder setNeedCheckMaxRows(boolean needCheckMaxRows) {
+            this.needCheckMaxRows = needCheckMaxRows;
+            return this;
+        }
+
+        public Builder setUseSemiAnti(boolean useSemiAnti) {
+            this.useSemiAnti = useSemiAnti;
+            return this;
+        }
+
+        public Builder setNeedOutputRightChildColumns(boolean needOutputRightChildColumns) {
+            this.needOutputRightChildColumns = needOutputRightChildColumns;
+            return this;
+        }
+
+        @Override
+        public LogicalApplyOperator build() {
+            return new LogicalApplyOperator(this);
+        }
+
+        @Override
+        public LogicalApplyOperator.Builder withOperator(LogicalApplyOperator applyOperator) {
+            super.withOperator(applyOperator);
+            subqueryOperator = applyOperator.subqueryOperator;
+            output = applyOperator.output;
+            correlationColumnRefs = applyOperator.correlationColumnRefs;
+            correlationConjuncts = applyOperator.correlationConjuncts;
+            needCheckMaxRows = applyOperator.needCheckMaxRows;
+            useSemiAnti = applyOperator.useSemiAnti;
+            needOutputRightChildColumns = applyOperator.needOutputRightChildColumns;
+            return this;
+        }
     }
 }

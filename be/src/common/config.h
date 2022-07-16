@@ -100,6 +100,8 @@ CONF_Int32(delete_worker_count_normal_priority, "2");
 CONF_Int32(delete_worker_count_high_priority, "1");
 // The count of thread to alter table.
 CONF_Int32(alter_tablet_worker_count, "3");
+// The count of parallel clone task per storage path
+CONF_Int32(parallel_clone_task_per_path, "2");
 // The count of thread to clone.
 CONF_Int32(clone_worker_count, "3");
 // The count of thread to clone.
@@ -179,9 +181,9 @@ CONF_mInt32(status_report_interval, "5");
 // Local directory to copy UDF libraries from HDFS into.
 CONF_String(local_library_dir, "${UDF_RUNTIME_DIR}");
 // Number of olap/external scanner thread pool size.
-CONF_mInt32(doris_scanner_thread_pool_thread_num, "48");
+CONF_mInt32(scanner_thread_pool_thread_num, "48");
 // Number of olap/external scanner thread pool size.
-CONF_Int32(doris_scanner_thread_pool_queue_size, "102400");
+CONF_Int32(scanner_thread_pool_queue_size, "102400");
 CONF_mDouble(scan_use_query_mem_ratio, "0.25");
 // Number of etl thread pool size.
 CONF_Int32(etl_thread_pool_size, "8");
@@ -197,11 +199,11 @@ CONF_Int32(broker_write_timeout_seconds, "30");
 // Default thrift client retry interval (in milliseconds).
 CONF_mInt64(thrift_client_retry_interval_ms, "100");
 // Single read execute fragment row size.
-CONF_mInt32(doris_scanner_row_num, "16384");
+CONF_mInt32(scanner_row_num, "16384");
 // Number of max hdfs scanners.
 CONF_Int32(max_hdfs_scanner_num, "50");
 // Number of max scan keys.
-CONF_mInt32(doris_max_scan_key_num, "1024");
+CONF_mInt32(max_scan_key_num, "1024");
 // The max number of push down values of a single column.
 // if exceed, no conditions will be pushed down for that column.
 CONF_mInt32(max_pushdown_conditions_per_column, "1024");
@@ -686,11 +688,6 @@ CONF_mInt32(max_hdfs_file_handle, "1000");
 
 CONF_Int64(max_segment_file_size, "1073741824");
 
-// Enables using hdfsPreadFully() instead of hdfsRead() when performing HDFS read operations.
-// This is necessary to use HDFS hedged reads (assuming the HDFS client is configured to do so).
-// hdfsPreadFully() are always enabled for object storage.
-CONF_Bool(use_hdfs_pread, "true");
-
 // Rewrite partial semgent or not.
 // if true, partial segment will be rewrite into new segment file first and append other column data
 // if false, the data of other column will be append into partial segment file and rebuild segment footer
@@ -711,12 +708,17 @@ CONF_Bool(object_storage_endpoint_use_https, "false");
 
 CONF_Bool(enable_orc_late_materialization, "true");
 // orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
-CONF_Int32(orc_file_cache_max_size, "2097152");
+CONF_Int32(orc_file_cache_max_size, "8388608");
+CONF_Int32(orc_natural_read_size, "8388608");
+CONF_mBool(orc_coalesce_read_enable, "true");
+
 // parquet reader, each column will reserve X bytes for read
 // but with coalesce read enabled, this value is not used.
 CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
 CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_mInt32(parquet_header_max_size, "16384");
+
+CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
@@ -753,7 +755,11 @@ CONF_String(jaeger_endpoint, "");
 
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
+// Root dir used for cache if cache enabled.
+CONF_String(starlet_cache_dir, "");
 #endif
+
+CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 
 } // namespace config
 

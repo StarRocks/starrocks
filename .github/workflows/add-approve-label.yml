@@ -1,0 +1,41 @@
+name: Add Label
+
+on:
+  workflow_run:
+    workflows: ["Label when reviewed"]
+    types: ['requested']
+
+permissions:
+  # All other permissions are set to none
+  checks: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  Approve:
+    runs-on: ubuntu-latest
+    steps:        
+      - name: "Get information about the original trigger of the run"
+        uses: potiuk/get-workflow-origin@v1_2
+        id: source-run-info
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          sourceRunId: ${{ github.event.workflow_run.id }}
+
+      - uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: review-pr-trigger.yml
+          pr: ${{ steps.source-run-info.outputs.pullRequestNumber }}
+          path: ${{ github.workspace }}
+
+      - name: Read Properties
+        id: read_property
+        run: echo "::set-output name=result::$(cat review/${{ steps.source-run-info.outputs.pullRequestNumber }})"
+
+      - name: Label when approved by 2 committers
+        if: steps.read_property.outputs.result == 'true'
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.PAT }}
+          labels: approved
+          number: ${{ steps.source-run-info.outputs.pullRequestNumber }}

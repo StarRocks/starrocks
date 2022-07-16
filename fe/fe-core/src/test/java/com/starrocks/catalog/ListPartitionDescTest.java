@@ -342,6 +342,4 @@ public class ListPartitionDescTest {
         ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
         listPartitionDesc.analyze(this.findColumnDefList(), null);
     }
-
-
 }

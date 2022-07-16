@@ -8,12 +8,14 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.velocity.VelocityContext;
 
 import java.io.StringWriter;
 import java.text.MessageFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -35,16 +37,24 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
                     + "    GROUP BY t0.`$columnName` "
                     + ") as t1";
 
-    public SampleStatisticsCollectJob(AnalyzeJob analyzeJob, Database db, OlapTable table, List<String> columns) {
-        super(analyzeJob, db, table, columns);
+    public SampleStatisticsCollectJob(Database db, OlapTable table, List<String> columns,
+                                      StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
+                                      Map<String, String> properties) {
+        super(db, table, columns, type, scheduleType, properties);
     }
 
     @Override
     public void collect() throws Exception {
-        for (String columnName : columns) {
-            String sql = buildSampleInsertSQL(db.getId(), table.getId(), Lists.newArrayList(columnName),
-                    analyzeJob.getSampleCollectRows());
-            collectStatisticSync(sql);
+        long sampleRowCount = Long.parseLong(properties.getOrDefault(StatsConstants.PROP_SAMPLE_COLLECT_ROWS_KEY,
+                String.valueOf(Config.statistic_sample_collect_rows)));
+        List<List<String>> splitColumns = Lists.partition(columns,
+                (int) (sampleRowCount * columns.size() / Config.statistics_collect_max_row_count_per_query + 1));
+
+        for (List<String> splitColItem : splitColumns) {
+            for (String columnName : splitColItem) {
+                String sql = buildSampleInsertSQL(db.getId(), table.getId(), Lists.newArrayList(columnName), sampleRowCount);
+                collectStatisticSync(sql);
+            }
         }
     }
 

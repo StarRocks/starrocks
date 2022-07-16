@@ -123,7 +123,6 @@ public class DecimalLiteral extends LiteralExpr {
         if (!Config.enable_decimal_v3) {
             type = ScalarType.DECIMALV2;
         } else {
-            this.value = value.stripTrailingZeros();
             int precision = getRealPrecision(this.value);
             int scale = getRealScale(this.value);
             int integerPartWidth = precision - scale;
@@ -148,7 +147,6 @@ public class DecimalLiteral extends LiteralExpr {
         ScalarType scalarType = (ScalarType) type;
         this.value = new BigDecimal(value.toPlainString());
         if (type.isDecimalV3()) {
-            this.value = value.stripTrailingZeros();
             int precision = scalarType.getScalarPrecision();
             int scale = scalarType.getScalarScale();
             int realPrecision = getRealPrecision(this.value);

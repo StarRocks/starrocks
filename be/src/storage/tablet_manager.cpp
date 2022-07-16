@@ -1083,9 +1083,14 @@ void TabletManager::_build_tablet_stat() {
         for (const auto& [tablet_id, tablet] : tablets_shard.tablet_map) {
             TTabletStat stat;
             stat.tablet_id = tablet_id;
-            // TODO(cbl): get row num and data size together is faster
-            stat.__set_data_size(tablet->tablet_footprint());
-            stat.__set_row_num(tablet->num_rows());
+            if (tablet->updates()) {
+                auto [row_num, data_size] = tablet->updates()->num_rows_and_data_size();
+                stat.__set_row_num(row_num);
+                stat.__set_data_size(data_size);
+            } else {
+                stat.__set_data_size(tablet->tablet_footprint());
+                stat.__set_row_num(tablet->num_rows());
+            }
             _tablet_stat_cache.emplace(tablet_id, stat);
         }
     }

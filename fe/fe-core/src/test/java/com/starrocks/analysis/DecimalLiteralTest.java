@@ -194,7 +194,7 @@ public class DecimalLiteralTest {
 
         type = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 18, 4);
         decimalLiteral = new DecimalLiteral("12345678.90", type);
-        Assert.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 1));
+        Assert.assertEquals(decimalLiteral.getType(), ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2));
         decimalLiteral = (DecimalLiteral) decimalLiteral.uncheckedCastTo(type);
         Assert.assertEquals(decimalLiteral.getType(), type);
 

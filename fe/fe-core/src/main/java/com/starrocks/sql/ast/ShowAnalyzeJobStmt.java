@@ -3,6 +3,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
@@ -14,12 +15,16 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.StatsConstants;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public class ShowAnalyzeJobStmt extends ShowStmt {
+    public ShowAnalyzeJobStmt(Predicate predicate) {
+        setPredicate(predicate);
+    }
 
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -42,7 +47,7 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
         List<String> columns = analyzeJob.getColumns();
 
         row.set(0, String.valueOf(analyzeJob.getId()));
-        if (AnalyzeJob.DEFAULT_ALL_ID != dbId) {
+        if (StatsConstants.DEFAULT_ALL_ID != dbId) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
 
             if (db == null) {
@@ -51,7 +56,7 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
 
             row.set(1, ClusterNamespace.getNameFromFullName(db.getFullName()));
 
-            if (AnalyzeJob.DEFAULT_ALL_ID != tableId) {
+            if (StatsConstants.DEFAULT_ALL_ID != tableId) {
                 Table table = db.getTable(tableId);
 
                 if (table == null) {
@@ -72,7 +77,7 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
             }
         }
 
-        row.set(4, analyzeJob.getType().name());
+        row.set(4, analyzeJob.getAnalyzeType().name());
         row.set(5, analyzeJob.getScheduleType().name());
         row.set(6, analyzeJob.getProperties() == null ? "{}" : analyzeJob.getProperties().toString());
         row.set(7, analyzeJob.getStatus().name());
@@ -87,6 +92,11 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
         }
 
         return row;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowAnalyzeJobStatement(this, context);
     }
 
     @Override

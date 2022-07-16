@@ -581,6 +581,9 @@ public class GlobalTransactionMgr implements Writable {
             if (transactionState.isExpired(now)) {
                 LOG.info("discard expired transaction state: {}", transactionState);
                 continue;
+            } else if (transactionState.getTransactionStatus() == TransactionStatus.UNKNOWN) {
+                LOG.info("discard unknown transaction state: {}", transactionState);
+                continue;
             }
             try {
                 DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionState.getDbId());
