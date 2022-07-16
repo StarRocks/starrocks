@@ -44,6 +44,7 @@ import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -325,6 +326,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateUserStatement(CreateUserStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropUserStatement(DropUserStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

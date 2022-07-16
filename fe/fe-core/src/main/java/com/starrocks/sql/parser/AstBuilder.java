@@ -60,6 +60,7 @@ import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -1818,6 +1819,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean ifNotExists = context.IF() != null;
         String userRole = context.string() == null ? null : ((StringLiteral) visit(context.string())).getStringValue();
         return new CreateUserStmt(ifNotExists, userDesc, userRole);
+    }
+
+    @Override
+    public ParseNode visitDropUser(StarRocksParser.DropUserContext context) {
+        UserIdentifier user = (UserIdentifier) visit(context.user());
+        return new DropUserStmt(user.getUserIdentity());
     }
 
     @Override
