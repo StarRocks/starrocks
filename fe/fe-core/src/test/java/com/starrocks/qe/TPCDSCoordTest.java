@@ -6,6 +6,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.TPCDSPlanTest;
+import com.starrocks.sql.plan.TPCDSPlanTestBase;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
@@ -17,7 +18,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 
-public class TPCDSHiveCoordTest extends TPCDSPlanTest {
+public class TPCDSCoordTest extends TPCDSPlanTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -30,7 +31,9 @@ public class TPCDSHiveCoordTest extends TPCDSPlanTest {
 
     @After
     public void tearDown() {
+        ConnectContext ctx = starRocksAssert.getCtx();
         FeConstants.runningUnitTest = false;
+        ctx.getSessionVariable().setEnablePipelineEngine(true);
     }
 
     @Test
