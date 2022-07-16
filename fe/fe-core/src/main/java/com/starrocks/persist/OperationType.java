@@ -205,7 +205,7 @@ public class OperationType {
     public static final short OP_ADD_HISTOGRAM_STATS_META = 10014;
 
     // workgroup 10021 ~ 10030
-    public static final short OP_WORKGROUP = 10021;
+    public static final short OP_RESOURCE_GROUP = 10021;
 
     // external hive table column change
     public static final short OP_MODIFY_HIVE_TABLE_COLUMN = 10031;

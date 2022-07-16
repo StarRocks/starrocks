@@ -33,8 +33,8 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.catalog.WorkGroup;
-import com.starrocks.catalog.WorkGroupClassifier;
+import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
@@ -224,7 +224,7 @@ public class Coordinator {
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
 
     // Resource group
-    WorkGroup workGroup = null;
+    ResourceGroup resourceGroup = null;
 
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
     // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
@@ -469,7 +469,7 @@ public class Coordinator {
         prepare();
 
         // prepare workgroup
-        this.workGroup = prepareWorkGroup(connectContext);
+        this.resourceGroup = prepareResourceGroup(connectContext);
 
         // compute Fragment Instance
         computeScanRangeAssignment();
@@ -499,39 +499,40 @@ public class Coordinator {
         deliverExecFragments();
     }
 
-    public static WorkGroup prepareWorkGroup(ConnectContext connect) {
-        WorkGroup workgroup = null;
+
+    public static ResourceGroup prepareResourceGroup(ConnectContext connect) {
+        ResourceGroup resourceGroup = null;
         if (connect == null || !connect.getSessionVariable().isEnableResourceGroup()) {
-            return workgroup;
+            return resourceGroup;
         }
         SessionVariable sessionVariable = connect.getSessionVariable();
 
         // 1. try to use the resource group specified by the variable
         if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
             String rgName = sessionVariable.getResourceGroup();
-            workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(rgName);
+            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(rgName);
         }
 
         // 2. try to use the resource group specified by workgroup_id
-        long workgroupId = connect.getSessionVariable().getWorkGroupId();
-        if (workgroup == null && workgroupId > 0) {
-            workgroup = new WorkGroup();
-            workgroup.setId(workgroupId);
+        long workgroupId = connect.getSessionVariable().getResourceGroupId();
+        if (resourceGroup == null && workgroupId > 0) {
+            resourceGroup = new ResourceGroup();
+            resourceGroup.setId(workgroupId);
         }
 
         // 3. if the specified resource group not exist try to use the default one
-        if (workgroup == null) {
+        if (resourceGroup == null) {
             Set<Long> dbIds = connect.getCurrentSqlDbIds();
-            workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
-                    connect, WorkGroupClassifier.QueryType.SELECT, dbIds);
+            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
+                    connect, ResourceGroupClassifier.QueryType.SELECT, dbIds);
         }
 
-        if (workgroup != null) {
-            connect.getAuditEventBuilder().setResourceGroup(workgroup.getName());
-            connect.setWorkGroup(workgroup);
+        if (resourceGroup != null) {
+            connect.getAuditEventBuilder().setResourceGroup(resourceGroup.getName());
+            connect.setResourceGroup(resourceGroup);
         }
 
-        return workgroup;
+        return resourceGroup;
     }
 
     private void prepareProfile() {
@@ -2730,8 +2731,8 @@ public class Coordinator {
 
                     boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
                     commonParams.setEnable_resource_group(enableResourceGroup);
-                    if (enableResourceGroup && workGroup != null) {
-                        commonParams.setWorkgroup(workGroup.toThrift());
+                    if (enableResourceGroup && resourceGroup != null) {
+                        commonParams.setWorkgroup(resourceGroup.toThrift());
                     }
                 }
             }

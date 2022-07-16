@@ -1,14 +1,14 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.analysis.DdlStmt;
 
-// Drop WorkGroup specified by name
+// Drop ResourceGroup specified by name
 // DROP RESOURCE GROUP <name>
-public class DropWorkGroupStmt extends DdlStmt {
+public class DropResourceGroupStmt extends DdlStmt {
     private final String name;
 
-    public DropWorkGroupStmt(String name) {
+    public DropResourceGroupStmt(String name) {
         this.name = name;
     }
 
@@ -18,7 +18,7 @@ public class DropWorkGroupStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropWorkGroupStatement(this, context);
+        return visitor.visitDropResourceGroupStatement(this, context);
     }
 
     @Override
