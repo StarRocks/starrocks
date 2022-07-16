@@ -1,33 +1,36 @@
-package com.starrocks.analysis;
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-import com.starrocks.catalog.WorkGroup;
-import com.starrocks.catalog.WorkGroupClassifier;
+package com.starrocks.sql.ast;
+
+import com.starrocks.analysis.DdlStmt;
+import com.starrocks.analysis.Predicate;
+import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.catalog.ResourceGroupClassifier;
+import com.starrocks.sql.analyzer.ResourceGroupAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.analyzer.WorkGroupAnalyzer;
-import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TWorkGroupType;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-// WorkGroup create statement format
+// ReesourceGroup create statement format
 // create resource group [if not exists] [or replace] <name>
 // to
 //  (user='foobar1', role='foo1', query_type in ('select'), source_ip='192.168.1.1/24'),
 //  (user='foobar2', role='foo2', query_type in ('insert'), source_ip='192.168.2.1/24')
 // with ('cpu_core_limit'='n', 'mem_limit'='m%', 'concurrency_limit'='n', 'type' = 'normal');
 //
-public class CreateWorkGroupStmt extends DdlStmt {
+public class CreateResourceGroupStmt extends DdlStmt {
     private String name;
     private boolean ifNotExists;
     private boolean replaceIfExists;
     private List<List<Predicate>> classifiers;
     private Map<String, String> properties;
-    private WorkGroup workgroup;
+    private ResourceGroup resourceGroup;
 
-    public CreateWorkGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists,
-                               List<List<Predicate>> classifiers, Map<String, String> proeprties) {
+    public CreateResourceGroupStmt(String name, boolean ifNotExists, boolean replaceIfExists,
+                                   List<List<Predicate>> classifiers, Map<String, String> proeprties) {
         this.name = name;
         this.ifNotExists = ifNotExists;
         this.replaceIfExists = replaceIfExists;
@@ -52,34 +55,34 @@ public class CreateWorkGroupStmt extends DdlStmt {
     }
 
     public void analyze() throws SemanticException {
-        workgroup = new WorkGroup();
-        workgroup.setName(name);
-        List<WorkGroupClassifier> classifierList = new ArrayList<>();
+        resourceGroup = new ResourceGroup();
+        resourceGroup.setName(name);
+        List<ResourceGroupClassifier> classifierList = new ArrayList<>();
         for (List<Predicate> predicates : classifiers) {
-            WorkGroupClassifier classifier = WorkGroupAnalyzer.convertPredicateToClassifier(predicates);
+            ResourceGroupClassifier classifier = ResourceGroupAnalyzer.convertPredicateToClassifier(predicates);
             classifierList.add(classifier);
         }
-        workgroup.setClassifiers(classifierList);
-        WorkGroupAnalyzer.analyzeProperties(workgroup, properties);
+        resourceGroup.setClassifiers(classifierList);
+        ResourceGroupAnalyzer.analyzeProperties(resourceGroup, properties);
 
-        if (workgroup.getWorkGroupType() == null) {
-            workgroup.setWorkGroupType(TWorkGroupType.WG_NORMAL);
+        if (resourceGroup.getResourceGroupType() == null) {
+            resourceGroup.setResourceGroupType(TWorkGroupType.WG_NORMAL);
         }
-        if (workgroup.getCpuCoreLimit() == null) {
+        if (resourceGroup.getCpuCoreLimit() == null) {
             throw new SemanticException("property 'cpu_core_limit' is absent");
         }
-        if (workgroup.getMemLimit() == null) {
+        if (resourceGroup.getMemLimit() == null) {
             throw new SemanticException("property 'mem_limit' is absent");
         }
     }
 
-    public WorkGroup getWorkgroup() {
-        return workgroup;
+    public ResourceGroup getResourceGroup() {
+        return resourceGroup;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateWorkGroupStatement(this, context);
+        return visitor.visitCreateResourceGroupStatement(this, context);
     }
 
     @Override

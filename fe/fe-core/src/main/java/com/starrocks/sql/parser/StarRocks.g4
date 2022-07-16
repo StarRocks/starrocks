@@ -96,10 +96,10 @@ statement
     | showHistogramMetaStatement                                                            #showHistogramMeta
 
     // Work Group Statement
-    | createWorkGroupStatement                                                              #createWorkGroup
-    | dropWorkGroupStatement                                                                #dropWorkGroup
-    | alterWorkGroupStatement                                                               #alterWorkGroup
-    | showWorkGroupStatement                                                                #showWorkGroup
+    | createResourceGroupStatement                                                              #createResourceGroup
+    | dropResourceGroupStatement                                                                #dropResourceGroup
+    | alterResourceGroupStatement                                                               #alterResourceGroup
+    | showResourceGroupStatement                                                                #showResourceGroup
 
     // Other statement
     | USE qualifiedName                                                                     #use
@@ -539,23 +539,23 @@ showHistogramMetaStatement
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
 
-createWorkGroupStatement
+createResourceGroupStatement
     : CREATE RESOURCE GROUP (IF NOT EXISTS)? (OR REPLACE)? identifier
         TO classifier (',' classifier)*  WITH '(' property (',' property)* ')'
     ;
 
-dropWorkGroupStatement
+dropResourceGroupStatement
     : DROP RESOURCE GROUP identifier
     ;
 
-alterWorkGroupStatement
+alterResourceGroupStatement
     : ALTER RESOURCE GROUP identifier ADD classifier (',' classifier)*
     | ALTER RESOURCE GROUP identifier DROP '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     | ALTER RESOURCE GROUP identifier DROP ALL
     | ALTER RESOURCE GROUP identifier WITH '(' property (',' property)* ')'
     ;
 
-showWorkGroupStatement
+showResourceGroupStatement
     : SHOW RESOURCE GROUP identifier
     | SHOW RESOURCE GROUPS ALL?
     ;

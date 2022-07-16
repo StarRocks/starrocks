@@ -260,7 +260,7 @@ public enum ErrorCode {
     ERR_BAD_CATALOG_ERROR(5078, new byte[] {'4', '2', '0', '0', '0'},
             "Unknown catalog '%s'"),
     ERROR_NO_WG_ERROR(5079, new byte[] {'4', '2', '0', '0', '0'},
-            "Unknown workgroup '%s' "),
+            "Unknown resource group '%s' "),
     ERR_BAD_CATALOG_AND_DB_ERROR(5080, new byte[] {'4', '2', '0', '0', '0'},
             "Unknown catalog.db '%s'"),
     ERR_WRONG_LABEL_NAME(5081,  new byte[] {'4', '2', '0', '0', '0'},
