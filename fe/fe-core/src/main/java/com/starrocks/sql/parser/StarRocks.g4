@@ -118,16 +118,13 @@ statement
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
 
     // procedure
-    | showProcedureStatement                                                                #showProcedure
+    | showProcedureStatement                                                                 #showProcedure
 
     //  Backup Store Satement
     | restoreStatement                                                                      #restore
 
     // proc
-    | showProcStatement                                                                     #showProc
-
-    // Backup Store Satement
-    | restoreStatement                                                                      #restore
+    | showProcStatement                                                                      #showProc
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -764,14 +761,6 @@ showProcedureStatement
 // ------------------------------------------- Proc Statement ---------------------------------------------------------
 showProcStatement
     : SHOW PROC path=string
-    ;
-
-// ---------------------------------------- Backup Store Statement -----------------------------------------------------
-restoreStatement
-    : RESTORE SNAPSHOT qualifiedName
-    FROM identifier
-    ON '(' restoreTableDesc (',' restoreTableDesc) * ')'
-    (PROPERTIES propertyList)?
     ;
 
 // ---------------------------------------- Backup Store Statement -----------------------------------------------------
