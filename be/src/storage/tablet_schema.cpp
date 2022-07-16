@@ -443,7 +443,7 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_table
 Status TabletSchema::_init_schema() const {
     starrocks::vectorized::Fields fields;
     for (ColumnId cid = 0; cid < num_columns(); ++cid) {
-        auto f = vectorized::ChunkHelper::convert_field_to_format_v2(cid, column(cid));
+        auto f = ChunkHelper::convert_field_to_format_v2(cid, column(cid));
         fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
     }
     _schema = std::make_unique<vectorized::Schema>(std::move(fields), keys_type());

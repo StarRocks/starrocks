@@ -12,8 +12,8 @@ import java.util.Objects;
 
 public class DictMappingOperator extends ScalarOperator {
 
-    private final ColumnRefOperator dictColumn;
-    private final ScalarOperator originScalaOperator;
+    private ColumnRefOperator dictColumn;
+    private ScalarOperator originScalaOperator;
 
     public DictMappingOperator(ColumnRefOperator dictColumn, ScalarOperator originScalaOperator, Type retType) {
         super(OperatorType.DICT_MAPPING, retType);
@@ -55,11 +55,22 @@ public class DictMappingOperator extends ScalarOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(dictColumn, originScalaOperator);
+        return Objects.hash(getType(), dictColumn, originScalaOperator);
     }
 
     @Override
     public boolean equals(Object other) {
+        if (other == null) {
+            return false;
+        }
+        if (this == other) {
+            return true;
+        }
+        if (other instanceof DictMappingOperator) {
+            final DictMappingOperator mapping = (DictMappingOperator) other;
+            return mapping.getType().equals(getType()) && mapping.originScalaOperator.equals(originScalaOperator) &&
+                    mapping.dictColumn.equals(dictColumn);
+        }
         return false;
     }
 
@@ -71,5 +82,13 @@ public class DictMappingOperator extends ScalarOperator {
     @Override
     public ColumnRefSet getUsedColumns() {
         return dictColumn.getUsedColumns();
+    }
+
+    @Override
+    public ScalarOperator clone() {
+        DictMappingOperator clone = (DictMappingOperator) super.clone();
+        clone.dictColumn = (ColumnRefOperator) this.dictColumn.clone();
+        clone.originScalaOperator = this.originScalaOperator.clone();
+        return clone;
     }
 }

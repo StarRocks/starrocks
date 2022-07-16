@@ -37,6 +37,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -53,6 +54,22 @@ public class ShowUserPropertyStmt extends ShowStmt {
 
     public ShowUserPropertyStmt(String user, String pattern) {
         this.user = user;
+        this.pattern = pattern;
+    }
+
+    public String getUser() {
+        return user;
+    }
+
+    public void setUser(String user) {
+        this.user = user;
+    }
+
+    public String getPatter() {
+        return pattern;
+    }
+
+    public void setPattern(String pattern) {
         this.pattern = pattern;
     }
 
@@ -101,6 +118,16 @@ public class ShowUserPropertyStmt extends ShowStmt {
             builder.addColumn(new Column(col, ScalarType.createVarchar(30)));
         }
         return builder.build();
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowUserPropertyStmt(this, context);
     }
 
     @Override

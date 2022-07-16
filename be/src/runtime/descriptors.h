@@ -188,9 +188,9 @@ private:
     std::vector<ExprContext*> _partition_key_value_evals;
 };
 
-class LakeTableDescriptor : public TableDescriptor {
+class HiveTableDescriptor : public TableDescriptor {
 public:
-    LakeTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    HiveTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     virtual bool has_partition() const = 0;
     virtual bool is_partition_col(const SlotDescriptor* slot) const;
     virtual int get_partition_col_index(const SlotDescriptor* slot) const;
@@ -211,21 +211,21 @@ protected:
     std::string _table_location;
 };
 
-class HdfsTableDescriptor : public LakeTableDescriptor {
+class HdfsTableDescriptor : public HiveTableDescriptor {
 public:
     HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~HdfsTableDescriptor() override = default;
     bool has_partition() const override { return true; }
 };
 
-class IcebergTableDescriptor : public LakeTableDescriptor {
+class IcebergTableDescriptor : public HiveTableDescriptor {
 public:
     IcebergTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~IcebergTableDescriptor() override = default;
     bool has_partition() const override { return false; }
 };
 
-class HudiTableDescriptor : public LakeTableDescriptor {
+class HudiTableDescriptor : public HiveTableDescriptor {
 public:
     HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~HudiTableDescriptor() override = default;

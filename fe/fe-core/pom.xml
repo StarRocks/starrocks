@@ -38,11 +38,19 @@ under the License.
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.5</jacoco.version>
-        <starrocks.thrift>thrift</starrocks.thrift>
         <iceberg.version>0.12.1</iceberg.version>
     </properties>
 
     <profiles>
+        <profile>
+            <id>default</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <properties>
+                <starrocks.thrift>thrift</starrocks.thrift>
+            </properties>
+        </profile>
         <profile>
             <id>thrift</id>
             <activation>
@@ -65,6 +73,13 @@ under the License.
                 <starrocks.thrift>${env.STARROCKS_THIRDPARTY}/installed/bin/thrift</starrocks.thrift>
             </properties>
         </profile>
+        <profile>
+            <id>windows</id>
+            <properties>
+                <starrocks.thrift>thrift.exe</starrocks.thrift>
+            </properties>
+        </profile>
+
     </profiles>
 
     <dependencies>
@@ -747,79 +762,42 @@ under the License.
             <!-- run make to generate Version and builtin -->
             <!-- also parse the proto for FE -->
             <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>3.0.0</version>
+                <artifactId>maven-antrun-plugin</artifactId>
                 <executions>
                     <execution>
-                        <id>make-dir</id>
+                        <id>generate-sources</id>
                         <phase>generate-sources</phase>
-                        <goals>
-                            <goal>exec</goal>
-                        </goals>
                         <configuration>
-                            <executable>mkdir</executable>
-                            <arguments>
-                                <argument>-p</argument>
-                                <argument>${basedir}/target/generated-sources/proto</argument>
-                            </arguments>
-                            <skip>${skip.plugin}</skip>
+                            <tasks>
+                                <mkdir dir="${basedir}/target/generated-sources/proto"/>
+                                <exec executable="${java.home}/bin/java">
+                                    <arg value="-jar"/>
+                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
+                                    <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
+                                    <arg value="${starrocks.home}/gensrc/proto/internal_service.proto"/>
+                                </exec>
+                                <exec executable="${java.home}/bin/java">
+                                    <arg value="-jar"/>
+                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
+                                    <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
+                                    <arg value="${starrocks.home}/gensrc/proto/lake_service.proto"/>
+                                </exec>
+                                <exec executable="python">
+                                    <arg value="${starrocks.home}/build-support/gen_build_version.py"/>
+                                    <arg value="--cpp"/>
+                                    <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build"/>
+                                    <arg value="--java"/>
+                                    <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build"/>
+                                </exec>
+                                <mkdir dir="${starrocks.home}gensrc/build/python/vectorized"/>
+                                <exec executable="python" dir="${starrocks.home}gensrc/build/python/vectorized">
+                                    <arg value="${starrocks.home}/gensrc/script/vectorized/gen_vectorized_functions.py"/>
+                                </exec>
+                            </tasks>
                         </configuration>
-                    </execution>
-                    <execution>
-                        <id>gensrc</id>
-                        <phase>generate-sources</phase>
                         <goals>
-                            <goal>exec</goal>
+                            <goal>run</goal>
                         </goals>
-                        <configuration>
-                            <executable>make</executable>
-                            <arguments>
-                                <argument>-C</argument>
-                                <argument>${starrocks.home}/gensrc/script</argument>
-                            </arguments>
-                            <skip>${skip.plugin}</skip>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>gen_proto</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <!-- DO NOT use goal 'java', it will terminate the VM after done -->
-                            <goal>exec</goal>
-                        </goals>
-                        <configuration>
-                            <executable>${java.home}/bin/java</executable>
-                            <arguments>
-                                <argument>-jar</argument>
-                                <argument>
-                                    ${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar
-                                </argument>
-                                <argument>--java_out=${basedir}/target/generated-sources/proto</argument>
-                                <argument>${starrocks.home}/gensrc/proto/internal_service.proto</argument>
-                            </arguments>
-                            <skip>${skip.plugin}</skip>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>gen_proto_starlake</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <!-- DO NOT use goal 'java', it will terminate the VM after done -->
-                            <goal>exec</goal>
-                        </goals>
-                        <configuration>
-                            <executable>${java.home}/bin/java</executable>
-                            <arguments>
-                                <argument>-jar</argument>
-                                <argument>
-                                    ${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar
-                                </argument>
-                                <argument>--java_out=${basedir}/target/generated-sources/proto</argument>
-                                <argument>${starrocks.home}/gensrc/proto/lake_service.proto</argument>
-                            </arguments>
-                            <skip>${skip.plugin}</skip>
-                        </configuration>
                     </execution>
                 </executions>
             </plugin>

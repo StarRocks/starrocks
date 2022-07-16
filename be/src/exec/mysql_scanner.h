@@ -72,7 +72,7 @@ private:
     __StarRocksMysql* _my_conn;
     __StarRocksMysqlRes* _my_result;
     std::string _sql_str;
-    bool _is_open;
+    bool _opened;
     int _field_num;
 };
 

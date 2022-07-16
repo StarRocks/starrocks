@@ -436,7 +436,7 @@ public class LocalTablet extends Tablet {
      * 2. all healthy replicas are in right cluster
      */
     public Pair<TabletStatus, TabletSchedCtx.Priority> getHealthStatusWithPriority(
-            SystemInfoService systemInfoService, String clusterName,
+            SystemInfoService systemInfoService,
             long visibleVersion, int replicationNum,
             List<Long> aliveBeIdsInCluster) {
 
@@ -476,10 +476,6 @@ public class LocalTablet extends Tablet {
             }
             stable++;
 
-            if (!backend.getOwnerClusterName().equals(clusterName)) {
-                // this replica is available, version complete, but not in right cluster
-                continue;
-            }
             availableInCluster++;
         }
 

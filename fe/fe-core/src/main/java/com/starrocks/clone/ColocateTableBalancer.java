@@ -144,12 +144,7 @@ public class ColocateTableBalancer extends MasterDaemon {
             if (db == null) {
                 continue;
             }
-
-            Map<String, ClusterLoadStatistic> statisticMap = globalStateMgr.getTabletScheduler().getStatisticMap();
-            if (statisticMap == null) {
-                continue;
-            }
-            ClusterLoadStatistic statistic = statisticMap.get(db.getClusterName());
+            ClusterLoadStatistic statistic = globalStateMgr.getTabletScheduler().getLoadStatistic();
             if (statistic == null) {
                 continue;
             }
@@ -159,7 +154,7 @@ public class ColocateTableBalancer extends MasterDaemon {
             }
 
             Set<Long> unavailableBeIdsInGroup = getUnavailableBeIdsInGroup(infoService, colocateIndex, groupId);
-            List<Long> availableBeIds = getAvailableBeIds(db.getClusterName(), infoService);
+            List<Long> availableBeIds = getAvailableBeIds(infoService);
             List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
             if (relocateAndBalance(groupId, unavailableBeIdsInGroup, availableBeIds, colocateIndex, infoService,
                     statistic, balancedBackendsPerBucketSeq)) {
@@ -234,7 +229,7 @@ public class ColocateTableBalancer extends MasterDaemon {
                                             st);
 
                                     TabletSchedCtx tabletCtx = new TabletSchedCtx(
-                                            TabletSchedCtx.Type.REPAIR, db.getClusterName(),
+                                            TabletSchedCtx.Type.REPAIR,
                                             db.getId(), tableId, partition.getId(), index.getId(), tablet.getId(),
                                             System.currentTimeMillis());
                                     // the tablet status will be set again when being scheduled
@@ -518,7 +513,7 @@ public class ColocateTableBalancer extends MasterDaemon {
         return unavailableBeIds;
     }
 
-    private List<Long> getAvailableBeIds(String cluster, SystemInfoService infoService) {
+    private List<Long> getAvailableBeIds(SystemInfoService infoService) {
         // get all backends to allBackendIds, and check be availability using checkBackendAvailable
         // backend stopped for a short period of time is still considered available
         List<Long> allBackendIds = infoService.getBackendIds(false);

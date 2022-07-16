@@ -10,10 +10,15 @@ curdir=`cd "$curdir"; pwd`
 starrocks_home=$(dirname $(dirname $curdir))
 
 # generate symbol's file in Breakpad's own format.
-$(dirname $curdir)/src/breakpad-main/src/tools/linux/dump_syms/dump_syms $starrocks_home/output/be/lib/starrocks_be > $starrocks_home/output/be/starrocks_be.sym
+$(dirname $curdir)/installed/bin/dump_syms $starrocks_home/output/be/lib/starrocks_be > $starrocks_home/output/be/starrocks_be.sym
 
+((starrocks_be_size_original=`ls -l output/be/lib/starrocks_be | awk '{print $5}'` / (1024*1024)))
 # remove debugging infos
 strip $starrocks_home/output/be/lib/starrocks_be
+((starrocks_be_size_simplify=`ls -l output/be/lib/starrocks_be | awk '{print $5}'` / (1024*1024)))
+
+# echo size reduction
+echo "starrocks_be'size ("$starrocks_be_size_original"mb) reduced to ("$starrocks_be_size_simplify"mb)"
 
 # remove unneed old symbols
 rm -rf $starrocks_home/output/be/symbols

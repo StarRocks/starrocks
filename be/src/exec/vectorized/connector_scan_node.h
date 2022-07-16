@@ -36,6 +36,8 @@ public:
     connector::DataSourceProvider* data_source_provider() { return _data_source_provider.get(); }
     connector::ConnectorType connector_type() { return _connector_type; }
 
+    int io_tasks_per_scan_operator() const override;
+
 private:
     RuntimeState* _runtime_state = nullptr;
     connector::DataSourceProviderPtr _data_source_provider = nullptr;
@@ -97,7 +99,6 @@ private:
     struct Profile {
         RuntimeProfile::Counter* scanner_queue_counter = nullptr;
         RuntimeProfile::Counter* scanner_queue_timer = nullptr;
-        RuntimeProfile::Counter* scan_ranges_counter = nullptr;
     };
     std::mutex _mtx;
     Stack<ChunkPtr> _chunk_pool;

@@ -54,8 +54,8 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     SegmentWriter writer(std::move(wfile), segment_id, &tschema, opts);
     RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
 
-    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tschema, column_ids);
-    auto chunk = vectorized::ChunkHelper::new_chunk(schema, columns[0]->size());
+    auto schema = ChunkHelper::convert_schema_to_format_v2(tschema, column_ids);
+    auto chunk = ChunkHelper::new_chunk(schema, columns[0]->size());
     for (int i = 0; i < columns.size(); ++i) {
         chunk->get_column_by_index(i).reset(columns[i].release());
     }
@@ -89,8 +89,8 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchema&
     SegmentWriter writer(std::move(wfile), segment_id, &tschema, opts);
     RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
 
-    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tschema, column_ids);
-    auto chunk = vectorized::ChunkHelper::new_chunk(schema, columns[0]->size());
+    auto schema = ChunkHelper::convert_schema_to_format_v2(tschema, column_ids);
+    auto chunk = ChunkHelper::new_chunk(schema, columns[0]->size());
     for (int i = 0; i < columns.size(); ++i) {
         chunk->get_column_by_index(i).reset(columns[i].release());
     }

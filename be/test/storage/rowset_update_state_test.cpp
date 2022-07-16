@@ -58,8 +58,8 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
-        auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
+        auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
         for (size_t i = 0; i < keys.size(); i++) {
             cols[0]->append_datum(vectorized::Datum(keys[i]));
@@ -129,9 +129,9 @@ public:
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(*partial_schema.get());
+        auto schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema.get());
 
-        auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
+        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
         auto& cols = chunk->columns();
         for (size_t i = 0; i < keys.size(); i++) {
@@ -169,7 +169,7 @@ static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletRea
 }
 
 static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
-    auto chunk = vectorized::ChunkHelper::new_chunk(iter->schema(), 100);
+    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
     while (true) {
         auto st = iter->get_next(chunk.get());
@@ -187,7 +187,7 @@ static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
 }
 
 static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
-    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -286,8 +286,8 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     writer_context.segments_overlap = NONOVERLAPPING;
     std::unique_ptr<RowsetWriter> writer;
     EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-    auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
-    auto chunk = vectorized::ChunkHelper::new_chunk(schema, N);
+    auto schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    auto chunk = ChunkHelper::new_chunk(schema, N);
     auto& cols = chunk->columns();
     for (size_t i = 0; i < N; i++) {
         cols[0]->append_datum(vectorized::Datum(i));

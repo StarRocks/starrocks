@@ -13,6 +13,9 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+import java.util.Arrays;
+import java.util.regex.Pattern;
+
 public class SelectStmtWithDecimalTypesNewPlannerTest {
     private static ConnectContext ctx;
     @Rule
@@ -64,6 +67,11 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\"\n" +
                 ");");
+    }
+
+    private static String removeSlotIds(String s) {
+        Pattern removeSlotIdPattern = Pattern.compile("((?<=\\[)\\b\\d+\\b:\\s*)|(\\b\\d+\\b\\s*<->\\s*)");
+        return s.replaceAll(removeSlotIdPattern.pattern(), "");
     }
 
     @Test
@@ -226,7 +234,8 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
 
         sql = "select sum(dec_20_19) from test_decimal_type6";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        Assert.assertTrue(plan.contains("sum[(cast([7: dec_20_19, DECIMAL128(20,19), true] as DECIMAL128(38,18))); args: DECIMAL128; result: DECIMAL128(38,18); args nullable: true; result nullable: true]"));
+        Assert.assertTrue(plan.contains(
+                "sum[(cast([7: dec_20_19, DECIMAL128(20,19), true] as DECIMAL128(38,18))); args: DECIMAL128; result: DECIMAL128(38,18); args nullable: true; result nullable: true]"));
     }
 
     @Test
@@ -384,11 +393,13 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         sql = "select count(`dec_10_2` + dec_12_10) from `test_decimal_type6`;";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         // decimal64(10, 2) + decimal64(12, 10) = decimal128(21, 10);
-        Assert.assertTrue(plan.contains("cast([4: dec_10_2, DECIMAL64(10,2), false] as DECIMAL128(19,2)) + cast([5: dec_12_10, DECIMAL64(12,10), false] as DECIMAL128(19,10))"));
+        Assert.assertTrue(plan.contains(
+                "cast([4: dec_10_2, DECIMAL64(10,2), false] as DECIMAL128(19,2)) + cast([5: dec_12_10, DECIMAL64(12,10), false] as DECIMAL128(19,10))"));
         // decimal64(18, 0) + decimal64(18, 18) = decimal(37, 18)
         sql = "select count(dec_18_0 + dec_18_18) from `test_decimal_type6`";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        Assert.assertTrue(plan.contains("cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(37,0)) + cast([3: dec_18_18, DECIMAL64(18,18), false] as DECIMAL128(37,18))"));
+        Assert.assertTrue(plan.contains(
+                "cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(37,0)) + cast([3: dec_18_18, DECIMAL64(18,18), false] as DECIMAL128(37,18))"));
         // const decimal64(18, 0) + decimal64(18, 18) = decimal128(37, 18) literal
         sql = "select cast(1000000000000000000 as decimal(18, 0)) + cast(0.000000000000000001 as decimal(18, 18))";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
@@ -411,7 +422,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalMulZero() throws Exception {
         String sql = "select col_decimal32p9s2 * 0.0 from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "6 <-> [2: col_decimal32p9s2, DECIMAL32(9,2), false] * 0";
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(9,2)) * 0.0";
         Assert.assertTrue(plan.contains(snippet));
     }
 
@@ -419,7 +430,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalDivZero() throws Exception {
         String sql = "select col_decimal32p9s2 / 0.0 from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,2)) / 0";
+        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,2)) / 0.0";
         Assert.assertTrue(plan.contains(snippet));
     }
 
@@ -435,7 +446,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testZeroDivDecimal() throws Exception {
         String sql = "select 0.0 / col_decimal32p9s2 from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "6 <-> 0 / cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,2))";
+        String snippet = "6 <-> 0.0 / cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,2))";
         Assert.assertTrue(plan.contains(snippet));
     }
 
@@ -443,7 +454,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testZeroModDecimal() throws Exception {
         String sql = "select 0.0 % col_decimal32p9s2 from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "6 <-> 0 % cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2))";
+        String snippet = "6 <-> 0.0 % cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2))";
         Assert.assertTrue(plan.contains(snippet));
     }
 
@@ -451,22 +462,25 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalNullableProperties() throws Exception {
         String sql;
         String plan;
-        
+
         // test decimal count(no-nullable decimal)
         sql = "select count(`dec_18_0`) from `test_decimal_type6`;";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        Assert.assertTrue(plan.contains("aggregate: count[([2: dec_18_0, DECIMAL64(18,0), false]); args: DECIMAL64; result: BIGINT; args nullable: false; result nullable: true]"));
+        Assert.assertTrue(plan.contains(
+                "aggregate: count[([2: dec_18_0, DECIMAL64(18,0), false]); args: DECIMAL64; result: BIGINT; args nullable: false; result nullable: true]"));
 
         // test decimal add return a nullable column
         sql = "select count(`dec_18_0` + `dec_18_18`) from `test_decimal_type6`;";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        Assert.assertTrue(plan.contains("cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(37,0)) + cast([3: dec_18_18, DECIMAL64(18,18), false] as DECIMAL128(37,18))"));
+        Assert.assertTrue(plan.contains(
+                "cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(37,0)) + cast([3: dec_18_18, DECIMAL64(18,18), false] as DECIMAL128(37,18))"));
 
         // test decimal input function input no-nullable, output is nullable
         sql = "select round(`dec_18_0`) from `test_decimal_type6`";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         System.out.println("plan = " + plan);
-        Assert.assertTrue(plan.contains("round[(cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(18,0))); args: DECIMAL128; result: DECIMAL128(38,0); args nullable: true; result nullable: true]"));
+        Assert.assertTrue(plan.contains(
+                "round[(cast([2: dec_18_0, DECIMAL64(18,0), false] as DECIMAL128(18,0))); args: DECIMAL128; result: DECIMAL128(38,0); args nullable: true; result nullable: true]"));
     }
 
     @Test
@@ -476,12 +490,13 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         sql = "select 123456789000000000000000000000000000.00 * 123456789.123456789 * 123456789.123456789;";
         final long sqlMode = ctx.getSessionVariable().getSqlMode();
         final long code = SqlModeHelper.encode("MODE_DOUBLE_LITERAL");
-        ctx.getSessionVariable().setSqlMode(code|sqlMode);
+        ctx.getSessionVariable().setSqlMode(code | sqlMode);
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         Assert.assertTrue(plan.contains("  |  2 <-> 1.8816763755525075E51"));
         ctx.getSessionVariable().setSqlMode(sqlMode);
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        Assert.assertTrue(plan.contains("  |  2 <-> 123456789000000000000000000000000000 * 123456789.123456789 * 123456789.123456789"));
+        Assert.assertTrue(plan.contains(
+                "  |  2 <-> 123456789000000000000000000000000000.00 * 123456789.123456789 * 123456789.123456789"));
     }
 
     @Test
@@ -495,7 +510,6 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         Assert.assertTrue(plan.contains("truncate[(0.6798916342905857, 10); args: DOUBLE,INT; result: DOUBLE; " +
                 "args nullable: false; result nullable: true]"));
-
 
         sql = "select TRUNCATE(0.6798916342905857, to_base64('abc'));";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
@@ -513,6 +527,294 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         Assert.assertTrue(plan.contains("truncate[(0.6798916342905857, cast('2000-01-31 12:00:00' as INT)); " +
                 "args: DOUBLE,INT; result: DOUBLE; args nullable: true; result nullable: true]"));
+    }
+
+    @Test
+    public void testOnePhaseSumDistinctDecimal() throws Exception {
+        int oldStage = ctx.getSessionVariable().getNewPlannerAggStage();
+        ctx.getSessionVariable().setNewPlanerAggStage(1);
+
+        String sql = "select sum(distinct col_decimal32p9s2) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String expectSnippet = "aggregate: multi_distinct_sum[([2: col_decimal32p9s2, DECIMAL32(9,2), false]); " +
+                "args: DECIMAL32; result: DECIMAL128(38,2)";
+        Assert.assertTrue(plan.contains(expectSnippet));
+
+        sql = "select sum(distinct col_decimal64p13s0) from db1.decimal_table";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        expectSnippet = "aggregate: multi_distinct_sum[([3: col_decimal64p13s0, DECIMAL64(13,0), false]); " +
+                "args: DECIMAL64; result: DECIMAL128(38,0)";
+        Assert.assertTrue(plan.contains(expectSnippet));
+
+
+        sql = "select sum(distinct col_decimal128p20s3) from db1.decimal_table";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        expectSnippet = "multi_distinct_sum[([5: col_decimal128p20s3, DECIMAL128(20,3), true]); " +
+                "args: DECIMAL128; result: DECIMAL128(38,3)";
+        Assert.assertTrue(plan.contains(expectSnippet));
+
+        ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
+    }
+
+
+    @Test
+    public void testTwoPhaseSumDistinct() throws Exception {
+        int oldStage = ctx.getSessionVariable().getNewPlannerAggStage();
+        ctx.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select sum(distinct col_decimal32p9s2) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String expectPhase1Snippet = "multi_distinct_sum[([2: col_decimal32p9s2, DECIMAL32(9,2), false]); " +
+                "args: DECIMAL32; result: VARCHAR";
+        String expectPhase2Snippet = "multi_distinct_sum[([6: sum, VARCHAR, true]); " +
+                "args: DECIMAL32; result: DECIMAL128(38,2)";
+        Assert.assertTrue(plan.contains(expectPhase1Snippet) && plan.contains(expectPhase2Snippet));
+
+        sql = "select sum(distinct col_decimal64p13s0) from db1.decimal_table";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        expectPhase1Snippet = "multi_distinct_sum[([3: col_decimal64p13s0, DECIMAL64(13,0), false]); " +
+                "args: DECIMAL64; result: VARCHAR";
+        expectPhase2Snippet = "multi_distinct_sum[([6: sum, VARCHAR, true]); " +
+                "args: DECIMAL64; result: DECIMAL128(38,0)";
+        Assert.assertTrue(plan.contains(expectPhase1Snippet) && plan.contains(expectPhase2Snippet));
+
+
+        sql = "select sum(distinct col_decimal128p20s3) from db1.decimal_table";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        expectPhase1Snippet = "multi_distinct_sum[([5: col_decimal128p20s3, DECIMAL128(20,3), true]); " +
+                "args: DECIMAL128; result: VARCHAR";
+        expectPhase2Snippet = "multi_distinct_sum[([6: sum, VARCHAR, true]); " +
+                "args: DECIMAL128; result: DECIMAL128(38,3)";
+        Assert.assertTrue(plan.contains(expectPhase1Snippet) && plan.contains(expectPhase2Snippet));
+
+        ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
+    }
+
+    @Test
+    public void testSumDistinctWithRewriteMultiDistinctRuleTakeEffect() throws Exception {
+        int oldStage = ctx.getSessionVariable().getNewPlannerAggStage();
+        boolean oldCboCteReUse = ctx.getSessionVariable().isCboCteReuse();
+        ctx.getSessionVariable().setNewPlanerAggStage(2);
+        ctx.getSessionVariable().setCboCteReuse(false);
+        String sql = "select sum(distinct col_decimal32p9s2), sum(distinct col_decimal64p13s0), " +
+                "sum(distinct col_decimal128p20s3) from db1.decimal_table";
+        String expectPhase1Snippet = "multi_distinct_sum[([2: col_decimal32p9s2, DECIMAL32(9,2), false]); " +
+                "args: DECIMAL32; result: VARCHAR; args nullable: false; result nullable: true], " +
+                "multi_distinct_sum[([3: col_decimal64p13s0, DECIMAL64(13,0), false]); " +
+                "args: DECIMAL64; result: VARCHAR; args nullable: false; result nullable: true], " +
+                "multi_distinct_sum[([5: col_decimal128p20s3, DECIMAL128(20,3), true]); " +
+                "args: DECIMAL128; result: VARCHAR; args nullable: true; result nullable: true]";
+        String expectPhase2Snippet = "multi_distinct_sum[([6: sum, VARCHAR, true]); " +
+                "args: DECIMAL32; result: DECIMAL128(38,2); args nullable: true; result nullable: true], " +
+                "multi_distinct_sum[([7: sum, VARCHAR, true]); " +
+                "args: DECIMAL64; result: DECIMAL128(38,0); args nullable: true; result nullable: true], " +
+                "multi_distinct_sum[([8: sum, VARCHAR, true]); " +
+                "args: DECIMAL128; result: DECIMAL128(38,3); " +
+                "args nullable: true; result nullable: true]";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan.contains(expectPhase1Snippet) && plan.contains(expectPhase2Snippet));
+
+        ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
+        ctx.getSessionVariable().setCboCteReuse(oldCboCteReUse);
+    }
+
+    @Test
+    public void testSumDistinctWithRewriteMultiDistinctByCTERuleTakeEffect() throws Exception {
+        int oldStage = ctx.getSessionVariable().getNewPlannerAggStage();
+        boolean oldCboCteReUse = ctx.getSessionVariable().isCboCteReuse();
+        ctx.getSessionVariable().setNewPlanerAggStage(2);
+        ctx.getSessionVariable().setCboCteReuse(true);
+        String sql = "select sum(distinct col_decimal32p9s2), sum(distinct col_decimal64p13s0), " +
+                "sum(distinct col_decimal128p20s3) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String[] expectSnippets = {
+                "multi_distinct_sum[([9: col_decimal32p9s2, DECIMAL32(9,2), false]); args: DECIMAL32; result: VARCHAR",
+                "multi_distinct_sum[([10: col_decimal64p13s0, DECIMAL64(13,0), false]); args: DECIMAL64; result: VARCHAR",
+                "multi_distinct_sum[([11: col_decimal128p20s3, DECIMAL128(20,3), true]); args: DECIMAL128; result: VARCHAR",
+                "multi_distinct_sum[([6: sum, VARCHAR, true]); args: DECIMAL32; result: DECIMAL128(38,2)",
+                "multi_distinct_sum[([7: sum, VARCHAR, true]); args: DECIMAL64; result: DECIMAL128(38,0)",
+                "multi_distinct_sum[([8: sum, VARCHAR, true]); args: DECIMAL128; result: DECIMAL128(38,3)",
+        };
+        Assert.assertTrue(Arrays.asList(expectSnippets).stream().allMatch(s -> plan.contains(s)));
+        ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
+        ctx.getSessionVariable().setCboCteReuse(oldCboCteReUse);
+    }
+
+    @Test
+    public void testOnePhaseAvgDistinctDecimal() throws Exception {
+        int oldStage = ctx.getSessionVariable().getNewPlannerAggStage();
+        ctx.getSessionVariable().setNewPlanerAggStage(1);
+
+        String sql = "select avg(distinct col_decimal32p9s2) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String multiDistinctSumSnippet = "aggregate: multi_distinct_sum[([8: col_decimal32p9s2, DECIMAL32(9,2), false]); " +
+                "args: DECIMAL32; result: DECIMAL128(38,2)";
+        String multiDistinctCountSnippet = "multi_distinct_count[([10: col_decimal32p9s2, DECIMAL32(9,2), false]);" +
+                " args: DECIMAL32; result: BIGINT";
+        Assert.assertTrue(plan.contains(multiDistinctSumSnippet) && plan.contains(multiDistinctCountSnippet));
+
+        sql = "select avg(distinct col_decimal64p13s0) from db1.decimal_table";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        multiDistinctSumSnippet = "multi_distinct_sum[([8: col_decimal64p13s0, DECIMAL64(13,0), false]); " +
+                "args: DECIMAL64; result: DECIMAL128(38,0)";
+        multiDistinctCountSnippet = "multi_distinct_count[([10: col_decimal64p13s0, DECIMAL64(13,0), false]); " +
+                "args: DECIMAL64; result: BIGINT";
+        Assert.assertTrue(plan.contains(multiDistinctSumSnippet) && plan.contains(multiDistinctCountSnippet));
+
+        sql = "select avg(distinct col_decimal128p20s3) from db1.decimal_table";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        multiDistinctSumSnippet = "multi_distinct_sum[([8: col_decimal128p20s3, DECIMAL128(20,3), true]); " +
+                "args: DECIMAL128; result: DECIMAL128(38,3)";
+        multiDistinctCountSnippet = "multi_distinct_count[([10: col_decimal128p20s3, DECIMAL128(20,3), true]); " +
+                "args: DECIMAL128; result: BIGINT";
+        Assert.assertTrue(plan.contains(multiDistinctSumSnippet) && plan.contains(multiDistinctCountSnippet));
+
+        ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
+    }
+
+
+    @Test
+    public void testTwoPhaseAvgDistinct() throws Exception {
+        int oldStage = ctx.getSessionVariable().getNewPlannerAggStage();
+        ctx.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select avg(distinct col_decimal32p9s2) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String expectPhase1Snippet = "multi_distinct_sum[([8: col_decimal32p9s2, DECIMAL32(9,2), false]); " +
+                "args: DECIMAL32; result: VARCHAR";
+        String expectPhase2Snippet = "multi_distinct_sum[([7: sum, VARCHAR, true]); " +
+                "args: DECIMAL32; result: DECIMAL128(38,2)";
+        Assert.assertTrue(plan.contains(expectPhase1Snippet) && plan.contains(expectPhase2Snippet));
+
+        sql = "select avg(distinct col_decimal64p13s0) from db1.decimal_table";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        expectPhase1Snippet = "multi_distinct_sum[([8: col_decimal64p13s0, DECIMAL64(13,0), false]); " +
+                "args: DECIMAL64; result: VARCHAR";
+        expectPhase2Snippet = "multi_distinct_sum[([7: sum, VARCHAR, true]); " +
+                "args: DECIMAL64; result: DECIMAL128(38,0)";
+        Assert.assertTrue(plan.contains(expectPhase1Snippet) && plan.contains(expectPhase2Snippet));
+
+
+        sql = "select avg(distinct col_decimal128p20s3) from db1.decimal_table";
+        plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        expectPhase1Snippet = "multi_distinct_sum[([8: col_decimal128p20s3, DECIMAL128(20,3), true]); " +
+                "args: DECIMAL128; result: VARCHAR";
+        expectPhase2Snippet = "multi_distinct_sum[([7: sum, VARCHAR, true]); " +
+                "args: DECIMAL128; result: DECIMAL128(38,3)";
+        Assert.assertTrue(plan.contains(expectPhase1Snippet) && plan.contains(expectPhase2Snippet));
+        ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
+    }
+
+    @Test
+    public void testAvgDistinctWithRewriteMultiDistinctRuleTakeEffect() throws Exception {
+        int oldStage = ctx.getSessionVariable().getNewPlannerAggStage();
+        boolean oldCboCteReUse = ctx.getSessionVariable().isCboCteReuse();
+        ctx.getSessionVariable().setNewPlanerAggStage(2);
+        ctx.getSessionVariable().setCboCteReuse(false);
+        String sql = "select avg(distinct col_decimal32p9s2), avg(distinct col_decimal64p13s0), " +
+                "avg(distinct col_decimal128p20s3) from db1.decimal_table";
+        String expectPhase1Snippet = "aggregate: " +
+                "multi_distinct_count[([2: col_decimal32p9s2, DECIMAL32(9,2), false]); " +
+                "args: DECIMAL32; result: VARCHAR; args nullable: false; result nullable: false], " +
+                "multi_distinct_sum[([2: col_decimal32p9s2, DECIMAL32(9,2), false]); " +
+                "args: DECIMAL32; result: VARCHAR; args nullable: false; result nullable: true], " +
+                "multi_distinct_count[([3: col_decimal64p13s0, DECIMAL64(13,0), false]); " +
+                "args: DECIMAL64; result: VARCHAR; args nullable: false; result nullable: false], " +
+                "multi_distinct_sum[([3: col_decimal64p13s0, DECIMAL64(13,0), false]); " +
+                "args: DECIMAL64; result: VARCHAR; args nullable: false; result nullable: true], " +
+                "multi_distinct_count[([5: col_decimal128p20s3, DECIMAL128(20,3), true]); " +
+                "args: DECIMAL128; result: VARCHAR; args nullable: true; result nullable: false], " +
+                "multi_distinct_sum[([5: col_decimal128p20s3, DECIMAL128(20,3), true]); " +
+                "args: DECIMAL128; result: VARCHAR; args nullable: true; result nullable: true]";
+
+        String expectPhase2Snippet = "aggregate: " +
+                "multi_distinct_count[([9: multi_distinct_count, VARCHAR, false]); " +
+                "args: DECIMAL32; result: BIGINT; args nullable: true; result nullable: false], " +
+                "multi_distinct_sum[([10: multi_distinct_sum, VARCHAR, true]); " +
+                "args: DECIMAL32; result: DECIMAL128(38,2); args nullable: true; result nullable: true], " +
+                "multi_distinct_count[([11: multi_distinct_count, VARCHAR, false]); " +
+                "args: DECIMAL64; result: BIGINT; args nullable: true; result nullable: false], " +
+                "multi_distinct_sum[([12: multi_distinct_sum, VARCHAR, true]); " +
+                "args: DECIMAL64; result: DECIMAL128(38,0); args nullable: true; result nullable: true], " +
+                "multi_distinct_count[([13: multi_distinct_count, VARCHAR, false]); " +
+                "args: DECIMAL128; result: BIGINT; args nullable: true; result nullable: false], " +
+                "multi_distinct_sum[([14: multi_distinct_sum, VARCHAR, true]); " +
+                "args: DECIMAL128; result: DECIMAL128(38,3); args nullable: true; result nullable: true]";
+        String projectOutputColumns = "" +
+                "  |  6 <-> [10: multi_distinct_sum, DECIMAL128(38,2), true] / " +
+                "cast([9: multi_distinct_count, BIGINT, false] as DECIMAL128(38,0))\n" +
+                "  |  7 <-> [12: multi_distinct_sum, DECIMAL128(38,0), true] / " +
+                "cast([11: multi_distinct_count, BIGINT, false] as DECIMAL128(38,0))\n" +
+                "  |  8 <-> [14: multi_distinct_sum, DECIMAL128(38,3), true] / " +
+                "cast([13: multi_distinct_count, BIGINT, false] as DECIMAL128(38,0))";
+
+        String plan = removeSlotIds(UtFrameUtils.getVerboseFragmentPlan(ctx, sql));
+        expectPhase1Snippet = removeSlotIds(expectPhase1Snippet);
+        expectPhase2Snippet = removeSlotIds(expectPhase2Snippet);
+        projectOutputColumns = removeSlotIds(projectOutputColumns);
+        Assert.assertTrue(plan.contains(expectPhase1Snippet) &&
+                plan.contains(expectPhase2Snippet) &&
+                plan.contains(projectOutputColumns));
+
+        ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
+        ctx.getSessionVariable().setCboCteReuse(oldCboCteReUse);
+    }
+
+    @Test
+    public void testAvgDistinctWithRewriteMultiDistinctByCTERuleTakeEffect() throws Exception {
+        int oldStage = ctx.getSessionVariable().getNewPlannerAggStage();
+        boolean oldCboCteReUse = ctx.getSessionVariable().isCboCteReuse();
+        ctx.getSessionVariable().setNewPlanerAggStage(2);
+        ctx.getSessionVariable().setCboCteReuse(true);
+        String sql = "select avg(distinct col_decimal32p9s2), avg(distinct col_decimal64p13s0), " +
+                "avg(distinct col_decimal128p20s3) from db1.decimal_table";
+        String plan = removeSlotIds(UtFrameUtils.getVerboseFragmentPlan(ctx, sql));
+        String[] expectSnippets = {
+                "  |  6 <-> [9: sum, DECIMAL128(38,2), true] / " +
+                        "cast([11: count, BIGINT, false] as DECIMAL128(38,0))\n" +
+                        "  |  7 <-> [13: sum, DECIMAL128(38,0), true] / " +
+                        "cast([15: count, BIGINT, false] as DECIMAL128(38,0))\n" +
+                        "  |  8 <-> [17: sum, DECIMAL128(38,3), true] / " +
+                        "cast([19: count, BIGINT, false] as DECIMAL128(38,0))",
+                "multi_distinct_sum[([10: col_decimal32p9s2, DECIMAL32(9,2), false]); args: DECIMAL32; result: VARCHAR",
+                "multi_distinct_sum[([14: col_decimal64p13s0, DECIMAL64(13,0), false]); args: DECIMAL64; result: VARCHAR",
+                "multi_distinct_sum[([18: col_decimal128p20s3, DECIMAL128(20,3), true]); args: DECIMAL128; result: VARCHAR",
+                "multi_distinct_sum[([9: sum, VARCHAR, true]); args: DECIMAL32; result: DECIMAL128(38,2)",
+                "multi_distinct_sum[([13: sum, VARCHAR, true]); args: DECIMAL64; result: DECIMAL128(38,0)",
+                "multi_distinct_sum[([17: sum, VARCHAR, true]); args: DECIMAL128; result: DECIMAL128(38,3)",
+        };
+        Assert.assertTrue(Arrays.asList(expectSnippets).stream().allMatch(s -> plan.contains(removeSlotIds(s))));
+        ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
+        ctx.getSessionVariable().setCboCteReuse(oldCboCteReUse);
+    }
+
+    @Test
+    public void testAvgDistinctNonDecimalTypeWithRewriteMultiDistinctRuleTakeEffect() throws Exception {
+        int oldStage = ctx.getSessionVariable().getNewPlannerAggStage();
+        boolean oldCboCteReUse = ctx.getSessionVariable().isCboCteReuse();
+        ctx.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select avg(distinct key0) from db1.decimal_table";
+        String[] snippets = new String[]{
+                "cast([multi_distinct_sum, BIGINT, true] as DOUBLE) / " +
+                        "cast([multi_distinct_count, BIGINT, false] as DOUBLE)",
+                "multi_distinct_count[([multi_distinct_count, VARCHAR, false]); " +
+                        "args: INT; result: BIGINT; args nullable: true; result nullable: false]",
+                "multi_distinct_sum[([multi_distinct_sum, VARCHAR, true]); " +
+                        "args: INT; result: BIGINT; args nullable: true; result nullable: true]",
+                "multi_distinct_count[([key0, INT, false]); args: INT; result: VARCHAR; " +
+                        "args nullable: false; result nullable: false]",
+                "multi_distinct_sum[([key0, INT, false]); " +
+                        "args: INT; result: VARCHAR; args nullable: false; result nullable: true]",
+        };
+
+        ctx.getSessionVariable().setCboCteReuse(false);
+        String disableCtePlan = removeSlotIds(UtFrameUtils.getVerboseFragmentPlan(ctx, sql));
+        Assert.assertTrue(Arrays.asList(snippets).stream().anyMatch(s -> disableCtePlan.contains(s)));
+
+        ctx.getSessionVariable().setCboCteReuse(true);
+        String enableCtePlan = removeSlotIds(UtFrameUtils.getVerboseFragmentPlan(ctx, sql));
+        Assert.assertTrue(Arrays.asList(snippets).stream().anyMatch(s -> enableCtePlan.contains(s)));
+
+        ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
+        ctx.getSessionVariable().setCboCteReuse(oldCboCteReUse);
     }
 }
 

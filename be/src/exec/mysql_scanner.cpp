@@ -30,7 +30,7 @@
 namespace starrocks {
 
 MysqlScanner::MysqlScanner(const MysqlScannerParam& param)
-        : _my_param(param), _my_conn(nullptr), _my_result(nullptr), _is_open(false), _field_num(0) {}
+        : _my_param(param), _my_conn(nullptr), _my_result(nullptr), _opened(false), _field_num(0) {}
 
 MysqlScanner::~MysqlScanner() {
     if (_my_result) {
@@ -50,7 +50,7 @@ MysqlScanner::~MysqlScanner() {
 }
 
 Status MysqlScanner::open() {
-    if (_is_open) {
+    if (_opened) {
         LOG(INFO) << "this scanner already opened";
         return Status::OK();
     }
@@ -77,13 +77,13 @@ Status MysqlScanner::open() {
         return Status::InternalError("mysql set character set failed.");
     }
 
-    _is_open = true;
+    _opened = true;
 
     return Status::OK();
 }
 
 Status MysqlScanner::query(const std::string& query) {
-    if (!_is_open) {
+    if (!_opened) {
         return Status::InternalError("Query before open.");
     }
 
@@ -118,7 +118,7 @@ Status MysqlScanner::query(const std::string& table, const std::vector<std::stri
                            const std::vector<std::string>& filters,
                            const std::unordered_map<std::string, std::vector<std::string>>& filters_in,
                            std::unordered_map<std::string, bool>& filters_null_in_set, int64_t limit) {
-    if (!_is_open) {
+    if (!_opened) {
         return Status::InternalError("Query before open.");
     }
 
@@ -191,7 +191,7 @@ Status MysqlScanner::query(const std::string& table, const std::vector<std::stri
 }
 
 Status MysqlScanner::get_next_row(char*** buf, unsigned long** lengths, bool* eos) {
-    if (!_is_open) {
+    if (!_opened) {
         return Status::InternalError("GetNextRow before open.");
     }
 

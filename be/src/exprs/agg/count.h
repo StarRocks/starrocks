@@ -8,16 +8,27 @@
 
 namespace starrocks::vectorized {
 
-struct AggregateFunctionCountData {
+struct AggregateCountWindowFunctionState {
+    // The following field are only used in "update_state_removable_cumulatively"
+    bool is_frame_init = false;
+};
+
+template <bool IsWindowFunc>
+struct AggregateCountFunctionState
+        : public std::conditional_t<IsWindowFunc, AggregateCountWindowFunctionState, AggregateFunctionEmptyState> {
     int64_t count = 0;
 };
 
 // count not null column
-class CountAggregateFunction final
-        : public AggregateFunctionBatchHelper<AggregateFunctionCountData, CountAggregateFunction> {
+template <bool IsWindowFunc>
+class CountAggregateFunction final : public AggregateFunctionBatchHelper<AggregateCountFunctionState<IsWindowFunc>,
+                                                                         CountAggregateFunction<IsWindowFunc>> {
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         this->data(state).count = 0;
+        if constexpr (IsWindowFunc) {
+            this->data(state).is_frame_init = false;
+        }
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -33,13 +44,35 @@ public:
     void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                    int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                    int64_t frame_end) const override {
+        // For cases like: rows between 2 preceding and 1 preceding
+        // If frame_start ge frame_end, means the frame is empty,
+        // we could directly return.
+        if (frame_start >= frame_end) {
+            return;
+        }
         this->data(state).count += (frame_end - frame_start);
+    }
+
+    void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                             int64_t current_row_position, int64_t partition_start,
+                                             int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
+                                             bool ignore_subtraction, bool ignore_addition) const override {
+        if constexpr (IsWindowFunc) {
+            DCHECK(!ignore_subtraction);
+            DCHECK(!ignore_addition);
+            // We don't actually update in removable cumulative way, since the ordinary way is effecient enough
+            const auto frame_start =
+                    std::min(std::max(current_row_position + rows_start_offset, partition_start), partition_end);
+            const auto frame_end =
+                    std::max(std::min(current_row_position + rows_end_offset + 1, partition_end), partition_start);
+            this->data(state).count = (frame_end - frame_start);
+        }
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_numeric());
         const auto* input_column = down_cast<const Int64Column*>(column);
-        data(state).count += input_column->get_data()[row_num];
+        this->data(state).count += input_column->get_data()[row_num];
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
@@ -61,7 +94,7 @@ public:
         Int64Column* column = down_cast<Int64Column*>(to);
         Buffer<int64_t>& result_data = column->get_data();
         for (size_t i = 0; i < chunk_size; i++) {
-            result_data.emplace_back(data(agg_states[i] + state_offset).count);
+            result_data.emplace_back(this->data(agg_states[i] + state_offset).count);
         }
     }
 
@@ -80,11 +113,16 @@ public:
 };
 
 // count null_able column
+template <bool IsWindowFunc>
 class CountNullableAggregateFunction final
-        : public AggregateFunctionBatchHelper<AggregateFunctionCountData, CountNullableAggregateFunction> {
+        : public AggregateFunctionBatchHelper<AggregateCountFunctionState<IsWindowFunc>,
+                                              CountNullableAggregateFunction<IsWindowFunc>> {
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).count = 0;
+        if constexpr (IsWindowFunc) {
+            this->data(state).is_frame_init = false;
+        }
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -112,6 +150,12 @@ public:
     void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                    int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                    int64_t frame_end) const override {
+        // For cases like: rows between 2 preceding and 1 preceding
+        // If frame_start ge frame_end, means the frame is empty,
+        // we could directly return.
+        if (frame_start >= frame_end) {
+            return;
+        }
         if (columns[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(columns[0]);
             if (nullable_column->has_null()) {
@@ -127,10 +171,64 @@ public:
         }
     }
 
+    void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                             int64_t current_row_position, int64_t partition_start,
+                                             int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
+                                             bool ignore_subtraction, bool ignore_addition) const override {
+        if constexpr (IsWindowFunc) {
+            DCHECK(!ignore_subtraction);
+            DCHECK(!ignore_addition);
+            const auto frame_start =
+                    std::min(std::max(current_row_position + rows_start_offset, partition_start), partition_end);
+            const auto frame_end =
+                    std::max(std::min(current_row_position + rows_end_offset + 1, partition_end), partition_start);
+            const auto frame_size = frame_end - frame_start;
+            // For cases like: rows between 2 preceding and 1 preceding
+            // If frame_start ge frame_end, means the frame is empty,
+            // we could directly return.
+            if (frame_size <= 0) {
+                this->data(state).count = 0;
+                return;
+            }
+            if (columns[0]->is_nullable()) {
+                const auto* nullable_column = down_cast<const NullableColumn*>(columns[0]);
+                if (nullable_column->has_null()) {
+                    const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
+                    if (this->data(state).is_frame_init) {
+                        // Since frame has been evaluated, we only need to update the boundary
+                        const int64_t previous_frame_first_position = current_row_position - 1 + rows_start_offset;
+                        const int64_t current_frame_last_position = current_row_position + rows_end_offset;
+                        if (previous_frame_first_position >= partition_start &&
+                            previous_frame_first_position < partition_end &&
+                            null_data[previous_frame_first_position] == 0) {
+                            this->data(state).count--;
+                        }
+                        if (current_frame_last_position >= partition_start &&
+                            current_frame_last_position < partition_end &&
+                            null_data[current_frame_last_position] == 0) {
+                            this->data(state).count++;
+                        }
+                    } else {
+                        // Build the frame for the first time
+                        for (size_t i = frame_start; i < frame_end; ++i) {
+                            this->data(state).count += !null_data[i];
+                        }
+                        this->data(state).is_frame_init = true;
+                    }
+                    return;
+                }
+            }
+
+            // Has no null value
+            // We don't actually update in removable cumulative way, since the ordinary way is effecient enough
+            this->data(state).count = frame_size;
+        }
+    }
+
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_numeric());
         const auto* input_column = down_cast<const Int64Column*>(column);
-        data(state).count += input_column->get_data()[row_num];
+        this->data(state).count += input_column->get_data()[row_num];
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
@@ -152,7 +250,7 @@ public:
         Int64Column* column = down_cast<Int64Column*>(to);
         Buffer<int64_t>& result_data = column->get_data();
         for (size_t i = 0; i < chunk_size; i++) {
-            result_data.emplace_back(data(agg_states[i] + state_offset).count);
+            result_data.emplace_back(this->data(agg_states[i] + state_offset).count);
         }
     }
 
