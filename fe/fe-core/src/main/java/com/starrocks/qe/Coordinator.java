@@ -451,7 +451,7 @@ public class Coordinator {
     // 'Request' must contain at least a coordinator plan fragment (ie, can't
     // be for a query like 'SELECT 1').
     // A call to Exec() must precede all other member function calls.
-    public void exec() throws Exception {
+    public void prepareExec() throws Exception {
         if (LOG.isDebugEnabled()) {
             if (!scanNodes.isEmpty()) {
                 LOG.debug("debug: in Coordinator::exec. query id: {}, planNode: {}",
@@ -464,7 +464,6 @@ public class Coordinator {
             LOG.debug("debug: in Coordinator::exec. query id: {}, desc table: {}",
                     DebugUtil.printId(queryId), descTable);
         }
-
 
         // prepare information
         prepare();
@@ -485,7 +484,18 @@ public class Coordinator {
         computeBeInstanceNumbers();
 
         prepareProfile();
+    }
 
+    public Map<PlanFragmentId, FragmentExecParams> getFragmentExecParamsMap() {
+        return fragmentExecParamsMap;
+    }
+
+    public List<PlanFragment> getFragments() {
+        return fragments;
+    }
+
+    public void exec() throws Exception {
+        prepareExec();
         deliverExecFragments();
     }
 
@@ -663,7 +673,8 @@ public class Coordinator {
                     // This is a load process, and it is the first fragment.
                     // we should add all BackendExecState of this fragment to needCheckBackendExecStates,
                     // so that we can check these backends' state when joining this Coordinator
-                    boolean needCheckBackendState = queryOptions.getQuery_type() == TQueryType.LOAD && profileFragmentId == 0;
+                    boolean needCheckBackendState =
+                            queryOptions.getQuery_type() == TQueryType.LOAD && profileFragmentId == 0;
 
                     for (TExecPlanFragmentParams tParam : tParams) {
                         // TODO: pool of pre-formatted BackendExecStates?
@@ -739,18 +750,19 @@ public class Coordinator {
      * - Each group should be delivered sequentially, and fragments in a group can be delivered concurrently.
      * <p>
      * For example, the following tree will produce four groups: [[1], [2, 3, 4], [5, 6], [7]]
-     * 1
-     * │
-     * ┌────┼────┐
-     * │    │    │
-     * 2    3    4
-     * ┌──┴─┐  │    │
-     * │    │  │    │
-     * 5    6  │    │
-     * │  │    │
-     * └──┼────┘
-     * │
-     * 7
+     * -     *         1
+     * -     *         │
+     * -     *    ┌────┼────┐
+     * -     *    │    │    │
+     * -     *    2    3    4
+     * -     *    │    │    │
+     * -     * ┌──┴─┐  │    │
+     * -     * │    │  │    │
+     * -     * 5    6  │    │
+     * -     *      │  │    │
+     * -     *      └──┼────┘
+     * -     *         │
+     * -     *         7
      *
      * @return multiple fragment groups.
      */
@@ -1056,6 +1068,7 @@ public class Coordinator {
 
         Map<Integer, List<TRuntimeFilterProberParams>> broadcastGRFProbersMap = Maps.newHashMap();
         List<RuntimeFilterDescription> broadcastGRFList = Lists.newArrayList();
+        Map<Integer, List<TRuntimeFilterProberParams>> idToProbePrams = new HashMap<>();
 
         for (PlanFragment fragment : fragments) {
             fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
@@ -1073,7 +1086,7 @@ public class Coordinator {
                 if (usePipeline && kv.getValue().isBroadcastJoin() && kv.getValue().isHasRemoteTargets()) {
                     broadcastGRFProbersMap.put(kv.getKey(), probeParamList);
                 } else {
-                    topParams.runtimeFilterParams.putToId_to_prober_params(kv.getKey(), probeParamList);
+                    idToProbePrams.computeIfAbsent(kv.getKey(), k -> new ArrayList<>()).addAll(probeParamList);
                 }
             }
 
@@ -1101,6 +1114,7 @@ public class Coordinator {
             }
             fragment.setRuntimeFilterMergeNodeAddresses(fragment.getPlanRoot(), mergeHost);
         }
+        topParams.runtimeFilterParams.setId_to_prober_params(idToProbePrams);
 
         broadcastGRFList.forEach(rf -> rf.setBroadcastGRFDestinations(
                 mergeGRFProbers(broadcastGRFProbersMap.get(rf.getFilterId()))));
