@@ -19,7 +19,6 @@ struct ColumnReaderOptions {
     RandomAccessFile* file = nullptr;
     SharedBufferedInputStream* sb_stream = nullptr;
     tparquet::RowGroup* row_group_meta = nullptr;
-    bool use_sb_stream = true;
 };
 
 class ColumnReader {

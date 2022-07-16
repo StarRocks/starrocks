@@ -10,13 +10,12 @@ namespace starrocks::lake {
 
 template <>
 StatusOr<TabletMetadataPtr> MetadataIterator<TabletMetadataPtr>::get_metadata_from_tablet_manager(
-        const std::string& group, const std::string& path) {
-    return _manager->get_tablet_metadata(group, path);
+        const std::string& path) {
+    return _manager->get_tablet_metadata(path, false);
 }
 
 template <>
-StatusOr<TxnLogPtr> MetadataIterator<TxnLogPtr>::get_metadata_from_tablet_manager(const std::string& group,
-                                                                                  const std::string& path) {
-    return _manager->get_txn_log(group, path);
+StatusOr<TxnLogPtr> MetadataIterator<TxnLogPtr>::get_metadata_from_tablet_manager(const std::string& path) {
+    return _manager->get_txn_log(path, false);
 }
 } // namespace starrocks::lake

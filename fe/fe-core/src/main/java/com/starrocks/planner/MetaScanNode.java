@@ -10,7 +10,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.lake.LakeTablet;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Backend;
@@ -55,7 +55,6 @@ public class MetaScanNode extends ScanNode {
 
             long visibleVersion = partition.getVisibleVersion();
             String visibleVersionStr = String.valueOf(visibleVersion);
-            boolean useStarOS = partition.isUseStarOS();
 
             for (Tablet tablet : tablets) {
                 long tabletId = tablet.getId();
@@ -76,7 +75,7 @@ public class MetaScanNode extends ScanNode {
                     LOG.error("no queryable replica found in tablet {}. visible version {}",
                             tabletId, visibleVersion);
                     if (LOG.isDebugEnabled()) {
-                        if (useStarOS) {
+                        if (olapTable.isLakeTable()) {
                             LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId,
                                     ((LakeTablet) tablet).getShardId(),
                                     tablet.getBackendIds());

@@ -119,7 +119,7 @@ public class SystemInfoServiceTest {
                 minTimes = 0;
                 result = be;
 
-                globalStateMgr.getCluster(anyString);
+                globalStateMgr.getCluster();
                 minTimes = 0;
                 result = new Cluster("cluster", 1);
             }
@@ -151,7 +151,7 @@ public class SystemInfoServiceTest {
                 minTimes = 0;
                 result = be;
 
-                globalStateMgr.getCluster(anyString);
+                globalStateMgr.getCluster();
                 minTimes = 0;
                 result = new Cluster("cluster", 1);
             }

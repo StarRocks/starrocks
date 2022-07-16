@@ -62,7 +62,7 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         ASSIGN_OR_RETURN(auto morsel_queue, convert_scan_range_to_morsel_queue(
                                                     global_scan_ranges, node_id, pipeline_dop,
                                                     enable_tablet_internal_parallel, global_scan_ranges.size()));
-        int scan_dop = std::min<int>(std::max<int>(1, morsel_queue->num_morsels()), pipeline_dop);
+        int scan_dop = std::min<int>(std::max<int>(1, morsel_queue->max_degree_of_parallelism()), pipeline_dop);
         return std::make_unique<pipeline::SharedMorselQueueFactory>(std::move(morsel_queue), scan_dop);
     } else {
         size_t num_total_scan_ranges = 0;

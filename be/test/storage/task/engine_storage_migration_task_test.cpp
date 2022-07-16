@@ -120,8 +120,8 @@ public:
 
     static void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer, const TabletSchema& tablet_schema) {
         std::vector<std::string> test_data;
-        auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
-        auto chunk = vectorized::ChunkHelper::new_chunk(schema, 1024);
+        auto schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema);
+        auto chunk = ChunkHelper::new_chunk(schema, 1024);
         for (size_t i = 0; i < 1024; ++i) {
             test_data.push_back("well" + std::to_string(i));
             auto& cols = chunk->columns();
@@ -229,13 +229,11 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
     vectorized::DeltaWriterOptions writer_options;
     writer_options.tablet_id = 12345;
     writer_options.schema_hash = 1111;
-    writer_options.write_type = vectorized::LOAD;
     writer_options.txn_id = 2222;
     writer_options.partition_id = 10;
     writer_options.load_id.set_hi(1000);
     writer_options.load_id.set_lo(2222);
     TupleDescriptor* tuple_desc = _create_tuple_desc();
-    writer_options.tuple_desc = tuple_desc;
     writer_options.slots = &tuple_desc->slots();
 
     {
@@ -257,7 +255,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
         ASSERT_TRUE(new_tablet_uid.hi == old_tablet_uid.hi && new_tablet_uid.lo == old_tablet_uid.lo);
         // prepare chunk
         std::vector<std::string> test_data;
-        auto chunk = vectorized::ChunkHelper::new_chunk(tuple_desc->slots(), 1024);
+        auto chunk = ChunkHelper::new_chunk(tuple_desc->slots(), 1024);
         std::vector<uint32_t> indexes;
         indexes.reserve(1024);
         for (size_t i = 0; i < 1024; ++i) {

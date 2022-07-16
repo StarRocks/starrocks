@@ -528,7 +528,11 @@ public class ExpressionTest extends PlanTestBase {
     public void testCastDecimalZero() throws Exception {
         String sql = "select (CASE WHEN CAST(t0.v1 AS BOOLEAN ) THEN 0.00 END) BETWEEN (0.07) AND (0.04) from t0;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  |  <slot 7> : CAST(6: if AS DECIMAL32(2,2))\n"));
+        Assert.assertTrue(plan.contains("  1:Project\n" +
+                "  |  <slot 4> : (6: if >= 0.07) AND (6: if <= 0.04)\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 5> : CAST(1: v1 AS BOOLEAN)\n" +
+                "  |  <slot 6> : if(5: cast, 0.00, NULL)"));
     }
 
     @Test
@@ -1005,14 +1009,14 @@ public class ExpressionTest extends PlanTestBase {
     @Test
     public void testTimestampadd() throws Exception {
         String sql = "select timestampadd(YEAR,1,'2022-04-02 13:21:03')";
-        String plan =  getFragmentPlan(sql);
+        String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("<slot 2> : '2023-04-02 13:21:03'"));
     }
 
     @Test
     public void testDaysSub() throws Exception {
         String sql = "select days_sub('2010-11-30 23:59:59', 0)";
-        String plan =  getFragmentPlan(sql);
+        String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("<slot 2> : '2010-11-30 23:59:59'"));
     }
 

@@ -12,7 +12,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.RangeUtils;
@@ -92,6 +91,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         // partition id which in BasePartitionInfo can be used to check partition is changed
         private Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap;
 
+        @SerializedName(value = "defineStartTime")
+        private boolean defineStartTime;
+
         @SerializedName(value = "starTime")
         private long startTime;
 
@@ -103,6 +105,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         public AsyncRefreshContext() {
             this.baseTableVisibleVersionMap = Maps.newHashMap();
+            this.defineStartTime = false;
             this.startTime = Utils.getLongFromDateTime(LocalDateTime.now());
             this.step = 0;
             this.timeUnit = null;
@@ -118,6 +121,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         Map<String, BasePartitionInfo> getPartitionVisibleVersionMapForTable(long tableId) {
             return baseTableVisibleVersionMap.get(tableId);
+        }
+
+        public boolean isDefineStartTime() {
+            return defineStartTime;
+        }
+
+        public void setDefineStartTime(boolean defineStartTime) {
+            this.defineStartTime = defineStartTime;
         }
 
         public long getStartTime() {
@@ -254,6 +265,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.viewDefineSql = viewDefineSql;
     }
 
+    public Set<String> getTableMvPartitionNameRefMap(String tablePartitionName) {
+        return tableMvPartitionNameRefMap.computeIfAbsent(tablePartitionName, k -> Sets.newHashSet());
+    }
+
+    public Set<String> getMvTablePartitionNameRefMap(String mvPartitionName) {
+        return mvTablePartitionNameRefMap.computeIfAbsent(mvPartitionName, k -> Sets.newHashSet());
+    }
+
     public Set<Long> getBaseTableIds() {
         return baseTableIds;
     }
@@ -311,6 +330,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return basePartitionInfoMap.keySet().stream()
                 .filter(partitionName -> !partitionNames.contains(partitionName))
                 .collect(Collectors.toSet());
+    }
+
+    public Set<String> getSyncedPartitionNames(long baseTableId) {
+        return this.getRefreshScheme().getAsyncRefreshContext()
+                .getBaseTableVisibleVersionMap()
+                .computeIfAbsent(baseTableId, k -> Maps.newHashMap())
+                .keySet();
     }
 
     public boolean needRefreshPartition(long baseTableId, Partition baseTablePartition) {
@@ -447,9 +473,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             Map<Long, Range<PartitionKey>> baseTableIdToRange = baseRangePartitionInfo.getIdToRange(false);
             for (Map.Entry<Long, Range<PartitionKey>> idRangeEntry : baseTableIdToRange.entrySet()) {
                 Partition baseTablePartition = baseTable.getPartition(idRangeEntry.getKey());
-                try {
-                    RangeUtils.checkRangeIntersect(idRangeEntry.getValue(), mvPartitionKeyRange);
-                } catch (DdlException e) {
+                if (RangeUtils.isRangeIntersect(idRangeEntry.getValue(), mvPartitionKeyRange)) {
                     this.addPartitionNameRef(baseTablePartition.getName(), mvPartition.getName());
                 }
             }
@@ -477,5 +501,17 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         String json = Text.readString(in);
         MaterializedView mv = GsonUtils.GSON.fromJson(json, MaterializedView.class);
         return mv;
+    }
+
+    /**
+     * Refresh the materialized view if the following conditions are met:
+     * 1. Refresh type of materialized view is ASYNC
+     * 2. timeunit and step not set for AsyncRefreshContext
+     * @return
+     */
+    public boolean isLoadTriggeredRefresh() {
+        AsyncRefreshContext asyncRefreshContext = this.refreshScheme.asyncRefreshContext;
+        return this.refreshScheme.getType() == MaterializedView.RefreshType.ASYNC &&
+                asyncRefreshContext.step == 0 &&  null == asyncRefreshContext.timeUnit;
     }
 }

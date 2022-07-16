@@ -45,13 +45,12 @@ class Rowset;
 using RowsetSharedPtr = std::shared_ptr<Rowset>;
 class RowsetFactory;
 class RowsetReader;
+class RowsetReadOptions;
 class TabletSchema;
 class KVStore;
 
 namespace vectorized {
-class RowsetReadOptions;
 class Schema;
-
 class ChunkIterator;
 using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 } // namespace vectorized
@@ -148,12 +147,12 @@ public:
     void set_schema(const TabletSchema* schema) { _schema = schema; }
 
     StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
-                                                        const vectorized::RowsetReadOptions& options);
+                                                        const RowsetReadOptions& options);
 
     // For each segment in this rowset, create a `ChunkIterator` for it and *APPEND* it into
     // |segment_iterators|. If segments in this rowset has no overlapping, a single `UnionIterator`,
     // instead of multiple `ChunkIterator`s, will be created and appended into |segment_iterators|.
-    Status get_segment_iterators(const vectorized::Schema& schema, const vectorized::RowsetReadOptions& options,
+    Status get_segment_iterators(const vectorized::Schema& schema, const RowsetReadOptions& options,
                                  std::vector<vectorized::ChunkIteratorPtr>* seg_iterators);
 
     // estimate the number of compaction segment iterator
@@ -255,8 +254,6 @@ public:
     static std::string segment_file_path(const std::string& segment_dir, const RowsetId& rowset_id, int segment_id);
     static std::string segment_temp_file_path(const std::string& dir, const RowsetId& rowset_id, int segment_id);
     static std::string segment_del_file_path(const std::string& segment_dir, const RowsetId& rowset_id, int segment_id);
-    static std::string segment_srcrssid_file_path(const std::string& segment_dir, const RowsetId& rowset_id,
-                                                  int segment_id);
 
     // return whether `path` is one of the files in this rowset
     bool check_path(const std::string& path);

@@ -247,6 +247,8 @@ public class BDBEnvironmentTest {
             expectDbNames.add(DB_INDEX_ARR[i]);
         }
         Assert.assertEquals(expectDbNames, masterEnvironment.getDatabaseNames());
+        Thread.sleep(1000);
+        // follower read
         for (BDBEnvironment followerEnvironment: followerEnvironments) {
             Assert.assertEquals(expectDbNames, followerEnvironment.getDatabaseNames());
         }

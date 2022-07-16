@@ -146,7 +146,7 @@ public class BatchRollupJobTest {
             Assert.assertEquals(OlapTableState.ROLLUP, tbl.getState());
             // cancel rest of rollup jobs
             stmtStr = "cancel alter table rollup from db1.tbl2 (" + Joiner.on(",").join(jobIds) + ")";
-            CancelAlterTableStmt cancelStmt = (CancelAlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(stmtStr, ctx);
+            CancelAlterTableStmt cancelStmt = (CancelAlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
             GlobalStateMgr.getCurrentState().cancelAlter(cancelStmt);
 
             Assert.assertEquals(OlapTableState.NORMAL, tbl.getState());

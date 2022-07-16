@@ -38,6 +38,7 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.Map;
 
+@Deprecated
 public class DppConfig implements Writable {
     // necessary hadoop job config keys
     private static final String FS_DEFAULT_NAME = "fs.default.name";

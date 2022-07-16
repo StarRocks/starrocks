@@ -646,7 +646,6 @@ public class ScalarOperatorFunctions {
         if (!Config.enable_decimal_v3) {
             type = ScalarType.DECIMALV2;
         } else {
-            result = result.stripTrailingZeros();
             int precision = DecimalLiteral.getRealPrecision(result);
             int scale = DecimalLiteral.getRealScale(result);
             type = ScalarType.createDecimalV3NarrowestType(precision, scale);

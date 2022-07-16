@@ -4,6 +4,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.AstVisitor;
 import org.apache.parquet.Strings;
 
 // clause which is used to swap table
@@ -26,6 +27,16 @@ public class SwapTableClause extends AlterTableClause {
         if (Strings.isNullOrEmpty(tblName)) {
             throw new AnalysisException("No table specified");
         }
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitSwapTableClause(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
     @Override

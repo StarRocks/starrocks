@@ -22,16 +22,16 @@ namespace pipeline {
 
 class OlapScanContext;
 using OlapScanContextPtr = std::shared_ptr<OlapScanContext>;
+class OlapScanContextFactory;
+using OlapScanContextFactoryPtr = std::shared_ptr<OlapScanContextFactory>;
 
 using namespace vectorized;
 
 class OlapScanContext final : public ContextWithDependency {
 public:
-    explicit OlapScanContext(vectorized::OlapScanNode* scan_node, int32_t dop, bool shared_scan)
-            : _scan_node(scan_node),
-              _chunk_buffer(shared_scan ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect, dop),
-              _shared_scan(shared_scan),
-              _scan_dop(dop) {}
+    explicit OlapScanContext(vectorized::OlapScanNode* scan_node, int32_t dop, bool shared_scan,
+                             BalancedChunkBuffer& chunk_buffer)
+            : _scan_node(scan_node), _chunk_buffer(chunk_buffer), _shared_scan(shared_scan), _scan_dop(dop) {}
 
     Status prepare(RuntimeState* state);
     void close(RuntimeState* state) override;
@@ -56,9 +56,6 @@ public:
     bool has_active_input() const;
     BalancedChunkBuffer& get_shared_buffer();
 
-    void update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows);
-    size_t avg_row_bytes() const { return _avg_row_bytes; }
-
 private:
     vectorized::OlapScanNode* _scan_node;
 
@@ -75,17 +72,36 @@ private:
     using ActiveInputSet = phmap::parallel_flat_hash_set<
             ActiveInputKey, typename phmap::Hash<ActiveInputKey>, typename phmap::EqualTo<ActiveInputKey>,
             typename std::allocator<ActiveInputKey>, NUM_LOCK_SHARD_LOG, std::mutex, true>;
-    BalancedChunkBuffer _chunk_buffer; // Shared Chunk buffer for all scan operator
-    ActiveInputSet _active_inputs;     // Maintain the active chunksource
-    bool _shared_scan;                 // Enable shared_scan
-    int32_t _scan_dop;                 // DOP of scan operator
+    BalancedChunkBuffer& _chunk_buffer; // Shared Chunk buffer for all scan operators, owned by OlapScanContextFactory.
+    ActiveInputSet _active_inputs;      // Maintain the active chunksource
+    bool _shared_scan;                  // Enable shared_scan
+    int32_t _scan_dop;                  // DOP of scan operator
 
     std::atomic<bool> _is_prepare_finished{false};
+};
 
-    std::mutex _mutex;
-    size_t _sum_row_bytes = 0;
-    size_t _num_rows = 0;
-    size_t _avg_row_bytes = 0;
+// OlapScanContextFactory creates different contexts for each scan operator, if _shared_scan is false.
+// Otherwise, it outputs the same context for each scan operator.
+class OlapScanContextFactory {
+public:
+    OlapScanContextFactory(vectorized::OlapScanNode* const scan_node, int32_t dop, bool shared_scan,
+                           ChunkBufferLimiterPtr chunk_buffer_limiter)
+            : _scan_node(scan_node),
+              _dop(dop),
+              _shared_scan(shared_scan),
+              _chunk_buffer(shared_scan ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect, dop,
+                            std::move(chunk_buffer_limiter)),
+              _contexts(shared_scan ? 1 : dop) {}
+
+    OlapScanContextPtr get_or_create(int32_t driver_sequence);
+
+private:
+    vectorized::OlapScanNode* const _scan_node;
+    const int32_t _dop;
+    const bool _shared_scan;           // Whether the scan operators share one morsel and chunk buffer.
+    BalancedChunkBuffer _chunk_buffer; // Shared Chunk buffer for all the scan operators.
+
+    std::vector<OlapScanContextPtr> _contexts;
 };
 
 } // namespace pipeline

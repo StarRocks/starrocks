@@ -8,6 +8,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
 public class MetaUtils {
@@ -37,6 +38,18 @@ public class MetaUtils {
             throw new SemanticException("Database %s is not find", tableName.getDb());
         }
         return db;
+    }
+
+    public static Table getTable(TableName tableName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
+        if (db == null) {
+            throw new SemanticException("Database %s is not find", tableName.getDb());
+        }
+        Table table = db.getTable(tableName.getTbl());
+        if (table == null) {
+            throw new SemanticException("Unknown table '%s", tableName.getTbl());
+        }
+        return table;
     }
 
     public static Table getTable(ConnectContext session, TableName tableName) {
