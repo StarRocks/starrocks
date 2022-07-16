@@ -122,7 +122,7 @@ statement
 
     // proc
     | showProcStatement                                                                     #showProc
-    
+
     // Backup Store Satement
     | restoreStatement                                                                      #restore
     ;
@@ -762,7 +762,7 @@ showProcedureStatement
 showProcStatement
     : SHOW PROC path=string
     ;
-    
+
 // ---------------------------------------- Backup Store Statement -----------------------------------------------------
 restoreStatement
     : RESTORE SNAPSHOT qualifiedName
@@ -1199,8 +1199,8 @@ nonReserved
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
-    | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE
-    | STRING | STATS | SUBMIT | SYNC
+    | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE | STRING
+    | STATS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER
