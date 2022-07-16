@@ -118,7 +118,6 @@ statement
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
 
     // procedure
-    | showProcedureStatment                                                                 #showProcedure
     | showProcedureStatement                                                                #showProcedure
 
     // proc
