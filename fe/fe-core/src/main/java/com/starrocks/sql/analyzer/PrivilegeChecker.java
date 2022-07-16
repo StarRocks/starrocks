@@ -44,6 +44,8 @@ import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
+import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -317,6 +319,15 @@ public class PrivilegeChecker {
                         ConnectContext.get().getQualifiedUser(),
                         ConnectContext.get().getRemoteIP(),
                         statement.getTableName());
+            }
+            return null;
+        }
+
+        public Void visitTruncateTableStatement(TruncateTableStmt statement, ConnectContext session) {
+            TableRef tblRef = statement.getTblRef();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), tblRef.getName().getDb(),
+                    tblRef.getName().getTbl(), PrivPredicate.LOAD)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "LOAD");
             }
             return null;
         }
