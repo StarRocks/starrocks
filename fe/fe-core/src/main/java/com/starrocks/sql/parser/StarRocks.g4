@@ -121,7 +121,7 @@ statement
     | showProcedureStatement                                                                #showProcedure
 
     //  Backup Store Satement
-    | createRepositoryStatement                                                             #createRepository
+    | createRepositoryStatement                                                              #createRepository
 
     // proc
     | showProcStatement                                                                     #showProc
