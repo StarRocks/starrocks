@@ -69,9 +69,9 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SetStmt;
-import com.starrocks.analysis.ShowBackupStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowBackupStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
@@ -378,10 +378,6 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitDropHistogramStatement(DropHistogramStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitShowBackupStmt(ShowBackupStmt statement, C context) {
         return visitStatement(statement, context);
     }
     

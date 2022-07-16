@@ -28,8 +28,8 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SetStmt;
-import com.starrocks.analysis.ShowBackupStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
+import com.starrocks.analysis.ShowBackupStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
@@ -368,11 +368,6 @@ public class Analyzer {
         public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext session) {
             AnalyzeStmtAnalyzer.analyze(statement, session);
             return null;
-        }
-
-        @Override
-        public Void visitShowBackupStmt(ShowBackupStmt statement, ConnectContext context) {
-            ShowBackupAnalyzer.analyze(statement, context);
         }
         
         public Void visitShowAnalyzeJobStatement(ShowAnalyzeJobStmt statement, ConnectContext session) {
