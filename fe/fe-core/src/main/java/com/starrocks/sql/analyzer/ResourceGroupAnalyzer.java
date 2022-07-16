@@ -10,8 +10,8 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.WorkGroup;
-import com.starrocks.catalog.WorkGroupClassifier;
+import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BackendCoreStat;
@@ -25,16 +25,16 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class WorkGroupAnalyzer {
+public class ResourceGroupAnalyzer {
     // Classifier format
     // 1. user = foobar
     // 2. role = operator
     // 3. query_type in ('select', 'insert')
     // 4. source_ip = "192.168.1.1/24"
     // 5. databases = "db1,db2,db3"
-    public static WorkGroupClassifier convertPredicateToClassifier(List<Predicate> predicates)
+    public static ResourceGroupClassifier convertPredicateToClassifier(List<Predicate> predicates)
             throws SemanticException {
-        WorkGroupClassifier classifier = new WorkGroupClassifier();
+        ResourceGroupClassifier classifier = new ResourceGroupClassifier();
         for (Predicate pred : predicates) {
             if (pred instanceof BinaryPredicate &&
                     ((BinaryPredicate) pred).getOp().equals(BinaryPredicate.Operator.EQ)) {
@@ -46,28 +46,28 @@ public class WorkGroupAnalyzer {
                 }
                 String key = ((SlotRef) lhs).getColumnName();
                 String value = ((StringLiteral) rhs).getValue();
-                if (key.equalsIgnoreCase(WorkGroup.USER)) {
-                    if (!WorkGroupClassifier.UseRolePattern.matcher(value).matches()) {
+                if (key.equalsIgnoreCase(ResourceGroup.USER)) {
+                    if (!ResourceGroupClassifier.UseRolePattern.matcher(value).matches()) {
                         throw new SemanticException(
-                                String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.USER,
+                                String.format("Illegal classifier specifier '%s': '%s'", ResourceGroup.USER,
                                         eqPred.toSql()));
                     }
                     classifier.setUser(value);
-                } else if (key.equalsIgnoreCase(WorkGroup.ROLE)) {
-                    if (!WorkGroupClassifier.UseRolePattern.matcher(value).matches()) {
+                } else if (key.equalsIgnoreCase(ResourceGroup.ROLE)) {
+                    if (!ResourceGroupClassifier.UseRolePattern.matcher(value).matches()) {
                         throw new SemanticException(
-                                String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.ROLE,
+                                String.format("Illegal classifier specifier '%s': '%s'", ResourceGroup.ROLE,
                                         eqPred.toSql()));
                     }
                     classifier.setRole(value);
-                } else if (key.equalsIgnoreCase(WorkGroup.SOURCE_IP)) {
+                } else if (key.equalsIgnoreCase(ResourceGroup.SOURCE_IP)) {
                     SubnetUtils.SubnetInfo subnetInfo = new SubnetUtils(value).getInfo();
                     classifier.setSourceIp(subnetInfo.getCidrSignature());
-                } else if (key.equalsIgnoreCase(WorkGroup.DATABASES)) {
+                } else if (key.equalsIgnoreCase(ResourceGroup.DATABASES)) {
                     List<String> databases = Splitter.on(",").splitToList(value);
                     if (CollectionUtils.isEmpty(databases)) {
                         throw new SemanticException(
-                                String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.DATABASES, eqPred));
+                                String.format("Illegal classifier specifier '%s': '%s'", ResourceGroup.DATABASES, eqPred));
                     }
 
                     List<Long> databaseIds = new ArrayList<>();
@@ -92,19 +92,19 @@ public class WorkGroupAnalyzer {
                             String.format("Illegal classifier specifier: '%s'", inPred.toSql()));
                 }
                 String key = ((SlotRef) lhs).getColumnName();
-                if (!key.equalsIgnoreCase(WorkGroup.QUERY_TYPE)) {
+                if (!key.equalsIgnoreCase(ResourceGroup.QUERY_TYPE)) {
                     throw new SemanticException(String.format("Unsupported classifier specifier: '%s'", key));
                 }
 
                 Set<String> values = rhs.stream().map(e -> ((StringLiteral) e).getValue()).collect(Collectors.toSet());
                 for (String queryType : values) {
-                    if (!WorkGroupClassifier.SUPPORTED_QUERY_TYPES.contains(queryType.toUpperCase())) {
+                    if (!ResourceGroupClassifier.SUPPORTED_QUERY_TYPES.contains(queryType.toUpperCase())) {
                         throw new SemanticException(
-                                String.format("Unsupported %s: '%s'", WorkGroup.QUERY_TYPE, queryType));
+                                String.format("Unsupported %s: '%s'", ResourceGroup.QUERY_TYPE, queryType));
                     }
                 }
                 classifier.setQueryTypes(values.stream()
-                        .map(String::toUpperCase).map(WorkGroupClassifier.QueryType::valueOf)
+                        .map(String::toUpperCase).map(ResourceGroupClassifier.QueryType::valueOf)
                         .collect(Collectors.toSet()));
             } else {
                 throw new SemanticException(String.format("Illegal classifier specifier: '%s'", pred.toSql()));
@@ -123,20 +123,20 @@ public class WorkGroupAnalyzer {
 
     // Property format:
     // ('cpu_core_limit'='n', 'mem_limit'='m%', 'concurrency_limit'='n', 'type'='normal|default|realtime')
-    public static void analyzeProperties(WorkGroup workgroup, Map<String, String> properties) throws SemanticException {
+    public static void analyzeProperties(ResourceGroup resourceGroup, Map<String, String> properties) throws SemanticException {
         for (Map.Entry<String, String> e : properties.entrySet()) {
             String key = e.getKey();
             String value = e.getValue();
-            if (key.equalsIgnoreCase(WorkGroup.CPU_CORE_LIMIT)) {
+            if (key.equalsIgnoreCase(ResourceGroup.CPU_CORE_LIMIT)) {
                 int cpuCoreLimit = Integer.parseInt(value);
                 int avgCoreNum = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
                 if (cpuCoreLimit <= 0 || cpuCoreLimit > avgCoreNum) {
                     throw new SemanticException(String.format("cpu_core_limit should range from 1 to %d", avgCoreNum));
                 }
-                workgroup.setCpuCoreLimit(Integer.parseInt(value));
+                resourceGroup.setCpuCoreLimit(Integer.parseInt(value));
                 continue;
             }
-            if (key.equalsIgnoreCase(WorkGroup.MEM_LIMIT)) {
+            if (key.equalsIgnoreCase(ResourceGroup.MEM_LIMIT)) {
                 double memLimit;
                 if (value.endsWith("%")) {
                     value = value.substring(0, value.length() - 1);
@@ -147,49 +147,49 @@ public class WorkGroupAnalyzer {
                 if (memLimit <= 0.0 || memLimit >= 1.0) {
                     throw new SemanticException("mem_limit should range from 0.00(exclude) to 1.00(exclude)");
                 }
-                workgroup.setMemLimit(memLimit);
+                resourceGroup.setMemLimit(memLimit);
                 continue;
             }
 
-            if (key.equalsIgnoreCase(WorkGroup.BIG_QUERY_MEM_LIMIT)) {
+            if (key.equalsIgnoreCase(ResourceGroup.BIG_QUERY_MEM_LIMIT)) {
                 long bigQueryMemLimit = Long.parseLong(value);
                 if (bigQueryMemLimit < 0) {
                     throw new SemanticException("big_query_mem_limit should greater than 0 or equal to 0");
                 }
-                workgroup.setBigQueryMemLimit(bigQueryMemLimit);
+                resourceGroup.setBigQueryMemLimit(bigQueryMemLimit);
                 continue;
             }
 
-            if (key.equalsIgnoreCase(WorkGroup.BIG_QUERY_SCAN_ROWS_LIMIT)) {
+            if (key.equalsIgnoreCase(ResourceGroup.BIG_QUERY_SCAN_ROWS_LIMIT)) {
                 long bigQueryScanRowsLimit = Long.parseLong(value);
                 if (bigQueryScanRowsLimit < 0) {
                     throw new SemanticException("big_query_scan_rows_limit should greater than 0 or equal to 0");
                 }
-                workgroup.setBigQueryScanRowsLimit(bigQueryScanRowsLimit);
+                resourceGroup.setBigQueryScanRowsLimit(bigQueryScanRowsLimit);
                 continue;
             }
 
-            if (key.equalsIgnoreCase(WorkGroup.BIG_QUERY_CPU_SECOND_LIMIT)) {
+            if (key.equalsIgnoreCase(ResourceGroup.BIG_QUERY_CPU_SECOND_LIMIT)) {
                 long bigQueryCpuCoreSecondLimit = Long.parseLong(value);
                 if (bigQueryCpuCoreSecondLimit < 0) {
                     throw new SemanticException("big_query_cpu_second_limit should greater than 0 or equal to 0");
                 }
-                workgroup.setBigQueryCpuSecondLimit(bigQueryCpuCoreSecondLimit);
+                resourceGroup.setBigQueryCpuSecondLimit(bigQueryCpuCoreSecondLimit);
                 continue;
             }
 
-            if (key.equalsIgnoreCase(WorkGroup.CONCURRENCY_LIMIT)) {
+            if (key.equalsIgnoreCase(ResourceGroup.CONCURRENCY_LIMIT)) {
                 int concurrencyLimit = Integer.parseInt(value);
                 if (concurrencyLimit < 0) {
                     throw new SemanticException("concurrency_limit should be greater than 0");
                 }
-                workgroup.setConcurrencyLimit(concurrencyLimit);
+                resourceGroup.setConcurrencyLimit(concurrencyLimit);
                 continue;
             }
-            if (key.equalsIgnoreCase(WorkGroup.WORKGROUP_TYPE)) {
+            if (key.equalsIgnoreCase(ResourceGroup.GROUP_TYPE)) {
                 try {
-                    workgroup.setWorkGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
-                    if (workgroup.getWorkGroupType() != TWorkGroupType.WG_NORMAL) {
+                    resourceGroup.setResourceGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
+                    if (resourceGroup.getResourceGroupType() != TWorkGroupType.WG_NORMAL) {
                         throw new SemanticException("Only support 'normal' type");
                     }
                 } catch (Exception ignored) {
