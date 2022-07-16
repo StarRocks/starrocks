@@ -117,9 +117,6 @@ statement
     | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
 
-    // procedure
-    | showProcedureStatment                                                                 #showProcedure
-
     // proc
     | showProcStatement                                                                     #showProc
     
