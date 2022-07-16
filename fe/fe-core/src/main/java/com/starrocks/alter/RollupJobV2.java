@@ -481,6 +481,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 } // end for tablets
             } // end for partitions
 
+            // colocate mv
+            tbl.addTableToColocateGroupIfSet(dbId, rollupIndexName);
             onFinished(tbl);
         } finally {
             db.writeUnlock();
@@ -514,6 +516,12 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
      */
     @Override
     protected boolean cancelImpl(String errMsg) {
+        //colocate mv
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        OlapTable table = (OlapTable) db.getTable(tableId);
+        db.writeLock();
+        table.removeMaterializedViewWhenJobCanceled(rollupIndexName);
+        db.writeUnlock();
         if (jobState.isFinalState()) {
             return false;
         }

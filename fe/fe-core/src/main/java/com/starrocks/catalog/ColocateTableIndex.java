@@ -50,6 +50,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -155,6 +156,7 @@ public class ColocateTableIndex implements Writable {
         try {
             GroupId groupId = null;
             String fullGroupName = dbId + "_" + groupName;
+
             if (groupName2Id.containsKey(fullGroupName)) {
                 groupId = groupName2Id.get(fullGroupName);
             } else {
@@ -488,6 +490,7 @@ public class ColocateTableIndex implements Writable {
     public void clear() {
         writeLock();
         try {
+            groupName2Id.clear();
             group2Tables.clear();
             table2Group.clear();
             group2BackendsPerBucketSeq.clear();
@@ -796,7 +799,6 @@ public class ColocateTableIndex implements Writable {
             }
             // change group after getting backends sequence(if has), in case 'getArbitraryTabletBucketsSeq' failed
             groupId = changeGroup(db.getId(), table, oldGroup, colocateGroup, assignedGroupId);
-
             if (groupSchema == null) {
                 Preconditions.checkNotNull(backendsPerBucketSeq);
                 addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
@@ -805,6 +807,7 @@ public class ColocateTableIndex implements Writable {
             // set this group as unstable
             markGroupUnstable(groupId, false /* edit log is along with modify table log */);
             table.setColocateGroup(colocateGroup);
+            table.setInColocateMvGroup(false);
         } else {
             // unset colocation group
             if (Strings.isNullOrEmpty(oldGroup)) {
@@ -812,12 +815,24 @@ public class ColocateTableIndex implements Writable {
                 return;
             }
 
-            // when replayModifyTableColocate, we need the groupId info
-            String fullGroupName = db.getId() + "_" + oldGroup;
-            groupId = getGroupSchema(fullGroupName).getGroupId();
+            // there is not any colocate mv related to the table
+            // just remove the table from colocat group
+            if (table.getColocateMaterializedViewNames().isEmpty()) {
+                // when replayModifyTableColocate, we need the groupId info
+                String fullGroupName = db.getId() + "_" + oldGroup;
+                groupId = getGroupSchema(fullGroupName).getGroupId();
+                removeTable(table.getId());
+                table.setColocateGroup(null);
+                table.setInColocateMvGroup(false);
+            } else {
+                // change the table's group from oldGroup to a new colocat group
+                // which is named by dbName + ":" + mvName
+                String groupName = db.getFullName() + ":" + table.getColocateMaterializedViewNames().stream().findAny().get();
+                groupId = changeGroup(db.getId(), table, oldGroup, groupName, assignedGroupId);
+                table.setColocateGroup(groupName);
+                table.setInColocateMvGroup(true);
+            }
 
-            removeTable(table.getId());
-            table.setColocateGroup(null);
         }
 
         if (!isReplay) {
