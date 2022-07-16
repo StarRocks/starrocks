@@ -18,7 +18,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-public class WorkGroup implements Writable {
+public class ResourceGroup implements Writable {
+    public static final String GROUP_TYPE = "type";
     public static final String USER = "user";
     public static final String ROLE = "role";
     public static final String QUERY_TYPE = "query_type";
@@ -30,8 +31,7 @@ public class WorkGroup implements Writable {
     public static final String BIG_QUERY_SCAN_ROWS_LIMIT = "big_query_scan_rows_limit";
     public static final String BIG_QUERY_CPU_SECOND_LIMIT = "big_query_cpu_second_limit";
     public static final String CONCURRENCY_LIMIT = "concurrency_limit";
-    public static final String WORKGROUP_TYPE = "type";
-    public static final String DEFAULT_WORKGROUP_NAME = "default_wg";
+    public static final String DEFAULT_RESOURCE_GROUP_NAME = "default_wg";
 
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -45,10 +45,9 @@ public class WorkGroup implements Writable {
                     .addColumn(new Column("concurrency_limit", ScalarType.createVarchar(200)))
                     .addColumn(new Column("type", ScalarType.createVarchar(200)))
                     .addColumn(new Column("classifiers", ScalarType.createVarchar(1024)))
-                   .build();
-
+                    .build();
     @SerializedName(value = "classifiers")
-    List<WorkGroupClassifier> classifiers;
+    List<ResourceGroupClassifier> classifiers;
     @SerializedName(value = "name")
     private String name;
     @SerializedName(value = "id")
@@ -66,19 +65,19 @@ public class WorkGroup implements Writable {
     @SerializedName(value = "concurrencyLimit")
     private Integer concurrencyLimit;
     @SerializedName(value = "workGroupType")
-    private TWorkGroupType workGroupType;
+    private TWorkGroupType resourceGroupType;
     @SerializedName(value = "version")
     private long version;
 
-    public WorkGroup() {
+    public ResourceGroup() {
     }
 
-    public static WorkGroup read(DataInput in) throws IOException {
+    public static ResourceGroup read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, WorkGroup.class);
+        return GsonUtils.GSON.fromJson(json, ResourceGroup.class);
     }
 
-    private List<String> showClassifier(WorkGroupClassifier classifier) {
+    private List<String> showClassifier(ResourceGroupClassifier classifier) {
         List<String> row = new ArrayList<>();
         row.add(this.name);
         row.add("" + this.id);
@@ -100,7 +99,7 @@ public class WorkGroup implements Writable {
             row.add("" + 0);
         }
         row.add("" + concurrencyLimit);
-        row.add("" + workGroupType.name().substring("WG_".length()));
+        row.add("" + resourceGroupType.name().substring("WG_".length()));
         row.add(classifier.toString());
         return row;
     }
@@ -169,8 +168,8 @@ public class WorkGroup implements Writable {
         if (concurrencyLimit != null) {
             twg.setConcurrency_limit(concurrencyLimit);
         }
-        if (workGroupType != null) {
-            twg.setWorkgroup_type(workGroupType);
+        if (resourceGroupType != null) {
+            twg.setWorkgroup_type(resourceGroupType);
         }
         twg.setVersion(version);
         return twg;
@@ -224,19 +223,19 @@ public class WorkGroup implements Writable {
         this.concurrencyLimit = concurrencyLimit;
     }
 
-    public TWorkGroupType getWorkGroupType() {
-        return workGroupType;
+    public TWorkGroupType getResourceGroupType() {
+        return resourceGroupType;
     }
 
-    public void setWorkGroupType(TWorkGroupType workGroupType) {
-        this.workGroupType = workGroupType;
+    public void setResourceGroupType(TWorkGroupType workGroupType) {
+        this.resourceGroupType = workGroupType;
     }
 
-    public List<WorkGroupClassifier> getClassifiers() {
+    public List<ResourceGroupClassifier> getClassifiers() {
         return classifiers;
     }
 
-    public void setClassifiers(List<WorkGroupClassifier> classifiers) {
+    public void setClassifiers(List<ResourceGroupClassifier> classifiers) {
         this.classifiers = classifiers;
     }
 
@@ -248,8 +247,8 @@ public class WorkGroup implements Writable {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        WorkGroup workGroup = (WorkGroup) o;
-        return id == workGroup.id && version == workGroup.version;
+        ResourceGroup resourceGroup = (ResourceGroup) o;
+        return id == resourceGroup.id && version == resourceGroup.version;
     }
 
     @Override

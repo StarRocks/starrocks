@@ -58,14 +58,14 @@ public class QueryDetail implements Serializable {
     private String errorMessage;
     private String explain;
     private String profile;
-    private String workGroupName;
+    private String resourceGroupName;
 
     public QueryDetail() {
     }
 
     public QueryDetail(String queryId, boolean isQuery, int connId, String remoteIP,
                        long startTime, long endTime, long latency, QueryMemState state,
-                       String database, String sql, String user, String workGroupName) {
+                       String database, String sql, String user, String resourceGroupName) {
         this.queryId = queryId;
         this.isQuery = isQuery;
         this.connId = connId;
@@ -220,11 +220,11 @@ public class QueryDetail implements Serializable {
         this.profile = profile;
     }
 
-    public String getWorkGroupName() {
-        return workGroupName;
+    public String getResourceGroupName() {
+        return resourceGroupName;
     }
 
-    public void setWorkGroupName(String workGroupName) {
-        this.workGroupName = workGroupName;
+    public void setResourceGroupName(String workGroupName) {
+        this.resourceGroupName = workGroupName;
     }
 }
