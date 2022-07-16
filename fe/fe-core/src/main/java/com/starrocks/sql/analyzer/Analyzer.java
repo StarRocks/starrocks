@@ -30,7 +30,6 @@ import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowRestoreStmt;
-import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;

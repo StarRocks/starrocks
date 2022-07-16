@@ -81,7 +81,6 @@ import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowRestoreStmt;
-import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -400,22 +399,6 @@ public abstract class AstVisitor<R, C> {
     
     public R visitShowRestoreStmt(ShowRestoreStmt statement, C context) {
         return visitStatement(statement, context);
-    }
-
-    public R visitShowAnalyzeJobStatement(ShowAnalyzeJobStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    public R visitShowAnalyzeStatusStatement(ShowAnalyzeStatusStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    public R visitShowBasicStatsMetaStatement(ShowBasicStatsMetaStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    public R visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, C context) {
-        return visitShowStatement(statement, context);
     }
 
     // ----------------- Catalog Clause -------------
