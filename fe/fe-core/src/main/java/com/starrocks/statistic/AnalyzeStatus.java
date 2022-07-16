@@ -3,14 +3,24 @@
 package com.starrocks.statistic;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
+import jersey.repackaged.com.google.common.collect.Lists;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -28,16 +38,16 @@ public class AnalyzeStatus implements Writable {
     private List<String> columns;
 
     @SerializedName("type")
-    private Constants.AnalyzeType type;
+    private StatsConstants.AnalyzeType type;
 
     @SerializedName("scheduleType")
-    private Constants.ScheduleType scheduleType;
+    private StatsConstants.ScheduleType scheduleType;
 
     @SerializedName("properties")
     private Map<String, String> properties;
 
     @SerializedName("status")
-    private Constants.ScheduleStatus status;
+    private StatsConstants.ScheduleStatus status;
 
     @SerializedName("startTime")
     private LocalDateTime startTime;
@@ -49,8 +59,8 @@ public class AnalyzeStatus implements Writable {
     private String reason;
 
     public AnalyzeStatus(long id, long dbId, long tableId, List<String> columns,
-                         Constants.AnalyzeType type,
-                         Constants.ScheduleType scheduleType,
+                         StatsConstants.AnalyzeType type,
+                         StatsConstants.ScheduleType scheduleType,
                          Map<String, String> properties,
                          LocalDateTime startTime) {
         this.id = id;
@@ -79,11 +89,11 @@ public class AnalyzeStatus implements Writable {
         return columns;
     }
 
-    public Constants.AnalyzeType getType() {
+    public StatsConstants.AnalyzeType getType() {
         return type;
     }
 
-    public Constants.ScheduleType getScheduleType() {
+    public StatsConstants.ScheduleType getScheduleType() {
         return scheduleType;
     }
 
@@ -103,11 +113,11 @@ public class AnalyzeStatus implements Writable {
         this.endTime = endTime;
     }
 
-    public void setStatus(Constants.ScheduleStatus status) {
+    public void setStatus(StatsConstants.ScheduleStatus status) {
         this.status = status;
     }
 
-    public Constants.ScheduleStatus getStatus() {
+    public StatsConstants.ScheduleStatus getStatus() {
         return status;
     }
 
@@ -117,6 +127,54 @@ public class AnalyzeStatus implements Writable {
 
     public void setReason(String reason) {
         this.reason = reason;
+    }
+
+    private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
+            .addColumn(new Column("Table", ScalarType.createVarchar(20)))
+            .addColumn(new Column("Op", ScalarType.createVarchar(20)))
+            .addColumn(new Column("Msg_type", ScalarType.createVarchar(20)))
+            .addColumn(new Column("Msg_text", ScalarType.createVarchar(200)))
+            .build();
+
+    public ShowResultSet toShowResult() {
+        String dbName;
+        if (dbId == StatsConstants.DEFAULT_ALL_ID) {
+            dbName = "*";
+        } else {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            dbName = ClusterNamespace.getNameFromFullName(db.getFullName());
+        }
+        String tableName;
+        if (tableId == StatsConstants.DEFAULT_ALL_ID) {
+            tableName = "*";
+        } else {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            Table table = db.getTable(tableId);
+            tableName = table.getName();
+        }
+
+        String op = "unknown";
+        if (type.equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
+            op = "histogram";
+        } else if (type.equals(StatsConstants.AnalyzeType.FULL)) {
+            op = "analyze";
+        } else if (type.equals(StatsConstants.AnalyzeType.SAMPLE)) {
+            op = "sample";
+        }
+
+        String msgType;
+        String msgText;
+        if (status.equals(StatsConstants.ScheduleStatus.FINISH)) {
+            msgType = "status";
+            msgText = "OK";
+        } else {
+            msgType = "error";
+            msgText = reason;
+        }
+
+        List<List<String>> rows = new ArrayList<>();
+        rows.add(Lists.newArrayList(dbName + "." + tableName, op, msgType, msgText));
+        return new ShowResultSet(META_DATA, rows);
     }
 
     @Override

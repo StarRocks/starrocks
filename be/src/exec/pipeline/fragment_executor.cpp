@@ -297,10 +297,36 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         ASSIGN_OR_RETURN(auto morsel_queue_factory, scan_node->convert_scan_range_to_morsel_queue_factory(
                                                             scan_ranges, scan_ranges_per_driver_seq, scan_node->id(),
                                                             dop, enable_tablet_internal_parallel));
-        morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
 
         if (auto* olap_scan = dynamic_cast<vectorized::OlapScanNode*>(scan_node)) {
-            olap_scan->enable_shared_scan(enable_shared_scan);
+            olap_scan->enable_shared_scan(enable_shared_scan && morsel_queue_factory->is_shared());
+        }
+
+        morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
+    }
+
+    int64_t logical_scan_limit = 0;
+    int64_t physical_scan_limit = 0;
+    for (auto& i : scan_nodes) {
+        auto* scan_node = down_cast<ScanNode*>(i);
+        if (scan_node->limit() > 0) {
+            // the upper bound of records we actually will scan is `limit * dop * io_parallelism`.
+            // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
+            // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
+            logical_scan_limit += scan_node->limit();
+            physical_scan_limit += scan_node->limit() * dop * scan_node->io_tasks_per_scan_operator();
+        } else {
+            // Not sure how many rows will be scan.
+            logical_scan_limit = -1;
+            break;
+        }
+    }
+
+    if (_wg && _wg->big_query_scan_rows_limit() > 0) {
+        if (logical_scan_limit >= 0 && logical_scan_limit <= _wg->big_query_scan_rows_limit()) {
+            _query_ctx->set_scan_limit(physical_scan_limit);
+        } else {
+            _query_ctx->set_scan_limit(_wg->big_query_scan_rows_limit());
         }
     }
 
@@ -354,9 +380,11 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
             DCHECK(morsel_queue_factories.count(source_id));
             auto& morsel_queue_factory = morsel_queue_factories[source_id];
-            // DOP of OlapScanPrepareOperator is always 1.
+            // DOP of OlapScanPrepareOperator is 1 (shared scan)
+            // or equal to DOP of OlapScanOperator (morsel_queue_factory->size()).
             DCHECK(cur_pipeline_dop == 1 || cur_pipeline_dop == morsel_queue_factory->size());
 
+            pipeline->source_operator_factory()->set_morsel_queue_factory(morsel_queue_factory.get());
             for (size_t i = 0; i < cur_pipeline_dop; ++i) {
                 auto&& operators = pipeline->create_operators(cur_pipeline_dop, i);
                 DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx,
@@ -368,7 +396,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
                         scan_operator->set_workgroup(_wg);
                     } else {
                         if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
-                            scan_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());
+                            scan_operator->set_io_threads(exec_env->pipeline_connector_scan_io_thread_pool());
                         } else {
                             scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
                         }

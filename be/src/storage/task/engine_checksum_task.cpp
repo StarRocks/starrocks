@@ -81,7 +81,7 @@ Status EngineChecksumTask::_compute_checksum() {
         return_columns.push_back(i);
     }
 
-    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, return_columns);
+    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, return_columns);
 
     vectorized::TabletReader reader(tablet, Version(0, _version), schema);
 
@@ -104,7 +104,7 @@ Status EngineChecksumTask::_compute_checksum() {
 
     int64_t checksum = 0;
 
-    auto chunk = vectorized::ChunkHelper::new_chunk(schema, reader_params.chunk_size);
+    auto chunk = ChunkHelper::new_chunk(schema, reader_params.chunk_size);
     st = reader.get_next(chunk.get());
 
     bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();

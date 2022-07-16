@@ -8,6 +8,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.Util;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
@@ -68,6 +69,20 @@ public class TaskRunManager {
         GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(status);
         arrangeTaskRun(taskRun, option.isMergeRedundant());
         return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED);
+    }
+
+
+    public boolean killTaskRun(Long taskId) {
+        TaskRun taskRun = runningTaskRunMap.get(taskId);
+        if (taskRun == null) {
+            return false;
+        }
+        ConnectContext runCtx = taskRun.getRunCtx();
+        if (runCtx != null) {
+            runCtx.kill(false);
+            return true;
+        }
+        return false;
     }
 
     // At present, only the manual and automatic tasks of the materialized view have different priorities.

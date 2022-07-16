@@ -91,7 +91,7 @@ public:
     ~SharedBufferedInputStream() override = default;
 
     Status set_io_ranges(const std::vector<IORange>& ranges);
-    Status remove_io_range(const IORange& range);
+    void release_to_offset(int64_t offset);
 
     Status get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes) override;
     void release();

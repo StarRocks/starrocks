@@ -191,6 +191,8 @@ private:
      */
     bool hasBadBloomFilters();
 
+    void buildIORanges(std::vector<InputStream::IORange>* io_ranges);
+
 public:
     /**
     * Constructor that lets the user specify additional options.

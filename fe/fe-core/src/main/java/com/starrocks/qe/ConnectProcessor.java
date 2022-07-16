@@ -111,11 +111,11 @@ public class ConnectProcessor {
             LOG.warn("Failed to execute command `Change user`.");
             return;
         }
-        handleResetConnnection();
+        handleResetConnection();
     }
 
     // COM_RESET_CONNECTION: reset current connection session variables
-    private void handleResetConnnection() throws IOException {
+    private void handleResetConnection() throws IOException {
         resetConnectionSession();
         ctx.getState().setOk();
     }
@@ -226,7 +226,7 @@ public class ConnectProcessor {
         }
         queryDetail.setEndTime(endTime);
         queryDetail.setLatency(elapseMs);
-        queryDetail.setWorkGroupName(ctx.getWorkGroup() != null ? ctx.getWorkGroup().getName() : "");
+        queryDetail.setResourceGroupName(ctx.getResourceGroup() != null ? ctx.getResourceGroup().getName() : "");
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
     }
 
@@ -381,7 +381,7 @@ public class ConnectProcessor {
         }
         ctx.setCommand(command);
         ctx.setStartTime();
-        ctx.setWorkGroup(null);
+        ctx.setResourceGroup(null);
         ctx.setErrorCode("");
 
         switch (command) {
@@ -402,7 +402,7 @@ public class ConnectProcessor {
                 handleChangeUser();
                 break;
             case COM_RESET_CONNECTION:
-                handleResetConnnection();
+                handleResetConnection();
                 break;
             case COM_PING:
                 handlePing();

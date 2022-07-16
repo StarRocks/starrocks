@@ -384,9 +384,6 @@ void RowReaderImpl::loadStripeIndex() {
 
     // obtain row indexes for selected columns
     uint64_t offset = currentStripeInfo.offset();
-    uint64_t rowIndexSize = currentStripeInfo.indexlength();
-    contents->stream->prepareCache(InputStream::PrepareCacheScope::READ_ROW_GROUP_INDEX, offset, rowIndexSize);
-
     for (int i = 0; i < currentStripeFooter.streams_size(); ++i) {
         const proto::Stream& pbStream = currentStripeFooter.streams(i);
         uint64_t colId = pbStream.column();
@@ -936,10 +933,24 @@ uint64_t ReaderImpl::getMemoryUse(int stripeIx, std::vector<bool>& selectedColum
     return memory + decompressorMemory;
 }
 
+void RowReaderImpl::buildIORanges(std::vector<InputStream::IORange>* io_ranges) {
+    // column streams: index & data
+    uint64_t offset = currentStripeInfo.offset();
+    for (const proto::Stream& stream : currentStripeFooter.streams()) {
+        uint32_t columnId = stream.column();
+        uint64_t length = stream.length();
+        if (selectedColumns[columnId] || lazyLoadColumns[columnId]) {
+            io_ranges->emplace_back(InputStream::IORange{.offset = offset, .size = length});
+        }
+        offset += length;
+    }
+}
+
 void RowReaderImpl::startNextStripe() {
     reader.reset(); // ColumnReaders use lots of memory; free old memory first
     rowIndexes.clear();
     bloomFilterIndex.clear();
+    bool streamIORangesEnabled = contents->stream->isIORangesEnabled();
 
     while (currentStripe < lastStripe) {
         currentStripeInfo = footer->stripes(static_cast<int>(currentStripe));
@@ -966,8 +977,16 @@ void RowReaderImpl::startNextStripe() {
 
         contents->stream->prepareCache(InputStream::PrepareCacheScope::READ_FULL_STRIPE, currentStripeInfo.offset(),
                                        stripeSize);
+        if (streamIORangesEnabled) {
+            contents->stream->clearIORanges();
+        }
         currentStripeFooter = getStripeFooter(currentStripeInfo, *contents);
         rowsInCurrentStripe = currentStripeInfo.numberofrows();
+        if (streamIORangesEnabled) {
+            std::vector<InputStream::IORange> io_ranges;
+            buildIORanges(&io_ranges);
+            contents->stream->setIORanges(io_ranges);
+        }
 
         if (sargsApplier) {
             // read row group statistics and bloom filters of current stripe
@@ -1414,5 +1433,13 @@ uint64_t InputStream::getNaturalReadSizeAfterSeek() const {
 }
 
 void InputStream::prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length) {}
+
+bool InputStream::isIORangesEnabled() const {
+    return false;
+}
+
+void InputStream::clearIORanges() {}
+
+void InputStream::setIORanges(std::vector<InputStream::IORange>& io_ranges) {}
 
 } // namespace orc

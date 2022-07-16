@@ -254,6 +254,11 @@ DecimalV2Value& DecimalV2Value::operator+=(const DecimalV2Value& other) {
     return *this;
 }
 
+DecimalV2Value& DecimalV2Value::operator-=(const DecimalV2Value& other) {
+    *this = *this - other;
+    return *this;
+}
+
 int DecimalV2Value::parse_from_str(const char* decimal_str, int32_t length) {
     int32_t error = E_DEC_OK;
     StringParser::ParseResult result = StringParser::PARSE_SUCCESS;

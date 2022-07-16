@@ -16,25 +16,25 @@ class TabletManager;
 template <typename T>
 class MetadataIterator {
 public:
-    explicit MetadataIterator(TabletManager* manager, std::string group, std::vector<std::string> vec)
-            : _manager(manager), _group(std::move(group)), _vec(std::move(vec)), _pos(0){};
+    explicit MetadataIterator(TabletManager* manager, std::vector<std::string> files)
+            : _manager(manager), _files(std::move(files)), _iter(_files.begin()){};
 
-    bool has_next() { return _pos < _vec.size(); }
+    bool has_next() const { return _iter != _files.end(); }
 
     StatusOr<T> next() {
-        if (_pos < _vec.size()) {
-            return get_metadata_from_tablet_manager(_group, _vec[_pos++]);
+        if (has_next()) {
+            return get_metadata_from_tablet_manager(*_iter++);
         } else {
-            return Status::RuntimeError(fmt::format("Out of range pos {} size {}", _pos, _vec.size()));
+            return Status::RuntimeError("no more element");
         }
     }
 
 private:
-    StatusOr<T> get_metadata_from_tablet_manager(const std::string& group, const std::string& path);
+    StatusOr<T> get_metadata_from_tablet_manager(const std::string& path);
 
     TabletManager* _manager;
-    std::string _group;
-    std::vector<std::string> _vec;
-    int _pos;
+    std::vector<std::string> _files;
+    std::vector<std::string>::iterator _iter;
 };
+
 } // namespace starrocks::lake

@@ -28,10 +28,10 @@ import com.starrocks.analysis.AlterDatabaseQuotaStmt.QuotaType;
 import com.starrocks.analysis.SetOperationStmt.Qualifier;
 import com.starrocks.analysis.SetOperationStmt.Operation;
 import com.starrocks.analysis.SetOperationStmt.SetOperand;
-import com.starrocks.analysis.CreateWorkGroupStmt;
-import com.starrocks.analysis.AlterWorkGroupStmt;
-import com.starrocks.analysis.DropWorkGroupStmt;
-import com.starrocks.analysis.ShowWorkGroupStmt;
+import com.starrocks.sql.ast.CreateResourceGroupStmt;
+import com.starrocks.sql.ast.AlterResourceGroupStmt;
+import com.starrocks.sql.ast.DropResourceGroupStmt;
+import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
@@ -774,19 +774,19 @@ alter_stmt ::=
 alter_resource_group_stmt ::=
     KW_ALTER KW_RESOURCE KW_GROUP ident:name KW_ADD classifier_list:list
     {:
-        RESULT = new AlterWorkGroupStmt(name, new AlterWorkGroupStmt.AddClassifiers(list));
+        RESULT = new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.AddClassifiers(list));
     :}
     |KW_ALTER KW_RESOURCE KW_GROUP ident:name KW_DROP LPAREN integer_list:list RPAREN
     {:
-        RESULT = new AlterWorkGroupStmt(name, new AlterWorkGroupStmt.DropClassifiers(list));
+        RESULT = new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.DropClassifiers(list));
     :}
     |KW_ALTER KW_RESOURCE KW_GROUP ident:name KW_DROP KW_ALL
     {:
-        RESULT = new AlterWorkGroupStmt(name, new AlterWorkGroupStmt.DropAllClassifiers());
+        RESULT = new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.DropAllClassifiers());
     :}
     |KW_ALTER KW_RESOURCE KW_GROUP ident:name KW_WITH LPAREN key_value_map:properties RPAREN
     {:
-        RESULT = new AlterWorkGroupStmt(name, new AlterWorkGroupStmt.AlterProperties(properties));
+        RESULT = new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.AlterProperties(properties));
     :}
     ;
 
@@ -941,10 +941,6 @@ alter_table_clause ::=
     {:
         RESULT = new ReorderColumnsClause(cols, rollup, properties);
     :}
-    | KW_SET LPAREN key_value_map:properties RPAREN
-    {:
-        RESULT = new ModifyTablePropertiesClause(properties);
-    :}
     | KW_ADD opt_tmp:isTempPartition single_range_partition_desc:desc opt_distribution:distribution opt_properties:properties
     {:
         RESULT = new AddPartitionClause(desc, distribution, properties, isTempPartition);
@@ -974,14 +970,6 @@ alter_table_clause ::=
     | KW_REPLACE opt_partition_names:partitions KW_WITH opt_partition_names:tempPartitions opt_properties:properties
     {:
         RESULT = new ReplacePartitionClause(partitions, tempPartitions, properties);
-    :}
-    | KW_SWAP KW_WITH ident:tblName
-    {:
-        RESULT = new SwapTableClause(tblName);
-    :}
-    | KW_RENAME ident:newTableName
-    {:
-        RESULT = new TableRenameClause(newTableName);
     :}
     | KW_RENAME KW_ROLLUP ident:rollupName ident:newRollupName
     {:
@@ -1094,10 +1082,6 @@ create_stmt ::=
         RESULT = new CreateFunctionStmt(functionType, functionName, args, returnType, intermediateType, properties);
     :}
     /* Table */
-    | KW_CREATE externalable_table:isExternal opt_if_not_exists:ifNotExists table_name:name KW_LIKE table_name:existed_name
-    {:
-        RESULT = new CreateTableLikeStmt(ifNotExists, name, existed_name);
-    :}
     | KW_CREATE externalable_table:isExternal opt_if_not_exists:ifNotExists table_name:name
             LPAREN column_definition_list:columns RPAREN opt_engine:engineName opt_charset_name:charsetName
             opt_keys:keys
@@ -1181,7 +1165,7 @@ create_stmt ::=
       KW_TO classifier_list:classifiers
       KW_WITH LPAREN key_value_map:properties RPAREN
     {:
-        RESULT = new CreateWorkGroupStmt(name, if_not_exists, or_replace, classifiers, properties);
+        RESULT = new CreateResourceGroupStmt(name, if_not_exists, or_replace, classifiers, properties);
     :}
     ;
 
@@ -1729,7 +1713,7 @@ drop_stmt ::=
     :}
     | KW_DROP KW_RESOURCE KW_GROUP ident:name
     {:
-        RESULT = new DropWorkGroupStmt(name);
+        RESULT = new DropResourceGroupStmt(name);
     :}
     ;
 
@@ -1742,10 +1726,6 @@ recover_stmt ::=
     | KW_RECOVER KW_SCHEMA ident:dbName
     {:
         RESULT = new RecoverDbStmt(dbName);
-    :}
-    | KW_RECOVER KW_TABLE table_name:dbTblName
-    {:
-        RESULT = new RecoverTableStmt(dbTblName);
     :}
     | KW_RECOVER KW_PARTITION ident:partitionName KW_FROM table_name:dbTblName
     {:
@@ -2378,11 +2358,6 @@ show_param ::=
     {:
         RESULT = new ShowCharsetStmt(parser.wild);
     :}
-    /* Show proc */
-    | KW_PROC STRING_LITERAL:path
-    {:
-        RESULT = new ShowProcStmt(path);
-    :}
     /* Show Warnings */
     | KW_COUNT LPAREN STAR RPAREN KW_WARNINGS
     {:
@@ -2423,16 +2398,6 @@ show_param ::=
     {:
         RESULT = new ShowExportStmt(db, parser.where, orderByClause, limitClause);
     :}
-    /* Show alter table statement: used to show process of alter table statement */
-    | KW_ALTER KW_TABLE opt_alter_type:type opt_db:db opt_wild_where order_by_clause:orderByClause limit_clause:limitClause
-    {:
-        RESULT = new ShowAlterStmt(type, db, parser.where, orderByClause, limitClause);
-    :}
-    /* Show alter materialized view*/
-    | KW_ALTER KW_MATERIALIZED KW_VIEW opt_db:db opt_wild_where order_by_clause:orderByClause limit_clause:limitClause
-    {:
-        RESULT = new ShowAlterStmt(ShowAlterStmt.AlterType.MATERIALIZED_VIEW, db, parser.where, orderByClause, limitClause);
-    :}
     /* Show data statement: used to show data size of specified range */
     | KW_DATA
     {:
@@ -2445,14 +2410,6 @@ show_param ::=
 	| opt_tmp:tmp KW_PARTITIONS KW_FROM table_name:tblName opt_wild_where order_by_clause:orderByClause limit_clause: limitClause
     {:
         RESULT = new ShowPartitionsStmt(tblName, parser.where, orderByClause, limitClause, tmp);
-    :}
-    | KW_TABLET INTEGER_LITERAL:tabletId
-    {:
-        RESULT = new ShowTabletStmt(null, tabletId);
-    :}
-    | KW_TABLET KW_FROM table_name:dbTblName opt_partition_names:partitionNames opt_wild_where order_by_clause:orderByClause limit_clause:limitClause
-    {:
-        RESULT = new ShowTabletStmt(dbTblName, -1L, partitionNames, parser.where, orderByClause, limitClause);
     :}
     | KW_PROPERTY opt_user:user opt_wild_where
     {:
@@ -2518,21 +2475,17 @@ show_param ::=
     {:
         RESULT = new ShowSmallFilesStmt(dbName);
     :}
-    | keys_or_index from_or_in table_name:dbTblName opt_db:dbName
-    {:
-        RESULT = new ShowIndexStmt(dbName, dbTblName);
-    :}
     | KW_TRANSACTION opt_db:dbName opt_wild_where
     {:
         RESULT = new ShowTransactionStmt(dbName, parser.where);
     :}
     | KW_RESOURCE KW_GROUPS opt_all:list_all
     {:
-        RESULT = new ShowWorkGroupStmt(null, list_all);
+        RESULT = new ShowResourceGroupStmt(null, list_all);
     :}
     | KW_RESOURCE KW_GROUP ident:name
     {:
-        RESULT = new ShowWorkGroupStmt(name, false);
+        RESULT = new ShowResourceGroupStmt(name, false);
     :}
     ;
 
@@ -2779,14 +2732,6 @@ cancel_param ::=
     KW_LOAD opt_db:db opt_wild_where
     {:
         RESULT = new CancelLoadStmt(db, parser.where);
-    :}
-    | KW_ALTER KW_TABLE opt_alter_type:type KW_FROM table_name:table cancel_rollup_job_id_list:list
-    {:
-        RESULT = new CancelAlterTableStmt(type, table, list);
-    :}
-    | KW_ALTER KW_MATERIALIZED KW_VIEW KW_FROM table_name:table
-    {:
-        RESULT = new CancelAlterTableStmt(ShowAlterStmt.AlterType.MATERIALIZED_VIEW, table);
     :}
     | KW_DECOMMISSION KW_BACKEND string_list:hostPorts
     {:
@@ -4819,10 +4764,6 @@ admin_stmt ::=
     {:
         RESULT = new AdminCancelRepairTableStmt(table_ref);
     :}
-    | KW_ADMIN KW_SET KW_FRONTEND KW_CONFIG opt_key_value_map:configs
-    {:
-        RESULT = new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs);
-    :}
     | KW_ADMIN KW_SHOW KW_FRONTEND KW_CONFIG opt_wild_where
     {:
         RESULT = new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, parser.wild);
@@ -4830,13 +4771,6 @@ admin_stmt ::=
     | KW_ADMIN KW_CHECK KW_TABLET LPAREN integer_list:tabletIds RPAREN opt_properties:properties
     {:
         RESULT = new AdminCheckTabletsStmt(tabletIds, properties);
-    :}
-    ;
-
-truncate_stmt ::=
-    KW_TRUNCATE KW_TABLE base_table_ref:tblRef
-    {:
-        RESULT = new TruncateTableStmt(tblRef);
     :}
     ;
 

@@ -13,12 +13,16 @@ class ScanNode;
 
 namespace pipeline {
 
+class ChunkBufferToken;
+using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
+
 class ScanOperator : public SourceOperator {
 public:
-    ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
-                 std::atomic<int>& num_committed_scan_tasks);
+    ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node);
 
     ~ScanOperator() override;
+
+    static size_t max_buffer_capacity() { return config::pipeline_io_buffer_size; }
 
     Status prepare(RuntimeState* state) override;
 
@@ -52,20 +56,22 @@ public:
     int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
     int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
 
-    // It takes effect, only when it is positive.
-    virtual size_t max_scan_concurrency() const { return 0; }
-
 protected:
-    static constexpr int MAX_IO_TASKS_PER_OP = 4;
     const size_t _buffer_size = config::pipeline_io_buffer_size;
 
-    // Shared scan
+    // TODO: remove this to the base ScanContext.
+    /// Shared scan
     virtual void attach_chunk_source(int32_t source_index) = 0;
     virtual void detach_chunk_source(int32_t source_index) {}
     virtual bool has_shared_chunk_source() const = 0;
     virtual bool has_buffer_output() const = 0;
-    virtual bool has_available_buffer() const = 0;
     virtual ChunkPtr get_chunk_from_buffer() = 0;
+    virtual size_t buffer_size() const = 0;
+    virtual size_t buffer_capacity() const = 0;
+    virtual size_t default_buffer_capacity() const = 0;
+    virtual ChunkBufferTokenPtr pin_chunk(int num_chunks) = 0;
+    virtual bool is_buffer_full() const = 0;
+    virtual void set_buffer_finished() = 0;
 
 private:
     // This method is only invoked when current morsel is reached eof
@@ -73,6 +79,7 @@ private:
     Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
+    void _close_chunk_source_unlocked(RuntimeState* state, int index);
     void _close_chunk_source(RuntimeState* state, int index);
     void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
                                    int64_t scan_bytes);
@@ -90,12 +97,9 @@ private:
         return _scan_status;
     }
 
-    bool _try_to_increase_committed_scan_tasks();
-    void _decrease_committed_scan_tasks() { _num_committed_scan_tasks.fetch_sub(1); }
-    bool _exceed_max_scan_concurrency(int num_committed_scan_tasks) const;
-
 protected:
     ScanNode* _scan_node = nullptr;
+    int _io_tasks_per_scan_operator;
     // ScanOperator may do parallel scan, so each _chunk_sources[i] needs to hold
     // a profile indenpendently, to be more specificly, _chunk_sources[i] will go through
     // many ChunkSourcePtr in the entire life time, all these ChunkSources of _chunk_sources[i]
@@ -105,9 +109,6 @@ protected:
 
     bool _is_finished = false;
 
-    // Shared by all the ScanOperators created by the same ScanOperatorFactory.
-    std::atomic<int>& _num_committed_scan_tasks;
-
 private:
     int32_t _io_task_retry_cnt = 0;
     PriorityThreadPool* _io_threads = nullptr;
@@ -116,6 +117,7 @@ private:
     mutable std::shared_mutex _task_mutex; // Protects the chunk-source from concurrent close and read
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
+    int32_t _chunk_source_idx = -1;
 
     mutable SpinLock _scan_status_mutex;
     Status _scan_status;
@@ -125,6 +127,15 @@ private:
     workgroup::WorkGroupPtr _workgroup = nullptr;
     std::atomic_int64_t _last_scan_rows_num = 0;
     std::atomic_int64_t _last_scan_bytes = 0;
+
+    RuntimeProfile::Counter* _default_buffer_capacity_counter = nullptr;
+    RuntimeProfile::Counter* _buffer_capacity_counter = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* _peak_buffer_size_counter = nullptr;
+    // The total number of the original tablets in this fragment instance.
+    RuntimeProfile::Counter* _tablets_counter = nullptr;
+    // The number of morsels picked up by this scan operator.
+    // A tablet may be divided into multiple morsels.
+    RuntimeProfile::Counter* _morsels_counter = nullptr;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {
@@ -151,8 +162,6 @@ public:
 protected:
     ScanNode* const _scan_node;
     bool _need_local_shuffle = true;
-
-    std::atomic<int> _num_committed_scan_tasks{0};
 };
 
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> factory, ScanNode* scan_node,

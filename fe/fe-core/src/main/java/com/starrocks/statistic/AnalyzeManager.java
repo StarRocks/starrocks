@@ -8,7 +8,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
@@ -90,11 +89,11 @@ public class AnalyzeManager implements Writable {
 
         LocalDateTime now = LocalDateTime.now();
         for (AnalyzeJob job : analyzeJobMap.values()) {
-            if (Constants.ScheduleStatus.FINISH != job.getStatus()) {
+            if (StatsConstants.ScheduleStatus.FINISH != job.getStatus()) {
                 continue;
             }
 
-            if (AnalyzeJob.DEFAULT_ALL_ID == job.getDbId() || AnalyzeJob.DEFAULT_ALL_ID == job.getTableId()) {
+            if (StatsConstants.DEFAULT_ALL_ID == job.getDbId() || StatsConstants.DEFAULT_ALL_ID == job.getTableId()) {
                 // finish job must be schedule once job, must contains db and table
                 LOG.warn("expire analyze job check failed, contain default id job: " + job.getId());
                 continue;
@@ -140,15 +139,13 @@ public class AnalyzeManager implements Writable {
     }
 
     public void addAnalyzeStatus(AnalyzeStatus status) {
-        if (Config.enable_collect_full_statistics) {
-            analyzeStatusMap.put(status.getId(), status);
-            GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeStatus(status);
-        }
+        analyzeStatusMap.put(status.getId(), status);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeStatus(status);
     }
 
     public void replayAddAnalyzeStatus(AnalyzeStatus status) {
-        if (status.getStatus().equals(Constants.ScheduleStatus.RUNNING)) {
-            status.setStatus(Constants.ScheduleStatus.FAILED);
+        if (status.getStatus().equals(StatsConstants.ScheduleStatus.RUNNING)) {
+            status.setStatus(StatsConstants.ScheduleStatus.FAILED);
         }
         analyzeStatusMap.put(status.getId(), status);
     }
@@ -158,10 +155,8 @@ public class AnalyzeManager implements Writable {
     }
 
     public void addBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
-        if (Config.enable_collect_full_statistics) {
-            basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
-            GlobalStateMgr.getCurrentState().getEditLog().logAddBasicStatsMeta(basicStatsMeta);
-        }
+        basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddBasicStatsMeta(basicStatsMeta);
     }
 
     public void replayAddBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
@@ -328,7 +323,7 @@ public class AnalyzeManager implements Writable {
         }
 
         public void expireCachedStatistics(AnalyzeJob job) {
-            if (job.getScheduleType().equals(Constants.ScheduleType.ONCE)) {
+            if (job.getScheduleType().equals(StatsConstants.ScheduleType.ONCE)) {
                 Database db = GlobalStateMgr.getCurrentState().getDb(job.getDbId());
                 if (null == db) {
                     return;
@@ -337,7 +332,7 @@ public class AnalyzeManager implements Writable {
                         .expireColumnStatistics(db.getTable(job.getTableId()), job.getColumns());
             } else {
                 List<Table> tableNeedCheck = new ArrayList<>();
-                if (job.getDbId() == AnalyzeJob.DEFAULT_ALL_ID) {
+                if (job.getDbId() == StatsConstants.DEFAULT_ALL_ID) {
                     List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
                     for (Long dbId : dbIds) {
                         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -346,8 +341,8 @@ public class AnalyzeManager implements Writable {
                         }
                         tableNeedCheck.addAll(db.getTables());
                     }
-                } else if (job.getDbId() != AnalyzeJob.DEFAULT_ALL_ID &&
-                        job.getTableId() == AnalyzeJob.DEFAULT_ALL_ID) {
+                } else if (job.getDbId() != StatsConstants.DEFAULT_ALL_ID &&
+                        job.getTableId() == StatsConstants.DEFAULT_ALL_ID) {
                     Database db = GlobalStateMgr.getCurrentState().getDb(job.getDbId());
                     if (null == db) {
                         return;
