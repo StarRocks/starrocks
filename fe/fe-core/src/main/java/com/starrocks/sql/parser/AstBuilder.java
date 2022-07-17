@@ -1425,8 +1425,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (context.ALL() != null) {
                 return new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.DropAllClassifiers());
             } else {
-                return new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.DropClassifiers(context.INTEGER_VALUE()
-                        .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList())));
+                return new AlterResourceGroupStmt(name,
+                        new AlterResourceGroupStmt.DropClassifiers(context.INTEGER_VALUE()
+                                .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList())));
             }
         } else {
             Map<String, String> properties = new HashMap<>();
