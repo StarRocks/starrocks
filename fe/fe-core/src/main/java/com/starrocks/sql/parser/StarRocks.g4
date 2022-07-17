@@ -111,6 +111,7 @@ statement
     | DROP USER user                                                                        #dropUser
     | CREATE ROLE identifierOrString                                                        #createRole
     | DROP ROLE identifierOrString                                                          #dropRole
+    | SHOW ROLES                                                                            #showRoles
 
     // procedure
     | showProcedureStatment                                                                 #showProcedure

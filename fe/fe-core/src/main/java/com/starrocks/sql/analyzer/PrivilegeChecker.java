@@ -36,6 +36,7 @@ import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
@@ -389,6 +390,14 @@ public class PrivilegeChecker {
             // check if current user has GRANT priv on GLOBAL level.
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(context, PrivPredicate.GRANT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE USER");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowRolesStatement(ShowRolesStmt statement, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(context, PrivPredicate.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }
             return null;
         }
