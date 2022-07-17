@@ -208,8 +208,6 @@ CONF_mInt32(max_scan_key_num, "1024");
 CONF_mInt32(max_pushdown_conditions_per_column, "1024");
 // (Advanced) Maximum size of per-query receive-side buffer.
 CONF_mInt32(exchg_node_buffer_size_bytes, "10485760");
-// The block_size every block allocate for sorter.
-CONF_Int32(sorter_block_size, "8388608");
 
 CONF_mInt64(column_dictionary_key_ratio_threshold, "0");
 CONF_mInt64(column_dictionary_key_size_threshold, "0");
