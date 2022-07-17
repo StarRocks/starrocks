@@ -16,6 +16,8 @@ import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowIndexStmt;
+import com.starrocks.analysis.ShowLoadStmt;
+import com.starrocks.analysis.ShowLoadWarningsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowStmt;
@@ -362,6 +364,16 @@ public class ShowStmtAnalyzer {
             if (!(binaryPredicate.getChild(0) instanceof SlotRef && binaryPredicate.getChild(1) instanceof LiteralExpr)) {
                 throw new SemanticException("Only support column = \"string literal\" format predicate");
             }
+        }
+
+        @Override
+        public Void visitShowLoadStmt(ShowLoadStmt statement, ConnectContext context) {
+            return ShowLoadStmtAnalyzer.analyze(statement, context);
+        }
+
+        @Override
+        public Void visitShowLoadWarningsStmt(ShowLoadWarningsStmt statement, ConnectContext context) {
+            return ShowLoadWarningsStmtAnalyzer.analyze(statement, context);
         }
     }
 }

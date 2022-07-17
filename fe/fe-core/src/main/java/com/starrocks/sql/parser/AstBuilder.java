@@ -32,6 +32,7 @@ import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.CancelAlterTableStmt;
+import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
@@ -117,6 +118,8 @@ import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowIndexStmt;
+import com.starrocks.analysis.ShowLoadStmt;
+import com.starrocks.analysis.ShowLoadWarningsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowStatusStmt;
@@ -1971,6 +1974,64 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 .getSymbol());
         Subquery subquery = new Subquery(new QueryStatement((QueryRelation) visit(context.queryBody())));
         return new BinaryPredicate(op, (Expr) visit(context.booleanExpression()), subquery);
+    }
+
+    // ------------------------------------------- Load Statement ------------------------------------------------------
+
+    @Override
+    public ParseNode visitShowLoadStatement(StarRocksParser.ShowLoadStatementContext context) {
+        String db = null;
+        if (context.identifier() != null) {
+            db = ((Identifier) visit(context.identifier())).getValue();
+        }
+        Expr labelExpr = null;
+        if (context.expression() != null) {
+            labelExpr = (Expr) visit(context.expression());
+        }
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowLoadStmt(db, labelExpr, orderByElements, limitElement);
+    }
+
+    @Override
+    public ParseNode visitShowLoadWarningsStatement(StarRocksParser.ShowLoadWarningsStatementContext context) {
+        if (context.ON() != null) {
+            String url = ((StringLiteral) visit(context.string())).getValue();
+            return new ShowLoadWarningsStmt(null, url, null, null);
+        }
+        String db = null;
+        if (context.identifier() != null) {
+            db = ((Identifier) visit(context.identifier())).getValue();
+        }
+        Expr labelExpr = null;
+        if (context.expression() != null) {
+            labelExpr = (Expr) visit(context.expression());
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowLoadWarningsStmt(db, null, labelExpr, limitElement);
+    }
+
+    @Override
+    public ParseNode visitCancelLoadStatement(StarRocksParser.CancelLoadStatementContext context) {
+        String db = null;
+        if (context.identifier() != null) {
+            db = ((Identifier) visit(context.identifier())).getValue();
+        }
+        Expr labelExpr = null;
+        if (context.expression() != null) {
+            labelExpr = (Expr) visit(context.expression());
+        }
+        return new CancelLoadStmt(db, labelExpr);
     }
 
     // ------------------------------------------- Other Statement -----------------------------------------------------
