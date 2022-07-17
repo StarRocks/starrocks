@@ -17,11 +17,19 @@
 
 package com.starrocks.external.elasticsearch;
 
+import com.fasterxml.jackson.core.JsonEncoding;
+import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.starrocks.common.io.FastByteArrayOutputStream;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -29,6 +37,32 @@ import java.util.Objects;
  * Some query builders and static helper method have been copied from Elasticsearch
  */
 public final class QueryBuilders {
+
+    /**
+     * Base class to build various ES queries
+     */
+    public abstract static class QueryBuilder {
+
+        /**
+         * Convert query to JSON format
+         *
+         * @param out used to generate JSON elements
+         * @throws IOException if IO error occurred
+         */
+        public abstract void toJson(JsonGenerator out) throws IOException;
+
+        @Override
+        public String toString() throws StarRocksESException {
+            FastByteArrayOutputStream out = new FastByteArrayOutputStream(256);
+            JsonFactory factory = new JsonFactory();
+            try (JsonGenerator jsonGenerator = factory.createGenerator(out, JsonEncoding.UTF8)) {
+                toJson(jsonGenerator);
+            } catch (IOException e) {
+                throw new StarRocksESException(e.getMessage());
+            }
+            return out.toString();
+        }
+    }
 
     /**
      * A query that matches on all documents.
@@ -158,20 +192,6 @@ public final class QueryBuilders {
     }
 
     /**
-     * Base class to build various ES queries
-     */
-    abstract static class QueryBuilder {
-
-        /**
-         * Convert query to JSON format
-         *
-         * @param out used to generate JSON elements
-         * @throws IOException if IO error occurred
-         */
-        abstract void toJson(JsonGenerator out) throws IOException;
-    }
-
-    /**
      * A Query that matches documents matching boolean combinations of other queries.
      */
     static class BoolQueryBuilder extends QueryBuilder {
@@ -206,7 +226,7 @@ public final class QueryBuilders {
         }
 
         @Override
-        protected void toJson(JsonGenerator out) throws IOException {
+        public void toJson(JsonGenerator out) throws IOException {
             out.writeStartObject();
             out.writeFieldName("bool");
             out.writeStartObject();
@@ -250,7 +270,7 @@ public final class QueryBuilders {
         }
 
         @Override
-        void toJson(final JsonGenerator out) throws IOException {
+        public void toJson(final JsonGenerator out) throws IOException {
             out.writeStartObject();
             out.writeFieldName("term");
             out.writeStartObject();
@@ -274,7 +294,7 @@ public final class QueryBuilders {
         }
 
         @Override
-        void toJson(final JsonGenerator out) throws IOException {
+        public void toJson(final JsonGenerator out) throws IOException {
             out.writeStartObject();
             out.writeFieldName("terms");
             out.writeStartObject();
@@ -341,7 +361,7 @@ public final class QueryBuilders {
         }
 
         @Override
-        void toJson(final JsonGenerator out) throws IOException {
+        public void toJson(final JsonGenerator out) throws IOException {
             if (lt == null && gt == null) {
                 throw new IllegalStateException("Either lower or upper bound should be provided");
             }
@@ -390,7 +410,7 @@ public final class QueryBuilders {
         }
 
         @Override
-        void toJson(JsonGenerator out) throws IOException {
+        public void toJson(JsonGenerator out) throws IOException {
             out.writeStartObject();
             out.writeFieldName("wildcard");
             out.writeStartObject();
@@ -413,7 +433,7 @@ public final class QueryBuilders {
         }
 
         @Override
-        void toJson(JsonGenerator out) throws IOException {
+        public void toJson(JsonGenerator out) throws IOException {
             out.writeStartObject();
             out.writeFieldName("exists");
             out.writeStartObject();
@@ -427,13 +447,13 @@ public final class QueryBuilders {
     /**
      * A query that matches on all documents
      */
-    static class MatchAllQueryBuilder extends QueryBuilder {
+    public static class MatchAllQueryBuilder extends QueryBuilder {
 
         private MatchAllQueryBuilder() {
         }
 
         @Override
-        void toJson(final JsonGenerator out) throws IOException {
+        public void toJson(final JsonGenerator out) throws IOException {
             out.writeStartObject();
             out.writeFieldName("match_all");
             out.writeStartObject();
@@ -451,5 +471,31 @@ public final class QueryBuilders {
      */
     private static void writeObject(JsonGenerator out, Object value) throws IOException {
         out.writeObject(value);
+    }
+
+    public static class RawQueryBuilder extends QueryBuilder {
+        private static final ObjectMapper MAPPER =
+                new ObjectMapper()
+                        .configure(JsonParser.Feature.ALLOW_COMMENTS, true);
+        private final String value;
+
+        public RawQueryBuilder(String value) {
+            this.value = value;
+            Map<String, Object> map;
+            try {
+                map = MAPPER.readValue(value, HashMap.class);
+            } catch (JsonProcessingException e) {
+                throw new StarRocksESException(e.getMessage());
+            }
+            if (map == null || map.size() != 1) {
+                throw new StarRocksESException("raw query dsl in `esquery` must have one (only one) root json element");
+            }
+
+        }
+
+        @Override
+        public void toJson(JsonGenerator out) throws IOException {
+            out.writeRaw(value);
+        }
     }
 }
