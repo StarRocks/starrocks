@@ -193,8 +193,6 @@ private:
     Status _init(const std::vector<StorePath>& store_paths);
     void _destroy();
 
-    Status _init_storage_page_cache();
-
 private:
     std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override

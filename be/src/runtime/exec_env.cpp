@@ -291,27 +291,18 @@ private:
 };
 
 Status ExecEnv::init_mem_tracker() {
-    int64_t bytes_limit = 0;
-    std::stringstream ss;
-    // --mem_limit="" means no memory limit
-    bytes_limit = ParseUtil::parse_mem_spec(config::mem_limit);
-    // use 90% of mem_limit as the soft mem limit of BE
-    bytes_limit = bytes_limit * 0.9;
+    int64_t bytes_limit = ParseUtil::parse_mem_spec(config::mem_limit);
     if (bytes_limit <= 0) {
-        ss << "Failed to parse mem limit from '" + config::mem_limit + "'.";
-        return Status::InternalError(ss.str());
+        std::string ss = fmt::format("Failed to parse mem limit from {}", config::mem_limit);
+        return Status::InternalError(ss);
+    } else {
+        LOG(INFO) << "Set process mem_limit to " << bytes_limit;
     }
-
     if (bytes_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Memory limit " << PrettyPrinter::print(bytes_limit, TUnit::BYTES)
                      << " exceeds physical memory of " << PrettyPrinter::print(MemInfo::physical_mem(), TUnit::BYTES)
                      << ". Using physical memory instead";
         bytes_limit = MemInfo::physical_mem();
-    }
-
-    if (bytes_limit <= 0) {
-        ss << "Invalid mem limit: " << bytes_limit;
-        return Status::InternalError(ss.str());
     }
 
     _mem_tracker = new MemTracker(MemTracker::PROCESS, bytes_limit, "process");
@@ -339,20 +330,20 @@ Status ExecEnv::init_mem_tracker() {
     GlobalTabletSchemaMap::Instance()->set_mem_tracker(_tablet_meta_mem_tracker);
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
-    _init_storage_page_cache();
-    return Status::OK();
-}
 
-Status ExecEnv::_init_storage_page_cache() {
+    // Storage page cache
+    // Use min(10% * process-memory, 4GB) as default
     int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit);
     if (storage_cache_limit > MemInfo::physical_mem()) {
-        LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
-                     << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
+        LOG(ERROR) << "Config storage_page_cache_limit is greater than memory size, config="
+                   << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
+    }
+    if (storage_cache_limit <= 0) {
+        storage_cache_limit = std::min<int64_t>(int64_t(4) << 30, bytes_limit * 0.1);
+        LOG(INFO) << "Set storage_page_cache_limit to " << storage_cache_limit;
     }
     StoragePageCache::create_global_cache(_page_cache_mem_tracker, storage_cache_limit);
 
-    // TODO(zc): The current memory usage configuration is a bit confusing,
-    // we need to sort out the use of memory
     return Status::OK();
 }
 
