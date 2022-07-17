@@ -60,6 +60,7 @@ import com.starrocks.analysis.DropFollowerClause;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropObserverClause;
+import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
@@ -1846,6 +1847,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitCreateRole(StarRocksParser.CreateRoleContext context) {
         Identifier role = (Identifier) visit(context.identifierOrString());
         return new CreateRoleStmt(role.getValue());
+    }
+
+    @Override
+    public ParseNode visitDropRole(StarRocksParser.DropRoleContext context) {
+        Identifier role = (Identifier) visit(context.identifierOrString());
+        return new DropRoleStmt(role.getValue());
     }
 
     @Override

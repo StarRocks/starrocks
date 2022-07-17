@@ -110,6 +110,7 @@ statement
     | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
     | DROP USER user                                                                        #dropUser
     | CREATE ROLE identifierOrString                                                        #createRole
+    | DROP ROLE identifierOrString                                                          #dropRole
 
     // procedure
     | showProcedureStatment                                                                 #showProcedure

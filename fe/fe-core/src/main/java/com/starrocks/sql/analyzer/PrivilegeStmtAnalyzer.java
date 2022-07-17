@@ -5,6 +5,7 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateUserStmt;
+import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
@@ -241,6 +242,12 @@ public class PrivilegeStmtAnalyzer {
         @Override
         public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
             stmt.setQualifiedRole(validRoleName(stmt.getQualifiedRole(), false, "Can not create role"));
+            return null;
+        }
+
+        @Override
+        public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
+            stmt.setQualifiedRole(validRoleName(stmt.getQualifiedRole(), false, "Can not drop role"));
             return null;
         }
     }
