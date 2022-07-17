@@ -25,6 +25,7 @@ import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -398,6 +399,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitRecoverPartitionStmt(RecoverPartitionStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropRoleStatement(DropRoleStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

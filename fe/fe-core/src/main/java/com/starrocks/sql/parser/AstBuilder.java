@@ -41,6 +41,7 @@ import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -2720,6 +2721,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         UserIdentity userId =
                 context.user() == null ? null : ((UserIdentifier) visit(context.user())).getUserIdentity();
         return new ShowGrantsStmt(userId, isAll);
+    }
+
+    @Override
+    public ParseNode visitDropRole(StarRocksParser.DropRoleContext context) {
+        Identifier role = (Identifier) visit(context.identifierOrString());
+        return new DropRoleStmt(role.getValue());
     }
 
     @Override

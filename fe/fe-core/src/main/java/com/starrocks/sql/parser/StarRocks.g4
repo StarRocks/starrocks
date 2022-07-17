@@ -173,6 +173,7 @@ statement
     | createRoleStatement
     | showRolesStatement
     | showGrantsStatement
+    | dropRoleStatement
 
     // Backup Restore Satement
     | backupStatement
@@ -1036,6 +1037,10 @@ showRolesStatement
 
 showGrantsStatement
     : SHOW ALL? GRANTS (FOR user)?
+    ;
+
+dropRoleStatement
+    : DROP ROLE identifierOrString                                                          #dropRole
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
