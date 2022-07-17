@@ -12,6 +12,7 @@ import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
+import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
@@ -445,6 +446,12 @@ public class Analyzer {
         @Override
         public Void visitLoadStmt(LoadStmt statement, ConnectContext context) {
             LoadStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCancelLoadStmt(CancelLoadStmt statement, ConnectContext context) {
+            CancelLoadStmtAnalyzer.analyze(statement, context);
             return null;
         }
     }

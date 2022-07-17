@@ -112,6 +112,9 @@ statement
 
     // Load Statement
     | loadStatement                                                                         #load
+    | showLoadStatement                                                                     #showLoad
+    | showLoadWarningsStatement                                                             #showLoadWarnings
+    | cancelLoadStatement                                                                   #cancelLoad
 
     // Other statement
     | USE qualifiedName                                                                     #useDb
@@ -672,6 +675,19 @@ brokerDesc
 
 resourceDesc
     : WITH RESOURCE name=identifierOrString props=propertyList?
+    ;
+
+showLoadStatement
+    : SHOW LOAD (FROM identifier)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    ;
+
+showLoadWarningsStatement
+    : SHOW LOAD WARNINGS (FROM identifier)? (WHERE expression)? limitElement?
+    | SHOW LOAD WARNINGS ON string
+    ;
+
+cancelLoadStatement
+    : CANCEL LOAD (FROM identifier)? (WHERE expression)?
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
