@@ -254,10 +254,6 @@ public class ConnectProcessorTest {
                 minTimes = 0;
                 result = "testCluster:user";
 
-                context.getClusterName();
-                minTimes = 0;
-                result = "testCluster";
-
                 context.getStartTime();
                 minTimes = 0;
                 result = 0L;

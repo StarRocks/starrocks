@@ -275,7 +275,6 @@ public class ShowExecutorTest {
         ctx.setConnectScheduler(scheduler);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
         ctx.setQualifiedUser("default_cluster:testUser");
-        ctx.setCluster("default_cluster");
 
         new Expectations(ctx) {
             {
@@ -346,10 +345,6 @@ public class ShowExecutorTest {
 
         new Expectations() {
             {
-                analyzer.getClusterName();
-                minTimes = 0;
-                result = "default_cluster";
-
                 globalStateMgr.getDb(0);
                 minTimes = 0;
                 result = db;

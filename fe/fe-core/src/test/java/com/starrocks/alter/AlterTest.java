@@ -1417,7 +1417,7 @@ public class AlterTest {
         auth.grant(grantUserStmt);
 
         UserIdentity testUser = new UserIdentity("testuser", "%");
-        testUser.analyze("default_cluster");
+        testUser.analyze();
 
         starRocksAssert.getCtx().setQualifiedUser("testuser");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);

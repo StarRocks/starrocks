@@ -37,6 +37,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -97,8 +98,6 @@ public class ConnectContext {
     // Db
     protected String currentDb = "";
 
-    // cluster name
-    protected String clusterName = "";
     // username@host of current login user
     protected String qualifiedUser;
     // username@host combination for the StarRocks account
@@ -422,14 +421,6 @@ public class ConnectContext {
         this.lastQueryId = queryId;
     }
 
-    public String getClusterName() {
-        return clusterName;
-    }
-
-    public void setCluster(String clusterName) {
-        this.clusterName = clusterName;
-    }
-
     public byte[] getAuthDataSalt() {
         return authDataSalt;
     }
@@ -552,7 +543,7 @@ public class ConnectContext {
             row.add("" + connectionId);
             row.add(ClusterNamespace.getNameFromFullName(qualifiedUser));
             row.add(getMysqlChannel().getRemoteHostPortString());
-            row.add(clusterName);
+            row.add(SystemInfoService.DEFAULT_CLUSTER);
             row.add(ClusterNamespace.getNameFromFullName(currentDb));
             // Command
             row.add(command.toString());

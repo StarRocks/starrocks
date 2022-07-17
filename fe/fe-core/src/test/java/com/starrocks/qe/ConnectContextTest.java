@@ -86,11 +86,6 @@ public class ConnectContextTest {
         ctx.setKilled();
         Assert.assertTrue(ctx.isKilled());
 
-        // Current cluster
-        Assert.assertEquals("", ctx.getClusterName());
-        ctx.setCluster("testCluster");
-        Assert.assertEquals("testCluster", ctx.getClusterName());
-
         // Current db
         Assert.assertEquals("", ctx.getDatabase());
         ctx.setDatabase("testCluster:testDb");
