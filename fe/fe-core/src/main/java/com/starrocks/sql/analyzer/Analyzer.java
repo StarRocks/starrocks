@@ -393,7 +393,7 @@ public class Analyzer {
             ShowStmtAnalyzer.analyze(statement, session);
             return null;
         }
-        
+
         @Override
         public Void visitRestoreStmt(RestoreStmt statement, ConnectContext context) {
             RestoreStmtAnalyzer.analyze(statement, context);

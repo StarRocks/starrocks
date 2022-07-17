@@ -120,6 +120,9 @@ statement
     // procedure
     | showProcedureStatement                                                                #showProcedure
 
+    //  Backup Store Satement
+    | restoreStatement                                                                      #restore
+
     // proc
     | showProcStatement                                                                     #showProc
 
@@ -761,6 +764,13 @@ showProcedureStatement
 // ------------------------------------------- Proc Statement ---------------------------------------------------------
 showProcStatement
     : SHOW PROC path=string
+    ;
+// ---------------------------------------- Backup Store Statement -----------------------------------------------------
+restoreStatement
+    : RESTORE SNAPSHOT qualifiedName
+    TO identifier
+    ON '(' restoreTableDesc restoreTableDesc * ')'
+    (PROPERTIES propertyList)?
     ;
 
 // ---------------------------------------- Backup Store Statement -----------------------------------------------------
