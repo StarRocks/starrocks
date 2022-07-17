@@ -170,6 +170,7 @@ statement
     | dropUserStatement
     | showAuthenticationStatement
     | createRoleStatement
+    | showRolesStatement
 
     // Backup Restore Satement
     | backupStatement
@@ -988,6 +989,10 @@ showAuthenticationStatement
 
 createRoleStatement
     : CREATE ROLE identifierOrString                                                         #createRole
+    ;
+
+showRolesStatement
+    : SHOW ROLES
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
