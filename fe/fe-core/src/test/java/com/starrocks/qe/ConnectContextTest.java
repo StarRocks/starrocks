@@ -125,7 +125,7 @@ public class ConnectContextTest {
         Assert.assertEquals("101", row.get(0));
         Assert.assertEquals("testUser", row.get(1));
         Assert.assertEquals("127.0.0.1:12345", row.get(2));
-        Assert.assertEquals("testCluster", row.get(3));
+        Assert.assertEquals("default_cluster", row.get(3));
         Assert.assertEquals("testDb", row.get(4));
         Assert.assertEquals("Ping", row.get(5));
         Assert.assertEquals(TimeUtils.longToTimeString(ctx.getConnectionStartTime()), row.get(6));
