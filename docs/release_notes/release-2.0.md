@@ -1,18 +1,5 @@
 # StarRocks version 2.0
 
-## 2.0.8
-
-Release date: July 15, 2022
-
-### Bug Fixes
-
-The following bugs are fixed:
-
-- Switching Leader FE node repetitively may cause all load jobs hang and fail. [#7350](https://github.com/StarRocks/starrocks/issues/7350)
-- BE crashes when the memory usage estimation of MemTable exceeds 4GB, because, during a data skew in load, some fields may occupy a large amount of memory resources. [#7161](https://github.com/StarRocks/starrocks/issues/7161)
-- After restarting FEs, the schemas of materialized views changed due to incorrect parsing of uppercase and lowercase letters. [#7362](https://github.com/StarRocks/starrocks/issues/7362)
-- When you load JSON data from Kafka into StarRocks by using Routine Load, if there are blank rows in the JSON data, the data after the blank rows will be lost. [#8534](https://github.com/StarRocks/starrocks/issues/8534)
-
 ## 2.0.7
 
 Release date: June 13, 2022

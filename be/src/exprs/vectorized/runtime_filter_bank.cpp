@@ -487,8 +487,8 @@ void RuntimeFilterProbeCollector::wait() {
             auto* rf = it.second;
             int filter_id = rf->filter_id();
             bool ready = (rf->runtime_filter() != nullptr);
-            VLOG_FILE << "RuntimeFilterCollector::wait. this = " << (void*)rf << ", plan_node_id = " << _plan_node_id
-                      << ", filter_id = " << filter_id << ", ready = " << std::to_string(ready);
+            VLOG_FILE << "RuntimeFilterCollector::wait. filter_id = " << filter_id
+                      << ", ready = " << std::to_string(ready);
         }
     }
 }

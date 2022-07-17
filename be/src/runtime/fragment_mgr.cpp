@@ -486,8 +486,7 @@ void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& par
             }
         }
         if (!found) {
-            VLOG_FILE << "FragmentMgr::receive_runtime_filter: finst not found. finst_id = " << frag_inst_id
-                      << ", filter_id = " << params.filter_id();
+            VLOG_FILE << "FragmentMgr::receive_runtime_filter: finst not found. finst_id = " << frag_inst_id;
         } else {
             auto profile = exec_state->runtime_state()->runtime_profile_ptr();
             auto q_tracker = exec_state->runtime_state()->query_mem_tracker_ptr();
