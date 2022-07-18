@@ -57,7 +57,7 @@ public class BDBJEJournal implements Journal {
     private BDBEnvironment bdbEnvironment = null;
     private CloseSafeDatabase currentJournalDB;
     protected Transaction currentTrasaction = null;
-    // used to distinguish different module's db in BDB, must not be a number
+    // used to distinguish different module's db in BDB, must be empty or end with '_'
     private final String prefix;
 
     // store uncommitted kv, used for rebuilding txn on commit fails
@@ -76,7 +76,7 @@ public class BDBJEJournal implements Journal {
 
     public BDBJEJournal(BDBEnvironment bdbEnvironment, String prefix) {
         this.bdbEnvironment = bdbEnvironment;
-        assert prefix.isEmpty() || !StringUtils.isNumeric(prefix);
+        assert prefix.isEmpty() || prefix.charAt(prefix.length() - 1) == '_';
         this.prefix = prefix;
     }
 
