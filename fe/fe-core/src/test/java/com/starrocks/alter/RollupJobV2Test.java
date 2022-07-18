@@ -85,6 +85,8 @@ public class RollupJobV2Test extends DDLTestBase {
         clause2 = new AddRollupClause(GlobalStateMgrTestUtil.testRollupIndex3, Lists.newArrayList("v1", "v2"), null,
                 GlobalStateMgrTestUtil.testTable1, null);
         clause2.analyze(analyzer);
+
+        AgentTaskQueue.clearAllTasks();
     }
 
     @After
