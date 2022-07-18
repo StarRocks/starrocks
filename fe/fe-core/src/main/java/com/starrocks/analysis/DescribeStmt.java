@@ -80,6 +80,8 @@ public class DescribeStmt extends ShowStmt {
     private boolean isOlapTable;
     private boolean isMaterializedView;
 
+    private boolean isExternalTable;
+
     public DescribeStmt(TableName dbTableName, boolean isAllTables) {
         this.dbTableName = dbTableName;
         this.totalRows = new LinkedList<List<String>>();
@@ -124,6 +126,10 @@ public class DescribeStmt extends ShowStmt {
 
     public void setOlapTable(boolean olapTable) {
         isOlapTable = olapTable;
+    }
+
+    public void setExternalTable(boolean externalTable) {
+        isExternalTable = externalTable;
     }
 
     public List<List<String>> getResultRows() throws AnalysisException {

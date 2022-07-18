@@ -11,9 +11,7 @@ import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
-import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.proc.ProcResult;
+import com.starrocks.common.proc.CatalogProcNode;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.persist.DropCatalogLog;
@@ -199,6 +197,10 @@ public class CatalogMgr {
 
     }
 
+    public ConcurrentHashMap<String, Catalog> getCatalogs() {
+        return catalogs;
+    }
+
     public List<List<String>> getCatalogsInfo() {
         return procNode.fetchResult().getRows();
     }
@@ -221,21 +223,5 @@ public class CatalogMgr {
 
     private void writeUnLock() {
         this.catalogLock.writeLock().unlock();
-    }
-
-    public class CatalogProcNode implements ProcNodeInterface {
-        @Override
-        public ProcResult fetchResult() {
-            BaseProcResult result = new BaseProcResult();
-            result.setNames(CATALOG_PROC_NODE_TITLE_NAMES);
-            for (Map.Entry<String, Catalog> entry : catalogs.entrySet()) {
-                Catalog catalog = entry.getValue();
-                if (catalog == null) {
-                    continue;
-                }
-                catalog.getProcNodeData(result);
-            }
-            return result;
-        }
     }
 }
