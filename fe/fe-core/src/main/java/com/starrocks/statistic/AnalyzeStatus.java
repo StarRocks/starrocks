@@ -7,7 +7,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -142,7 +141,7 @@ public class AnalyzeStatus implements Writable {
             dbName = "*";
         } else {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            dbName = ClusterNamespace.getNameFromFullName(db.getFullName());
+            dbName = db.getOriginName();
         }
         String tableName;
         if (tableId == StatsConstants.DEFAULT_ALL_ID) {
