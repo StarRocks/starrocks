@@ -106,16 +106,14 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.StarOSAgent;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletStatMgr;
 import com.starrocks.catalog.View;
-import com.starrocks.catalog.WorkGroupMgr;
-import com.starrocks.catalog.lake.ShardManager;
 import com.starrocks.clone.ColocateTableBalancer;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
@@ -164,6 +162,8 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
+import com.starrocks.lake.ShardManager;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
@@ -402,7 +402,7 @@ public class GlobalStateMgr {
 
     private long feStartTime;
 
-    private WorkGroupMgr workGroupMgr;
+    private ResourceGroupMgr resourceGroupMgr;
 
     private StarOSAgent starOSAgent;
 
@@ -416,7 +416,6 @@ public class GlobalStateMgr {
     private NodeMgr nodeMgr;
 
     private ShardManager shardManager;
-
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
@@ -525,7 +524,7 @@ public class GlobalStateMgr {
         this.auth = new Auth();
         this.domainResolver = new DomainResolver(auth);
 
-        this.workGroupMgr = new WorkGroupMgr(this);
+        this.resourceGroupMgr = new ResourceGroupMgr(this);
 
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
@@ -638,8 +637,8 @@ public class GlobalStateMgr {
         return auth;
     }
 
-    public WorkGroupMgr getWorkGroupMgr() {
-        return workGroupMgr;
+    public ResourceGroupMgr getResourceGroupMgr() {
+        return resourceGroupMgr;
     }
 
     public TabletScheduler getTabletScheduler() {
@@ -829,7 +828,6 @@ public class GlobalStateMgr {
         // 3. Load image first and replay edits
         initJournal();
         loadImage(this.imageDir); // load image file
-
 
         // 4. create load and export job label cleaner thread
         createLabelCleaner();
@@ -1143,7 +1141,7 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = analyzeManager.loadAnalyze(dis, checksum);
             remoteChecksum = dis.readLong();
-            checksum = workGroupMgr.loadWorkGroups(dis, checksum);
+            checksum = resourceGroupMgr.loadResourceGroups(dis, checksum);
             checksum = auth.readAsGson(dis, checksum);
             remoteChecksum = dis.readLong();
             checksum = taskManager.loadTasks(dis, checksum);
@@ -1401,7 +1399,7 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             checksum = analyzeManager.saveAnalyze(dos, checksum);
             dos.writeLong(checksum);
-            checksum = workGroupMgr.saveWorkGroups(dos, checksum);
+            checksum = resourceGroupMgr.saveResourceGroups(dos, checksum);
             checksum = auth.writeAsGson(dos, checksum);
             dos.writeLong(checksum);
             checksum = taskManager.saveTasks(dos, checksum);
@@ -2953,8 +2951,8 @@ public class GlobalStateMgr {
         this.isDefaultClusterCreated = isDefaultClusterCreated;
     }
 
-    public Cluster getCluster(String clusterName) {
-        return localMetastore.getCluster(clusterName);
+    public Cluster getCluster() {
+        return localMetastore.getCluster();
     }
 
     public void refreshExternalTable(RefreshTableStmt stmt) throws DdlException {

@@ -18,7 +18,7 @@ After the user submits the import job, the FE generates and distributes the corr
 
 The following diagram shows the main flow of broker load.
 
-![brokerload](/assets/4.2.2-1.png)
+![brokerload](../assets/4.2.2-1.png)
 
 ## Supported Remote File Systems
 
@@ -33,7 +33,7 @@ The following diagram shows the main flow of broker load.
 
 Broker Load needs a broker to access the remote storage, so a broker needs to be built first.
 
-You can refer to the manual deployment ([Deploy Broker](/quick_start/Deploy.md)).
+You can refer to the manual deployment ([Deploy Broker](../quick_start/Deploy.md)).
 
 ### Create import job
 
