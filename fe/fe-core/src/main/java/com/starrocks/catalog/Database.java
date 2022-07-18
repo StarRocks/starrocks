@@ -406,6 +406,18 @@ public class Database extends MetaObject implements Writable {
             }
         }
 
+        // process related materialized views
+        if (table.isOlapTable()) {
+            OlapTable olapTable = (OlapTable) table;
+            for (long mvId : olapTable.getRelatedMaterializedViews()) {
+                Table tmpTable = getTable(mvId);
+                if (tmpTable != null) {
+                    MaterializedView mv = (MaterializedView) tmpTable;
+                    mv.setActive(false);
+                }
+            }
+        }
+
         LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), getFullName(),
                 table.getId());
         return batchTaskMap;
