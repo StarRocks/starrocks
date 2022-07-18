@@ -93,7 +93,7 @@ protected:
             return;
         }
         auto partition_num = hash_map.size();
-        if (partition_num > 512 && total_num_rows / partition_num < 10000) {
+        if (partition_num > 512 && total_num_rows < 10000 * partition_num) {
             is_downgrade = true;
         }
     }
@@ -114,17 +114,17 @@ protected:
                 visited_keys(chunk->num_rows());
         const auto size = chunk->num_rows();
         uint32_t i = 0;
-        for (; i < size; i++) {
-            check_downgrade(hash_map);
-            if (is_downgrade) {
-                break;
-            }
-
+        for (; !is_downgrade && i < size; i++) {
             const auto& key = key_loader(i);
             visited_keys.insert(key);
+            bool is_new_partition = false;
             auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
+                is_new_partition = true;
                 return ctor(key_allocator(key), obj_pool->add(new PartitionChunks()));
             });
+            if (is_new_partition) {
+                check_downgrade(hash_map);
+            }
             auto& value = *(iter->second);
             if (value.chunks.empty() || value.remain_size <= 0) {
                 if (!value.chunks.empty()) {
@@ -195,20 +195,21 @@ protected:
             const auto size = chunk->num_rows();
 
             uint32_t i = 0;
-            for (; i < size; i++) {
-                check_downgrade(hash_map);
-                if (is_downgrade) {
-                    break;
-                }
+            for (; !is_downgrade && i < size; i++) {
                 PartitionChunks* value_ptr = nullptr;
                 if (null_flag_data[i] == 1) {
                     value_ptr = &null_key_value;
                 } else {
                     const auto& key = key_loader(i);
                     visited_keys.insert(key);
+                    bool is_new_partition = false;
                     auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
+                        is_new_partition = true;
                         return ctor(key_allocator(key), obj_pool->add(new PartitionChunks()));
                     });
+                    if (is_new_partition) {
+                        check_downgrade(hash_map);
+                    }
                     value_ptr = iter->second;
                 }
 
