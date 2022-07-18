@@ -104,7 +104,7 @@ public class ReportHandler extends Daemon {
         TABLET_REPORT,
         DISK_REPORT,
         TASK_REPORT,
-        WORKGROUP_REPORT
+        RESOURCE_GROUP_REPORT
     }
 
     private static final Logger LOG = LogManager.getLogger(ReportHandler.class);
@@ -125,7 +125,7 @@ public class ReportHandler extends Daemon {
         pendingTaskMap.put(ReportType.TABLET_REPORT, Maps.newHashMap());
         pendingTaskMap.put(ReportType.DISK_REPORT, Maps.newHashMap());
         pendingTaskMap.put(ReportType.TASK_REPORT, Maps.newHashMap());
-        pendingTaskMap.put(ReportType.WORKGROUP_REPORT, Maps.newHashMap());
+        pendingTaskMap.put(ReportType.RESOURCE_GROUP_REPORT, Maps.newHashMap());
     }
 
     public TMasterResult handleReport(TReportRequest request) throws TException {
@@ -197,14 +197,14 @@ public class ReportHandler extends Daemon {
         if (request.isSetActive_workgroups()) {
             if (reportType != ReportType.UNKNOWN_REPORT) {
                 buildErrorResult(tStatus,
-                        "invalid report request, multi fields " + reportType + " " + ReportType.WORKGROUP_REPORT);
+                        "invalid report request, multi fields " + reportType + " " + ReportType.RESOURCE_GROUP_REPORT);
                 return result;
             }
             activeWorkGroups = request.active_workgroups;
-            reportType = ReportType.WORKGROUP_REPORT;
+            reportType = ReportType.RESOURCE_GROUP_REPORT;
         }
         List<TWorkGroupOp> workGroupOps =
-                GlobalStateMgr.getCurrentState().getWorkGroupMgr().getWorkGroupsNeedToDeliver(beId);
+                GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroupsNeedToDeliver(beId);
         result.setWorkgroup_ops(workGroupOps);
 
         ReportTask reportTask =
@@ -450,7 +450,7 @@ public class ReportHandler extends Daemon {
         if (backend == null) {
             LOG.warn("backend does't exist. id: " + backendId);
         }
-        GlobalStateMgr.getCurrentState().getWorkGroupMgr().saveActiveWorkGroupsForBe(backendId, workGroups);
+        GlobalStateMgr.getCurrentState().getResourceGroupMgr().saveActiveResourceGroupsForBe(backendId, workGroups);
         LOG.debug("finished to handle workgroup report from backend{}, cost: {} ms, num: {}",
                 backendId, System.currentTimeMillis() - start, workGroups.size());
     }
