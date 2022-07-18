@@ -124,14 +124,8 @@ statement
     // procedure
     | showProcedureStatement                                                                 #showProcedure
 
-    //  Backup Store Satement
-    | restoreStatement                                                                      #restore
-
     // proc
     | showProcStatement                                                                      #showProc
-
-    // Backup Store Satement
-    | restoreStatement                                                                       #restore
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -793,13 +787,6 @@ showProcedureStatement
 // ------------------------------------------- Proc Statement ---------------------------------------------------------
 showProcStatement
     : SHOW PROC path=string
-    ;
-// ---------------------------------------- Backup Store Statement -----------------------------------------------------
-restoreStatement
-    : RESTORE SNAPSHOT qualifiedName
-    TO identifier
-    ON '(' restoreTableDesc restoreTableDesc * ')'
-    (PROPERTIES propertyList)?
     ;
 
 // ------------------------------------------- Expression --------------------------------------------------------------
