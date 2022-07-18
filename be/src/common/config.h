@@ -760,10 +760,13 @@ CONF_String(starlet_cache_dir, "");
 
 CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 
-CONF_mBool(enable_librdkafka_debug_mode, "false");
+CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
-// generic, broker, topic, metadata, feature, queue, msg, protocol, cgrp, security
-// fetch, interceptor, plugin, consumer, admin, eos, mock, assigner, conf, all
-CONF_String(librdkafka_debug_module, "all");
+// A comma-separated list of debug contexts to enable.
+// Producer debug context: broker, topic, msg
+// Consumer debug context: consumer, cgrp, topic, fetch
+// Other debug context: generic, metadata, feature, queue, protocol, security, interceptor, plugin
+// admin, eos, mock, assigner, conf
+CONF_String(dependency_librdkafka_debug, "all");
 
 } // namespace starrocks::config
