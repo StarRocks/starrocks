@@ -2,8 +2,8 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.catalog.lake.ShardDeleter;
-import com.starrocks.catalog.lake.ShardManager;
+import com.starrocks.lake.ShardDeleter;
+import com.starrocks.lake.ShardManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.journal.JournalTask;

@@ -42,6 +42,10 @@ statement
     | createTableLikeStatement                                                              #createTableLike
     | showIndexStatement                                                                    #showIndex
     | recoverTableStatement                                                                 #recoverTable
+    | truncateTableStatement                                                                #truncateTable
+    | showTabletStatement                                                                   #showTablet
+    | cancelAlterTableStatement                                                             #cancelAlterTable
+    | showPartitionsStatement                                                               #showPartitions
     | showOpenTableStatement                                                                #showOpenTable
 
     // View Statement
@@ -94,10 +98,10 @@ statement
     | showHistogramMetaStatement                                                            #showHistogramMeta
 
     // Work Group Statement
-    | createWorkGroupStatement                                                              #createWorkGroup
-    | dropWorkGroupStatement                                                                #dropWorkGroup
-    | alterWorkGroupStatement                                                               #alterWorkGroup
-    | showWorkGroupStatement                                                                #showWorkGroup
+    | createResourceGroupStatement                                                              #createResourceGroup
+    | dropResourceGroupStatement                                                                #dropResourceGroup
+    | alterResourceGroupStatement                                                               #alterResourceGroup
+    | showResourceGroupStatement                                                                #showResourceGroup
 
     // Other statement
     | USE qualifiedName                                                                     #use
@@ -263,6 +267,11 @@ showTableStatement
     : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
+showTabletStatement
+    : SHOW TABLET INTEGER_VALUE
+    | SHOW TABLET FROM qualifiedName partitionNames? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    ;
+
 showCreateTableStatement
     : SHOW CREATE (TABLE | VIEW | MATERIALIZED VIEW) table=qualifiedName
     ;
@@ -296,7 +305,7 @@ descTableStatement
     ;
 
 createTableLikeStatement
-    : CREATE TABLE (IF NOT EXISTS)? qualifiedName LIKE qualifiedName
+    : CREATE (EXTERNAL)? TABLE (IF NOT EXISTS)? qualifiedName LIKE qualifiedName
     ;
 
 showIndexStatement
@@ -307,9 +316,23 @@ recoverTableStatement
     : RECOVER TABLE qualifiedName
     ;
 
+truncateTableStatement
+    : TRUNCATE TABLE qualifiedName partitionNames?
+    ;
+
+cancelAlterTableStatement
+    : CANCEL ALTER TABLE (COLUMN | ROLLUP)? FROM qualifiedName ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?
+    | CANCEL ALTER MATERIALIZED VIEW FROM qualifiedName
+    ;
+
+showPartitionsStatement
+    : SHOW TEMPORARY? PARTITIONS FROM table=qualifiedName
+    (WHERE expression)?
+    (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    ;
+    
 showOpenTableStatement
     : SHOW OPEN TABLES
-    ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------
 
@@ -405,7 +428,9 @@ alterClause
     | dropComputeNodeClause
     | swapTableClause
     | dropPartitionClause
+    | modifyTablePropertiesClause
     | addPartitionClause
+    | modifyPartitionClause
     ;
 
 addPartitionClause
@@ -430,6 +455,10 @@ tableRenameClause
 
 swapTableClause
     : SWAP WITH identifier
+    ;
+
+modifyTablePropertiesClause
+    : SET propertyList
     ;
 
 addBackendClause
@@ -463,6 +492,10 @@ addComputeNodeClause
 dropComputeNodeClause
    : DROP COMPUTE NODE string (',' string)*
    ;
+
+modifyPartitionClause
+    : MODIFY PARTITION (identifier | identifierList | '(' ASTERISK_SYMBOL ')') SET propertyList
+    ;
 
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
@@ -519,23 +552,23 @@ showHistogramMetaStatement
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
 
-createWorkGroupStatement
+createResourceGroupStatement
     : CREATE RESOURCE GROUP (IF NOT EXISTS)? (OR REPLACE)? identifier
         TO classifier (',' classifier)*  WITH '(' property (',' property)* ')'
     ;
 
-dropWorkGroupStatement
+dropResourceGroupStatement
     : DROP RESOURCE GROUP identifier
     ;
 
-alterWorkGroupStatement
+alterResourceGroupStatement
     : ALTER RESOURCE GROUP identifier ADD classifier (',' classifier)*
     | ALTER RESOURCE GROUP identifier DROP '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     | ALTER RESOURCE GROUP identifier DROP ALL
     | ALTER RESOURCE GROUP identifier WITH '(' property (',' property)* ')'
     ;
 
-showWorkGroupStatement
+showResourceGroupStatement
     : SHOW RESOURCE GROUP identifier
     | SHOW RESOURCE GROUPS ALL?
     ;

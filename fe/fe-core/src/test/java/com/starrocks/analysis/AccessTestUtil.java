@@ -329,10 +329,6 @@ public class AccessTestUtil {
                 minTimes = 0;
                 result = withCluster ? prefix + "testUser" : "testUser";
 
-                analyzer.getClusterName();
-                minTimes = 0;
-                result = "testCluster";
-
                 analyzer.incrementCallDepth();
                 minTimes = 0;
                 result = 1;
@@ -360,10 +356,6 @@ public class AccessTestUtil {
                 analyzer.getQualifiedUser();
                 minTimes = 0;
                 result = "testCluster:testUser";
-
-                analyzer.getClusterName();
-                minTimes = 0;
-                result = "testCluster";
             }
         };
         return analyzer;
@@ -476,10 +468,6 @@ public class AccessTestUtil {
                 analyzer.getCatalog();
                 minTimes = 0;
                 result = globalStateMgr;
-
-                analyzer.getClusterName();
-                minTimes = 0;
-                result = "testCluster";
 
                 analyzer.incrementCallDepth();
                 minTimes = 0;

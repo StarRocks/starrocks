@@ -91,7 +91,6 @@ public class Database extends MetaObject implements Writable {
 
     private long id;
     private String fullQualifiedName;
-    private String clusterName;
     private QueryableReentrantReadWriteLock rwLock;
 
     // table family group map
@@ -122,7 +121,6 @@ public class Database extends MetaObject implements Writable {
         this.nameToTable = new ConcurrentHashMap<>();
         this.dataQuotaBytes = FeConstants.default_db_data_quota_bytes;
         this.replicaQuotaSize = FeConstants.default_db_replica_quota_size;
-        this.clusterName = "";
     }
 
     public void readLock() {
@@ -566,7 +564,7 @@ public class Database extends MetaObject implements Writable {
         }
 
         out.writeLong(dataQuotaBytes);
-        Text.writeString(out, clusterName);
+        Text.writeString(out, SystemInfoService.DEFAULT_CLUSTER);
         // compatible for dbState
         Text.writeString(out, "NORMAL");
         // NOTE: compatible attachDbName
@@ -604,15 +602,12 @@ public class Database extends MetaObject implements Writable {
 
         // read quota
         dataQuotaBytes = in.readLong();
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            clusterName = SystemInfoService.DEFAULT_CLUSTER;
-        } else {
-            clusterName = Text.readString(in);
-            // Compatible for dbState
-            Text.readString(in);
-            // Compatible for attachDbName
-            Text.readString(in);
-        }
+        // Compatible for Cluster
+        Text.readString(in);
+        // Compatible for dbState
+        Text.readString(in);
+        // Compatible for attachDbName
+        Text.readString(in);
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_47) {
             int numEntries = in.readInt();
@@ -662,14 +657,6 @@ public class Database extends MetaObject implements Writable {
 
         return (id == database.id) && (fullQualifiedName.equals(database.fullQualifiedName)
                 && dataQuotaBytes == database.dataQuotaBytes);
-    }
-
-    public String getClusterName() {
-        return clusterName;
-    }
-
-    public void setClusterName(String clusterName) {
-        this.clusterName = clusterName;
     }
 
     public void setName(String name) {
