@@ -419,6 +419,7 @@ alterClause
     | dropPartitionClause
     | modifyTablePropertiesClause
     | addPartitionClause
+    | modifyBrokerClause
     ;
 
 addPartitionClause
@@ -480,6 +481,12 @@ addComputeNodeClause
 dropComputeNodeClause
    : DROP COMPUTE NODE string (',' string)*
    ;
+
+modifyBrokerClause
+    : ADD BROKER identifierOrString string (',' string)*
+    | DROP BROKER identifierOrString string (',' string)*
+    | DROP ALL BROKER identifierOrString
+    ;
 
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 

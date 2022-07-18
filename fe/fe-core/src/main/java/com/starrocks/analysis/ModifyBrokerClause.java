@@ -17,15 +17,14 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.system.SystemInfoService;
+import com.starrocks.sql.ast.AstVisitor;
 import org.apache.commons.lang.NotImplementedException;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -48,6 +47,7 @@ public class ModifyBrokerClause extends AlterClause {
         this.op = op;
         this.brokerName = brokerName;
         this.hostPorts = hostPorts;
+        this.hostPortPairs = new HashSet<>();
     }
 
     public static ModifyBrokerClause createAddBrokerClause(String brokerName, List<String> hostPorts) {
@@ -70,28 +70,28 @@ public class ModifyBrokerClause extends AlterClause {
         return brokerName;
     }
 
+    public List<String> getHostPorts() {
+        return hostPorts;
+    }
+
     public Set<Pair<String, Integer>> getHostPortPairs() {
         return hostPortPairs;
     }
 
-    private void validateBrokerName() throws AnalysisException {
+    public void validateBrokerName() throws AnalysisException {
         if (Strings.isNullOrEmpty(brokerName)) {
             throw new AnalysisException("Broker's name can't be empty.");
         }
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        validateBrokerName();
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitModifyBrokerClause(this, context);
+    }
 
-        if (op != ModifyOp.OP_DROP_ALL) {
-            hostPortPairs = Sets.newHashSet();
-            for (String hostPort : hostPorts) {
-                Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
-                hostPortPairs.add(pair);
-            }
-            Preconditions.checkState(!hostPortPairs.isEmpty());
-        }
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
     @Override
