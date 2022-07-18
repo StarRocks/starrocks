@@ -11,6 +11,7 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PProxyRequest;
@@ -28,6 +29,7 @@ import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.PBackendService;
+import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
 import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.PTriggerProfileReportRequest;
@@ -50,6 +52,7 @@ import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TDeleteEtlFilesRequest;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TEtlState;
+import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TExecPlanFragmentResult;
 import com.starrocks.thrift.TExportState;
@@ -537,6 +540,31 @@ public class PseudoBackend {
         }
 
         @Override
+        public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(PExecBatchPlanFragmentsRequest request) {
+            TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
+            final TExecBatchPlanFragmentsParams params = new TExecBatchPlanFragmentsParams();
+            PExecBatchPlanFragmentsResult result = new PExecBatchPlanFragmentsResult();
+            result.status = new StatusPB();
+            result.status.statusCode = 0;
+            try {
+                deserializer.deserialize(params, request.getSerializedRequest());
+            } catch (TException e) {
+                LOG.warn("error deserialize request", e);
+                result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
+                result.status.errorMsgs = Lists.newArrayList(e.getMessage());
+                return CompletableFuture.completedFuture(result);
+            }
+            executor.submit(() -> {
+                try {
+                    execBatchPlanFragments(params);
+                } catch (Exception e) {
+                    LOG.warn("error execBatchPlanFragments", e);
+                }
+            });
+            return CompletableFuture.completedFuture(result);
+        }
+
+        @Override
         public Future<PCancelPlanFragmentResult> cancelPlanFragmentAsync(PCancelPlanFragmentRequest request) {
             return executor.submit(() -> {
                 PCancelPlanFragmentResult result = new PCancelPlanFragmentResult();
@@ -601,6 +629,41 @@ public class PseudoBackend {
             }
         } catch (TException e) {
             LOG.warn("error report exec status", e);
+        }
+    }
+
+    void execBatchPlanFragment(TExecPlanFragmentParams commonParams, TExecPlanFragmentParams uniqueParams) {
+        TReportExecStatusParams report = new TReportExecStatusParams();
+        report.setProtocol_version(FrontendServiceVersion.V1);
+        report.setQuery_id(commonParams.params.query_id);
+        report.setBackend_num(uniqueParams.backend_num);
+        report.setBackend_id(be.getId());
+        report.setFragment_instance_id(uniqueParams.params.fragment_instance_id);
+        report.setDone(true);
+        // TODO: support error injection
+        report.setStatus(new TStatus(TStatusCode.OK));
+        if (uniqueParams.fragment.output_sink != null) {
+            TDataSink tDataSink = uniqueParams.fragment.output_sink;
+            runSink(report, tDataSink);
+        } else if (commonParams.fragment.output_sink != null) {
+            TDataSink tDataSink = commonParams.fragment.output_sink;
+            runSink(report, tDataSink);
+        }
+        try {
+            TReportExecStatusResult ret = frontendService.reportExecStatus(report);
+            if (ret.status.status_code != TStatusCode.OK) {
+                LOG.warn("error report exec status " + (ret.status.error_msgs.isEmpty() ? "" : ret.status.error_msgs.get(0)));
+            }
+        } catch (TException e) {
+            LOG.warn("error report exec status", e);
+        }
+    }
+
+    void execBatchPlanFragments(TExecBatchPlanFragmentsParams params) {
+        LOG.info("exec_batch_plan_fragments {} #instances:{}", params.common_param.params.query_id.toString(),
+                params.unique_param_per_instance.size());
+        for (TExecPlanFragmentParams uniqueParams : params.unique_param_per_instance) {
+            execBatchPlanFragment(params.common_param, uniqueParams);
         }
     }
 
