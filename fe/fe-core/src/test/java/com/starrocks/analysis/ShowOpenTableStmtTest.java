@@ -26,6 +26,7 @@ import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -50,14 +51,6 @@ public class ShowOpenTableStmtTest {
     @Before
     public void setUp() throws Exception {
     }
-
-    @Test
-    public void testShowOpenTableParserAndAnalyzer() {
-        String sql_1 = "SHOW OPEN TABLES";
-        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
-        Assert.assertTrue(stmt instanceof ShowOpenTableStmt);
-    }
-
 
     @Test
     public void testNormal() throws Exception {
