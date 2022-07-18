@@ -1143,6 +1143,7 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
     }
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(!status.ok());
+    scanner->close(_runtime_state);
 }
 
 } // namespace starrocks::vectorized

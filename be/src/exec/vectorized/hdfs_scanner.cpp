@@ -70,18 +70,6 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
     RETURN_IF_ERROR(
             Expr::clone_if_not_exists(_scanner_params.min_max_conjunct_ctxs, runtime_state, &_min_max_conjunct_ctxs));
 
-    // Why we need this class? Because in above code, we clone many conjuncts from runtime_state->obj_pool()
-    // And if we quit execution by early abortion, ~RuntimeState() is called directly
-    // And those conjuncts are released befoe `HdfsScanner` class, so when we call `HdfsScanner::close`
-    // we will get invalid pointers. And to resolve this problem, we add this instance at the end of obj_pool.
-    // so this instance must be released before conjuncts, and `HdfsScanner::close` will get valid pointers.
-    struct ReleaseFence {
-        HdfsScanner* ptr;
-        ReleaseFence(HdfsScanner* p) : ptr(p) {}
-        ~ReleaseFence() { ptr->finalize(); }
-    };
-    _runtime_state->obj_pool()->add(new ReleaseFence(this));
-
     Status status = do_init(runtime_state, scanner_params);
     return status;
 }
