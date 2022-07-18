@@ -118,6 +118,8 @@ public class ShardDeleter extends MasterDaemon {
             shardIds.removeAll(deletedShards);
         }
         GlobalStateMgr.getCurrentState().getEditLog().logDeleteUnusedShard(deletedShards);
+        // for debug
+        LOG.info("delete shards {} succ", deletedShards);
     }
 
     @Override
